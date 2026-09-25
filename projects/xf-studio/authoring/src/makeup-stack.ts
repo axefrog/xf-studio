@@ -8,7 +8,8 @@ import {isDirectGlint} from "./direct-glint-settings";
 import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "./finish-export";
 import {installFresnelTint} from "./fresnel-tint";
 import {previewFacetChains} from "./route-mip-chains";
-import {createPlateComposite,createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
+import {createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
+import {createPlateComposite} from "./plate-composite";
 import type {SkinParameters} from "./skin-material";
 /** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
 const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
@@ -224,15 +225,27 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   function setUnderlaySource(source: (() => PlateUnderlay | null) | null) {
     underlaySource = source; underlayStale = true; blendDirty = true;
   }
+  /**
+   * Put the skin under the plate on the shared plate geometry. A later skin of the same vertex count is copied into the attributes
+   * already there (one buffer update each, PREV-60); only a different shape replaces them, after the geometry's GPU buffers are
+   * freed (they are uploaded again on the next draw). Without a skin the attributes stay: nothing draws with them then.
+   */
   function applyUnderlay(next: PlateUnderlay | null) {
-    const geometry = anchor.geometry;
     underlay = next;
-    if (next) {
-      geometry.setAttribute("xfsUnderlay", next.colour);
-      geometry.setAttribute("xfsUnderRoughness", next.roughness);
-      geometry.setAttribute("xfsUnderMetalness", next.metalness);
-    } else for (const name of ["xfsUnderlay", "xfsUnderRoughness", "xfsUnderMetalness"]) geometry.deleteAttribute(name);
+    if (!next) return;
+    const geometry = anchor.geometry;
+    const incoming: [string, THREE.BufferAttribute][] = [["xfsUnderlay", next.colour], ["xfsUnderRoughness", next.roughness], ["xfsUnderMetalness", next.metalness]];
+    const current = incoming.map(([name]) => geometry.getAttribute(name) as THREE.BufferAttribute | undefined);
+    const fits = incoming.every(([, attribute], i) => current[i] && current[i]!.itemSize === attribute.itemSize && current[i]!.array.length === attribute.array.length);
+    if (fits) {
+      incoming.forEach(([, attribute], i) => { current[i]!.copyArray(attribute.array); current[i]!.needsUpdate = true; });
+      return;
+    }
+    if (current.some(Boolean)) geometry.dispose();
+    for (const [name, attribute] of incoming) geometry.setAttribute(name, attribute);
   }
+  /** After a lost WebGL context comes back: the composite's targets came back empty, so the next frame redraws them (PREV-58). */
+  function contextRestored() { blendDirty = true; }
   /**
    * Before a frame: bring the plate up to date after a change (the export plan over the drawn layers, the skin underlay, then the
    * composite). Nothing runs when nothing changed, so an idle viewport costs nothing here.
@@ -266,11 +279,11 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   /** Light the plate with the drawn skin's own light (its profile), or with Three's standard light when no resolved skin is drawn. */
   function setSkinLight(parameters: Pick<SkinParameters, "lobes" | "wrap"> | null) { plateLight.handle.setSkinLight(parameters); }
   function blendDiagnostics() {
-    const target = composite.target;
-    return { window: composite.window, underlay: !!underlay, underlayStale, compositeBytes: composite.bytes(), halfFloat: composite.halfFloat,
+    const size = composite.size;
+    return { window: composite.window, underlay: !!underlay, underlayStale, dirty: blendDirty, compositeBytes: composite.bytes(), halfFloat: composite.halfFloat,
       plate: { drawn: plate.visible, route: merged.route, slots: [...merged.slots], renderOrder: plate.renderOrder,
         skinLight: plateLight.handle.skinLight, fresnel: plateLight.handle.fresnel,
-        composite: plate.visible && target ? { width: target.width, height: target.height } : null },
+        composite: plate.visible && size ? { width: size.width, height: size.height } : null, compositeDraws: composite.stats },
       layers: materials.map((material, i) => { const layer = applied.get(material);
         return { merged: merged.slots.includes(i), exportable: !!layer && layerExport(layer).exportable, ownPlate: plates[i].visible && material.visible }; }) };
   }
@@ -294,7 +307,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     });
   }
   return { plates, materials, textures, plate, setCanvases, reconcileLayerCanvases,
-    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics,
+    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored,
     setNormals(value: boolean) { plateLight.handle.setNormals(value); },
     setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };
 }

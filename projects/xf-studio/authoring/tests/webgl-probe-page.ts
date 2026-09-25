@@ -11,10 +11,10 @@
  *    the square-root-space predictions and the export's merged decal; then, under the skin's own light with a key light and the room
  *    environment, the one lit plate against the blended G-buffer surface drawn as one opaque skin-lit quad (stacked finishes, Glossy,
  *    Metallic either side of the 0.1 SSS switch), and against the face decals' pass for a surface as rough as the skin.
+ * With `?hide=half-float` the page first hides both half-float render extensions (PREV-59) and runs sections 1–3.
  * Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createDoubleDiffuseDecalMaterial } from "../src/brow-material";
 import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, shellParameters } from "../src/eye-material";
 import { createFaceDecalMaterial, decalColourUnits, faceDecalParameters, forwardDecal, gbufferColour, type Rgb } from "../src/face-decal-material";
@@ -26,11 +26,13 @@ import { accumulateComposite, EMPTY_COMPOSITE, plateSurface, type PlateComposite
 import { initialRecipe, type Layer } from "../src/recipe";
 import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters } from "../src/skin-material";
 import { stageBackdropPixels } from "../src/stage-backdrop";
+import { createStudioEnvironment } from "../src/studio-environment";
+import { hideHalfFloatRendering } from "./webgl-harness-page";
 
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[];
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
   opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; failure?: string;
-  plate?: PlateProbe };
+  plate?: PlateProbe; display?: { path: string; creatorTarget: string }; environment?: string };
 /** The authored plate's measurements (section 4). */
 export type PlateProbe = { steps: { coverage: number; sqrt: number[]; linear: number[] }[]; stack: { preview: number[]; target: number[]; linear: number[] };
   routes: string[]; once: { name: string; preview: number[]; truth: number[]; metalness: number; skinLight: boolean }[];
@@ -56,6 +58,7 @@ function quadGeometry(z: number) {
 }
 
 try {
+  if (new URLSearchParams(location.search).get("hide") === "half-float") hideHalfFloatRendering();
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 64;
   document.body.append(canvas);
@@ -74,11 +77,13 @@ try {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10);
   camera.position.set(0, 0, 5);
   const display = createLinearDisplay(renderer);
+  const { path, creatorTarget } = display.info();
+  probe.display = { path, creatorTarget };
 
   // 1. Every material variant, compiled and drawn once in a lit scene with an environment (as the app's).
   const scene = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  // The studio stage's environment: prefiltered when half float renders, otherwise the room's light probe.
+  probe.environment = createStudioEnvironment(renderer, scene).mode;
   scene.add(new THREE.DirectionalLight(0xffffff, 2));
   const white = () => texture([255, 255, 255, 255]), grey = () => texture([128, 128, 128, 200], true), flat = () => texture([128, 128, 255, 255]);
   const materials: THREE.Material[] = [];

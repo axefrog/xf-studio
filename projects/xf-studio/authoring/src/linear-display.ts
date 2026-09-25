@@ -21,8 +21,11 @@ import type { LightingPreset } from "./creator-lighting";
  * resolved alpha is then the pixel's coverage, and the composite `encode(tone(rgb / a)) · a + backdrop · (1 − a)` is
  * what the canvas's own multisample resolve gave before at silhouette edges.
  *
- * Without a renderable half-float colour buffer (`EXT_color_buffer_float`), the studio preset draws straight to the
- * canvas as before and the blends are approximate there (`path: "direct"`); the creator preset needs the target.
+ * A half-float colour buffer is renderable with `EXT_color_buffer_float` or `EXT_color_buffer_half_float` (Three.js enables
+ * both when present). Without either (PREV-59), the studio preset draws straight to the canvas as before and its blends are
+ * approximate there (`path: "direct"`), and the creator preset renders into an 8-bit sRGB target instead (`creatorTarget:
+ * "srgb8"`): the GPU encodes on write and blends in linear light, as the half-float target does, but scene values clip at one
+ * before the grade (about 2.2 × the default exposure's forehead), so only the brightest highlights differ.
  * Nothing here runs unless a frame is drawn, so an idle viewport costs no GPU work.
  */
 const QUAD_VERTEX = /* glsl */ `
@@ -66,6 +69,7 @@ const COVERAGE_FRAGMENT = /* glsl */ `void main() { gl_FragColor = vec4(0.0, 0.0
 
 export const DISPLAY_SAMPLES = 4;
 export type DisplayPath = "linear" | "direct";
+export type CreatorTarget = "half-float" | "srgb8";
 
 function lutTexture(lut: GradingLut): THREE.Data3DTexture {
   const half = new Uint16Array(lut.data.length);
@@ -83,8 +87,14 @@ function lutTexture(lut: GradingLut): THREE.Data3DTexture {
   return texture;
 }
 
-/** Whether a WebGL 2 context can render into a half-float colour buffer (the linear display's target). */
-export const linearTargetSupported = (context: Pick<WebGL2RenderingContext, "getExtension">) => !!context.getExtension("EXT_color_buffer_float");
+/** The extensions that make half-float colour buffers renderable in WebGL 2 (either one is enough). */
+export const HALF_FLOAT_RENDER_EXTENSIONS = ["EXT_color_buffer_float", "EXT_color_buffer_half_float"] as const;
+/** Whether a WebGL 2 context can render into a half-float colour buffer (the linear display's target); enables the extensions. */
+export const linearTargetSupported = (context: Pick<WebGL2RenderingContext, "getExtension">) =>
+  HALF_FLOAT_RENDER_EXTENSIONS.map(name => !!context.getExtension(name)).some(Boolean);
+/** The same question asked of a renderer's extension registry. */
+export const halfFloatRenderable = (extensions: { has?(name: string): boolean } | undefined) =>
+  HALF_FLOAT_RENDER_EXTENSIONS.some(name => !!extensions?.has?.(name));
 
 function fullScreen(material: THREE.Material) {
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
@@ -95,7 +105,7 @@ function fullScreen(material: THREE.Material) {
 }
 
 export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
-  const linear = !!renderer.extensions?.has?.("EXT_color_buffer_float");
+  const linear = halfFloatRenderable(renderer.extensions);
   const samples = Math.max(0, Math.min(DISPLAY_SAMPLES, renderer.capabilities?.maxSamples ?? DISPLAY_SAMPLES));
   let target: THREE.WebGLRenderTarget | null = null;
   let lut = lutTexture(neutralGradingLut(32));
@@ -125,8 +135,10 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
     const width = Math.max(1, Math.floor(size.x)), height = Math.max(1, Math.floor(size.y));
     if (target && target.width === width && target.height === height) return target;
     target?.dispose();
-    target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, format: THREE.RGBAFormat,
-      colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: true, samples, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    // Scene-linear in half float; otherwise sRGB-encoded 8-bit (the hardware encodes, blends in linear light and decodes on read).
+    target = new THREE.WebGLRenderTarget(width, height, { type: linear ? THREE.HalfFloatType : THREE.UnsignedByteType, format: THREE.RGBAFormat,
+      colorSpace: linear ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace, depthBuffer: true, samples,
+      minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     target.texture.name = "xfs-scene-linear";
     creator.uniforms.tScene!.value = studio.uniforms.tScene!.value = target.texture;
     return target;
@@ -170,6 +182,8 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
   return {
     /** How the studio preset reaches the canvas: through the linear target, or straight (no half-float colour buffer). */
     path: (linear ? "linear" : "direct") as DisplayPath,
+    /** What the creator preset renders into: the half-float target, or the 8-bit sRGB fallback. */
+    creatorTarget: (linear ? "half-float" : "srgb8") as CreatorTarget,
     samples,
     /** Draw one frame of `scene` through the preset's display transform to the canvas. */
     render(scene: THREE.Scene, camera: THREE.Camera, preset: LightingPreset) {
@@ -187,7 +201,8 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
     setExposure(k: number) { creator.uniforms.uExposure!.value = k; },
     get exposure(): number { return creator.uniforms.uExposure!.value as number; },
     /** Developer evidence: the display path and the target's current size. */
-    info: () => ({ path: linear ? "linear" as const : "direct" as const, samples, width: target?.width ?? 0, height: target?.height ?? 0 }),
+    info: () => ({ path: linear ? "linear" as const : "direct" as const, creatorTarget: linear ? "half-float" as const : "srgb8" as const,
+      samples, width: target?.width ?? 0, height: target?.height ?? 0 }),
     dispose() {
       target?.dispose(); target = null; lut.dispose();
       for (const pass of [creatorPass, studioPass, coveragePass]) { (pass.quad.material as THREE.Material).dispose(); pass.quad.geometry.dispose(); }

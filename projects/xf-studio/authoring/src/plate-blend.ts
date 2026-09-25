@@ -15,9 +15,10 @@ import { patchSkinLight, skinLightMapsChunk, skinLightUniforms, type SkinParamet
  * surface with the pixel's own lighting class: makeup on skin is lit as skin, once.
  *
  * What the preview does [approximation of a G-buffer in a forward renderer]:
- * 1. **Composite.** One small UV-space pass per change draws the preset's included layers (the export plan's), in order, as
- *    premultiplied "over" into one target over the plate's UV rectangle at the masks' texel density: √colour, roughness,
- *    metalness, the facet normal and its squared length (for filtering), and coverage. This is the export's merged decal.
+ * 1. **Composite** (plate-composite.ts). Small UV-space passes per change draw the preset's included layers (the export plan's),
+ *    in order, as premultiplied "over" over the plate's UV rectangle at the masks' texel density, then resolve the export's merged
+ *    decal per texel (√colour, roughness, metalness, coverage and the merged facet normal) and its faceted mip chain: the colour,
+ *    metalness and normal chains are the GPU's box means, and the roughness chain is the export's, level by level.
  * 2. **One lit plate.** One plate mesh reads that composite and the skin under each plate vertex (colour, roughness, metalness:
  *    the face decals' underlay, read on the drawn head) and forms the blended G-buffer surface G exactly as the game does. It lights
  *    G with the skin's own light when a resolved skin is drawn (skin-material.ts: the profile's two lobes, the subsurface stand-in,
@@ -34,13 +35,14 @@ import { patchSkinLight, skinLightMapsChunk, skinLightUniforms, type SkinParamet
  * Limits: the skin under the plate is known per vertex (its texel colour detail passes through at 1 − A, exact for black), and the
  * skin's own normal detail under the covered part is replaced by the plate's geometric normal; overlapping face decals below are not
  * part of what the plate sees; Colour-shifting's view-dependent tint is added in the plate shader (one pigment, as the export
- * requires); faceted mips widen roughness from the filtered facet moments rather than the export's exact per-level chain (the
- * composite undoes the mode-1 fade the per-layer preview maps carry, to within their 8-bit steps, so the plate fades once).
+ * requires); the colour and metalness are filtered premultiplied, so between texel centres at coverage edges they weigh by coverage
+ * where the game filters the stored colour (the composite undoes the mode-1 fade the per-layer preview maps carry, to within their
+ * 8-bit steps, so the plate fades once).
  * Preview-only models (Glitter, the earlier Glossy clear coat and thin-film study, and Colour-shifting layers the export omits from a
  * mixed preset) keep their own plates with the ordinary linear blend and light, and are not part of the composite; one between
  * exported layers draws above all of them. The solve is in linear light, so it holds where the pass blends in linear
- * light: both lighting presets draw into the display's scene-linear target (linear-display.ts); a GPU without a renderable half-float
- * buffer draws straight to the canvas and is approximate there.
+ * light: both lighting presets draw into the display's scene-linear target (linear-display.ts); on a GPU without a renderable
+ * half-float buffer the studio stage draws straight to the canvas and is approximate there.
  */
 
 /** A UV rectangle: the plate's own bounds, which the composite covers. */
@@ -112,33 +114,26 @@ export function residualForward(lit: Readonly<Rgb>, under: Readonly<Rgb>, alpha:
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// The composite pass.
+// The facets the composite reads (the GPU pass is plate-composite.ts).
 
-const blankTexture = (value: number, rgba: number[] = [value, value, value, value]) => {
+const blankTexture = (rgba: number[]) => {
   const texture = new THREE.DataTexture(new Uint8Array(rgba), 1, 1);
   texture.needsUpdate = true;
   return texture;
 };
-/** Nothing (all zero), the neutral surface map (all one) and a flat normal. Shared, never disposed. */
-const NOTHING = blankTexture(0), NEUTRAL_MAP = blankTexture(255), FLAT_NORMAL = blankTexture(0, [128, 128, 255, 255]);
+/** Nothing (all zero) and a flat normal. Shared, never disposed. */
+const NOTHING = blankTexture([0, 0, 0, 0]), FLAT_NORMAL = blankTexture([128, 128, 255, 255]);
 
-const PASS_VERTEX = /* glsl */`
-uniform vec4 uWindow;
-varying vec2 vUv;
-void main() {
-	vUv = uWindow.xy + ( position.xy * 0.5 + 0.5 ) * uWindow.zw;
-	gl_Position = vec4( position.xy, 0.0, 1.0 );
-}`;
 /** Tilt (length of the facet's X, Y) from which `NormalsBlendingMode` 1 keeps a facet whole: saturate(50 − 50z) = 1 at z = 0.98. */
 export const MODE1_FULL_TILT = Math.sqrt(1 - 0.98 * 0.98);
 /** Components within this of zero are the tangent-normal encoding's zero (bytes 127 and 128 decode to ∓0.0039). */
-const FACET_ZERO = 0.005;
+export const FACET_ZERO = 0.005;
 const mode1Fade = (t: number) => Math.min(1, Math.max(0, 50 - 50 * Math.sqrt(Math.max(0, 1 - t * t))));
 
 /**
  * Undo the mode-1 fade the preview's facet maps carry (route-mip-chains.ts `previewFacetChains` stores X, Y × saturate(50 − 50z)),
  * so the plate fades the filtered merged normal once, as the game does. The fade is monotonic in the tilt, so the tilt is found by
- * bisection; tilts past `MODE1_FULL_TILT` were never faded. Mirrors the composite pass's `xfsUnfade`.
+ * bisection; tilts past `MODE1_FULL_TILT` were never faded. Mirrors the composite pass's `xfsUnfade` (plate-composite.ts).
  */
 export function unfadeFacet(x: number, y: number): [number, number] {
   if (Math.abs(x) < FACET_ZERO) x = 0;
@@ -149,117 +144,6 @@ export function unfadeFacet(x: number, y: number): [number, number] {
   for (let i = 0; i < 20; i++) { const mid = (lo + hi) / 2; if (mid * mode1Fade(mid) < t) lo = mid; else hi = mid; }
   const scale = (lo + hi) / 2 / t;
   return [x * scale, y * scale];
-}
-
-/**
- * One layer's premultiplied contribution, read exactly as its own plate reads it (colour × mask, roughness and metalness × maps,
- * the facet normal of a faceted layer, its mode-1 fade undone). Normals are stored offset (x / 2 + ½) so an 8-bit target holds them.
- */
-const LAYER_FRAGMENT = /* glsl */`
-precision highp float;
-uniform sampler2D uMask;
-uniform sampler2D uRoughnessMap;
-uniform sampler2D uMetalnessMap;
-uniform sampler2D uNormalMap;
-uniform vec3 uColour;
-uniform vec3 uSurface;
-varying vec2 vUv;
-layout( location = 0 ) out highp vec4 oColour;
-layout( location = 1 ) out highp vec4 oSurface;
-layout( location = 2 ) out highp vec4 oNormal;
-vec2 xfsUnfade( vec2 xy ) {
-	xy = mix( xy, vec2( 0.0 ), step( abs( xy ), vec2( ${FACET_ZERO} ) ) );
-	float t = length( xy ), full = ${MODE1_FULL_TILT.toFixed(8)};
-	if ( t <= 0.0 || t >= full ) return xy;
-	float lo = t, hi = full;
-	for ( int i = 0; i < 20; i++ ) {
-		float mid = 0.5 * ( lo + hi );
-		if ( mid * clamp( 50.0 - 50.0 * sqrt( max( 1.0 - mid * mid, 0.0 ) ), 0.0, 1.0 ) < t ) lo = mid; else hi = mid;
-	}
-	return xy * ( 0.5 * ( lo + hi ) / t );
-}
-void main() {
-	vec4 mask = textureLod( uMask, vUv, 0.0 );
-	float a = clamp( mask.a, 0.0, 1.0 );
-	vec3 colour = max( uColour * mask.rgb, vec3( 0.0 ) );
-	float roughness = clamp( uSurface.x * textureLod( uRoughnessMap, vUv, 0.0 ).g, 0.0, 1.0 );
-	float metalness = clamp( uSurface.y * textureLod( uMetalnessMap, vUv, 0.0 ).b, 0.0, 1.0 );
-	vec2 facet = uSurface.z > 0.5 ? xfsUnfade( clamp( textureLod( uNormalMap, vUv, 0.0 ).xy * 2.0 - 1.0, -1.0, 1.0 ) ) : vec2( 0.0 );
-	oColour = vec4( a * sqrt( colour ), a );
-	oSurface = vec4( a * roughness, a * metalness, a * dot( facet, facet ), a );
-	oNormal = vec4( a * ( facet * 0.5 + 0.5 ), 0.0, a );
-}`;
-
-/** What the composite reads from one included layer: its own plate material (colour, mask, surface and facet maps). */
-export type CompositeLayer = THREE.MeshPhysicalMaterial;
-
-/**
- * The merged decal of the included layers, over the plate's UV rectangle. `update` redraws it (only when called: the stack calls it
- * when a layer or the plan changed): one clear and one small draw per layer, nothing per frame. Half-float when the GPU can render it.
- */
-export function createPlateComposite(window: BlendWindow) {
-  const quad = new THREE.PlaneGeometry(2, 2);
-  const pass = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: PASS_VERTEX, fragmentShader: LAYER_FRAGMENT,
-    depthTest: false, depthWrite: false, blending: THREE.CustomBlending,
-    blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-    blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-    uniforms: { uWindow: { value: new THREE.Vector4(window.u0, window.v0, window.u1 - window.u0, window.v1 - window.v0) },
-      uMask: { value: NOTHING as THREE.Texture }, uRoughnessMap: { value: NEUTRAL_MAP as THREE.Texture },
-      uMetalnessMap: { value: NEUTRAL_MAP as THREE.Texture }, uNormalMap: { value: FLAT_NORMAL as THREE.Texture },
-      uColour: { value: new THREE.Color() }, uSurface: { value: new THREE.Vector3() } } });
-  const mesh = new THREE.Mesh(quad, pass);
-  mesh.frustumCulled = false;
-  const scene = new THREE.Scene(), camera = new THREE.Camera();
-  scene.add(mesh);
-  let target: THREE.WebGLRenderTarget | null = null, halfFloat = false;
-
-  function ensure(renderer: THREE.WebGLRenderer, size: { width: number; height: number }, anisotropy: number) {
-    const half = !!renderer.extensions?.has?.("EXT_color_buffer_float");
-    if (target && target.width === size.width && target.height === size.height && half === halfFloat) return target;
-    target?.dispose();
-    halfFloat = half;
-    target = new THREE.WebGLRenderTarget(size.width, size.height, { count: 3, type: half ? THREE.HalfFloatType : THREE.UnsignedByteType,
-      format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
-    for (const texture of target.textures) { texture.name = "xfs_plate_composite"; texture.anisotropy = anisotropy; }
-    return target;
-  }
-
-  return {
-    window,
-    get target() { return target; },
-    /** Redraw the composite from `layers` in stack order; `maskSize` is the masks' side. Returns the target. */
-    update(renderer: THREE.WebGLRenderer, layers: readonly CompositeLayer[], maskSize: number, anisotropy = 1) {
-      const into = ensure(renderer, compositeTargetSize(maskSize, window, renderer.capabilities.maxTextureSize), anisotropy);
-      const previousTarget = renderer.getRenderTarget(), autoClear = renderer.autoClear;
-      const clearColour = renderer.getClearColor(new THREE.Color()), clearAlpha = renderer.getClearAlpha();
-      renderer.autoClear = false;
-      renderer.setClearColor(0x000000, 0);
-      try {
-        renderer.setRenderTarget(into);
-        renderer.clear(true, false, false);
-        const u = pass.uniforms;
-        for (const layer of layers) {
-          u.uMask!.value = layer.map ?? NOTHING;
-          u.uRoughnessMap!.value = layer.roughnessMap ?? NEUTRAL_MAP;
-          u.uMetalnessMap!.value = layer.metalnessMap ?? NEUTRAL_MAP;
-          u.uNormalMap!.value = layer.normalMap ?? FLAT_NORMAL;
-          (u.uColour!.value as THREE.Color).copy(layer.color);
-          (u.uSurface!.value as THREE.Vector3).set(layer.roughness, layer.metalness, layer.normalMap ? 1 : 0);
-          renderer.render(scene, camera);
-        }
-      } finally {
-        renderer.setRenderTarget(previousTarget);
-        renderer.setClearColor(clearColour, clearAlpha);
-        renderer.autoClear = autoClear;
-      }
-      return into;
-    },
-    /** GPU bytes held by the composite (three RGBA attachments with their mips). */
-    bytes() { return target ? Math.round(target.width * target.height * 4 * (halfFloat ? 2 : 1) * 3 * 4 / 3) : 0; },
-    get halfFloat() { return halfFloat; },
-    release() { target?.dispose(); target = null; },
-    dispose() { target?.dispose(); target = null; quad.dispose(); pass.dispose(); },
-  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -280,6 +164,7 @@ const FRAGMENT_DECLARATIONS = /* glsl */`
 uniform sampler2D xfsPlateColour;
 uniform sampler2D xfsPlateSurface;
 uniform sampler2D xfsPlateNormal;
+uniform sampler2D xfsPlateRoughness;
 uniform vec4 xfsPlateWindow;
 uniform float xfsPlateNormals;
 #ifdef XFS_PLATE_FRESNEL
@@ -290,28 +175,27 @@ uniform float xfsShiftExponent;
 varying vec3 vXfsPlateUnder;
 varying vec2 vXfsPlateSurface;
 varying vec2 vXfsPlateUv;`;
-/** Replaces `map_fragment`: the merged decal at this pixel, unpremultiplied, and the skin under it. */
+/** Replaces `map_fragment`: the merged decal at this pixel (colour unpremultiplied; the normal is stored per texel), and the skin under it. */
 const SAMPLE = /* glsl */`
 vec2 xfsCompositeUv = ( vXfsPlateUv - xfsPlateWindow.xy ) * xfsPlateWindow.zw;
 vec4 xfsPc = texture2D( xfsPlateColour, xfsCompositeUv );
 vec4 xfsPs = texture2D( xfsPlateSurface, xfsCompositeUv );
 vec4 xfsPn = texture2D( xfsPlateNormal, xfsCompositeUv );
+float xfsPr = texture2D( xfsPlateRoughness, xfsCompositeUv ).r;
 float xfsCoverage = clamp( xfsPc.a, 0.0, 1.0 );
 if ( xfsCoverage < 0.001 ) discard;
 float xfsInv = 1.0 / xfsCoverage;
 vec3 xfsSqrtDecal = max( xfsPc.rgb * xfsInv, vec3( 0.0 ) );
 vec3 xfsDecal = xfsSqrtDecal * xfsSqrtDecal;
-vec2 xfsFacetXy = clamp( xfsPn.xy * xfsInv, 0.0, 1.0 ) * 2.0 - 1.0;
-float xfsFacetMoment = max( xfsPs.z * xfsInv, dot( xfsFacetXy, xfsFacetXy ) );
+vec2 xfsFacetXy = clamp( xfsPn.xy, 0.0, 1.0 ) * 2.0 - 1.0;
 vec3 xfsUnder = max( vXfsPlateUnder, vec3( 0.0 ) );`;
 /**
- * Replaces `roughnessmap_fragment`: the G-buffer's roughness, the decal's at its coverage over the skin's. Facets averaged by the
- * filter widen the decal's lobe as the export's faceted mips do (route-mip-chains.ts): α'² = α² + the lost slope variance.
+ * Replaces `roughnessmap_fragment`: the G-buffer's roughness, the decal's at its coverage over the skin's. The decal's roughness is
+ * the export's own chain (plate-composite.ts): level 0 as merged, lower levels widened by the facet variance their averaging lost,
+ * sampled as the game samples the exported map.
  */
 const ROUGHNESS = /* glsl */`
-float xfsDecalRough = clamp( xfsPs.x * xfsInv, 0.0, 1.0 );
-float xfsSlopeVariance = max( 0.0, xfsFacetMoment - dot( xfsFacetXy, xfsFacetXy ) );
-xfsDecalRough = sqrt( sqrt( xfsDecalRough * xfsDecalRough * xfsDecalRough * xfsDecalRough + xfsSlopeVariance ) );
+float xfsDecalRough = clamp( xfsPr, 0.0, 1.0 );
 float roughnessFactor = xfsCoverage * xfsDecalRough + ( 1.0 - xfsCoverage ) * vXfsPlateSurface.x;`;
 const METALNESS = /* glsl */`
 float metalnessFactor = xfsCoverage * clamp( xfsPs.y * xfsInv, 0.0, 1.0 ) + ( 1.0 - xfsCoverage ) * vXfsPlateSurface.y;`;
@@ -384,9 +268,12 @@ export function patchPlateLightShader(shader: { vertexShader: string; fragmentSh
   return shader;
 }
 
+/** What the plate samples from the composite (plate-composite.ts `CompositeTextures`). */
+export type PlateCompositeTextures = { colour: THREE.Texture; surface: THREE.Texture; normal: THREE.Texture; roughness: THREE.Texture };
+
 export type PlateLightHandle = {
-  /** Read this composite (the target of `createPlateComposite`) over `window`; null draws nothing. */
-  setComposite(target: THREE.WebGLRenderTarget | null, window: BlendWindow): void;
+  /** Read this composite (plate-composite.ts `createPlateComposite`) over `window`; null draws nothing. */
+  setComposite(textures: PlateCompositeTextures | null, window: BlendWindow): void;
   /** Light with the skin's own light (the drawn skin's profile) or, with null, Three's standard light. Recompiles on a change. */
   setSkinLight(parameters: Pick<SkinParameters, "lobes" | "wrap"> | null): void;
   readonly skinLight: boolean;
@@ -408,7 +295,8 @@ export function createPlateLightMaterial(): { material: THREE.MeshStandardMateri
   material.name = "xfs_makeup_plate";
   const uniforms = {
     xfsPlateColour: { value: NOTHING as THREE.Texture }, xfsPlateSurface: { value: NOTHING as THREE.Texture },
-    xfsPlateNormal: { value: NOTHING as THREE.Texture }, xfsPlateWindow: { value: new THREE.Vector4(0, 0, 1, 1) },
+    xfsPlateNormal: { value: NOTHING as THREE.Texture }, xfsPlateRoughness: { value: NOTHING as THREE.Texture },
+    xfsPlateWindow: { value: new THREE.Vector4(0, 0, 1, 1) },
     xfsPlateNormals: { value: 1 },
     xfsShiftColor: { value: new THREE.Color() }, xfsShiftIntensity: { value: 0 }, xfsShiftExponent: { value: FRESNEL_EXPONENT },
     ...skinLightUniforms({ lobes: { roughness0: 1, roughness1: 1, weight: 1 }, wrap: [0, 0, 0] }),
@@ -418,17 +306,18 @@ export function createPlateLightMaterial(): { material: THREE.MeshStandardMateri
     Object.assign(shader.uniforms, uniforms);
     patchPlateLightShader(shader, { skinLight });
   };
-  material.customProgramCacheKey = () => `xfs-plate-light-1|${skinLight ? "s" : ""}`;
+  material.customProgramCacheKey = () => `xfs-plate-light-2|${skinLight ? "s" : ""}`;
   const define = (name: string, on: boolean) => {
     const defines = { ...material.defines };
     if (on) defines[name] = ""; else delete defines[name];
     material.defines = defines;
   };
   return { material, handle: {
-    setComposite(target, window) {
-      uniforms.xfsPlateColour.value = target?.textures[0] ?? NOTHING;
-      uniforms.xfsPlateSurface.value = target?.textures[1] ?? NOTHING;
-      uniforms.xfsPlateNormal.value = target?.textures[2] ?? NOTHING;
+    setComposite(textures, window) {
+      uniforms.xfsPlateColour.value = textures?.colour ?? NOTHING;
+      uniforms.xfsPlateSurface.value = textures?.surface ?? NOTHING;
+      uniforms.xfsPlateNormal.value = textures?.normal ?? NOTHING;
+      uniforms.xfsPlateRoughness.value = textures?.roughness ?? NOTHING;
       uniforms.xfsPlateWindow.value.set(window.u0, window.v0, 1 / (window.u1 - window.u0), 1 / (window.v1 - window.v0));
     },
     get skinLight() { return skinLight; },

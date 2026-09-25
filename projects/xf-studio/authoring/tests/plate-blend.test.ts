@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { decodeSrgbByte } from "../src/decal-underlay";
 import { gbufferColour, type Rgb } from "../src/face-decal-material";
-import { flatSurface } from "../src/finish-export";
+import { flatSurface, planPresetExport } from "../src/finish-export";
 import { createMakeupStack, type PlateUnderlay } from "../src/makeup-stack";
 import { accumulateComposite, compositeTargetSize, createPlateLightMaterial, EMPTY_COMPOSITE, MODE1_FULL_TILT, patchPlateLightShader, plateBlendWindow,
   plateDrawnAlpha, plateSurface, residualForward, unfadeFacet, type PlateComposite, type PlateSkin, type PlateSurface, type PlateTexel } from "../src/plate-blend";
@@ -226,16 +226,17 @@ describe("the makeup stack's plate", () => {
     expect(evidence.halfFloat).toBe(true);
     expect(evidence.layers.map(layer => layer.ownPlate)).toEqual([false, false, true, false]);
     expect(stack.materials.map(material => material.visible)).toEqual([false, false, true, false]);
-    // One draw per carried layer into the one composite.
-    expect(draws()).toBe(3);
+    // One draw per carried layer, one resolve of the merged decal, and one draw per level of its roughness chain (33 × 9: 6 levels).
+    expect(evidence.plate.compositeDraws).toEqual({ layerDraws: 3, resolves: 1, levelDraws: 6 });
+    expect(draws()).toBe(10);
     // Idle: nothing changed, nothing runs.
     stack.prepareBlend(renderer);
-    expect(draws()).toBe(3);
+    expect(draws()).toBe(10);
     expect(reads).toBe(1);
     // A layer's mask changed: the composite is redrawn, the skin is not read again.
     stack.setLayerCanvas(0, { width: 64, height: 64 } as HTMLCanvasElement);
     stack.prepareBlend(renderer);
-    expect(draws()).toBe(6);
+    expect(draws()).toBe(20);
     expect(reads).toBe(1);
     // A new skin is read once, on the next frame; its light arrives with it.
     stack.setUnderlaySource(() => { reads++; return underlay(); });
@@ -292,6 +293,96 @@ describe("the makeup stack's plate", () => {
     expect(stack.blendDiagnostics().plate.drawn).toBe(false);
     expect(stack.blendDiagnostics().layers[0]!.ownPlate).toBe(true);
     expect(anchor.geometry.getAttribute("xfsUnderlay")).toBeUndefined();
+    stack.setCanvases([]);
+  });
+
+  test("the merged slots are the export plan's included layers across finishes, models, disabled and invisible layers", () => {
+    const base = initialRecipe().layers[0]!;
+    const shift = (color: string) => ({ ...GAME, shift: { color, strength: 0.8 } });
+    const kinds: Record<string, Partial<Layer>> = {
+      matte: { finish: "matte" }, satin: { finish: "regular" }, metallic: { finish: "metallic" },
+      glossy: { finish: "glossy", optics: GAME }, earlierGlossy: { finish: "glossy" },
+      shimmer: { finish: "shimmer", optics: GAME }, earlierShimmer: { finish: "shimmer" }, glitter: { finish: "glitter" },
+      shiftA: { finish: "iridescent", color: "#3a2350", optics: shift("#3fd4c2") }, shiftB: { finish: "iridescent", color: "#3a2350", optics: shift("#d43f8a") },
+      earlierShift: { finish: "iridescent" }, disabled: { finish: "matte", enabled: false }, invisible: { finish: "regular", opacity: 0 },
+    };
+    const presets: string[][] = [
+      ["matte", "disabled", "invisible", "metallic", "satin"],
+      ["earlierGlossy", "glossy", "earlierShimmer", "shimmer", "matte"],
+      ["shiftA", "shiftA", "disabled"],
+      ["shiftA", "matte", "shiftA"],
+      ["shiftA", "shiftB"],
+      ["glitter", "earlierShift", "invisible"],
+      ["glitter", "satin", "shiftA", "glossy", "invisible", "shimmer"],
+    ];
+    const textured = new Set(["shimmer", "earlierShimmer", "glitter"]);
+    for (const names of presets) {
+      const anchor = plateAnchor(), stack = createMakeupStack(anchor, 1), { renderer } = fakeRenderer();
+      const layers = names.map((name, i): Layer => ({ ...base, id: `${name}-${i}`, ...kinds[name] }));
+      stack.setCanvases(layers.map(() => ({ width: 32, height: 32 }) as HTMLCanvasElement));
+      stack.setUnderlaySource(underlay);
+      layers.forEach((layer, i) => stack.updateLayer(i, layer, textured.has(names[i]!) ? optics(32) : undefined));
+      stack.prepareBlend(renderer);
+      const plan = planPresetExport({ layers }), slots = plan.included.map(layer => layers.indexOf(layer));
+      const { plate, layers: drawn } = stack.blendDiagnostics();
+      expect({ names, slots: plate.slots }).toEqual({ names, slots });
+      expect(plate.drawn).toBe(slots.length > 0);
+      expect(plate.route).toBe(slots.length ? plan.route : null);
+      // Every other enabled layer draws on its own plate; disabled ones draw nothing.
+      expect(drawn.map(layer => layer.ownPlate)).toEqual(layers.map((layer, i) => layer.enabled && !slots.includes(i)));
+      stack.setCanvases([]);
+    }
+  });
+
+  test("a new skin of the same shape reuses the plate's underlay buffers; a different shape frees the old ones first (PREV-60)", () => {
+    const anchor = plateAnchor(), stack = createMakeupStack(anchor, 1), { renderer } = fakeRenderer();
+    stack.setCanvases([{ width: 32, height: 32 } as HTMLCanvasElement]);
+    stack.updateLayer(0, initialRecipe().layers[0]!);
+    const names = ["xfsUnderlay", "xfsUnderRoughness", "xfsUnderMetalness"];
+    const read = () => names.map(name => anchor.geometry.getAttribute(name) as THREE.BufferAttribute);
+    let freed = 0;
+    anchor.geometry.addEventListener("dispose", () => freed++);
+    stack.setUnderlaySource(underlay);
+    stack.prepareBlend(renderer);
+    const first = read(), versions = first.map(attribute => attribute.version);
+    // Another V with the same plate: the same attributes, new values, one upload each.
+    const warmer = (): PlateUnderlay => ({ ...underlay(), colour: new THREE.BufferAttribute(new Float32Array(9).fill(0.55), 3) });
+    stack.setUnderlaySource(warmer);
+    stack.prepareBlend(renderer);
+    expect(read()).toEqual(first);
+    read().forEach((attribute, i) => expect(attribute).toBe(first[i]!));
+    expect(first[0]!.getX(0)).toBeCloseTo(0.55, 6);
+    first.forEach((attribute, i) => expect(attribute.version).toBe(versions[i]! + 1));
+    expect(freed).toBe(0);
+    // No skin under the plate: nothing reads the attributes, and they stay for the next skin.
+    stack.setUnderlaySource(() => null);
+    stack.prepareBlend(renderer);
+    expect(stack.blendDiagnostics().plate.drawn).toBe(false);
+    read().forEach((attribute, i) => expect(attribute).toBe(first[i]!));
+    // A skin of another shape replaces them after the geometry's buffers are freed.
+    const four = (): PlateUnderlay => ({ colour: new THREE.BufferAttribute(new Float32Array(12), 3), roughness: new THREE.BufferAttribute(new Float32Array(4), 1),
+      metalness: new THREE.BufferAttribute(new Float32Array(4), 1) });
+    stack.setUnderlaySource(four);
+    stack.prepareBlend(renderer);
+    expect(freed).toBe(1);
+    expect(read()[0]!.count).toBe(4);
+    stack.setCanvases([]);
+  });
+
+  test("a restored WebGL context redraws the composite on the next frame (PREV-58)", () => {
+    const anchor = plateAnchor(), stack = createMakeupStack(anchor, 1), { renderer, draws } = fakeRenderer();
+    stack.setCanvases([{ width: 32, height: 32 } as HTMLCanvasElement]);
+    stack.setUnderlaySource(underlay);
+    stack.updateLayer(0, initialRecipe().layers[0]!);
+    stack.prepareBlend(renderer);
+    const once = draws();
+    stack.prepareBlend(renderer);
+    expect(draws()).toBe(once);
+    stack.contextRestored();
+    expect(stack.blendDiagnostics().dirty).toBe(true);
+    stack.prepareBlend(renderer);
+    expect(draws()).toBe(2 * once);
+    expect(stack.blendDiagnostics().dirty).toBe(false);
     stack.setCanvases([]);
   });
 });

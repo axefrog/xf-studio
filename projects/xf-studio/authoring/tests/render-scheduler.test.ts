@@ -231,6 +231,10 @@ test("the authored plate's light, skin and composite change only inside calls th
   const frame = source.slice(source.indexOf("    frame(dt, now) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
   expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeGreaterThan(-1);
   expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
+  // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and redraws the composite (PREV-58).
+  expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
+  expect(source).toContain("const restored = () => { environment.restore(); makeup.contextRestored(); };");
+  expect(source).toContain(`renderer.domElement.addEventListener("webglcontextrestored", restored);`);
   // Behaviour: a skin-light change needs no composite pass, and an unchanged stack draws nothing more.
   const { createMakeupStack } = await import("../src/makeup-stack");
   const THREE = await import("three");
@@ -251,11 +255,13 @@ test("the authored plate's light, skin and composite change only inside calls th
   stack.setUnderlaySource(underlay);
   stack.updateLayer(0, (await import("../src/recipe")).initialRecipe().layers[0]!);
   stack.prepareBlend(renderer);
-  expect(draws).toBe(1);
+  // One composite update: the layer, the resolve and the 9 × 3 composite's four roughness levels (plate-composite.ts).
+  expect(stack.blendDiagnostics().plate.compositeDraws).toEqual({ layerDraws: 1, resolves: 1, levelDraws: 4 });
+  const once = draws;
   stack.setSkinLight({ lobes: { roughness0: 0.97, roughness1: 1.6, weight: 1 }, wrap: [0.3, 0.2, 0.2] });
   stack.setNormals(false);
   for (let frame = 0; frame < 5; frame++) stack.prepareBlend(renderer);
-  expect(draws).toBe(1);
+  expect(draws).toBe(once);
   stack.setCanvases([]);
 });
 

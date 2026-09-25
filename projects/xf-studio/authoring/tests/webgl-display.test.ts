@@ -1,9 +1,7 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { launch, type Session } from "../tools/cdp";
+import { beforeAll, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { oracleDescribe } from "./optional-oracles";
+import { CHROME, chromeInstalled, runProbePage } from "./webgl-harness";
 import type { PlateProbe } from "./webgl-probe-page";
 
 /**
@@ -11,37 +9,50 @@ import type { PlateProbe } from "./webgl-probe-page";
  * WebGL 2 (PREV-56), and the studio display blends in linear light, so a face decal shows the colour of the game's
  * square-root-space blend in both lighting presets (PREV-50), and the authored makeup plate blends in square-root space and is lit
  * once, with the skin's light, as the G-buffer lights the blended surface (plate-blend.ts: experiment 016's Board 5 steps, a stacked
- * pair against the export, and the lit plate against the blended surface drawn opaque). Needs a local Chrome; public CI has none and skips, and
- * XFS_REQUIRE_ORACLES=1 turns the skip into a failure.
+ * pair against the export, and the lit plate against the blended surface drawn opaque). The same page runs again with both half-float
+ * render extensions hidden (PREV-59). Needs a local Chrome; public CI has none and skips, and XFS_REQUIRE_ORACLES=1 turns the skip
+ * into a failure.
  */
-const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[]; failure?: string;
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
-  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; plate?: PlateProbe };
+  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; plate?: PlateProbe;
+  display: { path: string; creatorTarget: string }; environment: string };
+const PAGE = resolve(import.meta.dir, "webgl-probe-page.ts");
 const gap = (a: readonly number[], b: readonly number[]) => Math.max(...a.map((value, k) => Math.abs(value - b[k]!)));
 /** Largest relative difference per channel. */
 const relative = (a: readonly number[], b: readonly number[]) => Math.max(...a.map((value, k) => Math.abs(value / b[k]! - 1)));
 
-oracleDescribe(existsSync(CHROME), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("renderer shaders on a real GPU", () => {
-  const out = mkdtempSync(join(tmpdir(), "xfs-webgl-probe-"));
-  let server: ReturnType<typeof Bun.serve> | undefined, page: Session | undefined, probe: Probe;
+oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("renderer shaders on a real GPU", () => {
+  let probe: Probe, hidden: Probe;
   beforeAll(async () => {
-    const build = await Bun.build({ entrypoints: [resolve(import.meta.dir, "webgl-probe-page.ts")], outdir: out, target: "browser", naming: "probe.js" });
-    if (!build.success) throw Error(build.logs.map(String).join("\n"));
-    server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => new URL(request.url).pathname === "/probe.js"
-      ? new Response(Bun.file(join(out, "probe.js")), { headers: { "content-type": "text/javascript" } })
-      : new Response(`<!doctype html><meta charset="utf-8"><body><script type="module" src="/probe.js"></script>`, { headers: { "content-type": "text/html" } }) });
-    page = await launch(`http://127.0.0.1:${server.port}/`, { width: 200, height: 200, debugPort: 9200 + (server.port! % 500) });
-    await page.waitFor("window.probe", 60_000);
-    probe = await page.evaluate("window.probe");
-  }, 90_000);
-  afterAll(async () => { await page?.close(); server?.stop(true); rmSync(out, { recursive: true, force: true }); });
+    probe = await runProbePage<Probe>(PAGE);
+    hidden = await runProbePage<Probe>(PAGE, "?hide=half-float");
+  }, 180_000);
 
   test("every decal family variant (plain, double diffuse, gradient recolour), the brows, skin, eyes and display passes compile and draw", () => {
     expect(probe.failure).toBeUndefined();
     expect(probe.ok).toBe(true);
     expect(probe.errors).toEqual([]);
     expect(probe.programs.length).toBeGreaterThanOrEqual(10);
+    expect(probe.display).toEqual({ path: "linear", creatorTarget: "half-float" });
+    expect(probe.environment).toBe("pmrem");
+  });
+
+  test("without a renderable half-float buffer everything still draws: the creator preset through an 8-bit sRGB target, the room as a light probe (PREV-59)", () => {
+    expect(hidden.failure).toBeUndefined();
+    expect(hidden.ok).toBe(true);
+    expect(hidden.linear).toBe(false);
+    // No incomplete framebuffers (the prefilter's and the display's half-float targets were the silent failures).
+    expect(hidden.errors).toEqual([]);
+    expect(hidden.display).toEqual({ path: "direct", creatorTarget: "srgb8" });
+    expect(hidden.environment).toBe("probe");
+    // The creator preset still shows the game's square-root blend, within 8-bit rounding, and is not black.
+    for (const blend of hidden.blends) {
+      expect(gap(blend.creator, blend.creatorTarget)).toBeLessThanOrEqual(2);
+      expect(Math.max(...blend.creatorTarget)).toBeGreaterThan(20);
+      // The same picture as the half-float target within 8-bit rounding: nothing here comes near the clip at one.
+      expect(gap(blend.creatorTarget, probe.blends.find(item => item.name === blend.name)!.creatorTarget)).toBeLessThanOrEqual(2);
+    }
   });
 
   test("the studio stage shows a decal as the game's square-root blend, within rounding, as the creator preset does (PREV-50)", () => {
