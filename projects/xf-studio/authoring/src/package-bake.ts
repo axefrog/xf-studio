@@ -11,7 +11,8 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { HEAD_TEXTURE_SIZE, ROUTE_CHANNELS, WINDOW_TEXTURE, type ExportRoute, type TextureChannel } from "./finish-export";
+import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, HEAD_TEXTURE_SIZE, ROUTE_CHANNELS, WINDOW_TEXTURE, type ExportRoute, type TextureChannel } from "./finish-export";
+import { compileGlitterPreset } from "./glitter-route";
 import type { UvWindow } from "./plate-uv-window";
 import { compilePreset, presetCoverage, type TextureSpace } from "./preset-compiler";
 import { planCollection } from "./preset-collection";
@@ -20,8 +21,12 @@ export type CollectionPlan = ReturnType<typeof planCollection>;
 /** The flat route's channels, kept for callers that predate the other routes. */
 export const BAKED_CHANNELS = ROUTE_CHANNELS.flat;
 export type BakedChannel = TextureChannel;
-/** A raw map: `width` × `height` texels; `side` is kept for square maps (head UV and the Fresnel gradient). */
-export interface BakedMap { channel: BakedChannel; file: string; bytes: number; sha256: string; width: number; height: number; side?: number }
+/**
+ * A raw map: `width` × `height` texels; `side` is kept for square maps (head UV and the Fresnel gradient). A
+ * diagnostic glitter map is its whole supplied chain (`levels` levels, largest first, concatenated), because its
+ * nested levels are drawn, not reduced from level 0.
+ */
+export interface BakedMap { channel: BakedChannel; file: string; bytes: number; sha256: string; width: number; height: number; side?: number; levels?: number }
 /**
  * Head-UV linear coverage of the preset's included layers (1 byte per texel), for the verifier's mapping
  * check: texels [x0, x0 + width) × [y0, y0 + height) of a `grid`² head atlas, covering the window.
@@ -55,6 +60,32 @@ export interface BakeOptions {
 }
 
 /**
+ * One diagnostic glitter preset (glitter-route.ts): every channel's whole chain in one raw file, the accent's head-UV
+ * chain when it has one, and the head-UV coverage reference of its pigment layers for the verifier's mapping gate.
+ */
+function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, window: UvWindow): BakedRecord {
+  const knob = preset.diagnostics?.glitter;
+  if (!knob) throw Error(`Glitter preset ${preset.id} has no glitter knob.`);
+  const chains = compileGlitterPreset(preset.recipe, knob, window), maps: BakedMap[] = [];
+  const channels: TextureChannel[] = [...ROUTE_CHANNELS.glitter, ...(chains.accent ? ["accent" as const] : [])];
+  for (const channel of channels) {
+    const levels = channel === "accent" ? chains.accent! : chains[channel as "diffuse" | "roughness" | "metalness" | "normal" | "flakes"];
+    const data = Buffer.concat(levels), file = `${preset.appearance}_${channel}.raw`;
+    const size = channel === "accent" ? { width: ACCENT_TEXTURE_SIZE, height: ACCENT_TEXTURE_SIZE, side: ACCENT_TEXTURE_SIZE } : { ...GLITTER_WINDOW_TEXTURE };
+    writeFileSync(resolve(out, file), data);
+    maps.push({ channel, file, bytes: data.byteLength, sha256: sha256(data), ...size, levels: levels.length });
+  }
+  const crop = referenceCrop(window), reference = presetCoverage(preset.recipe, crop), referenceFile = `${preset.appearance}_reference.raw`;
+  writeFileSync(resolve(out, referenceFile), reference);
+  return { id: preset.id, revision: preset.revision, route: "glitter", uvSpace: "plate-window", ...GLITTER_WINDOW_TEXTURE, window, maps,
+    reference: { file: referenceFile, bytes: reference.byteLength, sha256: sha256(reference), ...crop },
+    metadata: { adapter: "mesh-decal-glitter-diagnostic-v1", diagnostic: true, levels: chains.stats, ...(chains.accentStats ? { accent: chains.accentStats } : {}),
+      limitations: ["Diagnostic only: flakes come from the preset's glitter knob; the Glitter finish itself has no export route.",
+        "Nested flake mips are drawn per level; how the game's filtering, TAA and upscalers treat them needs in-game evidence."] },
+    recipeSha256: sha256(JSON.stringify(preset.recipe)) };
+}
+
+/**
  * Write `<appearance>_<channel>.raw` (and `<appearance>_reference.raw` for window presets), `plan.json`
  * and `compiled.json` into `outDir`. `beforePreset` runs before each compile so a caller can yield or stop.
  */
@@ -69,6 +100,11 @@ export async function bakeCollection(value: unknown, outDir: string,
   for (const [index, preset] of plan.presets.entries()) {
     await beforePreset(index);
     const windowed = !!options.window && preset.uvSpace === "plate-window";
+    if (preset.route === "glitter") {
+      if (!windowed) throw Error(`Diagnostic glitter preset ${preset.id} needs the plate's UV window.`);
+      records.push(bakeGlitter(preset, out, options.window!));
+      continue;
+    }
     const space: TextureSpace = windowed ? { kind: "window", ...WINDOW_TEXTURE, window: options.window! } : { kind: "head", size: PACKAGE_MAP_SIZE };
     const compiled = compilePreset(preset.recipe, space);
     if (compiled.route !== preset.route) throw Error(`Preset ${preset.id} compiled as ${compiled.route}, planned as ${preset.route}`);

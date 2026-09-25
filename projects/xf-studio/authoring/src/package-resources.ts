@@ -81,6 +81,26 @@ function facetedMaterial(plan: CollectionPlan, uv?: UvTransformConstants) {
   return localInstance("base/materials/mesh_decal.mt", values);
 }
 
+/** `@glitter` (diagnostic): the faceted layout plus the flake mask as `NormalAlphaTex`, on the plate window. */
+function glitterMaterial(plan: CollectionPlan, uv: UvTransformConstants) {
+  const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"],
+    ["NormalTexture", "normal"], ["NormalAlphaTex", "flakes"]] as const).map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 1, UseNormalAlphaTex: 1, NormalsBlendingMode: 1,
+    RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }))
+    values.push(floatValue(name, value));
+  values.push(colorValue("DiffuseColor", WHITE), ...windowValues(uv));
+  return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** A glitter preset's emissive accent (diagnostic): its head-UV mask's red channel lights the flake colour. */
+function accentMaterialInstance(plan: CollectionPlan, preset: CollectionPlan["presets"][number]) {
+  const material = preset.accent;
+  if (!material) throw Error(`Preset ${preset.id} has no planned glitter accent.`);
+  return localInstance(ACCENT_TEMPLATE, [softTexture(plan, "EmissiveMask", "accent"),
+    { $type: "Vector4", EmissiveMaskChannel: { $type: "Vector4", ...material.EmissiveMaskChannel } },
+    colorValue("EmissiveColor", material.EmissiveColor), floatValue("EmissiveEV", material.EmissiveEV), floatValue("AlphaThreshold", material.AlphaThreshold)]);
+}
+
 /** One colour-shift preset's gradient-recolour instance: mask and base colour maps plus its shift constants. */
 function fresnelMaterialInstance(plan: CollectionPlan, preset: CollectionPlan["presets"][number]) {
   const material = preset.fresnel;
@@ -92,6 +112,8 @@ function fresnelMaterialInstance(plan: CollectionPlan, preset: CollectionPlan["p
   return localInstance(FRESNEL_TEMPLATE, values);
 }
 export const FRESNEL_TEMPLATE = "base/materials/mesh_decal_gradientmap_recolor_blendable.mt";
+/** Template of a diagnostic glitter accent: masks and constants only, no UV transform (its mask is on head UV). */
+export const ACCENT_TEMPLATE = "base/materials/mesh_decal_emissive_subsurface.mt";
 
 /**
  * Replace the plate's appearances and materials. Each preset binds its route's template entry:
@@ -106,10 +128,14 @@ export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: Hand
   if (chunkCount !== undefined && chunkCount !== chunks) throw Error(`The plate has ${chunkCount} render chunks; the plan lifts ${chunks}.`);
   const entries: string[] = [];
   for (const preset of plan.presets) if (!entries.includes(preset.material)) entries.push(preset.material);
-  // Several lifts (a diagnostic depth comparison): every appearance names all chunks, its own with its
-  // material and the others with the hidden entry. One lift keeps the Experiment 005 stub layout.
+  for (const preset of plan.presets) if (preset.accentMaterial) entries.push(preset.accentMaterial);
+  // Several chunks (a diagnostic depth comparison, or a glitter accent's chunk): every appearance names all chunks,
+  // its own with its material, the accent chunk with its accent material if it has one, and the others with the
+  // hidden entry. One chunk keeps the Experiment 005 stub layout.
+  const chunkEntry = (preset: CollectionPlan["presets"][number], chunk: number) => chunk === preset.plateChunk ? preset.appearance + preset.material
+    : chunk === plan.plate.accentChunk && preset.accentMaterial ? preset.appearance + preset.accentMaterial : HIDDEN_CHUNK_ENTRY;
   const chunkMaterials = (preset: CollectionPlan["presets"][number], i: number) => chunks > 1
-    ? Array.from({ length: chunks }, (_, chunk) => cname(chunk === preset.plateChunk ? preset.appearance + preset.material : HIDDEN_CHUNK_ENTRY))
+    ? Array.from({ length: chunks }, (_, chunk) => cname(chunkEntry(preset, chunk)))
     : i === 0 || preset.material !== seed.material || preset.route === "fresnel" ? [cname(preset.appearance + preset.material)] : [];
   root.appearances = plan.presets.map((preset, i) => handles.handle({ $type: "meshMeshAppearance", name: cname(preset.appearance),
     chunkMaterials: chunkMaterials(preset, i), tags: [] }));
@@ -117,11 +143,14 @@ export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: Hand
   root.materialEntries = entries.map((name, index) => ({ $type: "CMeshMaterialEntry", index, isLocalInstance: 1, name: cname(name) }));
   root.localMaterialBuffer.materials = entries.map(name => {
     if (name === HIDDEN_CHUNK_ENTRY) return hiddenMaterial();
+    const accent = plan.presets.find(p => p.accentMaterial === name);
+    if (accent) return accentMaterialInstance(plan, accent);
     const preset = plan.presets.find(p => p.material === name)!;
     const windowed = preset.uvSpace === "plate-window" ? uv : undefined;
     if (preset.uvSpace === "plate-window" && !uv) throw Error(`Preset ${preset.id} needs the plate's UV window.`);
     return preset.route === "flat" ? flatMaterial(plan, preset.diagnostics?.surface, windowed)
-      : preset.route === "faceted" ? facetedMaterial(plan, windowed) : fresnelMaterialInstance(plan, preset);
+      : preset.route === "faceted" ? facetedMaterial(plan, windowed)
+      : preset.route === "glitter" ? glitterMaterial(plan, windowed!) : fresnelMaterialInstance(plan, preset);
   });
   root.localMaterialBuffer.rawData = null;
   root.localMaterialBuffer.rawDataHeaders = [];

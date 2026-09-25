@@ -40,10 +40,11 @@ import { basename, join, relative, resolve, sep } from "node:path";
 import { chainDimensions, readDdsChain, type DdsKind } from "./dds-reader";
 import { resourceRecords, type ResourceFile } from "./resource-inventory";
 import { checkPlateGeometry, VERIFIER_PLATE_LIFT_MM, type PlateGeometryReport } from "./plate-geometry";
-import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, textureDims, uvSpaceOf,
+import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, glitterOf, GRADIENT_SIDE, routeOf, sameJson, textureDims, uvSpaceOf,
   VerificationError, type Node, type VerifierPlan, type VerifierRoute, type VerifierUvSpace } from "./resource-checks";
-import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, uniformReference,
+import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, normalInputOf, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
+import { checkAccentChain, checkGlitterChains, splitChain, type AccentReport, type GlitterChainReport } from "./glitter-checks";
 import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
   type MappingStats, type PlateUvSamples, type ReferenceCrop, type VerifierWindow } from "./uv-window";
 
@@ -83,7 +84,8 @@ export const VERIFICATION_LIMITS: readonly string[] = [
   "Plate lift checked against the vanilla face-decal offset (0.40 mm along the head's normals, morph-aware); depth behaviour, eyelid contact and deformation need in-game evidence.",
   "Flat, faceted and Fresnel decal routes are checked as resources and pixels; the faceted normal sign, the Fresnel colour-parameter encoding and every finish's lit appearance need in-game evidence.",
   "The plate-local UV window is re-derived from the packaged plate's UVs; window maps are compared with the authored head-UV coverage at plate sample points through the restated mesh_decal UV transform and WolvenKit's stored row order (checked on each build). The game's own sampling of the window is untested.",
-  "Glitter has no export route; only Matte, Satin, Metallic and the experimental game-matched Glossy, Shimmer and Colour-shifting finishes are packaged.",
+  "The Glitter finish has no export route; only Matte, Satin, Metallic and the experimental game-matched Glossy, Shimmer and Colour-shifting finishes are packaged from authored layers.",
+  "A diagnostic glitter knob's nested flake chains are checked for their published properties (coverage, resolved and nested flakes, tilt, density, BOX and sheen rules) and against the decoded XBMs, not re-drawn from the flake catalogue; the accent chunk's glow, and every glint in game, need in-game evidence.",
 ];
 
 type MipRow = { level: number; width: number; height: number; partialTexels: number; coverage?: ErrorStats; premultipliedDestination?: ErrorStats; widenedRoughness?: ErrorStats };
@@ -106,7 +108,8 @@ export interface VerificationReport {
   decodedPixelChecks: ((SpaceCheck & {
     preset: string; coveredTexels: number; coverageError: ErrorStats; premultipliedEncodedColourError: ErrorStats;
     premultipliedSurfaceError: { roughness: ErrorStats; metalness: ErrorStats }; route?: "faceted"; normalError?: ErrorStats;
-  }) | (SpaceCheck & { preset: string; route: "fresnel"; coveredTexels: number; coverageError: ErrorStats; outsideCoverageMax: number; gradientError: ErrorStats }))[];
+  }) | (SpaceCheck & { preset: string; route: "fresnel"; coveredTexels: number; coverageError: ErrorStats; outsideCoverageMax: number; gradientError: ErrorStats })
+    | (SpaceCheck & { preset: string; route: "glitter"; coveredTexels: number; coverageError: ErrorStats; decoded: GlitterDecodedReport; chains: GlitterChainReport; accent?: AccentReport & { decodedError: ErrorStats } }))[];
   decodedMipChecks: { preset: string; levels: MipRow[] }[];
   /** Each preset's route, re-derived from its recipe and matched by the plan, the compiled record and the resources. */
   presetRoutes: { id: string; route: VerifierRoute }[];
@@ -219,7 +222,7 @@ export function checkMapping(name: string, coverage: Float64Array, dims: { width
 export const VERIFIER_REFERENCE_GRID = 4096;
 
 const GROUP: Record<string, string> = { diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar",
-  mask: "dds-scalar", normal: "dds-normal" };
+  mask: "dds-scalar", normal: "dds-normal", flakes: "dds-scalar", accent: "dds-scalar" };
 type Exported = (depotPath: string) => string;
 
 /**
@@ -281,10 +284,109 @@ function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan[
     mips: { preset: preset.name, levels } };
 }
 
+/** Decoded XBM levels of a glitter preset against its supplied chain, and the flake normals' BC5 error at level 0. */
+type GlitterDecodedReport = {
+  levels: { level: number; diffuse: number; alpha: number; roughness: number; metalness: number; flakes: number; normal: number }[];
+  /** Angle (degrees) between supplied and decoded normals on level-0 flake texels (mask ≥ ½). */
+  flakeNormalDegrees: ErrorStats;
+  /** Level 0 flake mask error on flake edges (0 < mask < 255). */
+  flakeEdgeError: ErrorStats;
+  /** Levels 1–3: decoded flakes' mean error to the supplied nested level and to a BOX chain of level 0 (WolvenKit kept the supplied chain). */
+  keptChain: { level: number; toSupplied: number; toBox: number }[];
+};
+const GLITTER_TEXEL_BYTES: Record<string, number> = { diffuse: 4, normal: 2, roughness: 1, metalness: 1, flakes: 1, accent: 1 };
+
+function checkGlitterTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], context: TextureContext) {
+  const glitter = glitterOf(preset)!, name = preset.appearance, dims = textureDims(preset, "diffuse"), { width, height } = dims;
+  const raw = readBaked(build, record), chains: Record<string, Uint8Array[]> = {};
+  for (const map of record.maps as Node[]) {
+    const channelDims = textureDims(preset, map.channel);
+    ensure(map.width === channelDims.width && map.height === channelDims.height, `Glitter ${map.channel} map of ${name} is ${map.width}x${map.height}`);
+    chains[map.channel] = splitChain(raw[map.channel], map.width, map.height, GLITTER_TEXEL_BYTES[map.channel], map.levels, `Glitter ${map.channel} map of ${name}`);
+  }
+  const wanted = ["diffuse", "roughness", "metalness", "normal", "flakes", ...(glitter.accent ? ["accent"] : [])];
+  ensure(sameJson(Object.keys(chains).sort(), wanted.sort()), `Build record for ${name} lacks a glitter map`);
+  // Published properties of the chains, restated.
+  const alpha = expectedChain(chains.diffuse[0], chains.roughness[0], chains.metalness[0], width, height).chain.diffuse
+    .map(level => Uint8Array.from({ length: level.length / 4 }, (_, t) => level[4 * t + 3]));
+  const report = checkGlitterChains(preset.name, preset.recipe, glitter, context.window, dims, chains as never, alpha);
+  // Supplied import chains are the baked chains byte for byte (normals as their RGBA import rows).
+  const decoded: Record<string, readonly Uint8Array[]> = {};
+  for (const channel of wanted)
+    decoded[channel] = suppliedAndDecoded(build, preset, channel, textureDims(preset, channel as "diffuse"),
+      channel === "normal" ? normalInputOf(chains.normal) : chains[channel], "baked glitter", context.exported);
+
+  // Decoded against supplied, every level.
+  const levels: GlitterDecodedReport["levels"] = [];
+  const meanOf = (a: Uint8Array, b: Uint8Array, stride: number, pick: (k: number) => boolean) => {
+    let sum = 0, n = 0;
+    for (let i = 0; i < a.length; i++) if (pick(i % stride)) { sum += Math.abs(a[i] - b[i]); n++; }
+    return n ? sum / n / 255 : 0;
+  };
+  chains.diffuse.forEach((_, L) => {
+    const row = { level: L, diffuse: meanOf(decoded.diffuse[L], chains.diffuse[L], 4, k => k < 3), alpha: meanOf(decoded.diffuse[L], chains.diffuse[L], 4, k => k === 3),
+      roughness: meanOf(decoded.roughness[L], chains.roughness[L], 1, () => true), metalness: meanOf(decoded.metalness[L], chains.metalness[L], 1, () => true),
+      flakes: meanOf(decoded.flakes[L], chains.flakes[L], 1, () => true), normal: meanOf(decoded.normal[L], chains.normal[L], 2, () => true) };
+    if (L <= 5) ensure(Object.entries(row).every(([key, value]) => key === "level" || value < .02),
+      `Decoded glitter level ${L} of ${name} differs from its supplied chain: ${JSON.stringify(row)}`);
+    levels.push(row);
+  });
+  // BC5 on flakes: the angle between supplied and decoded normals on level-0 flake texels.
+  const angles: number[] = [], edges: number[] = [];
+  const toVector = (x: number, y: number) => { const a = x / 255 * 2 - 1, b = y / 255 * 2 - 1; return [a, b, Math.sqrt(Math.max(0, 1 - a * a - b * b))]; };
+  for (let t = 0; t < width * height; t++) {
+    const m = chains.flakes[0][t];
+    if (m > 0 && m < 255) edges.push(Math.abs(decoded.flakes[0][t] - m) / 255);
+    if (m < 128) continue;
+    const p = toVector(chains.normal[0][2 * t], chains.normal[0][2 * t + 1]), q = toVector(decoded.normal[0][2 * t], decoded.normal[0][2 * t + 1]);
+    const dot = (p[0] * q[0] + p[1] * q[1] + p[2] * q[2]) / (Math.hypot(...p) * Math.hypot(...q));
+    angles.push(Math.acos(Math.min(1, dot)) * 180 / Math.PI);
+  }
+  const flakeNormalDegrees = errorStats(Float64Array.from(angles)), flakeEdgeError = errorStats(Float64Array.from(edges));
+  ensure(flakeNormalDegrees.mean < 3 && flakeNormalDegrees.p95 < 8, `Decoded flake normals of ${name} lose their tilt: ${JSON.stringify(flakeNormalDegrees)}`);
+  // WolvenKit kept the supplied nested levels rather than regenerating them: decoded flakes sit closer to the supplied level than to a BOX chain.
+  const keptChain: GlitterDecodedReport["keptChain"] = [];
+  let box = Float64Array.from(chains.flakes[0], b => b / 255), bw = width, bh = height;
+  for (let L = 1; L <= 3; L++) {
+    const w = bw / 2, h = bh / 2, next = new Float64Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const a = 2 * y * bw + 2 * x; next[y * w + x] = (((box[a] + box[a + 1]) + box[a + bw]) + box[a + bw + 1]) / 4; }
+    box = next; bw = w; bh = h;
+    let toSupplied = 0, toBox = 0, n = 0;
+    for (let t = 0; t < w * h; t++) {
+      const s = chains.flakes[L][t] / 255, b = box[t], d = decoded.flakes[L][t] / 255;
+      if (!s && !b) continue;
+      toSupplied += Math.abs(d - s); toBox += Math.abs(d - b); n++;
+    }
+    const row = { level: L, toSupplied: n ? toSupplied / n : 0, toBox: n ? toBox / n : 0 };
+    ensure(row.toSupplied < row.toBox, `Decoded flake level ${L} of ${name} looks regenerated rather than the supplied nested chain: ${JSON.stringify(row)}`);
+    keptChain.push(row);
+  }
+  let accent: (AccentReport & { decodedError: ErrorStats }) | undefined;
+  if (glitter.accent) {
+    const side = textureDims(preset, "accent").width;
+    const accentReport = checkAccentChain(preset.name, preset.recipe, glitter, context.window, chains.accent, side, chains.flakes[0], dims);
+    const decodedError = errorStats(byteErrors(decoded.accent[0], chains.accent[0], 1, Uint8Array.from(chains.accent[0], v => (v ? 1 : 0))));
+    ensure(decodedError.mean < .03, `Decoded accent mask of ${name} differs from its supplied chain: ${JSON.stringify(decodedError)}`);
+    accent = { ...accentReport, decodedError };
+  }
+  // Placement: the stored rows and the window mapping, as for every window preset.
+  const coverage = Float64Array.from({ length: width * height }, (_, t) => (decoded.diffuse[0][4 * t + 3] / 255) ** 2);
+  const space = checkSpace(build, record, preset, "roughness", decoded.roughness[0], coverage, context);
+  const active = Uint8Array.from({ length: width * height }, (_, t) => (chains.diffuse[0][4 * t + 3] ? 1 : 0)), covered = active.reduce((n, v) => n + v, 0);
+  ensure(covered > 0, `Preset ${preset.name} has no makeup in its glitter texture`);
+  const coverageError = errorStats(Float64Array.from({ length: width * height }, (_, t) => t).filter(t => active[t])
+    .map(t => Math.abs((decoded.diffuse[0][4 * t + 3] / 255) ** 2 - (chains.diffuse[0][4 * t + 3] / 255) ** 2)));
+  ensure(coverageError.p95 < .05, `Decoded glitter coverage of ${name} differs from its supplied map: ${JSON.stringify(coverageError)}`);
+  return { pixel: { preset: preset.name, route: "glitter" as const, ...space, coveredTexels: covered, coverageError,
+    decoded: { levels, flakeNormalDegrees, flakeEdgeError, keptChain }, chains: report, ...(accent ? { accent } : {}) },
+    mips: { preset: preset.name, levels: levels.map(row => ({ level: row.level, width: Math.max(1, width >> row.level), height: Math.max(1, height >> row.level), partialTexels: 0 })) } };
+}
+
 function checkTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], context: TextureContext) {
   const route = routeOf(preset);
   ensure(record.route === route, `Compiled record for ${preset.appearance} is ${record.route ?? "missing its route"}, but its recipe needs the ${route} route`);
   if (route === "fresnel") return checkFresnelTextures(build, record, preset, context);
+  if (route === "glitter") return checkGlitterTextures(build, record, preset, context);
   const exported = context.exported, dims = textureDims(preset, "diffuse"), { width, height } = dims;
   const name = preset.appearance, raw = readBaked(build, record);
   ensure(raw.diffuse && raw.roughness && raw.metalness, `Build record for ${name} lacks a base map`);

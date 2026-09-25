@@ -23,12 +23,13 @@ export function chainDimensions(width: number, height: number): { width: number;
 }
 
 /** Texture channels, plus the two normal-map encodings: the RGBA8 import input and WolvenKit's decoded BC5 (RG8). */
-export type DdsKind = "diffuse" | "roughness" | "metalness" | "mask" | "gradient" | "normal" | "normal-input";
+export type DdsKind = "diffuse" | "roughness" | "metalness" | "mask" | "gradient" | "normal" | "normal-input" | "flakes" | "accent";
 
 const FORMAT_RGBA8_SRGB = 29, FORMAT_RGBA8 = 28, FORMAT_RG8 = 49, FORMAT_R8 = 61, TEXTURE_2D = 3;
 const KIND: Record<DdsKind, { format: number; bytes: number }> = {
   diffuse: { format: FORMAT_RGBA8_SRGB, bytes: 4 }, gradient: { format: FORMAT_RGBA8_SRGB, bytes: 4 },
   roughness: { format: FORMAT_R8, bytes: 1 }, metalness: { format: FORMAT_R8, bytes: 1 }, mask: { format: FORMAT_R8, bytes: 1 },
+  flakes: { format: FORMAT_R8, bytes: 1 }, accent: { format: FORMAT_R8, bytes: 1 },
   normal: { format: FORMAT_RG8, bytes: 2 }, "normal-input": { format: FORMAT_RGBA8, bytes: 4 },
 };
 

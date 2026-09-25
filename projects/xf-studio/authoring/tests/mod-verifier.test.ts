@@ -24,12 +24,12 @@ const verifierDir = resolve(import.meta.dir, "../src/mod-verifier");
 
 test("the verifier imports nothing from the compiler or other Studio modules", () => {
   const files = readdirSync(verifierDir).filter(name => name.endsWith(".ts"));
-  expect(files.sort()).toEqual(["dds-reader.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "uv-window.ts", "verify-build.ts"]);
+  expect(files.sort()).toEqual(["dds-reader.ts", "glitter-checks.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "uv-window.ts", "verify-build.ts"]);
   for (const name of files) {
     const code = readFileSync(join(verifierDir, name), "utf8");
     const specifiers = [...code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(m => m[1]);
     for (const specifier of specifiers)
-      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|plate-geometry|resource-checks|resource-inventory|texture-checks|uv-window|verify-build))$/);
+      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|glitter-checks|plate-geometry|resource-checks|resource-inventory|texture-checks|uv-window|verify-build))$/);
     expect(code, `${name} uses require()`).not.toMatch(/\brequire\s*\(/);
   }
 });

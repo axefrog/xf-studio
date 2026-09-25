@@ -1,6 +1,6 @@
-import { fresnelMaterial, HEAD_UV_ENTRY_SUFFIX, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, ROUTE_UV_WINDOW, type ExportRoute,
-  type FresnelMaterial, type TextureChannel } from "./finish-export";
-import { parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type PresetDiagnostics } from "./export-diagnostics";
+import { ACCENT_ENTRY_PREFIX, fresnelMaterial, HEAD_UV_ENTRY_SUFFIX, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, ROUTE_UV_WINDOW,
+  type ExportRoute, type FresnelMaterial, type TextureChannel } from "./finish-export";
+import { accentConstants, parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type PresetDiagnostics } from "./export-diagnostics";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
 import type { Recipe, RecipeFile } from "./recipe";
@@ -147,11 +147,25 @@ export function planCollection(value: unknown) {
   const liftOf = (id: string) => diagnostics?.presets[id]?.plateLiftMm ?? PLATE_LIFT_MM;
   // One plate render chunk per distinct lift, ascending; a normal collection has the one production lift.
   const liftsMm = [...new Set(collection.presets.map(p => liftOf(p.id)))].sort((a, b) => a - b);
+  // A diagnostic glitter accent draws on one more chunk after them, at the lift of the presets that carry one.
+  const accentLifts = [...new Set(collection.presets.filter(p => diagnostics?.presets[p.id]?.glitter?.accent).map(p => liftOf(p.id)))];
+  if (accentLifts.length > 1) throw Error("Glitter accents in one collection must share one plate lift.");
+  const accentChunk = accentLifts.length ? liftsMm.length : undefined;
+  if (accentLifts.length) liftsMm.push(accentLifts[0]);
   const namespace = `xfs_c${key}`, depot = `axefrog/appearance_studio/collections/${key}`;
   const presets = collection.presets.map((preset, i) => {
     const appearance = `xfs_p${preset.id.replaceAll("-", "")}`;
     // The export route decides the material template entry and which texture channels exist.
-    const exported = planPresetExport(preset.recipe), route: ExportRoute = exported.route;
+    const exported = planPresetExport(preset.recipe), glitter = diagnostics?.presets[preset.id]?.glitter;
+    // The diagnostic Glitter route draws flakes over flat-finish pigment layers; only its knob selects it.
+    if (glitter) {
+      if (exported.route !== "flat" || exported.excluded.length)
+        throw Error(`Diagnostic glitter needs flat-finish pigment layers only; ${preset.name} is ${exported.route}.`);
+      const active = new Set(exported.included.map(layer => layer.id));
+      for (const region of glitter.regions) if (!active.has(region.layer))
+        throw Error(`Diagnostic glitter for ${preset.name} names layer ${region.layer}, which is not one of its active layers.`);
+    }
+    const route: ExportRoute = glitter ? "glitter" : exported.route;
     const surface = diagnostics?.presets[preset.id]?.surface;
     if (surface && route !== "flat") throw Error(`Diagnostic surface overrides apply only to flat presets; ${preset.name} is ${route}.`);
     // Texture space: the plate-local UV window where the route's template can transform UVs, unless a
@@ -164,9 +178,12 @@ export function planCollection(value: unknown) {
     const presetDiagnostics = diagnostics?.presets[preset.id];
     // A colour-shift preset's material constants (its one shift colour) are part of the plan.
     const fresnel: FresnelMaterial | undefined = route === "fresnel" ? fresnelMaterial(exported.included[0].optics!.shift!) : undefined;
+    // A glitter accent: its own emissive material entry, bound on the accent chunk, and one more texture.
+    const accent = glitter?.accent ? { accentMaterial:`${ACCENT_ENTRY_PREFIX}${preset.id.replaceAll("-", "")}`, accent:accentConstants(glitter) } : {};
+    const channels: readonly TextureChannel[] = [...ROUTE_CHANNELS[route], ...(glitter?.accent ? ["accent" as const] : [])];
     return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`, route, material, uvSpace, ...(fresnel ? { fresnel } : {}),
-      plateChunk:liftsMm.indexOf(liftOf(preset.id)), ...(presetDiagnostics ? { diagnostics:presetDiagnostics } : {}),
-      textures:Object.fromEntries(ROUTE_CHANNELS[route].map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as PlanTextures };
+      plateChunk:liftsMm.indexOf(liftOf(preset.id)), ...accent, ...(presetDiagnostics ? { diagnostics:presetDiagnostics } : {}),
+      textures:Object.fromEntries(channels.map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as PlanTextures };
   });
   // Branding (modName/selectorLabel) is display text, never part of a resource identity.
   return { schema:"xfas/export-plan-1" as const, collectionId:collection.id, name:collection.name,
@@ -174,8 +191,9 @@ export function planCollection(value: unknown) {
     selector:namespace, component:`${namespace}_makeup`, offAppearance:"xfs_off", templateAppearance:`${namespace}__xfs_template`,
     app:`${depot}/xfs_collection.app`, customization:`${depot}/xfs_collection.inkcharcustomization`,
     mesh:`${depot}/models/xfs_eye_plate.mesh`, morph:`${depot}/models/xfs_eye_plate.morphtarget`,
-    // The packaged plate: one render chunk per lift (mm along the head's normals), in this order.
-    plate:{ liftsMm },
+    // The packaged plate: one render chunk per lift (mm along the head's normals), in this order; a diagnostic glitter
+    // accent adds one last chunk (`accentChunk`) at its presets' lift.
+    plate:{ liftsMm, ...(accentChunk !== undefined ? { accentChunk } : {}) },
     presets, requirements:{ArchiveXL:"1.27.3",game:"2.31"},
     limitations:["Appearance names are stable; game save/index persistence across reorder/removal still requires runtime proof.",
       "One pack creates one selector. Multi-pack aggregation into one global selector is not implemented."],

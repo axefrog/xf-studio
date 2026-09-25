@@ -184,7 +184,12 @@ export function facetedReference(diffuse: Uint8Array, roughness: Uint8Array, met
     }
     roughChain.push(r); xyChain.push(xy);
   }
-  const rgba = xyChain.map(level => {
+  return { roughness: roughChain, normalXY: xyChain, normalInput: normalInputOf(xyChain) };
+}
+
+/** The RGBA normal-map import rows of X/Y byte levels: B = unitByte(√max(0, 1 − x² − y²)·½ + ½), A = 255. */
+export function normalInputOf(xyChain: readonly Uint8Array[]): Uint8Array[] {
+  return xyChain.map(level => {
     const out = new Uint8Array(level.length * 2);
     for (let t = 0; t < level.length / 2; t++) {
       const a = unorm(level[2 * t]), b = unorm(level[2 * t + 1]);
@@ -192,7 +197,6 @@ export function facetedReference(diffuse: Uint8Array, roughness: Uint8Array, met
     }
     return out;
   });
-  return { roughness: roughChain, normalXY: xyChain, normalInput: rgba };
 }
 
 /** Expected linear coverage mask chain. */
