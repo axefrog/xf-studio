@@ -1,9 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { depotHash } from "../src/depot-path";
-import { archiveSourceContains, readRdarIndexHashes, sortedHashesContain } from "../src/rdar-index-fs";
+import { archiveSourceContains, readRdarIndexCount, readRdarIndexHashes, sortedHashesContain } from "../src/rdar-index-fs";
+import { readArchiveIndex } from "../src/resolver-host";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -37,4 +38,24 @@ test("the game's own archive indexes say whether a resource exists, without read
   const broken = mkdtempSync(join(tmpdir(), "xfs-rdar-broken-")); roots.push(broken);
   writeFileSync(join(broken, "basegame_1.archive"), "not an archive");
   expect(() => archiveSourceContains(broken, wanted)).toThrow("No readable archive index");
+});
+
+test("the resolver's index cache holds only complete indexes; a short one is deleted and read again (PREV-47)", () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-rdar-cache-")); roots.push(root);
+  const archive = join(root, "mod.archive"), cache = join(root, "cache");
+  writeFileSync(archive, rdar(["base\\a.mesh", "base\\b.mesh", "base\\c.mesh"]));
+  expect(readRdarIndexCount(archive)).toBe(3);
+  expect(readArchiveIndex(archive, cache)).toHaveLength(3);
+  const [name] = readdirSync(join(cache, "index"));
+  const file = join(cache, "index", name!);
+  expect(statSync(file).size).toBe(24);
+  expect(readdirSync(join(cache, "index"))).toEqual([name]); // no staging files left behind
+  // A first scan killed mid-write left an empty or partial file: it is not trusted, and the complete index replaces it.
+  for (const damaged of [new Uint8Array(0), readFileSync(file).subarray(0, 8)]) {
+    writeFileSync(file, damaged);
+    const hashes = readArchiveIndex(archive, cache);
+    expect(hashes).toHaveLength(3);
+    expect(sortedHashesContain(hashes, BigInt(depotHash("base\\c.mesh")))).toBe(true);
+    expect(statSync(file).size).toBe(24);
+  }
 });

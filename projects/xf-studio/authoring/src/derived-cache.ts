@@ -28,6 +28,13 @@ export function contentFingerprint(gameRoot: string, archiveDirectory: string): 
   return createHash("sha256").update(entries.join("\n")).digest("hex");
 }
 
+/** Write through a unique temporary sibling and rename, so a reader never sees a half-written cache file. */
+export function writeFileAtomic(path: string, data: string | Uint8Array): void {
+  const staging = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
+  try { writeFileSync(staging, data); renameSync(staging, path); }
+  catch (error) { rmSync(staging, { force: true }); throw error; }
+}
+
 export const samePath = (left: string, right: string) => process.platform === "win32"
   ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right);
 

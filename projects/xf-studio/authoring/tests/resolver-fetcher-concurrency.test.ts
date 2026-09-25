@@ -20,7 +20,7 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-fetcher-")); roots.push(root); return root; };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-type FakeOptions = { noJson?: Set<string>; convertExit?: number; fail?: (args: string[]) => WolvenKitRunError | null };
+type FakeOptions = { noJson?: Set<string>; convertExit?: number; fail?: (args: string[]) => WolvenKitRunError | null; cli?: string };
 function fakeWolvenKit(calls: string[][], options: FakeOptions = {}) {
   return async (args: string[]) => {
     calls.push(args);
@@ -53,14 +53,14 @@ function archive(root: string, name: string): MountedArchive {
 }
 const ref = (hash: string) => ({ hash, path: null });
 
-function setup(options: FakeOptions = {}) {
-  const root = temporary(), cache = join(root, "cache");
+function setup(options: FakeOptions = {}, root = temporary()) {
+  const cache = join(root, "cache");
   const a = archive(root, "a.archive"), b = archive(root, "b.archive");
   const owned: Record<string, string[]> = { [a.id]: ["1001", "1002"], [b.id]: ["2001", "2002"] };
   const contains = (id: string, hash: string) => owned[id]?.includes(hash) ?? false;
   const calls: string[][] = [];
   const fetcher = () => {
-    const created = new WolvenKitFetcher("WolvenKit.CLI.exe", cache, contains);
+    const created = new WolvenKitFetcher(options.cli ?? "WolvenKit.CLI.exe", cache, contains);
     (created as unknown as { run: unknown }).run = fakeWolvenKit(calls, options);
     return created;
   };
@@ -126,4 +126,50 @@ test("a .failed marker from before the marker rule (PREV-29) is ignored, removed
   expect(result).not.toBeNull();
   expect(calls.length).toBeGreaterThan(runs);
   expect(markers()).toEqual([]);
+});
+
+test("a .failed marker counts only for the WolvenKit that wrote it; the JSON cache is keyed by WolvenKit too (PREV-46, PIPE-04)", async () => {
+  const root = temporary(), cli = join(root, "WolvenKit.CLI.exe");
+  writeFileSync(cli, "WolvenKit 9.0.1");
+  const options: FakeOptions = { noJson: new Set(["1002"]), cli };
+  const first = setup(options, root);
+  expect(await first.fetcher().fetch(first.a, ref("1002"), "app")).toBeNull();
+  expect(await first.fetcher().fetch(first.a, ref("1001"), "app")).not.toBeNull();
+  expect(first.markers()).toHaveLength(1);
+  const marker = JSON.parse(readFileSync(join(first.cache, "json", first.markers()[0]!), "utf8"));
+  expect(marker).toMatchObject({ markerVersion: 3, wolvenKit: first.fetcher().tool });
+  // Same WolvenKit: the marker and the cached JSON hold, so nothing runs.
+  const runs = first.calls.length;
+  expect(await first.fetcher().fetch(first.a, ref("1002"), "app")).toBeNull();
+  expect(await first.fetcher().fetch(first.a, ref("1001"), "app")).not.toBeNull();
+  expect(first.calls.length).toBe(runs);
+  // An upgraded WolvenKit that converts the resource: both are extracted again, and the resource is found.
+  writeFileSync(cli, "WolvenKit 9.1.0");
+  options.noJson!.clear();
+  const upgraded = first.fetcher();
+  expect(upgraded.tool).not.toBe(marker.wolvenKit);
+  expect(await upgraded.fetch(first.a, ref("1002"), "app")).not.toBeNull();
+  expect(await upgraded.fetch(first.a, ref("1001"), "app")).not.toBeNull();
+  expect(first.calls.filter(args => args[0] === "unbundle").length).toBe(4);
+});
+
+test("a marker written by another WolvenKit identity at the current key is ignored and removed (PREV-46)", async () => {
+  const { cache, a, fetcher, markers } = setup();
+  const probe = fetcher();
+  await probe.fetch(a, ref("1002"), "app");
+  const cached = readdirSync(join(cache, "json")).find(name => name.startsWith("1002-"))!;
+  writeFileSync(join(cache, "json", `${cached.replace(/^1002-/, "1001-")}.failed`), JSON.stringify({ markerVersion: 3, wolvenKit: "wolvenkit:8.17.4:0123456789abcdef",
+    hash: "1001", path: null, archive: "a.archive", reason: "WolvenKit extracted the resource but produced no readable JSON.", at: "2026-09-25T08:25:34.755Z" }));
+  expect(await fetcher().fetch(a, ref("1001"), "app")).not.toBeNull();
+  expect(markers()).toEqual([]);
+});
+
+test("an extracted resource still answers when its cache file cannot be written (PREV-49)", async () => {
+  const { cache, a, b, fetcher } = setup();
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, "json"), "a file where the cache folder should be");
+  const created = fetcher();
+  const results = await Promise.all([created.fetch(a, ref("1001"), "app"), created.fetch(b, ref("2001"), "app")]);
+  expect(results.every(result => result !== null)).toBe(true);
+  expect(created.stats.failures.join(" | ")).toContain("not cached");
 });

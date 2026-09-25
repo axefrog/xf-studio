@@ -97,7 +97,15 @@ function bilinear(plane: ArrayLike<number>, width: number, height: number, x: nu
   return (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
 }
 
-export interface MappingStats { readonly samples: number; readonly covered: number; readonly mean: number; readonly p99: number; readonly farShare: number }
+/**
+ * `covered`: samples where either side has coverage (≥ 1/255), over which the errors are taken. `drawn`: samples
+ * where the game's map has coverage. `authored`: samples where the authored reference reaches at least
+ * `REFERENCE_REACH` (the Studio's plate-reach threshold, 2/255, restated).
+ */
+export interface MappingStats { readonly samples: number; readonly covered: number; readonly drawn: number; readonly authored: number;
+  readonly mean: number; readonly p99: number; readonly farShare: number }
+/** Authored coverage at a sample that counts as the makeup reaching it (the Studio omits presets that reach no sample at 2/255). */
+export const REFERENCE_REACH = 2 / 255;
 
 /** A head-UV coverage reference: texels [x0, x0 + width) × [y0, y0 + height) of a grid² head atlas. */
 export interface ReferenceCrop { readonly grid: number; readonly x0: number; readonly y0: number; readonly width: number; readonly height: number }
@@ -112,7 +120,7 @@ export interface ReferenceCrop { readonly grid: number; readonly x0: number; rea
 export function mappingStats(coverage: Float64Array, width: number, height: number, constants: Record<string, number>,
   reference: Uint8Array, crop: ReferenceCrop, samples: PlateUvSamples): MappingStats {
   const errors: number[] = [];
-  let far = 0;
+  let far = 0, drawn = 0, reached = 0;
   for (let i = 0; i < samples.uv.length; i += 2) {
     const U = samples.uv[i], V = samples.uv[i + 1];
     const tu = wrapT(constants.UVScaleX * (U - .5) + .5 + constants.UVOffsetX), tv = wrapT(constants.UVScaleY * (V - .5) + .5 + constants.UVOffsetY);
@@ -120,18 +128,28 @@ export function mappingStats(coverage: Float64Array, width: number, height: numb
     const rx = U * crop.grid - .5 - crop.x0, ry = (1 - V) * crop.grid - .5 - crop.y0;
     ensure(rx >= 0 && ry >= 0 && rx < crop.width - 1 && ry < crop.height - 1, "A plate sample lies outside the coverage reference");
     const authored = bilinear(reference, crop.width, crop.height, rx, ry) / 255;
+    if (game >= 1 / 255) drawn++;
+    if (authored >= REFERENCE_REACH) reached++;
     if (game < 1 / 255 && authored < 1 / 255) continue;
     const error = Math.abs(game - authored);
     errors.push(error);
     if (error > .5) far++;
   }
   const sorted = Float64Array.from(errors).sort(), n = sorted.length;
-  return { samples: samples.uv.length / 2, covered: n, mean: n ? errors.reduce((a, b) => a + b, 0) / n : 0,
+  return { samples: samples.uv.length / 2, covered: n, drawn, authored: reached, mean: n ? errors.reduce((a, b) => a + b, 0) / n : 0,
     p99: n ? sorted[Math.min(n - 1, Math.floor(.99 * (n - 1)))] : 0, farShare: n ? far / n : 0 };
 }
 
-/** Search range of the offset estimate (window texels) and its coarse-to-fine steps. */
-export const OFFSET_SEARCH = Object.freeze({ range: 8, steps: [1, 1 / 4, 1 / 16] as readonly number[] });
+/**
+ * Search range of the offset estimate (window texels), its coarse-to-fine steps, and the least evidence it needs
+ * (PIPE-39): samples with authored content (≥ 1/255), and edge strength, the spread of the total error over the
+ * coarse shifts in coverage units (how much misplacing the content would cost). Below either the estimate is not
+ * made. Calibrated on lossless bakes of the lid layer over the built-in plate's window: a preset that barely reaches
+ * the plate (13 content samples, edge 2.5) and very faint makeup (1 % opacity, edge 2.5 one-sided and 4.4 mirrored;
+ * 0.5 %, edge 0.9) gave spurious estimates of 0.2-0.5 texel, while presets with at least 100 content samples and
+ * edge 24 estimated exactly 0.
+ */
+export const OFFSET_SEARCH = Object.freeze({ range: 8, steps: [1, 1 / 4, 1 / 16] as readonly number[], minContentSamples: 24, minEdge: 8 });
 
 /**
  * Signed estimate of how far the game's map content sits from the authored content at the plate samples, in
@@ -140,7 +158,8 @@ export const OFFSET_SEARCH = Object.freeze({ range: 8, steps: [1, 1 / 4, 1 / 16]
  * the authored reference: a joint search (a diagonal edge couples the axes) over whole texels within ±range,
  * refined twice around the best. Among equal errors the shift nearest zero wins, so an edge along one axis
  * reports 0 on it. The mean-error gate tolerates small misregistrations (a 6-texel shift of fine lines passes
- * it); this estimate bounds them. `null` when no shift changes the error (nothing to align).
+ * it); this estimate bounds them. `null` when there is too little to align (see `OFFSET_SEARCH`), so the estimate
+ * would be noise.
  */
 export function mappingOffset(coverage: Float64Array, width: number, height: number, constants: Record<string, number>,
   reference: Uint8Array, crop: ReferenceCrop, samples: PlateUvSamples, search = OFFSET_SEARCH): { u: number | null; v: number | null } {
@@ -171,6 +190,8 @@ export function mappingOffset(coverage: Float64Array, width: number, height: num
     for (let i = 0; i < gx.length; i++) sum += Math.abs(bilinear(coverage, width, height, gx[i] + su, gy[i] + sv) - authored[i]);
     return sum;
   };
+  const content = authored.reduce((n, a) => n + (a >= 1 / 255 ? 1 : 0), 0);
+  if (content < search.minContentSamples) return { u: null, v: null };
   let best = { u: 0, v: 0, e: error(0, 0) }, least = best.e, most = best.e;
   const tolerance = () => 1e-9 * Math.max(1, best.e);
   for (const [level, step] of search.steps.entries()) {
@@ -182,7 +203,7 @@ export function mappingOffset(coverage: Float64Array, width: number, height: num
       if (level === 0) { least = Math.min(least, e); most = Math.max(most, e); }
       if (e < best.e - tolerance() || (e <= best.e + tolerance() && Math.hypot(u, v) < Math.hypot(best.u, best.v))) best = { u, v, e };
     }
-    if (level === 0 && !(most - least > 1e-9 * Math.max(1, most))) return { u: null, v: null };
+    if (level === 0 && !(most - least >= search.minEdge && most - least > 1e-9 * Math.max(1, most))) return { u: null, v: null };
   }
   return { u: best.u, v: best.v };
 }

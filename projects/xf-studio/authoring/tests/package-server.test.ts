@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createPackageHandler, localPackageTools } from "../src/package-server";
+import { createPackageHandler, localPackageTools, localPlateRouteKey } from "../src/package-server";
 import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
 import { createHash } from "node:crypto";
-import type { PackageAction, PackageCheck } from "../src/package-action";
+import { packageErrorCode, type PackageAction, type PackageCheck } from "../src/package-action";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { defaultLocalSettings } from "../src/local-settings";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { EyePlateCache } from "../src/eye-plate-cache";
+import { contentFingerprint, EyePlateCache } from "../src/eye-plate-cache";
 import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/eye-plate-service";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { OFF_PLATE_REASON } from "../src/package-filter";
+import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/package-filter";
 import { preflightPackageCollection } from "../src/package-preflight";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { plateUvFootprint } from "../src/plate-uv-window";
@@ -160,8 +160,10 @@ test("PIPE-33: Check plans on the plate the cache last prepared for this game, a
     writeFileSync(manifestFile, JSON.stringify({ schema: EYE_PLATE_MANIFEST_SCHEMA, recipeId: EYE_PLATE_RECIPE.id,
       recipeRevision: EYE_PLATE_RECIPE.revision, uv: plateUvManifestRecord(footprint) }));
     writeFileSync(join(cacheRoot, name, PLATE_UV_FILE), JSON.stringify(footprint));
+    const tools = { ...localPackageTools(), plateCache: cacheRoot, gamepath: game };
     new EyePlateCache(cacheRoot).writeStatus({ recipeId: EYE_PLATE_RECIPE.id, recipeRevision: EYE_PLATE_RECIPE.revision, state: "ready",
-      code: null, message: "ready", gameRoot: game, contentFingerprint: "", cacheName: name });
+      code: null, message: "ready", gameRoot: game, contentFingerprint: contentFingerprint(game, EYE_PLATE_RECIPE.source.archiveDirectory),
+      cacheName: name, routeKey: localPlateRouteKey(tools) });
     const collection = structuredClone(fixture);
     for (const layer of collection.presets[1].recipe.layers) layer.points = layer.points.map((p: { v: number }) => ({ ...p, v: p.v + .4 }));
     const plate = plateReachInput(footprint);
@@ -170,7 +172,6 @@ test("PIPE-33: Check plans on the plate the cache last prepared for this game, a
       const { packagedCollectionJson: _json, ...check } = preflightPackageCollection(value, reach);
       return check;
     };
-    const tools = { ...localPackageTools(), plateCache: cacheRoot, gamepath: game };
     const handler = createPackageHandler(tools, async (_action, file, actionTools) => {
       passed = actionTools.checkPlateManifest;
       return planned(JSON.parse(readFileSync(file, "utf8")), plate);
@@ -193,6 +194,28 @@ test("PIPE-33: Check plans on the plate the cache last prepared for this game, a
     const unplanned = await other(request({ action: "check", collection }));
     expect(unplanned.status).toBe(200);
     expect(passed).toBeUndefined();
-    expect((await unplanned.json()).omissions).toEqual([]);
+    const blindCheck = await unplanned.json();
+    expect(blindCheck.omissions).toEqual([]);
+    expect(blindCheck.plateUv).toBeNull();
+    expect(blindCheck.notes).toEqual([PLATE_REACH_UNCHECKED_NOTE]); // the Studio says so plainly
+    expect(result.notes).toEqual([]);
+    // PIPE-36: the plate was prepared for the direct route; after switching to an MO2 profile (or the other head choice) Check plans on none.
+    for (const changed of [{ ...tools, route: { launchRoute: "mo2" as const, mo2Root: join(directory, "mo2"), mo2ProfileId: "Default", manualModRoot: null } },
+      { ...tools, headOverride: "base-game" as const }]) {
+      passed = "unset";
+      const switched = createPackageHandler(changed, async (_action, file, actionTools) => {
+        passed = actionTools.checkPlateManifest;
+        return planned(JSON.parse(readFileSync(file, "utf8")), null);
+      });
+      expect((await switched(request({ action: "check", collection }))).status).toBe(200);
+      expect(passed).toBeUndefined();
+    }
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("PIPE-37: the package CLI's machine error line is read back by code", () => {
+  expect(packageErrorCode(`log line\nXFS_PACKAGE_ERROR=${JSON.stringify({ code: "package_plate_stale", message: "stale" })}\nPackage build failed: stale`))
+    .toBe("package_plate_stale");
+  expect(packageErrorCode("Package build failed: no machine line")).toBeNull();
+  expect(packageErrorCode("XFS_PACKAGE_ERROR={not json")).toBeNull();
 });

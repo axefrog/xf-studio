@@ -407,6 +407,8 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     r.selectorLabel ? ` · in-game selector “${r.selectorLabel}”` : ""));
   if (!isBuild) card.append(h("ul", { class: "result-list" }, check.presets.map(preset =>
     h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
+  // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
+  if (!isBuild) for (const text of check.notes ?? []) card.append(note(text, "info"));
   if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
     h("ul", { class: "result-list" }, r.omissions.map(item => h("li", {}, icon("warning"),
       h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` : `Whole preset “${item.presetName}” — ${item.reason}` }))))));

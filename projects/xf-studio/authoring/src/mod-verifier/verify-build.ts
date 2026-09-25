@@ -206,6 +206,8 @@ export function checkMapping(name: string, coverage: Float64Array, dims: { width
   reference: Uint8Array, crop: ReferenceCrop, samples: PlateUvSamples): MappingCheck {
   const stats = mappingStats(coverage, dims.width, dims.height, uv, reference, crop, samples);
   ensure(stats.covered > 0, `Window map for ${name} has no content at the plate's UVs`);
+  // Faint makeup can pass the mean limit with an empty map; the makeup reaches the plate, so the map must draw it (PIPE-38).
+  ensure(stats.authored === 0 || stats.drawn > 0, `Window map for ${name} is empty at the plate's UVs, where its authored makeup reaches`);
   ensure(stats.mean < MAPPING_LIMITS.mean && stats.farShare < MAPPING_LIMITS.farShare,
     `Window map for ${name} does not match its authored head-UV content at the plate's UVs: ${JSON.stringify(stats)}`);
   const offsetTexels = mappingOffset(coverage, dims.width, dims.height, uv, reference, crop, samples);
