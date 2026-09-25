@@ -297,9 +297,10 @@ export const TARGET_LABELS: Readonly<Record<ViewportScope, Record<PointerTarget,
   head: { point: "Contour point", tangent: "Bézier handle", "warp-origin": "Warp position", "warp-vector": "Warp pull", shape: "Shape", empty: "Off makeup" },
   uv: { point: "Contour point", tangent: "Bézier handle", "warp-origin": "Warp position", "warp-vector": "Warp pull", shape: "Shape", empty: "Empty UV space" },
 };
-export type BlockReason = "no-layer" | "layer-hidden" | "surface-off";
+export type BlockReason = "no-layer" | "layer-hidden" | "surface-off" | "look-locked";
 const BLOCK_NOTES: Record<BlockReason, string> = {
   "no-layer": "Add a layer to edit a shape",
+  "look-locked": "This look needs a newer XF Studio · see Layers",
   "layer-hidden": "The selected layer is hidden · show it to edit",
   "surface-off": "Surface controls are off · turn them on to edit on the head",
 };
