@@ -96,7 +96,7 @@ Consequences: no per-mod code is needed, but the preview must (1) take the head 
 
 Effort is relative: **S** about a day of agent work, **M** a few days, **L** a week or more. All items plug into the platform design: the host resolves (`CharacterContextService` + resolver host), a `DetailLoader` loads each drawing component, and a `MaterialAdapter` per template turns resolved parameters into a Three material ([platform §5](../research/authoring/feature-module-platform.md#5-rendering-ui-02-ui-11)).
 
-**P0 (prerequisite, S–M).** Wire the resolver into the preview host and extend the render record. Today `CoreDetail` (`xfs/render-detail-1`, `src/render-detail.ts`) carries one GLB and four PNG slots with no material parameters. The record needs, per resolved drawing component: a geometry resource (bound GLB with `(target, region)` shape keys, cached by depot hash and container fingerprint as `game-asset-export.ts` already does), its visible chunks, and per chunk `{template, scalars, colours, textures}`, where each texture keeps its **raw channels** plus `isGamma` (adapters, not the exporter, interpret channels: skin roughness R/B, decal R, tint-mask RGB). Fix the two resolver defects found here first: a switcher's default target stays active when another choice is selected, and a `None` definition yields an empty descriptor ([evidence](../research/character-customization/head-cc-render-evidence.md#observations-recorded-here-in-detail)).
+**P0 (prerequisite, S–M).** Wire the resolver into the preview host and extend the render record. Today `CoreDetail` (`xfs/render-detail-1`, `src/render-detail.ts`) carries one GLB and four PNG slots with no material parameters. The record needs, per resolved drawing component: a geometry resource (bound GLB with `(target, region)` shape keys, cached by depot hash and container fingerprint as `game-asset-export.ts` already does), its visible chunks, and per chunk `{template, scalars, colours, textures}`, where each texture keeps its **raw channels** plus `isGamma` (adapters, not the exporter, interpret channels: skin roughness R/B, decal R, tint-mask RGB). The two resolver defects this study found are fixed: a switcher's default target no longer stays active beside another choice, and a `None` (Off) definition emits nothing ([evidence](../research/character-customization/head-cc-render-evidence.md#observations-recorded-here-in-detail)).
 
 | Rank | Work | Visual gain | Effort | Needs |
 |---|---|---|---|---|
@@ -115,7 +115,7 @@ After these: piercings through a `multilayered` adapter (`.mlsetup` layers, curr
 3. Which components are shadow-only (hair `*_shadow_npc`, CCXL `hair_shadow`), given that `isShadowMesh` is also set on the visible beard-stubble mesh?
 4. What drives the skin blood-flow blend (the two cubed vertex interpolants), and is it active in the creator?
 5. Is `TintColor` delivered to the skin program as byte/255 or sRGB-decoded? This sets every tone's strength.
-6. When a switcher changes choice, does the game deactivate the previously active target, as the `switchVisibility` flag suggests? (The resolver currently keeps the default target active.)
+6. Does the running game deactivate a switcher's previous target on a choice change, as the vanilla UI presets and the reference save show for stored states [resource]? `switchVisibility` is not the cause (it is 0 on `skin_type`). Test ask 6 checks this.
 7. Does the renderer's `SecondaryAlbedo` path from a texture framework's donor mesh (overlay, emissive mask) actually draw in game with ArchiveXL 1.27.3, as the resolver expects?
 
 ## In-game test asks
@@ -127,6 +127,7 @@ Batch into one prepared session; record game, ArchiveXL, CET and the Character R
 3. **Decal order.** Choose eye makeup style 5 black, blush 10 and facial tattoo 2 together; capture where they overlap near the cheekbone.
 4. **Lip finish roughness.** Lipstick style 5 regular, glossy and matte in turn under a moving light: expect regular and glossy to share the skin's highlight and matte to dull it.
 5. **Render options.** Toggle the Character Rendering Editor between "Vanilla" and the installed preset once, same frame, to size how much runtime tuning changes the reference portrait.
+6. **Switcher exclusivity and Off.** New game, female V: skin type 3, brows 3, hairstyle 5, scars Off, everything else default. Make a manual save straight after the creator and hand it over. Expected from the save's appearance list: `skin_type_03`, `eyebrows_color3` and `hair_color5` only, with no `skin_type_01`, `eyebrows_color1`, `hair_color1` and no `scars` entry. One face with no z-fighting at the hairline and brows is the visual cross-check.
 
 ## Related pages
 

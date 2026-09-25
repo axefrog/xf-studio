@@ -119,3 +119,53 @@ describe("character-creator merge (ArchiveXL MergeCustomEntries)", () => {
     expect(result.ambiguities.map(a => a.code)).toEqual(["link-index-out-of-range"]);
   });
 });
+
+describe("UI state: switcher targets and Off choices (rule R5)", () => {
+  const opts = (result: ReturnType<typeof descriptorsFromUiState>) => result.appearances.map(a => `${a.option}=${a.definition}`);
+
+  // Vanilla shape: the default target is `enabled`, the other targets are not.
+  const skin = readCco(root(cco([
+    switcherOption("skin_type", [["01", ["skin_type_01"]], ["02", ["skin_type_02"]], ["03", ["skin_type_03"]]]),
+    appearanceOption("skin_type_01", "base\\d01.app", ["pale_d01"], { uiSlot: "skin_type", hidden: 1 }),
+    appearanceOption("skin_type_02", "base\\d02.app", ["pale_d02"], { uiSlot: "skin_type", hidden: 1, enabled: 0 }),
+    appearanceOption("skin_type_03", "base\\d03.app", ["pale_d03"], { uiSlot: "skin_type", hidden: 1, enabled: 0 }),
+    appearanceOption("teeth", "base\\teeth.app", ["teeth"]),
+    appearanceOption("unused", "base\\unused.app", ["x"], { enabled: 0 }),
+  ], { TPP: ["skin_type_01", "skin_type_02", "skin_type_03", "teeth", "unused"] })), "base game");
+
+  test("only the chosen switcher target is active; the enabled default target is deactivated", () => {
+    expect(opts(descriptorsFromUiState(skin, { skin_type: "03" }))).toEqual(["skin_type_03=pale_d03", "teeth=teeth"]);
+    expect(opts(descriptorsFromUiState(skin, {}))).toEqual(["skin_type_01=pale_d01", "teeth=teeth"]);
+    expect(opts(descriptorsFromUiState(skin, { skin_type: "01" }))).toEqual(["skin_type_01=pale_d01", "teeth=teeth"]);
+  });
+
+  test("nested switchers: an unchosen switcher is inactive and so are its targets, including shared ones", () => {
+    const hair = readCco(root(cco([
+      switcherOption("cyberware", [["Off", ["cyberware_00", "hairstyle"]], ["01", ["cyberware_01", "hairstyle_cyberware"]]]),
+      appearanceOption("cyberware_00", null, ["None"], { hidden: 1 }),
+      appearanceOption("cyberware_01", "base\\cw.app", ["cw_01"], { enabled: 0 }),
+      switcherOption("hairstyle", [["01", ["hair_color1"]], ["05", ["hair_color5"]]]),
+      switcherOption("hairstyle_cyberware", [["01", ["hair_color1"]], ["05", ["hair_color5"]], ["07", ["hair_color7"]]], { enabled: 0 }),
+      appearanceOption("hair_color1", "base\\h01.app", ["blonde"], { uiSlot: "hair_color" }),
+      appearanceOption("hair_color5", "base\\h05.app", ["blonde"], { uiSlot: "hair_color", enabled: 0 }),
+      appearanceOption("hair_color7", "base\\h07.app", ["blonde"], { uiSlot: "hair_color", enabled: 0 }),
+    ], { TPP: ["cyberware_00", "cyberware_01", "hair_color1", "hair_color5", "hair_color7"] })), "base game");
+    expect(opts(descriptorsFromUiState(hair, { hairstyle: "05" }))).toEqual(["hair_color5=blonde"]);
+    // `hairstyle` still names 05 in the state, but cyberware 01 deactivated it; only the cyberware hairstyle counts.
+    expect(opts(descriptorsFromUiState(hair, { cyberware: "01", hairstyle: "05", hairstyle_cyberware: "07" })))
+      .toEqual(["cyberware_01=cw_01", "hair_color7=blonde"]);
+    expect(opts(descriptorsFromUiState(hair, { cyberware: "01", hairstyle_cyberware: "05" }))).toEqual(["cyberware_01=cw_01", "hair_color5=blonde"]);
+  });
+
+  test("an Off (None) definition emits no descriptor and no gap, directly or through a link", () => {
+    const decals = readCco(root(cco([
+      appearanceOption("scars", "base\\scars.app", ["None", "scar_01", "scar_02"]),
+      appearanceOption("tattoo_color", null, ["None", "ink_01"], { link: "tattoo", linkController: 1 }),
+      appearanceOption("tattoo_mesh", "base\\tattoo.app", ["None", "tattoo_01"], { link: "tattoo", hidden: 1 }),
+    ], { TPP: ["scars", "tattoo_color", "tattoo_mesh"] })), "base game");
+    const off = descriptorsFromUiState(decals, {});
+    expect(off.appearances).toEqual([]);
+    expect(off.ambiguities).toEqual([]);
+    expect(opts(descriptorsFromUiState(decals, { scars: "scar_02", tattoo_color: "ink_01" }))).toEqual(["scars=scar_02", "tattoo_mesh=tattoo_01"]);
+  });
+});
