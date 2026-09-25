@@ -115,7 +115,7 @@ After these: piercings through a `multilayered` adapter (`.mlsetup` layers, curr
 3. Which components are shadow-only (hair `*_shadow_npc`, CCXL `hair_shadow`), given that `isShadowMesh` is also set on the visible beard-stubble mesh?
 4. What drives the skin blood-flow blend (the two cubed vertex interpolants), and is it active in the creator?
 5. Is `TintColor` delivered to the skin program as byte/255 or sRGB-decoded? This sets every tone's strength.
-6. Does the running game deactivate a switcher's previous target on a choice change, as the vanilla UI presets and the reference save show for stored states [resource]? `switchVisibility` is not the cause (it is 0 on `skin_type`). Test ask 6 checks this.
+6. ~~Does the running game deactivate a switcher's previous target on a choice change?~~ **Answered [runtime, 25 September]:** a new-game save with skin type 3, brows 3, hairstyle 5 and scars Off lists only `skin_type_03`, `eyebrows_color3`, `hair_color5` (and its FPP twin `hair_color_fpp_05`) across the `TPP`, `TPP_photomode`, `hairs`, `FPP_hairs` and `character_customization` groups, with no default targets and no `scars` entry, exactly as rule R5 predicts. `switchVisibility` is not the cause (it is 0 on `skin_type`).
 7. Does the renderer's `SecondaryAlbedo` path from a texture framework's donor mesh (overlay, emissive mask) actually draw in game with ArchiveXL 1.27.3, as the resolver expects?
 
 ## In-game test asks
@@ -127,7 +127,7 @@ Batch into one prepared session; record game, ArchiveXL, CET and the Character R
 3. **Decal order.** Choose eye makeup style 5 black, blush 10 and facial tattoo 2 together; capture where they overlap near the cheekbone.
 4. **Lip finish roughness.** Lipstick style 5 regular, glossy and matte in turn under a moving light: expect regular and glossy to share the skin's highlight and matte to dull it.
 5. **Render options.** Toggle the Character Rendering Editor between "Vanilla" and the installed preset once, same frame, to size how much runtime tuning changes the reference portrait.
-6. **Switcher exclusivity and Off.** New game, female V: skin type 3, brows 3, hairstyle 5, scars Off, everything else default. Make a manual save straight after the creator and hand it over. Expected from the save's appearance list: `skin_type_03`, `eyebrows_color3` and `hair_color5` only, with no `skin_type_01`, `eyebrows_color1`, `hair_color1` and no `scars` entry. One face with no z-fighting at the hairline and brows is the visual cross-check.
+6. **Switcher exclusivity and Off.** *Done 25 September; result under open question 6.* New game, female V: skin type 3, brows 3, hairstyle 5, scars Off, everything else default. Make a manual save straight after the creator and hand it over. Expected from the save's appearance list: `skin_type_03`, `eyebrows_color3` and `hair_color5` only, with no `skin_type_01`, `eyebrows_color1`, `hair_color1` and no `scars` entry. One face with no z-fighting at the hairline and brows is the visual cross-check.
 
 ## Related pages
 
