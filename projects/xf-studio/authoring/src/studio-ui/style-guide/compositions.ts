@@ -13,7 +13,7 @@ export function states() {
       drives: `${code("status.workspace")}, ${code("library.summary().draft.revision")} vs ${code("summaries[].revision")}.`,
       avoid: "Claiming “unsaved changes” — the application does not yet expose a draft-versus-revision diff (audit API gap A-1). Say what is known." }),
     pattern({ id: "t-undo", title: "Undo, recovery and view changes", status: "implemented",
-      what: "Three scopes, named consistently: recipe Undo (Ctrl+Z; per preset; content edits, one step per gesture or slider drag), recovery (restore removed preset, recover previous collection draft — separate stacks) and view changes (camera, UV pan/zoom, panels, theme — never undoable, never in recipes).",
+      what: "Three scopes, named consistently: Undo (Ctrl+Z; per look; content edits, one step per gesture or slider drag), recovery (restore removed preset, recover previous collection draft — separate stacks) and view changes (camera, UV pan/zoom, panels, theme — never undoable, never in recipes).",
       when: "Toasts offer the matching scope: “Undo” after layer removal or reset, “Restore” after preset removal, “Undo open” after opening a collection.",
       combine: "Menus group view commands under their own view heading, after the target's edits. Removal commands say “Undo with Ctrl+Z” or “Restorable from the Presets panel”." }),
     pattern({ id: "t-async", title: "Async work and cancellation", status: "implemented",

@@ -64,7 +64,7 @@ export class ViewportInputHints {
     this.interactive = frame.viewport[this.scope].phase === "ready";
     const layer = frame.layer;
     // A look made with a newer XF Studio can't be edited here; Layers says why and offers the update.
-    const locked = !frame.editable.available && frame.editable.code === "unavailable";
+    const locked = frame.locked !== undefined;
     this.blocked = locked ? "look-locked" : !layer ? "no-layer" : this.scope === "head" && !frame.preview.preview?.surface ? "surface-off"
       : this.scope === "head" && !layer.enabled ? "layer-hidden" : undefined;
     this.render();

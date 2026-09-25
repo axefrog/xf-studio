@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { cancelsGesture } from "../src/gesture-cancel";
+import { IRREGULAR_RANGE_MESSAGE } from "../src/recipe-actions";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
@@ -137,6 +138,10 @@ test("limitsFor publishes static and state-dependent input limits for a concrete
   const count = app.limitsFor(target, "glitter.setIrregular", "count").value;
   expect(count).toMatchObject({ min: 0, max: 32768, dependsOn: ["radius"] });
   expect(app.dispatch({ kind: "glitter.setIrregular", layerId: id, key: "count", value: 40000 }).ok).toBe(false);
+  // The refusal says why in the person's terms, so the Colour & finish panel shows it as it is (UI-54).
+  expect(app.capability({ kind: "glitter.setIrregular", layerId: id, key: "count", value: 40000 }))
+    .toMatchObject({ available: false, reason: IRREGULAR_RANGE_MESSAGE, issue: { code: "range", field: "count" } });
+  expect(IRREGULAR_RANGE_MESSAGE).toContain("denser than 32,768 flakes need flakes of 0.06% UV or smaller");
   const other = document.recipe.layers[1].id;
   app.dispatch({ kind: "softness.edit", layerId: other, command: { kind: "variable-softness", enabled: false } });
   expect(app.limitsFor({ kind: "point", layerId: other, index: 0 }, "softness.edit", "point-softness").value.requires?.reason)
@@ -285,7 +290,7 @@ test("consequences say what an action replaces, writes or discards and how to re
   const summary = service.summary().draft!;
   expect(summary.recoveryCount).toBe(summary.recoveryLimit);
   expect(app.consequences({ file: { kind: "collection.import" } })).toEqual({ replaces: "draft", recoverableBy: "collection.undoOpen",
-    discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name }], confirm: true });
+    discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name, id: summary.oldestRecoverable!.id }], confirm: true });
 });
 
 test("the viewport snapshot carries UV selection visibility and view-change notifications", async () => {

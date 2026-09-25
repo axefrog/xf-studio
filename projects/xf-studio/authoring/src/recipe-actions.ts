@@ -7,6 +7,7 @@ import { canonicalFinish, defaultFlakes, isIrregular, type Flakes } from "./fini
 import { glitterModel, glitterModels, selectGlitterModel, validGlitterSettings, validShiftSettings,
   type GlitterChoices, type GlitterModel, type LayerChoices } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
+import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS, validStudioIrregularSettings, type IrregularFlakes } from "./flake-field";
 import { hasGameOptics } from "./finish-export";
 import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
@@ -135,6 +136,10 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refusal("missing_target", "That warp control no longer exists.");
   if (action.kind === "glitter.setIrregular" && !isIrregular(layer.flakes))
     return refuse({ code: "mode", field: "model", message: "Select the irregular Glitter model first." });
+  // Flake density and size bound each other; the person hears the rule in their terms, not a parser error (UI-54).
+  if (action.kind === "glitter.setIrregular" && (action.key === "count" || action.key === "radius") &&
+      !validStudioIrregularSettings({ ...layer.flakes as IrregularFlakes, [action.key]: action.value }))
+    return refuse({ code: "range", field: action.key, message: IRREGULAR_RANGE_MESSAGE });
   if (action.kind === "glitter.setDirect" && !isDirectGlint(layer.flakes))
     return refuse({ code: "mode", field: "model", message: "Select a direct-light Glitter model first." });
   if (action.kind === "glitter.setClassic" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)))
@@ -316,3 +321,7 @@ export class RecipeActions {
     for (const listener of this.listeners) listener(effect);
   }
 }
+
+/** Why an irregular Glitter density and flake size can't go together, in the person's terms (the limits are `flake-field`'s). */
+export const IRREGULAR_RANGE_MESSAGE = "That density and flake size are outside the Glitter preview range. Fields denser than " +
+  `${FLAKE_LIMITS.count.toLocaleString("en")} flakes need flakes of ${REGION_FLAKE_STUDY_LIMITS.maxRadius * 100}% UV or smaller; larger flakes need a lower density.`;

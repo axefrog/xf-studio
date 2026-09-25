@@ -12,8 +12,16 @@ import type { PackageAction, PackageBuild, PackageCheck } from "./package-action
 import { describePackageExperimental, describePackageOmissions } from "./package-filter";
 import { refusal, type Capability } from "./platform/api";
 
+/** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
+export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made with a newer version of XF Studio, so this version " +
+  "can't put them in a mod. Update XF Studio to build it.";
+export const NO_EDITABLE_EYE_MAKEUP_MESSAGE = "The looks with eye makeup here were made with a newer version of XF Studio, so this " +
+  "version can't put them in a mod. Update XF Studio to build them, or add eye makeup to another look.";
+
 export type CollectionRequest =
-  | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportCollection" | "exportPlan" }
+  | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportPlan" }
+  /** `draft`: the collection ID of an earlier draft in the recovery queue to export instead of the current one (unsaved). */
+  | { kind: "exportCollection"; draft?: string }
   | { kind: "open"; id: string }
   | { kind: "import"; text: string; bytes: number }
   | { kind: "package"; action: PackageAction };
@@ -192,15 +200,20 @@ export class CollectionService {
     return parseCollection(eyeMakeupCollection(this.actions!.snapshot().collection));
   }
   /**
-   * Whether the draft's eye-makeup view has a look to package (CORE-34): a look with an eye-makeup
-   * part, or the selected look while the live editor has layers. Reads without copying.
+   * Why the draft's eye-makeup view has no look to package, or undefined when it has one (CORE-34): a look
+   * with an eye-makeup part, or the selected look while the live editor has layers. A look made with a newer
+   * version of XF Studio never counts, since the export leaves it out (PIPE-44). Reads without copying.
    */
-  private hasPackageableLook(): boolean {
-    const selected = this.actions!.selected(), live = this.model.live;
-    return this.actions!.presetsForComparison().some(look => look.id === selected
+  private unpackageable(): string | undefined {
+    const selected = this.actions!.selected(), live = this.model.live, looks = this.actions!.presetsForComparison();
+    if (looks.some(look => !look.locked && (look.id === selected
       ? !!look.parts[live] || (this.readRecipe?.() ?? this.read()).recipe.layers.length > 0
-      : !!look.parts[live]);
+      : !!look.parts[live]))) return undefined;
+    if (looks.length && looks.every(look => look.locked)) return EVERY_LOOK_NEWER_MESSAGE;
+    return looks.some(look => look.locked) ? NO_EDITABLE_EYE_MAKEUP_MESSAGE
+      : "None of these presets has eye makeup yet, so there is nothing to put in a mod.";
   }
+
   /** Whether the draft has this preset, without cloning the draft (CORE-05). */
   hasPreset(id: string): boolean { return this.actions?.hasPreset(id) ?? false; }
   /** The draft's collection ID and selected preset, without cloning the draft (CORE-05); undefined while loading. */
@@ -223,8 +236,12 @@ export class CollectionService {
     if ((request.kind === "exportCollection" || request.kind === "exportPlan" || request.kind === "package") &&
         !this.actions.summary().presets.length) return refusal("invalid_value", COLLECTION_MESSAGE);
     // A build plan and a mod hold eye makeup only: they need a look that has some (CORE-34).
-    if ((request.kind === "exportPlan" || request.kind === "package") && !this.hasPackageableLook())
-      return refusal("invalid_value", "None of these presets has eye makeup yet, so there is nothing to put in a mod.");
+    if (request.kind === "exportPlan" || request.kind === "package") {
+      const reason = this.unpackageable();
+      if (reason) return refusal("invalid_value", reason);
+    }
+    if (request.kind === "exportCollection" && request.draft !== undefined && !this.actions.recoveryCollection(request.draft))
+      return refusal("missing_target", "That earlier draft is no longer in the recovery list.");
     return { available: true };
   }
   /** Draft action capability with a structured reason code. */
@@ -331,6 +348,13 @@ export class CollectionService {
           message = `Saved “${stored.collection.name}” · revision ${stored.revision}. Changes made during saving remain in your draft.`; break;
         }
         case "exportCollection": case "exportPlan": {
+          if (request.kind === "exportCollection" && request.draft !== undefined) {
+            // An earlier draft is exported as it is, never saved: the library's revision belongs to the current draft.
+            const earlier = this.actions!.recoveryCollection(request.draft)! as LookCollection;
+            result = { kind: "export", name: "xfs.collection.json", json: JSON.stringify(this.model.parts.writeMinimal(earlier), null, 2) };
+            message = `Exported the earlier draft “${earlier.name}” with its recipes and stable preset identities. It wasn't saved to your library; your current draft is unchanged.`;
+            break;
+          }
           // The draft is saved first only when the library takes it: a collection that needs
           // `xfs/collection-2` is refused there (CORE-30), and exporting it to a file is exactly how
           // it is kept, so its draft snapshot is exported unsaved (CORE-38).
@@ -342,11 +366,15 @@ export class CollectionService {
           result = { kind: "export", name: plan ? "xfs.build-plan.json" : "xfs.collection.json",
             json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(collection))
               : this.model.parts.writeMinimal(collection), null, 2) };
+          const locked = collection.presets.filter(look => look.locked);
           const kept = storable ? "It was also saved to your library first."
-            : collection.presets.some(look => look.locked)
-            ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio, which is exported exactly as it came. Your draft is kept."
+            : locked.length
+            ? plan ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio. Your draft is kept."
+              : "It wasn't saved to your library: it has a look made with a newer version of XF Studio, which is exported exactly as it came. Your draft is kept."
             : "It wasn't saved to your library: it has parts the released XF Studio 0.1.0-alpha.1 can't read, and that version opens the same library. Your draft is kept.";
-          message = plan ? `Build plan exported for the offline compiler; this is not an installable mod. ${kept}`
+          // The plan holds eye makeup only; what it leaves out is listed in the file's `omitted` and named here (PIPE-45).
+          const left = plan && locked.length ? ` Not in the plan: ${locked.map(look => `“${look.name}”`).join(", ")}, made with a newer version of XF Studio.` : "";
+          message = plan ? `Build plan exported for the offline compiler; this is not an installable mod.${left} ${kept}`
             : storable ? "Collection saved to your library and exported. Recipes and stable preset identities are included."
             : `Collection exported with its recipes and stable preset identities. ${kept}`; break;
         }

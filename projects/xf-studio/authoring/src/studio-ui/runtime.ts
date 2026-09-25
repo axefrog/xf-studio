@@ -29,8 +29,8 @@ export class Frame {
   get field() { return this.once("field", () => this.editor.selectedField()); }
   get revision() { return this.once("revision", () => this.editor.revision()); }
   get canUndo() { return this.once("canUndo", () => this.editor.canUndo()); }
-  /** Whether the selected look's eye makeup can be edited here (not when it was made with a newer XF Studio). */
-  get editable() { return this.once("editable", () => this.port.feature("eye-makeup").editable()); }
+  /** The plain reason when the selected look was made with a newer XF Studio (its eye makeup is kept as it is); else undefined. */
+  get locked() { return this.once("locked", () => this.port.feature("eye-makeup").locked()); }
   get library() { return this.once("library", () => this.port.library.summary()); }
   get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
@@ -73,6 +73,8 @@ export class StudioRuntime {
     const schema = (variant ? descriptor.variants?.[variant]?.payload[field] : undefined) ?? descriptor.payload[field];
     return { min: schema?.min ?? 0, max: schema?.max ?? 1 };
   }
+  /** The catalogue's finish a layer's stored finish name means (its ID, or a stored alias such as older recipes' `satin`). */
+  finishOf(finish: string) { return this.finishes.find(item => item.id === finish || item.stored.includes(finish)); }
   /** Validated dispatch. Failures surface their typed reason; nothing is retried silently. */
   dispatch(action: StudioAction, options: { success?: string; quiet?: boolean; failure?: string } = {}) {
     const result = this.port.authoring.dispatch(action);

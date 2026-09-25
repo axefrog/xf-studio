@@ -276,6 +276,10 @@ export function writeCollectionWorkspace(workspace: CollectionWorkspace, model: 
     ...(workspace.older ? { older: workspace.older.map(draft) } : {}) };
 }
 
+/** Whether a draft holds a locked look (a newer build's), in its collection or its removed presets. */
+export function holdsLocked(draft: Pick<CollectionDraft, "collection" | "removed">) {
+  return draft.collection.presets.some(look => look.locked) || draft.removed.some(entry => entry.preset.locked);
+}
 /** Removed presets kept for Restore; removing another beyond this drops the oldest. */
 export const REMOVED_PRESET_LIMIT = 20;
 /** `newId` is the new look's ID for `add` and `copy`; the session fills it from its host's ID source. */
@@ -315,6 +319,6 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand, 
     if (!Number.isInteger(command.to) || command.to < 0 || command.to >= presets.length) throw Error("Invalid preset position.");
     presets.splice(command.to, 0, presets.splice(index, 1)[0]);
   } else if (command.kind === "rename") presets[index].name = command.name.trim();
-  state.collection = model.parts.readCollection(state.collection, true, "keep");
+  state.collection = model.parts.rereadCollection(state.collection);
   return state;
 }

@@ -188,16 +188,30 @@ export class PartRegistry implements HistoryParts {
   /**
    * Read a stored collection of either schema. Identity is independent of names, revisions and order.
    * `newer` `keep` keeps looks holding a newer build's data verbatim and locked; by default they are refused.
+   * A `locked` key in the input is never trusted (CORE-45): stored data and imported files never carry
+   * it, so a look is locked only when reading its parts meets a newer build's data. In-memory drafts are
+   * validated again with `rereadCollection`.
    */
   readCollection(value: unknown, allowEmpty = false, newer: NewerPolicy = "refuse"): LookCollection {
+    return this.readLooks(value, allowEmpty, newer, false);
+  }
+  /**
+   * Validate an in-memory collection again (after a rename or a preset edit): as `readCollection` with
+   * `keep`, except that a look this session already locked stays locked, read from its kept parts (a look
+   * can be locked by newer data in its Undo history while its parts read). Never for stored or imported data.
+   */
+  rereadCollection(collection: LookCollection, allowEmpty = true): LookCollection {
+    return this.readLooks(collection, allowEmpty, "keep", true);
+  }
+  private readLooks(value: unknown, allowEmpty: boolean, newer: NewerPolicy, trusted: boolean): LookCollection {
     const input = value as { schema?: unknown; id?: string; name?: unknown; presets?: unknown[] };
     if (!input || (input.schema !== COLLECTION_1 && input.schema !== COLLECTION_2) || !UUID.test(input.id ?? "") ||
         !title(input.name) || !Array.isArray(input.presets) || (!allowEmpty && !input.presets.length))
       throw Error(COLLECTION_MESSAGE);
     const seen = new Set<string>();
     const presets = input.presets.map(preset => {
-      // A look already locked in memory is read again from its kept parts, which still need a newer build.
-      const look = (preset as Look | undefined)?.locked && newer === "keep"
+      // Only an in-memory look this session locked is read again from its kept parts.
+      const look = trusted && (preset as Look | undefined)?.locked
         ? this.keepLook(preset, input.schema as string) : this.readPreset(preset, input.schema as string, newer);
       if (seen.has(look.id)) throw Error(PRESET_MESSAGE);
       seen.add(look.id);

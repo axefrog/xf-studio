@@ -1,5 +1,5 @@
 import { CollectionSession, type EditorSnapshot } from "./collection-session";
-import { COLLECTION_RECOVERY_LIMIT } from "./collection-workspace";
+import { COLLECTION_RECOVERY_LIMIT, holdsLocked } from "./collection-workspace";
 import type { CollectionWorkspace, DocumentModel, PresetCommand } from "./collection-workspace";
 import type { StoredCollection } from "./collection-store";
 import type { Look, LookCollection } from "./platform/api";
@@ -31,7 +31,8 @@ export type CollectionDraftSummary = {
   removed: { id: string; name: string; index: number }[];
   previous?: { id: string; name: string; revision?: number };
   recoveryCount: number; recoveryLimit: number;
-  oldestRecoverable?: { id: string; name: string; revision?: number };
+  /** `locked`: it holds a look made with a newer version, which the library can't take, so this draft may be its only copy. */
+  oldestRecoverable?: { id: string; name: string; revision?: number; locked?: true };
 };
 export type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
@@ -62,7 +63,12 @@ export class CollectionActions {
         revision: s.previous.revision } : undefined,
       recoveryCount: recovery.length, recoveryLimit: COLLECTION_RECOVERY_LIMIT,
       oldestRecoverable: oldest ? { id: oldest.collection.id, name: oldest.collection.name,
-        revision: oldest.revision } : undefined };
+        revision: oldest.revision, ...(holdsLocked(oldest) ? { locked: true as const } : {}) } : undefined };
+  }
+  /** An earlier draft's collection in the recovery queue, by its ID, uncloned (for the service's own reads). */
+  recoveryCollection(id: string): Readonly<LookCollection> | undefined {
+    const s = this.session.state;
+    return [s.previous, ...(s.older ?? [])].find(draft => draft?.collection.id === id)?.collection;
   }
   snapshot(): CollectionWorkspace { return this.session.snapshot(); }
   /** Trusted, uncloned look list for the service's own comparisons. Never hand it to a view. */

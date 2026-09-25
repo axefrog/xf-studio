@@ -5,14 +5,17 @@
  * step, and the collection and the workspace carry each look's hair part and editor memory.
  */
 import { expect, test } from "bun:test";
-import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { STUDIO_COMPOSITION, STUDIO_OWNERS } from "../src/compose/studio-registry";
 import { CollectionSession } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";
-import { COLLECTION_2 } from "../src/platform/api";
+import { COLLECTION_2, featureActionTable, featureId } from "../src/platform/api";
 import { initialRecipe } from "../src/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { withHair, type Hair } from "./fixtures/hair-feature";
+import { EYE_MAKEUP } from "../src/features/eye-makeup";
+import { PartRegistry } from "../src/platform/core/document";
+import { Registry } from "../src/platform/core/registry";
+import { hairCodec, withHair, type Hair } from "./fixtures/hair-feature";
 
 const RESET = { label: "Reset look", actionKind: "look.reset" };
 const ids = () => { let n = 0; return () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`; };
@@ -162,4 +165,68 @@ test("the stored workspace keeps the live hair part and editor memory, with a co
   expect(c.document.export().liveFeatures).toEqual(loose.liveFeatures);
   // A build without the hair feature carries the loose look's hair part verbatim.
   expect(parseWorkspace(stored, STUDIO_COMPOSITION.documents).otherFeatures?.parts?.hair).toEqual(stored.look.parts.hair);
+});
+
+/**
+ * A feature with a content action that records no Undo step (`tint.try`, Undo policy `none`: a try-on value),
+ * beside eye makeup, as the step-5 review's probe composed it.
+ */
+function withTint() {
+  const input = (type: "string") => ({ type, required: true, from: "input" as const });
+  const TINT = Object.freeze({ owner: "feature", id: featureId("tint"), api: 1, label: "Tint", stage: "dev",
+    part: { ...hairCodec, current: "xfs/tint-1", accepts: ["xfs/tint-1"], serialize: (part: unknown) => ({ schema: "xfs/tint-1", body: part }) },
+    editor: { empty: () => ({}), parse: () => ({}), serialize: () => ({}) },
+    actions: featureActionTable(
+      { "tint.set": { scope: ["workspace"], effect: "content", undo: "part", payload: { colour: input("string") } },
+        "tint.try": { scope: ["workspace"], effect: "content", undo: "none", payload: { colour: input("string") } } } as never,
+      { "tint.set": true, "tint.try": true } as never, {
+        capability: () => ({ available: true }),
+        apply: (state: { part: Hair; editor: unknown }, action: { kind: string }) => {
+          const colour = (action as { kind: string; colour: string }).colour;
+          return { part: { ...state.part, colour }, editor: state.editor, changed: state.part.colour !== colour, effect: { kind: "content" } };
+        },
+        label: (action: { kind: string }) => ({ label: action.kind, actionKind: action.kind }),
+      }),
+  });
+  return { registry: new Registry([...STUDIO_OWNERS, TINT as never]),
+    documents: Object.freeze({ parts: new PartRegistry([EYE_MAKEUP, TINT as never]), live: "eye-makeup" }) };
+}
+
+test("a change that records no step hides Redo, which would overwrite it (CORE-46)", () => {
+  const c = core(withTint() as never), tint = () => (c.document.others!.read("tint") as Hair | undefined)?.colour;
+  c.app.dispatch({ kind: "tint.set", colour: "#111111" } as never);
+  c.app.dispatch({ kind: "history.undo" });
+  expect([tint(), c.app.history().redoDepth]).toEqual([undefined, 1]);
+  expect(c.app.capability({ kind: "history.redo" }).available).toBe(true);
+  // The un-recorded edit changes the look without a step: Redo would silently throw it away, so it goes.
+  c.app.dispatch({ kind: "tint.try", colour: "#222222" } as never);
+  expect(c.app.capability({ kind: "history.redo" })).toMatchObject({ available: false });
+  expect(c.app.dispatch({ kind: "history.redo" })).toMatchObject({ ok: false });
+  expect(tint()).toBe("#222222");
+  // A change that leaves the content as it was (a selection) keeps Redo, as before.
+  const h = core();
+  h.app.dispatch({ kind: "hair.addStrand", length: 2 } as never);
+  h.app.dispatch({ kind: "hair.addStrand", length: 3 } as never);
+  h.app.dispatch({ kind: "history.undo" });
+  expect(h.app.dispatch({ kind: "hair.selectStrand", index: 0 } as never)).toMatchObject({ ok: true });
+  expect(h.app.dispatch({ kind: "history.redo" })).toMatchObject({ ok: true });
+  expect(hair(h)!.strands).toEqual([2, 3]);
+});
+
+test("a transaction body that returns a promise is refused and reverted (CORE-48)", async () => {
+  const c = core(), before = c.document.undoDepth;
+  let resumed = false;
+  // @ts-expect-error: a look transaction's body can't be async (its awaited edits could not join the step).
+  const outcome = c.app.transaction(RESET, ["hair"], async () => {
+    c.app.dispatch({ kind: "hair.setColour", colour: "#aa3300" } as never);
+    await Promise.resolve();
+    resumed = true;
+  });
+  expect(outcome).toMatchObject({ ok: false, code: "invalid_value" });
+  // What ran before the first await is reverted with no step and no Redo; nothing else is open.
+  expect([hair(c), c.document.undoDepth, c.app.history().redoDepth]).toEqual([undefined, before, 0]);
+  await Promise.resolve(); await Promise.resolve();
+  expect(resumed).toBe(true);
+  expect(c.app.transaction(RESET, ["hair"], () => c.app.dispatch({ kind: "hair.setColour", colour: "#aa3300" } as never))).toMatchObject({ ok: true });
+  expect(c.app.history().undo).toEqual(RESET);
 });

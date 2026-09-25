@@ -15,8 +15,12 @@ export type Consequence = {
   replaces?: "draft" | "preset" | "layer-content";
   /** Durable side effects outside the browser draft. */
   writes?: "library-revision" | "private-files";
-  /** Recoverable state that this action pushes out of reach. */
-  discards: { kind: "recovery-draft" | "removed-preset" | "undo-entry" | "redo"; label: string }[];
+  /**
+   * Recoverable state that this action pushes out of reach. A recovery draft carries its collection `id`, and
+   * `locked` when it holds a look made with a newer version (the library can't take it, so the draft may be its
+   * only copy; CORE-49).
+   */
+  discards: { kind: "recovery-draft" | "removed-preset" | "undo-entry" | "redo"; label: string; id?: string; locked?: true }[];
   recoverableBy: "history.undo" | "history.redo" | "preset.restore" | "collection.undoOpen" | "none";
   /** True only when something recoverable would be lost for good. */
   confirm: boolean;
@@ -36,7 +40,8 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
   // Opening or importing adds the current draft to a bounded queue; at capacity the oldest goes.
   const replaceDraft = () => done({ replaces: "draft", recoverableBy: "collection.undoOpen",
     discards: draft && draft.recoveryCount >= draft.recoveryLimit && draft.oldestRecoverable
-      ? [{ kind: "recovery-draft", label: draft.oldestRecoverable.name }] : [] });
+      ? [{ kind: "recovery-draft", label: draft.oldestRecoverable.name, id: draft.oldestRecoverable.id,
+        ...(draft.oldestRecoverable.locked ? { locked: true as const } : {}) }] : [] });
   if ("request" in subject) {
     const request = subject.request;
     if (request.kind === "open" || request.kind === "import") return replaceDraft();
