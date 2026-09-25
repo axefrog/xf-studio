@@ -59,20 +59,27 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   const opacityRange = rt.range("layer.setOpacity", "opacity");
   const opacity = new Slider({ label: "Opacity", ...opacityRange, step: .01, format: pct,
     transaction: recipeTransaction<number>(rt, "opacity", (layer, value) => ({ kind: "layer.setOpacity", layerId: layer.id, opacity: value })) });
+  // Finishes are grouped by export status, so each row's length is intentional and every group
+  // heading is the one status line its cards share. Cards show the short name only; synonyms and
+  // the full name are in the tooltip and the description line.
+  const statusText = { "flat-provisional": "Exports", experimental: "Experimental", none: "Preview only" } as const;
   const finishButtons = rt.finishes.map(finish => {
-    const element = h("button", { class: "finish-option", type: "button", "aria-pressed": "false", "data-finish": finish.id },
-      h("span", { class: "finish-chip", "aria-hidden": "true" }), h("span", { class: "finish-name", text: finish.label }),
-      finish.exportAdapter === "none" ? h("span", { class: "finish-tag warn", text: "Preview" })
-        : finish.exportAdapter === "experimental" ? h("span", { class: "finish-tag warn", text: "Experimental" })
-        : h("span", { class: "finish-tag ok", text: "Exports" }));
+    const element = h("button", { class: "finish-option", type: "button", "aria-pressed": "false", "data-finish": finish.id,
+      "aria-label": `${finish.shortLabel}, ${statusText[finish.exportAdapter].toLowerCase()}` },
+      h("span", { class: "finish-chip", "aria-hidden": "true" }), h("span", { class: "finish-name", text: finish.shortLabel }));
     element.addEventListener("click", () => {
       const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setFinish", layerId: layer.id, finish: finish.id });
     });
     return { finish, element };
   });
-  const finishGroup = h("div", { class: "finish-grid", role: "group", "aria-label": "Finish family" }, finishButtons.map(item => item.element));
+  const finishGroup = h("div", { class: "finish-groups", role: "group", "aria-label": "Finish family" },
+    (["flat-provisional", "experimental", "none"] as const).filter(status => finishButtons.some(item => item.finish.exportAdapter === status))
+      .map(status => h("div", { class: "finish-group", "data-status": status },
+        h("span", { class: `finish-tag ${status === "flat-provisional" ? "ok" : "warn"}`, "aria-hidden": "true", text: statusText[status] }),
+        h("div", { class: "finish-grid" }, finishButtons.filter(item => item.finish.exportAdapter === status).map(item => item.element)))));
   finishGroup.addEventListener("keydown", event => {
-    const buttons = finishButtons.map(item => item.element), index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    // Arrow keys follow the visual order (grouped by status), not catalogue order.
+    const buttons = [...finishGroup.querySelectorAll<HTMLButtonElement>(".finish-option")], index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
     if (step && index >= 0) { event.preventDefault(); buttons[(index + step + buttons.length) % buttons.length].focus(); }
   });
@@ -152,10 +159,10 @@ export function finishPanel(rt: StudioRuntime): PanelController {
         setAttr(element, "aria-pressed", String(finish.id === current));
         const choice = choices.find(item => item.value === finish.id);
         element.disabled = !!choice && !choice.capability.available && finish.id !== current;
-        element.title = `${finish.label} — ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
+        element.title = `${finish.label} — ${statusText[finish.exportAdapter]}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
       }
       const descriptor = rt.finishes.find(finish => finish.id === current);
-      setText(description, descriptor?.description ?? "");
+      setText(description, descriptor ? `${descriptor.aliases.length ? `${descriptor.shortLabel} (also ${descriptor.aliases.join(", ")}). ` : ""}${descriptor.description}` : "");
       // Per-layer status: an experimental finish still in its earlier preview model is left out until switched.
       const status = port.authoring.layerExport(layer.id), key = `${current}:${status?.exportable ? status.experimental : status?.reason}`;
       if (exportLine.dataset.finish !== key) {

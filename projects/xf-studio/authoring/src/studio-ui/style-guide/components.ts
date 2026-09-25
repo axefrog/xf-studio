@@ -21,8 +21,10 @@ const cursorSwatches = `<div class="cursor-swatches">${cursorKinds.flatMap(([kin
   return [false, true].map(stage => `<div class="cursor-swatch${stage ? " on-stage" : ""}"><div class="viewport-slot" data-cursor="${kind}"><span><code>${kind}</code><br>${label}</span></div></div>`);
 }).join("")}</div>`;
 
-const finishes: [string, string, boolean][] = [["matte", "Matte", true], ["regular", "Satin", true], ["metallic", "Metallic / foil", true],
-  ["shimmer", "Shimmer / pearl", false], ["glitter", "Glitter", false], ["glossy", "Glossy / wet look", false], ["iridescent", "Colour-shifting", false]];
+const finishGroups: [string, string, [string, string][]][] = [
+  ["Exports", "ok", [["matte", "Matte"], ["regular", "Satin"], ["metallic", "Metallic"]]],
+  ["Experimental", "warn", [["shimmer", "Shimmer"], ["glossy", "Glossy"], ["iridescent", "Colour-shift"]]],
+  ["Preview only", "warn", [["glitter", "Glitter"]]]];
 
 export function components() {
   return section("components", "04", "Components",
@@ -69,12 +71,12 @@ export function components() {
       what: "Native picker plus a hex field. Picker changes are one transaction; hex entry commits on Enter/blur and flags invalid input without applying it.",
       when: "Layer pigment and finish-specific facet colours. A future palette library should feed the same field (see future directions)." }),
     pattern({ id: "c-finish", title: "Finish chooser", status: "implemented", wide: true,
-      specimen: `<div class="finish-grid" style="max-width:560px">${finishes.map(([id, label, exports], index) => `<button type="button" class="finish-option" data-finish="${id}" aria-pressed="${index === 2}"><span class="finish-chip"></span><span class="finish-name">${label}</span><span class="finish-tag ${exports ? "ok" : "warn"}">${exports ? "Exports" : "Preview"}</span></button>`).join("")}</div>
-        <div class="export-line" style="max-width:560px">${badge("Can be built", "success")}<span class="small">Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet.</span></div>`,
-      what: "The seven finish families as comparable tiles, each with its export status from the application's finish catalogue. The selected tile's description and export note sit underneath; Glitter reveals its model suite and Shimmer/Glitter reveal flake studies.",
+      specimen: `<div style="display:grid;gap:var(--sp-3);max-width:420px"><div class="finish-groups">${finishGroups.map(([status, tone, items]) => `<div class="finish-group"><span class="finish-tag ${tone}">${status}</span><div class="finish-grid">${items.map(([id, label]) => `<button type="button" class="finish-option" data-finish="${id}" aria-pressed="${id === "metallic"}" aria-label="${label}, ${status.toLowerCase()}"><span class="finish-chip"></span><span class="finish-name">${label}</span></button>`).join("")}</div></div>`).join("")}</div>
+        <div class="export-line">${badge("Can be built", "success")}<span class="small">Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet.</span></div></div>`,
+      what: "The seven finish families as equal one-line tiles with short names, grouped into rows by export status (Exports, Experimental, Preview only) from the application's finish catalogue; the group heading is the status line its tiles share. Synonyms (foil, pearl, wet look, duochrome) and the full name live in the tooltip and the description line. The selected tile's description and export note sit underneath; Glitter reveals its model suite, Shimmer/Glitter reveal flake studies and Colour-shift its shift colour.",
       when: "Colour & finish panel, the layer context menu's Finish submenu and the command palette — all from the same catalogue.",
       combine: "Metallic is its own family; never alias it to Shimmer. Satin is the user-facing name of the internal regular finish.",
-      drives: `${code("finishCatalogue()")} (export status mirrors the compiler gate) and ${code("choicesFor({kind:'layer',id}, 'layer.setFinish', 'finish')")}.`,
+      drives: `${code("finishCatalogue()")} (short label, aliases and export status mirroring the route policy) and ${code("choicesFor({kind:'layer',id}, 'layer.setFinish', 'finish')")}.`,
       avoid: "Inferring package eligibility from labels. The tag informs; Check decides." }),
     pattern({ id: "c-rows", title: "Ordered rows: presets and layers", status: "implemented", wide: true,
       specimen: `<div class="row gap-m align-start"><ol class="item-list" style="width:300px">${row("Accent", "Matte · 85%", { swatch: "#3b8f94", hidden: true })}${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true })}<li class="item-drop"></li>${row("Petal wash", "Matte · 85%", { swatch: "#b0587a", selected: true })}</ol>

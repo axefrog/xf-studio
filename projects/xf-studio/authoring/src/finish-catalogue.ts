@@ -6,7 +6,12 @@ import { finishExportSummary } from "./finish-export";
 export type FinishId = ReturnType<typeof canonicalFinish>;
 export type FinishDescriptor = {
   id: FinishId;
+  /** Full name for menus and search, e.g. "Glossy / wet look". */
   label: string;
+  /** One-word card name, e.g. "Glossy"; synonyms move to `aliases`. */
+  shortLabel: string;
+  /** Other names people use for this family (foil, pearl, wet look, duochrome). */
+  aliases: string[];
   description: string;
   /** Browser preview maturity, not a claim about in-game appearance. */
   preview: "working" | "preview-study";
@@ -21,6 +26,10 @@ const labels: Record<FinishId, string> = {
   matte: "Matte", regular: "Satin", metallic: "Metallic / foil", shimmer: "Shimmer / pearl",
   glitter: "Glitter", glossy: "Glossy / wet look", iridescent: "Colour-shifting",
 };
+const short: Record<FinishId, [string, string[]]> = {
+  matte: ["Matte", []], regular: ["Satin", []], metallic: ["Metallic", ["foil"]], shimmer: ["Shimmer", ["pearl"]],
+  glitter: ["Glitter", []], glossy: ["Glossy", ["wet look"]], iridescent: ["Colour-shift", ["duochrome"]],
+};
 const order: FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"];
 
 /**
@@ -32,7 +41,7 @@ export function finishCatalogue(): FinishDescriptor[] {
   return order.map(id => {
     const summary = finishExportSummary(id as Finish);
     return {
-      id, label: labels[id], description: finishDescription(id as Finish),
+      id, label: labels[id], shortLabel: short[id][0], aliases: short[id][1], description: finishDescription(id as Finish),
       preview: summary.adapter === "none" ? "preview-study" : "working",
       exportAdapter: summary.adapter, exportNote: summary.note,
     };
