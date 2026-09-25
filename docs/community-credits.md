@@ -26,7 +26,7 @@ Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation 
 
 ### ArchiveXL
 
-By psiberx and contributors. [GitHub](https://github.com/psiberx/cp2077-archive-xl). ArchiveXL's source taught us how character-creator options are registered, how appearance templates are cloned and how dynamic material paths expand. That understanding is the foundation of XF Studio's single-selector preset export, which avoids generating a separate material for every combination. It is an intended runtime dependency; no ArchiveXL code is included in XF Studio.
+By psiberx and contributors. [GitHub](https://github.com/psiberx/cp2077-archive-xl). ArchiveXL's source taught us how character-creator options are registered, how appearance templates are cloned and how dynamic material paths expand. That understanding is the foundation of XF Studio's single-selector preset export, which avoids generating a separate material for every combination, and its archive-group, `.xl` discovery, scope, fix, patch, copy/link and dynamic-mesh rules are what XF Studio's character resolver replicates to interpret installed mods the way the game does. It is an intended runtime dependency; no ArchiveXL code is included in XF Studio.
 
 ### Codeware and TweakXL
 
@@ -152,7 +152,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### KnowSo team
 
-[-KS- UV Texture Framework](https://www.nexusmods.com/cyberpunk2077/mods/3783), crediting original authors Zosoab70 and AllKnowingLion and named contributors. Its skin template and seam-fix resources showed why each file's effective load-order winner must be resolved before changing preview materials. Studied only; its asset-reuse conditions would need separate review.
+[-KS- UV Texture Framework](https://www.nexusmods.com/cyberpunk2077/mods/3783), crediting original authors Zosoab70 and AllKnowingLion and named contributors. Its skin template and seam-fix resources showed why each file's effective load-order winner must be resolved before changing preview materials, and its head-mesh appearance patch showed that an ArchiveXL patch can change the effective head material chain. Studied only; its asset-reuse conditions would need separate review.
 
 ### Kwek EquipmentEx earrings
 

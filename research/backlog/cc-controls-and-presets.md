@@ -1,6 +1,6 @@
 # Character-creator controls and presets
 
-**Status (25 Sep 2026): open — requirement captured, implementation not started.** Track 3 in the [ranked queue](README.md).
+**Status (25 Sep 2026): open — the data layer exists, no controls yet.** Track 3 in the [ranked queue](README.md). The generic character resolver (phase 1) now derives the effective option catalogue and resolves any choice to its resources; the controls, preview wiring and preset format are not started.
 
 ## Requirement
 
@@ -16,8 +16,8 @@ The Studio currently lets a user choose only the **eye shape** (base mesh plus 2
 |---|---|
 | Saved-V import | Read-only decode of the whole appearance node; five facial morphs applied to head and plate; eye diffuse, brows, lashes, hair and piercings resolved for the captured reference save with documented fidelity gaps. [Save import](../eye-artistry/save-import.md). |
 | Selectable in the Studio | Eye shape; preview piercing style and colour (vanilla female, colours 8–16 from source palette tints); brow/lash/hair/piercing visibility. |
-| Option discovery | [Read-only catalogue probe](../character-customization/catalog-prototype.md) normalises vanilla `female_cco.inkcharcustomization` plus one mod-added resource (Unique Eyes) into options/choices with provenance. No effective archive-winner claim. |
-| Source resolution | [Source discovery foundation](../authoring/source-discovery-foundation.md) inventories direct-game and MO2 candidates; [resolver contract](../character-customization/mod-source-resolution.md) proposed. Vortex, REDmod and ArchiveXL transformations open. |
+| Option discovery | `loadMergedCco` in `src/character-resolver.ts` loads the installed base CCO (the `_ep1` twin with Phantom Liberty) and merges every `.xl`-registered custom resource the way ArchiveXL does (242 on the reference installation), with per-option and per-choice provenance. `descriptorsFromUiState` turns an option state into the appearance and morph descriptors the game would use (simple link rule). The Python [catalogue probe](../character-customization/catalog-prototype.md) is superseded. |
+| Source resolution | Implemented for MO2 and direct routes: archive precedence, ArchiveXL scopes/fixes/patches/copies/links, app overrides, dynamic appearances, components, geometry and material chains, each with provenance and evidence grade ([mod loading](../../knowledge/mod-loading.md), [validation](../character-customization/resolver-validation.md)). Vortex, REDmod, `.ent` patches and geometry/texture export are open. |
 | Save write-back, CC presets | Not started. |
 
 ## Design constraints
@@ -33,8 +33,8 @@ The Studio currently lets a user choose only the **eye shape** (base mesh plus 2
 
 ## Suggested slices
 
-1. Enumerate every vanilla female head option group from the catalogue probe and render the ones whose assets already load (morphs, eye shapes, skin tone), with provenance shown.
-2. Add mod-added options through the provider-neutral resolver, including uncertain-winner reporting.
+1. Expose the merged option catalogue through a typed read-only capability and render the options whose assets already load (morphs, eye shapes, skin tone), with provenance shown.
+2. Add a geometry/texture export adapter keyed by the resolver's `(depot hash, container)` so mod-added and vanilla options render through one path, including uncertain-winner reporting.
 3. Define a portable CC preset format (`xfs/cc-preset-1` or similar) and load/save it locally.
 4. Male/body/arms groups.
 5. Save write-back behind the gate above; sharing format after that.

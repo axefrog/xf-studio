@@ -206,8 +206,8 @@ export function settleDepotAdditions(config: ArchiveXlConfig, exists: (hash: str
     if (patchSources.has(target)) continue;
     patchesByTarget.set(target, [...(patchesByTarget.get(target) ?? []), patch]);
   }
-  // std::sort by `order`; MSVC sorts ranges of up to 32 elements by insertion sort, which keeps declaration
-  // order among equal `order` values [source: MSVC STL _ISORT_MAX]. Array.prototype.sort is stable too.
+  // ArchiveXL uses std::sort by `order`. Keeping declaration order among equal values assumes an MSVC build,
+  // whose std::sort insertion-sorts ranges of up to 32 elements [hypothesis]. Array.prototype.sort is stable.
   for (const list of patchesByTarget.values()) list.sort((a, b) => a.order - b.order);
   return { copies, links, patchesByTarget, patchSources, rejected };
 }
