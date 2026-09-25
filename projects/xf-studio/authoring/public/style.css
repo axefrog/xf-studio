@@ -396,6 +396,8 @@ input[type="checkbox"] {
 #uv {
   width: 100%;
   height: auto;
+  /* The UV editor no longer sizes its canvas; this shell keeps its historical box. */
+  aspect-ratio: 720 / 310;
   display: block;
   background: #222b2d;
   border: 1px solid #424d50;

@@ -456,7 +456,9 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .history-row[data-kind="undone"] .history-label { font-style: italic; font-weight: 500; }
 
 /* ---------- Viewports ---------- */
-.viewport-panel { position: relative; height: 100%; min-height: 160px; background: var(--stage); color: var(--stage-text); overflow: hidden; }
+/* Viewport overlays (context, tools, hints, badges, warnings) are absolutely positioned: they never take layout
+ * space, so their content can change without resizing a canvas. The hint strip is clamped to two rows. */
+.viewport-panel { position: relative; height: 100%; min-height: 160px; background: var(--stage); color: var(--stage-text); overflow: hidden; --hint-strip-max: 45px; }
 .viewport-panel:focus-visible { outline-offset: -3px; }
 .viewport-slot { position: absolute; inset: 0; }
 .viewport-slot > .device-head { position: absolute; inset: 0; }
@@ -486,20 +488,32 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .viewport-panel .ready-badge[data-phase="updating"] { color: var(--stage-updating); }
 .viewport-panel .ready-badge[data-phase="blocked"] { color: var(--stage-danger); }
 @keyframes pulse { 50% { opacity: .25; } }
-.viewport-panel.uv { display: flex; flex-direction: column; background: var(--bg-sunken); color: var(--text); }
-.uv-toolbar { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.uv-slot { position: relative; inset: auto; flex: 1; display: grid; place-items: center; min-height: 0; padding: var(--sp-3); }
-.uv-slot > .device-uv { position: relative; }
-.device-uv canvas { width: 100%; height: 100%; border: 1px solid var(--line-strong); touch-action: none; }
-.uv-hint { font-size: var(--fs-xs); color: var(--text-muted); padding: var(--sp-2) var(--sp-4) var(--sp-3); }
-.uv-hint[data-tone="warning"] { color: var(--warning); padding-bottom: 0; }
+.viewport-panel.uv { display: flex; flex-direction: column; }
+.uv-toolbar { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg-sunken); color: var(--text); }
+/* The UV canvas fills the stage; the atlas is drawn inside it and the stage shows around it. The editor
+ * reads --uv-safe-* as the band its fitted frame keeps clear: the hint strip's maximum height plus margins. */
+@property --uv-safe-top { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --uv-safe-right { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --uv-safe-bottom { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --uv-safe-left { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.uv-stage { position: relative; flex: 1; min-height: 0; overflow: hidden;
+  --uv-safe-top: var(--sp-4); --uv-safe-right: var(--sp-4); --uv-safe-left: var(--sp-4);
+  --uv-safe-bottom: calc(var(--sp-4) + var(--hint-strip-max) + var(--sp-2)); }
+.uv-stage[data-hints="off"] { --uv-safe-bottom: var(--sp-4); }
+.uv-slot > .device-uv { position: absolute; inset: 0; }
+.device-uv canvas { width: 100%; height: 100%; touch-action: none; }
+.uv-stage .viewport-top { justify-content: flex-start; }
+.uv-warning { font-size: var(--fs-xs); line-height: 1.35; color: var(--stage-warning); background: var(--stage-chip-strong); padding: 4px 8px; border-left: 2px solid var(--stage-warning); }
 
 /* ---------- Input hints, target tooltips and gesture cursors ----------
  * Derived from the input binding catalogue (src/input-bindings.ts): the strip lists what the
  * pointer and held keys do here; cursors come from the same bindings. Never interactive. */
 .input-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 3px var(--sp-5); font-size: var(--fs-xs); line-height: 1.35; pointer-events: none; min-width: 0; }
-.viewport-bottom > .input-hints { pointer-events: none; color: var(--stage-text); background: var(--stage-chip-strong); padding: 4px 8px; max-width: 72%; }
-.viewport-panel.uv > .input-hints { color: var(--text-muted); padding: var(--sp-2) var(--sp-4) var(--sp-3); }
+/* Vertical spacing is a transparent border, not padding: overflow clips at the padding edge, so a third row
+ * is hidden completely instead of peeking into the padding. Two 17 px rows + 3 px gap + 2 × 4 px = 45 px. */
+.viewport-bottom > .input-hints { pointer-events: none; color: var(--stage-text); background: var(--stage-chip-strong); padding: 0 8px; max-width: 72%;
+  border-block: 4px solid transparent; max-height: var(--hint-strip-max); overflow: hidden; align-content: flex-start; }
+.uv-stage .viewport-bottom > .input-hints { max-width: 100%; }
 .input-hints .hint-group { display: contents; }
 .input-hints .hint { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .input-hints .hint-key, .target-tip .hint-key { font: 600 var(--fs-2xs)/1 var(--font-mono); padding: 2px 4px 1px; border: 1px solid currentColor; border-bottom-width: 2px; border-radius: var(--radius); background: none; color: inherit; opacity: .92; }
@@ -509,7 +523,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .input-hints .hint-state { display: inline-flex; align-items: center; gap: 5px; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--accent-text); }
 .viewport-bottom > .input-hints .hint-state { color: var(--accent); }
 .input-hints[data-tone="held"], .input-hints[data-tone="gesture"] { box-shadow: inset 2px 0 0 var(--accent); }
-.viewport-panel.uv > .input-hints[data-tone="held"], .viewport-panel.uv > .input-hints[data-tone="gesture"] { box-shadow: inset 2px 0 0 var(--accent-edge); }
 .input-hints .hint-note { color: var(--warning); white-space: nowrap; }
 .viewport-bottom > .input-hints .hint-note { color: var(--stage-warning); }
 .target-tip { position: absolute; left: 0; top: 0; z-index: 5; display: grid; gap: 3px; max-width: 260px; padding: 6px 8px; pointer-events: none;

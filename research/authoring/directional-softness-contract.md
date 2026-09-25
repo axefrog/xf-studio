@@ -20,6 +20,6 @@ Widths are blended targets: a very soft opposing edge can influence a sharp edge
 
 ## UV resolution correction
 
-The old UV canvas always used 720 backing pixels across and became blurry when a larger sidebar stretched it. It now uses the pane's CSS dimensions multiplied by display pixel density. Controls, line widths and hit tests remain in CSS pixels; changing the backing resolution does not alter recipes or stored UV zoom/pan. An explicit CSS aspect ratio prevents the backing-buffer dimensions from changing the layout. Resize and display-density observers redraw without reallocating an unchanged buffer.
+The old UV canvas always used 720 backing pixels across and became blurry when a larger sidebar stretched it. It now uses the pane's CSS dimensions multiplied by display pixel density. Controls, line widths and hit tests remain in CSS pixels; changing the backing resolution does not alter recipes or stored UV zoom/pan. The canvas's CSS size comes from its host (it fills the UV panel), so the backing-buffer dimensions cannot change the layout. Resize and display-density observers redraw without reallocating an unchanged buffer.
 
 At emulated DPR 2, a 1191 × 859.609375 CSS-pixel pane produced a 2382 × 1719 buffer. Point selection/dragging and Undo worked at that density. Returning to DPR 1 restored a 661 × 477 buffer for the narrower pane with the same saved view. Enlarging the photographic or mask background may still reveal its source texture resolution; the path and controls are drawn freshly at display resolution.

@@ -27,6 +27,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 - **Eyes follow the eye shape.** Changing eye shape moves the eyeballs with the eyelids, as the game does, including during the idle animation and blinks. Eye shapes are numbered like the character creator.
 - **A History panel lists your recent changes.** Click any step to go back to it, or to a step you undid to go forward again. Steps you undid stay listed, dimmed, until you make a new change. Each preset keeps its own history, and the panel says when older steps were not kept. The Undo and Redo buttons (next to Save) now say which change they would undo or redo, such as “Redo: Move point”, and show their shortcuts: Ctrl+Z, and Ctrl+Shift+Z or Ctrl+Y.
+- **The UV map uses the whole panel and zooms across it.** The map fills its panel at any size, docked or floating. Fit shape fills the panel with a small margin, a single eye fills it on its own, the wheel zooms around the pointer, and right-drag or Ctrl-drag pans anywhere in the panel, with a neutral background around the texture. Your zoom and pan are kept when you reopen the app.
 - **The eye-makeup area follows your own head.** The built-in eye plate is cut from the head your game actually loads, including a head adjusted by an installed mod. If a head mod changes the head in a way XF Eye Artistry doesn't support yet, Build stops and names the mod.
 
 ### Fixes and under the hood
@@ -37,6 +38,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - The installer is not code-signed, so Windows SmartScreen may warn before it runs. Checksums and a build-provenance attestation are published with each release so you can check the file came from this project's automated build.
 - Automatic updates are off. Download new versions from the releases page. Installing one version over another hasn't been tested yet, so export your looks as a backup first. Uninstalling with the default **App** option keeps your library and settings.
 - **Autosave you can rely on.** Your draft is saved only after you change something, keeps full Undo for the preset you are working on and the last few steps for the others, and a damaged backup entry no longer stops the rest of your draft from coming back. If storage runs short, the status bar says so.
+- The mouse and keyboard hints over the head and UV map float over the view and stay at most two lines high, so changing hints never resize the view. Hovering a curve point no longer makes the UV map jump back and forth, and the hints no longer cover the texture after Fit shape.
 - Closing the window waits for your latest draft to be saved, and shows a message instead of closing if saving fails.
 - XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows PCs already have. If it's missing, XF Studio offers to install it for you with one click, using Microsoft's own installer, and then opens. Any other startup failure shows **Try again** and **Copy diagnostics** instead of an empty window.
 - Cancelling a slider or drag with Esc no longer throws away the changes you could still redo.
