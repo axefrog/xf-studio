@@ -3,10 +3,11 @@ import type { CollectionOutcome, CollectionRequest } from "../collection-service
 import type { ValueSchema } from "../studio-action-descriptors";
 import type { StudioAction } from "../studio-application";
 import type { StudioFileAction, StudioFileOutcome } from "../studio-file-operations";
-import type { StudioPresentationPort } from "../studio-presentation";
+import type { EyeMakeupFacade, StudioPresentationPort } from "../studio-presentation";
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
 import { AnchorRegistry } from "./guidance/anchors";
+import { activitySource } from "./views";
 
 export type Port = StudioPresentationPort<HTMLElement>;
 type Ret<T extends (...args: never[]) => unknown> = ReturnType<T>;
@@ -19,13 +20,17 @@ export class Frame {
     if (!this.cache.has(key)) this.cache.set(key, read());
     return this.cache.get(key) as T;
   }
-  get recipe() { return this.once("recipe", () => this.port.editor.recipe()); }
-  get layer() { return this.once("layer", () => this.port.editor.layer()); }
-  get active() { return this.once("active", () => this.port.editor.active()); }
-  get selected() { return this.once("selected", () => this.port.editor.selected()); }
-  get field() { return this.once("field", () => this.port.editor.selectedField()); }
-  get revision() { return this.once("revision", () => this.port.editor.revision()); }
-  get canUndo() { return this.once("canUndo", () => this.port.editor.canUndo()); }
+  /** Eye makeup's editor view (its facade's `view()`). */
+  private get editor() { return this.port.feature("eye-makeup").view(); }
+  get recipe() { return this.once("recipe", () => this.editor.recipe()); }
+  get layer() { return this.once("layer", () => this.editor.layer()); }
+  get active() { return this.once("active", () => this.editor.active()); }
+  get selected() { return this.once("selected", () => this.editor.selected()); }
+  get field() { return this.once("field", () => this.editor.selectedField()); }
+  get revision() { return this.once("revision", () => this.editor.revision()); }
+  get canUndo() { return this.once("canUndo", () => this.editor.canUndo()); }
+  /** Whether the selected look's eye makeup can be edited here (not when it was made with a newer XF Studio). */
+  get editable() { return this.once("editable", () => this.port.feature("eye-makeup").editable()); }
   get library() { return this.once("library", () => this.port.library.summary()); }
   get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
@@ -40,13 +45,8 @@ export class Frame {
 }
 export type FrameState = Frame;
 
-const sources: [RegExp, string][] = [
-  [/^recipe\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
-  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
-  [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
-  [/^collection\./, "Library"], [/^savedV\./, "Saved V"], [/^previewSetup\./, "3D preview"],
-];
-export const sourceLabel = (kind: string) => sources.find(([pattern]) => pattern.test(kind))?.[1] ?? "Studio";
+/** The activity-log source an action kind reports under, from the view contributions (`views/`). */
+export const sourceLabel = (kind: string) => activitySource(kind);
 
 /** Shared presentation services. Holds no authored state of its own. */
 export class StudioRuntime {
@@ -54,14 +54,19 @@ export class StudioRuntime {
   /** Named guidance anchors that panels and the shell register as they build their controls. */
   readonly anchors = new AnchorRegistry();
   readonly descriptors: Ret<Port["authoring"]["actionDescriptors"]>;
-  readonly finishes: Ret<Port["authoring"]["finishCatalogue"]>;
-  readonly glitterModels: Ret<Port["authoring"]["glitterModelCatalogue"]>;
+  /** Eye makeup's facade: its editor view, form-control transactions and catalogues (feature-module platform §4). */
+  readonly eyeMakeup: EyeMakeupFacade;
+  readonly finishes: Ret<EyeMakeupFacade["finishCatalogue"]>;
+  readonly glitterModels: Ret<EyeMakeupFacade["glitterModelCatalogue"]>;
   private listeners = new Set<() => void>();
   constructor(readonly port: Port, readonly feedback: Feedback) {
     this.descriptors = port.authoring.actionDescriptors();
-    this.finishes = port.authoring.finishCatalogue();
-    this.glitterModels = port.authoring.glitterModelCatalogue();
+    this.eyeMakeup = port.feature("eye-makeup");
+    this.finishes = this.eyeMakeup.finishCatalogue();
+    this.glitterModels = this.eyeMakeup.glitterModelCatalogue();
   }
+  /** Eye makeup's live editor view (cheap, cached and read-only). */
+  get editor() { return this.eyeMakeup.view(); }
   /** Descriptor limits drive control ranges, so the view keeps no copy of domain constants. */
   range(kind: StudioAction["kind"], field: string, variant?: string): { min: number; max: number } {
     const descriptor = this.descriptors[kind] as { payload: Record<string, ValueSchema>; variants?: Record<string, { payload: Record<string, ValueSchema> }> };
@@ -110,13 +115,13 @@ export class StudioRuntime {
   }
   /** A toast "Undo" that only undoes the change it announced, never a later unrelated edit. */
   undoAction(): FeedbackAction {
-    const revision = this.port.editor.revision();
+    const revision = this.editor.revision();
     return { label: "Undo", run: () => {
-      if (this.port.editor.revision() !== revision) {
+      if (this.editor.revision() !== revision) {
         this.feedback.toast("warning", "Undo", `Other edits happened since. Use Undo (${shortcutLabel("shell.undo")}) to step back through them in order.`);
         return;
       }
-      this.dispatch({ kind: "recipe.undo" });
+      this.dispatch({ kind: "history.undo" });
     } };
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }

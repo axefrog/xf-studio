@@ -220,8 +220,10 @@ function compactWorkspace(state: WorkspaceState, plan: WorkspacePlan, model: Doc
     return { ...state, history, ...(history.trimmed ? { historyTrimmed: true } : {}) };
   }
   const current = compactDraft(collections, plan, true, model);
+  // A recovery draft holding a locked look (a newer build's, kept exactly as it came) is never dropped to fit.
   const recovery = [collections.previous, ...(collections.older ?? [])]
-    .filter((draft): draft is CollectionDraft => !!draft).slice(0, plan.recovery).map(draft => compactDraft(draft, plan, false, model));
+    .filter((draft): draft is CollectionDraft => !!draft).filter((draft, index) => index < plan.recovery || holdsLocked(draft))
+    .map(draft => compactDraft(draft, plan, false, model));
   const compacted: CollectionWorkspace = { ...current,
     ...(recovery.length ? { previous: recovery[0], older: recovery.slice(1) } : {}) };
   // The stored form restores the editor from the collection's selected look, so it keeps no loose editor copy.
@@ -234,10 +236,16 @@ function compactDraft(draft: CollectionDraft, plan: WorkspacePlan, current: bool
     const keep = !current ? 0 : id === draft.selected ? plan.selected : plan.background;
     memory[id] = trimLook(look, keep, model);
   }
+  // Recovery drafts keep their presets but not their removed-preset lists; removed presets keep no history. A removed
+  // locked look (a newer build's, kept exactly as it came) is always kept, with its memory as it was read.
+  const kept = current ? plan.removed : 0;
   return { collection: draft.collection, revision: draft.revision, selected: draft.selected,
-    // Recovery drafts keep their presets but not their removed-preset lists; removed presets keep no history.
-    memory, removed: (current && plan.removed > 0 ? draft.removed.slice(-plan.removed) : [])
+    memory, removed: draft.removed.filter((entry, index) => index >= draft.removed.length - kept || entry.preset.locked)
       .map(entry => ({ ...entry, memory: trimLook(entry.memory, 0, model) })) };
+}
+/** Whether a draft holds a locked look, in its collection or its removed presets. */
+function holdsLocked(draft: CollectionDraft) {
+  return draft.collection.presets.some(look => look.locked) || draft.removed.some(entry => entry.preset.locked);
 }
 
 /** A look's Undo history trimmed to its latest `keep` steps, recording when older ones were dropped. */

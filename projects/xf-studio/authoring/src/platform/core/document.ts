@@ -12,8 +12,8 @@
  *   `xfas/collection-1` whenever every look holds exactly the legacy feature's part in a form
  *   that schema holds exactly, and `xfs/collection-2` otherwise.
  */
-import { canonicalJson, COLLECTION_1, COLLECTION_2, isNewerData, LOOK_MEMORY, NewerDataError, type Look, type LookCollection,
-  type LookMemory, type PartEnvelope, type PartMemory } from "../api/document";
+import { canonicalJson, COLLECTION_1, COLLECTION_2, isNewerData, KEPT_MEMORY, LOOK_MEMORY, NEWER_LOOK_MESSAGE, NewerDataError, type Look,
+  type LookCollection, type LookMemory, type PartEnvelope, type PartMemory } from "../api/document";
 import type { AnyFeatureModule } from "../api/feature";
 import { HISTORY_LIMIT, LOOK_HISTORY_1, type HistoryParts, type LookHistoryData, type StoredLookEntry } from "../api/history";
 import { emptyLookHistory, isEmptyLookHistory, LookHistory, lookHistoryBodies, pruneLookHistory } from "./look-history";
@@ -32,9 +32,11 @@ export type StoredPartMemory = { editor?: unknown; partSchema?: string; history?
 /**
  * What a reader does with data from a newer build (`NewerDataError`): `refuse` throws it, so the
  * store holding it is protected; `omit` leaves the newer entries out of a read-only view (the
- * caller must then never write that view back over the store).
+ * caller must then never write that view back over the store); `keep` keeps a look holding it
+ * verbatim and locked (`Look.locked`), so the rest stays editable and writers put it back unchanged
+ * (collection drafts and collection files; step 5).
  */
-export type NewerPolicy = "refuse" | "omit";
+export type NewerPolicy = "refuse" | "omit" | "keep";
 
 export class PartRegistry implements HistoryParts {
   private readonly byId = new Map<string, AnyFeatureModule>();
@@ -96,9 +98,10 @@ export class PartRegistry implements HistoryParts {
    * A look's in-memory parts are already parsed at their feature's current schema (`readPart`), so
    * those bodies are returned as they are (no copy); a part in another schema is parsed.
    */
-  part<P>(look: Pick<Look, "parts">, feature: string): P | undefined {
+  part<P>(look: Pick<Look, "parts" | "locked">, feature: string): P | undefined {
     const module = this.byId.get(feature), envelope = look.parts[feature];
-    return module && envelope ? this.parsedPart(module, envelope) as P : undefined;
+    // A locked look's parts are kept as stored: this build cannot read them.
+    return module && envelope && !look.locked ? this.parsedPart(module, envelope) as P : undefined;
   }
   /** Wrap a registered feature's parsed part (no copy). */
   envelope(feature: string, part: unknown): PartEnvelope {
@@ -114,17 +117,56 @@ export class PartRegistry implements HistoryParts {
   canonicalParts(parts: Readonly<Record<string, PartEnvelope>>): string {
     return canonicalJson(Object.fromEntries(Object.keys(parts).sort().map(feature => {
       const module = this.byId.get(feature), envelope = parts[feature];
-      return [feature, module && envelope?.schema === module.part.current ? envelope : this.readPart(feature, envelope)];
+      if (module && envelope?.schema === module.part.current) return [feature, envelope];
+      // A part this build cannot read (a locked look's) cannot change here: its stored text is its content.
+      try { return [feature, this.readPart(feature, envelope)]; }
+      catch (error) { if (!isNewerData(error)) throw error; return [feature, envelope]; }
     })));
   }
   /** Primitive facts of one look for views; a feature the look lacks contributes nothing. */
-  summary(look: Pick<Look, "parts">, feature: string): Readonly<Record<string, number | string | boolean>> | undefined {
+  summary(look: Pick<Look, "parts" | "locked">, feature: string): Readonly<Record<string, number | string | boolean>> | undefined {
     const module = this.byId.get(feature), envelope = look.parts[feature];
-    return module && envelope ? module.part.summary(envelope.body) : undefined;
+    return module && envelope && !look.locked ? module.part.summary(envelope.body) : undefined;
   }
 
-  /** One stored preset of either collection schema, as a look. */
-  readPreset(value: unknown, schema: string): Look {
+  /**
+   * One stored preset of either collection schema, as a look. With `newer` `keep`, a look holding a newer
+   * build's data is kept verbatim and locked (`keepLook`) instead of refused.
+   */
+  readPreset(value: unknown, schema: string, newer: NewerPolicy = "refuse"): Look {
+    try { return this.readPresetParts(value, schema); }
+    catch (error) {
+      if (newer !== "keep" || !isNewerData(error)) throw error;
+      return this.keepLook(value, schema);
+    }
+  }
+  /**
+   * A stored preset this build cannot read, kept exactly as stored and locked: its identity is checked,
+   * its parts are copied verbatim (a collection-1 preset's legacy field becomes the claiming feature's
+   * part in its legacy schema, as that field has always been read).
+   */
+  keepLook(value: unknown, schema: string): Look {
+    const input = value as LegacyPreset & { parts?: unknown };
+    if (!input || typeof input !== "object" || !UUID.test(input.id ?? "") || !title(input.name) ||
+        !Number.isSafeInteger(input.revision) || input.revision < 1) throw Error(PRESET_MESSAGE);
+    const parts: Record<string, PartEnvelope> = {};
+    if (schema === COLLECTION_1) {
+      const owner = this.legacyOwner, legacy = owner?.part.legacy;
+      if (!owner || !legacy) throw Error("This version of XF Studio cannot read xfas/collection-1 collections.");
+      parts[owner.id] = { schema: legacy.schema, body: structuredClone(input[legacy.presetField]) };
+    } else {
+      const stored = input.parts;
+      if (!stored || typeof stored !== "object" || Array.isArray(stored)) throw Error(`Preset ${input.name} has no parts.`);
+      for (const [feature, envelope] of Object.entries(stored as Record<string, PartEnvelope>)) {
+        if (!FEATURE_KEY.test(feature) || feature.length > 64 || !envelope || typeof envelope !== "object" || Array.isArray(envelope) ||
+            typeof envelope.schema !== "string" || !envelope.schema || envelope.schema.length > 128 || !("body" in envelope))
+          throw Error(`The ${feature} part of a look is damaged.`);
+        parts[feature] = { schema: envelope.schema, body: structuredClone(envelope.body) };
+      }
+    }
+    return { id: input.id, name: input.name, revision: input.revision, parts, locked: NEWER_LOOK_MESSAGE };
+  }
+  private readPresetParts(value: unknown, schema: string): Look {
     const input = value as LegacyPreset & { parts?: unknown };
     if (!input || typeof input !== "object" || !UUID.test(input.id ?? "") || !title(input.name) ||
         !Number.isSafeInteger(input.revision) || input.revision < 1) throw Error(PRESET_MESSAGE);
@@ -143,15 +185,20 @@ export class PartRegistry implements HistoryParts {
     }
     return { id: input.id, name: input.name, revision: input.revision, parts };
   }
-  /** Read a stored collection of either schema. Identity is independent of names, revisions and order. */
-  readCollection(value: unknown, allowEmpty = false): LookCollection {
+  /**
+   * Read a stored collection of either schema. Identity is independent of names, revisions and order.
+   * `newer` `keep` keeps looks holding a newer build's data verbatim and locked; by default they are refused.
+   */
+  readCollection(value: unknown, allowEmpty = false, newer: NewerPolicy = "refuse"): LookCollection {
     const input = value as { schema?: unknown; id?: string; name?: unknown; presets?: unknown[] };
     if (!input || (input.schema !== COLLECTION_1 && input.schema !== COLLECTION_2) || !UUID.test(input.id ?? "") ||
         !title(input.name) || !Array.isArray(input.presets) || (!allowEmpty && !input.presets.length))
       throw Error(COLLECTION_MESSAGE);
     const seen = new Set<string>();
     const presets = input.presets.map(preset => {
-      const look = this.readPreset(preset, input.schema as string);
+      // A look already locked in memory is read again from its kept parts, which still need a newer build.
+      const look = (preset as Look | undefined)?.locked && newer === "keep"
+        ? this.keepLook(preset, input.schema as string) : this.readPreset(preset, input.schema as string, newer);
       if (seen.has(look.id)) throw Error(PRESET_MESSAGE);
       seen.add(look.id);
       return look;
@@ -173,7 +220,8 @@ export class PartRegistry implements HistoryParts {
   legacyPreset(look: Look): LegacyPreset | undefined {
     const owner = this.legacyOwner, legacy = owner?.part.legacy;
     const features = Object.keys(look.parts);
-    if (!owner || !legacy || features.length !== 1 || features[0] !== owner.id) return undefined;
+    // A locked look is written in the look form, where a build that cannot read it refuses it cleanly.
+    if (!owner || !legacy || look.locked || features.length !== 1 || features[0] !== owner.id) return undefined;
     const envelope = look.parts[owner.id];
     const body = envelope.schema === legacy.schema ? envelope.body
       : owner.part.downgrade?.(this.parsedPart(owner, envelope), legacy.schema)?.body;
@@ -209,6 +257,8 @@ export class PartRegistry implements HistoryParts {
    * shares structure with `look` (for a writer that serializes it at once, like the workspace).
    */
   minimalLook(look: Look, copy = true): Look {
+    // A locked look's parts are written exactly as they were read.
+    if (look.locked) return { id: look.id, name: look.name, revision: look.revision, parts: copy ? structuredClone(look.parts) : look.parts };
     return { id: look.id, name: look.name, revision: look.revision,
       parts: Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.minimalPart(feature, part, copy)])) };
   }
@@ -230,7 +280,8 @@ export class PartRegistry implements HistoryParts {
   write(collection: LookCollection): LookCollection {
     return { schema: COLLECTION_2, id: collection.id, name: collection.name,
       presets: collection.presets.map(look => ({ id: look.id, name: look.name, revision: look.revision,
-        parts: Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.readPart(feature, part)])) })) };
+        parts: look.locked ? structuredClone(look.parts)
+          : Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.readPart(feature, part)])) })) };
   }
 
   /**
@@ -266,8 +317,10 @@ export class PartRegistry implements HistoryParts {
    * stored form (see `writeMemory`); damaged steps are skipped. Steps from a newer build are never
    * skipped as damage: see `NewerPolicy` (omitted ones are reported as trimmed history).
    */
-  readMemory(value: unknown, look: Pick<Look, "parts"> | undefined, newer: NewerPolicy = "refuse"): LookMemory {
+  readMemory(value: unknown, look: Pick<Look, "parts" | "locked"> | undefined, newer: NewerPolicy = "refuse"): LookMemory {
     const memory: LookMemory = {};
+    // A locked look's memory is kept exactly as stored (`KEPT_MEMORY`); nothing in it is read.
+    if (look?.locked) return { [KEPT_MEMORY]: { editor: structuredClone(value) } };
     if (!value || typeof value !== "object" || Array.isArray(value)) return memory;
     const bodies: [string, unknown[]][] = [];
     let trimmed = false, lookLevel = false;
@@ -310,7 +363,7 @@ export class PartRegistry implements HistoryParts {
   private readSteps(module: AnyFeatureModule, partSchema: string, history: unknown, newer: NewerPolicy): { bodies: unknown[]; trimmed: boolean } {
     if (!Array.isArray(history) || !history.length) return { bodies: [], trimmed: false };
     if (!module.part.accepts.includes(partSchema)) {
-      if (newer === "refuse") throw this.newer(module, partSchema);
+      if (newer !== "omit") throw this.newer(module, partSchema);
       return { bodies: [], trimmed: true };
     }
     const bodies: unknown[] = [];
@@ -319,7 +372,7 @@ export class PartRegistry implements HistoryParts {
       try { bodies.push(module.part.parse({ schema: partSchema, body })); }
       catch (error) {
         if (!isNewerData(error)) continue; // One damaged Undo entry must not lose the draft.
-        if (newer === "refuse") throw error;
+        if (newer !== "omit") throw error;
         omitted = true;
       }
     }
@@ -358,7 +411,7 @@ export class PartRegistry implements HistoryParts {
         kept.push(data.entries[index]);
       } catch (error) {
         if (!isNewerData(error)) continue;
-        if (newer === "refuse") throw error;
+        if (newer !== "omit") throw error;
         omitted = true;
       }
     }
@@ -376,6 +429,9 @@ export class PartRegistry implements HistoryParts {
    * layer then costs one layer chunk instead of the whole part.
    */
   writeMemory(memory: LookMemory, options: { lookLevel?: boolean } = {}): Record<string, StoredPartMemory> {
+    // A locked look's memory goes back exactly as it was read.
+    // (A look stored without memory has none to write: `undefined` leaves its key out of the stored JSON.)
+    if (memory[KEPT_MEMORY]) return structuredClone(memory[KEPT_MEMORY].editor) as Record<string, StoredPartMemory>;
     const history = this.lookHistory(memory), stored: Record<string, StoredPartMemory> = {};
     const bodies = options.lookLevel && history.entries.length ? undefined : lookHistoryBodies(history, this);
     // Whole parts hold the history only for a registered feature (no reader accepts steps of any other).

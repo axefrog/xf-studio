@@ -105,7 +105,7 @@ export function shell() {
       when: "Always visible. Only commands that act on the whole document or workspace belong here; anything about a layer or panel stays in that panel.",
       combine: "The library chip repeats the Presets panel chip so saved state is visible when that panel is closed.",
       adapt: "Below 1100 px the brand word, collection crumb and action labels collapse to icons with names; below 720 px the chip and verification flag hide (the status bar still reports them).",
-      drives: `${code("library.summary()")}, ${code("authoring.capability({kind:'recipe.undo'|'recipe.redo'})")}, ${code("authoring.history()")}, ${code("authoring.requestCapability({kind:'save'})")}, ${code("status.snapshot().verification")}, ${code("preferences")}.` }),
+      drives: `${code("library.summary()")}, ${code("authoring.capability({kind:'history.undo'|'history.redo'})")}, ${code("authoring.history()")}, ${code("authoring.requestCapability({kind:'save'})")}, ${code("status.snapshot().verification")}, ${code("preferences")}.` }),
     pattern({ id: "s-category", title: "Category label and growth", status: "implemented",
       specimen: `<div class="shell-header demo-header"><span class="category" title="Authoring category: eye makeup">${i("category")}<span>Eye makeup</span></span></div>`,
       what: "The header names the authoring category. It is the one place new categories will join. With only Eye makeup there is nothing to choose, so it is a plain label, not a menu: menus list only what can be done.",

@@ -51,7 +51,8 @@ export class DesktopWorkspaceStore {
     const path = this.path(verification), known = this.known.get(path);
     if (known?.text === raw) return { newer: false, schema: known.schema };
     const value = JSON.parse(raw), schema = (value as { schema?: unknown } | null)?.schema;
-    try { parseWorkspace(value, this.model, []); }
+    // Looks holding a newer build's data are kept verbatim and locked (step 5): such a workspace is writable.
+    try { parseWorkspace(value, this.model, [], "keep"); }
     catch (error) {
       if (!isNewerData(error)) throw error;
       parseWorkspace(value, this.model, [], "omit");
@@ -93,7 +94,7 @@ export class DesktopWorkspaceStore {
     // Refuse to replace an unreadable prior draft (the user can recover its file), or one holding a newer build's data.
     const prior = previous === null ? undefined : this.inspect(verification, previous);
     if (prior?.newer) throw Error("The saved desktop workspace holds data from a newer XF Studio; it was not replaced.");
-    const value = JSON.parse(raw), parsed = parseWorkspace(value, this.model);
+    const value = JSON.parse(raw), parsed = parseWorkspace(value, this.model, undefined, "keep");
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     const path = this.path(verification), temporary = resolve(this.root, `.workspace-${randomUUID()}.tmp`);
     // Downgrade protection: a version-1 file an older build wrote is kept beside it before it is replaced.

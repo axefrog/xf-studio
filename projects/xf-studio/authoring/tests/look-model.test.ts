@@ -21,7 +21,7 @@ import { LIVE_FEATURE, STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDI
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../src/direct-glint-settings";
 import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
 import { EYE_MAKEUP_FEATURE, recipeFile } from "../src/recipe-schema";
-import { canonicalJson, COLLECTION_1, COLLECTION_2, type FeatureActionSpec, type LookCollection } from "../src/platform/api";
+import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type FeatureActionSpec, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { compilePreset } from "../src/preset-compiler";
 import { eyeMakeupCollection, parseCollection, planCollection } from "../src/preset-collection";
@@ -116,14 +116,14 @@ test("parts and memory of features this build does not register are carried unch
   expect(eyeMakeupCollection(read).presets).toHaveLength(read.presets.length);
 });
 
-test("a workspace from a newer build or damaged beyond the current draft stays protected", () => {
+test("a workspace from a newer build stays protected; a newer look in a collection draft opens locked (step 5)", () => {
   const state = storedWorkspace(restore(smallWorkspaceV1()).state);
-  for (const value of [{ ...state, schema: "xfs/workspace-3" },
-    { ...state, collections: { ...state.collections, collection: { ...state.collections.collection,
-      presets: [{ ...state.collections.collection.presets[0], parts: { [EYE]: { schema: "xfs/eye-makeup-part-9", body: {} } } }] } } }]) {
-    const loaded = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false, STUDIO_DOCUMENTS);
-    expect(loaded.writable).toBe(false);
-  }
+  const load = (value: unknown) => loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false, STUDIO_DOCUMENTS);
+  expect(load({ ...state, schema: "xfs/workspace-3" }).writable).toBe(false);
+  const newerLook = load({ ...state, collections: { ...state.collections, collection: { ...state.collections.collection,
+    presets: [{ ...state.collections.collection.presets[0], parts: { [EYE]: { schema: "xfs/eye-makeup-part-9", body: {} } } }] } } });
+  expect(newerLook.writable).toBe(true);
+  expect(newerLook.state.collections!.collection.presets[0].locked).toBe(NEWER_LOOK_MESSAGE);
   expect(() => STUDIO_PARTS.readPart(EYE, { schema: "xfs/eye-makeup-part-9", body: {} }))
     .toThrow("saved by a newer version of XF Studio (xfs/eye-makeup-part-9)");
 });

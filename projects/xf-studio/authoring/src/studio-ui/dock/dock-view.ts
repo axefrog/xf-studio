@@ -288,7 +288,7 @@ export class DockView {
 
   private tabKey(event: KeyboardEvent, group: GroupNode, id: PanelId) {
     const index = group.panels.indexOf(id);
-    const focusTab = (panel: PanelId) => this.element.querySelector<HTMLElement>(`#dock-tab-${panel}`)?.focus();
+    const focusTab = (panel: PanelId) => this.element.querySelector<HTMLElement>(`[id="dock-tab-${panel}"]`)?.focus();
     const command = keyBinding("tabs", event)?.id;
     if (command === "tabs.reorder") {
       event.preventDefault();
@@ -321,7 +321,7 @@ export class DockView {
   reveal(id: PanelId, focus = true) {
     const tree = showPanelDocked(this.isOpen(id) ? activate(this.tree, id) : openPanel(this.tree, id, this.siblingsInDefault(id), this.area()), id);
     this.update(tree, this.isOpen(id) ? undefined : `${this.title(id)} opened`);
-    if (focus) requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`#dock-tab-${id}`)?.focus());
+    if (focus) requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
   }
   close(id: PanelId) {
     const at = locate(this.tree, id);
@@ -340,7 +340,7 @@ export class DockView {
   }
   moveTo(id: PanelId, target: DropTarget, message: string) {
     this.update(showPanelDocked(applyDrop(this.tree, { kind: "panel", panelId: id }, target, this.groupRect(locate(this.tree, id)?.group.id)), id), message);
-    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`#dock-tab-${id}`)?.focus());
+    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
   }
   toggleMaximize(groupId: string) {
     const on = this.tree.maximized !== groupId;
@@ -394,7 +394,7 @@ export class DockView {
     );
     if (at.group.panels.length > 1) items.splice(1, 0, { kind: "submenu", label: "Show tab", icon: "chevronRight",
       items: () => at.group.panels.map(panel => ({ kind: "action", label: this.title(panel), checked: panel === at.group.active,
-        run: () => { this.update(activate(this.tree, panel)); this.element.querySelector<HTMLElement>(`#dock-tab-${panel}`)?.focus(); } })) });
+        run: () => { this.update(activate(this.tree, panel)); this.element.querySelector<HTMLElement>(`[id="dock-tab-${panel}"]`)?.focus(); } })) });
     return items;
   }
   openPanelMenu(id: PanelId, anchor: Element | { x: number; y: number }, invoker?: Element) {

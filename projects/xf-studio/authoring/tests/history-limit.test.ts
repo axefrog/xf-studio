@@ -28,7 +28,7 @@ test("a form edit at the history limit labels its own entry and Undo restores th
   app.controlCommit("opacity");
   expect(document.undoDepth).toBe(RECIPE_HISTORY_LIMIT);
   expect(app.history().undo).toMatchObject({ label: "Opacity", actionKind: "layer.setOpacity" });
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(document.recipe.layers[0].opacity).toBe(before);
   // Undoing the entry that displaced the oldest one brings that oldest entry back.
   expect(document.undoDepth).toBe(RECIPE_HISTORY_LIMIT);

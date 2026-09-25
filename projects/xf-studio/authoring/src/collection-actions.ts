@@ -25,7 +25,8 @@ export type CodedCapability = ActionCapability & { code?: ReasonCode };
 /** Primitive-only draft projection; building it never clones recipes or Undo histories. */
 export type CollectionDraftSummary = {
   id: string; name: string; revision?: number; selected?: string;
-  presets: { id: string; name: string; revision: number; layers: number }[];
+  /** `locked`: the look holds a newer build's data and is not editable in this version. */
+  presets: { id: string; name: string; revision: number; layers: number; locked?: true }[];
   /** Oldest first; `restore` brings back the last entry. */
   removed: { id: string; name: string; index: number }[];
   previous?: { id: string; name: string; revision?: number };
@@ -55,7 +56,7 @@ export class CollectionActions {
     const oldest = recovery.at(-1);
     return { id: s.collection.id, name: s.collection.name, revision: s.revision, selected: s.selected,
       presets: s.collection.presets.map(p => ({ id: p.id, name: p.name, revision: p.revision,
-        layers: Number(this.model.parts.summary(p, this.model.live)?.layers ?? 0) })),
+        layers: Number(this.model.parts.summary(p, this.model.live)?.layers ?? 0), ...(p.locked ? { locked: true as const } : {}) })),
       removed: s.removed.map(entry => ({ id: entry.preset.id, name: entry.preset.name, index: entry.index })),
       previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
         revision: s.previous.revision } : undefined,

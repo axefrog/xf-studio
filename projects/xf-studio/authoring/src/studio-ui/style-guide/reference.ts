@@ -19,8 +19,8 @@ export function reference(panels: PanelInfo[]) {
     ["Preview quality", "quality.set, quality.rebuild", "previewState().quality, previewReadiness"],
     ["Library", "requests save/saveCopy/refresh/open, files collection.import/export/plan/recover, recipe.import/export, mask.export", "library.summary(), files.snapshot()"],
     ["Mod package", "files package.check/package.build", "files.snapshot().package (freshness), library.summary().progress"],
-    ["History", "history.jumpTo {entryId}, recipe.undo, recipe.redo", "historyTimeline(), history()"],
-    ["Header / status", "recipe.undo, recipe.redo, save, theme.set, layout.set", "history(), status.snapshot(), preferences"],
+    ["History", "history.jumpTo {entryId}, history.undo, history.redo", "historyTimeline(), history()"],
+    ["Header / status", "history.undo, history.redo, save, theme.set, layout.set", "history(), status.snapshot(), preferences"],
   ];
   const keys = bindingReference();
   const terms: [string, string][] = [
@@ -38,7 +38,7 @@ export function reference(panels: PanelInfo[]) {
     `Mappings from patterns to the public presentation port, the keyboard model, terminology and the rules that keep future UI work inside the architecture contract.`, [
     pattern({ id: "r-panels", title: "Panel registry", status: "implemented", wide: true,
       specimen: `<table class="ref-table"><thead><tr><th>ID</th><th>Title</th><th>Purpose</th></tr></thead><tbody>${panels.map(panel => `<tr><td><code>${panel.id}</code></td><td>${esc(panel.title)}</td><td>${esc(panel.description)}</td></tr>`).join("")}</tbody></table>`,
-      what: `${PANEL_IDS.length} panels with stable IDs. A new panel gets an ID, a default group in both size classes and an entry here.`,
+      what: `${PANEL_IDS.length} panels with stable IDs, each from a view contribution (the shell's or a feature's). A new panel gets a &lt;feature&gt;.&lt;panel&gt; ID, a slot and an order in its view.`,
       when: "Adding or renaming panels. IDs are persisted in layouts; never reuse an ID for a different purpose." }),
     pattern({ id: "r-actions", title: "Pattern → action and state map", status: "implemented", wide: true,
       specimen: `<table class="ref-table"><thead><tr><th>Surface</th><th>Actions / requests</th><th>Read-only state</th></tr></thead><tbody>${actionMap.map(([a, b, c]) => `<tr><td>${a}</td><td><code>${b}</code></td><td><code>${c}</code></td></tr>`).join("")}</tbody></table>`,

@@ -1,11 +1,13 @@
 import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
-import { liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, withLiveMemory, writeCollectionWorkspace,
+import { liveFeatureStates, liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, withLiveFeatures, withLiveMemory,
+  writeCollectionWorkspace,
   type CollectionWorkspace, type DocumentModel, type RestoreWarnings } from "./collection-workspace";
 import { isNewerData, LOOK_HISTORY_1, LOOK_MEMORY, type LookMemory, type PartEnvelope } from "./platform/api";
 import type { DocumentHistory } from "./authoring-document";
 import { emptyLookHistory } from "./platform/core/look-history";
 import type { NewerPolicy } from "./platform/core/document";
+import type { LiveFeatureState } from "./platform/core/live-features";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
@@ -66,6 +68,13 @@ export type WorkspaceState = {
    * the loose look's other parts and memory, and other features' workspace memory.
    */
   otherFeatures?: { parts?: Record<string, PartEnvelope>; memory?: LookMemory; features?: Record<string, unknown> };
+  /**
+   * The live look's other registered features (their parts and editor memory), beside the live document's
+   * fields above; present only when the composition registers features beside the live one (step 5).
+   */
+  liveFeatures?: Record<string, LiveFeatureState>;
+  /** Present when the selected look is locked (it holds a newer build's data): why, in plain words. Never stored. */
+  liveLocked?: string;
 };
 /**
  * The stored `xfs/workspace-2` document. Editor memory is per feature: `look` is the editor
@@ -114,7 +123,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   newer: NewerPolicy = "refuse"): WorkspaceState {
   const v = value as Record<string, unknown> & Partial<WorkspaceState>;
   if (!v || (v.schema as string) !== WORKSPACE_1 && v.schema !== WORKSPACE_2) throw Error("Unsupported workspace version");
-  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v, model) : readEditorV2(v as unknown as StoredWorkspace, model, newer);
+  // `keep` locks looks inside collection drafts only; the loose editor and workspace-1 drafts refuse newer data as before.
+  const strict: NewerPolicy = newer === "keep" ? "refuse" : newer;
+  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v, model) : readEditorV2(v as unknown as StoredWorkspace, model, strict);
   state.uiPreferences = parseUIPreferences(v.uiPreferences);
   state.uvView = parseUVView(v.uvView);
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
@@ -154,14 +165,17 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   // widths, scroll positions, open sections). It is ignored here and not written again; the
   // Studio's dock layout lives in `uiPreferences`.
   if (v.collections !== undefined) {
-    state.collections = (v.schema as string) === WORKSPACE_1 ? readCollectionWorkspaceV1(v.collections, model, warnings, newer)
+    state.collections = (v.schema as string) === WORKSPACE_1 ? readCollectionWorkspaceV1(v.collections, model, warnings, strict)
       : parseCollectionWorkspace(v.collections, model, warnings, newer);
     // The selected look restores the editor; any loose editor copy is ignored.
     const preset = state.collections.collection.presets.find(p => p.id === state.collections!.selected);
     const recipe = livePart(preset, model);
     state.recipe = recipe ? structuredClone(recipe) : emptyRecipe();
-    const memory = liveMemory(preset ? state.collections.memory[preset.id] : undefined, model);
+    const lookMemory = preset ? state.collections.memory[preset.id] : undefined, memory = liveMemory(lookMemory, model);
     state.active = memory.active; state.selected = memory.selected; state.history = structuredClone(memory.history);
+    const others = liveFeatureStates(preset, lookMemory, model);
+    if (others) state.liveFeatures = others; else delete state.liveFeatures;
+    if (preset?.locked) state.liveLocked = preset.locked; else delete state.liveLocked;
     if (memory.historyTrimmed) state.historyTrimmed = true; else delete state.historyTrimmed;
     state.fieldSelection = structuredClone(memory.fieldSelection ?? {});
   }
@@ -202,6 +216,12 @@ function readEditorV2(v: StoredWorkspace, model: DocumentModel, newer: NewerPoli
   if (live.historyTrimmed) state.historyTrimmed = true;
   const features = registry.readFeatureWide(v.features);
   state.glitterChoices = (features[LIVE] as { choices?: GlitterChoices } | undefined)?.choices ?? {};
+  // The loose look's other registered features are live documents too (step 5); only unregistered ones are carried.
+  const others = liveFeatureStates({ parts }, memory, model);
+  if (others) {
+    state.liveFeatures = others;
+    for (const feature of Object.keys(others)) { delete parts[feature]; delete memory[feature]; }
+  }
   delete parts[LIVE]; delete memory[LIVE]; delete memory[LOOK_MEMORY]; delete features[LIVE];
   const other = { ...(Object.keys(parts).length ? { parts } : {}), ...(Object.keys(memory).length ? { memory } : {}),
     ...(Object.keys(features).length ? { features } : {}) };
@@ -221,13 +241,16 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
   options: { lookLevel?: boolean } = {}): StoredWorkspace {
   const { parts: registry, live: LIVE } = model;
   const { schema: _schema, recipe, active, selected, history, historyTrimmed, fieldSelection, glitterChoices, collections,
-    otherFeatures, ...view } = state;
+    otherFeatures, liveFeatures, liveLocked: _locked, ...view } = state;
   const features = registry.writeFeatureWide({ ...otherFeatures?.features, [LIVE]: { choices: glitterChoices } });
-  const look = collections ? undefined : {
-    parts: registry.minimalLook({ id: "", name: "", revision: 1,
-      parts: { ...otherFeatures?.parts, [LIVE]: registry.envelope(LIVE, recipe) } }, false).parts,
-    memory: registry.writeMemory(withLiveMemory(otherFeatures?.memory, { active, selected, fieldSelection, history,
-      ...(historyTrimmed ? { historyTrimmed: true } : {}) }, model), options) };
+  // The loose look: the live document, the other live features (when registered) and unregistered entries carried as they came.
+  const loose = collections ? undefined : withLiveFeatures({ id: "", name: "", revision: 1,
+    parts: { ...otherFeatures?.parts, [LIVE]: registry.envelope(LIVE, recipe) } },
+    withLiveMemory(otherFeatures?.memory, { active, selected, fieldSelection, history, ...(historyTrimmed ? { historyTrimmed: true } : {}) }, model),
+    liveFeatures, model);
+  const look = loose && {
+    parts: registry.minimalLook({ id: "", name: "", revision: 1, parts: loose.parts }, false).parts,
+    memory: registry.writeMemory(loose.memory, options) };
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view,
     ...(collections ? { collections: writeCollectionWorkspace(collections, model, options) } : {}) };
 }
@@ -284,7 +307,8 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
     if (raw !== null) {
       const value = JSON.parse(raw), warnings: RestoreWarnings = [];
       try {
-        const state = parseWorkspace(value, model, warnings);
+        // A look holding a newer build's data is kept verbatim and locked; everything else stays editable.
+        const state = parseWorkspace(value, model, warnings, "keep");
         return { state, writable: true, ...(warnings.length ? { warning: restoreWarning(warnings) } : {}) };
       } catch (e) {
         if (!isNewerData(e)) throw e;

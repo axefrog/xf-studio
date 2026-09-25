@@ -14,12 +14,12 @@ export function layersPanel(rt: StudioRuntime): PanelController {
   const add = button({ label: "Add layer", icon: "plus", small: true,
     onClick: () => { if (rt.dispatch({ kind: "layer.edit", command: { kind: "add" } })) rt.feedback.announce("Layer added at the front and selected"); } });
   const duplicate = button({ label: "Duplicate selected layer", icon: "duplicate", iconOnly: true, small: true, variant: "ghost", onClick: () => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });
   } });
   const more = button({ label: "Selected layer actions", icon: "more", iconOnly: true, small: true, variant: "ghost", onClick: event => {
-    const layer = port.editor.layer(); if (layer) layerMenu(rt, layer.id, event.currentTarget as Element, event.currentTarget as Element);
+    const layer = rt.editor.layer(); if (layer) layerMenu(rt, layer.id, event.currentTarget as Element, event.currentTarget as Element);
   } });
-  const toVisual = (index: number) => port.editor.recipe().layers.length - 1 - index;
+  const toVisual = (index: number) => rt.editor.recipe().layers.length - 1 - index;
   const list = new ItemList<{ id: string; name: string; meta: string }>({
     label: "Layers, front first", noun: "layer", maxLength: 80,
     onSelect: id => rt.dispatch({ kind: "layer.select", layerId: id }),
@@ -29,12 +29,12 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     onDuplicate: id => rt.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id } }),
     onMenu: (id, anchor, invoker) => layerMenu(rt, id, anchor, invoker),
     decorate: (item, row, selected) => {
-      const layer = port.editor.recipe().layers.find(entry => entry.id === item.id);
+      const layer = rt.editor.recipe().layers.find(entry => entry.id === item.id);
       if (!layer) return;
       if (!row.lead.childElementCount) {
         const eye = h("button", { class: "icon-btn small visibility", type: "button" });
         eye.addEventListener("click", () => {
-          const current = port.editor.recipe().layers.find(entry => entry.id === item.id);
+          const current = rt.editor.recipe().layers.find(entry => entry.id === item.id);
           if (current) rt.dispatch({ kind: "layer.setEnabled", id: item.id, enabled: !current.enabled });
         });
         row.lead.append(eye, h("span", { class: "swatch", "aria-hidden": "true" }));
@@ -57,7 +57,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
       swatch.dataset.finish = layer.finish === "satin" ? "regular" : layer.finish;
       const descriptor = rt.finishes.find(finish => finish.id === (layer.finish === "satin" ? "regular" : layer.finish));
       const flag = row.trailing.querySelector<HTMLElement>(".finish-flag")!;
-      const status = rt.port.authoring.layerExport(layer.id);
+      const status = rt.eyeMakeup.layerExport(layer.id);
       flag.hidden = status ? status.exportable : descriptor?.exportAdapter !== "none";
       flag.title = status && !status.exportable ? `Omitted from mod packages: ${status.reason}` : "Preview-study finish: omitted from mod packages";
       if (!flag.childElementCount) flag.append(icon("warning"));
@@ -68,7 +68,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     },
   });
   function removeLayer(id: string) {
-    const name = port.editor.recipe().layers.find(layer => layer.id === id)?.name ?? "Layer";
+    const name = rt.editor.recipe().layers.find(layer => layer.id === id)?.name ?? "Layer";
     if (rt.dispatch({ kind: "layer.edit", command: { kind: "remove", id } }))
       rt.feedback.toast("info", "Layers", `Removed “${name}”.`, [rt.undoAction()]);
   }
@@ -76,9 +76,15 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     button({ label: "Add layer", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) }));
   const noPreset = emptyState("No preset selected", "Layers belong to a preset. Add or select one to edit its layers.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
+  // A look made with a newer XF Studio: say what happened, that it is safe, and the one next step.
+  const newerBody = h("p", { class: "empty-body" });
+  const newer = h("div", { class: "empty", role: "status" }, h("p", { class: "empty-title", text: "This look needs a newer XF Studio" }), newerBody,
+    h("div", { class: "empty-actions" }, button({ label: "Get the latest version", icon: "export", variant: "primary", onClick: () => {
+      void port.links.open("project-releases").then(result => { if (!result.ok) rt.feedback.toast("info", "Layers", result.message); });
+    } })));
   const element = h("div", { class: "panel-content" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
-    noPreset, empty, list.element,
+    noPreset, newer, empty, list.element,
     note(`Top = front. Drag the grip or use ${chordsLabel(keyBindingById("rows.reorder"))} to reorder · ${shortcutLabel("rows.rename")} renames · ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`));
   rt.anchors.register("layers.add", add);
   rt.anchors.register("layers.list", list.element);
@@ -88,8 +94,11 @@ export function layersPanel(rt: StudioRuntime): PanelController {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
       // Without a loaded library the document's layers remain editable; only a loaded, empty collection has no preset.
       const draft = frame.library.draft, hasPreset = !draft || !!draft.selected;
+      const locked = hasPreset && !frame.editable.available && frame.editable.code === "unavailable";
       noPreset.hidden = hasPreset;
-      empty.hidden = !hasPreset || layers.length > 0;
+      newer.hidden = !locked;
+      if (locked) setText(newerBody, frame.editable.reason ?? "");
+      empty.hidden = !hasPreset || locked || layers.length > 0;
       setText(count, String(layers.length));
       count.title = "The current preview budget is 32 layers per preset.";
       list.update([...layers].reverse().map(layer => {

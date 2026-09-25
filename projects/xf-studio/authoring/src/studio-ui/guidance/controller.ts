@@ -12,9 +12,9 @@ import type { GuidanceFacts, TourCommand, TourNavigation } from "./types";
 
 /** Read-only facts for `advanceWhen`, from the port's snapshots and the dock. */
 export function guidanceFacts(rt: StudioRuntime): GuidanceFacts {
-  const port = rt.port, layer = port.editor.layer(), history = port.authoring.historyTimeline();
+  const port = rt.port, layer = rt.editor.layer(), history = port.authoring.historyTimeline();
   return {
-    layers: port.editor.recipe().layers.length,
+    layers: rt.editor.recipe().layers.length,
     activeLayer: layer?.id ?? null, finish: layer?.finish ?? null, color: layer?.color ?? null,
     edit: `${history.steps.length}:${history.current}:${history.steps[history.current]?.id ?? history.startId}`,
     presets: port.library.summary().draft?.presets.length ?? 0,
@@ -29,7 +29,7 @@ export function commandCapability(rt: StudioRuntime, command: TourCommand): Guid
   switch (command.kind) {
     case "studio": return port.authoring.capability(command.action);
     case "studio.activeLayer": {
-      const layer = port.editor.layer();
+      const layer = rt.editor.layer();
       return layer ? port.authoring.capability({ ...command.action, layerId: layer.id } as Parameters<typeof port.authoring.capability>[0])
         : { available: false, reason: "Add or select a layer first." };
     }
@@ -43,7 +43,7 @@ export async function runCommand(rt: StudioRuntime, command: TourCommand): Promi
   switch (command.kind) {
     case "studio": return rt.dispatch(command.action);
     case "studio.activeLayer": {
-      const layer = rt.port.editor.layer();
+      const layer = rt.editor.layer();
       if (!layer) { rt.feedback.toast("info", "Tour", "Add or select a layer first."); return false; }
       return rt.dispatch({ ...command.action, layerId: layer.id } as Parameters<StudioRuntime["dispatch"]>[0]);
     }
