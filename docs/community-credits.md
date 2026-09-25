@@ -34,7 +34,7 @@ By psiberx and contributors. [Codeware](https://github.com/psiberx/cp2077-codewa
 
 ### RED4ext and RED4ext SDK
 
-By wopss and contributors. [RED4ext](https://github.com/wopss/RED4ext), [RED4ext SDK](https://github.com/wopss/RED4ext.SDK). RED4ext's releases set our framework baseline, and the SDK's resource-depot declarations clarified which parts of archive lookup order the game leaves unspecified. Its character-customization type declarations showed that the creator tracks an active flag per option.
+By wopss and contributors. [RED4ext](https://github.com/wopss/RED4ext), [RED4ext SDK](https://github.com/wopss/RED4ext.SDK). RED4ext's releases set our framework baseline, and the SDK's resource-depot declarations clarified which parts of archive lookup order the game leaves unspecified. Its character-customization type declarations showed that the creator tracks an active flag per option. A dump of the game's scripting type information, exported for us by psiberx with his fork of wopss's RED4.RTTIDumper, named the puppet-preview controller and camera classes that led us to the character creator's scene and camera.
 
 ### redscript
 
@@ -44,7 +44,7 @@ By jac3km4 and contributors. [GitHub](https://github.com/jac3km4/redscript). Its
 
 ### Cyberpunk Blender Add-on (IO Suite)
 
-By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato and current maintenance by DoctorPresto, showed how community tools read each shader template's parameters and texture channels, including its empirical hair-profile colour handling. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
+By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato and current maintenance by DoctorPresto, showed how community tools read each shader template's parameters and texture channels, including its empirical hair-profile colour handling. Its world-sector importer's light conversion showed which local axis a light shines along. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
 
 ### Mod Organizer 2
 
@@ -116,7 +116,7 @@ By the gfx-rs/wgpu contributors. [GitHub](https://github.com/gfx-rs/wgpu). Its d
 
 ### Cyberpunk 2077 Modding Wiki
 
-By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families and skin-shader parameters, decals and load order. We are particularly grateful to the guide authors and editors icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), saltypigloaf (facial-rig guide), Rebecca (whose multilayered clear-coat page demonstrated the view-angle coat tint), and to the CyberCAT documentation for pointing us to external preset files.
+By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families and skin-shader parameters, decals and load order. We are particularly grateful to the guide authors and editors icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), saltypigloaf (facial-rig guide), Rebecca (whose multilayered clear-coat page demonstrated the view-angle coat tint), nullfractal (whose LUT guides explained that the game grades through 3D LUTs fed with ARRI LogC3 values), and to the CyberCAT documentation for pointing us to external preset files.
 
 ## Mods and creators whose work we studied
 
@@ -129,6 +129,10 @@ These mods were studied from local installations. Where the private preview disp
 ### Arkhe
 
 [Beautiful EYEBROWS II](https://www.nexusmods.com/cyberpunk2077/mods/26168), [Universal Skin Tone](https://www.nexusmods.com/cyberpunk2077/mods/15426), [Realistic Complexion III](https://www.nexusmods.com/cyberpunk2077/mods/19314) and [Character Rendering Editor](https://www.nexusmods.com/cyberpunk2077/mods/32842). The eyebrow mod taught us how ArchiveXL copy/patch declarations assemble complete resources from vanilla geometry, and how the game combines two alpha maps with a colour gradient for brows. The skin mods provided alternative skin maps for render-fidelity comparisons and showed how a complexion replacer works: same-path head textures plus replaced global skin resources. The Character Rendering Editor's list of hair, skin and eye rendering options with their vanilla values gave the preview's hair light its default tuning and names the runtime skin and rim-light options a capture must record. Private local reference only.
+
+### CyanideX
+
+[LUT Switcher 2](https://www.nexusmods.com/cyberpunk2077/mods/16310). Studying its installed package showed that runtime LUT mods apply grading as player effects that can switch off in menus, which the character-creator capture protocol now controls for. Private local reference only.
 
 ### eagul
 

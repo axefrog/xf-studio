@@ -1,6 +1,6 @@
 # Hair shading (`hair.mt` family, game 2.31)
 
-**Maturity: Draft.** The colour, coverage and G-buffer arithmetic of `base\materials\hair.mt` and the deferred hair light are decoded from compiled 2.31 programs. The CPU bake of `.hp` profiles is not in any resource and is still a hypothesis. The lighting constants are runtime GameOptions; their vanilla values come from a third-party list, not yet from our own dump. So far the preview has been compared only with an uncontrolled in-game portrait ([calibration note](../research/eye-artistry/hair-calibration-2026-09-25.md)). For what is still open, see the [open questions](#open-questions) and the [capture request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request).
+**Maturity: Draft.** The colour, coverage and G-buffer arithmetic of `base\materials\hair.mt` and the deferred hair light are decoded from compiled 2.31 programs. The CPU bake of `.hp` profiles is not in any resource and is still a hypothesis. The lighting constants are runtime GameOptions; their vanilla values come from a third-party list, not yet from our own dump. So far the preview has been compared only with an uncontrolled in-game portrait ([calibration note](../research/eye-artistry/hair-calibration-2026-09-25.md)). That portrait was taken with a colour-grading ReShade preset active and a replacement grading LUT installed, so its colours are not raw game output. The fixed, repeatable light for future comparisons is the creator and mirror screen ([creator lighting](creator-lighting.md)). For what is still open, see the [open questions](#open-questions) and the [capture request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request).
 
 This page covers hair cards, and lashes that use hair materials. Brows in the reference save use a post-G-buffer decal (`mesh_decal_double_diffuse.mt`), not `hair.mt`. The last section covers that decal's colour blend. For material resources, G-buffer layout and other templates, see [materials and shaders](materials-and-shaders.md).
 
@@ -140,7 +140,8 @@ Alpha-to-coverage is deterministic, so there is no grain to accumulate over fram
 4. The hair local-light and environment-probe paths, and the Scattering/thickness term.
 5. The global flag that multiplies coverage by 1.33, and whether the dither's per-frame register is a plain frame counter.
 6. Sign of the strand direction (root→tip) as stored in GBuffer1, which sets the direction of the R/TRT shifts.
-7. How much self-shadowing, contact shadows, rain wetness and tone mapping darken hair in typical scenes. The base-colour pass alone scales colour by down to 0.25 when the character is wet.
+7. How much self-shadowing, contact shadows, rain wetness and tone mapping darken hair in typical scenes. The base-colour pass alone scales colour by down to 0.25 when the character is wet. The game's SDR display transform (LogC3 into a 3D grading LUT) is decoded in [creator lighting §5](creator-lighting.md#5-tone-mapping-and-grading).
+8. The local-light hair path (`LocalLight` options). Every light on the creator and mirror screen is local, so that screen's hair uses it, not the global path in §5.
 
 ## Sources
 
