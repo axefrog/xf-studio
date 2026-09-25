@@ -14,7 +14,7 @@ import { dirname, join, parse, resolve, sep } from "node:path";
 import type { PackageBuild, PackageCheck, PackagePlate } from "./package-action";
 import { packagePresetIdentities } from "./package-filter";
 import { preflightPackageCollection } from "./package-preflight";
-import { buildPackageResources, plateStem, type BuildRecord } from "./package-resource-builder";
+import { buildPackageResources, PlateFootprintChangedError, plateStem, type BuildRecord } from "./package-resource-builder";
 import { createWolvenKitPackageTools, PackageToolError, type PackageResourceTools } from "./package-build-wolvenkit";
 import { verifyBuild, type VerificationReport, type VerifyBuildOptions } from "./mod-verifier/verify-build";
 import { createWolvenKitVerifierTools } from "./verifier-wolvenkit";
@@ -261,6 +261,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     if (error instanceof PackageToolError) fail(error.code, error.code === "package_tool_failed"
       ? `WolvenKit failed while building resources: ${error.message}` : error.message);
     if (error instanceof PackageBuildError) throw error;
+    if (error instanceof PlateFootprintChangedError) fail("package_plate_stale", `${error.message} The host prepares the plate again.`);
     return fail("package_build_failed", `Resource build failed: ${(error as Error).message}`);
   } finally { rmSync(snapshot, { force: true }); }
 

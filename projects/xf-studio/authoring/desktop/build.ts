@@ -5,9 +5,9 @@ import { basename, resolve, sep } from "node:path";
 import { parseCollection } from "../src/preset-collection";
 import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
-import type { PackageBuild } from "../src/package-action";
+import { packageErrorCode, type PackageBuild } from "../src/package-action";
 import type { LocalSettings } from "../src/local-settings";
-import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateResult } from "../src/eye-plate-service";
+import { discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateHeadOverride, eyePlateRouteKey, type EyePlateResult } from "../src/eye-plate-service";
 import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 import { readManifestPlateReach } from "../src/plate-uv-footprint-io";
@@ -197,12 +197,21 @@ export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, s
   headSource: createInstalledHeadSource({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
     mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli! },
   resolve(cacheRoot, "resolver")),
-  headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead) });
+  headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead), routeKey: desktopPlateRouteKey(settings) ?? undefined });
+
+/** The route and head choice a desktop plate is recorded under, which Check must match to plan on it (PIPE-36). */
+export const desktopPlateRouteKey = (settings: LocalSettings) => settings.gameRoot ? eyePlateRouteKey({ gameRoot: settings.gameRoot,
+  launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot },
+  eyePlateHeadOverride(process.env, settings.eyePlateHead)) : null;
+
+/** The builder found the cached plate's recorded UV footprint stale (`package_plate_stale`). */
+class StalePlate extends Error {}
 
 /** Prepare the built-in eye plate, then run the packaged builder as one bounded process tree; publish only the shared verified result. */
 export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,
   timeoutMs = buildDeadlineMs, signal?: AbortSignal, wolvenKitProbe: WolvenKitProbe = probeWolvenKit,
-  preparePlate: DesktopPlatePreparer = prepareDesktopPlate, log: (message: string) => void = message => console.error(message)): Promise<BuildOutcome> {
+  preparePlate: DesktopPlatePreparer = prepareDesktopPlate, log: (message: string) => void = message => console.error(message),
+  retried = false): Promise<BuildOutcome> {
   // Build itself waits for definitive tool checks (async, shared with readiness requests).
   if (wolvenKitProbe === probeWolvenKit) await warmBuildProbes(settings);
   const issue = desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe);
@@ -262,6 +271,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
       return { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
     if (run.stopped === "cancelled") return { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." };
     if (run.exitCode !== 0) {
+      if (!retried && packageErrorCode(run.stderr) === "package_plate_stale") throw new StalePlate();
       log(`Build: the package tool failed (exit ${run.exitCode}): ${(run.error?.message ?? run.stderr).slice(-3000)}`);
       return { kind: "failure", code: "package_build_failed", message: "Package Build failed. No candidate was published." };
     }
@@ -278,11 +288,18 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
     verifyPackageBuildResult(result, collection, prepared, source, candidateRoot, plate.manifest);
     return { kind: "success", result };
   } catch (error) {
-    log(`Build: the package result failed verification: ${(error as Error).message}`);
-    return { kind: "failure", code: "package_build_failed", message: "Package Build could not verify its result. No candidate was published." };
+    if (!(error instanceof StalePlate)) {
+      log(`Build: the package result failed verification: ${(error as Error).message}`);
+      return { kind: "failure", code: "package_build_failed", message: "Package Build could not verify its result. No candidate was published." };
+    }
   } finally {
     rmSync(work, { recursive: true, force: true });
     rmSync(stageRoot, { recursive: true, force: true });
     rmSync(buildRoot, { recursive: true, force: true });
   }
+  // The cached plate's recorded footprint was stale: discard it and build once more on a freshly prepared plate (PIPE-37).
+  log("Build: the cached eye plate's UV footprint was stale; preparing the plate again.");
+  try { discardCachedPlate(desktopPlateCache(dataRoot), plate.manifestFile); }
+  catch { return { kind: "failure", code: "package_build_failed", message: "Package Build failed. No candidate was published." }; }
+  return runDesktopBuild(value, settings, dataRoot, toolsRoot, Math.max(1, timeoutMs - (Date.now() - started)), signal, wolvenKitProbe, preparePlate, log, true);
 }

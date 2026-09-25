@@ -8,6 +8,11 @@ import { plateUvRecord, presetReachesPlate, type PlateReachInput } from "./plate
 /** Why a whole preset is omitted: nothing exportable is left, or its makeup never reaches the eye plate. */
 export const NO_EXPORTABLE_LAYERS_REASON = "No active exportable layers remain.";
 export const OFF_PLATE_REASON = "Its makeup doesn't reach the eye plate, so it wouldn't show in game.";
+/**
+ * Said by a Check that had no plate to plan on (`plateUv: null`): no plate prepared yet for this game, route and head
+ * choice. Build then judges plate reach on the plate it packages and reports any omission (PIPE-36).
+ */
+export const PLATE_REACH_UNCHECKED_NOTE = "Whether each look reaches the eye area is checked when you Build.";
 
 export type PackageOmission =
   | { kind: "layer"; presetId: string; presetName: string; layerId: string; layerName: string;

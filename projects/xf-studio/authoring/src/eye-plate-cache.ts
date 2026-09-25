@@ -13,6 +13,11 @@ export type EyePlateStatus = {
   recipeId: string; recipeRevision: number;
   state: EyePlateStatusState; code: string | null; message: string;
   gameRoot: string; contentFingerprint: string; cacheName: string | null; updatedAt: string;
+  /**
+   * Launch route and head choice the plate was prepared for (`eyePlateRouteKey`); Check plans only on a plate
+   * prepared for the same one. Null or absent in statuses written before it was recorded.
+   */
+  routeKey?: string | null;
 };
 
 export { contentFingerprint, fileSha256 } from "./derived-cache";

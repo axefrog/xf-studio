@@ -16,10 +16,12 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { join } from "node:path";
 import type { MountedArchive } from "./archive-precedence";
 import { installationFingerprint, type CharacterDetailSettings } from "./character-detail-host";
+import { writeFileAtomic } from "./derived-cache";
 import { refFromPath } from "./depot-path";
 import { CREATOR_ENVIRONMENT, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_FILE, GRADING_LUT_STATE_SCHEMA, decodeGradingLut, decodeGradingLutBinary, encodeGradingLut, GradingLutError, readEnvironmentGrading, selectGradingLut,
   supportedMapping, type GradingLut, type GradingLutSource } from "./grading-lut";
 import type { Installation, InstallationOptions } from "./resolver-host";
+import { ResourceGraph } from "./resource-graph";
 import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 
 export { GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT } from "./grading-lut";
@@ -39,7 +41,7 @@ export type GradingLutHostOptions = {
   resolverCache: string;
   settings: () => CharacterDetailSettings;
   log?: (message: string) => void;
-  /** Minimum time before a transient failure is prepared again (default `GRADING_LUT_RETRY_MS`). */
+  /** Time before the first retry of a transient failure, doubled for each later one (default `GRADING_LUT_RETRY_MS`). */
   retryAfterMs?: number;
   /** Test seams. */
   open?: (options: InstallationOptions) => Installation;
@@ -56,8 +58,10 @@ const fingerprint = (path: string) => { try { const s = statSync(path); return `
 export const GRADING_LUT_STEP_TIMEOUT_MS = 2 * 60_000;
 /** Version of `decodeGradingLut`'s output; part of the decoded-LUT cache key, so a decoder change decodes again. */
 export const GRADING_LUT_DECODER_VERSION = 1;
-/** A preparation that failed for a transient reason (WolvenKit, disk) is tried again after this long. */
+/** A preparation that failed for a transient reason (time limit, .NET, disk) is first tried again after this long, then after twice as long each time. */
 export const GRADING_LUT_RETRY_MS = 30_000;
+/** At most this many retries per installation fingerprint (30 s, 1, 2, 4 and 8 min by default); then only a change or a restart tries again. */
+export const GRADING_LUT_MAX_RETRIES = 5;
 
 /** Extract one resource from one archive with WolvenKit and return its untrimmed JSON. */
 export async function extractUntrimmedJson(cli: string, archive: MountedArchive, hash: string, workDir: string, signal?: AbortSignal): Promise<unknown> {
@@ -83,25 +87,55 @@ export async function extractUntrimmedJson(cli: string, archive: MountedArchive,
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-/** Plain note for a WolvenKit failure that left the neutral grade. */
-function toolNote(error: WolvenKitRunError): string {
-  if (error.code === "runtime_missing") return `Colour grading: ${WOLVENKIT_RUNTIME_MISSING_MESSAGE} A neutral grade is shown until it is.`;
-  if (error.code === "tool_timeout") return "Colour grading: reading the game's LUT took too long, so a neutral grade is shown for now. XF Studio tries again shortly.";
-  return "Colour grading: WolvenKit couldn't read the game's LUT, so a neutral grade is shown for now. XF Studio tries again shortly.";
+/** When XF Studio tries again, as the plain note says it: shortly, or once something changes. */
+const tryAgain = (retry: boolean) => retry ? "XF Studio tries again shortly."
+  : "XF Studio tries again when your game, mods or WolvenKit change, or when XF Studio restarts.";
+
+/** Plain note for a failure that left the neutral grade. */
+function failureNote(error: unknown, retry: boolean): string {
+  if (error instanceof WolvenKitRunError) {
+    if (error.code === "runtime_missing") return `Colour grading: ${WOLVENKIT_RUNTIME_MISSING_MESSAGE} A neutral grade is shown until it is. ${tryAgain(retry)}`;
+    if (error.code === "tool_timeout") return `Colour grading: reading the game's LUT took too long, so a neutral grade is shown for now. ${tryAgain(retry)}`;
+    return `Colour grading: WolvenKit couldn't read the game's LUT, so a neutral grade is shown for now. ${tryAgain(retry)}`;
+  }
+  return `Colour grading: the game's LUT couldn't be read, so a neutral grade is shown for now. ${tryAgain(retry)}`;
 }
 
-type Preparation = { key: string; state: GradingLutState; promise: Promise<void>; controller: AbortController; retryAt: number | null };
+/**
+ * A LUT extraction failure that repeats while the archive, the entry and WolvenKit are unchanged (the cache key
+ * holds all three): WolvenKit ran and reported failure (an exit code, or an unhandled exception in its log), or
+ * what it wrote could not be read or decoded. A time limit, a missing .NET runtime, a process that could not
+ * start and a disk error are transient.
+ */
+const lastingFailure = (error: unknown) =>
+  error instanceof WolvenKitRunError ? error.code === "tool_failed" && error.exitCode !== null : error instanceof GradingLutError;
+
+type Attempt = { source: GradingLutSource; file: string | null; failure: unknown };
+type Preparation = { key: string; state: GradingLutState; promise: Promise<void>; controller: AbortController;
+  /** Transient failures so far, and when the next retry is due (null when none is). */
+  failures: number; retryAt: number | null };
+/** The installation opened for one fingerprint, kept for retries; `environmentRead` once the creator environment loaded. */
+type Opened = { key: string; installation: Installation; graph: ResourceGraph; environmentRead: boolean };
 class Superseded extends Error {}
 
 /**
  * One preparation at a time, keyed by the installation fingerprint the character details use. A changed
- * installation supersedes (cancels) the running preparation, and the new one starts once it has stopped.
- * A preparation that failed for a transient reason (a WolvenKit error, time limit or missing .NET, or an
- * unexpected error) answers with the neutral grade and is prepared again on a request after
- * `GRADING_LUT_RETRY_MS`; a LUT whose content cannot be decoded stays neutral until the installation changes.
+ * installation supersedes the running preparation: its WolvenKit run is stopped at once, but source discovery
+ * (synchronous) and a resource load already under way finish first, and the new preparation starts once it has
+ * settled.
+ *
+ * Failures (PREV-45). A transient failure (time limit, missing .NET, a process that could not start, a disk
+ * error) answers with the neutral grade and is tried again on a request after `GRADING_LUT_RETRY_MS`, doubling
+ * each time, at most `GRADING_LUT_MAX_RETRIES` times. A retry keeps the installation opened for the same
+ * fingerprint (no second discovery) and re-extracts only what failed: decoded LUTs are cached on disk and failures
+ * that repeat are remembered. While it runs, the answer already given stands. A lasting failure (see
+ * `lastingFailure`) is not tried again until its archive or WolvenKit changes or the host restarts.
  */
 export class GradingLutHost {
   private current: Preparation | null = null;
+  private opened: Opened | null = null;
+  /** Extractions that failed in a way that repeats, by decoded-LUT cache key: not tried again while the key holds. */
+  private readonly lasting = new Map<string, string>();
   constructor(private readonly options: GradingLutHostOptions) {}
 
   private get root() { return join(this.options.cacheRoot, "grading-lut"); }
@@ -111,45 +145,86 @@ export class GradingLutHost {
   request(): GradingLutState {
     const settings = this.options.settings(), key = installationFingerprint(settings);
     const known = this.current;
-    if (known?.key === key && (known.retryAt === null || this.now() < known.retryAt)) return structuredClone(known.state);
+    if (known?.key === key) {
+      if (known.retryAt !== null && this.now() >= known.retryAt) this.run(known, settings, known.promise);
+      return structuredClone(known.state);
+    }
     known?.controller.abort();
-    const state: GradingLutState = { schema: GRADING_LUT_STATE_SCHEMA, phase: "preparing", source: null, file: null };
-    const controller = new AbortController();
-    const entry: Preparation = { key, state, promise: Promise.resolve(), controller, retryAt: null };
+    const entry: Preparation = { key, state: { schema: GRADING_LUT_STATE_SCHEMA, phase: "preparing", source: null, file: null },
+      promise: Promise.resolve(), controller: new AbortController(), failures: 0, retryAt: null };
     this.current = entry;
-    const retryLater = () => { entry.retryAt = this.now() + (this.options.retryAfterMs ?? GRADING_LUT_RETRY_MS); };
-    const start = () => controller.signal.aborted ? Promise.reject(new Superseded()) : this.prepare(settings, controller.signal);
     // A superseded preparation settles (its WolvenKit run is stopped) before the next one starts.
-    entry.promise = (known ? known.promise.then(start) : start())
-      .then(result => {
-        entry.state = { ...state, phase: "ready", source: result.source, file: result.file };
-        if (result.transient) retryLater();
-      })
-      .catch(error => {
-        if (error instanceof Superseded || controller.signal.aborted) return;
-        this.options.log?.(`Colour grading LUT not prepared: ${(error as Error)?.stack ?? error}`);
-        entry.state = { ...state, phase: "ready", file: null, source: neutralSource(error instanceof WolvenKitRunError ? toolNote(error)
-          : "Colour grading: the game's LUT couldn't be read, so a neutral grade is shown for now. XF Studio tries again shortly.") };
-        retryLater();
-      });
-    return structuredClone(state);
+    this.run(entry, settings, known?.promise ?? Promise.resolve());
+    return structuredClone(entry.state);
   }
 
   async settled(): Promise<void> { await this.current?.promise; }
 
-  private async prepare(settings: CharacterDetailSettings, signal: AbortSignal): Promise<{ source: GradingLutSource; file: string | null; transient: boolean }> {
-    if (!settings.gameRoot || !settings.wolvenKitCli || !existsSync(settings.wolvenKitCli))
-      return { source: neutralSource(NOT_SET_UP), file: null, transient: false };
-    const cli = settings.wolvenKitCli;
+  /** Start (or retry) `entry` once `after` has settled. Never rejects. */
+  private run(entry: Preparation, settings: CharacterDetailSettings, after: Promise<void>): void {
+    const controller = new AbortController();
+    entry.controller = controller; entry.retryAt = null;
+    const start = () => controller.signal.aborted ? Promise.reject(new Superseded()) : this.prepare(settings, entry.key, controller.signal);
+    entry.promise = after.then(start)
+      .then(result => {
+        const retry = result.failure !== null && this.scheduleRetry(entry);
+        // A transient failure that left the neutral grade says so plainly, and when XF Studio tries again.
+        const source = result.failure !== null && result.source.kind === "neutral" ? { ...result.source, note: failureNote(result.failure, retry) } : result.source;
+        entry.state = { schema: GRADING_LUT_STATE_SCHEMA, phase: "ready", source, file: result.file };
+      })
+      .catch(error => {
+        if (error instanceof Superseded || controller.signal.aborted) return;
+        this.options.log?.(`Colour grading LUT not prepared: ${(error as Error)?.stack ?? error}`);
+        entry.state = { schema: GRADING_LUT_STATE_SCHEMA, phase: "ready", file: null, source: neutralSource(failureNote(error, this.scheduleRetry(entry))) };
+      });
+  }
+
+  /** Count a transient failure and schedule the next retry with backoff; false once the retries are used up. */
+  private scheduleRetry(entry: Preparation): boolean {
+    entry.failures++;
+    if (entry.failures > GRADING_LUT_MAX_RETRIES) return false;
+    entry.retryAt = this.now() + (this.options.retryAfterMs ?? GRADING_LUT_RETRY_MS) * 2 ** (entry.failures - 1);
+    return true;
+  }
+
+  /** The installation for `key`: opened once, then kept for retries. */
+  private async installationFor(settings: CharacterDetailSettings, key: string, cli: string): Promise<Opened> {
+    const known = this.opened;
+    if (known?.key === key) {
+      // The graph remembers a failed load, so a retry reads the environment through a fresh graph over the same indexes.
+      if (!known.environmentRead && known.installation.fetcher && known.installation.xl)
+        known.graph = new ResourceGraph(known.installation.depot, known.installation.xl, known.installation.fetcher);
+      return known;
+    }
     const open = this.options.open ?? (await import("./resolver-host")).openInstallation;
-    const installation = open({ gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    const installation = open({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: cli, cacheDir: this.options.resolverCache, log: this.options.log });
-    const graph = installation.graph;
+    return this.opened = { key, installation, graph: installation.graph, environmentRead: false };
+  }
+
+  /** The decoded LUT a cache index names, or null when it names none or its file is missing or damaged. */
+  private cachedLut(index: string): { lut: GradingLut; name: string } | null {
+    try {
+      if (!existsSync(index)) return null;
+      const name = readFileSync(index, "utf8").trim(), file = join(this.root, "files", name);
+      if (!GRADING_LUT_FILE.test(name) || !existsSync(file)) return null;
+      return { lut: decodeGradingLutBinary(new Uint8Array(readFileSync(file))), name };
+    } catch { return null; }
+  }
+
+  private async prepare(settings: CharacterDetailSettings, key: string, signal: AbortSignal): Promise<Attempt> {
+    if (!settings.gameRoot || !settings.wolvenKitCli || !existsSync(settings.wolvenKitCli))
+      return { source: neutralSource(NOT_SET_UP), file: null, failure: null };
+    const cli = settings.wolvenKitCli;
     const superseded = () => { if (signal.aborted) throw new Superseded(); };
+    const opened = await this.installationFor(settings, key, cli);
+    superseded();
+    const graph = opened.graph;
     // The environment names the LUT; a mod that edits the environment to name another LUT is followed too.
     let environmentPath: string | null = null, environmentNote: string | undefined;
     const env = await graph.load(refFromPath(CREATOR_ENVIRONMENT), "env");
     superseded();
+    if (env) opened.environmentRead = true;
     const grading = env ? readEnvironmentGrading(env.root) : null;
     if (!grading?.ldr?.path) environmentNote = "The creator environment could not be read; the vanilla LUT path is used.";
     else if (!supportedMapping(grading.ldr)) environmentNote = `The environment's LUT uses ${grading.ldr.inputMapping} → ${grading.ldr.outputMapping}, which the preview does not implement; the vanilla LUT path is used.`;
@@ -159,43 +234,40 @@ export class GradingLutHost {
     const names = new Map<GradingLut, string>();
     // The decoded cube depends on the archive's bytes, the decoder and the WolvenKit that converted it.
     const tool = wolvenKitIdentityKey(wolvenKitIdentity(cli));
-    let toolError: WolvenKitRunError | null = null;
+    let failure: unknown = null;
     const read = async (archive: MountedArchive, path: string): Promise<GradingLut> => {
       superseded();
       const entry = graph.locate(refFromPath(path)).entry;
       const cacheKey = createHash("sha256").update(`decoder:${GRADING_LUT_DECODER_VERSION}|${tool}|${fingerprint(archive.id)}|${entry.hash}`).digest("hex");
       const index = join(this.root, "keys", `${cacheKey}.txt`);
-      if (existsSync(index)) {
-        const name = readFileSync(index, "utf8").trim(), file = join(this.root, "files", name);
-        if (GRADING_LUT_FILE.test(name) && existsSync(file)) {
-          const lut = decodeGradingLutBinary(new Uint8Array(readFileSync(file)));
-          names.set(lut, name);
-          return lut;
-        }
-      }
-      let document: unknown;
-      try { document = await extract(cli, archive, entry.hash, join(this.root, "tmp"), signal); }
+      const cached = this.cachedLut(index);
+      if (cached) { names.set(cached.lut, cached.name); return cached.lut; }
+      const lasting = this.lasting.get(cacheKey);
+      if (lasting) throw new GradingLutError(lasting);
+      let lut: GradingLut;
+      try { lut = decodeGradingLut(await extract(cli, archive, entry.hash, join(this.root, "tmp"), signal)); }
       catch (error) {
-        if (error instanceof WolvenKitRunError && error.code !== "cancelled") toolError ??= error;
+        if (error instanceof WolvenKitRunError && error.code === "cancelled") throw error;
+        if (lastingFailure(error)) this.lasting.set(cacheKey, (error as Error).message);
+        else failure ??= error;
         throw error;
       }
-      const lut = decodeGradingLut(document);
       const bytes = encodeGradingLut(lut), name = `${createHash("sha256").update(bytes).digest("hex")}.bin`;
-      mkdirSync(join(this.root, "files"), { recursive: true }); mkdirSync(join(this.root, "keys"), { recursive: true });
-      writeFileSync(join(this.root, "files", name), bytes);
-      writeFileSync(index, name);
+      try {
+        mkdirSync(join(this.root, "files"), { recursive: true }); mkdirSync(join(this.root, "keys"), { recursive: true });
+        writeFileAtomic(join(this.root, "files", name), bytes);
+        writeFileAtomic(index, name);
+      } catch (error) { failure ??= error; throw error; } // Served only from its file, so a failed write is tried again.
       names.set(lut, name);
       return lut;
     };
     const selected = await selectGradingLut({ environmentPath, environmentNote, read,
       lookup: path => graph.locate(refFromPath(path)).lookup });
     superseded();
-    const failure = toolError as WolvenKitRunError | null;
-    // WolvenKit itself failing is transient: say so plainly when it left the neutral grade, and try again later.
-    const source = failure && selected.source.kind === "neutral" ? { ...selected.source, note: toolNote(failure) } : selected.source;
     const file = selected.lut ? names.get(selected.lut) ?? null : null;
+    const source = selected.source;
     this.options.log?.(`Colour grading LUT: ${source.kind}${source.archive ? ` from ${source.archive}` : ""}${source.skipped.length ? ` (skipped: ${source.skipped.join("; ")})` : ""}.`);
-    return { source, file, transient: failure !== null };
+    return { source, file, failure };
   }
 
   /** Absolute path of a served LUT file, or null. Names are content-addressed, never paths. */

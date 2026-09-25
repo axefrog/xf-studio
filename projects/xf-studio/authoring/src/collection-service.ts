@@ -348,7 +348,7 @@ export class CollectionService {
           if (request.action === "check") {
             const checked = response as PackageCheck;
             result = { kind: "packageCheck", result: checked };
-            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${describePackageOmissions(checked.omissions)}${describePackageExperimental(checked.experimental)}`;
+            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${(checked.notes ?? []).map(note => ` ${note}`).join("")}${describePackageOmissions(checked.omissions)}${describePackageExperimental(checked.experimental)}`;
           } else {
             const built = response as PackageBuild;
             result = { kind: "packageBuild", result: built };

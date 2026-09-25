@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { contentFingerprint, EyePlateCache, fileSha256 } from "./eye-plate-cache";
 import { samePath } from "./derived-cache";
 import { derivePlateDocuments } from "./eye-plate-cut";
@@ -16,7 +16,7 @@ import { verifyEyePlate, type EyePlateVerification } from "./eye-plate-verify";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 import type { PackagePlate } from "./package-action";
-import { plateUvFootprint } from "./plate-uv-window";
+import { plateUvFootprint, plateUvWindow } from "./plate-uv-window";
 import { PLATE_UV_FILE, plateUvManifestRecord, readManifestPlateReach, type PlateUvManifestRecord } from "./plate-uv-footprint-io";
 import type { PlateReachInput } from "./plate-reach";
 
@@ -81,6 +81,11 @@ export type EnsureEyePlateOptions = { gameRoot: string; cacheRoot: string; tools
   headSource?: EyePlateHeadSourcePort;
   /** Escape hatch: cut from the base-game head even when an installed mod changes it. */
   headOverride?: "base-game";
+  /**
+   * Identity of the launch route and head choice (`eyePlateRouteKey`), recorded in the cache status so Check plans
+   * only on a plate prepared for the same route, head choice and game files (PIPE-36).
+   */
+  routeKey?: string;
   signal?: AbortSignal; progress?: (message: string) => void };
 
 /** The package manifest's record of a derived plate; hosts and the builder compare exactly this value. */
@@ -124,6 +129,15 @@ function moddedMessage(providers: string[]): string {
     "then build again (the makeup may then not sit exactly on your modded head). Or disable that mod in the profile chosen in Local setup.";
 }
 
+/**
+ * Does a recorded footprint follow the current window rule? The window is recomputed from the recorded bounds, so
+ * a changed rule (margin, clamping) makes an older entry derive again instead of failing every Build (PIPE-37).
+ * A change to how the footprint itself is read from the mesh changes `PLATE_UV_FOOTPRINT_SCHEMA` instead.
+ */
+const currentWindowRule = (record: PlateUvManifestRecord) => {
+  try { return JSON.stringify(plateUvWindow(record.bounds)) === JSON.stringify(record.window); } catch { return false; }
+};
+
 /** Validate a cached entry against its manifest and the expected cache identity. */
 function loadCached(cache: EyePlateCache, directory: string, key: string, recipe: EyePlateRecipe): EyePlateResult | null {
   const manifestFile = join(directory, EYE_PLATE_MANIFEST_FILE);
@@ -131,7 +145,7 @@ function loadCached(cache: EyePlateCache, directory: string, key: string, recipe
   try {
     const manifest = cache.readJson(manifestFile) as EyePlateManifest;
     if (manifest.schema !== EYE_PLATE_MANIFEST_SCHEMA || manifest.cacheKey !== key || manifest.recipeId !== recipe.id ||
-        manifest.recipeRevision !== recipe.revision || !manifest.head || !manifest.uv) return null;
+        manifest.recipeRevision !== recipe.revision || !manifest.head || !manifest.uv || !currentWindowRule(manifest.uv)) return null;
     readManifestPlateReach(manifestFile, manifest);
     const resources = join(directory, EYE_PLATE_RESOURCE_DIRECTORY);
     const meshFile = join(resources, manifest.files.mesh.name), morphFile = join(resources, manifest.files.morph.name);
@@ -186,24 +200,63 @@ function contentPlan(recipe: EyePlateRecipe, gameRoot: string): HeadSourcePlan {
   return { mesh, morph, patches: [], ignoredPatches: [], baseGame: { mesh, morph }, modded: false };
 }
 
+/** The launch route settings that decide which head the plate is cut from. */
+export type EyePlateRoute = { gameRoot: string; launchRoute: "direct" | "mo2"; mo2Root?: string | null; mo2ProfileId?: string | null;
+  manualModRoot?: string | null };
+const stamp = (path: string | null) => {
+  if (!path) return "-";
+  try { const s = statSync(path); return `${s.size}|${s.mtimeMs}`; } catch { return "missing"; }
+};
 /**
- * The UV footprint of the plate the cache last prepared for this game folder and recipe, for Check before a
- * Build. Advisory: the next Build resolves the head again and plans on the plate it actually packages. `null`
- * when no plate has been prepared yet (or the entry predates footprints, or anything is unreadable).
+ * Identity of what decides which head a route loads, cheap enough for every Check (no route resolution): the route
+ * settings, the head choice, and the size and time of the game's mod folder and its `modlist.txt`, the MO2 profile's
+ * `modlist.txt`, MO2's overwrite folder and the manual mod folder. Installing, enabling, disabling or reordering mods
+ * changes it; editing files inside an existing MO2 mod folder does not (the next Build resolves the head anyway).
  */
-export function cachedPlateReach(cacheRoot: string | null, gameRoot: string | null, recipe: EyePlateRecipe = EYE_PLATE_RECIPE):
+export function eyePlateRouteKey(route: EyePlateRoute, headOverride?: "base-game"): string {
+  const mods = join(route.gameRoot, "archive", "pc", "mod");
+  const profile = route.mo2Root && route.mo2ProfileId ? join(route.mo2Root, "profiles", route.mo2ProfileId) : null;
+  return createHash("sha256").update(canonicalJson({
+    route: [resolve(route.gameRoot), route.launchRoute, route.mo2Root ?? null, route.mo2ProfileId ?? null, route.manualModRoot ?? null],
+    head: headOverride ?? "installed",
+    stamps: [stamp(mods), stamp(join(mods, "modlist.txt")), stamp(profile && join(profile, "modlist.txt")),
+      stamp(route.mo2Root ? join(route.mo2Root, "overwrite") : null), stamp(route.manualModRoot ?? null)],
+  })).digest("hex");
+}
+
+/**
+ * The UV footprint of the plate the cache last prepared, for Check before a Build: only when it was prepared for
+ * the same game folder, unchanged game content archives, the same recipe, and the same route and head choice
+ * (`routeKey`), and its footprint follows the current window rule (PIPE-36, PIPE-37). Advisory: the next Build
+ * resolves the head again and plans on the plate it actually packages. `null` when no such plate exists (Check then
+ * says that plate reach is checked at Build) or anything is unreadable.
+ */
+export function cachedPlateReach(cacheRoot: string | null, gameRoot: string | null, routeKey: string | null, recipe: EyePlateRecipe = EYE_PLATE_RECIPE):
   { plate: PlateReachInput; manifestFile: string } | null {
-  if (!cacheRoot || !gameRoot) return null;
+  if (!cacheRoot || !gameRoot || !routeKey) return null;
   try {
     const cache = new EyePlateCache(cacheRoot), status = cache.readStatus();
     if (!status || status.state !== "ready" || !status.cacheName || status.recipeId !== recipe.id ||
-        status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot)) return null;
+        status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot) || status.routeKey !== routeKey ||
+        status.contentFingerprint !== contentFingerprint(gameRoot, recipe.source.archiveDirectory)) return null;
     const manifestFile = join(cache.entry(status.cacheName), EYE_PLATE_MANIFEST_FILE);
     const manifest = cache.readJson(manifestFile) as EyePlateManifest;
-    if (manifest.schema !== EYE_PLATE_MANIFEST_SCHEMA || manifest.recipeId !== recipe.id || manifest.recipeRevision !== recipe.revision) return null;
+    if (manifest.schema !== EYE_PLATE_MANIFEST_SCHEMA || manifest.recipeId !== recipe.id || manifest.recipeRevision !== recipe.revision ||
+        !manifest.uv || !currentWindowRule(manifest.uv)) return null;
     const plate = readManifestPlateReach(manifestFile, manifest);
     return plate ? { plate, manifestFile } : null;
   } catch { return null; }
+}
+
+/**
+ * Remove a published plate whose recorded UV footprint the resource builder found to differ from the plate itself
+ * (`package_plate_stale`, PIPE-37), so the next preparation derives it again instead of every Build failing on it.
+ */
+export function discardCachedPlate(cacheRoot: string, manifestFile: string): void {
+  const cache = new EyePlateCache(cacheRoot), entry = dirname(resolve(manifestFile));
+  if (!samePath(dirname(entry), cache.root) || basename(manifestFile) !== EYE_PLATE_MANIFEST_FILE)
+    throw Error("The plate to discard is not an entry of this eye plate cache.");
+  cache.remove(entry);
 }
 
 export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<EyePlateResult> {
@@ -215,7 +268,8 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
   catch (error) { throw new EyePlateError("plate_cache_unavailable", "XF Studio could not open its private eye plate cache.", (error as Error).message); }
   const fingerprint = contentFingerprint(gameRoot, recipe.source.archiveDirectory);
   const status = (state: "ready" | "missing" | "unsupported" | "failed", code: string | null, message: string, cacheName: string | null = null) => {
-    try { cache.writeStatus({ recipeId: recipe.id, recipeRevision: recipe.revision, state, code, message, gameRoot, contentFingerprint: fingerprint, cacheName }); }
+    try { cache.writeStatus({ recipeId: recipe.id, recipeRevision: recipe.revision, state, code, message, gameRoot, contentFingerprint: fingerprint, cacheName,
+      routeKey: options.routeKey ?? null }); }
     catch { /* Status is advisory; the Build result carries the real outcome. */ }
   };
   const cancelled = () => { if (signal?.aborted) throw new EyePlateError("plate_cancelled", "Eye plate preparation was cancelled."); };

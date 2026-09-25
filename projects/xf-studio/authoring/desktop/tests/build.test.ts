@@ -138,6 +138,28 @@ test("a desktop Build deadline stops the process tree and publishes no candidate
   expect(existsSync(resolve(h.data, "package-candidates"))).toBe(false);
 }, 30_000);
 
+test("PIPE-37: a stale cached plate footprint discards that plate and builds once more, and only once", async () => {
+  const runs = resolve(root, `runs-${crypto.randomUUID()}`);
+  const h = host([
+    `const fs = require("node:fs");`,
+    `fs.appendFileSync(${JSON.stringify(runs)}, "run ");`,
+    `console.error("XFS_PACKAGE_ERROR=" + JSON.stringify({ code: "package_plate_stale", message: "The eye plate's recorded UV footprint differs from the plate itself." }));`,
+    `process.exit(1);`,
+  ].join("\n"));
+  const seen: string[] = [], logs: string[] = [];
+  const discarded: boolean[] = [];
+  const preparer: DesktopPlatePreparer = async (settings, cacheRoot, signal) => {
+    // The second preparation finds the first plate's entry gone, as ensureEyePlate would, and derives it again.
+    discarded.push(seen.length > 0 && !existsSync(resolve(cacheRoot, "fixture", "plate-manifest.json")));
+    return fixturePlate(seen)(settings, cacheRoot, signal);
+  };
+  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 10_000, undefined, fixtureWolvenKit, preparer, message => logs.push(message));
+  expect(result).toMatchObject({ kind: "failure", code: "package_build_failed" });
+  expect(readFileSync(runs, "utf8").trim().split(/\s+/)).toEqual(["run", "run"]);
+  expect(discarded).toEqual([false, true]);
+  expect(logs.join(" | ")).toContain("stale; preparing the plate again");
+}, 30_000);
+
 test("an invalid collection is refused before starting the builder", async () => {
   const h = host();
   const seen: string[] = [];

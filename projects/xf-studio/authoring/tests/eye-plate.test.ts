@@ -9,7 +9,7 @@ import {
 import { cutMorphBlob, derivePlateDocuments, selectPlate } from "../src/eye-plate-cut";
 import { plateTopology, verifyEyePlate } from "../src/eye-plate-verify";
 import { contentFingerprint, EyePlateCache, eyePlateReadiness } from "../src/eye-plate-cache";
-import { cachedPlateReach, EyePlateError, ensureEyePlate, type EyePlateTools } from "../src/eye-plate-service";
+import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, type EyePlateTools } from "../src/eye-plate-service";
 import { plateUvFootprint } from "../src/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { depotPathRegex } from "../src/eye-plate-wolvenkit";
@@ -215,31 +215,83 @@ test("PIPE-33: the cache records the plate's UV footprint for Check, and derives
   const mesh = fixtureHeadMesh(), morph = fixtureHeadMorph();
   const recipe = hashedRecipe(mesh, morph);
   const game = fakeGame(dir), cacheRoot = join(dir, "cache");
-  const first = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
+  const routeKey = eyePlateRouteKey({ gameRoot: game, launchRoute: "direct" });
+  const first = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey, tools: fakeTools({ mesh, morph }, recipe) });
   // The footprint of the finished plate resource, beside the manifest, bound by its hash, bounds and window.
   const footprint = plateUvFootprint(JSON.parse(readFileSync(first.meshFile, "utf8")).Data.RootChunk);
   expect(first.manifest.uv).toEqual(plateUvManifestRecord(footprint));
   expect(JSON.parse(readFileSync(join(dirname(first.manifestFile), PLATE_UV_FILE), "utf8"))).toEqual(footprint);
   expect(readdirSync(first.directory).sort()).toEqual(["xfs_eye_plate.mesh", "xfs_eye_plate.morphtarget"]);
-  // Check finds it through the cache status for the same game folder and recipe only.
-  const cached = cachedPlateReach(cacheRoot, game, recipe);
+  // Check finds it through the cache status for the same game folder, route and recipe only.
+  const cached = cachedPlateReach(cacheRoot, game, routeKey, recipe);
   expect(cached).toEqual({ plate: plateReachInput(footprint), manifestFile: first.manifestFile });
-  expect(cachedPlateReach(cacheRoot, join(dir, "other-game"), recipe)).toBeNull();
-  expect(cachedPlateReach(null, game, recipe)).toBeNull();
+  expect(cachedPlateReach(cacheRoot, join(dir, "other-game"), routeKey, recipe)).toBeNull();
+  expect(cachedPlateReach(null, game, routeKey, recipe)).toBeNull();
   // A damaged footprint is not planned on, and the entry is derived again.
   writeFileSync(join(dirname(first.manifestFile), PLATE_UV_FILE), JSON.stringify({ ...footprint, uv: footprint.uv.map(v => v + .01) }));
-  expect(cachedPlateReach(cacheRoot, game, recipe)).toBeNull();
-  const repaired = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
+  expect(cachedPlateReach(cacheRoot, game, routeKey, recipe)).toBeNull();
+  const repaired = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey, tools: fakeTools({ mesh, morph }, recipe) });
   expect(repaired.reused).toBe(false);
-  expect(cachedPlateReach(cacheRoot, game, recipe)?.plate.sha256).toBe(plateReachInput(footprint).sha256);
+  expect(cachedPlateReach(cacheRoot, game, routeKey, recipe)?.plate.sha256).toBe(plateReachInput(footprint).sha256);
   // An entry cached before footprints were recorded is derived again once, with the same plate bytes.
   const { uv: _uv, ...older } = repaired.manifest;
   writeFileSync(repaired.manifestFile, JSON.stringify(older));
-  expect(cachedPlateReach(cacheRoot, game, recipe)).toBeNull();
-  const upgraded = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
+  expect(cachedPlateReach(cacheRoot, game, routeKey, recipe)).toBeNull();
+  const upgraded = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey, tools: fakeTools({ mesh, morph }, recipe) });
   expect(upgraded.reused).toBe(false);
   expect(upgraded.manifest.uv).toEqual(first.manifest.uv);
   expect(upgraded.manifest.files).toEqual(first.manifest.files);
+}));
+
+test("PIPE-36: Check plans only on a plate prepared for the same route, head choice and game files", () => withDirectory(async dir => {
+  const mesh = fixtureHeadMesh(), morph = fixtureHeadMorph();
+  const recipe = hashedRecipe(mesh, morph);
+  const game = fakeGame(dir), cacheRoot = join(dir, "cache");
+  // A fresh install has no plate: nothing to plan on.
+  const route = { gameRoot: game, launchRoute: "direct" as const };
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey(route), recipe)).toBeNull();
+  await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey: eyePlateRouteKey(route), tools: fakeTools({ mesh, morph }, recipe) });
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey(route), recipe)).not.toBeNull();
+  // Another launch route or profile, or the other head choice, was not the route the plate was cut for.
+  const mo2 = join(dir, "mo2");
+  mkdirSync(join(mo2, "profiles", "Default"), { recursive: true });
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey({ ...route, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Default" }), recipe)).toBeNull();
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey(route, "base-game"), recipe)).toBeNull();
+  // Installing a mod changes the route's mod folder.
+  const before = eyePlateRouteKey(route);
+  mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });
+  expect(eyePlateRouteKey(route)).not.toBe(before);
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey(route), recipe)).toBeNull();
+  // So does a game update (the content archives), even on the same route.
+  await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey: eyePlateRouteKey(route), tools: fakeTools({ mesh, morph }, recipe) });
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey(route), recipe)).not.toBeNull();
+  writeFileSync(join(game, "archive", "pc", "content", "basegame_4_appearance.archive"), "patched archive");
+  expect(cachedPlateReach(cacheRoot, game, eyePlateRouteKey(route), recipe)).toBeNull();
+  // A status written before routes were recorded is not planned on.
+  expect(cachedPlateReach(cacheRoot, game, null, recipe)).toBeNull();
+}));
+
+test("PIPE-37: a footprint made under another window rule is derived again, and a stale plate can be discarded", () => withDirectory(async dir => {
+  const mesh = fixtureHeadMesh(), morph = fixtureHeadMorph();
+  const recipe = hashedRecipe(mesh, morph);
+  const game = fakeGame(dir), cacheRoot = join(dir, "cache"), routeKey = eyePlateRouteKey({ gameRoot: game, launchRoute: "direct" });
+  const first = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey, tools: fakeTools({ mesh, morph }, recipe) });
+  // Rewrite the entry as an older rule would have: a narrower window, consistently recorded in the file and the manifest.
+  const uvFile = join(dirname(first.manifestFile), PLATE_UV_FILE);
+  const footprint = JSON.parse(readFileSync(uvFile, "utf8"));
+  const older = { ...footprint, window: { ...footprint.window, u0: footprint.window.u0 + 1e-3 } };
+  writeFileSync(uvFile, JSON.stringify(older));
+  writeFileSync(first.manifestFile, JSON.stringify({ ...first.manifest, uv: plateUvManifestRecord(older) }));
+  expect(cachedPlateReach(cacheRoot, game, routeKey, recipe)).toBeNull();
+  const again = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey, tools: fakeTools({ mesh, morph }, recipe) });
+  expect(again.reused).toBe(false);
+  expect(again.manifest.uv).toEqual(first.manifest.uv);
+  // The builder's mismatch discards the entry, so the next preparation derives it again.
+  discardCachedPlate(cacheRoot, again.manifestFile);
+  expect(existsSync(again.manifestFile)).toBe(false);
+  expect(cachedPlateReach(cacheRoot, game, routeKey, recipe)).toBeNull();
+  expect((await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, routeKey, tools: fakeTools({ mesh, morph }, recipe) })).reused).toBe(false);
+  expect(() => discardCachedPlate(cacheRoot, join(dir, "elsewhere", "plate-manifest.json"))).toThrow("not an entry");
 }));
 
 test("an unsupported or missing head explains itself and blocks readiness until the game changes", () => withDirectory(async dir => {
