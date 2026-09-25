@@ -1,6 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { contentFingerprint, DerivedCache, samePath } from "./derived-cache";
 import type { EyePlateRecipe } from "./eye-plate-recipe";
 
 /**
@@ -17,76 +15,16 @@ export type EyePlateStatus = {
   gameRoot: string; contentFingerprint: string; cacheName: string | null; updatedAt: string;
 };
 
-export function fileSha256(path: string): string {
-  const digest = createHash("sha256"), buffer = Buffer.alloc(1024 * 1024), handle = openSync(path, "r");
-  try { let count: number; while ((count = readSync(handle, buffer, 0, buffer.length, null)) > 0) digest.update(buffer.subarray(0, count)); }
-  finally { closeSync(handle); }
-  return digest.digest("hex");
-}
+export { contentFingerprint, fileSha256 } from "./derived-cache";
 
-/** Cheap identity of the game's content archives, so a stale failure clears after a game update or repair. */
-export function contentFingerprint(gameRoot: string, archiveDirectory: string): string {
-  const directory = resolve(gameRoot, archiveDirectory);
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(directory).filter(name => name.toLowerCase().endsWith(".archive")).sort().map(name => {
-      const stat = statSync(join(directory, name));
-      return `${name}|${stat.size}|${Math.trunc(stat.mtimeMs)}`;
-    });
-  } catch { entries = ["unavailable"]; }
-  return createHash("sha256").update(entries.join("\n")).digest("hex");
-}
-
-const samePath = (left: string, right: string) => process.platform === "win32"
-  ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right);
-
-export class EyePlateCache {
-  readonly root: string;
-  constructor(root: string) {
-    if (!isAbsolute(root)) throw Error("Eye plate cache directory must be absolute.");
-    this.root = resolve(root);
-  }
-  private get statusFile() { return join(this.root, "status.json"); }
-  private guard(path: string) {
-    for (let current = resolve(path); ; current = dirname(current)) {
-      if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw Error("Eye plate cache uses a linked path.");
-      if (current === this.root || dirname(current) === current) break;
-    }
-  }
-  ensure(): void { mkdirSync(this.root, { recursive: true, mode: 0o700 }); this.guard(this.root); }
-  createWork(): string {
-    this.ensure();
-    const work = join(this.root, `.work-${randomUUID()}`);
-    mkdirSync(work, { mode: 0o700 });
-    return work;
-  }
-  remove(path: string): void {
-    const target = resolve(path);
-    if (!target.startsWith(this.root + sep)) throw Error("Refusing to remove outside the eye plate cache.");
-    rmSync(target, { recursive: true, force: true });
-  }
-  entry(name: string): string { return join(this.root, name); }
-  /** Rename a finished staging directory into place; an existing entry wins a concurrent race. */
-  publish(staging: string, name: string): string {
-    const target = this.entry(name);
-    this.guard(target);
-    if (existsSync(target)) this.remove(target);
-    renameSync(staging, target);
-    return target;
-  }
-  readJson(path: string): unknown { return JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, "")); }
-  writeJson(path: string, value: unknown): void { writeFileSync(path, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 }); }
+export class EyePlateCache extends DerivedCache {
+  constructor(root: string) { super(root, "eye plate"); }
   writeStatus(status: Omit<EyePlateStatus, "schema" | "updatedAt">): void {
-    this.ensure();
-    const temporary = `${this.statusFile}.${randomUUID()}.tmp`;
-    this.writeJson(temporary, { schema: EYE_PLATE_STATUS_SCHEMA, ...status, updatedAt: new Date().toISOString() });
-    renameSync(temporary, this.statusFile);
+    this.writeStatusDocument({ schema: EYE_PLATE_STATUS_SCHEMA, ...status, updatedAt: new Date().toISOString() });
   }
   readStatus(): EyePlateStatus | null {
-    try {
-      const status = this.readJson(this.statusFile) as EyePlateStatus;
-      return status?.schema === EYE_PLATE_STATUS_SCHEMA ? status : null;
-    } catch { return null; }
+    const status = this.readStatusDocument() as EyePlateStatus | null;
+    return status?.schema === EYE_PLATE_STATUS_SCHEMA ? status : null;
   }
 }
 

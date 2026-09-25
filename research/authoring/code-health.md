@@ -96,4 +96,4 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-None since `b9597bd`.
+- Generic game asset export (`game-asset-export*.ts`) and the derived 3D preview core (`preview-core-*.ts`, `render-detail.ts`, `core-detail-loader.ts`, desktop `preview-preparation.js`), 25 September 2026.

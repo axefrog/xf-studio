@@ -5,9 +5,12 @@
  * docs and manifests, not in reasons shown beside a disabled control.
  */
 
-/** Shown for every head, camera, motion and saved-V action when no 3D preview files are present. */
+/**
+ * Shown for every head, camera, motion and saved-V action until the 3D preview has been
+ * prepared from the player's own game files (the desktop then reports its progress instead).
+ */
 export const NO_3D_PREVIEW_IN_ALPHA =
-  "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully.";
+  "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
 
 /** Shown for Build when the host's Build setup is incomplete; the setup view lists the missing paths. */
 export const BUILD_NEEDS_SETUP =
