@@ -8,20 +8,35 @@ import { createInstallDetectionHandler, hostFrameworkCheck } from "../src/instal
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
-import { desktopBuildIssue, desktopPlateCache, type WolvenKitProbe } from "./build";
+import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, probeBun, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
-import { DesktopWorkspaceStore, desktopWorkspaceRequest } from "./workspace-store";
+import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
+import { PreviewCoreHost } from "../src/preview-core-host";
+import { createPreviewCoreHandler } from "../src/preview-core-server";
+import type { GameAssetExporter } from "../src/game-asset-export";
+
+/** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
+export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
+
+/**
+ * The Studio page loads only its own scripts, styles, workers and data from this loopback
+ * origin. Inline style attributes are used by the UI; inline scripts are not.
+ */
+export const DESKTOP_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; " +
+  "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
   toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
   updateTrial?: { native: NativeUpdater; trust: UpdateTrust;
-    requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number }) {
+    requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
+  previewExporter?: (cli: string | null) => GameAssetExporter) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -43,19 +58,31 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     buildHash: version.buildHash }, updateTrial?.native ?? null,
     updateTrial?.trust ?? { verifiedPrivateFeed: false, signedRelease: false, twoVersionTrialAccepted: false },
     updateGuard || null);
+  // Readiness requests never run external tools inline: cached answers, background checks.
+  const readinessProbes: [WolvenKitProbe, typeof probeBun] = wolvenKitProbe ? [wolvenKitProbe, probeBun] : [cachedWolvenKitProbe, cachedBunProbe];
   const buildReady = () => {
-    try { return desktopBuildIssue(settingsStore.load().settings, dataRoot, toolsRoot, wolvenKitProbe) === null; }
+    try { return desktopBuildIssue(settingsStore.load().settings, dataRoot, toolsRoot, ...readinessProbes) === null; }
     catch { return false; }
   };
   const localSettings = createLocalSettingsHandler(settingsStore, {},
     settings => ({ updater: false, installer: false, packageCheck: true,
-      packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe) === null,
+      packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes) === null,
       eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
       frameworks: hostFrameworkCheck(settings) }));
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
+  // Community path: the core preview is derived from the player's own game files.
+  const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+    settings: () => { try { const { gameRoot, wolvenKitCli } = settingsStore.load().settings; return { gameRoot, wolvenKitCli }; }
+      catch { return { gameRoot: null, wolvenKitCli: null }; } },
+    log: message => report(message) });
+  const previewCoreRequest = createPreviewCoreHandler(previewCore);
+  /** Prepared developer files win; otherwise the derived preview; otherwise what is missing. */
+  const previewAssetState = async (): Promise<{ state: "ready" | "incomplete" | "missing"; source: "prepared" | "derived" | null }> =>
+    await coreAssetsReady() ? { state: "ready", source: "prepared" } : previewCore.ready() ? { state: "ready", source: "derived" } :
+      { state: existsSync(assetRoot) ? "incomplete" : "missing", source: null };
   // Maintainer-only: the five prepared preview files come from a private
   // pipeline, so the intake stays hidden and refused unless explicitly enabled.
   const previewIntake = () => existsSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER));
@@ -82,10 +109,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       const routedRequest = sameOriginWebView ? new Request(request, {
         headers: new Headers([...request.headers, ["Origin", origin]]),
       }) : request;
-      if (url.pathname === "/api/desktop/capabilities")
-        return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
-          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady(), previewIntake()),
+      if (url.pathname.startsWith("/api/") && request.method === "POST" &&
+          request.headers.get("Content-Type")?.split(";")[0].trim() !== "application/json")
+        return new Response("Expected JSON", { status: 415 });
+      if (url.pathname === "/api/desktop/capabilities") {
+        const preview = await previewAssetState();
+        return Response.json(desktopCapabilities(preview.state, version, dataRoot, buildReady(), previewIntake(), preview.source),
           { headers: { "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === "/api/desktop/update") {
         if (request.method === "GET") return Response.json(updates.snapshot(),
           { headers: { "Cache-Control": "no-store" } });
@@ -103,9 +135,18 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }
       if (url.pathname === "/api/desktop/assets/intake") return previewIntake() ?
         desktopAssetIntakeRequest(routedRequest, dataRoot) : new Response("Not found", { status: 404 });
+      if (url.pathname === "/api/desktop/workspace/start-fresh") {
+        const response = desktopWorkspaceStartFresh(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
+        return response;
+      }
       if (url.pathname === "/api/desktop/workspace") {
-        if (request.method === "GET" && !renderer.bootstrapped) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
         const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        // Only a successfully loaded workspace makes the close handshake wait for the page.
+        if (request.method === "GET" && !renderer.bootstrapped) {
+          if (response.ok) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
+          else report("The saved workspace is unreadable; the page offers Start fresh.");
+        }
         if (request.method === "POST" && response.status === 204)
           updateGuard?.noteWorkspaceWrite(request.headers.get("X-XFS-Update-Flush"));
         return response;
@@ -130,7 +171,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
-        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe }, activity);
+        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: message => report(message) }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
@@ -138,17 +179,23 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
-      if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop-spike" });
+      if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
       const asset = url.pathname.startsWith("/assets/");
       const root = asset ? assetRoot : staticRoot;
       try { path = resolve(root, "." + decodeURIComponent(asset ? url.pathname.slice("/assets".length) : url.pathname === "/" ? "/index.html" : url.pathname)); }
       catch { return new Response("Bad path", { status: 400 }); }
       if (!path.startsWith(root + sep)) return new Response("Not found", { status: 404 });
-      const file = Bun.file(path);
+      let file = Bun.file(path);
+      let servedRoot = root;
+      if (asset && !(await coreAssetsReady())) {
+        // Without a complete developer intake, the core preview files come from the derived cache.
+        const derived = previewCore.assetPath(url.pathname.slice("/assets/".length));
+        if (derived) { path = derived; file = Bun.file(derived); servedRoot = resolve(derived, ".."); }
+      }
       if (!(await file.exists())) return new Response("Not found", { status: 404 });
       try {
-        const resolvedRoot = realpathSync(root), resolvedFile = realpathSync(path);
+        const resolvedRoot = realpathSync(servedRoot), resolvedFile = realpathSync(path);
         if (!resolvedFile.startsWith(resolvedRoot + sep) || !statSync(resolvedFile).isFile())
           return new Response("Not found", { status: 404 });
       } catch { return new Response("Not found", { status: 404 }); }
@@ -156,6 +203,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       return new Response(request.method === "HEAD" ? null : file, { headers: {
         "Content-Type": file.type, "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff",
         ...(firstVisit ? { "Set-Cookie": `xfs_session=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}),
+        ...(path.endsWith(".html") ? { "Content-Security-Policy": DESKTOP_CSP } : {}),
       } });
     },
   });
@@ -168,6 +216,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     renderer(): Readonly<typeof renderer> { return { ...renderer }; },
     beforeQuit(event: { response?: { allow: boolean } }) { updateGuard?.beforeQuit(event); },
     beginInstallTransaction() { return activity.begin("install"); },
-    stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    /** The derived 3D preview's host service (tests and shutdown). */
+    previewCore,
+    stop() { shutdown.abort(); previewCore.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

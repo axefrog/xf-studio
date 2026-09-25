@@ -14,7 +14,6 @@ test("a presentation mounts from trusted services without loading legacy UI cont
   let resets = 0, imports = 0;
   core = createTrustedAuthoringCore(workspace, {
     resetStack: () => { resets++; }, selectedCollection: () => "draft",
-    controlAction: action => { core.recipe.dispatch(action); },
   });
   core.app.attach({ quality: new PreviewQualityActions(512,
     { assess: () => ({ accepted: true }), replace: () => {} }) });

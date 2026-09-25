@@ -7,39 +7,65 @@
 // DDS reading and the resource inventory are reimplemented in this directory, and
 // tests/mod-verifier.test.ts enforces that import boundary.
 //
+// Self-sourcing: the verifier reads none of the builder's conversions. It copies the
+// packed archive and the plate inputs into its own empty work directory, unbundles
+// that archive copy, requires every member's SHA-256 to equal the build record, and
+// only then runs its own WolvenKit `convert serialize` (resources and plate inputs)
+// and `export` (textures) on those files. Every structural and pixel check therefore
+// reads data derived from hash-checked archive members. The `.archive.xl` is parsed
+// as YAML from the same bytes it hashes, and the plate inputs are re-hashed at the
+// end against the provenance recorded at the start.
+//
 // Differences from verify.py, all deliberate:
 // - Base-map inputs are the baked raw maps, checked against the build record's
 //   SHA-256, instead of PNG copies written by the builder.
 // - Decoded base levels come from WolvenKit's DDS export (level 0) instead of its
 //   PNG export. verify.py asserted that both are byte-identical on every build it
 //   passed, so the PNG round trip adds no evidence.
-// - The unpack directory must start empty, so stale members cannot be counted.
+// - verify.py read the builder's own round trip and texture export; this verifier
+//   converts the unbundled members itself (above).
+// - The work directory must start empty, so stale files cannot be counted.
 // Dynamic expansion checks model inspected ArchiveXL rules; they do not run the game.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { readDdsChain, type DdsKind } from "./dds-reader";
 import { resourceRecords, type ResourceFile } from "./resource-inventory";
-import { checkResources, ensure, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, VerificationError, type Node, type VerifierPlan } from "./resource-checks";
+import { checkArchiveXl, checkResources, ensure, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, VerificationError, type Node,
+  type VerifierPlan } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
 
 export { VerificationError } from "./resource-checks";
 
-export interface UnbundleResult { readonly exitCode: number | null; readonly stdout: string; readonly stderr: string }
+export interface ToolResult { readonly exitCode: number | null; readonly stdout: string; readonly stderr: string }
+
+/** The three WolvenKit operations the verifier runs itself. Each writes only into `output`. */
+export interface VerifierTools {
+  unbundle(archive: string, output: string): ToolResult;
+  serialize(input: string, output: string): ToolResult;
+  exportTextures(input: string, output: string): ToolResult;
+}
 
 export interface VerifyBuildOptions {
   /** Intermediate build directory containing build.json. */
   readonly build: string;
-  /** WolvenKit.CLI executable used to unbundle the packed archive. */
+  /** WolvenKit.CLI executable the verifier runs itself. */
   readonly wolvenkit: string;
-  /** Empty or absent directory for the unpacked archive; defaults to <build>/unpacked. */
-  readonly unpackDir?: string;
-  /** Serialized source plate, relative to the build; defaults to the build record's `plateStem`. */
-  readonly sourcePlate?: { readonly mesh: string; readonly morph: string };
-  /** Test seam; defaults to `wolvenkit unbundle <archive> -o <dir>`. */
-  readonly unbundle?: (archive: string, output: string) => UnbundleResult;
+  /** Game folder that WolvenKit's `export` command requires; read only. */
+  readonly gamepath?: string;
+  /** Empty or absent directory for the verifier's own files; defaults to <build>/verify. */
+  readonly workDir?: string;
+  /**
+   * Plate input files given to the builder, with the hashes the caller prepared. Defaults to the
+   * build record's `plateInputs`; either way the files must hash to the build record's values.
+   */
+  readonly plate?: { readonly mesh: string; readonly morph: string; readonly meshSha256?: string; readonly morphSha256?: string };
+  /** Morph target count from the plate recipe; absent accepts the source plate's own count. */
+  readonly morphTargets?: number;
+  /** Test seam for the WolvenKit operations. */
+  readonly tools?: Partial<VerifierTools>;
 }
 
 export const VERIFICATION_LIMITS: readonly string[] = [
@@ -56,7 +82,7 @@ type MipRow = { level: number; size: number; partialTexels: number; coverage?: E
 export interface VerificationReport {
   build: string; presetCount: number; selectorCount: 1; selectorOptionCount: number; appDefinitions: 2;
   compiledComponentTemplates: 1; meshAppearances: number; materialTemplates: number; textureCount: number;
-  archiveBytes: number; archiveSha256: string; unpackedFilesVerified: number; preservedMorphs: 105;
+  archiveBytes: number; archiveSha256: string; unpackedFilesVerified: number; preservedMorphs: number;
   modelBuffersUnchanged: true;
   resolvedDynamicPaths: ReturnType<typeof checkResources>["resolved"];
   decodedPixelChecks: ({
@@ -64,6 +90,10 @@ export interface VerificationReport {
     premultipliedSurfaceError: { roughness: ErrorStats; metalness: ErrorStats }; route?: "faceted"; normalError?: ErrorStats;
   } | { preset: string; route: "fresnel"; coveredTexels: number; coverageError: ErrorStats; outsideCoverageMax: number; gradientError: ErrorStats })[];
   decodedMipChecks: { preset: string; levels: MipRow[] }[];
+  /** SHA-256 of the `.archive.xl` bytes that were parsed and checked. */
+  archiveXlSha256: string;
+  /** Plate input hashes, equal at the start and the end of verification. */
+  plateInputs: { mesh: string; morph: string };
   installed: false; gameRenderingVerified: false; limits: string[];
 }
 
@@ -71,6 +101,7 @@ const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).
 const readJson = (path: string): Node => JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
 const bytes = (path: string) => new Uint8Array(readFileSync(path));
 const fileName = (depotPath: string) => depotPath.slice(depotPath.lastIndexOf("/") + 1);
+const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
 
 function listFiles(root: string): ResourceFile[] {
   const files: ResourceFile[] = [];
@@ -111,17 +142,24 @@ function readBaked(build: string, record: Node): Record<string, Uint8Array> {
 
 const GROUP: Record<string, string> = { diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar",
   mask: "dds-scalar", normal: "dds-normal" };
+type Exported = (depotPath: string) => string;
 
-/** Supplied chain must equal the reference byte for byte; returns the decoded (exported) chain. */
-function suppliedAndDecoded(build: string, name: string, channel: string, side: number, expected: readonly Uint8Array[], what: string) {
-  const suppliedPath = join(build, "input", GROUP[channel], `${name}_${channel}.dds`), decodedPath = join(build, "export-dds", `${name}_${channel}.dds`);
+/**
+ * The builder's supplied import chain must equal the independent reference byte for byte; returns the
+ * chain decoded from the verifier's own WolvenKit export of the unbundled member.
+ */
+function suppliedAndDecoded(build: string, preset: VerifierPlan["presets"][number], channel: string, side: number,
+  expected: readonly Uint8Array[], what: string, exported: Exported) {
+  const name = preset.appearance, depotPath = preset.textures[channel as keyof typeof preset.textures];
+  ensure(typeof depotPath === "string", `Preset ${preset.name} plans no ${channel} texture`);
+  const suppliedPath = join(build, "input", GROUP[channel], `${name}_${channel}.dds`), decodedPath = exported(depotPath);
   const supplied = readDdsChain(bytes(suppliedPath), channel === "normal" ? "normal-input" : channel as DdsKind, suppliedPath);
-  const exported = readDdsChain(bytes(decodedPath), channel as DdsKind, decodedPath);
-  ensure(supplied.side === side && exported.side === side, `${name} ${channel} DDS size differs from ${side}`);
+  const decoded = readDdsChain(bytes(decodedPath), channel as DdsKind, decodedPath);
+  ensure(supplied.side === side && decoded.side === side, `${name} ${channel} DDS size differs from ${side}`);
   ensure(supplied.levels.length === expected.length && supplied.levels.every((level, i) => Buffer.compare(level, expected[i]) === 0),
     `Supplied ${channel} mip chain for ${name} differs from the independent ${what} reference`);
-  ensure(exported.levels.length === Math.log2(side) + 1, `Decoded ${channel} chain for ${name} is incomplete`);
-  return exported.levels;
+  ensure(decoded.levels.length === Math.log2(side) + 1, `Decoded ${channel} chain for ${name} is incomplete`);
+  return decoded.levels;
 }
 
 const byteErrors = (a: Uint8Array, b: Uint8Array, stride: number, mask: Uint8Array | null, scale = 255) => {
@@ -130,15 +168,15 @@ const byteErrors = (a: Uint8Array, b: Uint8Array, stride: number, mask: Uint8Arr
   return Float64Array.from(out);
 };
 
-function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan["presets"][number]) {
+function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], exported: Exported) {
   const size: number = record.size, name = preset.appearance, raw = readBaked(build, record);
   ensure(raw.mask && raw.gradient, `Build record for ${name} lacks a Fresnel map`);
   const { color } = fresnelPigment(preset), rgba = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)).concat(255);
   const gradientExpected = uniformReference(rgba, GRADIENT_SIDE);
   ensure(Buffer.compare(raw.gradient, gradientExpected[0]) === 0, `Baked gradient for ${name} is not the preset base colour`);
   const maskChain = maskReference(raw.mask, size);
-  const mask = suppliedAndDecoded(build, name, "mask", size, maskChain, "linear coverage");
-  const gradient = suppliedAndDecoded(build, name, "gradient", GRADIENT_SIDE, gradientExpected, "uniform colour");
+  const mask = suppliedAndDecoded(build, preset, "mask", size, maskChain, "linear coverage", exported);
+  const gradient = suppliedAndDecoded(build, preset, "gradient", GRADIENT_SIDE, gradientExpected, "uniform colour", exported);
   const covered = Uint8Array.from(raw.mask, v => (v ? 1 : 0)), count = covered.reduce((n, v) => n + v, 0);
   ensure(count > 0, `Fresnel preset ${name} covers no texels`);
   const coverageError = errorStats(byteErrors(mask[0], raw.mask, 1, covered));
@@ -161,10 +199,10 @@ function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan[
     mips: { preset: preset.name, levels } };
 }
 
-function checkTextures(build: string, plan: VerifierPlan, record: Node, preset: VerifierPlan["presets"][number]) {
+function checkTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], exported: Exported) {
   const route = routeOf(preset);
   ensure((record.route ?? "flat") === route, `Compiled record for ${preset.appearance} is ${record.route}, planned ${route}`);
-  if (route === "fresnel") return checkFresnelTextures(build, record, preset);
+  if (route === "fresnel") return checkFresnelTextures(build, record, preset, exported);
   const size: number = record.size, name = preset.appearance, raw = readBaked(build, record);
   ensure(raw.diffuse && raw.roughness && raw.metalness, `Build record for ${name} lacks a base map`);
   const faceted = route === "faceted";
@@ -174,8 +212,8 @@ function checkTextures(build: string, plan: VerifierPlan, record: Node, preset: 
   const expected: Record<string, readonly Uint8Array[]> = { ...chain, ...(facets ? { roughness: facets.roughness } : {}) };
   const decoded: Record<string, readonly Uint8Array[]> = {};
   for (const channel of ["diffuse", "roughness", "metalness"] as const)
-    decoded[channel] = suppliedAndDecoded(build, name, channel, size, expected[channel],
-      facets && channel === "roughness" ? "variance-widened" : "coverage-space");
+    decoded[channel] = suppliedAndDecoded(build, preset, channel, size, expected[channel],
+      facets && channel === "roughness" ? "variance-widened" : "coverage-space", exported);
 
   // Base level: decoded XBM against the compiler's exact base pixels.
   const source = idealChain[0], actual = contributionsOf(decoded.diffuse[0], decoded.roughness[0], decoded.metalness[0], size);
@@ -205,7 +243,7 @@ function checkTextures(build: string, plan: VerifierPlan, record: Node, preset: 
   }
   let normalError: ErrorStats | undefined;
   if (facets) {
-    const normal = suppliedAndDecoded(build, name, "normal", size, facets.normalInput, "facet normal");
+    const normal = suppliedAndDecoded(build, preset, "normal", size, facets.normalInput, "facet normal", exported);
     normalError = errorStats(byteErrors(normal[0], raw.normal, 2, active, 127.5));
     ensure(normalError.mean < .03 && normalError.p95 < .1, `Decoded normal error too large for ${name}: ${JSON.stringify(normalError)}`);
   }
@@ -236,71 +274,149 @@ function checkTextures(build: string, plan: VerifierPlan, record: Node, preset: 
   return { pixel, mips: { preset: preset.name, levels } };
 }
 
-function defaultUnbundle(wolvenkit: string): NonNullable<VerifyBuildOptions["unbundle"]> {
-  return (archive, output) => {
-    const result = spawnSync(wolvenkit, ["unbundle", archive, "-o", output], { encoding: "utf8", timeout: 180_000, windowsHide: true, maxBuffer: 64 << 20 });
-    if (result.error) throw new VerificationError(`WolvenKit unbundle could not run: ${result.error.message}`);
+function defaultTools(wolvenkit: string, gamepath: string | undefined): VerifierTools {
+  const run = (label: string, args: string[]): ToolResult => {
+    const result = spawnSync(wolvenkit, args, { encoding: "utf8", timeout: 240_000, windowsHide: true, maxBuffer: 64 << 20 });
+    if (result.error) throw new VerificationError(`WolvenKit ${label} could not run: ${result.error.message}`);
     return { exitCode: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
   };
+  return {
+    unbundle: (archive, output) => run("unbundle", ["unbundle", archive, "-o", output]),
+    serialize: (input, output) => run("serialize", ["convert", "serialize", input, "-o", output]),
+    exportTextures: (input, output) => {
+      ensure(gamepath && existsSync(gamepath) && statSync(gamepath).isDirectory(), "WolvenKit texture export needs the game folder (--gamepath).");
+      return run("export", ["export", input, "-o", output, "--uext", "dds", "--gamepath", gamepath!]);
+    },
+  };
+}
+
+/** Plate input files and their hashes: the caller's, else the build record's; both must agree. */
+function plateInputs(build: Node, options: VerifyBuildOptions) {
+  const recorded: Node[] = Array.isArray(build.plateInputs) ? build.plateInputs : [];
+  const byExtension = (extension: string) => recorded.filter(entry => typeof entry?.path === "string" &&
+    entry.path.toLowerCase().endsWith(extension));
+  const mesh = byExtension(".mesh"), morph = byExtension(".morphtarget");
+  ensure(recorded.length === 2 && mesh.length === 1 && morph.length === 1, "Build record must name exactly one plate mesh and morph target input");
+  const files = { mesh: resolve(options.plate?.mesh ?? mesh[0].path), morph: resolve(options.plate?.morph ?? morph[0].path) };
+  const start = { mesh: "", morph: "" };
+  for (const role of ["mesh", "morph"] as const) {
+    ensure(isFile(files[role]), `Plate ${role} input is missing: ${files[role]}`);
+    start[role] = sha256(readFileSync(files[role]));
+    const record = role === "mesh" ? mesh[0] : morph[0];
+    ensure(start[role] === record.sha256, `Plate ${role} input differs from the build record`);
+    const expected = role === "mesh" ? options.plate?.meshSha256 : options.plate?.morphSha256;
+    ensure(expected === undefined || start[role] === expected, `Plate ${role} input differs from the plate the host prepared`);
+  }
+  return { files, start };
 }
 
 /** Verify one intermediate build; throws VerificationError on the first failed check. */
 export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   const out = resolve(options.build), wolvenkit = resolve(options.wolvenkit);
-  ensure(options.unbundle || (existsSync(wolvenkit) && statSync(wolvenkit).isFile()), `WolvenKit is missing: ${wolvenkit}`);
+  const injected = options.tools ?? {};
+  ensure((injected.unbundle && injected.serialize && injected.exportTextures) || isFile(wolvenkit), `WolvenKit is missing: ${wolvenkit}`);
+  const tools: VerifierTools = { ...defaultTools(wolvenkit, options.gamepath && resolve(options.gamepath)), ...injected };
   ensure(existsSync(join(out, "build.json")), `Build manifest is missing: ${out}`);
-  ensure(existsSync(join(out, "export-dds")), "The selected build predates supplied mip chains; rebuild before verifying");
   const build = readJson(join(out, "build.json")), plan: VerifierPlan = build.plan;
-  const archive = join(out, "archive"), roundtrip = join(out, "roundtrip");
-  ensure(sameJson(resourceRecords(listFiles(archive), plan), build.artifacts), "Generated resource inventory changed after pack");
-  const root = (file: string) => readJson(join(roundtrip, file)).Data.RootChunk;
-  // As verify.py: the build record names the plate stem; builds that predate it used the Experiment 004 name.
-  const stem = build.plateStem ?? "xfas_eye_plate";
-  ensure(typeof stem === "string" && /^[a-z0-9_]+$/.test(stem), "Build record has an invalid plate stem");
-  const plate = options.sourcePlate ?? { mesh: `source-json/${stem}.mesh.json`, morph: `source-json/${stem}.morphtarget.json` };
+  const work = resolve(options.workDir ?? join(out, "verify"));
+  ensure(!existsSync(work) || readdirSync(work).length === 0, `Verifier work directory is not empty: ${work}`);
+  const dirs = Object.fromEntries(["archive", "unpacked", "json", "plate", "plate-json", "dds", "logs"]
+    .map(name => [name, join(work, name)])) as Record<"archive" | "unpacked" | "json" | "plate" | "plate-json" | "dds" | "logs", string>;
+  for (const dir of Object.values(dirs)) mkdirSync(dir, { recursive: true });
+  const runTool = (label: string, call: () => ToolResult) => {
+    const result = call();
+    writeFileSync(join(dirs.logs, `${label}.log`), result.stdout + result.stderr, "utf8");
+    ensure(result.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(result.stdout + result.stderr),
+      `WolvenKit ${label} failed: ${(result.stdout + result.stderr).slice(-2000)}`);
+  };
+
+  // Plate provenance at the start: the host's plate files, hashed and copied before anything else.
+  const plate = plateInputs(build, options);
+  const plateCopy = { mesh: join(dirs.plate, basename(plate.files.mesh)), morph: join(dirs.plate, basename(plate.files.morph)) };
+  for (const role of ["mesh", "morph"] as const) {
+    copyFileSync(plate.files[role], plateCopy[role]);
+    ensure(sha256(readFileSync(plateCopy[role])) === plate.start[role], `Plate ${role} input changed while it was copied`);
+  }
+
+  // The generated tree before packing must still equal the recorded inventory.
+  ensure(sameJson(resourceRecords(listFiles(join(out, "archive")), plan), build.artifacts), "Generated resource inventory changed after pack");
   const records: Node[] = build.compiled;
   ensure(Array.isArray(records) && records.length === plan.presets.length, "Build record does not list one compiled record per preset");
   records.forEach((record, i) => ensure(record.id === plan.presets[i].id, `Compiled record ${i} does not match preset ${plan.presets[i].id}`));
-  const summary = checkResources(plan, {
-    mesh: root(fileName(plan.mesh) + ".json"), morph: root(fileName(plan.morph) + ".json"),
-    app: root(fileName(plan.app) + ".json"), customization: root(fileName(plan.customization) + ".json"),
-    sourceMesh: readJson(join(out, plate.mesh)).Data.RootChunk, sourceMorph: readJson(join(out, plate.morph)).Data.RootChunk,
-    texture: path => root(fileName(path) + ".json"),
-    archiveHas: path => existsSync(join(archive, ...path.split("/"))) && statSync(join(archive, ...path.split("/"))).isFile(),
-  }, build.artifacts.map((a: Node) => a.path), records.map(r => r.size));
 
-  const pixelResults: VerificationReport["decodedPixelChecks"] = [], mipResults: VerificationReport["decodedMipChecks"] = [];
-  plan.presets.forEach((preset, i) => {
-    const { pixel, mips } = checkTextures(out, plan, records[i], preset);
-    pixelResults.push(pixel);
-    mipResults.push(mips);
-  });
-
-  const packed = join(out, "package", "archive", "pc", "mod", plan.namespace + ".archive");
-  const archiveData = bytes(packed), archiveSha256 = sha256(archiveData);
+  // Archive and declaration: hash exactly the bytes that are unbundled and parsed.
+  const packageDir = join(out, "package", "archive", "pc", "mod");
+  const archiveCopy = join(dirs.archive, plan.namespace + ".archive");
+  copyFileSync(join(packageDir, plan.namespace + ".archive"), archiveCopy);
+  const archiveData = bytes(archiveCopy), archiveSha256 = sha256(archiveData);
   ensure(archiveSha256 === build.archiveSha256, "Packed archive differs from the build record");
-  const xl = readFileSync(join(out, "package", "archive", "pc", "mod", plan.namespace + ".archive.xl"), "utf8");
-  ensure(xl.includes(plan.customization.replaceAll("/", "\\")) && xl.includes(plan.app.replaceAll("/", "\\")),
-    "ArchiveXL declaration does not register the customization and app");
-  const unpacked = resolve(options.unpackDir ?? join(out, "unpacked"));
-  ensure(!existsSync(unpacked) || readdirSync(unpacked).length === 0, `Unpack directory is not empty: ${unpacked}`);
-  mkdirSync(unpacked, { recursive: true });
-  const result = (options.unbundle ?? defaultUnbundle(wolvenkit))(packed, unpacked);
-  mkdirSync(join(out, "logs"), { recursive: true });
-  writeFileSync(join(out, "logs", "unpack-verify.log"), result.stdout + result.stderr, "utf8");
-  ensure(result.exitCode === 0 && !result.stdout.includes("Error"), `WolvenKit unbundle failed: ${result.stdout.slice(-2000)}`);
-  const files = listFiles(unpacked);
+  const xlBytes = readFileSync(join(packageDir, plan.namespace + ".archive.xl"));
+  let declaration: Node;
+  try { declaration = Bun.YAML.parse(xlBytes.toString("utf8").replace(/^﻿/, "")); }
+  catch (error) { throw new VerificationError(`ArchiveXL declaration is not valid YAML: ${(error as Error).message}`); }
+  checkArchiveXl(plan, declaration);
+
+  // Unbundle the verified archive copy; every member must match the build record byte for byte.
+  runTool("unbundle", () => tools.unbundle(archiveCopy, dirs.unpacked));
+  const files = listFiles(dirs.unpacked);
   ensure(files.length === build.artifacts.length, `Unpacked ${files.length} files; expected ${build.artifacts.length}`);
   ensure(sameJson(files.map(f => f.path).sort(), build.artifacts.map((a: Node) => a.path).sort()), "Unpacked member paths differ from the generated resources");
   const unpackedHashes = new Map(files.map(f => [f.path, f.sha256]));
   for (const artifact of build.artifacts) ensure(unpackedHashes.get(artifact.path) === artifact.sha256, `Unpacked ${artifact.path} differs from its generated payload`);
+  const names = files.map(f => fileName(f.path));
+  ensure(new Set(names).size === names.length, "Unpacked members must have distinct file names for conversion");
+
+  // The verifier's own conversions of the hash-checked members and plate inputs.
+  runTool("serialize-members", () => tools.serialize(dirs.unpacked, dirs.json));
+  runTool("serialize-plate", () => tools.serialize(dirs.plate, dirs["plate-json"]));
+  const converted = (dir: string, name: string) => {
+    const path = join(dir, name + ".json");
+    ensure(isFile(path), `WolvenKit did not serialize ${name}`);
+    return readJson(path);
+  };
+  const root = (depotPath: string) => converted(dirs.json, fileName(depotPath)).Data.RootChunk;
+  const textureDirs = [...new Set(plan.presets.flatMap(p => Object.values(p.textures) as string[]).map(path => path.slice(0, path.lastIndexOf("/"))))];
+  const exportDirs = new Map<string, string>();
+  textureDirs.forEach((dir, i) => {
+    const target = join(dirs.dds, String(i));
+    mkdirSync(target);
+    runTool(`export-textures-${i}`, () => tools.exportTextures(join(dirs.unpacked, ...dir.split("/")), target));
+    exportDirs.set(dir, target);
+  });
+  const exported = (depotPath: string) => {
+    const path = join(exportDirs.get(depotPath.slice(0, depotPath.lastIndexOf("/")))!, fileName(depotPath).replace(/\.xbm$/, ".dds"));
+    ensure(isFile(path), `WolvenKit did not export ${depotPath}`);
+    return path;
+  };
+
+  const members = new Set(files.map(f => f.path));
+  const summary = checkResources(plan, {
+    mesh: root(plan.mesh), morph: root(plan.morph), app: root(plan.app), customization: root(plan.customization),
+    sourceMesh: converted(dirs["plate-json"], basename(plateCopy.mesh)).Data.RootChunk,
+    sourceMorph: converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk,
+    texture: path => root(path),
+    archiveHas: path => members.has(path),
+  }, build.artifacts.map((a: Node) => a.path), records.map(r => r.size), options.morphTargets ?? null);
+
+  const pixelResults: VerificationReport["decodedPixelChecks"] = [], mipResults: VerificationReport["decodedMipChecks"] = [];
+  plan.presets.forEach((preset, i) => {
+    const { pixel, mips } = checkTextures(out, records[i], preset, exported);
+    pixelResults.push(pixel);
+    mipResults.push(mips);
+  });
+
+  // Plate provenance at the end must equal the start.
+  for (const role of ["mesh", "morph"] as const)
+    ensure(isFile(plate.files[role]) && sha256(readFileSync(plate.files[role])) === plate.start[role],
+      `Plate ${role} input changed during verification`);
 
   return {
     build: out, presetCount: plan.presets.length, selectorCount: 1, selectorOptionCount: summary.selectorOptionCount,
     appDefinitions: 2, compiledComponentTemplates: 1, meshAppearances: summary.meshAppearances,
     materialTemplates: summary.materialTemplates, textureCount: plan.presets.reduce((n, p) => n + Object.keys(p.textures).length, 0),
-    archiveBytes: archiveData.length, archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: 105,
+    archiveBytes: archiveData.length, archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: summary.morphTargets,
     modelBuffersUnchanged: true, resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
-    decodedMipChecks: mipResults, installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
+    decodedMipChecks: mipResults, archiveXlSha256: sha256(xlBytes), plateInputs: { ...plate.start },
+    installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
   };
 }

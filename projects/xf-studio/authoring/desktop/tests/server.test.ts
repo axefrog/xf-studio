@@ -381,3 +381,34 @@ test("desktop settings recovery uses previous copy and blocks editing damaged pr
   expect(restored.status).toBe(200);
   expect((await restored.json()).source).toBe("primary");
 });
+
+test("the desktop reports and prepares the derived 3D preview through its session-gated endpoint", async () => {
+  const previewRoot = resolve(root, "preview-trial");
+  const game = resolve(previewRoot, "game"), cli = resolve(previewRoot, "WolvenKit.CLI.exe");
+  mkdirSync(resolve(game, "archive", "pc", "content"), { recursive: true });
+  writeFileSync(cli, "");
+  const { createGameAssetExporter } = await import("../../src/game-asset-export");
+  const exports: string[][] = [];
+  const trial = createDesktopServer(staticRoot, resolve(previewRoot, "data"),
+    { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" }, undefined, undefined, undefined, undefined,
+    () => createGameAssetExporter(resolve(previewRoot, "data", "preview-cache", "exports"), async ({ depotPaths }) => { exports.push(depotPaths); }));
+  try {
+    const base = `http://127.0.0.1:${trial.port}`;
+    const cookie = (await fetch(trial.url)).headers.get("set-cookie")!.split(";")[0]!;
+    const headers = { Cookie: cookie };
+    expect((await fetch(base + "/api/desktop/preview")).status).toBe(403);
+    expect(await (await fetch(base + "/api/desktop/preview", { headers })).json()).toMatchObject({ phase: "needs-setup", needs: ["game", "wolvenkit"] });
+    expect(await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).toMatchObject({ previewAssets: "missing", previewSource: null });
+    new LocalSettingsStore(resolve(previewRoot, "data")).save({ ...(await import("../../src/local-settings")).defaultLocalSettings(),
+      gameRoot: game, wolvenKitCli: cli }, 0);
+    const post = (body: unknown, origin = base) => fetch(base + "/api/desktop/preview", { method: "POST",
+      headers: { ...headers, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    expect((await post({ action: "prepare" }, "https://attacker.example")).status).toBe(403);
+    expect(await (await post({ action: "prepare" })).json()).toMatchObject({ phase: "preparing", canCancel: true });
+    await trial.previewCore.settled();
+    // The stand-in exporter found nothing, so the head is reported missing in plain language.
+    expect(await (await fetch(base + "/api/desktop/preview", { headers })).json()).toMatchObject({ phase: "blocked", code: "preview_source_missing" });
+    expect(exports).toHaveLength(1);
+    expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(404);
+  } finally { trial.stop(); }
+});

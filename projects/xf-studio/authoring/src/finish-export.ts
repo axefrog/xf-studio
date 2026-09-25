@@ -154,5 +154,5 @@ export function finishExportSummary(finish: Finish): { adapter: "flat-provisiona
   if (id === "glossy") return { adapter: "experimental", note: "Experimental: exports as one smooth reflection (the game has no separate clear coat). Not yet tested in game." };
   if (id === "shimmer") return { adapter: "experimental", note: "Experimental: exports as fine facet normals that merge into a sheen at distance. Not yet tested in game." };
   if (id === "iridescent") return { adapter: "experimental", note: "Experimental: exports as a two-tone Fresnel tint when the whole preset is one colour-shift pigment. Not yet tested in game." };
-  return { adapter: "none", note: "Preview only in this alpha. Check and Build leave out layers with this finish and tell you which." };
+  return { adapter: "none", note: "Preview only for now. Check and Build leave out layers with this finish and tell you which." };
 }

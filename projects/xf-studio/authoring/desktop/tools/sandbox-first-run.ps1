@@ -1,9 +1,10 @@
 # Runs inside Windows Sandbox (see sandbox-trial.ts), unattended. Records the environment,
 # checks the setup ZIP against its checksum, installs quietly, launches the installed app with
-# no preview assets and captures what happened: screenshots, the app's desktop.log, WebView2
-# presence, whether the loopback server answers, and the page state through a WebView2
-# remote-debugging port (safe here: the sandbox is disposable). Everything goes to the mapped
-# results folder; with -AutoClose the sandbox shuts itself down when done.
+# no preview assets and walks a first-time user's session through Windows UI Automation
+# (sandbox-ui.ps1): WebView2 consent if needed, welcome, UV editor, edit and Undo, library save,
+# fixture import and Check, About and Licences, close and relaunch, then uninstall. It records
+# WebView2 presence, the loopback server, the app's desktop.log and app-window screenshots in the
+# mapped results folder; with -AutoClose the sandbox shuts itself down when done.
 param([switch]$AutoClose)
 $ErrorActionPreference = "Continue"
 $in = Join-Path $env:USERPROFILE "Desktop\xfs-input"
@@ -38,12 +39,9 @@ function AppWindow {
   return $app
 }
 function Shot([string]$name) {
+  # Always the XF Studio window itself (in-page dialogs included), sized by AppWindow.
   $app = AppWindow
-  # A message box in front of the app is what the user sees, so capture the foreground window then.
-  $front = [XfsWin]::GetForegroundWindow()
-  $r = New-Object XfsWin+RECT; [void][XfsWin]::GetWindowRect($front, [ref]$r)
-  $dialog = $app -and $front -ne $app.MainWindowHandle -and ($r.Right - $r.Left) -lt 1000
-  if ($app -and -not $dialog) { ShotWindow $app.MainWindowHandle $name } else { ShotWindow $front $name }
+  if ($app) { [void]$shell.AppActivate($app.Id); Start-Sleep -Milliseconds 400; ShotWindow $app.MainWindowHandle $name }
 }
 function Pv([string]$key) { try { (Get-ItemProperty -Path $key -ErrorAction Stop).pv } catch { $null } }
 # Evaluate one expression in the first WebView2 page through the remote-debugging port.
@@ -154,46 +152,80 @@ if ($version) { $report.packagedVersion = Get-Content $version.FullName -Raw | C
 Save
 
 if ($launcher) {
-  # The installer's Close starts the app itself; restart it here so the debugging port applies.
-  Start-Sleep -Seconds 3
-  Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
-  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
-  Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
-  Start-Sleep -Seconds 25
-  $report.windows = @(Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { "$($_.ProcessName): $($_.MainWindowTitle)" })
-  $bun = @(Get-Process bun -ErrorAction SilentlyContinue)
-  $ports = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $bun.Id -contains $_.OwningProcess } | ForEach-Object { $_.LocalPort })
-  $report.loopback = @($ports | ForEach-Object {
-    try { $r = Invoke-WebRequest "http://127.0.0.1:$_/" -UseBasicParsing -TimeoutSec 5; "$_ -> $($r.StatusCode)" }
-    catch { "$_ -> $($_.Exception.Response.StatusCode.value__)" } })
-  $report.webview2Processes = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count
-  $report.recentAppErrors = @(Get-WinEvent -FilterHashtable @{ LogName = "Application"; Level = 2; StartTime = $t } -MaxEvents 5 -ErrorAction SilentlyContinue |
-    ForEach-Object { $_.Message.Substring(0, [Math]::Min(300, $_.Message.Length)) })
-  $report.pageFirstRun = PageState 9222 $state
-  Shot "first-run"
-  Save
-  # The welcome's first button (Start designing) has focus, so Enter dismisses it.
-  $app = Get-Process | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
-  if ($app) {
-    [void]$shell.AppActivate($app.Id); Start-Sleep -Seconds 1; $shell.SendKeys("{ENTER}"); Start-Sleep -Seconds 4
-    $report.pageAfterWelcome = PageState 9222 $state
-    Shot "after-welcome"
-    # Close and reopen: the welcome must not return, and the draft must come back.
-    [void]$app.CloseMainWindow(); Start-Sleep -Seconds 12
-    $report.closedCleanly = -not (Get-Process -Id $app.Id -ErrorAction SilentlyContinue)
-    Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  $fixture = Join-Path $in "fixture-collection.json"
+  . (Join-Path $in "sandbox-ui.ps1")
+  function StopApp { Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+  function StartApp {
     Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
-    Start-Sleep -Seconds 25
-    $report.pageRelaunch = PageState 9222 $state
-    Shot "relaunch"
   }
+  function WaitAppWindow([int]$seconds) {
+    $end = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $end) {
+      $w = Get-Process bun -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
+      if ($w) { return $w }
+      Start-Sleep -Seconds 1
+    }
+  }
+  # The installer's Close starts the app itself; restart it so the trial controls exactly one instance.
+  Start-Sleep -Seconds 3; StopApp
+  StartApp
+  $window = WaitAppWindow 30
+  Start-Sleep -Seconds 4
+  $report.webview2BeforeApp = [bool](Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client") -or [bool](Pv "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$client")
+  if (-not $report.webview2BeforeApp -and $window) {
+    # Expect XF Studio's own consent prompt; accept it with its default button, the one click a user makes.
+    [void]$shell.AppActivate($window.Id); Start-Sleep -Milliseconds 800
+    ShotWindow ([IntPtr]::Zero) "00-webview2-consent"
+    $report.consentText = (Get-Process -Id $window.Id).MainWindowTitle
+    $shell.SendKeys("{ENTER}")
+    $report.consentClicked = (Get-Date).ToString("o")
+    Save
+    Start-Sleep -Seconds 20
+    ShotWindow ([IntPtr]::Zero) "00-webview2-installing"
+    $end = (Get-Date).AddMinutes(10)
+    while ((Get-Date) -lt $end -and -not (Get-Process msedgewebview2 -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 3 }
+    $report.webview2InstallSeconds = [int]((Get-Date) - [datetime]$report.consentClicked).TotalSeconds
+  }
+  $report.webview2After = [ordered]@{
+    hklmWow64 = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client"
+    hkcu = Pv "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$client"
+    processes = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count }
+  Save
+  if ($report.webview2After.processes -gt 0) {
+    Start-Sleep -Seconds 5
+    [void](AppWindow)
+    UiFirstRun
+    ShotWindow ((AppWindow).MainWindowHandle) "09-app-window"
+    # Close normally (the save handshake runs), then relaunch: no welcome, same collection.
+    $app = AppWindow
+    if ($app) {
+      [void]$shell.AppActivate($app.Id); $shell.SendKeys("{ESC}"); Start-Sleep -Milliseconds 500   # close any open dialog first
+      [void]$app.CloseMainWindow(); $gone = $app.WaitForExit(20000); $report.closedCleanly = $gone
+      if (-not $gone) { ShotWindow $app.MainWindowHandle "close-blocked" }
+    }
+    StopApp
+    StartApp
+    [void](WaitAppWindow 30); Start-Sleep -Seconds 6; [void](AppWindow)
+    UiRelaunch
+    $app = AppWindow
+    if ($app) { [void]$app.CloseMainWindow(); [void]$app.WaitForExit(20000) }
+  } else {
+    Shot "no-webview2"
+  }
+  StopApp
   $dataRoot = Join-Path $env:LOCALAPPDATA "dev.axefrog.xf-studio\canary"
-  $report.dataRoot = [ordered]@{ exists = Test-Path $dataRoot
-    files = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
-    webViewFolder = @(Get-ChildItem $dataRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) }
   $log = Join-Path $dataRoot "desktop.log"
   if (Test-Path $log) { Copy-Item $log (Join-Path $out "desktop.log") }
+  $report.dataRootBeforeUninstall = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  # Default App uninstall: removes the app, keeps the library and settings.
+  $uninstaller = Join-Path $dataRoot "uninstall.exe"
+  if (Test-Path $uninstaller) {
+    $u = Start-Process $uninstaller -ArgumentList "--quiet" -PassThru; [void]$u.WaitForExit(120000)
+    Start-Sleep -Seconds 5
+    $report.uninstall = [ordered]@{ exit = $u.ExitCode
+      launcherRemains = [bool](Get-ChildItem $dataRoot -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue)
+      kept = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) }
+  } else { $report.uninstall = "uninstall.exe not found" }
 }
 $report.finished = (Get-Date).ToString("o")
 Save

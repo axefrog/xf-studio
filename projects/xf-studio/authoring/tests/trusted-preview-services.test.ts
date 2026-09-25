@@ -50,7 +50,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
     setBlink: () => calls.push("blink"), animateBlink: () => calls.push("play") };
   const services = createTrustedPreviewServices(workspace, {
     savedAppearance: { apply: () => { calls.push("save"); return { applied: [], appearanceReferences: 0,
-      matchedDetails: [], matchedHair: true, matchedPiercing: false, eyeAppearance: { message: "" } }; } },
+      matchedDetails: [], matchedHair: true, matchedPiercing: false, eyeAppearance: { message: "" }, eyeShape: 9 }; } },
     preview, motion,
   });
   expect(services.restoredSavedAppearance?.suggestedEyeShape).toBe(9);
@@ -67,7 +67,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   // suggested selector must not apply the eye morph a second time.
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
   core = createTrustedAuthoringCore(workspace, { resetStack: () => {},
-    selectedCollection: () => "draft", controlAction: action => core.recipe.dispatch(action) });
+    selectedCollection: () => "draft" });
   core.app.attach({ preview: actions, savedV: services.savedAppearance });
   const before = calls.filter(call => call.startsWith("eye:")).length;
   const imported = services.savedAppearance.dispatch({ kind: "savedV.restore", value: saved });

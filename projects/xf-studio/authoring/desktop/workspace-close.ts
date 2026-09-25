@@ -10,6 +10,8 @@ export class DesktopWorkspaceClose {
     report(message: string): void;
     /** False while no Studio page has loaded a workspace: there is nothing to save, so close at once. */
     rendererReady?(): boolean;
+    /** After a failed save: ask whether to close anyway. Resolves true to close without saving. */
+    confirmCloseWithoutSaving?(): Promise<boolean>;
   }, private readonly timeoutMs = 10_000) {}
 
   request(event: { response?: { allow: boolean } }) {
@@ -29,7 +31,7 @@ export class DesktopWorkspaceClose {
     this.timer = undefined;
     this.pending = null;
     if (status === "saved") this.port.close();
-    else this.port.report("Workspace save failed. Keep the window open and retry closing or export the collection.");
+    else this.offerClose("Workspace save failed. Keep the window open and retry closing or export the collection.");
     return true;
   }
 
@@ -38,7 +40,13 @@ export class DesktopWorkspaceClose {
     this.pending = null;
     clearTimeout(this.timer);
     this.timer = undefined;
-    this.port.report(message);
+    this.offerClose(message);
+  }
+
+  /** A failed save must never trap the user: report it, then offer Close without saving. */
+  private offerClose(message: string) {
+    try { this.port.report(message); } catch { /* The page may be gone. */ }
+    void this.port.confirmCloseWithoutSaving?.().then(close => { if (close) this.port.close(); }, () => {});
   }
 }
 

@@ -26,6 +26,7 @@ projects/*/authoring/.server-*.log
 projects/*/authoring/data/
 projects/*/authoring/desktop/static/
 projects/*/authoring/desktop/build-tools/
+projects/*/authoring/desktop/webview2/
 projects/*/authoring/desktop/build/
 projects/*/authoring/desktop/.hutch/
 projects/*/authoring/desktop/.cottontail-tmp/

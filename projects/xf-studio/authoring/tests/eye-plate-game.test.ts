@@ -7,16 +7,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureEyePlate } from "../src/eye-plate-service";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
+import { oracleTest } from "./optional-oracles";
 
 const game = process.env.XFS_TEST_GAME_ROOT, wolvenkit = process.env.XFS_TEST_WOLVENKIT;
 const available = !!game && !!wolvenkit && existsSync(join(game, "archive", "pc", "content")) && existsSync(wolvenkit);
-if (!available) console.warn("eye-plate-game.test.ts skipped: set XFS_TEST_GAME_ROOT and XFS_TEST_WOLVENKIT to verify the built-in plate against an installed game.");
+const gameTest = oracleTest(available, "the built-in plate check against an installed game needs XFS_TEST_GAME_ROOT and XFS_TEST_WOLVENKIT.");
 
 // Reference outputs from WolvenKit CLI 8.17.4 and 9.0.1 (identical bytes) for the supported 2.31 head.
 const REFERENCE = { mesh: "58081caf393e7d9e0223e2e646e6ad9bd7107a4ac307edf08fe786e4c38eed26",
   morph: "b8b7c055f6e3dd0f9a38bce2862581be13709d16d347bb55d3adb36a4c550131" };
 
-test.skipIf(!available)("the built-in eye plate derives from the installed game with exact native bytes", async () => {
+gameTest("the built-in eye plate derives from the installed game with exact native bytes", async () => {
   const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-eye-plate-game-"));
   try {
     const tools = createWolvenKitEyePlateTools(wolvenkit!);

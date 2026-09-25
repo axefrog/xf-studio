@@ -45,10 +45,11 @@ Builds are repeatable but **not byte-reproducible**, because Electrobun's archiv
 ### Cutting a release
 
 1. Set `version` in `desktop/package.json` and rename **Unreleased** in the changelog to that version, with a new empty **Unreleased** above it. Merge to `main`.
-2. Optionally run the workflow manually on `main` and try the artifact.
-3. Tag the merged commit (`git tag v0.1.0-alpha.1 <sha>`) and push the tag. CI creates the draft.
-4. Review the draft (body, assets, checksums, attestations), then **publish by hand**.
-5. Set `releaseStatus: "prerelease"` and `release: { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }` in `site.config.json`, run `bun run verify` and `bun run qa`, and merge. The Pages workflow deploys it.
+2. On the development machine, run `XFS_REQUIRE_ORACLES=1 bun test` in `projects/xf-studio/authoring` with the Python oracle, game and resolver variables set ([authoring checks](../../projects/xf-studio/authoring/README.md#checks)). Public CI skips those tests; in this mode a missing prerequisite fails instead of skipping.
+3. Optionally run the workflow manually on `main` and try the artifact.
+4. Tag the merged commit (`git tag v0.1.0-alpha.1 <sha>`) and push the tag. CI creates the draft.
+5. Review the draft (body, assets, checksums, attestations), then **publish by hand**.
+6. Set `releaseStatus: "prerelease"` and `release: { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }` in `site.config.json`, run `bun run verify` and `bun run qa`, and merge. The Pages workflow deploys it.
 
 A mistaken tag fails before any release exists. A bad draft is deleted by hand and the version bumped; published tags are never reused.
 
@@ -119,7 +120,7 @@ The generator and the script's syntax are checked; the in-sandbox run itself has
 1. **Licence — done.** The repository and app are MIT-licensed (top-level `LICENSE`, decided 25 September 2026). MIT is OSI-approved, which also satisfies SignPath's prerequisite.
 2. **Third-party notices — done.** [`projects/xf-studio/THIRD_PARTY_NOTICES.md`](../../projects/xf-studio/THIRD_PARTY_NOTICES.md) was built from the actual canary archive: Bun 1.4.0 (`bin/bun.exe`, MIT, with its statically linked components and the LGPL JavaScriptCore/WebKit source location), the Electrobun 2.0.1 programs and scripts (MIT), the Microsoft WebView2 SDK loader found inside `libNativeWrapper.dll`, Zstandard and the Zig standard library (reproduced as a precaution) and three.js 0.186.0 (MIT), with licence texts. It lives beside the changelog because it describes the app installer, not the whole repository. It is installed with the app, shown under About → Licences and attached to each release; `verify-canary.ts` keeps it current. Cottontail is not shipped, and no fonts or game files are.
 3. **Community clarity — done.** First run, About, Build and every other reachable control explain what isn't in this alpha in plain words; see the [desktop README control inventory](../../projects/xf-studio/authoring/desktop/README.md#community-alpha-control-inventory-25-september).
-4. **WebView2 on clean machines.** Windows Sandbox has no WebView2 Runtime, and the first sandbox run showed a blank white window. The app now detects a missing runtime and offers Microsoft's download page, and any other startup failure explains itself; the full first run in the sandbox still needs the runtime installed there (`--install-webview2`, with the maintainer's go-ahead). Bundling or bootstrapping WebView2 from our installer is a later decision; see the [desktop README sandbox results](../../projects/xf-studio/authoring/desktop/README.md#windows-sandbox-results-25-september).
+4. **WebView2 on clean machines — done.** Windows Sandbox has no WebView2 Runtime, and the first sandbox run showed a blank white window. The app now packages Microsoft's signed Evergreen bootstrapper (Microsoft's distribution guidance allows packaging it) and, before any window, installs a missing runtime with one consent click; the full unattended sandbox first run passes (see the [desktop README sandbox results](../../projects/xf-studio/authoring/desktop/README.md#windows-sandbox-results-25-september)).
 5. **First CI run.** Run the workflow manually on `main`, then install the artifact on a clean machine or in the sandbox.
 6. **Draft review.** Read the release body and check that the checksums and `gh attestation verify` work on the downloaded files.
 

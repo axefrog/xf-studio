@@ -6,6 +6,7 @@ import {
   CONTRIBUTION_CHANNELS, DDS_HEADER_BYTES, destinationContributions, encodeContributions, encodeFlatDds,
   flatMipChain, mipLevelCount, reduceContributions,
 } from "../src/flat-mip-chain";
+import { oracleTest } from "./optional-oracles";
 
 const study = resolve(import.meta.dir, "../../../../experiments/005-preset-collection");
 const linear = (b: number) => { const v = b / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
@@ -169,9 +170,9 @@ const oracle = (() => {
     return probe.exitCode === 0;
   } catch { return false; }
 })();
-if (!oracle) console.warn("Skipping the mip_maps.py byte-identity oracle: Python with NumPy is not available.");
+const oracleCase = oracleTest(oracle, "the mip_maps.py byte-identity oracle needs Python with NumPy (set XFS_PYTHON).");
 
-test.skipIf(!oracle)("DDS bytes are identical to the Python mip_maps.py oracle", () => {
+oracleCase("DDS bytes are identical to the Python mip_maps.py oracle", () => {
   const dir = mkdtempSync(resolve(tmpdir(), "xfs-mip-oracle-"));
   try {
     const cases = [{ size: 1, seed: 1 }, { size: 2, seed: 2 }, { size: 64, seed: 3 }, { size: 256, seed: 4 }];

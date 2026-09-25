@@ -1,0 +1,125 @@
+# XF Studio authoring suite: tests, typechecks and the browser build on every push to main and
+# every pull request that touches the Studio source. Nothing is built for release or uploaded.
+#
+# - authoring (Ubuntu): `bun test` (which also runs the desktop host tests), `bun run check` and
+#   `bun run build` in projects/xf-studio/authoring. The suite has no platform-specific tests.
+# - desktop (Windows): the desktop typecheck extends the Electrobun SDK type devkit, which Hutch
+#   generates; that step is proven on Windows by desktop-release.yml, so it runs there, followed by
+#   the desktop package's own `bun test tests`.
+#
+# Private preview assets, the game, WolvenKit, MO2 and the Python oracles are absent here, so the
+# tests that need them are skipped with a printed reason. Before a release, run the suite on the
+# development machine with XFS_REQUIRE_ORACLES=1 so those skips fail instead (see
+# projects/xf-studio/authoring/README.md#checks).
+name: Authoring
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/xf-studio/authoring/**"
+      - "experiments/005-preset-collection/**"
+      - ".github/workflows/authoring.yml"
+  pull_request:
+    paths:
+      - "projects/xf-studio/authoring/**"
+      - "experiments/005-preset-collection/**"
+      - ".github/workflows/authoring.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authoring:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: authoring-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        working-directory: projects/xf-studio/authoring
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      # Private preview assets and game-format files are ignored locally; prove none are tracked or
+      # present, which is what makes XFS_PRIVATE_ASSETS=absent below honest.
+      - name: Refuse private inputs
+        run: |
+          if [ -e public/assets ]; then echo "::error::public/assets must not exist in a CI checkout."; exit 1; fi
+          tracked=$(git ls-files -- . | grep -E '(^|/)(assets|preview-assets)/|\.(sqlite|sqlite-wal|sqlite-shm|glb|blend|sav|archive|xl)$' || true)
+          if [ -n "$tracked" ]; then echo "$tracked"; echo "::error::Private or game-format files are tracked under authoring/."; exit 1; fi
+
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          bun install --frozen-lockfile --cwd desktop
+
+      - name: Test
+        env:
+          XFS_PRIVATE_ASSETS: absent
+        run: bun test
+
+      - name: Typecheck
+        run: bun run check
+
+      - name: Browser build
+        run: bun run build
+
+  desktop:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    concurrency:
+      group: authoring-desktop-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: projects/xf-studio/authoring/desktop
+    steps:
+      # Keep LF checkouts, as desktop-release.yml does.
+      - name: Disable CRLF conversion
+        working-directory: ${{ runner.temp }}
+        run: git config --global core.autocrlf false
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install
+        run: |
+          bun install --frozen-lockfile --cwd ..
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Electrobun's npm shim downloads its paired Hutch (SHA-256 checked against the Electrobun
+      # release index); Hutch generates the SDK type devkit the desktop typecheck extends.
+      - name: Prepare Electrobun type devkit
+        run: |
+          $env:HUTCH_HOME = Join-Path $env:RUNNER_TEMP "hutch"
+          bun run prepare:devkit
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Typecheck
+        run: |
+          bun run check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Test
+        run: bun test tests

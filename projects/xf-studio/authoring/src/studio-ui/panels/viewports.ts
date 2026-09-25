@@ -122,16 +122,20 @@ export function headPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const state = frame.viewport.head;
       loading.hidden = state.phase === "ready";
-      if (state.phase === "error") { loading.replaceChildren(icon("error"), h("p", { text: state.error ?? "The 3D preview could not load." }),
-        h("p", { class: "muted small", text: "You can keep working in the UV map." })); loading.dataset.tone = "error"; }
+      // A known reason already says what still works; only an unexplained failure needs the fallback line.
+      if (state.phase === "error") { loading.replaceChildren(icon("error"), ...(state.error ? [h("p", { text: state.error })] :
+        [h("p", { text: "The 3D preview could not load." }), h("p", { class: "muted small", text: "You can keep working in the UV map." })]));
+        loading.dataset.tone = "error"; }
       badge.update(frame); hints.update(frame);
+      // Head gestures and shortcuts mean nothing without a head; the pane explains why instead.
+      if (state.phase !== "ready") hints.strip.hidden = true;
       const preview = frame.preview.preview, motion = frame.preview.motion;
       setAttr(surface, "aria-pressed", String(!!preview?.surface)); setAttr(wire, "aria-pressed", String(!!preview?.wire));
       const playing = !!motion?.idle && !motion.idlePaused;
       if (idle.dataset.playing !== String(playing)) { idle.dataset.playing = String(playing); idle.replaceChildren(icon(playing ? "pause" : "play")); }
       setAttr(idle, "aria-label", !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle");
       idle.hidden = !motion?.available;
-      // Each control shows its own application reason (for example, no 3D preview in this alpha).
+      // Each control shows its own application reason (for example, no 3D preview yet).
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       applyCapability(surface, port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }));
       applyCapability(wire, port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }));

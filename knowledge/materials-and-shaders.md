@@ -98,6 +98,7 @@ WolvenKit maps each class to its value field in `MaterialExtractor.cs:626-646`. 
 | **Cycles crash the game.** A cyclic `baseMaterial` chain does this. | [wiki] `re-using-materials-.mi.md` L29 |
 | **Masking.** Effective masking is `template.canBeMasked && instance.enableMask`. A masked (alpha-test) draw uses the pass's `stagePassNameDiscarded` stage (`…_discarded`); the shader cache records it as `Discarded`. | [source] WolvenKit export logic `MaterialExtractor.cs:313-314,386`; the stage link is [hypothesis] |
 | **Shared templates.** Never edit a shipped template or a shared `.mi`: every user of it changes. About half the player head skin `.mi` files are shared with NPCs. | [wiki] `configuring-materials/README.md` L22-25; `cheat-sheet-head/README.md` L70-72 |
+| **WolvenKit's material export applies this order for us.** `uncook … --mesh-export-type MeshOnly -gp <game>` writes `<mesh>.Material.json`: every mesh-local material resolved through its `.mi` chain (`Data` holds the effective parameters), plus `Appearances` keyed `<name><index>` → chunk material names, and it decodes every texture those materials use. Example (2.31 female head, appearance `default` → `01_ca_pale`): `Albedo` `h0_000_pwa_c__basehead_d01.xbm` and `Normal` `h0_001_pwa_c__basehead_n01.xbm` come from the mesh-local instance, `Roughness` `h0_000_wa_c__basehead_rm01.xbm` from `default_female_head_01_ca_pale.mi` two levels up; a manual `.mi` walk gave the same answer. The Studio's derived preview reads this file instead of re-walking chains (`src/preview-core-materials.ts`). | [resource] 2.31 export, 25 Sep 2026, CLI 8.17.4 and 9.0.1; [source] `MaterialExtractor.cs` |
 
 ### 1.4 Mesh-side binding
 
@@ -458,6 +459,7 @@ Transparency needs `enableMask` [wiki] (`textured-material-properties.md` L25).
 | **Skin and eye roughness maps are multi-channel with template-specific meanings** (skin R/G/B, eye R only). Three.js's default G sampling is wrong for both. | [source] |
 | **Colour is stored as `sqrt(linear)` in the G-buffer.** Whether a texture sample is sRGB-decoded depends on the XBM's `isGamma` / format. Diffuse maps use `isGamma`; normal, roughness and mask maps must be linear. | [source] (sqrt); [wiki] `textures/README.md` L60-62, `ccxl-eye-textures.md` L252 |
 | **Textures are stored vertically flipped** relative to PNG; WolvenKit's `VFlip` handles this. | [wiki] `materials/textures/README.md` L28-29 |
+| **Player head defaults.** The female head mesh's own `default` appearance is the pale tone `01_ca_pale` (D01 albedo). The eye mesh's `default` appearance is a `metal_base.remt` placeholder on all three chunks; the real eye colour is an appearance the character creator selects (e.g. `gradient_brown`, whose albedo is `he_000_base_d02.xbm` and whose colour comes from `IrisColorGradient`). | [resource] 2.31 `h0_000_pwa_c__basehead.mesh`, `he_000_pwa_c__basehead.mesh` |
 | **Gradient and profile ramps** (`.gradient`, `.hp`) are baked at runtime into gradient textures that the shaders address by row. The exact row bytes and filtering are unrecovered. | [source] [exp. 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md) |
 
 ---

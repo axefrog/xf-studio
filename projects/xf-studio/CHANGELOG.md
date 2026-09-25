@@ -11,35 +11,33 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
-- **Glossy, Shimmer and Colour-shifting can now be built into your mod, as experiments.** Each now has a game-matched version whose preview follows how the game can actually draw it: Glossy is one sharp reflection (the game has no separate clear coat), Shimmer uses fine reflective facets that sparkle close up and soften into a sheen further away, and Colour-shifting turns toward a shift colour you choose as the lid curves away from view. Choosing one of these finishes uses the game-matched version; layers you made earlier keep their old look until you press **Use game-matched model**, and Check tells you which ones are waiting. A Colour-shifting preset can only contain that one colour-shift pigment for now. Check, Build and the package record label all three as experimental: the files were checked offline, but nobody has seen them in the game yet. Glitter stays preview-only.
-- **Shift colour and strength for Colour-shifting**, in the Colour & finish panel.
-
 ### Fixes and under the hood
-
-- **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
-- **Existing Matte, Satin and Metallic packages are unchanged.** A regression build of the four-preset test collection came out byte-for-byte identical after the new finishes were added.
-- **An all-black preset no longer fails Build.** The package checker's texture-orientation test now also looks at coverage, so black makeup is checked properly instead of being refused.
-- **Moving or scaling a direct-light Glitter layer** is no longer refused as out of range.
-
-- **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
 
 ## 0.1.0-alpha.1
 
 ### New and improved
 
-- **The first test version of XF Studio for Windows.** XF Studio is a desktop app for designing your own eye makeup for V. It installs for your Windows user, with its own window, icon and About page.
+- **The first test version of XF Studio for Windows.** XF Studio is a desktop app for customising Cyberpunk 2077, starting with your own V. Eye makeup is the first supported feature. It installs for your Windows user, with its own window, icon and About page.
 - **Design eye makeup in layers on the flat UV map.** Build complete looks from stacked layers (up to 32), each with its own colour, opacity, strength and finish. Draw each layer as a smooth or cornered curve, soften its edge (differently at different points if you like), bend it with warp controls, and move, rotate or scale the whole shape. Zoom and pan the map. Every change can be undone.
+- **The 3D head preview, built from your own game.** Once XF Studio knows your Cyberpunk 2077 folder and WolvenKit CLI, it prepares the 3D head preview from your own game files the first time you open it: the head with its facial shapes, the eye-makeup area and the eyes, with the game's default skin and eye textures. On the test PC this took 11 to 16 seconds. It shows its progress, can be cancelled, changes nothing in your game, and the head appears without restarting. If XF Studio finds your game folder it offers to use it; if WolvenKit isn't set up it says so, and the UV editor keeps working. The eyes use the game's plain eye texture rather than your character's eye colour, and brows, lashes, hair and piercings aren't in this preview yet. Checked on one PC with game version 2.31 in a browser run of the app's own server; not yet tried in an installed copy of the app.
 - **Keep your looks in a library.** Presets can be added, copied, renamed, reordered and removed. Your collection is saved in a local library with version history, your current draft comes back when you reopen the app, and looks can be exported and imported as files to back up or share.
 - **Check which looks can become mod files.** Check lists every preset and layer that can be built into **XF Eye Artistry**, the eye-makeup mod the Studio makes for you, and names anything that would be left out, and why. It needs no game files.
-- **What isn't in this alpha yet.** The **3D head preview** isn't available: a preview built from your own game files is planned. **Building the mod files** still needs a developer setup (the game, WolvenKit and build tools), so most people can design and Check but not Build yet. Anything that isn't ready says so where you would use it.
+- **What you set up yourself for now.** The 3D head preview and **Build** both need your game folder and the WolvenKit CLI, set up under **About → Build setup**; XF Studio finds your game folder when it can. No Python is needed. Anything that isn't ready says so where you would use it.
 - **Licences in About.** About → Licences shows XF Studio's MIT licence and the notices for the software it includes.
+
+- **Eyes follow the eye shape.** Changing eye shape moves the eyeballs with the eyelids, as the game does, including during the idle animation and blinks. Eye shapes are numbered like the character creator.
+- **The eye-makeup area follows your own head.** The built-in eye plate is cut from the head your game actually loads, including a head adjusted by an installed mod. If a head mod changes the head in a way XF Eye Artistry doesn't support yet, Build stops and names the mod.
+- **Glossy, Shimmer and Colour-shifting can be built into your mod, as experiments.** Each has a game-matched version whose preview follows how the game can actually draw it: Glossy is one sharp reflection (the game has no separate clear coat), Shimmer uses fine reflective facets that sparkle close up and soften into a sheen further away, and Colour-shifting turns toward a shift colour you choose as the lid curves away from view. Choosing one of these finishes uses the game-matched version; a layer still showing an older preview study is left out of the mod until you press **Use game-matched model**, and Check tells you which ones are waiting. A Colour-shifting preset can only contain that one colour-shift pigment for now. Check, Build and the package record label all three as experimental: the files were checked offline, but nobody has seen them in the game yet.
+- **Shift colour and strength for Colour-shifting**, in the Colour & finish panel.
 
 ### Fixes and under the hood
 
 - Nothing from the game or other mods is included in the download. Every build is checked automatically so that only the app's own files, its licence and the third-party notices are packaged.
 - Mod files the Studio builds are checked automatically but have **not** been tested in the game yet, and nothing is installed into the game or your mod manager for you.
-- Matte, Satin and Metallic can be built. Shimmer, Glitter, Glossy and Colour-shifting are preview only: Check and Build leave those layers out and tell you which.
+- Matte, Satin and Metallic can be built. Glossy, Shimmer and Colour-shifting can be built as experiments (see above). Glitter is preview only: Check and Build leave those layers out and tell you which.
 - The installer is not code-signed, so Windows SmartScreen may warn before it runs. Checksums and a build-provenance attestation are published with each release so you can check the file came from this project's automated build.
 - Automatic updates are off. Download new versions from the releases page. Installing one version over another hasn't been tested yet, so export your looks as a backup first. Uninstalling with the default **App** option keeps your library and settings.
+- **Autosave you can rely on.** Your draft is saved only after you change something, keeps full Undo for the preset you are working on and the last few steps for the others, and a damaged backup entry no longer stops the rest of your draft from coming back. If storage runs short, the status bar says so.
 - Closing the window waits for your latest draft to be saved, and shows a message instead of closing if saving fails.
-- XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows 10 and 11 PCs already have. If it's missing, the app says so and offers Microsoft's download page instead of showing an empty window, and any other startup failure shows **Try again** and **Copy diagnostics**.
+- XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows PCs already have. If it's missing, XF Studio offers to install it for you with one click, using Microsoft's own installer, and then opens. Any other startup failure shows **Try again** and **Copy diagnostics** instead of an empty window.
+- Build's independent check unpacks and converts the finished mod files itself and reads the ArchiveXL file line by line, so fewer kinds of faulty output can slip through.

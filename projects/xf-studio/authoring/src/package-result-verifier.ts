@@ -4,7 +4,7 @@ import { resolve, sep } from "node:path";
 import type { PackageBuild } from "./package-action";
 import type { PresetCollection } from "./preset-collection";
 import type { preparePackageCollection } from "./package-filter";
-import type { EyePlateManifest } from "./eye-plate-service";
+import { packagePlateRecord, type EyePlateManifest } from "./eye-plate-service";
 
 function fileSha256(path: string): string {
   const digest = createHash("sha256"), buffer = Buffer.alloc(1024 * 1024), handle = openSync(path, "r");
@@ -81,9 +81,7 @@ export function verifyPackageBuildResult(
       manifest.installed !== false || manifest.gameRenderingVerified !== false)
     throw Error("Package manifest does not match this collection snapshot.");
   if (expectedPlate) {
-    const plate = { source: "derived", recipeId: expectedPlate.recipeId, recipeRevision: expectedPlate.recipeRevision,
-      sourceRevision: expectedPlate.source.revisionId, cacheKey: expectedPlate.cacheKey,
-      meshSha256: expectedPlate.files.mesh.sha256, morphSha256: expectedPlate.files.morph.sha256 };
+    const plate = packagePlateRecord(expectedPlate);
     if (JSON.stringify(manifest.plate) !== JSON.stringify(plate) || JSON.stringify(built.plate) !== JSON.stringify(plate))
       throw Error("Package was not built from the prepared eye plate.");
   }

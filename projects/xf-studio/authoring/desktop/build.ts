@@ -7,7 +7,8 @@ import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import type { PackageBuild } from "../src/package-action";
 import type { LocalSettings } from "../src/local-settings";
-import { EyePlateError, ensureEyePlate, type EyePlateResult } from "../src/eye-plate-service";
+import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateResult } from "../src/eye-plate-service";
+import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 import { runProcessTree } from "../src/process-tree";
 
@@ -33,6 +34,9 @@ const inside = (path: string, root: string) => {
   return target === base || target.startsWith(base + sep);
 };
 export type WolvenKitProbe = (path: string) => string | null;
+export type BunProbe = (path: string) => string | null;
+/** Shown while the first tool check runs in the background; readiness requests never wait for it. */
+export const PROBE_PENDING = "XF Studio is still checking your build tools. Try again in a moment.";
 const wolvenKitCache = new Map<string, { issue: string | null; until: number }>();
 const bunCache = new Map<string, { issue: string | null; until: number }>();
 /** Execute code, rather than trusting a filename or the Electrobun main path. */
@@ -69,6 +73,79 @@ export const probeWolvenKit: WolvenKitProbe = path => {
   wolvenKitCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
   return issue;
 };
+const stampKey = (path: string) => { const stamp = statSync(path); return `${path}|${stamp.size}|${stamp.mtimeMs}`; };
+async function run(path: string, args: string[], timeoutMs: number) {
+  const child = Bun.spawn([path, ...args], { stdout: "pipe", stderr: "pipe", windowsHide: true });
+  const timer = setTimeout(() => child.kill(), timeoutMs);
+  try {
+    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    return { stdout, stderr, code };
+  } finally { clearTimeout(timer); }
+}
+const inFlight = new Map<string, Promise<void>>();
+function once(key: string, work: () => Promise<void>): Promise<void> {
+  let pending = inFlight.get(key);
+  if (!pending) { pending = work().finally(() => inFlight.delete(key)); inFlight.set(key, pending); }
+  return pending;
+}
+/** The same checks as probeWolvenKit/probeBun without blocking the event loop; one shared run per tool. */
+export async function warmBuildProbes(settings: LocalSettings): Promise<void> {
+  const jobs: Promise<void>[] = [];
+  if (settings.wolvenKitCli && file(settings.wolvenKitCli)) {
+    const path = settings.wolvenKitCli, key = stampKey(path);
+    const cached = wolvenKitCache.get(key);
+    if (!cached || Date.now() >= cached.until) jobs.push(once(`wk:${key}`, async () => {
+      let issue: string | null = null;
+      try {
+        const version = await run(path, ["--version"], 15_000);
+        if (version.code !== 0 || !/\b(?:8\.17\.4|9\.0\.1)\b/.test(version.stdout + version.stderr))
+          issue = "WolvenKit CLI must be a validated 8.17.4 or 9.0.1 installation.";
+        else {
+          const help = await run(path, ["--help"], 15_000);
+          const commands = help.stdout + help.stderr;
+          if (help.code !== 0 || !["import", "export", "convert", "pack", "extract"].every(name => new RegExp(`\\b${name}\\b`, "i").test(commands)))
+            issue = "WolvenKit CLI does not expose the required build and verification commands.";
+        }
+      } catch { issue = "WolvenKit CLI could not complete its version and command checks."; }
+      wolvenKitCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
+    }));
+  }
+  const bun = settings.bunExecutable || process.execPath;
+  if (file(bun)) {
+    const key = stampKey(bun), cached = bunCache.get(key);
+    if (!cached || Date.now() >= cached.until) jobs.push(once(`bun:${key}`, async () => {
+      let issue: string | null = null;
+      try {
+        const result = await run(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], 5000);
+        if (result.code !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "The selected Bun executable cannot run the packaged compiler scripts.";
+      } catch { issue = "The selected Bun executable could not be checked."; }
+      bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
+    }));
+  }
+  await Promise.all(jobs);
+}
+/** Readiness-path probes: answer from the cache, or start a background check and say so. */
+export const cachedWolvenKitProbe: WolvenKitProbe = path => {
+  const cached = wolvenKitCache.get(stampKey(path));
+  if (cached && Date.now() < cached.until) return cached.issue;
+  void warmBuildProbes({ wolvenKitCli: path } as LocalSettings).catch(() => {});
+  return PROBE_PENDING;
+};
+export const cachedBunProbe: BunProbe = path => {
+  const cached = bunCache.get(stampKey(path));
+  if (cached && Date.now() < cached.until) return cached.issue;
+  void warmBuildProbes({ bunExecutable: path } as LocalSettings).catch(() => {});
+  return PROBE_PENDING;
+};
+const toolHashes = new Map<string, string>();
+/** The packaged tool's SHA-256, recomputed only when its size or modification time changes. */
+function toolHash(path: string): string {
+  const key = stampKey(path);
+  let hash = toolHashes.get(key);
+  if (!hash) { hash = createHash("sha256").update(readFileSync(path)).digest("hex"); toolHashes.set(key, hash); }
+  return hash;
+}
+
 function privatePath(root: string, target: string): void {
   const base = resolve(root), path = resolve(target);
   if (!inside(path, base) || lstatSync(base).isSymbolicLink()) throw Error("Private build root uses a linked path.");
@@ -89,7 +166,7 @@ export const desktopPlateCache = (dataRoot: string) => resolve(dataRoot, "plate-
 
 /** A packaged code bundle, external executables and the game are required; the eye plate is built in. */
 export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, toolsRoot: string,
-  wolvenKitProbe: WolvenKitProbe = probeWolvenKit): string | null {
+  wolvenKitProbe: WolvenKitProbe = probeWolvenKit, bunProbe: BunProbe = probeBun): string | null {
   try {
     const manifest = JSON.parse(readFileSync(resolve(toolsRoot, "manifest.json"), "utf8"));
     if (manifest.schema !== BUILD_TOOLS_SCHEMA || !manifest.files ||
@@ -99,7 +176,7 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     for (const name of toolNames) {
       const path = resolve(toolsRoot, name);
       if (!file(path) || !inside(realpathSync(path), actualTools) ||
-        createHash("sha256").update(readFileSync(path)).digest("hex") !== manifest.files[name])
+        toolHash(path) !== manifest.files[name])
         return "The packaged build tools failed integrity checks.";
     }
   } catch { return "The packaged build tools are unavailable."; }
@@ -113,7 +190,7 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     return "The selected game executable is not a Windows executable.";
   const bun = settings.bunExecutable || process.execPath;
   if (!file(bun)) return "The Bun executable is unavailable.";
-  const bunIssue = probeBun(bun);
+  const bunIssue = bunProbe(bun);
   if (bunIssue) return bunIssue;
   try {
     for (const name of privateRoots) privatePath(dataRoot, resolve(dataRoot, name));
@@ -139,13 +216,23 @@ type BuildOutcome = { kind: "success"; result: PackageBuild } |
 
 /** Prepares the verified built-in eye plate for one Build; injectable for host tests. */
 export type DesktopPlatePreparer = (settings: LocalSettings, cacheRoot: string, signal: AbortSignal) => Promise<EyePlateResult>;
+/**
+ * The plate is cut from the head the saved launch route loads (base game, or a mod's head when its topology
+ * matches). XFS_EYE_PLATE_HEAD=base-game in the app's environment is the documented escape hatch.
+ */
 export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, signal) => ensureEyePlate({
-  gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal });
+  gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal,
+  headSource: createInstalledHeadSource({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli! },
+  resolve(cacheRoot, "resolver")),
+  headOverride: eyePlateHeadOverride(process.env) });
 
 /** Prepare the built-in eye plate, then run the packaged builder as one bounded process tree; publish only the shared verified result. */
 export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,
   timeoutMs = buildDeadlineMs, signal?: AbortSignal, wolvenKitProbe: WolvenKitProbe = probeWolvenKit,
-  preparePlate: DesktopPlatePreparer = prepareDesktopPlate): Promise<BuildOutcome> {
+  preparePlate: DesktopPlatePreparer = prepareDesktopPlate, log: (message: string) => void = message => console.error(message)): Promise<BuildOutcome> {
+  // Build itself waits for definitive tool checks (async, shared with readiness requests).
+  if (wolvenKitProbe === probeWolvenKit) await warmBuildProbes(settings);
   const issue = desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe);
   if (issue) return { kind: "failure", code: "package_build_unavailable", message: issue };
   const started = Date.now();
@@ -170,7 +257,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
     plate = await preparePlate(settings, desktopPlateCache(dataRoot), plateDeadline.signal);
   } catch (error) {
     if (error instanceof EyePlateError) {
-      if (error.detail) console.error("Desktop eye plate preparation failed:", error.detail.slice(-3000));
+      if (error.detail) log(`Build: eye plate preparation failed (${error.code}): ${error.detail.slice(-3000)}`);
       if (error.code === "plate_cancelled") return signal?.aborted
         ? { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." }
         : { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
@@ -192,7 +279,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
       return { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
     if (run.stopped === "cancelled") return { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." };
     if (run.exitCode !== 0) {
-      console.error("Desktop package tool failed:", (run.error?.message ?? run.stderr).slice(-3000));
+      log(`Build: the package tool failed (exit ${run.exitCode}): ${(run.error?.message ?? run.stderr).slice(-3000)}`);
       return { kind: "failure", code: "package_build_failed", message: "Package Build failed. No candidate was published." };
     }
     const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
@@ -208,7 +295,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
     verifyPackageBuildResult(result, collection, prepared, source, candidateRoot, plate.manifest);
     return { kind: "success", result };
   } catch (error) {
-    console.error("Desktop package result failed:", (error as Error).message);
+    log(`Build: the package result failed verification: ${(error as Error).message}`);
     return { kind: "failure", code: "package_build_failed", message: "Package Build could not verify its result. No candidate was published." };
   } finally {
     rmSync(work, { recursive: true, force: true });

@@ -1,5 +1,6 @@
 import { parseCollection, type PresetCollection } from "./preset-collection";
 import type { PackageExperimental, PackageOmission } from "./package-filter";
+import type { EyePlateHeadRecord } from "./eye-plate-head-source";
 
 export type PackageAction = "check" | "build";
 /** `modName`/`selectorLabel` come from the shared mod-branding module via the export plan. */
@@ -7,9 +8,12 @@ export type PackageCheck = { ready: true; collectionId: string; namespace: strin
   originalPresetCount: number; omissions: PackageOmission[]; packagedCollectionSha256: string;
   /** Included layers whose finish adapter still needs in-game confirmation. */
   experimental?: PackageExperimental[] };
-/** Which eye plate was packaged: the built-in plate derived from the installed game, or a developer override. */
+/**
+ * Which eye plate was packaged: the built-in plate derived from the installed game (with the head resources it
+ * was cut from: base game, installed mods or the base-game escape hatch), or a developer override.
+ */
 export type PackagePlate = { source: "derived"; recipeId: string; recipeRevision: number; sourceRevision: string; cacheKey: string;
-  meshSha256: string; morphSha256: string } | { source: "override"; meshSha256: string; morphSha256: string };
+  meshSha256: string; morphSha256: string; head?: EyePlateHeadRecord } | { source: "override"; meshSha256: string; morphSha256: string };
 export type PackageBuild = { package: string; manifest: string; modName: string; selectorLabel: string;
   archiveSha256: string; presetCount: number; plate?: PackagePlate;
   originalPresetCount: number; omissions: PackageOmission[]; packagedCollectionSha256: string;

@@ -57,7 +57,7 @@ test("saved appearance service applies validated V atomically and exposes eye se
   let applied = 0;
   const actions = new SavedAppearanceActions({ apply: () => { applied++;
     return { applied: ["h091_eyes"], appearanceReferences: 0, matchedDetails: [], matchedHair: false,
-      matchedPiercing: false, eyeAppearance: { message: "Reference eye" } }; } });
+      matchedPiercing: false, eyeAppearance: { message: "Reference eye" }, eyeShape: 9 }; } });
   const state = actions.dispatch({ kind: "savedV.restore", value: saved });
   expect(state.suggestedEyeShape).toBe(9);
   expect(state.result?.applied).toEqual(["h091_eyes"]);

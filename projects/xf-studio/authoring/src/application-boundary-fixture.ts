@@ -1,32 +1,18 @@
-import { AuthoringControlEdits } from "./authoring-control-edits";
-import { AuthoringDocument } from "./authoring-document";
-import { AuthoringLayerActions } from "./authoring-layer-actions";
-import { AuthoringGestures } from "./authoring-gestures";
 import { CollectionService } from "./collection-service";
 import { collectionDraft } from "./collection-workspace";
 import { PreviewQualityActions } from "./preview-quality-actions";
-import { RecipeActions } from "./recipe-actions";
-import { StudioApplication } from "./studio-application";
+import type { StudioApplication } from "./studio-application";
+import { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import { freshWorkspace } from "./workspace-state";
 
 /** Small replaceable-presentation fixture: no current sidebar, scene, worker or storage. */
-const initial = freshWorkspace(), documentState = new AuthoringDocument(initial);
-const undo = () => { const recipe = documentState.undoRecipe();
-  if (!recipe) return false;
-  documentState.replaceRecipe(recipe,
-    recipe.layers.findIndex(layer => layer.id === documentState.recipe.layers[documentState.active]?.id));
-  return true; };
+const initial = freshWorkspace();
 let collection: CollectionService;
-const recipe = new RecipeActions(() => ({ recipe: documentState.recipe, active: documentState.active,
-  selected: documentState.selected, fieldSelection: documentState.fieldSelection }),
-(next, effect) => documentState.applyActionState(next, effect), documentState, {},
-() => collection?.snapshot()?.selected ?? "fixture", index => documentState.gestureChanged(index));
-const gestures = new AuthoringGestures(documentState, recipe, undo);
-const controls = new AuthoringControlEdits(documentState, action => { recipe.dispatch(action); }, undo);
+const core = createTrustedAuthoringCore(initial, { resetStack: () => {},
+  selectedCollection: () => collection?.snapshot()?.selected ?? "fixture" });
+const documentState = core.document, app = core.app;
 const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-const layerActions = new AuthoringLayerActions(documentState, () => {});
-const app = new StudioApplication({ document: documentState, recipe, gestures, controls, quality,
-  layer: action => layerActions.dispatch(action), undo });
+app.attach({ quality });
 const presetId = crypto.randomUUID(), collectionId = crypto.randomUUID();
 collection = new CollectionService(collectionDraft({ schema: "xfas/collection-1", id: collectionId,
   name: "Fixture collection", presets: [{ id: presetId, name: "Fixture preset", revision: 1,
@@ -79,7 +65,9 @@ const opacity = $<HTMLInputElement>("opacity");
 opacity.onpointerdown = () => { const layer = documentState.snapshot().recipe.layers[documentState.active];
   if (layer) app.controlBegin("opacity", layer.id); };
 opacity.oninput = () => { const layer = documentState.snapshot().recipe.layers[documentState.active];
-  if (layer) app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer.id, opacity: +opacity.value }); };
+  if (!layer) return;
+  const result = app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer.id, opacity: +opacity.value });
+  if (!result.ok) show(`${result.code}: ${result.message}`); };
 opacity.onchange = () => app.controlCommit("opacity");
 opacity.onkeydown = event => { if (event.key === "Escape") { app.controlCancel("opacity"); event.preventDefault(); } };
 paint();

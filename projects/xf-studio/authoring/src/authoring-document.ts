@@ -1,4 +1,4 @@
-import { RecipeHistory } from "./editor-actions";
+import { RecipeHistory, type HistoryEntryId } from "./editor-actions";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { parseRecipe, type Recipe } from "./recipe";
 import type { RecipeActionEffect, RecipeActionState } from "./recipe-actions";
@@ -82,12 +82,18 @@ export class AuthoringDocument {
     const prior = this.pendingLabel; this.pendingLabel = label;
     try { return change(); } finally { this.pendingLabel = prior; }
   }
-  checkpoint(_recipe?: Recipe, label?: HistoryLabel) {
-    this.history.checkpoint(this.state.recipe, label ?? this.pendingLabel); this.notify("history");
+  /** Record the current recipe; returns the added entry, or undefined when it duplicated the top entry. */
+  checkpoint(_recipe?: Recipe, label?: HistoryLabel): HistoryEntryId | undefined {
+    const added = this.history.checkpoint(this.state.recipe, label ?? this.pendingLabel); this.notify("history");
+    return added;
   }
   /** Name an open transaction's entry once its first edit shows what it does. */
-  relabelCheckpoint(depth: number, label: HistoryLabel) {
-    if (this.history.depth === depth) this.history.relabelTop(label);
+  relabelCheckpoint(entry: HistoryEntryId, label: HistoryLabel) { this.history.relabel(entry, label); }
+  /** True while `entry` is the one the next Undo restores. */
+  isLatestCheckpoint(entry: HistoryEntryId) { return this.history.isTop(entry); }
+  /** Drop an empty transaction's own checkpoint; never removes an older entry. */
+  discardCheckpoint(entry: HistoryEntryId) {
+    const removed = this.history.discard(entry); if (removed) this.notify("history"); return removed;
   }
   historyLabel() { return this.history.topLabel(); }
   undoRecipe() { const recipe = this.history.undo(); if (recipe) this.notify("history"); return recipe; }

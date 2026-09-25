@@ -35,6 +35,7 @@ export function noticeIssues(text: string, facts: NoticeFacts): string[] {
   if (!text.includes(`bun-v${facts.bunVersion}`)) issues.push(`Bun's licence link does not point at bun-v${facts.bunVersion}.`);
   for (const name of facts.binaries)
     if (!text.includes(`\`bin/${name}\``)) issues.push(`Shipped program bin/${name} is not named.`);
+  if (!text.includes("MicrosoftEdgeWebview2Setup.exe")) issues.push("The packaged WebView2 bootstrapper is not named.");
   for (const heading of ["### Bun (MIT)", "### Electrobun (MIT)", "### three.js (MIT)",
     "### GNU Lesser General Public License, version 2.1"])
     if (!text.includes(heading)) issues.push(`Missing licence text: ${heading.slice(4)}.`);

@@ -1,5 +1,6 @@
 import type { CameraState, PreviewState } from "./workspace-state";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
+import type { FaceMorphChoice } from "./face-morphs";
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "piercingStyle" | "piercingDefinition" |
@@ -21,6 +22,10 @@ export type PreviewActionResult = { limited?: boolean };
 export type PreviewCapability = { available: boolean; reason?: string };
 export type PiercingPreviewOption = { id: string; label: string;
   choices: { index: number; definition: string; label: string }[] };
+/** Eye-shape choices as the loaded head carries them, and whether the eyeballs follow them. */
+export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean; eyeSource: string | null };
+/** Persisted workspace bounds before a head is loaded (the female creator's 22 choices). */
+export const MAX_EYE_SHAPE_INDEX = 21;
 export type PreviewPort = {
   cameraState(): CameraState; front(): boolean; setFov(degrees: number): boolean | undefined; endFovGesture(): void;
   restoreCamera(camera: CameraState): void;
@@ -30,6 +35,7 @@ export type PreviewPort = {
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
   setPiercingPreview(style: string, definition: string): void;
   piercingOptions?(): PiercingPreviewOption[];
+  eyeShapeOptions?(): EyeShapeOptions;
   setDetail(detail: "brows" | "lashes", enabled: boolean): void;
   availability?(target: "brows" | "lashes" | "hair"): string | undefined;
 };
@@ -48,6 +54,13 @@ export class PreviewActions {
   piercingOptions(): Readonly<PiercingPreviewOption[]> {
     return structuredClone(this.port.piercingOptions?.() ?? []);
   }
+  eyeShapeOptions(): Readonly<EyeShapeOptions> {
+    return structuredClone(this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null });
+  }
+  private validEyeShape(index: number) {
+    const choices = this.port.eyeShapeOptions?.().choices;
+    return Number.isInteger(index) && index >= 0 && (choices ? index < choices.length : index <= MAX_EYE_SHAPE_INDEX);
+  }
   snapshot(): Readonly<PreviewConfig & { camera: CameraState }> {
     return structuredClone({ ...this.state, camera: this.port.cameraState() });
   }
@@ -63,8 +76,8 @@ export class PreviewActions {
       return { available: false, reason: "Exposure must be between 0.5 and 2." };
     if (action.kind === "preview.setKeyAngle" && (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360))
       return { available: false, reason: "Key light angle must be between 0° and 360°." };
-    if (action.kind === "preview.setEyeShape" && (!Number.isInteger(action.index) || action.index < 0 || action.index > 21))
-      return { available: false, reason: "Eye shape must be between 0 and 21." };
+    if (action.kind === "preview.setEyeShape" && !this.validEyeShape(action.index))
+      return { available: false, reason: "That eye shape is not offered by this head." };
     if (action.kind === "preview.setPiercingPreview" && action.style) {
       const option = this.port.piercingOptions?.().find(item => item.id === action.style);
       if (!option || !option.choices.some(choice => choice.definition === action.definition))
@@ -106,7 +119,7 @@ export class PreviewActions {
   }
   /** Saved facial morph application already changed the renderer; only update the persisted selector. */
   rememberEyeShape(index: number) {
-    if (!Number.isInteger(index) || index < 0 || index > 21) return;
+    if (!this.validEyeShape(index)) return;
     this.state.eyeShape = index;
     for (const listener of this.listeners) listener();
   }

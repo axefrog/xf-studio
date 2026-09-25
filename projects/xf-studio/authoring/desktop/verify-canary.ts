@@ -3,6 +3,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "./electrobun.config";
+import { WEBVIEW2_BOOTSTRAPPER, verifyMicrosoftSignature, webView2Folder } from "./prepare-webview2";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
 import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
 
@@ -59,7 +62,7 @@ const views = `${bundle}/Resources/app/views/studio/`;
 const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWith("/"))
   .map(name => name.slice(views.length));
 sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
-  "build/studio-main.js", "build/raster-worker.js", packagedNotices, packagedLicence], "Packaged Studio view");
+  "build/studio-main.js", "build/raster-worker.js", "boot-watchdog.js", packagedNotices, packagedLicence], "Packaged Studio view");
 // The installed app must carry the current licence and notices, and the notices
 // must name every shipped program and the versions actually built in.
 for (const [name, source] of [[packagedNotices, noticesPath], [packagedLicence, licencePath]] as const)
@@ -81,6 +84,16 @@ for (const name of toolFiles.filter(name => name !== "manifest.json")) {
   if (createHash("sha256").update(tarBytes(["-xOf", archive, toolPrefix + name])).digest("hex") !== toolManifest.files[name])
     throw Error(`Packaged build tool changed: ${name}`);
 }
+// Exactly one extra resource: Microsoft's WebView2 bootstrapper, unmodified and Microsoft-signed.
+const extraPrefix = `${bundle}/Resources/app/webview2/`;
+sameMembers(members.filter(name => name.startsWith(extraPrefix) && !name.endsWith("/")).map(name => name.slice(extraPrefix.length)),
+  [WEBVIEW2_BOOTSTRAPPER], "Packaged WebView2 bootstrapper");
+const packagedBootstrapper = tarBytes(["-xOf", archive, extraPrefix + WEBVIEW2_BOOTSTRAPPER]);
+if (!packagedBootstrapper.equals(readFileSync(resolve(webView2Folder, WEBVIEW2_BOOTSTRAPPER))))
+  throw Error("Packaged WebView2 bootstrapper differs from the verified download.");
+const scratch = mkdtempSync(resolve(tmpdir(), "xfs-webview2-check-"));
+try { writeFileSync(resolve(scratch, WEBVIEW2_BOOTSTRAPPER), packagedBootstrapper); verifyMicrosoftSignature(resolve(scratch, WEBVIEW2_BOOTSTRAPPER)); }
+finally { rmSync(scratch, { recursive: true, force: true }); }
 if (members.some(name => /(?:^|\/)(?:assets|preview-assets|data)(?:\/|$)|\.sqlite(?:-wal|-shm)?$|\.(?:glb|blend|sav)$/i.test(name)))
   throw Error("Canary bundle contains a private asset or data path.");
 
@@ -99,4 +112,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Nine allowlisted Studio view files (licence and third-party notices included), current notices, and one hashed asset-free build tool; no private preview assets or update feed.");
+console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");

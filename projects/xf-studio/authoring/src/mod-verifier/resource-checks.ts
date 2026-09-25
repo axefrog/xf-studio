@@ -128,21 +128,28 @@ function uint64(x: Node, label: string): bigint {
 
 export interface ResourceSummary {
   readonly appearanceNames: string[];
+  readonly morphTargets: number;
   readonly materialTemplates: number;
   readonly meshAppearances: number;
   readonly selectorOptionCount: number;
   readonly resolved: ResolvedPreset[];
 }
 
+/**
+ * Structural checks of the package resources. `morphTargets` is the plate recipe's target count;
+ * null (a developer override plate) accepts the source plate's own non-zero count.
+ */
 export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, artifactPaths: readonly string[],
-  textureSizes: readonly number[]): ResourceSummary {
+  textureSizes: readonly number[], morphTargets: number | null): ResourceSummary {
   const { mesh, morph, app, customization: cc } = r;
   for (const field of ["renderResourceBlob", "boneNames", "boneRigMatrices", "boundingBox"])
     ensure(field in mesh && sameJson(mesh[field], r.sourceMesh[field], IGNORED), `Mesh ${field} differs from the source plate`);
   for (const field of ["blob", "targets"])
     ensure(sameJson(morph[field], r.sourceMorph[field], IGNORED), `Morph ${field} differs from the source plate`);
   ensure(dep(morph.baseMesh) === plan.mesh, "Morph baseMesh does not reference the planned mesh");
-  ensure(morph.targets?.length === 105, "Morph target count is not 105");
+  const targetCount = Array.isArray(morph.targets) ? morph.targets.length : 0;
+  ensure(morphTargets === null ? targetCount > 0 : targetCount === morphTargets,
+    `Morph target count is ${targetCount}, not the plate recipe's ${morphTargets ?? "non-zero count"}`);
   // Material entries: one per distinct template entry, in first-use order across presets.
   const entryNames: string[] = [];
   for (const preset of plan.presets) if (!entryNames.includes(materialOf(preset))) entryNames.push(materialOf(preset));
@@ -275,6 +282,27 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     }
     resolved.push({ appearance: preset.appAppearance, chunkMaterial: suffix + entry, textures: expanded });
   });
-  return { appearanceNames: appearances, materialTemplates: materials.length, meshAppearances: mesh.appearances.length,
+  return { appearanceNames: appearances, morphTargets: targetCount, materialTemplates: materials.length, meshAppearances: mesh.appearances.length,
     selectorOptionCount: option.definitions.length, resolved };
+}
+
+const isMap = (x: Node): boolean => !!x && typeof x === "object" && !Array.isArray(x);
+const keysAre = (x: Node, keys: readonly string[]) => isMap(x) && sameJson(Object.keys(x).sort(), [...keys].sort());
+const depotText = (path: string) => path.replaceAll("/", "\\");
+
+/**
+ * The parsed `.archive.xl` declaration must hold exactly the female customization registration and the
+ * app's `player_customization.app` scope membership, with the planned depot paths, and nothing else.
+ */
+export function checkArchiveXl(plan: VerifierPlan, declaration: Node): void {
+  ensure(keysAre(declaration, ["customizations", "resource"]), "ArchiveXL declaration must contain exactly customizations and resource");
+  const custom = declaration.customizations;
+  ensure(keysAre(custom, ["female"]), "ArchiveXL customizations must declare only the female list");
+  const female = Array.isArray(custom.female) ? custom.female : [custom.female];
+  ensure(sameJson(female, [depotText(plan.customization)]), "ArchiveXL declaration does not register exactly the planned customization");
+  ensure(keysAre(declaration.resource, ["scope"]) && keysAre(declaration.resource.scope, ["player_customization.app"]),
+    "ArchiveXL resource section must hold only the player_customization.app scope");
+  const members = declaration.resource.scope["player_customization.app"];
+  ensure(sameJson(Array.isArray(members) ? members : [members], [depotText(plan.app)]),
+    "ArchiveXL scope does not list exactly the planned app");
 }

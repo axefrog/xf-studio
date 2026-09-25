@@ -20,8 +20,7 @@ function mountFixture() {
   workspace.collections = collectionDraft(source, 3);
   workspace.history = Array.from({ length: 40 }, () => structuredClone(workspace.recipe));
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
-  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft",
-    controlAction: action => { core.recipe.dispatch(action); } });
+  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
   core.app.attach({ quality: new PreviewQualityActions(1024, { assess: () => ({ accepted: true }), replace: () => {} }) });
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 1, height: 1 }),
     resize: () => {}, cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
@@ -76,7 +75,7 @@ test("library summary is a primitive projection with the live layer count and re
 test("preview state excludes document and collection clones", () => {
   const { port } = mountFixture();
   const state = port.authoring.previewState();
-  expect(Object.keys(state).sort()).toEqual(["control", "gesture", "motion", "preview", "previewOptions", "quality", "savedV"]);
+  expect(Object.keys(state).sort()).toEqual(["control", "eyeShapeOptions", "gesture", "motion", "preview", "previewOptions", "quality", "savedV"]);
   expect(state.quality).toMatchObject({ size: 1024, blocked: false });
   expect(state.savedV).toMatchObject({ loaded: false });
 });

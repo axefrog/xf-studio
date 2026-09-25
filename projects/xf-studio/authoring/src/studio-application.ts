@@ -9,7 +9,7 @@ import { consequenceOf, type Consequence, type ConsequenceSubject } from "./acti
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
 import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import type { CollectionAction } from "./collection-actions";
-import type { CollectionRequest, CollectionService } from "./collection-service";
+import { CollectionServiceError, type CollectionRequest, type CollectionService } from "./collection-service";
 import { layerCapability, type LayerAction } from "./editor-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
@@ -18,7 +18,7 @@ import type { Layer, Point, WarpField } from "./recipe";
 import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
 import { ACTION_DESCRIPTORS, actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
-  type ValueSchema } from "./studio-action-descriptors";
+  type ActionDescriptor, type ValueSchema } from "./studio-action-descriptors";
 import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
@@ -35,6 +35,8 @@ export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_va
 export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode;
   /** Structured validation detail when the refusal concerns one input value or mode. */
   issue?: ValidationIssue };
+/** Every synchronous action entry point (dispatch, context dispatch, form control edits) returns this. */
+export type StudioDispatchResult = { ok: true; result?: unknown } | { ok: false; code: string; message: string };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
   undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
 export type StudioGestureProposal =
@@ -147,23 +149,7 @@ export class StudioApplication {
       typeof flattened.fieldId === "string" && target.kind === "field" && flattened.fieldId !== target.id ||
       typeof flattened.index === "number" && target.kind === "point" && flattened.index !== target.index))
       return { available: false, code: "missing_target", reason: "The command targets a different item." };
-    // A range limit is generic; when the domain can say why in the user's terms
-    // (for example "already at the front"), show that instead.
-    const explain = (issue: StudioCapability) => {
-      if (issue.code !== "limit") return issue;
-      const domain = this.capability(action);
-      return !domain.available && domain.reason ? domain : issue;
-    };
-    for (const [name, schema] of Object.entries(descriptor.payload)) {
-      const issue = fieldIssue(flattened[name], schema, name);
-      if (issue) return explain(issue);
-    }
-    const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
-    const variantFields = variant && descriptor.variants?.[String(variant)]?.payload;
-    if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
-      const issue = fieldIssue(flattened[name], schema, name);
-      if (issue) return explain(issue);
-    }
+    // Payload types and ranges are checked by capability(), the same gate dispatch uses.
     return this.capability(action);
   }
   /** Current static and state-dependent input limits for an action on a concrete target (audit A-7). */
@@ -257,7 +243,7 @@ export class StudioApplication {
       reason: "This command is not offered for that hit target." };
     return this.contextCapability(target, action);
   }
-  dispatchContext(context: StudioBoundContext, action: StudioAction) {
+  dispatchContext(context: StudioBoundContext, action: StudioAction): StudioDispatchResult {
     const allowed = this.boundActionCapability(context, action);
     return allowed.available ? this.dispatch(action) : { ok: false as const,
       code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
@@ -265,7 +251,8 @@ export class StudioApplication {
   snapshot() {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
-      preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(), motion: s.motion?.snapshot(),
+      preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(), motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
   }
@@ -276,6 +263,7 @@ export class StudioApplication {
   previewState() {
     const s = this.services, saved = s.savedV?.snapshot();
     return structuredClone({ preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(),
       motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
@@ -313,9 +301,20 @@ export class StudioApplication {
     if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
       action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    let raw: { available: boolean; reason?: string; issue?: ValidationIssue };
     if ((action.kind === "recipe.undo" || action.kind === "recipe.redo") && (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
+    // Descriptor payload types and ranges gate every entry point, not only context menus.
+    const payload = payloadIssue(action);
+    if (payload && payload.code !== "limit") return payload;
+    const domain = this.domainCapability(action);
+    // A range limit is generic; when the domain can say why in the user's terms
+    // (for example "already at the front"), show that instead.
+    if (!domain.available) return domain;
+    return payload ?? domain;
+  }
+  private domainCapability(action: StudioAction): StudioCapability {
+    const s = this.services;
+    let raw: { available: boolean; reason?: string; issue?: ValidationIssue };
     if (action.kind === "recipe.undo") raw = s.document.canUndo ? { available: true } :
       { available: false, reason: "There is no recipe change to undo." };
     else if (action.kind === "recipe.redo") raw = !s.history ? { available: false, reason: "Redo is not available in this host." } :
@@ -362,7 +361,7 @@ export class StudioApplication {
     return actions.map(action => ({ action, capability: this.capability(action),
       undo: undoPolicy(action), async: false }));
   }
-  dispatch(action: StudioAction): { ok: true; result?: unknown } | { ok: false; code: string; message: string } {
+  dispatch(action: StudioAction): StudioDispatchResult {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
     try {
@@ -380,16 +379,32 @@ export class StudioApplication {
       else if (action.kind.startsWith("quality.")) result = s.quality!.dispatch(action as QualityAction);
       else result = s.savedV!.dispatch(action as SavedAppearanceAction);
       return { ok: true, result };
-    } catch (error) { return { ok: false, code: "invalid_value", message: (error as Error).message }; }
+    } catch (error) { return { ok: false, ...failure(action, error) }; }
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
     if (this.gesture || this.unowned()) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
-  controlEdit(id: string, action: RecipeAction) {
-    if (this.gesture || this.unowned()) return;
-    this.services.controls.edit(id, action.layerId, action);
+  /**
+   * One continuous form edit inside the control's Undo transaction. It passes the same
+   * capability gate as dispatch (target, payload ranges, domain rules) and returns a typed
+   * result instead of throwing. A refused edit never opens a transaction; a failed edit
+   * inside an open one leaves the recipe unchanged, and the control still commits or
+   * cancels that transaction as usual.
+   */
+  controlEdit(id: string, action: RecipeAction): StudioDispatchResult {
+    if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
+    if (!recipeKinds.has(action.kind) || selection.has(action.kind))
+      return { ok: false, code: "invalid_value", message: "That command cannot be adjusted by a form control." };
+    const allowed = this.capability(action);
+    if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+    try {
+      const outcome = this.services.controls.edit(id, action.layerId, action);
+      if (outcome === "stale") return { ok: false, code: "missing_target",
+        message: "That layer changed while you were adjusting it; the edit was not applied." };
+      return { ok: true, result: outcome === "changed" };
+    } catch (error) { return { ok: false, ...failure(action, error) }; }
   }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
@@ -461,6 +476,40 @@ export class StudioApplication {
     if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
     this.gesture = undefined; this.notify();
   }
+}
+/** Descriptor payload check for a concrete action: top-level fields, then its command/key variant. */
+function payloadIssue(action: StudioAction): StudioCapability | undefined {
+  const descriptor = ACTION_DESCRIPTORS[action.kind] as ActionDescriptor | undefined;
+  if (!descriptor) return { available: false, code: "invalid_value", reason: "Unknown command." };
+  const payload = action as unknown as Record<string, unknown>;
+  const command = payload.command && typeof payload.command === "object"
+    ? payload.command as Record<string, unknown> : undefined;
+  const flattened = { ...payload, ...command };
+  for (const [name, schema] of Object.entries(descriptor.payload)) {
+    const issue = fieldIssue(flattened[name], schema, name);
+    if (issue) return issue;
+  }
+  const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
+  const variantFields = variant !== undefined ? descriptor.variants?.[String(variant)]?.payload : undefined;
+  if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
+    const issue = fieldIssue(flattened[name], schema, name);
+    if (issue) return issue;
+  }
+}
+/**
+ * Classify an exception thrown after the capability gate passed, by where it came from:
+ * a collection service error keeps its own code; device-backed preview, camera, motion and
+ * quality services report "unavailable"; a programming fault is "internal"; anything else
+ * is the domain rejecting the resulting content ("invalid_value").
+ */
+function failure(action: StudioAction, error: unknown): { code: string; message: string } {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof CollectionServiceError) return { code: error.code, message };
+  if (error instanceof TypeError || error instanceof ReferenceError)
+    return { code: "internal", message: `That change could not be applied because of an internal error (${message}). Nothing was changed.` };
+  if (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||
+    action.kind.startsWith("quality.")) return { code: "unavailable", message };
+  return { code: "invalid_value", message };
 }
 function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioCapability | undefined {
   const refused = (code: StudioReasonCode, issue: ValidationIssue): StudioCapability =>

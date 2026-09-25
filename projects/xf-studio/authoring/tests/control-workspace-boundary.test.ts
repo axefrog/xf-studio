@@ -13,7 +13,7 @@ test("form edits group a slider gesture into one Undo and Escape restores its st
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
   let restores = 0;
-  const edits = new AuthoringControlEdits(document, action => { actions.dispatch(action); }, () => {
+  const edits = new AuthoringControlEdits(document, action => actions.dispatch(action), () => {
     restores++;
     const prior = document.undoRecipe();
     if (prior) document.recipe = prior;
@@ -39,7 +39,7 @@ test("form edits group a slider gesture into one Undo and Escape restores its st
 test("empty and stale form transactions cannot consume an unrelated Undo entry", () => {
   const document = new AuthoringDocument(freshWorkspace());
   let restores = 0;
-  const edits = new AuthoringControlEdits(document, () => {}, () => { restores++; });
+  const edits = new AuthoringControlEdits(document, () => false, () => { restores++; });
   const layer = document.recipe.layers[0];
   edits.begin("weight", layer.id); edits.commit("weight");
   expect(document.undoDepth).toBe(0);

@@ -174,7 +174,7 @@ function viewPreferences(port: Port, feedback: Feedback) {
   return {
     hints, setHints, openReference,
     items(): MenuItem[] {
-      return [{ kind: "heading", label: "Viewports", detail: "Stored with this browser workspace" },
+      return [{ kind: "heading", label: "Viewports", detail: "Stored with your workspace" },
         { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Corner strip and target tooltips that follow the pointer and held keys",
           run: () => setHints(!hints()) },
         { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference }];
@@ -184,7 +184,7 @@ function viewPreferences(port: Port, feedback: Feedback) {
 type ViewPrefs = ReturnType<typeof viewPreferences>;
 
 function themeItems(theme: Theme): MenuItem[] {
-  return [{ kind: "heading", label: "Appearance", detail: "Stored with this browser workspace" },
+  return [{ kind: "heading", label: "Appearance", detail: "Stored with your workspace" },
     { kind: "action", label: `Match system (${theme.system})`, icon: "monitor", checked: theme.preference === "system", run: () => theme.set("system") },
     { kind: "action", label: "Light", icon: "sun", checked: theme.preference === "light", run: () => theme.set("light") },
     { kind: "action", label: "Dark", icon: "moon", checked: theme.preference === "dark", run: () => theme.set("dark") }];
@@ -260,7 +260,7 @@ function statusBar(rt: StudioRuntime) {
     update(frame: Frame) {
       const save = frame.status.workspace;
       workspace.dataset.tone = save.kind;
-      setText(workspace, save.kind === "saved" ? "● Draft autosaved in this browser" : save.kind === "idle" ? "○ Draft autosave starting" : `▲ ${save.message}`);
+      setText(workspace, save.kind === "saved" ? "● Draft autosaved" : save.kind === "idle" ? "○ Draft autosave starting" : `▲ ${save.message}`);
       workspace.title = save.kind === "protected" ? save.message : "Browser autosave keeps your draft between sessions; the library holds explicit revisions.";
       const library = frame.library;
       const last = rt.feedback.log.at(-1);

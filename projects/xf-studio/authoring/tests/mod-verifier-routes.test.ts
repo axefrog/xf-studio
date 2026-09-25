@@ -1,18 +1,21 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the builder side: it writes the supplied chains and resources that the
 // independent verifier must reproduce from its own restated specification.
 import { encodeDds, flatMipChain } from "../src/flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../src/route-mip-chains";
 import { planCollection } from "../src/preset-collection";
-import { HandleCounter, rewritePlateMesh } from "../src/package-resources";
+import { archiveXlDeclaration, HandleCounter, rewritePlateMesh } from "../src/package-resources";
 import { archiveKey } from "../src/mod-verifier/resource-inventory";
 import { componentId } from "../src/mod-verifier/resource-checks";
-import { verifyBuild } from "../src/mod-verifier/verify-build";
+import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
 
+// Synthetic, asset-free fixture in the style of mod-verifier.test.ts: archive members and plate inputs
+// hold their WolvenKit JSON as text, the fake `serialize` derives documents from the hash-checked bytes
+// and the fake `export` returns each texture's decoded DDS. The builder's conversions are never written.
 const SIZE = 16, GRADIENT = 16;
 const game = { model: "game-matched-1" } as const;
 const layer = (id: string, finish: string, extra: Record<string, unknown> = {}) => ({
@@ -28,6 +31,7 @@ const collection = { schema: "xfas/collection-1", id: "11111111-2222-4333-8444-5
     recipe: { schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [layer("d", "iridescent", { color: "#3a2350",
       optics: { ...game, shift: { color: "#3fd4c2", strength: .8 } } })] } },
 ] };
+type Plan = ReturnType<typeof planCollection>;
 const cname = (s: string) => ({ $type: "CName", $storage: "string", $value: s });
 const ref = (s: string, soft = false) => ({ DepotPath: { $type: "ResourcePath", $storage: "string", $value: s.replaceAll("/", "\\") }, Flags: soft ? "Soft" : "Default" });
 const doc = (root: unknown) => ({ Header: {}, Data: { Version: 195, RootChunk: root } });
@@ -47,15 +51,25 @@ function maps(route: string) {
   }
   return { diffuse, roughness, metalness, normal, mask, gradient };
 }
+/** Rewrite an RGBA DDS chain as the RG8 (DXGI 49) chain WolvenKit exports for BC5 normals. */
+function rg8(levels: readonly Uint8Array[], side: number) {
+  const xy = levels.map(level => level.filter((_, i) => i % 4 < 2)), out = new Uint8Array(148 + xy.reduce((n, l) => n + l.length, 0));
+  out.set(encodeDds(levels, side, "rgba8-unorm").subarray(0, 148));
+  new DataView(out.buffer).setUint32(128, 49, true); new DataView(out.buffer).setUint32(20, side * 2, true);
+  let o = 148; for (const level of xy) { out.set(level, o); o += level.length; }
+  return out;
+}
 
-function makeBuild(tamper?: (build: string, plan: ReturnType<typeof planCollection>) => void) {
+type Mutation = (data: { mesh: any; xbm: Record<string, any>; plan: Plan }) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
+function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => void) {
   const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-routes-"));
   const plan = planCollection(collection);
   const blob = { renderResourceBlob: { Data: { v: 1 } }, boneNames: [cname("root")], boneRigMatrices: [], boundingBox: {} };
-  const sourceMesh = { ...structuredClone(blob), appearances: [], materialEntries: [], localMaterialBuffer: {} };
   const targets = Array.from({ length: 105 }, (_, i) => ({ name: cname(`t${i}`) }));
+  const sourceMesh = { ...structuredClone(blob), appearances: [], materialEntries: [], localMaterialBuffer: {} };
+  const sourceMorph = { blob: { Data: {} }, targets };
   const mesh = rewritePlateMesh(doc(structuredClone(sourceMesh)), plan, new HandleCounter()).Data.RootChunk;
-  const morph = { blob: { Data: {} }, targets, baseMesh: ref(plan.mesh) };
+  const morph = { ...structuredClone(sourceMorph), baseMesh: ref(plan.mesh) };
   const id = componentId(plan.component).toString();
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(plan.component), id, isEnabled: 1,
     meshAppearance: cname(plan.presets[0].appearance), morphResource: ref(plan.morph), localTransform: { Orientation: { i: 0, j: 0, k: 0, r: 1 } },
@@ -71,7 +85,7 @@ function makeBuild(tamper?: (build: string, plan: ReturnType<typeof planCollecti
     headGroups: [{ options: [cname(plan.selector)] }] };
   const setup: Record<string, [number, string]> = { diffuse: [1, "TCM_QualityColor"], gradient: [1, "TCM_QualityColor"], roughness: [0, "TCM_QualityR"],
     metalness: [0, "TCM_QualityR"], mask: [0, "TCM_QualityR"], normal: [0, "TCM_Normalmap"] };
-  const xbm: Record<string, unknown> = {};
+  const xbm: Record<string, unknown> = {}, dds = new Map<string, Uint8Array>();
   const compiled = plan.presets.map(preset => {
     const m = maps(preset.route) as Record<string, Uint8Array>, chains: Record<string, readonly Uint8Array[]> = {};
     if (preset.route === "fresnel") Object.assign(chains, { mask: maskMipChain(m.mask, SIZE), gradient: uniformMipChain(m.gradient, GRADIENT) });
@@ -84,76 +98,81 @@ function makeBuild(tamper?: (build: string, plan: ReturnType<typeof planCollecti
       write(join(build, "baked", file), m[channel]);
       const format = channel === "diffuse" || channel === "gradient" ? "rgba8-srgb" : channel === "normal" ? "rgba8-unorm" : "r8";
       const group = format === "rgba8-srgb" ? "dds-colour" : format === "r8" ? "dds-scalar" : "dds-normal";
-      write(join(build, "input", group, `${preset.appearance}_${channel}.dds`), encodeDds(chains[channel], side, format));
-      // A lossless "decode"; the normal export is two-channel.
-      const decoded = channel === "normal" ? chains[channel].map(level => level.filter((_, i) => i % 4 < 2)) : chains[channel];
-      const exported = encodeDds(decoded.map(l => channel === "normal" ? Uint8Array.from({ length: l.length * 2 }, (_, i) => i % 4 < 2 ? l[(i >> 2) * 2 + (i % 4)] : 0) : l), side, format);
-      if (channel === "normal") { // Rewrite as an RG8 (DXGI 49) DDS.
-        const levels = decoded, payload = levels.reduce((n, l) => n + l.length, 0), out = new Uint8Array(148 + payload);
-        out.set(exported.subarray(0, 148)); new DataView(out.buffer).setUint32(128, 49, true); new DataView(out.buffer).setUint32(20, side * 2, true);
-        let o = 148; for (const l of levels) { out.set(l, o); o += l.length; }
-        write(join(build, "export-dds", `${preset.appearance}_${channel}.dds`), out);
-      } else write(join(build, "export-dds", `${preset.appearance}_${channel}.dds`), exported);
+      const supplied = encodeDds(chains[channel], side, format);
+      write(join(build, "input", group, `${preset.appearance}_${channel}.dds`), supplied);
+      dds.set(`${preset.appearance}_${channel}.dds`, channel === "normal" ? rg8(chains[channel], side) : supplied); // a lossless "decode"
       xbm[preset.textures[channel as keyof typeof preset.textures]!] = { width: side, height: side,
         setup: { hasMipchain: 1, isGamma: setup[channel][0], compression: setup[channel][1] } };
       return { channel, file, bytes: m[channel].length, sha256: sha(m[channel]), side };
     });
     return { id: preset.id, revision: 1, size: SIZE, route: preset.route, maps: records };
   });
-  const name = (path: string) => path.slice(path.lastIndexOf("/") + 1) + ".json";
-  for (const [path, root] of [[plan.mesh, mesh], [plan.morph, morph], [plan.app, app], [plan.customization, cc], ...Object.entries(xbm)] as [string, unknown][])
-    write(join(build, "roundtrip", name(path)), JSON.stringify(doc(root)));
-  write(join(build, "source-json/xfs_eye_plate.mesh.json"), JSON.stringify(doc(sourceMesh)));
-  write(join(build, "source-json/xfs_eye_plate.morphtarget.json"), JSON.stringify(doc({ blob: { Data: {} }, targets })));
-  const resources = [plan.mesh, plan.morph, plan.app, plan.customization, ...plan.presets.flatMap(p => Object.values(p.textures) as string[])];
-  const artifacts = resources.map(path => { const data = `payload:${path}`; write(join(build, "archive", path), data);
-    return { path, bytes: data.length, sha256: sha(data), depotPathHash64: archiveKey(path) }; }).sort((a, b) => (a.path < b.path ? -1 : 1));
+  mutate?.({ mesh, xbm, plan });
+  const plate = { mesh: join(build, "plate", "xfs_eye_plate.mesh"), morph: join(build, "plate", "xfs_eye_plate.morphtarget") };
+  write(plate.mesh, JSON.stringify(doc(sourceMesh)));
+  write(plate.morph, JSON.stringify(doc(sourceMorph)));
+  const plateInputs = [plate.mesh, plate.morph].map(path => ({ path, sha256: sha(readFileSync(path)) }));
+  const members = [[plan.mesh, mesh], [plan.morph, morph], [plan.app, app], [plan.customization, cc], ...Object.entries(xbm)] as [string, unknown][];
+  const artifacts = members.map(([path, root]) => {
+    const data = JSON.stringify(doc(root));
+    write(join(build, "archive", path), data);
+    return { path, bytes: data.length, sha256: sha(data), depotPathHash64: archiveKey(path) };
+  }).sort((a, b) => (a.path < b.path ? -1 : 1));
   const archive = new TextEncoder().encode("synthetic archive");
   write(join(build, "package/archive/pc/mod", `${plan.namespace}.archive`), archive);
-  write(join(build, "package/archive/pc/mod", `${plan.namespace}.archive.xl`), `female: ${plan.customization.replaceAll("/", "\\")} ${plan.app.replaceAll("/", "\\")}`);
-  write(join(build, "build.json"), JSON.stringify({ plan, compiled, artifacts, plateStem: "xfs_eye_plate", archiveSha256: sha(archive) }));
+  write(join(build, "package/archive/pc/mod", `${plan.namespace}.archive.xl`), archiveXlDeclaration(plan));
+  write(join(build, "build.json"), JSON.stringify({ plan, compiled, plateStem: "xfs_eye_plate", plateInputs, artifacts, archiveSha256: sha(archive) }));
   tamper?.(build, plan);
-  return build;
+  return { build, dds };
 }
-const run = (build: string) => verifyBuild({ build, wolvenkit: "unused",
-  unbundle: (_a, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return { exitCode: 0, stdout: "ok", stderr: "" }; } });
 
-test("flat, faceted and Fresnel presets pass the independent verifier with route-aware checks", () => {
-  const build = makeBuild();
+const ok = (): ToolResult => ({ exitCode: 0, stdout: "ok", stderr: "" });
+function run({ build, dds }: ReturnType<typeof makeBuild>) {
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+    .flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
+  const tools: VerifierTools = {
+    unbundle: (_archive, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return ok(); },
+    serialize: (input, output) => { for (const file of files(input)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
+    exportTextures: (input, output) => {
+      for (const file of files(input)) writeFileSync(join(output, basename(file).replace(/\.xbm$/, ".dds")), dds.get(basename(file).replace(/\.xbm$/, ".dds"))!);
+      return ok();
+    },
+  };
+  return verifyBuild({ build, wolvenkit: "unused", tools });
+}
+
+test("flat, faceted and Fresnel presets pass the self-sourcing verifier with route-aware checks", () => {
+  const fixture = makeBuild();
   try {
-    const report = run(build);
+    const report = run(fixture);
     expect(report).toMatchObject({ presetCount: 3, materialTemplates: 3, textureCount: 3 + 4 + 2 });
     expect(report.resolvedDynamicPaths.map(r => r.chunkMaterial.slice(r.chunkMaterial.indexOf("@")))).toEqual(["@preset", "@faceted",
       "@fresnel_11111111222243338444000000000003"]);
     expect(report.decodedPixelChecks[1]).toMatchObject({ route: "faceted" });
     expect(report.decodedPixelChecks[2]).toMatchObject({ route: "fresnel", outsideCoverageMax: 0 });
     expect(report.decodedMipChecks[1].levels.some(level => level.widenedRoughness)).toBe(true);
-  } finally { rmSync(build, { recursive: true, force: true }); }
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
 });
 
-test("route-specific tampering fails: widened roughness, normal chain, mask chain, base colour and shift constants", () => {
+test("route-specific tampering fails: widened roughness, normal chain, mask chain, base colour, constants and bindings", () => {
   const flip = (path: string, offset: number) => { const data = readFileSync(path); data[offset] ^= 0x10; writeFileSync(path, data); };
-  const cases: [RegExp, (build: string, plan: ReturnType<typeof planCollection>) => void][] = [
-    [/variance-widened/, (b, p) => flip(join(b, "input/dds-scalar", `${p.presets[1].appearance}_roughness.dds`), 148 + 256 + 5)],
-    [/facet normal/, (b, p) => flip(join(b, "input/dds-normal", `${p.presets[1].appearance}_normal.dds`), 148 + 1024 + 9)],
-    [/linear coverage/, (b, p) => flip(join(b, "input/dds-scalar", `${p.presets[2].appearance}_mask.dds`), 148 + 256 + 20)],
-    [/not the preset base colour/, (b, p) => {
+  const cases: [RegExp, Mutation | undefined, ((build: string, plan: Plan) => void) | undefined][] = [
+    [/variance-widened/, undefined, (b, p) => flip(join(b, "input/dds-scalar", `${p.presets[1].appearance}_roughness.dds`), 148 + 256 + 5)],
+    [/facet normal/, undefined, (b, p) => flip(join(b, "input/dds-normal", `${p.presets[1].appearance}_normal.dds`), 148 + 1024 + 9)],
+    [/linear coverage/, undefined, (b, p) => flip(join(b, "input/dds-scalar", `${p.presets[2].appearance}_mask.dds`), 148 + 256 + 20)],
+    [/not the preset base colour/, undefined, (b, p) => {
       const path = join(b, "baked", `${p.presets[2].appearance}_gradient.raw`), data = readFileSync(path); data[0] ^= 1; writeFileSync(path, data);
       const record = JSON.parse(readFileSync(join(b, "build.json"), "utf8"));
       record.compiled[2].maps[1].sha256 = sha(data); writeFileSync(join(b, "build.json"), JSON.stringify(record)); }],
-    [/FresnelColorIntensity/, (b, p) => {
-      const path = join(b, "roundtrip", p.mesh.slice(p.mesh.lastIndexOf("/") + 1) + ".json"), mesh = JSON.parse(readFileSync(path, "utf8"));
-      const values = mesh.Data.RootChunk.localMaterialBuffer.materials[2].values;
-      values.find((v: Record<string, unknown>) => "FresnelColorIntensity" in v).FresnelColorIntensity = 8; writeFileSync(path, JSON.stringify(mesh)); }],
-    [/must name @faceted/, (b, p) => {
-      const path = join(b, "roundtrip", p.mesh.slice(p.mesh.lastIndexOf("/") + 1) + ".json"), mesh = JSON.parse(readFileSync(path, "utf8"));
-      mesh.Data.RootChunk.appearances[1].Data.chunkMaterials = []; writeFileSync(path, JSON.stringify(mesh)); }],
-    [/unexpected compression/, (b, p) => {
-      const path = join(b, "roundtrip", p.presets[1].textures.normal!.split("/").pop() + ".json"), xbm = JSON.parse(readFileSync(path, "utf8"));
-      xbm.Data.RootChunk.setup.compression = "TCM_QualityR"; writeFileSync(path, JSON.stringify(xbm)); }],
+    [/FresnelColorIntensity/, d => {
+      d.mesh.localMaterialBuffer.materials[2].values.find((v: Record<string, unknown>) => "FresnelColorIntensity" in v).FresnelColorIntensity = 8; }, undefined],
+    [/FadeOutOffset/, d => {
+      d.mesh.localMaterialBuffer.materials[2].values.find((v: Record<string, unknown>) => "FadeOutOffset" in v).FadeOutOffset = .2; }, undefined],
+    [/must name @faceted/, d => { d.mesh.appearances[1].Data.chunkMaterials = []; }, undefined],
+    [/unexpected compression/, d => { d.xbm[d.plan.presets[1].textures.normal!].setup.compression = "TCM_QualityR"; }, undefined],
   ];
-  for (const [message, tamper] of cases) {
-    const build = makeBuild(tamper);
-    try { expect(() => run(build)).toThrow(message); } finally { rmSync(build, { recursive: true, force: true }); }
+  for (const [message, mutate, tamper] of cases) {
+    const fixture = makeBuild(mutate, tamper);
+    try { expect(() => run(fixture)).toThrow(message); } finally { rmSync(fixture.build, { recursive: true, force: true }); }
   }
 });

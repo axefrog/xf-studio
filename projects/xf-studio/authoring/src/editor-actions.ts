@@ -34,25 +34,38 @@ export function applyLayerAction(recipe: Recipe, activeId: string | undefined, a
     changed: next.layers.findIndex(layer => layer.id === action.id) };
 }
 
+type Entry = { encoded: string; id: HistoryEntryId; label?: HistoryLabel };
+/** Opaque identity of one Undo entry, returned when a checkpoint actually adds it. */
+export type HistoryEntryId = number & { readonly __historyEntry: unique symbol };
 /**
  * Recipe history has no DOM or storage dependency and never returns a mutable stored entry.
  * Each entry may carry a session-only label; persisted/restored entries have none.
+ * Transactions track the entry their checkpoint added by identity, never by depth: at
+ * `RECIPE_HISTORY_LIMIT` a new entry drops the oldest, so the depth does not grow.
  */
 export class RecipeHistory {
-  private entries: { encoded: string; label?: HistoryLabel }[];
-  constructor(initial: Recipe[] = []) { this.entries = encode(initial); }
+  private entries: Entry[];
+  /** The oldest entry the latest checkpoint pushed out at the limit, restored if that checkpoint is discarded. */
+  private displaced?: { by: HistoryEntryId; entry: Entry };
+  private nextId = 1;
+  constructor(initial: Recipe[] = []) { this.entries = this.encode(initial); }
   get canUndo() { return this.entries.length > 0; }
   get depth() { return this.entries.length; }
-  /** Returns true when a new entry was added (an identical top entry is not duplicated). */
-  checkpoint(recipe: Recipe, label?: HistoryLabel) {
+  /** Returns the new entry's identity, or undefined when an identical top entry made it a no-op. */
+  checkpoint(recipe: Recipe, label?: HistoryLabel): HistoryEntryId | undefined {
     const encoded = JSON.stringify(recipe);
-    const added = this.entries.at(-1)?.encoded !== encoded;
-    if (added) this.entries.push({ encoded, label: label && { ...label } });
-    if (this.entries.length > RECIPE_HISTORY_LIMIT) this.entries.shift();
-    return added;
+    if (this.entries.at(-1)?.encoded === encoded) return undefined;
+    const id = this.id();
+    this.entries.push({ encoded, id, label: label && { ...label } });
+    const dropped = this.entries.length > RECIPE_HISTORY_LIMIT ? this.entries.shift() : undefined;
+    this.displaced = dropped && { by: id, entry: dropped };
+    return id;
   }
+  /** True while `id` is the entry the next Undo would restore. */
+  isTop(id: HistoryEntryId) { return this.entries.at(-1)?.id === id; }
+  /** Pop the top entry. At the limit, the oldest entry its checkpoint displaced comes back. */
   undo(): Recipe | undefined {
-    const entry = this.entries.pop();
+    const entry = this.pop();
     return entry ? parseRecipe(JSON.parse(entry.encoded)) : undefined;
   }
   /** Label of the entry the next Undo would restore. */
@@ -60,10 +73,27 @@ export class RecipeHistory {
     const entry = this.entries.at(-1);
     return entry && (entry.label ? { ...entry.label } : { ...UNKNOWN_HISTORY_LABEL });
   }
-  relabelTop(label: HistoryLabel) { const entry = this.entries.at(-1); if (entry) entry.label = { ...label }; }
+  /** Name one entry; a no-op once that entry was undone or dropped. */
+  relabel(id: HistoryEntryId, label: HistoryLabel) {
+    const entry = this.entries.find(item => item.id === id); if (entry) entry.label = { ...label };
+  }
+  /**
+   * Remove `id` only while it is still the top entry (an empty transaction's checkpoint),
+   * so an empty transaction leaves the history exactly as it found it, even at the limit.
+   */
+  discard(id: HistoryEntryId) { if (!this.isTop(id)) return false; this.pop(); return true; }
+  private pop() {
+    const entry = this.entries.pop();
+    if (entry && this.displaced?.by === entry.id) this.entries.unshift(this.displaced.entry);
+    this.displaced = undefined;
+    return entry;
+  }
   snapshot(): Recipe[] { return this.entries.map(entry => parseRecipe(JSON.parse(entry.encoded))); }
-  restore(entries: Recipe[]) { this.entries = encode(entries); }
+  restore(entries: Recipe[]) { this.entries = this.encode(entries); this.displaced = undefined; }
+  private id() { return this.nextId++ as HistoryEntryId; }
+  private encode(entries: Recipe[]) {
+    return entries.slice(-RECIPE_HISTORY_LIMIT).map(recipe => ({ encoded: JSON.stringify(parseRecipe(recipe)), id: this.id() }));
+  }
 }
 /** Recipe Undo entries kept per preset (the oldest is dropped beyond this). */
 export const RECIPE_HISTORY_LIMIT = 80;
-const encode = (entries: Recipe[]) => entries.map(recipe => ({ encoded: JSON.stringify(parseRecipe(recipe)) })).slice(-RECIPE_HISTORY_LIMIT);

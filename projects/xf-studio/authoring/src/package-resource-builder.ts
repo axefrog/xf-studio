@@ -5,7 +5,8 @@
 // TypeScript port of experiments/005-preset-collection/build.py, which remains a research
 // oracle. Differences, all deliberate: the bake runs in-process; the builder no longer
 // writes PNG copies of the maps or asks WolvenKit for a PNG export, because only the old
-// Python verifier read them (the TypeScript verifier reads the raw maps and the DDS export).
+// Python verifier read them; and it no longer round-trips the resources or exports the
+// textures, because the independent verifier converts the unbundled archive members itself.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -30,7 +31,6 @@ export interface ResourceBuildOptions {
   readonly output: string;
   /** Directory holding exactly one plate mesh/morphtarget pair. */
   readonly plate: string;
-  readonly gameRoot: string;
   readonly tools: PackageResourceTools;
   readonly signal?: AbortSignal;
   readonly log?: (line: string) => void;
@@ -55,7 +55,7 @@ const TEXTURE_GROUPS: readonly (readonly [string, TextureImportSettings])[] = [
 export const CHANNEL_GROUP: Record<TextureChannel, "dds-colour" | "dds-scalar" | "dds-normal"> = {
   diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar", mask: "dds-scalar", normal: "dds-normal",
 };
-const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json", "roundtrip", "export-dds",
+const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json",
   "input/dds-colour", "input/dds-scalar", "input/dds-normal", "archive", "package/archive/pc/mod"];
 
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
@@ -74,7 +74,7 @@ function checkCancelled(signal?: AbortSignal) {
 }
 
 export async function buildPackageResources(options: ResourceBuildOptions): Promise<BuildRecord> {
-  const out = resolve(options.output), plate = resolve(options.plate), game = resolve(options.gameRoot);
+  const out = resolve(options.output), plate = resolve(options.plate);
   const log = options.log ?? (() => {});
   if (existsSync(out)) throw Error(`Output already exists: ${out}`);
   const stem = plateStem(plate);
@@ -157,8 +157,6 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
   await step("deserialize-app", () => options.tools.deserialize(join(out, "app-json"), appDir));
   await step("deserialize-customization", () => options.tools.deserialize(join(out, "cc-json"), appDir));
-  await step("roundtrip", () => options.tools.serialize(archive, join(out, "roundtrip")));
-  await step("export-texture-mips", () => options.tools.exportTextures(textureDir, join(out, "export-dds"), "dds", game));
 
   // 5. Pre-pack gate: the physical tree must equal the planned canonical resource paths exactly.
   checkCancelled(options.signal);
