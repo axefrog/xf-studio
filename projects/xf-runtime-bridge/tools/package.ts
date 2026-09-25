@@ -10,7 +10,7 @@
 //   red4ext/plugins/XFRuntimeBridge/Scripts/*.reds       (added to redscript by the plugin)
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
-//   xf-runtime-bridge-manifest.json                      (versions and SHA-256 of every file)
+//   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -90,14 +90,15 @@ function stage(variant: "default" | "diagnostic") {
     },
     files,
   };
-  writeFileSync(join(stageDir, "xf-runtime-bridge-manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  writeFileSync(join(stageDir, plugin, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
   const suffix = variant === "diagnostic" ? "-diagnostic" : "";
   const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${suffix}.zip`);
   rmSync(zip, { force: true });
   // Windows' own bsdtar (not Git's GNU tar) writes a zip when the name ends in .zip and -a is given.
   const tarExe = join(process.env.SystemRoot ?? "C:/Windows", "System32", "tar.exe");
-  const tar = spawnSync(tarExe, ["-a", "-c", "-f", zip, "-C", stageDir, "."], { encoding: "utf8" });
+  // Name the top-level folders explicitly so entries carry no "./" prefix.
+  const tar = spawnSync(tarExe, ["-a", "-c", "-f", zip, "-C", stageDir, "bin", "r6", "red4ext"], { encoding: "utf8" });
   if (tar.status !== 0) throw new Error(`tar failed: ${tar.stderr}`);
   console.log(`${zip}\n  sha256 ${sha256(zip)}  (${files.length} files, bridge ${variant === "diagnostic" ? "ON (read-only)" : "OFF"})`);
   for (const file of files) console.log(`  ${file.sha256.slice(0, 16)}  ${file.path}`);
