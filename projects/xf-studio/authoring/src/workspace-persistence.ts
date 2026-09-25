@@ -1,3 +1,4 @@
+import type { DocumentModel } from "./collection-workspace";
 import { encodeWorkspaceAt, WORKSPACE_LEVELS, WORKSPACE_STORAGE_BUDGET } from "./workspace-budget";
 import type { WorkspaceState } from "./workspace-state";
 
@@ -33,7 +34,9 @@ export class WorkspacePersistence {
   private written?: string;
   private lastSize = 0;
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
-    restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number }) {}
+    restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number;
+    /** The document model the stored form is written with (injected by the composition root). */
+    model: DocumentModel }) {}
   subscribe(listener: (status: WorkspaceSaveStatus) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
@@ -60,7 +63,7 @@ export class WorkspacePersistence {
     // (other keys share the quota), keep trimming before reporting that autosave stopped.
     let quota = false;
     for (let level = 0; level < WORKSPACE_LEVELS; level++) {
-      const candidate = encodeWorkspaceAt(state, level, this.options.budget ?? WORKSPACE_STORAGE_BUDGET);
+      const candidate = encodeWorkspaceAt(state, level, this.options.model, this.options.budget ?? WORKSPACE_STORAGE_BUDGET);
       if (candidate.overBudget && level < WORKSPACE_LEVELS - 1) continue;
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
       if (candidate.encoded === this.written) return;

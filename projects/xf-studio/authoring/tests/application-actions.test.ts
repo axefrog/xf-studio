@@ -9,12 +9,15 @@ import { freshWorkspace } from "../src/workspace-state";
 import { glitterModel, type GlitterChoices } from "../src/glitter-model";
 import { initialRecipe } from "../src/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
+import { EYE_MAKEUP } from "../src/features/eye-makeup";
+import type { GestureEdit } from "../src/recipe-actions";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("collection commands keep UI views isolated and notify only after valid transitions", () => {
   const preset = { id: crypto.randomUUID(), name: "First", revision: 1, recipe: initialRecipe() };
   const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Collection", presets: [preset] };
   let editor: EditorSnapshot = { recipe: preset.recipe, ...emptyMemory() };
-  const actions = new CollectionActions(collectionDraft(collection), () => editor, value => editor = value);
+  const actions = new CollectionActions(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), () => editor, value => editor = value);
   let changes = 0;
   const unsubscribe = actions.subscribe(() => changes++);
   const view = actions.view() as unknown as CollectionWorkspace; view.collection.presets[0].name = "Tampered";
@@ -124,17 +127,24 @@ test("pointer edits preserve target identity, reject stale presets and leave one
   let state: RecipeActionState = { recipe, active: 0, selected: 0, fieldSelection: {} }, changes = 0;
   const history = new RecipeHistory(), actions = new RecipeActions(() => state, next => state = next,
     history, {}, () => "draft", () => changes++);
+  // Eye makeup's registered gestures apply each frame; the recipe service publishes it.
+  const gestures = EYE_MAKEUP.gestures!;
+  const applyGesture = (edit: GestureEdit) => {
+    const changed = gestures.apply(state.recipe, edit);
+    if (changed) actions.publishGesture(changed.layerIndex, changed.kind);
+    return !!changed;
+  };
   history.checkpoint(recipe);
-  expect(actions.applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
+  expect(applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
     index: 0, expectedPoint: point, next: { u: point.u + .005 } })).toBe(true);
-  expect(actions.applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
+  expect(applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
     index: 0, expectedPoint: point, next: { u: point.u + .005 } })).toBe(true);
   expect(state.recipe.layers[0]).toBe(target);
   expect(state.recipe.layers[0].points[0]).toBe(point);
   expect(changes).toBe(2);
   const replaced = structuredClone(recipe);
   state = { ...state, recipe: replaced };
-  expect(actions.applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
+  expect(applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
     index: 0, expectedPoint: point, next: { u: .9 } })).toBe(false);
   expect(replaced.layers[0].points[0].u).not.toBe(.9);
   expect(history.undo()!.layers[0].points[0].u).toBe(initialRecipe().layers[0].points[0].u);

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { CollectionLibrary } from "../../src/collection-store";
 import { LookLibrary } from "../../src/library-store";
 import { recipe3 } from "./workspace-v1-fixtures";
+import { STUDIO_PARTS } from "../../src/compose/studio-registry";
 
 const experiments = new URL("../../../../../experiments/", import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, experiments), "utf8"));
@@ -22,7 +23,7 @@ try {
   looks.save({ name: "Legacy look renamed", recipe: recipe3("legacy"), revision: first.revision }, first.id);
   looks.save({ name: "Second legacy look", recipe: read("005-preset-collection/collection.json").presets[0].recipe });
   looks.close();
-  const library = new CollectionLibrary(path);
+  const library = new CollectionLibrary(path, STUDIO_PARTS);
   const editor = read("005-preset-collection/editor-collection.json");
   const saved = library.save({ collection: editor });
   const changed = structuredClone(saved.collection);

@@ -3,29 +3,19 @@
  * the recipe part and the editor state. They wrap the existing pure functions
  * (`recipeActionCapability`/`applyRecipeAction`, `layerCapability`/`applyLayerAction`), so the
  * application, form controls and tests all run the same rules.
+ *
+ * Apply is deterministic: an action that creates an item (a warp control, a layer) carries the
+ * new item's ID, which its host fills in with `assignEyeMakeupIds` before applying it, so the
+ * same state and action always give the same result (replay; migration step 4).
  */
-import type { Capability, FeatureResult, FeatureState } from "../../platform/api";
-import { parseFieldSelection, type FieldSelection } from "../../field-selection";
+import type { Capability } from "../../platform/api";
+import { parseFieldSelection } from "../../field-selection";
 import type { GlitterChoices, LayerChoices } from "../../glitter-model";
 import { applyLayerAction, layerCapability, type LayerAction } from "../../editor-actions";
-import { applyRecipeAction, recipeActionCapability, type RecipeAction, type RecipeActionEffect } from "../../recipe-actions";
-import type { Recipe } from "../../recipe";
+import { applyRecipeAction, recipeActionCapability } from "../../recipe-actions";
+import type { EyeMakeupAction, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
 
-export type EyeMakeupAction = RecipeAction | LayerAction;
-/**
- * The editor state actions read: the look's editor memory plus its layers' remembered Glitter
- * and Colour-shift settings (keyed by layer ID; the host projects them from the feature memory).
- */
-export type EyeMakeupEditorState = { active: number; selected: number; fieldSelection: FieldSelection;
-  choices: Readonly<Record<string, LayerChoices>> };
-export type EyeMakeupState = FeatureState<Recipe, EyeMakeupEditorState>;
-/**
- * What the preview does with a result: a recipe action's scheduled, immediate or selection-only
- * effect; `structure` when the layer stack changed (resources are reconciled against the
- * previous recipe); `none` when nothing changed.
- */
-export type EyeMakeupEffect = RecipeActionEffect | { kind: "structure" } | { kind: "none" };
-export type EyeMakeupResult = FeatureResult<Recipe, EyeMakeupEditorState, EyeMakeupEffect>;
+export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
 
 const isLayerAction = (action: EyeMakeupAction): action is LayerAction =>
   action.kind === "layer.edit" || action.kind === "layer.setEnabled";
@@ -38,7 +28,21 @@ export function eyeMakeupCapability(state: EyeMakeupState, action: EyeMakeupActi
   return recipeActionCapability({ recipe: state.part, active, selected, fieldSelection }, action);
 }
 
+/** The action with the IDs of the items it creates filled in from the host's ID source (never overwritten). */
+export function assignEyeMakeupIds(action: EyeMakeupAction, newId: () => string): EyeMakeupAction {
+  if (action.kind === "field.add" && !action.fieldId) return { ...action, fieldId: newId() };
+  if (action.kind === "layer.edit" && (action.command.kind === "add" || action.command.kind === "duplicate") && !action.command.newId)
+    return { ...action, command: { ...action.command, newId: newId() } };
+  return action;
+}
+/** Whether an action that creates an item lacks its ID (apply then refuses: it never invents one). */
+function lacksId(action: EyeMakeupAction) {
+  return action.kind === "field.add" ? !action.fieldId :
+    action.kind === "layer.edit" && (action.command.kind === "add" || action.command.kind === "duplicate") && !action.command.newId;
+}
+
 export function applyEyeMakeup(state: EyeMakeupState, action: EyeMakeupAction): EyeMakeupResult {
+  if (lacksId(action)) throw Error(`${action.kind} needs the new item's ID from its host (assignEyeMakeupIds).`);
   const editor = state.editor;
   if (isLayerAction(action)) {
     const next = applyLayerAction(state.part, state.part.layers[editor.active]?.id, action);

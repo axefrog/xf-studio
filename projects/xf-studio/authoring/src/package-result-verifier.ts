@@ -3,7 +3,7 @@ import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync, r
 import { relative, resolve, sep } from "node:path";
 import type { PackageBuild } from "./package-action";
 import type { PresetCollection } from "./preset-collection";
-import { packagePresetIdentities, type preparePackageCollection } from "./package-filter";
+import { originalPresetCount, packagePresetIdentities, type preparePackageCollection } from "./package-filter";
 import { packagePlateRecord, type EyePlateManifest } from "./eye-plate-service";
 
 function fileSha256(path: string): string {
@@ -82,7 +82,7 @@ export function verifyPackageBuildResult(
   }
   if (manifest.schema !== "xfs/local-package-1" || manifest.collectionId !== collection.id ||
       manifest.collectionSha256 !== sourceHash || manifest.packagedCollectionSha256 !== packagedHash ||
-      manifest.originalPresetCount !== collection.presets.length ||
+      manifest.originalPresetCount !== originalPresetCount(prepared.source) ||
       JSON.stringify(manifest.omissions) !== JSON.stringify(prepared.omissions) ||
       JSON.stringify(manifest.experimental ?? []) !== JSON.stringify(prepared.experimental) ||
       manifest.namespace !== prepared.plan.namespace ||
@@ -94,7 +94,7 @@ export function verifyPackageBuildResult(
       JSON.stringify(manifest.plateUv ?? null) !== JSON.stringify(prepared.plateUv) || JSON.stringify(built.plateUv ?? null) !== JSON.stringify(prepared.plateUv) ||
       manifest.verifiedPresetCount !== prepared.packaged.presets.length ||
       built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== prepared.packaged.presets.length ||
-      built.originalPresetCount !== collection.presets.length || built.packagedCollectionSha256 !== packagedHash ||
+      built.originalPresetCount !== originalPresetCount(prepared.source) || built.packagedCollectionSha256 !== packagedHash ||
       JSON.stringify(built.omissions) !== JSON.stringify(prepared.omissions) ||
       JSON.stringify(built.experimental ?? []) !== JSON.stringify(prepared.experimental) ||
       built.installed !== false || built.gameRenderingVerified !== false ||

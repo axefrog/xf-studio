@@ -8,6 +8,7 @@ import { freshWorkspace } from "../src/workspace-state";
 import { bodySexOf, SavedAppearanceActions } from "../src/saved-appearance-actions";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
 test("preview bootstrap restores saved V, scene, motion and camera in order without controls", () => {
   const calls: string[] = [], workspace = freshWorkspace();
@@ -70,7 +71,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   // suggested selector must not apply the eye morph a second time.
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
   core = createTrustedAuthoringCore(workspace, { resetStack: () => {},
-    selectedCollection: () => "draft" });
+    selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   core.app.attach({ preview: actions, savedV: services.savedAppearance });
   const before = calls.filter(call => call.startsWith("eye:")).length;
   const imported = services.savedAppearance.dispatch({ kind: "savedV.restore", value: saved });

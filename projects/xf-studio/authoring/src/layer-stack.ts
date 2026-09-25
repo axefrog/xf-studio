@@ -1,8 +1,13 @@
 import { newLayerTemplate, MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
 
+/**
+ * `newId` is the ID of the layer `add` and `duplicate` create. The registered eye-makeup apply
+ * requires it (its host supplies it, so replay is deterministic); these helpers still make one when absent.
+ */
 export type LayerCommand =
-  | { kind: "add" }
-  | { kind: "duplicate" | "remove" | "reset"; id: string }
+  | { kind: "add"; newId?: string }
+  | { kind: "duplicate"; id: string; newId?: string }
+  | { kind: "remove" | "reset"; id: string }
   | { kind: "rename"; id: string; name: string }
   | { kind: "move"; id: string; to: number };
 
@@ -14,7 +19,8 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
   if (command.kind === "add" || command.kind === "duplicate") {
     if (layers.length >= MAX_LAYERS) throw Error(`This preview currently supports up to ${MAX_LAYERS} layers.`);
     const layer = structuredClone(command.kind === "duplicate" ? layers[index] : newLayerTemplate());
-    layer.id = crypto.randomUUID();
+    layer.id = command.newId ?? crypto.randomUUID();
+    if (layers.some(existing => existing.id === layer.id)) throw Error("That layer ID is already in use.");
     layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : `Layer ${layers.length + 1}`;
     if (command.kind === "add") layer.enabled = true;
     layers.splice(command.kind === "duplicate" ? index + 1 : layers.length, 0, layer);

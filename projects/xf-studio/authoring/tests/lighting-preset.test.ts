@@ -8,6 +8,7 @@ import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/trusted-preview-services";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 function port(options: { creator?: boolean } = {}) {
   const calls: string[] = [], listeners = new Set<() => void>();
@@ -86,7 +87,7 @@ test("descriptors and application validation cover the new actions", () => {
   for (const kind of ["preview.setLightingPreset", "preview.setCreatorLighting", "camera.creatorFraming"] as const)
     expect(ACTION_DESCRIPTORS[kind]).toMatchObject({ scope: ["viewport"], effect: "workspace", undo: "none" });
   const workspace = freshWorkspace();
-  const { app } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  const { app } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   app.attach({ preview: new PreviewActions(workspace.preview, port().port) });
   expect(app.capability({ kind: "preview.setCreatorLighting", key: "exposure", value: 50 })).toMatchObject({ available: false, reason: "Creator exposure must be between 0.01 and 20." });
   expect(app.dispatch({ kind: "preview.setLightingPreset", preset: "creator" })).toMatchObject({ ok: true });
@@ -99,11 +100,11 @@ test("the workspace keeps the preset and diagnostics, and restore applies them",
   const workspace = freshWorkspace();
   workspace.preview.lightingPreset = "creator";
   workspace.preview.creatorLighting = { intensity: "cone", cone: "full", exposure: 1.5 };
-  const parsed = parseWorkspace(storedWorkspace(workspace));
+  const parsed = parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS);
   expect(parsed.preview.lightingPreset).toBe("creator");
   expect(parsed.preview.creatorLighting).toEqual({ intensity: "cone", cone: "full", exposure: 1.5 });
   const damaged = parseWorkspace({ ...storedWorkspace(workspace), preview: { ...workspace.preview, lightingPreset: "disco",
-    creatorLighting: { intensity: "cone", cone: "full", exposure: -1 } } });
+    creatorLighting: { intensity: "cone", cone: "full", exposure: -1 } } }, STUDIO_DOCUMENTS);
   expect(damaged.preview.lightingPreset).toBe("studio");
   expect(damaged.preview.creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);
   const { port: p, calls } = port();

@@ -12,8 +12,8 @@
  *   `xfas/collection-1` whenever every look holds exactly the legacy feature's part in a form
  *   that schema holds exactly, and `xfs/collection-2` otherwise.
  */
-import { canonicalJson, COLLECTION_1, COLLECTION_2, type Look, type LookCollection, type LookMemory, type PartEnvelope,
-  type PartMemory } from "../api/document";
+import { canonicalJson, COLLECTION_1, COLLECTION_2, isNewerData, NewerDataError, type Look, type LookCollection, type LookMemory,
+  type PartEnvelope, type PartMemory } from "../api/document";
 import type { AnyFeatureModule } from "../api/feature";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -29,6 +29,12 @@ export type LegacyPreset = { id: string; name: string; revision: number; [field:
 export type LegacyCollection = { schema: typeof COLLECTION_1; id: string; name: string; presets: LegacyPreset[] };
 /** Stored per-feature memory: the editor, the part schema of its history entries and those entries. */
 export type StoredPartMemory = { editor?: unknown; partSchema?: string; history?: unknown[]; historyTrimmed?: true };
+/**
+ * What a reader does with data from a newer build (`NewerDataError`): `refuse` throws it, so the
+ * store holding it is protected; `omit` leaves the newer entries out of a read-only view (the
+ * caller must then never write that view back over the store).
+ */
+export type NewerPolicy = "refuse" | "omit";
 
 export class PartRegistry {
   private readonly byId = new Map<string, AnyFeatureModule>();
@@ -63,17 +69,23 @@ export class PartRegistry {
       throw Error(`The ${feature} part of a look is damaged.`);
     const module = this.byId.get(feature);
     if (!module) return structuredClone({ schema: envelope.schema, body: envelope.body });
-    if (!module.part.accepts.includes(envelope.schema))
-      throw Error(`This look's ${module.label.toLowerCase()} was saved by a newer version of XF Studio (${envelope.schema}).`);
+    if (!module.part.accepts.includes(envelope.schema)) throw this.newer(module, envelope.schema);
     const part = module.part.serialize(module.part.parse(envelope));
     if (checkSize && JSON.stringify(part.body).length > module.part.maxBytes)
       throw Error(`This look's ${module.label.toLowerCase()} exceeds the ${Math.round(module.part.maxBytes / 1e6)} MB limit for one part.`);
     return part;
   }
-  /** The parsed value of a registered feature's part, or undefined when the look does not have one. */
+  private newer(module: AnyFeatureModule, schema: string) {
+    return new NewerDataError(`This look's ${module.label.toLowerCase()} was saved by a newer version of XF Studio (${schema}).`);
+  }
+  /**
+   * The parsed value of a registered feature's part, or undefined when the look does not have one.
+   * A look's in-memory parts are already parsed at their feature's current schema (`readPart`), so
+   * those bodies are returned as they are (no copy); a part in another schema is parsed.
+   */
   part<P>(look: Pick<Look, "parts">, feature: string): P | undefined {
     const module = this.byId.get(feature), envelope = look.parts[feature];
-    return module && envelope ? module.part.parse(envelope) as P : undefined;
+    return module && envelope ? this.parsedPart(module, envelope) as P : undefined;
   }
   /** Wrap a registered feature's parsed part (no copy). */
   envelope(feature: string, part: unknown): PartEnvelope {
@@ -81,9 +93,16 @@ export class PartRegistry {
     if (!module) throw Error(`Feature ${feature} is not registered.`);
     return module.part.serialize(part);
   }
-  /** Canonical text of a look's parts: equal for equal content, whatever key order or older schema. */
+  /**
+   * Canonical text of a look's parts: equal for equal content, whatever key order or older schema.
+   * A registered part at its current schema is an in-memory (parsed) body and is not parsed again
+   * (CORE-35); any other schema is read first.
+   */
   canonicalParts(parts: Readonly<Record<string, PartEnvelope>>): string {
-    return canonicalJson(Object.fromEntries(Object.keys(parts).sort().map(feature => [feature, this.readPart(feature, parts[feature])])));
+    return canonicalJson(Object.fromEntries(Object.keys(parts).sort().map(feature => {
+      const module = this.byId.get(feature), envelope = parts[feature];
+      return [feature, module && envelope?.schema === module.part.current ? envelope : this.readPart(feature, envelope)];
+    })));
   }
   /** Primitive facts of one look for views; a feature the look lacks contributes nothing. */
   summary(look: Pick<Look, "parts">, feature: string): Readonly<Record<string, number | string | boolean>> | undefined {
@@ -152,16 +171,17 @@ export class PartRegistry {
    * A part in the oldest schema its codec accepts that holds it exactly (`accepts` lists them
    * oldest first; `downgrade` decides), else its current schema. Unregistered parts stay verbatim.
    */
-  minimalPart(feature: string, envelope: PartEnvelope): PartEnvelope {
+  minimalPart(feature: string, envelope: PartEnvelope, copy = true): PartEnvelope {
     const module = this.byId.get(feature);
-    if (!module) return structuredClone(envelope);
+    const clone = <T>(value: T) => copy ? structuredClone(value) : value;
+    if (!module) return clone(envelope);
     const part = this.parsedPart(module, envelope);
     for (const schema of module.part.accepts) {
       if (schema === module.part.current) break;
       const older = module.part.downgrade?.(part, schema);
-      if (older) return structuredClone(older);
+      if (older) return clone(older);
     }
-    return structuredClone(module.part.serialize(part));
+    return clone(module.part.serialize(part));
   }
   /**
    * The parsed value of an in-memory part: a look's registered parts are already parsed at their
@@ -171,10 +191,13 @@ export class PartRegistry {
   private parsedPart(module: AnyFeatureModule, envelope: PartEnvelope): unknown {
     return envelope.schema === module.part.current ? envelope.body : module.part.parse(envelope);
   }
-  /** A look with each part in the oldest part schema that holds it. */
-  private minimalLook(look: Look): Look {
+  /**
+   * A look with each part in the oldest part schema that holds it. With `copy` false the result
+   * shares structure with `look` (for a writer that serializes it at once, like the workspace).
+   */
+  minimalLook(look: Look, copy = true): Look {
     return { id: look.id, name: look.name, revision: look.revision,
-      parts: Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.minimalPart(feature, part)])) };
+      parts: Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.minimalPart(feature, part, copy)])) };
   }
   /** The stored form of one look: collection-1 preset fields when they hold it exactly, else its minimal parts. */
   writePresetMinimal(look: Look): LegacyPreset | Look { return this.legacyPreset(look) ?? this.minimalLook(look); }
@@ -197,8 +220,11 @@ export class PartRegistry {
         parts: Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.readPart(feature, part)])) })) };
   }
 
-  /** Per-feature memory of one look, as stored in `xfs/workspace-2`; damaged history entries are skipped. */
-  readMemory(value: unknown, look: Pick<Look, "parts"> | undefined): LookMemory {
+  /**
+   * Per-feature memory of one look, as stored in `xfs/workspace-2`; damaged history entries are
+   * skipped. Entries from a newer build are never skipped as damage: see `NewerPolicy`.
+   */
+  readMemory(value: unknown, look: Pick<Look, "parts"> | undefined, newer: NewerPolicy = "refuse"): LookMemory {
     const memory: LookMemory = {};
     if (!value || typeof value !== "object" || Array.isArray(value)) return memory;
     for (const [feature, stored] of Object.entries(value as Record<string, StoredPartMemory>)) {
@@ -207,7 +233,7 @@ export class PartRegistry {
       // A newer build's feature memory is kept verbatim, like its parts.
       if (!module) { memory[feature] = structuredClone(stored) as PartMemory; continue; }
       memory[feature] = this.readFeatureMemory(feature, stored.editor, stored.partSchema ?? module.part.current,
-        stored.history, stored.historyTrimmed === true, look);
+        stored.history, stored.historyTrimmed === true, look, newer);
     }
     return memory;
   }
@@ -215,26 +241,56 @@ export class PartRegistry {
    * One registered feature's memory: its editor state parsed against the look's part (or the
    * empty part when the look lacks it) and history entries read as parts of `partSchema`.
    * At most `HISTORY_LIMIT` entries are kept; dropping older ones sets `historyTrimmed`.
+   * A damaged entry is skipped; entries from a newer build (a `partSchema` this build does not
+   * accept, or a newer model inside one entry) follow `newer`, and omitted ones are reported as
+   * trimmed history.
    */
   readFeatureMemory(feature: string, editor: unknown, partSchema: string, history: unknown, trimmed: boolean,
-    look: Pick<Look, "parts"> | undefined): PartMemory {
+    look: Pick<Look, "parts"> | undefined, newer: NewerPolicy = "refuse"): PartMemory {
     const module = this.byId.get(feature)!;
     const part = (look && this.part(look, feature)) ?? module.part.empty();
     const entries: unknown[] = [];
-    if (Array.isArray(history)) for (const body of history.slice(-HISTORY_LIMIT)) {
-      try { entries.push(module.part.parse({ schema: partSchema, body })); } catch { /* One damaged Undo entry must not lose the draft. */ }
+    let omitted = false;
+    if (Array.isArray(history) && history.length && !module.part.accepts.includes(partSchema)) {
+      if (newer === "refuse") throw this.newer(module, partSchema);
+      omitted = true;
+    } else if (Array.isArray(history)) for (const body of history.slice(-HISTORY_LIMIT)) {
+      try { entries.push(module.part.parse({ schema: partSchema, body })); }
+      catch (error) {
+        if (!isNewerData(error)) continue; // One damaged Undo entry must not lose the draft.
+        if (newer === "refuse") throw error;
+        omitted = true;
+      }
     }
-    return { editor: module.editor.parse(editor, part), history: entries,
-      ...(trimmed || (Array.isArray(history) && history.length > HISTORY_LIMIT) ? { historyTrimmed: true as const } : {}) };
+    return { editor: module.editor.parse(editor, part), history: omitted ? [] : entries,
+      ...(trimmed || omitted || (Array.isArray(history) && history.length > HISTORY_LIMIT) ? { historyTrimmed: true as const } : {}) };
   }
-  /** The stored form of one look's memory. */
+  /**
+   * The stored form of one look's memory. History entries are written in the oldest part schema
+   * that holds every entry exactly (as the collection writers do), so older builds read them.
+   */
   writeMemory(memory: LookMemory): Record<string, StoredPartMemory> {
     return Object.fromEntries(Object.entries(memory).map(([feature, entry]) => {
       const module = this.byId.get(feature);
       if (!module) return [feature, structuredClone(entry)];
-      return [feature, { editor: module.editor.serialize(entry.editor), partSchema: module.part.current,
-        history: entry.history.map(part => module.part.serialize(part).body), ...(entry.historyTrimmed ? { historyTrimmed: true } : {}) }];
+      const { schema, bodies } = this.minimalHistory(module, entry.history);
+      return [feature, { editor: module.editor.serialize(entry.editor), partSchema: schema,
+        history: bodies, ...(entry.historyTrimmed ? { historyTrimmed: true } : {}) }];
     }));
+  }
+  /** The oldest part schema every entry downgrades to exactly (`accepts` is oldest first), with the bodies in it. */
+  private minimalHistory(module: AnyFeatureModule, history: readonly unknown[]): { schema: string; bodies: unknown[] } {
+    for (const schema of module.part.accepts) {
+      if (schema === module.part.current) break;
+      const bodies: unknown[] = [];
+      for (const part of history) {
+        const older = module.part.downgrade?.(part, schema);
+        if (!older) break;
+        bodies.push(older.body);
+      }
+      if (bodies.length === history.length) return { schema, bodies };
+    }
+    return { schema: module.part.current, bodies: history.map(part => module.part.serialize(part).body) };
   }
   /** Feature-wide memory by feature, as stored; unregistered features' entries are kept verbatim. */
   readFeatureWide(value: unknown): Record<string, unknown> {

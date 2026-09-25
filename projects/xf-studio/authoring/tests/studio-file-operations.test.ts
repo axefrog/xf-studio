@@ -8,6 +8,7 @@ import { looks } from "./fixtures/looks";
 import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
 import { BUILD_NEEDS_SETUP } from "../src/alpha-availability";
 import { recipeFile } from "../src/recipe-schema";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
   name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),
@@ -27,7 +28,7 @@ function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "d
           finish: "glitter", reason: "Active finish has no supported game-export adapter." },
       ], packagedCollectionSha256: "hash", presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
   };
-  const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
+  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), { selected: "", name: "" },
     () => editor, value => editor = value, transport);
   let nextFile: StudioPickedFile | undefined, layer = structuredClone(recipe.layers[0]);
   const downloads: { name: string; type: string; blob: Blob }[] = [];

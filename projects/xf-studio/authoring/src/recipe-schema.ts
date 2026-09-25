@@ -6,10 +6,31 @@
  * schema: it is derived when a recipe is written.
  */
 import { LAYER_MODELS, type LayerModelRegistry } from "./layer-models";
+import { NewerDataError } from "./platform/api";
 import { parseRecipe, parseRecipeFile, parseRecipePart, type Recipe, type RecipeFile } from "./recipe";
 
+/** Eye makeup's feature ID: its part's key in a look (feature-module platform §2). */
+export const EYE_MAKEUP_FEATURE = "eye-makeup" as const;
+/** Eye makeup's first part schema: a recipe file body (`xfs/recipe-N`). */
+export const EYE_MAKEUP_PART_1 = "xfs/eye-makeup-part-1";
 /** Eye makeup's part schema with the per-layer model registry (feature-module platform §2). */
 export const EYE_MAKEUP_PART_2 = "xfs/eye-makeup-part-2";
+const EYE_MAKEUP_PART = /^xfs\/eye-makeup-part-\d+$/;
+
+/**
+ * Read one eye-makeup part (`{ schema, body }`) into the in-memory recipe: part-2 bodies as they
+ * are, part-1 bodies as recipe files (their schema gates their layer models). A later part schema
+ * is a newer build's (`NewerDataError`). The part codec and the package pipeline both read with it.
+ */
+export function parseEyeMakeupPart(envelope: { schema: string; body: unknown }, models: LayerModelRegistry = LAYER_MODELS): Recipe {
+  if (envelope.schema === EYE_MAKEUP_PART_2) return parseRecipePart(envelope.body, models);
+  // A part-1 body is a recipe file: its schema gates its layer models, then goes. Like every recipe
+  // reader, it also takes a recipe without a schema (an in-memory one) as part-2.
+  if (envelope.schema === EYE_MAKEUP_PART_1) return parseRecipe(envelope.body, models);
+  if (EYE_MAKEUP_PART.test(envelope.schema))
+    throw new NewerDataError(`This look's eye makeup was saved by a newer version of XF Studio (${envelope.schema}).`);
+  throw Error(`Unsupported eye-makeup part schema ${envelope.schema}.`);
+}
 /** Every recipe file schema `parseRecipe` reads; a bare file of one of these is an eye-makeup recipe. */
 export const RECIPE_SCHEMAS: readonly string[] = ["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4",
   "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"];

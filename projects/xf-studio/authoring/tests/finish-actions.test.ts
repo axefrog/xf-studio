@@ -10,12 +10,13 @@ const written = (recipe: Recipe) => { expect(recipe).not.toHaveProperty("schema"
 import { StudioApplication, type StudioAction } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
+import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 
 // Finish, game-optics and Glitter-model actions through the application (CORE-16/17/18/21).
 
 function fixture(recipe: Recipe = initialRecipe()) {
   const workspace = freshWorkspace(recipe);
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
   const layer = (index: number) => core.document.recipe.layers[index];
   const ok = (action: StudioAction) => {
     const capability = core.app.capability(action);
@@ -188,7 +189,7 @@ test("a host without user-level history reads the same timeline mapper", () => {
   f.ok({ kind: "layer.setOpacity", layerId: id, opacity: .4 });
   const { history: _history, ...services } = { document: f.document, eyeMakeup: f.eyeMakeup,
     undo: f.undo, history: f.history, gestures: f.gestures, controls: f.controls };
-  const bare = new StudioApplication(services);
+  const bare = new StudioApplication(services, STUDIO_REGISTRY);
   expect(bare.historyTimeline()).toEqual({ ...f.app.historyTimeline(), redoCount: 0 });
   expect(bare.historyTimeline().steps.map(step => step.label)).toEqual(["Opacity"]);
 });

@@ -1,7 +1,7 @@
 import { parseExportDiagnostics } from "./export-diagnostics";
 import { canonicalFinish, finishLabel, type Finish } from "./finish";
 import { layerExport, planPresetExport, type ExportAdapterId } from "./finish-export";
-import { parseCollection, planCollection, type PresetCollection } from "./preset-collection";
+import { NO_EYE_MAKEUP_REASON, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
 import type { PackagePresetIdentity } from "./package-action";
 import { plateUvRecord, presetReachesPlate, type PlateReachInput } from "./plate-reach";
 
@@ -12,7 +12,9 @@ export const OFF_PLATE_REASON = "Its makeup doesn't reach the eye plate, so it w
 export type PackageOmission =
   | { kind: "layer"; presetId: string; presetName: string; layerId: string; layerName: string;
       finish: Finish; reason: string }
-  | { kind: "preset"; presetId: string; presetName: string; reason: string };
+  | { kind: "preset"; presetId: string; presetName: string; reason: string }
+  /** Another feature's part of a look: this mod packages eye makeup only (CORE-34). */
+  | { kind: "part"; presetId: string; presetName: string; feature: string; reason: string };
 
 /** An included layer whose finish uses an adapter that still needs in-game confirmation. */
 export type PackageExperimental = { presetId: string; presetName: string; layerId: string; layerName: string;
@@ -24,7 +26,9 @@ export function describePackageOmissions(omissions: PackageOmission[]): string {
   if (!omissions.length) return "";
   return ` Partial export: ${omissions.map(item => item.kind === "layer"
     ? `omitted layer “${item.layerName}” (${label(item.finish)}) from preset “${item.presetName}”`
+    : item.kind === "part" ? `left out the ${item.feature} part of preset “${item.presetName}”, which this mod can't hold yet`
     : item.reason === OFF_PLATE_REASON ? `omitted whole preset “${item.presetName}” because its makeup doesn't reach the eye plate`
+    : item.reason === NO_EYE_MAKEUP_REASON ? `omitted whole preset “${item.presetName}” because it has no eye makeup`
     : `omitted whole preset “${item.presetName}” because no exportable active layers remain`).join("; ")}. The authored collection is unchanged.`;
 }
 
@@ -42,6 +46,10 @@ export function describePackageExperimental(experimental: readonly PackageExperi
 export const packagePresetIdentities = (plan: Pick<ReturnType<typeof planCollection>, "presets">): PackagePresetIdentity[] => plan.presets.map(p =>
   ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route, ...(p.diagnostics ? { diagnostics: p.diagnostics } : {}) }));
 
+/** Every look of the source collection, packaged or not: a look without eye makeup counts as an omitted preset. */
+export const originalPresetCount = (source: PresetCollection) =>
+  source.presets.length + (source.omitted ?? []).filter(item => item.feature === undefined).length;
+
 /**
  * A package-specific copy. Never changes the authored collection or its stable identities.
  *
@@ -51,7 +59,10 @@ export const packagePresetIdentities = (plan: Pick<ReturnType<typeof planCollect
  */
 export function preparePackageCollection(value: unknown, plate: PlateReachInput | null = null) {
   const source = parseCollection(value);
-  const omissions: PackageOmission[] = [];
+  // Looks without eye makeup and other features' parts, which the collection's eye-makeup view left out, come first.
+  const omissions: PackageOmission[] = (source.omitted ?? []).map(item => item.feature === undefined
+    ? { kind: "preset" as const, presetId: item.presetId, presetName: item.presetName, reason: item.reason }
+    : { kind: "part" as const, presetId: item.presetId, presetName: item.presetName, feature: item.feature, reason: item.reason });
   const experimental: PackageExperimental[] = [];
   const presets: PresetCollection["presets"] = [];
   for (const preset of source.presets) {
@@ -84,7 +95,9 @@ export function preparePackageCollection(value: unknown, plate: PlateReachInput 
   if (!presets.length) throw Error("No mod files can be made: no preset has an active layer with an exportable finish (Matte, Satin, Metallic, or a game-matched Glossy, Shimmer or Colour-shifting layer). Your collection is unchanged.");
   // Diagnostic knobs of a prepared test candidate stay with the packaged copy for the presets it keeps.
   const diagnostics = parseExportDiagnostics((value as { diagnostics?: unknown } | null)?.diagnostics, presets.map(p => p.id));
-  const packaged: PresetCollection = { ...source, presets, ...(diagnostics ? { diagnostics } : {}) };
+  // The omitted list is a report, not content: the packaged copy (and its hash) never carries it.
+  const { omitted: _omitted, ...content } = source;
+  const packaged: PresetCollection = { ...content, presets, ...(diagnostics ? { diagnostics } : {}) };
   const plan = planCollection(packaged);
   return { source, packaged, plan, omissions, experimental, plateUv: plate ? plateUvRecord(plate) : null };
 }

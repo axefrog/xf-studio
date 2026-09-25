@@ -13,14 +13,14 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
+import { COLLECTION_2_LIBRARY_MESSAGE, CollectionLibrary } from "../src/collection-store";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import type { EditorSnapshot } from "../src/collection-session";
 import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/collection-workspace";
-import { EYE_MAKEUP_FEATURE, LIVE_FEATURE, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { LIVE_FEATURE, STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../src/direct-glint-settings";
 import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
-import { recipeFile } from "../src/recipe-schema";
+import { EYE_MAKEUP_FEATURE, recipeFile } from "../src/recipe-schema";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, type FeatureActionSpec, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { compilePreset } from "../src/preset-compiler";
@@ -60,7 +60,7 @@ test("workspace-1 fixtures restore exactly what the pre-migration code restored,
 
 test("workspace-2 stores editor memory per feature and restores the live workspace losslessly", () => {
   const state = restore(smallWorkspaceV1()).state;
-  const stored = serializeWorkspace(state);
+  const stored = serializeWorkspace(state, STUDIO_DOCUMENTS);
   expect(stored.schema).toBe("xfs/workspace-2");
   // With a collection, the selected look restores the editor: no loose copy is stored.
   expect(stored).not.toHaveProperty("look");
@@ -72,16 +72,18 @@ test("workspace-2 stores editor memory per feature and restores the live workspa
   const collections = stored.collections!;
   expect(collections.collection.schema).toBe(COLLECTION_2);
   const p1 = collections.memory[fixedId(1)][EYE] as { editor: unknown; partSchema: string; history: unknown[]; historyTrimmed?: true };
+  // History is written in the oldest part schema that holds every entry (CORE-27): part-1 recipe files here.
   expect(p1).toMatchObject({ editor: { active: 1, selected: 2, fieldSelection: { "a-shift": "a-shift-w2" } },
-    partSchema: "xfs/eye-makeup-part-2", historyTrimmed: true });
+    partSchema: "xfs/eye-makeup-part-1", historyTrimmed: true });
   expect(p1.history).toHaveLength(3);
+  for (const entry of p1.history) expect((entry as { schema?: string }).schema).toMatch(/^xfs\/recipe-(?:[7-9]|1[01])$/);
   expect(collections.removed[0].memory[EYE]).toMatchObject({ historyTrimmed: true });
   // Lossless: the stored form restores the same live state, field for field.
-  expect(parseWorkspace(JSON.parse(JSON.stringify(stored)))).toEqual(state);
-  const loose = restore(looseWorkspaceV1()).state, looseStored = serializeWorkspace(loose);
-  expect(looseStored.look?.parts[EYE].schema).toBe("xfs/eye-makeup-part-2");
+  expect(parseWorkspace(JSON.parse(JSON.stringify(stored)), STUDIO_DOCUMENTS)).toEqual(state);
+  const loose = restore(looseWorkspaceV1()).state, looseStored = serializeWorkspace(loose, STUDIO_DOCUMENTS);
+  expect(looseStored.look?.parts[EYE].schema).toBe("xfs/eye-makeup-part-1");
   expect(looseStored.look?.memory[EYE]).toMatchObject({ historyTrimmed: true, editor: { active: 2, selected: 3 } });
-  expect(parseWorkspace(storedWorkspace(loose))).toEqual(loose);
+  expect(parseWorkspace(storedWorkspace(loose), STUDIO_DOCUMENTS)).toEqual(loose);
 });
 
 test("parts and memory of features this build does not register are carried unchanged", () => {
@@ -91,7 +93,7 @@ test("parts and memory of features this build does not register are carried unch
   stored.collections.collection.presets[0].parts.hair = future;
   stored.collections.memory[fixedId(1)].hair = { editor: { brush: 4 }, partSchema: "xfs/hair-part-3", history: [{ strands: [] }] };
   stored.features.hair = { palette: ["#123456"] };
-  const restored = parseWorkspace(stored);
+  const restored = parseWorkspace(stored, STUDIO_DOCUMENTS);
   expect(restored.collections!.collection.presets[0].parts.hair).toEqual(future);
   const again = storedWorkspace(restored);
   expect(again.collections.collection.presets[0].parts.hair).toEqual(future);
@@ -100,7 +102,7 @@ test("parts and memory of features this build does not register are carried unch
   // A loose look carries them too.
   const loose = storedWorkspace(restore(looseWorkspaceV1()).state);
   loose.look.parts.hair = future; loose.features.hair = { palette: [] };
-  expect(storedWorkspace(parseWorkspace(loose)).look.parts.hair).toEqual(future);
+  expect(storedWorkspace(parseWorkspace(loose, STUDIO_DOCUMENTS)).look.parts.hair).toEqual(future);
   // A collection file keeps them through import, the library and export.
   const file = { ...STUDIO_PARTS.write(STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[1]))) };
   file.presets[0].parts.hair = future;
@@ -119,7 +121,7 @@ test("a workspace from a newer build or damaged beyond the current draft stays p
   for (const value of [{ ...state, schema: "xfs/workspace-3" },
     { ...state, collections: { ...state.collections, collection: { ...state.collections.collection,
       presets: [{ ...state.collections.collection.presets[0], parts: { [EYE]: { schema: "xfs/eye-makeup-part-9", body: {} } } }] } } }]) {
-    const loaded = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false);
+    const loaded = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false, STUDIO_DOCUMENTS);
     expect(loaded.writable).toBe(false);
   }
   expect(() => STUDIO_PARTS.readPart(EYE, { schema: "xfs/eye-makeup-part-9", body: {} }))
@@ -215,7 +217,7 @@ function legacyLibrary() {
 
 test("a pre-migration SQLite library lists and reads unchanged, and old rows are never rewritten", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path);
+  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
   try {
     expect(library.list().map(({ updatedAt: _u, ...item }) => item)).toEqual(legacy.rows.list);
     // Every stored revision reads as looks whose eye-makeup view is the collection the old store returned.
@@ -234,7 +236,7 @@ test("a pre-migration SQLite library lists and reads unchanged, and old rows are
 
 test("saving an unchanged collection adds no preset revision; a change adds exactly one; old rows stay byte-unchanged", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path);
+  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
   try {
     const editorId = legacy.rows.list[1].id, latest = library.get(editorId);
     const versions = () => legacy.dump().collection_preset_versions.length;
@@ -260,7 +262,7 @@ test("saving an unchanged collection adds no preset revision; a change adds exac
     expect(parseCollection(JSON.parse(newest.collection_json as string)).presets[2].recipe.layers[0].opacity).toBe(0.25);
     // Reopening compares canonically too.
     library.close();
-    const reopened = new CollectionLibrary(legacy.path);
+    const reopened = new CollectionLibrary(legacy.path, STUDIO_PARTS);
     try {
       const again = reopened.save({ collection: reopened.get(editorId).collection, revision: saved.revision });
       expect(again.collection.presets.map(item => item.revision)).toEqual(saved.collection.presets.map(item => item.revision));
@@ -269,26 +271,25 @@ test("saving an unchanged collection adds no preset revision; a change adds exac
   } finally { try { library.close(); } catch { /* already closed */ } legacy.cleanup(); }
 });
 
-test("a look the legacy format cannot hold is stored as collection-2 and still lists and reads", () => {
+test("a look the legacy format cannot hold is refused by the library, never written where 0.1.0-alpha.1 reads", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path);
+  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
   try {
     const current = library.get(legacy.rows.list[2].id), edited = structuredClone(current.collection);
     edited.presets[0].parts.hair = { schema: "xfs/hair-part-3", body: { strands: 3 } };
-    const saved = library.save({ collection: edited, revision: current.revision });
-    const rows = legacy.dump();
-    expect(JSON.parse(rows.collection_revisions.at(-1)!.collection_json as string).schema).toBe(COLLECTION_2);
-    expect(JSON.parse(rows.collection_preset_versions.at(-1)!.preset_json as string).parts.hair).toEqual({ schema: "xfs/hair-part-3", body: { strands: 3 } });
-    expect(library.get(saved.collection.id).collection.presets[0].parts.hair).toEqual({ schema: "xfs/hair-part-3", body: { strands: 3 } });
-    expect(library.list().find(item => item.id === saved.collection.id)?.revision).toBe(2);
-    // Only that preset changed.
-    expect(saved.collection.presets.map(p => p.revision)).toEqual(current.collection.presets.map((p, i) => p.revision + (i === 0 ? 1 : 0)));
+    const before = legacy.dump();
+    // The alpha lists a library only while every collection's latest row is collection-1 (CORE-30).
+    expect(() => library.save({ collection: edited, revision: current.revision })).toThrow(COLLECTION_2_LIBRARY_MESSAGE);
+    expect(legacy.dump()).toEqual(before);
+    expect(library.list().find(item => item.id === current.collection.id)?.revision).toBe(current.revision);
+    // The collection-2 writer still serves collection files (Export collection), which the alpha refuses cleanly.
+    expect(STUDIO_PARTS.writeMinimal(edited).schema).toBe(COLLECTION_2);
   } finally { library.close(); legacy.cleanup(); }
 });
 
 test("draft persistence compares canonically: a library revision read from collection-1 rows is clean until edited", async () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path);
+  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
   try {
     const id = legacy.rows.list[1].id;
     const transport: CollectionTransport = { list: async () => library.list(), get: async key => library.get(key),
@@ -297,7 +298,7 @@ test("draft persistence compares canonically: a library revision read from colle
     let revision = 0;
     // The editor shows the selected (first) look, as a restored workspace does.
     let editor: EditorSnapshot = { recipe: structuredClone(recipeOf(stored.collection.presets[0])), ...emptyMemory() };
-    const service = new CollectionService(collectionDraft(stored.collection, stored.revision), { selected: "", name: "" },
+    const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(stored.collection, STUDIO_DOCUMENTS, stored.revision), { selected: "", name: "" },
       () => editor, value => editor = value, transport, () => ({ recipe: editor.recipe, revision }));
     await service.execute({ kind: "initialize" });
     service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[1].id });
@@ -317,7 +318,7 @@ test("export writes collection-1 for eye-makeup looks, and both collection schem
     save: async (collection, revision) => (stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 },
       { ...stored, updatedAt: "now" }), package: async () => { throw Error("unused"); } };
   let editor: EditorSnapshot = { recipe: parseRecipe(file.presets[0].recipe), ...emptyMemory() };
-  const service = new CollectionService(collectionDraft(file), { selected: "", name: "" }, () => editor, value => editor = value, transport);
+  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(file, STUDIO_DOCUMENTS), { selected: "", name: "" }, () => editor, value => editor = value, transport);
   await service.execute({ kind: "initialize" });
   const exported = await service.execute({ kind: "exportCollection" });
   const json = exported.ok && exported.result.kind === "export" ? JSON.parse(exported.result.json) : undefined;
@@ -362,7 +363,7 @@ test("apply is pure and matches the recipe service; the application dispatches t
     { kind: "glitter.selectModel", layerId: "pure-glit", model: "irregular" },
     { kind: "layer.setFinish", layerId: "pure-shift", finish: "matte" },
     { kind: "layer.select", layerId: "pure-satin" },
-    { kind: "layer.edit", command: { kind: "duplicate", id: "pure-gloss" } },
+    { kind: "layer.edit", command: { kind: "duplicate", id: "pure-gloss", newId: "pure-copy" } },
     { kind: "layer.setEnabled", id: "pure-satin", enabled: false },
   ] as const;
   for (const action of actions) {
@@ -384,7 +385,7 @@ test("apply is pure and matches the recipe service; the application dispatches t
   // Through the application: the same result, one Undo step, the memory written back under the preset.
   const workspace = freshWorkspace(recipe);
   workspace.glitterChoices = { "preset-a/pure-glit": structuredClone(remembered) };
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
   expect(core.app.dispatch({ kind: "glitter.selectModel", layerId: "pure-glit", model: "irregular" }).ok).toBe(true);
   expect(core.document.recipe).toEqual(selected.part);
   expect(core.document.undoDepth).toBe(1);
@@ -412,22 +413,22 @@ test("the part registry reads identities without parts, refuses oversized parts 
 
 test("workspace-1 collection drafts read through the generic reader match the workspace reader", () => {
   const v1 = smallWorkspaceV1().collections;
-  const direct = readCollectionWorkspaceV1(v1);
-  expect(parseWorkspace(smallWorkspaceV1()).collections).toEqual(direct);
+  const direct = readCollectionWorkspaceV1(v1, STUDIO_DOCUMENTS);
+  expect(parseWorkspace(smallWorkspaceV1(), STUDIO_DOCUMENTS).collections).toEqual(direct);
   // In memory, a look's part is the parsed recipe of that preset; its memory is by feature.
   expect(recipeOf(direct.collection.presets[2])).toEqual(parseRecipe(recipe3("c")));
   expect(Object.keys(direct.memory[fixedId(3)])).toEqual([EYE]);
-  expect(parseCollectionWorkspace(JSON.parse(JSON.stringify(direct)))).toEqual(direct);
+  expect(parseCollectionWorkspace(JSON.parse(JSON.stringify(direct)), STUDIO_DOCUMENTS)).toEqual(direct);
 });
 
 // ---- CORE-05: routine queries never copy the draft ----
 
 test("target checks and context binding read the collection's identity without copying the draft (CORE-05)", async () => {
   const workspace = freshWorkspace();
-  workspace.collections = collectionDraft(readFixture(COLLECTION_FIXTURES[1]));
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "x" });
+  workspace.collections = collectionDraft(readFixture(COLLECTION_FIXTURES[1]), STUDIO_DOCUMENTS);
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "x" }, STUDIO_COMPOSITION);
   let editor: EditorSnapshot = { recipe: core.document.recipe, ...emptyMemory() };
-  const service = new CollectionService(workspace.collections, { selected: "", name: "" }, () => editor, value => editor = value,
+  const service = new CollectionService(STUDIO_DOCUMENTS, workspace.collections, { selected: "", name: "" }, () => editor, value => editor = value,
     { list: async () => [], get: async () => { throw Error(); }, save: async () => { throw Error(); }, package: async () => { throw Error(); } });
   core.app.attach({ collection: service });
   let views = 0, snapshots = 0;
@@ -453,8 +454,8 @@ test("target checks and context binding read the collection's identity without c
 
 test("the stored workspace grows only by the part envelopes", () => {
   const state = restore(largeWorkspaceV1()).state;
-  const v2 = encodeWorkspaceAt(state, 0).size;
+  const v2 = encodeWorkspaceAt(state, 0, STUDIO_DOCUMENTS).size;
   // Per look: one envelope and a partSchema per memory entry; a few hundred code units in total, against ~1.7M.
   expect(v2).toBeLessThan(2_000_000);
-  expect(JSON.parse(encodeWorkspaceAt(state, 0).encoded).schema).toBe("xfs/workspace-2");
+  expect(JSON.parse(encodeWorkspaceAt(state, 0, STUDIO_DOCUMENTS).encoded).schema).toBe("xfs/workspace-2");
 });

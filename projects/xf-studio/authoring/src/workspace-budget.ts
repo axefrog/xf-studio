@@ -1,4 +1,4 @@
-import type { CollectionDraft, CollectionWorkspace } from "./collection-workspace";
+import type { CollectionDraft, CollectionWorkspace, DocumentModel } from "./collection-workspace";
 import type { LookMemory, PartMemory } from "./platform/api";
 import { serializeWorkspace, type WorkspaceState } from "./workspace-state";
 
@@ -45,15 +45,17 @@ export const WORKSPACE_LEVELS = LEVELS.length;
  * - keeps only the latest few Undo entries of presets that are not selected.
  * Nothing here changes the live session; only what is written to storage.
  */
-export function encodeWorkspaceAt(state: WorkspaceState, level: number, budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
-  const encoded = JSON.stringify(serializeWorkspace(compactWorkspace(state, LEVELS[Math.max(0, Math.min(level, LEVELS.length - 1))])));
+export function encodeWorkspaceAt(state: WorkspaceState, level: number, model: DocumentModel,
+  budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
+  const encoded = JSON.stringify(serializeWorkspace(compactWorkspace(state, LEVELS[Math.max(0, Math.min(level, LEVELS.length - 1))]), model));
   return { encoded, size: encoded.length, level, overBudget: encoded.length > budget };
 }
 
 /** The first level that fits the budget (or the smallest one when none fits). */
-export function encodeWorkspaceForStorage(state: WorkspaceState, budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
+export function encodeWorkspaceForStorage(state: WorkspaceState, model: DocumentModel,
+  budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
   for (let level = 0; ; level++) {
-    const candidate = encodeWorkspaceAt(state, level, budget);
+    const candidate = encodeWorkspaceAt(state, level, model, budget);
     if (!candidate.overBudget || level === LEVELS.length - 1) return candidate;
   }
 }

@@ -2,6 +2,8 @@ import { resolve, sep } from "node:path";
 import { mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
+// A composition root: the part registry is built once and injected (CORE-29).
+import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { createPackageHandler, localPackageTools, localPlateCache, localToolsRoot } from "./src/package-server";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
@@ -22,8 +24,8 @@ const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
-const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
-const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
+const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
+const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
 const localSettings = new LocalSettingsStore();
 // WolvenKit: XFS_PACKAGE_WOLVENKIT, then Local setup, then XF Studio's own copy (downloaded only with consent).
 const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),

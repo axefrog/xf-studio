@@ -3,8 +3,9 @@ import { CollectionServiceError } from "../src/collection-service";
 import { PreviewQualityActions } from "../src/preview-quality-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
-const makeCore = () => createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" });
+const makeCore = () => createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
 
 test("capability applies descriptor payload ranges to every entry point, not only context menus", () => {
   const { app, document } = makeCore(), id = document.recipe.layers[0].id;

@@ -12,16 +12,17 @@ import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment } from "../src/viewport-attachment";
 import { freshWorkspace } from "../src/workspace-state";
 import { recipeFile } from "../src/recipe-schema";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 function mountFixture() {
   const workspace = freshWorkspace();
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Fixture",
     presets: [{ id: crypto.randomUUID(), name: "First", revision: 1, recipe: recipeFile(structuredClone(workspace.recipe))! },
       { id: crypto.randomUUID(), name: "Second", revision: 1, recipe: recipeFile({ ...structuredClone(workspace.recipe), layers: [] })! }] };
-  workspace.collections = collectionDraft(source, 3);
+  workspace.collections = collectionDraft(source, STUDIO_DOCUMENTS, 3);
   workspace.history = Array.from({ length: 40 }, () => structuredClone(workspace.recipe));
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
-  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   core.app.attach({ quality: new PreviewQualityActions(1024, { assess: () => ({ accepted: true }), replace: () => {} }) });
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 1, height: 1 }),
     resize: () => {}, cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,

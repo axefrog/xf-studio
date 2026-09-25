@@ -1,9 +1,9 @@
 import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
 import { liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, writeCollectionWorkspace,
-  type CollectionWorkspace, type RestoreWarnings } from "./collection-workspace";
-import { LIVE_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
-import type { LookMemory, PartEnvelope } from "./platform/api";
+  type CollectionWorkspace, type DocumentModel, type RestoreWarnings } from "./collection-workspace";
+import { isNewerData, type LookMemory, type PartEnvelope } from "./platform/api";
+import type { NewerPolicy } from "./platform/core/document";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
@@ -96,11 +96,18 @@ const uuid = (x: unknown): x is string => typeof x === "string" && /^[0-9a-f]{8}
  * memory and Undo histories become eye makeup's part and memory; `glitterChoices` becomes eye
  * makeup's feature memory). With `warnings`, damaged recovery drafts and removed presets are
  * dropped (and noted) instead of failing the restore; the current draft must always parse.
+ *
+ * Data from a newer build (a part schema or layer model this build does not know, anywhere: the
+ * current draft, recovery drafts, removed presets, Undo histories) is never dropped as damage.
+ * It is refused with `NewerDataError`, so the stored workspace stays protected, unless `newer` is
+ * `omit`: then the newer entries are left out of a view that must never be written back
+ * (`loadWorkspace` opens it read-only). The current draft's own looks are always required.
  */
-export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): WorkspaceState {
+export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: RestoreWarnings,
+  newer: NewerPolicy = "refuse"): WorkspaceState {
   const v = value as Record<string, unknown> & Partial<WorkspaceState>;
   if (!v || (v.schema as string) !== WORKSPACE_1 && v.schema !== WORKSPACE_2) throw Error("Unsupported workspace version");
-  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v) : readEditorV2(v as unknown as StoredWorkspace);
+  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v) : readEditorV2(v as unknown as StoredWorkspace, model, newer);
   state.uiPreferences = parseUIPreferences(v.uiPreferences);
   state.uvView = parseUVView(v.uvView);
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
@@ -140,13 +147,13 @@ export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): Work
   // widths, scroll positions, open sections). It is ignored here and not written again; the
   // Studio's dock layout lives in `uiPreferences`.
   if (v.collections !== undefined) {
-    state.collections = (v.schema as string) === WORKSPACE_1 ? readCollectionWorkspaceV1(v.collections, warnings)
-      : parseCollectionWorkspace(v.collections, warnings);
+    state.collections = (v.schema as string) === WORKSPACE_1 ? readCollectionWorkspaceV1(v.collections, model, warnings, newer)
+      : parseCollectionWorkspace(v.collections, model, warnings, newer);
     // The selected look restores the editor; any loose editor copy is ignored.
     const preset = state.collections.collection.presets.find(p => p.id === state.collections!.selected);
-    const recipe = livePart(preset);
+    const recipe = livePart(preset, model);
     state.recipe = recipe ? structuredClone(recipe) : emptyRecipe();
-    const memory = liveMemory(preset ? state.collections.memory[preset.id] : undefined);
+    const memory = liveMemory(preset ? state.collections.memory[preset.id] : undefined, model);
     state.active = memory.active; state.selected = memory.selected; state.history = structuredClone(memory.history);
     if (memory.historyTrimmed) state.historyTrimmed = true; else delete state.historyTrimmed;
     state.fieldSelection = structuredClone(memory.fieldSelection ?? {});
@@ -170,20 +177,21 @@ function readEditorV1(v: Record<string, unknown>): WorkspaceState {
 }
 
 /** Workspace-2's loose look (the editor without a collection) and each feature's workspace memory. */
-function readEditorV2(v: StoredWorkspace): WorkspaceState {
+function readEditorV2(v: StoredWorkspace, model: DocumentModel, newer: NewerPolicy): WorkspaceState {
+  const { parts: registry, live: LIVE } = model;
   const look = v.look && typeof v.look === "object" ? v.look : undefined;
   const parts: Record<string, PartEnvelope> = {};
   if (look?.parts && typeof look.parts === "object")
-    for (const [feature, part] of Object.entries(look.parts)) parts[feature] = STUDIO_PARTS.readPart(feature, part);
-  const memory = STUDIO_PARTS.readMemory(look?.memory, { parts });
-  const recipe = livePart({ parts }) ?? emptyRecipe(), state = freshWorkspace(recipe);
-  const live = liveMemory(memory);
+    for (const [feature, part] of Object.entries(look.parts)) parts[feature] = registry.readPart(feature, part);
+  const memory = registry.readMemory(look?.memory, { parts }, newer);
+  const recipe = livePart({ parts }, model) ?? emptyRecipe(), state = freshWorkspace(recipe);
+  const live = liveMemory(memory, model);
   state.active = live.active; state.selected = live.selected; state.history = live.history;
   state.fieldSelection = live.fieldSelection ?? {};
   if (live.historyTrimmed) state.historyTrimmed = true;
-  const features = STUDIO_PARTS.readFeatureWide(v.features);
-  state.glitterChoices = (features[LIVE_FEATURE] as { choices?: GlitterChoices } | undefined)?.choices ?? {};
-  delete parts[LIVE_FEATURE]; delete memory[LIVE_FEATURE]; delete features[LIVE_FEATURE];
+  const features = registry.readFeatureWide(v.features);
+  state.glitterChoices = (features[LIVE] as { choices?: GlitterChoices } | undefined)?.choices ?? {};
+  delete parts[LIVE]; delete memory[LIVE]; delete features[LIVE];
   const other = { ...(Object.keys(parts).length ? { parts } : {}), ...(Object.keys(memory).length ? { memory } : {}),
     ...(Object.keys(features).length ? { features } : {}) };
   if (Object.keys(other).length) state.otherFeatures = other;
@@ -192,19 +200,23 @@ function readEditorV2(v: StoredWorkspace): WorkspaceState {
 
 /**
  * The stored `xfs/workspace-2` form of a live workspace: the editor and its memory per feature,
- * collection looks with their parts and per-feature memory. Nothing is trimmed here; the
- * storage budget (`workspace-budget.ts`) decides what is kept before this runs.
+ * collection looks with their parts and per-feature memory, each part and Undo history in the
+ * oldest part schema that holds it. Nothing is trimmed here; the storage budget
+ * (`workspace-budget.ts`) decides what is kept before this runs. The result shares structure
+ * with `state`; serialize it at once.
  */
-export function serializeWorkspace(state: WorkspaceState): StoredWorkspace {
+export function serializeWorkspace(state: WorkspaceState, model: DocumentModel): StoredWorkspace {
+  const { parts: registry, live: LIVE } = model;
   const { schema: _schema, recipe, active, selected, history, historyTrimmed, fieldSelection, glitterChoices, collections,
     otherFeatures, ...view } = state;
-  const features = STUDIO_PARTS.writeFeatureWide({ ...otherFeatures?.features, [LIVE_FEATURE]: { choices: glitterChoices } });
+  const features = registry.writeFeatureWide({ ...otherFeatures?.features, [LIVE]: { choices: glitterChoices } });
   const look = collections ? undefined : {
-    parts: { ...otherFeatures?.parts, [LIVE_FEATURE]: STUDIO_PARTS.envelope(LIVE_FEATURE, recipe) },
-    memory: STUDIO_PARTS.writeMemory({ ...otherFeatures?.memory, [LIVE_FEATURE]: { editor: { active, selected, fieldSelection },
+    parts: registry.minimalLook({ id: "", name: "", revision: 1,
+      parts: { ...otherFeatures?.parts, [LIVE]: registry.envelope(LIVE, recipe) } }, false).parts,
+    memory: registry.writeMemory({ ...otherFeatures?.memory, [LIVE]: { editor: { active, selected, fieldSelection },
       history, ...(historyTrimmed ? { historyTrimmed: true as const } : {}) } }) };
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view,
-    ...(collections ? { collections: writeCollectionWorkspace(collections) } : {}) };
+    ...(collections ? { collections: writeCollectionWorkspace(collections, model) } : {}) };
 }
 
 export function workspaceKeys(verification: boolean) {
@@ -216,20 +228,44 @@ export function workspaceKeys(verification: boolean) {
 
 export type LoadedWorkspace = { state: WorkspaceState; writable: boolean; error?: string;
   /** Damaged non-current entries that were dropped; the rest of the workspace was restored. */
-  warning?: string };
+  warning?: string;
+  /**
+   * The workspace holds data from a newer XF Studio: `state` is a read-only view without it (the
+   * current draft when that is readable, else a fresh one) and the stored workspace is never replaced.
+   */
+  newer?: true };
 
-/** Never replace unreadable saved work automatically. Storage errors stay visible to the UI. */
-export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: boolean): LoadedWorkspace {
+/** What the protected status says when a newer build's data keeps the workspace read-only. */
+export const NEWER_WORKSPACE_MESSAGE = "Parts of this workspace were saved by a newer version of XF Studio, so it opened " +
+  "without them and changes are not autosaved. Update XF Studio to keep working on it";
+
+/**
+ * Never replace unreadable saved work automatically. Storage errors stay visible to the UI. A
+ * workspace holding a newer build's data anywhere opens read-only: its current draft is shown
+ * when this build can read it, and nothing is ever written over the stored workspace.
+ */
+export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel): LoadedWorkspace {
   const keys = workspaceKeys(verification);
-  let error: string | undefined;
+  let error: string | undefined, newer = false;
   try {
     const raw = storage.getItem(keys.workspace);
     if (raw !== null) {
-      const warnings: RestoreWarnings = [];
-      const state = parseWorkspace(JSON.parse(raw), warnings);
-      return { state, writable: true, ...(warnings.length ? { warning: restoreWarning(warnings) } : {}) };
+      const value = JSON.parse(raw), warnings: RestoreWarnings = [];
+      try {
+        const state = parseWorkspace(value, model, warnings);
+        return { state, writable: true, ...(warnings.length ? { warning: restoreWarning(warnings) } : {}) };
+      } catch (e) {
+        if (!isNewerData(e)) throw e;
+        newer = true;
+        // Read-only view: the current draft without the newer build's entries (throws when the draft itself is newer).
+        const state = parseWorkspace(value, model, [], "omit");
+        return { state, writable: false, newer: true, error: NEWER_WORKSPACE_MESSAGE };
+      }
     }
-  } catch (e) { error = `Workspace could not be restored: ${(e as Error).message}`; }
+  } catch (e) {
+    error = newer ? NEWER_WORKSPACE_MESSAGE : `Workspace could not be restored: ${(e as Error).message}`;
+    if (newer) return { state: freshWorkspace(starterRecipe()), writable: false, newer: true, error };
+  }
   // The fallback shows the small authored contour. Saved workspaces and legacy
   // recipe-only drafts still pass through their existing parsers unchanged.
   let state = freshWorkspace(starterRecipe());

@@ -15,6 +15,8 @@ import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
 import { freshWorkspace } from "../src/workspace-state";
 import { recipeFile } from "../src/recipe-schema";
+import { registeredEditing } from "./gesture-test-adapter";
+import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 
 /**
  * A trusted presentation over real application services, without a browser. `hitAt` stands in
@@ -29,10 +31,11 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "fixture");
-  const gestures = new AuthoringGestures(document, recipe, undo);
-  const controls = new AuthoringControlEdits(document, action => recipe.dispatch(action), undo);
+  const eyeMakeup = eyeMakeupPort(document, recipe), editing = registeredEditing(eyeMakeup);
+  const gestures = new AuthoringGestures(document, editing.gestures, undo);
+  const controls = new AuthoringControlEdits(document, editing.controls, undo);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-  const app = new StudioApplication({ document, eyeMakeup: eyeMakeupPort(document, recipe), gestures, controls, undo, quality });
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, undo, quality }, STUDIO_REGISTRY);
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: recipeFile(structuredClone(document.recipe))! }] };
@@ -57,7 +60,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     savedVReady: () => false, executeCollection: request => app.execute(request),
     recoverCollection: () => library.recover(),
   });
-  library = new CollectionApplication(collectionDraft(source, 1), workspace.library, document,
+  library = new CollectionApplication(STUDIO_DOCUMENTS, collectionDraft(source, STUDIO_DOCUMENTS, 1), workspace.library, document,
     () => {}, transport, app, files);
   const locations: string[] = [];
   let uvView = { mode: "both" as "both" | "single", side: "low" as "low" | "high",

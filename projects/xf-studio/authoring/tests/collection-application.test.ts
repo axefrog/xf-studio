@@ -13,6 +13,8 @@ import { StudioApplication } from "../src/studio-application";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { freshWorkspace } from "../src/workspace-state";
 import { recipeFile } from "../src/recipe-schema";
+import { registeredEditing } from "./gesture-test-adapter";
+import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 
 function fixture() {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
@@ -21,9 +23,10 @@ function fixture() {
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
-  const gestures = new AuthoringGestures(document, recipe, undo);
-  const controls = new AuthoringControlEdits(document, action => recipe.dispatch(action), undo);
-  const app = new StudioApplication({ document, eyeMakeup: eyeMakeupPort(document, recipe), gestures, controls, undo });
+  const eyeMakeup = eyeMakeupPort(document, recipe), editing = registeredEditing(eyeMakeup);
+  const gestures = new AuthoringGestures(document, editing.gestures, undo);
+  const controls = new AuthoringControlEdits(document, editing.controls, undo);
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, undo }, STUDIO_REGISTRY);
   const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: recipeFile(structuredClone(document.recipe))! }] };
@@ -45,7 +48,7 @@ function fixture() {
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}), savedVReady: () => false,
     executeCollection: request => app.execute(request), recoverCollection: () => bootstrap.recover(),
   });
-  bootstrap = new CollectionApplication(collectionDraft(collection, 1), workspace.library, document,
+  bootstrap = new CollectionApplication(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), workspace.library, document,
     () => { restored++; }, transport, app, files);
   return { bootstrap, collection, other, document, app, files, transport,
     saves: () => saves, restored: () => restored, packageInput: () => packageInput };

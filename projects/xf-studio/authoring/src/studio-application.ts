@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
-import { historyTimeline, type AuthoringHistory, type HistorySnapshot, type HistoryState } from "./authoring-history";
+import { historyTimeline, type AuthoringHistory, type HistoryAction, type HistorySnapshot, type HistoryState } from "./authoring-history";
 import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue } from "./validation-issues";
@@ -9,26 +9,41 @@ import { consequenceOf, type Consequence, type ConsequenceSubject } from "./acti
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
 import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import { CollectionServiceError, type CollectionRequest, type CollectionService } from "./collection-service";
-import type { MotionActions } from "./motion-actions";
-import type { PreviewActions } from "./preview-actions";
-import type { PreviewQualityActions } from "./preview-quality-actions";
+import type { CollectionStudioAction } from "./collection-actions";
+import type { MotionAction, MotionActions } from "./motion-actions";
+import type { PreviewAction, PreviewActions } from "./preview-actions";
+import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
 import type { Layer, Point, Recipe, WarpField } from "./recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./recipe-actions";
-import type { EyeMakeupPort } from "./authoring-eye-makeup";
-import type { SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
+import type { EyeMakeupPort, EyeMakeupSpec } from "./authoring-eye-makeup";
+import type { EyeMakeupAction } from "./eye-makeup-model";
+import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
 import { actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ActionDescriptor, type ValueSchema } from "./studio-action-descriptors";
-import { coded, refusal, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type Capability,
-  type FeatureActionSpec, type ReasonCode, type ValidationIssue } from "./platform/api";
+import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type Capability,
+  type ReasonCode, type ValidationIssue } from "./platform/api";
 import type { Registry } from "./platform/core/registry";
-import { STUDIO_REGISTRY, type EyeMakeupAction, type EyeMakeupEditorState, type EyeMakeupEffect, type StudioOwnerActions,
-  type StudioOwnerId } from "./compose/studio-registry";
 import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
 import { layerExport, planPresetExport, type LayerExport } from "./finish-export";
 
+/**
+ * Each owner this application binds a handler for, with its action union, keyed by owner ID. The
+ * composition list (`compose/studio-registry.ts`) must register exactly these owners: it checks
+ * this map at compile time, and the constructor checks the injected registry at run time.
+ */
+export type StudioOwnerActions = {
+  history: HistoryAction;
+  "eye-makeup": EyeMakeupAction;
+  collection: CollectionStudioAction;
+  preview: PreviewAction;
+  motion: MotionAction;
+  quality: QualityAction;
+  savedV: SavedAppearanceAction;
+};
+export type StudioOwnerId = keyof StudioOwnerActions;
 /** Every action a presentation may dispatch: the union of the registered owners' actions. */
 export type StudioAction = StudioOwnerActions[StudioOwnerId];
 /** A layer's export status within its preset. `blockedBy` says whether its own finish ("layer")
@@ -74,7 +89,8 @@ export class StudioApplication {
   private readonly routes: Registry;
   /** One handler per registered owner: the compiler requires every owner in the composition list. */
   private readonly handlers: Handlers;
-  constructor(services: Services, registry: Registry = STUDIO_REGISTRY) {
+  /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
+  constructor(services: Services, registry: Registry) {
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
     const owners = registry.owners().map(owner => owner.id).sort(), bound = Object.keys(this.handlers).sort();
@@ -227,7 +243,9 @@ export class StudioApplication {
           capability = { available: false, code: "incompatible_mode",
             reason: "Enable point edge softness before editing an individual edge." };
       }
-      return { ...candidate, capability, undo: this.routes.descriptor(candidate.actionKind)!.undo };
+      // The Undo policy of the variant the option edits, as dispatch records it (CORE-32).
+      const variant = { kind: candidate.actionKind, command: { kind: candidate.variant } } as { kind: string };
+      return { ...candidate, capability, undo: undoPolicyOf(this.routes.descriptor(candidate.actionKind)!, variant) };
     });
   }
   contextQuery(hit: StudioContextHit) {
@@ -348,7 +366,7 @@ export class StudioApplication {
   private eyeMakeupSpec(action: EyeMakeupAction) {
     const route = this.routes.route(action.kind);
     if (!route.ok || route.owner.owner !== "feature") throw Error(`${action.kind} is not a feature action.`);
-    return route.spec as FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction, string, EyeMakeupEffect>;
+    return route.spec as EyeMakeupSpec;
   }
   /**
    * Each owner's live behaviour. Eye makeup's is its module's pure capability and apply over
@@ -357,7 +375,8 @@ export class StudioApplication {
    */
   private bindHandlers(): Handlers {
     const app = this;
-    const selection = (kind: string) => this.routes.descriptor(kind)?.effect === "selection";
+    // An action records an Undo entry by its Undo policy (its variant's first), never by its effect (CORE-32).
+    const recorded = (action: StudioAction) => this.routes.undoPolicy(action) !== "none";
     return {
       history: {
         capability: action => {
@@ -383,8 +402,7 @@ export class StudioApplication {
         capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
         dispatch: action => {
           const s = app.services, spec = app.eyeMakeupSpec(action);
-          s.document.withHistoryLabel(historyLabel(action), () =>
-            s.eyeMakeup.commit(action, spec.apply(s.eyeMakeup.state(), action), !selection(action.kind)));
+          s.document.withHistoryLabel(historyLabel(action), () => s.eyeMakeup.apply(spec, action, recorded(action)));
           return undefined;
         },
       },

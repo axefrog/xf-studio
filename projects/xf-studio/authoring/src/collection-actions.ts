@@ -1,8 +1,7 @@
 import { CollectionSession, type EditorSnapshot } from "./collection-session";
 import { COLLECTION_RECOVERY_LIMIT } from "./collection-workspace";
-import type { CollectionWorkspace, PresetCommand } from "./collection-workspace";
+import type { CollectionWorkspace, DocumentModel, PresetCommand } from "./collection-workspace";
 import type { StoredCollection } from "./collection-store";
-import { LIVE_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
 import type { Look, LookCollection } from "./platform/api";
 import type { Recipe } from "./recipe";
 import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./validation-issues";
@@ -17,6 +16,8 @@ export type CollectionAction =
   | { kind: "collection.undoOpen" }
   | { kind: "collection.importRecipe"; recipe: Recipe; name: string }
   | { kind: "collection.saved"; result: StoredCollection; sourceId: string };
+/** Collection actions a presentation may dispatch; `collection.saved` is the library's own completion. */
+export type CollectionStudioAction = Exclude<CollectionAction, { kind: "collection.saved" }>;
 
 export type ActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue };
 /** A capability with the reason code chosen where it was refused (`platform/api`). */
@@ -39,8 +40,9 @@ export class CollectionActions {
   private session: CollectionSession;
   private listeners = new Set<() => void>();
 
-  constructor(state: CollectionWorkspace, read: () => EditorSnapshot, show: (editor: EditorSnapshot) => void) {
-    this.session = new CollectionSession(state, read, show);
+  constructor(private model: DocumentModel, state: CollectionWorkspace, read: () => EditorSnapshot,
+    show: (editor: EditorSnapshot) => void) {
+    this.session = new CollectionSession(model, state, read, show);
   }
 
   view(): ReadonlyDeep<CollectionWorkspace> { return structuredClone(this.session.state); }
@@ -51,7 +53,7 @@ export class CollectionActions {
     const oldest = recovery.at(-1);
     return { id: s.collection.id, name: s.collection.name, revision: s.revision, selected: s.selected,
       presets: s.collection.presets.map(p => ({ id: p.id, name: p.name, revision: p.revision,
-        layers: Number(STUDIO_PARTS.summary(p, LIVE_FEATURE)?.layers ?? 0) })),
+        layers: Number(this.model.parts.summary(p, this.model.live)?.layers ?? 0) })),
       removed: s.removed.map(entry => ({ id: entry.preset.id, name: entry.preset.name, index: entry.index })),
       previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
         revision: s.previous.revision } : undefined,
@@ -70,6 +72,8 @@ export class CollectionActions {
   identity(): { collectionId: string; selected?: string } {
     return { collectionId: this.session.state.collection.id, selected: this.session.state.selected };
   }
+  /** The draft's saved library revision (undefined before its first save), without cloning. */
+  summaryRevision(): number | undefined { return this.session.state.revision; }
   /** Whether the draft has this preset, without cloning (CORE-05). */
   hasPreset(id: string): boolean { return this.session.state.collection.presets.some(preset => preset.id === id); }
   subscribe(listener: () => void): () => void {

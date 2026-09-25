@@ -14,11 +14,11 @@ import type { EditorCodec, MemoryCodec, PartCodec, PartEnvelope } from "../../pl
 import { parseFieldSelection, type FieldSelection } from "../../field-selection";
 import { parseGlitterChoices, type GlitterChoices } from "../../glitter-model";
 import { LAYER_MODELS, type LayerModelRegistry } from "../../layer-models";
-import { emptyRecipe, parseRecipe, parseRecipePart, starterRecipe, type Recipe } from "../../recipe";
-import { EYE_MAKEUP_PART_2, readPortableRecipe, recipeFile, RECIPE_SCHEMAS } from "../../recipe-schema";
+import { emptyRecipe, starterRecipe, type Recipe } from "../../recipe";
+import { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readPortableRecipe, recipeFile,
+  RECIPE_SCHEMAS } from "../../recipe-schema";
 
-export const EYE_MAKEUP_PART_1 = "xfs/eye-makeup-part-1";
-export { EYE_MAKEUP_PART_2, RECIPE_SCHEMAS };
+export { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, RECIPE_SCHEMAS };
 
 /** Eye makeup's part codec over a layer-model registry (the build's own by default; tests pass others). */
 export function eyeMakeupPartCodec(models: LayerModelRegistry = LAYER_MODELS): PartCodec<Recipe> {
@@ -26,13 +26,7 @@ export function eyeMakeupPartCodec(models: LayerModelRegistry = LAYER_MODELS): P
     current: EYE_MAKEUP_PART_2,
     /** Oldest first: `downgrade` targets and the minimal writers try them in this order. */
     accepts: [EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2],
-    parse(envelope: PartEnvelope): Recipe {
-      if (envelope.schema === EYE_MAKEUP_PART_2) return parseRecipePart(envelope.body, models);
-      if (envelope.schema !== EYE_MAKEUP_PART_1) throw Error(`Unsupported eye-makeup part schema ${envelope.schema}.`);
-      // A part-1 body is a recipe file: its schema gates its layer models, then goes. Like every recipe
-      // reader, it also takes a recipe without a schema (an in-memory one) as part-2.
-      return parseRecipe(envelope.body, models);
-    },
+    parse: (envelope: PartEnvelope): Recipe => parseEyeMakeupPart(envelope, models),
     serialize: (recipe: Recipe): PartEnvelope => ({ schema: EYE_MAKEUP_PART_2, body: recipe }),
     lift: (file: unknown): Recipe | undefined => readPortableRecipe(file, models),
     downgrade(recipe: Recipe, schema: string): PartEnvelope | undefined {

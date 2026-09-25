@@ -1,9 +1,18 @@
 import { Database } from "bun:sqlite";
 import { parseCollection } from "./preset-collection";
 import { LibraryError } from "./library-store";
-import { STUDIO_PARTS } from "./compose/studio-registry";
 import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { PartRegistry } from "./platform/core/document";
+
+/**
+ * Why a save that needs `xfs/collection-2` is refused. The released 0.1.0-alpha.1 lists a library
+ * only while the latest revision of every collection is `xfas/collection-1` (one other row makes
+ * its whole list fail), and saves on top of a collection only while that revision is too; so no
+ * row it cannot read is ever written into the shared library (CORE-30). Such collections still
+ * live in the workspace and export to files.
+ */
+export const COLLECTION_2_LIBRARY_MESSAGE = "This collection has parts the released XF Studio 0.1.0-alpha.1 can't read, " +
+  "so it isn't saved to the library, which that version also opens. Your draft is kept: export the collection to a file to keep a copy.";
 
 /** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
 export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };
@@ -11,13 +20,15 @@ export type CollectionSummary = { id: string; name: string; revision: number; co
 /**
  * The local collection library (SQLite v2; no DDL change for the look model). Rows describe their
  * own schema: rows written before the look model hold `xfas/collection-1` JSON and are never
- * rewritten. A save writes each new row in the oldest schema that holds it exactly, so a
- * library of eye-makeup looks stays readable by 0.1.0-alpha.1; a look with parts that schema
- * cannot hold is written as `xfs/collection-2` (feature-module platform §2).
+ * rewritten. A save writes each new row in the oldest schema that holds it exactly, so a library
+ * of eye-makeup looks stays readable by 0.1.0-alpha.1; a collection that needs `xfs/collection-2`
+ * is refused rather than written where that release reads (`COLLECTION_2_LIBRARY_MESSAGE`).
+ * Rows of either schema read (feature-module platform §2). The part registry is injected by the
+ * server roots.
  */
 export class CollectionLibrary {
   private db: Database;
-  constructor(path: string, private parts: PartRegistry = STUDIO_PARTS) {
+  constructor(path: string, private parts: PartRegistry) {
     this.db = new Database(path, { create: true, strict: true });
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     const { user_version: version } = this.db.query("PRAGMA user_version").get() as { user_version: number };
@@ -68,18 +79,28 @@ export class CollectionLibrary {
    * content is compared canonically (parsed and serialized by its codecs, keys sorted), so a
    * row stored in an older schema or key order never counts as a change.
    */
+  /**
+   * Each part is parsed once: the input when it is read, an older preset row when it is compared.
+   * Parsed parts are compared and written as they are (CORE-35); the previous revision is looked up
+   * by number only.
+   */
   save(value: unknown): StoredCollection {
     const input = value as { collection?: unknown; revision?: number };
     let collection: LookCollection;
     try { collection = this.parts.readCollection(input?.collection, true); } catch { throw new LibraryError("Invalid collection; nothing was saved."); }
+    // Every row this save writes must be one 0.1.0-alpha.1 reads (CORE-30).
+    const stored = this.parts.writeMinimal(collection);
+    if (stored.schema !== COLLECTION_1) throw new LibraryError(COLLECTION_2_LIBRARY_MESSAGE, 422);
     return this.db.transaction(() => {
+      const latest = this.db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?")
+        .get(collection.id) as { revision: number | null } | null;
       const exists = this.db.query("SELECT id FROM collections WHERE id=?").get(collection.id);
-      const previous = exists ? this.get(collection.id) : undefined;
-      if (previous && previous.revision !== input.revision)
+      const previous = exists && latest?.revision ? latest.revision : undefined;
+      if (previous !== undefined && previous !== input.revision)
         throw new LibraryError("This collection changed in another window. Open the saved version or save a separate copy.", 409);
-      if (!previous && input.revision !== undefined) throw new LibraryError("Collection revision does not exist.", 409);
-      const revision = (previous?.revision ?? 0) + 1, updatedAt = new Date().toISOString();
-      if (!previous) this.db.query("INSERT INTO collections VALUES (?, ?)").run(collection.id, updatedAt);
+      if (previous === undefined && input.revision !== undefined) throw new LibraryError("Collection revision does not exist.", 409);
+      const revision = (previous ?? 0) + 1, updatedAt = new Date().toISOString();
+      if (!exists) this.db.query("INSERT INTO collections VALUES (?, ?)").run(collection.id, updatedAt);
       collection.presets = collection.presets.map(p => {
         const row = this.db.query(`SELECT preset_json FROM collection_preset_versions WHERE collection_id=? AND preset_id=?
           ORDER BY revision DESC LIMIT 1`).get(collection.id, p.id) as { preset_json: string } | null;
@@ -91,7 +112,8 @@ export class CollectionLibrary {
         return preset;
       });
       this.db.query("INSERT INTO collection_revisions VALUES (?, ?, ?, ?)")
-        .run(collection.id, revision, JSON.stringify(this.parts.writeMinimal(collection)), updatedAt);
+        .run(collection.id, revision, JSON.stringify({ ...stored, presets: stored.presets.map((preset, index) =>
+          ({ ...preset, revision: collection.presets[index].revision })) }), updatedAt);
       return { collection, revision, updatedAt };
     }).immediate();
   }

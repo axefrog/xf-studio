@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { packagePresetIdentities, preparePackageCollection } from "./package-filter";
+import { originalPresetCount, packagePresetIdentities, preparePackageCollection } from "./package-filter";
 import { compilePreset } from "./preset-compiler";
 import type { PackageCheck } from "./package-action";
 import type { PlateReachInput } from "./plate-reach";
@@ -19,7 +19,7 @@ export function preflightPackageCollection(value: unknown, plate: PlateReachInpu
     namespace: plan.namespace,
     modName: plan.modName,
     selectorLabel: plan.selectorLabel,
-    originalPresetCount: source.presets.length,
+    originalPresetCount: originalPresetCount(source),
     omissions,
     experimental,
     packagedCollectionSha256: createHash("sha256").update(packagedCollectionJson).digest("hex"),

@@ -5,16 +5,15 @@
  * into `platform/core` when that table is split (migration step 5).
  */
 import { actionTable, familyId, type SystemFamily } from "../platform/api";
-import type { CollectionAction } from "../collection-actions";
+import type { CollectionStudioAction } from "../collection-actions";
+import type { HistoryAction } from "../authoring-history";
 import type { MotionAction } from "../motion-actions";
 import type { PreviewAction } from "../preview-actions";
 import type { QualityAction } from "../preview-quality-actions";
 import type { SavedAppearanceAction } from "../saved-appearance-actions";
 import { ACTION_DESCRIPTORS, type ActionScope } from "../studio-action-descriptors";
 
-export type HistoryAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string };
-/** Collection actions a presentation may dispatch; `collection.saved` is the library's own completion. */
-export type CollectionStudioAction = Exclude<CollectionAction, { kind: "collection.saved" }>;
+export type { CollectionStudioAction, HistoryAction };
 
 const HISTORY_ID = familyId("history");
 const COLLECTION_ID = familyId("collection");

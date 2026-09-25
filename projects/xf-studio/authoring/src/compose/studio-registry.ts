@@ -1,35 +1,27 @@
 /**
  * The composition list (feature-module platform §4, §9): every system family and feature
- * module the Studio registers, in catalogue order. Adding a feature module adds it here and
- * to `StudioOwnerActions`; the compiler then requires `StudioApplication` to bind a handler.
+ * module the Studio registers, in catalogue order, and the composition the roots inject from it.
+ *
+ * Only composition roots import this module (the browser startup, the server and desktop hosts,
+ * tools and tests); every other module receives the registry, the part registry and the live
+ * feature as arguments (CORE-29). Adding a feature module adds it here; the compiler then requires
+ * `StudioApplication` to bind a handler for it (`StudioOwnerActions`).
  */
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
-import { EYE_MAKEUP, EYE_MAKEUP_ID, type EyeMakeupAction } from "../features/eye-makeup";
-import { COLLECTION_FAMILY, HISTORY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY, SAVED_V_FAMILY,
-  type CollectionStudioAction, type HistoryAction } from "./system-families";
-import type { MotionAction } from "../motion-actions";
-import type { PreviewAction } from "../preview-actions";
-import type { QualityAction } from "../preview-quality-actions";
-import type { SavedAppearanceAction } from "../saved-appearance-actions";
+import { EYE_MAKEUP, EYE_MAKEUP_ID } from "../features/eye-makeup";
+import { COLLECTION_FAMILY, HISTORY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY, SAVED_V_FAMILY } from "./system-families";
+import type { DocumentModel } from "../collection-workspace";
+import type { StudioOwnerActions, StudioOwnerId } from "../studio-application";
+import type { StudioComposition } from "../trusted-authoring-core";
 
-/** Each registered owner's action union, keyed by its ID. */
-export type StudioOwnerActions = {
-  history: HistoryAction;
-  "eye-makeup": EyeMakeupAction;
-  collection: CollectionStudioAction;
-  preview: PreviewAction;
-  motion: MotionAction;
-  quality: QualityAction;
-  savedV: SavedAppearanceAction;
-};
-export type StudioOwnerId = keyof StudioOwnerActions;
+export type { StudioOwnerActions, StudioOwnerId };
 
 /** Registration order is catalogue order: the golden registry snapshot pins it. */
 export const STUDIO_OWNERS = [HISTORY_FAMILY, EYE_MAKEUP, COLLECTION_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY,
   QUALITY_FAMILY, SAVED_V_FAMILY] as const;
 
-// Compile-time: the list's IDs are exactly the keys of StudioOwnerActions.
+// Compile-time: the list's IDs are exactly the owners StudioApplication binds handlers for.
 type ListedIds = (typeof STUDIO_OWNERS)[number]["id"];
 type Unlisted = { [K in StudioOwnerId]: [Extract<ListedIds, K>] extends [never] ? K : never }[StudioOwnerId];
 const exact: [ListedIds] extends [StudioOwnerId] ? [Unlisted] extends [never] ? true : false : false = true;
@@ -44,7 +36,9 @@ export const STUDIO_PARTS = new PartRegistry(STUDIO_OWNERS.filter(owner => owner
  * the authoring document holds eye makeup's part; other parts of a look are carried unchanged.
  */
 export const LIVE_FEATURE = EYE_MAKEUP_ID;
-/** Eye makeup's feature ID, for the eye-makeup package pipeline's view of a look collection (moves with the exporter, step 8). */
-export const EYE_MAKEUP_FEATURE = EYE_MAKEUP_ID;
+/** The document model the collection, library and workspace code is given. */
+export const STUDIO_DOCUMENTS: DocumentModel = Object.freeze({ parts: STUDIO_PARTS, live: LIVE_FEATURE });
+/** Everything the trusted core needs from the composition. */
+export const STUDIO_COMPOSITION: StudioComposition = Object.freeze({ registry: STUDIO_REGISTRY, documents: STUDIO_DOCUMENTS });
 export type { EyeMakeupAction, EyeMakeupEditor, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupMemory, EyeMakeupResult,
   EyeMakeupState } from "../features/eye-makeup";

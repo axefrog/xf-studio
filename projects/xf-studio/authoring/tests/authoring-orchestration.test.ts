@@ -3,6 +3,8 @@ import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringGestures } from "../src/authoring-gestures";
 import { AuthoringRenderScheduler } from "../src/authoring-render-scheduler";
 import { RecipeActions } from "../src/recipe-actions";
+import { eyeMakeupPort } from "../src/authoring-eye-makeup";
+import { registeredEditing } from "./gesture-test-adapter";
 import { freshWorkspace } from "../src/workspace-state";
 
 test("document effects route immediate, deferred, selection and gesture rendering by live layer identity", () => {
@@ -46,7 +48,7 @@ test("gesture service owns one checkpoint, commit and Escape restoration without
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft",
   index => document.gestureChanged(index));
   let restores = 0;
-  const gestures = new AuthoringGestures(document, actions, () => {
+  const gestures = new AuthoringGestures(document, registeredEditing(eyeMakeupPort(document, actions)).gestures, () => {
     restores++;
     const prior = document.undoRecipe();
     if (prior) document.recipe = prior;
