@@ -5,11 +5,8 @@ import { basename, resolve } from "node:path";
 // The desktop shell deliberately bundles only its distributable subset (desktop/prepare-static.ts).
 export const browserEntries = [
   "src/studio-main.ts",
-  "src/main.ts",
-  "src/port-smoke.ts",
   "src/raster-worker.ts",
   "src/render-fidelity-study.ts",
-  "src/application-boundary-fixture.ts",
   "tools/glitter-head-study.ts",
 ].map(path => resolve(import.meta.dir, path));
 

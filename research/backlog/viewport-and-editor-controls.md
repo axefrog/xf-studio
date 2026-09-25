@@ -25,6 +25,6 @@ The 23 September viewport/layer requests are implemented, with two bounded cavea
 
 ## Sidebar width follow-up — 23 September 2026
 
-**Obsolete.** The 640 px cap removal and per-sidebar preferred widths applied to the legacy fixed-sidebar shell (still at `/legacy.html`); the dock UI replaced sidebars on 24 September.
+**Obsolete.** The 640 px cap removal and per-sidebar preferred widths applied to the legacy fixed-sidebar shell (retired 25 September); the dock UI replaced sidebars on 24 September.
 
 The brow-area idle motion question (default `ui_closeup_shot` vs the stronger `ui_closeup_shot_eyes` brow tracks) belongs to [preview fidelity](preview-fidelity.md#missing-brow-area-idle-movement).

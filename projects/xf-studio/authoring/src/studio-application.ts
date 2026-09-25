@@ -62,8 +62,8 @@ const recipeKinds: ReadonlySet<string> = RECIPE_ACTION_KINDS;
 const selection: ReadonlySet<string> = new Set([...recipeKinds].filter(kind =>
   ACTION_DESCRIPTORS[kind as RecipeAction["kind"]].effect === "selection"));
 const COLLECTION_KIND_TABLE: Record<Exclude<CollectionAction, { kind: "collection.saved" }>["kind"], true> = {
-  "preset.edit": true, "preset.select": true, "preset.expand": true, "collection.rename": true,
-  "collection.filesOpen": true, "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true };
+  "preset.edit": true, "preset.select": true, "collection.rename": true,
+  "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true };
 const collectionKinds: ReadonlySet<string> = new Set(Object.keys(COLLECTION_KIND_TABLE));
 
 /** One read-only, target-aware entry point for a replaceable presentation. */

@@ -12,16 +12,10 @@ test("trusted application and presentation services keep browser devices outside
     const code = source(name);
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(three(?:\/|$)|\.\/(?:main|browser-|scene|uv-editor|surface-editor|raster-client|collection-transport))/);
+        /^(three(?:\/|$)|\.\/(?:studio-main|studio-startup|browser-|scene|uv-editor|surface-editor|raster-client|collection-transport))/);
     expect(code, `${name} reads browser globals`).not.toMatch(
       /\b(?:window|localStorage)\.|(?<!\.)\bdocument\.(?:getElementById|querySelector|createElement|body|addEventListener)/);
   }
-});
-
-test("the independent browser entry does not depend on legacy main or control modules", () => {
-  const dependencies = imports(source("port-smoke"));
-  expect(dependencies).not.toContain("./main");
-  expect(dependencies.some(path => /\.\/(?:collection-ui|path-ui|control-edit-ui|motion-ui)$/.test(path))).toBe(false);
 });
 
 test("install detection keeps parsing pure and host access in its adapter", () => {
@@ -29,18 +23,18 @@ test("install detection keeps parsing pure and host access in its adapter", () =
     "mo2-placement", "pe-version"]) {
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|main$|scene|studio-ui))/);
+        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|studio-(?:main|startup)$|scene|studio-ui))/);
   }
   // The action layer and browser device reach the host only through a typed transport.
   expect(imports(source("install-detection-actions")).filter(path => !path.startsWith("./"))).toEqual([]);
   expect(imports(source("browser-install-detection-device"))).toEqual(["./install-detection-actions"]);
 });
 
-// Dependencies point inward. Presentation modules (legacy `*-ui` controls, the
-// `studio-ui/` tree) and browser entry points may import the core, never the
-// reverse. `context-menu` is presentation policy shared by both shells.
+// Dependencies point inward. Presentation modules (the `studio-ui/` tree and any
+// `*-ui` module) and browser entry points may import the core, never the reverse.
+// `context-menu` is presentation policy.
 const presentation = (path: string) => /^\.\/(?:[\w-]+-ui|studio-ui\/.*|context-menu)$/.test(path);
-const entries = new Set(["main", "studio-main", "port-smoke", "application-boundary-fixture"]);
+const entries = new Set(["studio-main", "studio-startup"]);
 
 test("core modules never import presentation modules or browser entry points", () => {
   const { readdirSync } = require("node:fs") as typeof import("node:fs");
@@ -78,7 +72,7 @@ test("the character resolver keeps its rules pure and all host access in resolve
     const code = source(name);
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|main$|scene|studio-ui))/);
+        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|studio-(?:main|startup)$|scene|studio-ui))/);
     expect(code, `${name} reaches the host`).not.toMatch(/\bBun\.(?:spawn|file|write)|\bprocess\.env\b/);
   }
 });

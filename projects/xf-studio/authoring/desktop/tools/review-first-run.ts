@@ -1,14 +1,14 @@
 /**
  * Asset-free visual check of the desktop first-run flow through its real loopback host:
- * the community welcome (no preview intake), UV-only workflows and About → Licences, then
- * the maintainer path with the developer intake marker. Run `bun run prepare:static` first.
+ * the community welcome, the 3D preview card, UV-only workflows, About → Licences and Build
+ * setup, then a data folder holding hand-placed preview files (never served). Run
+ * `bun run prepare:static` first.
  */
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { launch } from "../../tools/cdp";
 import { createDesktopServer } from "../server";
-import { PREVIEW_INTAKE_MARKER } from "../host";
 
 const directory = mkdtempSync(resolve(tmpdir(), "xfs-desktop-first-run-"));
 const screenshots = resolve(import.meta.dir, "../../evidence/screenshots");
@@ -23,11 +23,8 @@ try {
   browser = await launch(server.url + "&verify=1", { width: 900, height: 650, debugPort: 9438, scheme: "dark" });
   await browser.waitFor("document.querySelector('#desktop-welcome')?.open");
   const firstRun = await browser.evaluate(`({ setupOpen: document.querySelector('#desktop-setup').open,
-    intake: !!document.querySelector('#desktop-intake'), previewButton: !!document.querySelector('#desktop-intake-open'),
-    mode: document.documentElement.dataset.desktopPreviewIntake,
     welcome: document.querySelector('#desktop-welcome').textContent })`);
-  if (firstRun.setupOpen || firstRun.intake || firstRun.previewButton || firstRun.mode !== "disabled" ||
-    !firstRun.welcome.includes("3D head preview is built from your own Cyberpunk 2077 files"))
+  if (firstRun.setupOpen || !firstRun.welcome.includes("3D head preview is built from your own Cyberpunk 2077 files"))
     throw Error(`Desktop first run did not lead with the community welcome: ${JSON.stringify(firstRun)}`);
   await browser.screenshot(resolve(screenshots, "desktop-welcome-first-run.png"));
   await browser.evaluate("document.querySelector('#desktop-welcome-start').click()");
@@ -92,20 +89,10 @@ try {
   await browser.waitFor("document.querySelector('#desktop-licence-text').textContent.includes('JavaScriptCore')");
   await browser.screenshot(resolve(screenshots, "desktop-licences.png"));
   await browser.evaluate("document.querySelector('#desktop-licences').close()");
-  // Maintainer path: the developer marker turns the five-file intake back on.
-  writeFileSync(resolve(directory, "user-data", PREVIEW_INTAKE_MARKER), "");
-  await browser.evaluate("document.documentElement.dataset.testReload = 'intake'; location.reload()");
-  await browser.waitFor("!document.documentElement.dataset.testReload && document.querySelector('#studio.studio-ready') && document.querySelector('#desktop-intake-open')");
-  await browser.evaluate("document.querySelector('#desktop-intake-open').click()");
-  await browser.evaluate(`document.querySelector('#desktop-intake-folder').value = ${JSON.stringify(resolve(directory, "absent"))};
-    document.querySelector('#desktop-intake-inspect').click()`);
-  await browser.waitFor("document.querySelector('#desktop-intake-status').textContent.includes('head.glb (missing)')");
-  const intake = await browser.evaluate(`({ message: document.querySelector('#desktop-intake-status').textContent,
-    importDisabled: document.querySelector('#desktop-intake-import').disabled })`);
-  if (!intake.importDisabled || !intake.message.includes("head.glb (missing)"))
-    throw Error("First-run asset diagnostics or import guard failed.");
+  // The preview card names the missing game folder: it offers a detected install, or Build setup.
+  await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['setup', 'use-game'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
-  await browser.evaluate("document.querySelector('#desktop-setup-open-inline').click()");
+  await browser.evaluate("document.querySelector('#desktop-about-open').click(); document.querySelector('#desktop-setup-open').click()");
   await browser.waitFor("document.querySelector('#desktop-setup').open && document.querySelector('#desktop-setup-status').textContent.includes('Check works')");
   await browser.screenshot(resolve(screenshots, "desktop-build-setup.png"));
   await browser.evaluate(`document.querySelector('input[name="gameRoot"]').value = ${JSON.stringify(game)};
@@ -128,22 +115,20 @@ try {
   const csp = browser.console.filter(entry => /Content Security Policy/i.test(entry.text ?? ""));
   if (csp.length) throw Error(`The page's CSP blocked something: ${JSON.stringify(csp.slice(0, 3))}`);
   await browser.close(); browser = undefined;
-  const partialData = resolve(directory, "incomplete-data");
+  // Preview files placed by hand in the data folder are ignored: the head comes only from the game.
+  const partialData = resolve(directory, "hand-placed-data");
   mkdirSync(resolve(partialData, "preview-assets"), { recursive: true });
-  writeFileSync(resolve(partialData, "preview-assets", "head.glb"), "invalid fixture");
-  writeFileSync(resolve(partialData, PREVIEW_INTAKE_MARKER), "");
+  writeFileSync(resolve(partialData, "preview-assets", "head.glb"), "hand-placed fixture");
   const partialServer = createDesktopServer(resolve(import.meta.dir, "../static"), partialData,
     { version: "0.1.0", channel: "dev", buildHash: "fixture", metadataStatus: "ready" });
   try {
     browser = await launch(partialServer.url + "&verify=1", { width: 900, height: 650, debugPort: 9440 });
     await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'error'");
-    const incomplete = await browser.evaluate(`({ mode: document.documentElement.dataset.desktopPreviewAssets,
-      uv: window.xfStudioPresentation.viewport.snapshot().uv.phase,
+    const handPlaced = await browser.evaluate(`({ uv: window.xfStudioPresentation.viewport.snapshot().uv.phase,
       reason: window.xfStudioPresentation.viewport.snapshot().head.error,
       headFetches: performance.getEntriesByType('resource').filter(item => item.name.endsWith('/assets/head.glb')).length })`);
-    if (incomplete.mode !== "incomplete" || incomplete.uv !== "ready" ||
-      !incomplete.reason.includes("incomplete") || incomplete.headFetches)
-      throw Error(`Incomplete-asset UV-only startup failed: ${JSON.stringify(incomplete)}`);
+    if (handPlaced.uv !== "ready" || !/3D (?:head )?preview/.test(handPlaced.reason) || handPlaced.headFetches)
+      throw Error(`Hand-placed preview files changed the UV-only startup: ${JSON.stringify(handPlaced)}`);
   } finally { await browser?.close(); browser = undefined; partialServer.stop(); }
   console.log("Desktop first-run browser review passed; screenshots are in the ignored evidence directory.");
 } finally {

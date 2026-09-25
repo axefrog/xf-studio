@@ -14,6 +14,17 @@ export class LocalSetupActions {
   constructor(private transport: LocalSetupTransport) {}
   snapshot(): Readonly<LocalSetupState> { return structuredClone(this.state); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /**
+   * Resolves once no request is in flight. Several views share one instance (the desktop's Build
+   * setup, the Studio's Game & tools form and the preview card), so a save waits for a refresh
+   * another view started instead of being refused as busy.
+   */
+  idle(): Promise<void> {
+    if (!this.state.busy) return Promise.resolve();
+    return new Promise(resolve => {
+      const off = this.subscribe(() => { if (!this.state.busy) { off(); resolve(); } });
+    });
+  }
   private publish(state: LocalSetupState) { this.state = state; for (const listener of this.listeners) listener(); }
   capability(action: LocalSetupAction): { available: boolean; reason?: string } {
     if (this.state.busy) return { available: false, reason: "Local setup is busy." };

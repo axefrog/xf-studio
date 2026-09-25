@@ -15,7 +15,7 @@ import type { InstallDetectionActions } from "./install-detection-actions";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
-/** Compose trusted services before mounting any presentation. No legacy control IDs are read here. */
+/** Compose trusted services before mounting any presentation. No page control IDs are read here. */
 export function createTrustedStudioBootstrap<Slot>(options: {
   workspace: WorkspaceState;
   core: Core;

@@ -325,7 +325,7 @@ test("export and preview caches are keyed by the exporting tool, which the manif
 });
 
 test("the derived cache carries a render record that names, hashes and sources every core file", async () => {
-  const { parseCoreDetail, CORE_TEXTURE_SLOTS, PREPARED_CORE_DETAIL } = await import("../src/render-detail");
+  const { parseCoreDetail, CORE_TEXTURE_SLOTS } = await import("../src/render-detail");
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
   const result = await ensurePreviewCore({ gameRoot: gameFolder(), cacheRoot: temporary("cache"), recipe, plateRecipe: plate,
     exporter: fresh(fakeUncook(plate, recipe)) });
@@ -339,11 +339,13 @@ test("the derived cache carries a render record that names, hashes and sources e
   expect(record.geometry.morphs?.map(entry => [entry.node, entry.depotPath])).toEqual([["head", plate.source.morphDepotPath],
     ["makeup_plate", plate.source.morphDepotPath], ["eyes", recipe.eye.morphDepotPath]]);
   expect(result.manifest.source.eyeMorphDepotPath).toBe(recipe.eye.morphDepotPath);
-  expect(parseCoreDetail({ ...record, geometry: { ...record.geometry, morphs: undefined } }).geometry.morphs).toBeUndefined();
+  expect(() => parseCoreDetail({ ...record, geometry: { ...record.geometry, morphs: undefined } })).toThrow("geometry morphs");
   expect(() => parseCoreDetail({ ...record, geometry: { ...record.geometry, morphs: [{ node: "eyes" }] } })).toThrow("morph 0 source");
   for (const slot of CORE_TEXTURE_SLOTS) expect(record.textures[slot].sha256).toBe(hash(record.textures[slot].file));
   expect(record.textures["head.roughness"].sources[0]).toMatchObject({ material: "01_ca_pale", parameter: "Roughness", adapter: "red-to-grey" });
-  expect(parseCoreDetail(structuredClone(PREPARED_CORE_DETAIL)).origin).toBe("prepared");
+  // The game-derived preview is the only source of the core head: other origins and unhashed files are refused.
+  expect(() => parseCoreDetail({ ...record, origin: "prepared" })).toThrow("origin");
+  expect(() => parseCoreDetail({ ...record, geometry: { ...record.geometry, sha256: null } })).toThrow("hash");
   expect(() => parseCoreDetail({ ...record, geometry: { ...record.geometry, file: "../secret.glb" } })).toThrow("plain asset file name");
   expect(() => parseCoreDetail({ ...record, textures: { ...record.textures, "head.normal": { ...record.textures["head.normal"], sha256: "x" } } })).toThrow("hash");
 });

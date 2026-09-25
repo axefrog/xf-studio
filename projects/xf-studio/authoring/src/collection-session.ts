@@ -25,10 +25,8 @@ export class CollectionSession {
   }
   select(id: string) {
     if (!this.state.collection.presets.some(p => p.id === id)) throw Error("Preset not found.");
-    this.stash(); this.state.selected = id; this.state.expanded = true; this.display();
+    this.stash(); this.state.selected = id; this.display();
   }
-  setExpanded(expanded: boolean) { this.state.expanded = expanded; }
-  setFilesOpen(open: boolean) { this.state.filesOpen = open; }
   renameCollection(name: string) {
     this.stash();
     this.state.collection = parseCollection({ ...this.state.collection, name: name.trim() }, true);
@@ -39,16 +37,16 @@ export class CollectionSession {
     if (previous !== this.state.selected || command.kind === "restore") this.display();
   }
   open(collection: PresetCollection, revision?: number) {
-    const { previous, older, filesOpen, ...current } = this.snapshot();
+    const { previous, older, ...current } = this.snapshot();
     const recovery = [current, ...(previous ? [previous] : []), ...(older ?? [])].slice(0, COLLECTION_RECOVERY_LIMIT);
-    this.state = { ...collectionDraft(collection, revision), previous: recovery[0], older: recovery.slice(1), filesOpen };
+    this.state = { ...collectionDraft(collection, revision), previous: recovery[0], older: recovery.slice(1) };
     this.display();
   }
   undoOpen() {
     if (!this.state.previous) throw Error("No previous collection draft.");
-    const { previous, older, filesOpen, ...current } = this.snapshot();
+    const { previous, older, ...current } = this.snapshot();
     const recovery = [...(older ?? []), current];
-    this.state = { ...previous!, previous: recovery[0], older: recovery.slice(1), filesOpen };
+    this.state = { ...previous!, previous: recovery[0], older: recovery.slice(1) };
     this.display();
   }
   importRecipe(recipe: Recipe, name: string) {

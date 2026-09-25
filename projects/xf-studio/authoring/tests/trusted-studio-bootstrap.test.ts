@@ -7,7 +7,7 @@ import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment } from "../src/viewport-attachment";
 import { freshWorkspace } from "../src/workspace-state";
 
-test("a presentation mounts from trusted services without loading legacy UI controls", async () => {
+test("a presentation mounts from trusted services without any page controls", async () => {
   expect(typeof document).toBe("undefined");
   const workspace = freshWorkspace();
   let core!: ReturnType<typeof createTrustedAuthoringCore>;

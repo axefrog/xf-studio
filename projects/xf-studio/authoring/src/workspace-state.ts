@@ -33,8 +33,6 @@ export type WorkspaceState = {
   library: LibraryState;
   collections?: CollectionWorkspace;
   uiPreferences: UIPreferences;
-  panels: { lighting: boolean; previewQuality: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number;
-    sidebarLeft: number; sidebarRight: number };
 };
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
@@ -46,7 +44,6 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
     uiPreferences: defaultUIPreferences(),
-    panels: { lighting: false, previewQuality: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
   };
 }
 const finite = (x: unknown, min: number, max: number): x is number =>
@@ -100,14 +97,9 @@ export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): Work
     if (c && uuid(c.id) && Number.isSafeInteger(c.revision) && c.revision >= 1)
       state.library.current = { id: c.id, revision: c.revision };
   }
-  if (v.panels) {
-    for (const [key, min] of [["sidebarLeft", 220], ["sidebarRight", 280]] as const)
-      if (finite(v.panels[key], min, Number.MAX_SAFE_INTEGER)) state.panels[key] = v.panels[key];
-    if (typeof v.panels.lighting === "boolean") state.panels.lighting = v.panels.lighting;
-    if (typeof v.panels.previewQuality === "boolean") state.panels.previewQuality = v.panels.previewQuality;
-    for (const key of ["layersScroll", "propertiesScroll", "pageX", "pageY"] as const)
-      if (finite(v.panels[key], 0, 100000)) state.panels[key] = v.panels[key];
-  }
+  // Workspaces saved by earlier builds also hold the retired sidebar shell's `panels` (sidebar
+  // widths, scroll positions, open sections). It is ignored here and not written again; the
+  // Studio's dock layout lives in `uiPreferences`.
   if (v.collections !== undefined) {
     state.collections = parseCollectionWorkspace(v.collections, warnings);
     const preset = state.collections.collection.presets.find(p => p.id === state.collections!.selected);

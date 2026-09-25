@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { createGameAssetExporter } from "../src/game-asset-export";
 import { createWolvenKitUncook } from "../src/game-asset-export-wolvenkit";
 import { ensurePreviewCore, previewCoreReadiness } from "../src/preview-core-service";
-import { inspectCoreAssets } from "../desktop/asset-intake";
 import { accessorFloats, parseGlb, readAccessor } from "../src/glb";
 
 /** Show-through counts at neutral, and per eye shape with the eyes left static (the old preview) or morphed. */
@@ -72,8 +71,6 @@ test.skipIf(!available)("the 3D preview core derives from the installed 2.31 gam
     expect(seating.shapes).toHaveLength(21);
     expect(total("morphed")).toBeLessThan(total("static") * 0.2);
     expect(seating.shapes.filter(shape => shape.morphed <= seating.base + 5).length).toBeGreaterThanOrEqual(15);
-    // The derived set also passes the desktop's structural check for the five core preview files.
-    expect((await inspectCoreAssets(derived.directory, false)).ready).toBe(true);
     expect(previewCoreReadiness(cacheRoot, game!).state).toBe("ready");
     const reused = await ensurePreviewCore({ gameRoot: game!, cacheRoot, exporter });
     expect(reused.reused).toBe(true);

@@ -174,7 +174,7 @@ export class CollectionService {
     const allowed = this.actionCapability(action);
     if (!allowed.available) throw new CollectionServiceError("unavailable", allowed.reason!);
     this.actions!.dispatch(action);
-    if (action.kind !== "preset.expand" && action.kind !== "collection.filesOpen") this.content++;
+    this.content++;
     this.notify();
   }
   /** A restored draft's revision content is fetched once so dirty state can be exact after reload. */

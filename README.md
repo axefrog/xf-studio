@@ -6,7 +6,7 @@ The current eye-makeup editor is a working prototype. It supports head and UV ed
 
 ## Try the local editor
 
-The editor needs [Bun](https://bun.sh/) and locally prepared Cyberpunk 2077 assets. The repository intentionally excludes game files, extracted mod resources, personal saves, databases and credentials, so a fresh clone alone cannot show the full character preview. Follow the [asset intake and setup notes](projects/xf-studio/authoring/README.md#actual-asset-intake), then from `projects/xf-studio/authoring` run:
+The editor needs [Bun](https://bun.sh/), and its 3D head preview needs your own Cyberpunk 2077 installation and the WolvenKit CLI: the Studio derives the head, eye plate and eyes from your game files locally. The repository intentionally excludes game files, extracted mod resources, personal saves, databases and credentials. Follow the [setup notes](projects/xf-studio/authoring/README.md#quick-start), then from `projects/xf-studio/authoring` run:
 
 ```powershell
 bun install --frozen-lockfile

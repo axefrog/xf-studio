@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { SurfaceMap, type UV } from "../src/surface-map";
-import { privateAssetTest } from "./private-assets";
+import { derivedPreviewFile, derivedPreviewTest } from "./private-assets";
 
 // Bypass only the new broad phase in the comparison instance. This retains the
 // pre-index exhaustive triangle order and exact barycentric/clipping arithmetic.
@@ -44,11 +44,11 @@ test("UV index preserves overlaps, relaxed edges, tiny gaps and outside-atlas qu
   expect(map.continuous({ u: Infinity, v: 0 }, { u: 0, v: 0 })).toBe(false);
 });
 
-privateAssetTest("real plate index matches exhaustive anchors and gap clipping with reduced search work", async () => {
-  const buffer = await Bun.file(new URL("../public/assets/head.glb", import.meta.url)).arrayBuffer();
+derivedPreviewTest("real plate index matches exhaustive anchors and gap clipping with reduced search work", async () => {
+  const buffer = await Bun.file(derivedPreviewFile("head.glb")).arrayBuffer();
   const view = new DataView(buffer), length = view.getUint32(12, true);
   const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, length)));
-  const primitive = json.meshes.find((m: { name: string }) => m.name.endsWith(".012")).primitives[0];
+  const primitive = json.meshes.find((m: { name: string }) => m.name === "makeup_plate").primitives[0];
   const read = (id: number, components: number) => {
     const a = json.accessors[id], b = json.bufferViews[a.bufferView], bytes = a.componentType === 5123 ? 2 : 4;
     const start = 28 + length + (b.byteOffset ?? 0) + (a.byteOffset ?? 0), stride = b.byteStride ?? components * bytes;

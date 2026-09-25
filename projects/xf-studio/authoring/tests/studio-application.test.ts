@@ -51,7 +51,7 @@ test("recipe Undo is a current workspace action with live capability and one ato
 
 test("unavailable 3D device leaves authoring and Undo available with explicit reasons", () => {
   const { app, document } = fixture();
-  const reason = "3D preview assets are missing. Import the five prepared files to enable the head view.";
+  const reason = "The 3D preview needs your Cyberpunk 2077 game folder.";
   app.setPreviewUnavailable(reason);
   expect(app.capability({ kind: "camera.front" })).toEqual({ available: false, code: "asset_unavailable", reason });
   expect(app.capability({ kind: "motion.setBlink", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });

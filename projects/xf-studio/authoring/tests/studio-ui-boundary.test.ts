@@ -45,8 +45,8 @@ test("studio-ui imports only types from the core plus a documented allowlist of 
   expect(problems).toEqual([]);
 });
 
-test("the presentation never imports trusted composition, legacy shell or live document modules", () => {
-  const banned = /from "\.\.\/(\.\.\/)?(main|studio-main|trusted-[a-z-]+|authoring-document|authoring-geometry|scene|collection-service|collection-application|studio-file-operations|browser-[a-z-]+)"/;
+test("the presentation never imports the composition root, trusted services or live document modules", () => {
+  const banned = /from "\.\.\/(\.\.\/)?(studio-main|studio-startup|trusted-[a-z-]+|authoring-document|authoring-geometry|scene|collection-service|collection-application|studio-file-operations|browser-[a-z-]+)"/;
   for (const file of files(ui)) {
     const source = readFileSync(file, "utf8");
     const lines = source.split("\n").filter(line => banned.test(line) && !line.startsWith("import type"));
@@ -54,10 +54,13 @@ test("the presentation never imports trusted composition, legacy shell or live d
   }
 });
 
-test("the composition root hands the view only the public presentation port", () => {
-  const source = readFileSync(join(root, "studio-main.ts"), "utf8");
+test("the one composition root hands the view only the public presentation port", () => {
+  const source = readFileSync(join(root, "studio-startup.ts"), "utf8");
   expect(source).toContain("bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); })");
   expect((source.match(/mountStudio\(/g) ?? []).length).toBe(1);
   const importers = files(root).filter(file => !file.startsWith(ui) && readFileSync(file, "utf8").includes("studio-ui/app"));
-  expect(importers.map(file => relative(root, file))).toEqual(["studio-main.ts"]);
+  expect(importers.map(file => relative(root, file))).toEqual(["studio-startup.ts"]);
+  // Host differences arrive as a typed host object, never as page globals or data attributes.
+  for (const name of ["studio-startup.ts", "studio-main.ts"])
+    expect(readFileSync(join(root, name), "utf8")).not.toMatch(/\bdataset\b|xfDesktop|xfs-desktop/);
 });
