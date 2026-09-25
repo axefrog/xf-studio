@@ -1,5 +1,7 @@
 # Versioned framework set for the first XF Studio runtime diagnostic
 
+> **Superseded (historical record):** the side-by-side framework copies described below were removed under the rule against duplicating users' frameworks; the original entries were updated in place, and the Studio now only [checks versions and advises](framework-version-check.md).
+
 25 September 2026. The new `XF Studio diagnostic 2026-09-25` MO2 profile now enables side-by-side stable ArchiveXL, TweakXL and Codeware mods. The original `2025 (again)` profile remains selected and its modlist SHA-256 remains `64edf00004f8a283a173671d70390d7b16d22cd64da92af7d05e66682537ab4b`. No game session or framework load has occurred since this change. A private, ignored manifest records every copied file hash and the profile's before/after modlist hashes.
 
 | Official tagged release | ZIP SHA-256 | Diagnostic MO2 folder | Files |

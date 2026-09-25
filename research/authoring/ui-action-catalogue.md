@@ -110,14 +110,15 @@ The desktop first-run **Continue without paths** control dispatches the existing
 
 ### Host actions
 
-`InstallDetectionActions` is published on `StudioPresentationPort` as `installDetection`. Its two read-only host requests are `detect.gameInstalls` and `detect.mo2Instances`. Both have scope `host`, effect `read`, no payload and no Undo, and both are listed in `DETECTION_DESCRIPTORS`. `capability(action)` reports when the host has no transport or when a detection is already running. `dispatch` rechecks that capability. It publishes a detached result, or a typed error when the host returns an unexpected schema.
+`InstallDetectionActions` is published on `StudioPresentationPort` as `installDetection`. Its three read-only host requests are `detect.gameInstalls`, `detect.mo2Instances` and `detect.frameworkVersions`. All have scope `host`, effect `read`, no payload and no Undo, and all are listed in `DETECTION_DESCRIPTORS`. `capability(action)` reports when the host has no transport or when a detection is already running. `dispatch` rechecks that capability. It publishes a detached result, or a typed error when the host returns an unexpected schema.
 
-The snapshot holds the latest `xfs/game-install-detection-1` and `xfs/mo2-instance-detection-1` results:
+The snapshot holds the latest `xfs/game-install-detection-1`, `xfs/mo2-instance-detection-1` and `xfs/framework-version-check-1` results:
 
 - game install candidates confirmed by executable, each with its Steam/GOG/Epic/MO2 evidence, plus rejected registered paths;
-- MO2 instances, each with its kind, game path, selected profile, configured directories and profile list.
+- MO2 instances, each with its kind, game path, selected profile, configured directories and profile list;
+- framework versions (ArchiveXL, TweakXL, Codeware, RED4ext, redscript, CET) for the game folder and the configured MO2 profile, with the XF Eye Artistry minimums and a plain-language message and Nexus Mods/GitHub links for each shortfall. The host reads its own local settings for this check; the report carries mod and profile names, not paths. The same report feeds the advisory `frameworks` Local setup readiness entry. [Framework check](framework-version-check.md).
 
-These results are private host metadata. Detection changes no setting: a setup view offers a candidate, and saving the choice goes through `setup.save`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
+These results are private host metadata. Detection changes no setting: a setup view offers a candidate, and saving the choice goes through `setup.save`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2|frameworks`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
 
 ## Persistence, async boundaries and truthful state
 

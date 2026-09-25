@@ -5,7 +5,7 @@
  * mods below it in the pane, which in the file are the rows ABOVE its line, back to the previous
  * separator. Rows after the last separator line sit loose at the top of the pane.
  *
- * The rule adds exactly one row and moves nothing else (research/authoring/mo2-mod-placement.md):
+ * The rule adds exactly one row and moves nothing else (research/authoring/framework-version-check.md, "MO2 placement rule"):
  * 1. The mod is already listed (enabled or not): keep the user's position.
  * 2. A related entry is listed (an earlier name or predecessor of this mod), outside a framework
  *    section: go directly below it in the pane (one row higher priority, same section).

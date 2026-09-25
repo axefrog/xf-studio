@@ -44,7 +44,7 @@ The parser follows QSettings value syntax: `@ByteArray(...)`, `\\` escapes, quot
 
 On the development machine, a read-only run found the game through three GOG registry entries and one portable MO2 instance. It found no Steam or Epic record for the game. Detection took about 0.2 s.
 
-The capability is exposed as the typed read-only host actions `detect.gameInstalls` and `detect.mo2Instances`. They are listed in `DETECTION_DESCRIPTORS` and served GET-only by `/api/install-detection?target=games|mo2`. See the [action catalogue](ui-action-catalogue.md#host-actions). No settings view uses them yet. A later setup view can offer each candidate and then save the choice through the local setup actions.
+The capability is exposed as the typed read-only host actions `detect.gameInstalls` and `detect.mo2Instances`. They are listed in `DETECTION_DESCRIPTORS` and served GET-only by `/api/install-detection?target=games|mo2`. A third action, `detect.frameworkVersions`, reuses the same MO2 interpretation to report framework versions ([framework check](framework-version-check.md)). See the [action catalogue](ui-action-catalogue.md#host-actions). No settings view uses them yet. A later setup view can offer each candidate and then save the choice through the local setup actions.
 
 ## Source discovery
 
