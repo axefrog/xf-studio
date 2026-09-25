@@ -37,6 +37,7 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 export const ACTION_DESCRIPTORS = {
   "recipe.undo": desc("workspace", "content", "none"),
   "recipe.redo": desc("workspace", "content", "none"),
+  "history.jumpTo": desc("workspace", "content", "none", { entryId: input("string") }),
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
   "point.remove": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer") }),

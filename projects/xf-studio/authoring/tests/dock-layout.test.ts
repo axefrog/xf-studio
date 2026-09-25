@@ -55,7 +55,7 @@ test("factory defaults give the portrait head a portrait viewport beside a visib
 test("panels move between tab groups, split beside groups and dock at workspace edges", () => {
   let tree = defaultWide();
   tree = applyDrop(tree, { kind: "panel", panelId: "motion" }, { kind: "tab", groupId: "g-layers", index: 0 });
-  expect(locate(tree, "motion")!.group).toMatchObject({ id: "g-layers", panels: ["motion", "layers"], active: "motion" });
+  expect(locate(tree, "motion")!.group).toMatchObject({ id: "g-layers", panels: ["motion", "layers", "history"], active: "motion" });
   // Beside a group inside a column: a nested row replaces it.
   tree = applyDrop(tree, { kind: "panel", panelId: "quality" }, { kind: "split", groupId: "g-uv", side: "right" });
   const root = tree.root!, right = root.kind === "split" ? root.children[2] : undefined;
@@ -92,7 +92,7 @@ test("floating panels magnetize into a composite that grows instead of squeezing
   // Moving the whole composite into a docked group merges its panels as tabs.
   tree = applyDrop(tree, { kind: "window", windowId: tree.floating[0].id }, { kind: "tab", groupId: "g-layers", index: 1 });
   expect(tree.floating).toHaveLength(0);
-  expect(locate(tree, "lighting")!.group.panels).toEqual(["layers", "lighting", "motion"]);
+  expect(locate(tree, "lighting")!.group.panels).toEqual(["layers", "lighting", "motion", "history"]);
   everyPanelOnce(tree);
 });
 
@@ -141,7 +141,12 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   const saved = JSON.parse(JSON.stringify(serializeDockState({ wide, compact })));
   const restored = restoreDockPreference(saved, area);
   expect(restored.recovered).toBe(true);
-  expect(restored.state).toEqual(saved.state);
+  // Panels added since (History) join beside their default siblings as background tabs; nothing else moves.
+  const expected = structuredClone(saved.state) as { wide: DockTree; compact: DockTree };
+  locate(expected.wide, "layers")!.group.panels.push("history");
+  locate(expected.compact, "layers")!.group.panels.push("history");
+  expect(restored.state).toEqual(expected);
+  expect(locate(restored.state.wide, "history")!.group.active).toBe("layers");
 });
 
 test("persisted preferences pass the engine's recovery gate and round-trip", () => {

@@ -3,7 +3,9 @@ import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { parseRecipe, type Recipe } from "./recipe";
 
 export type Preset = PresetCollection["presets"][number];
-export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: Recipe[] };
+export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: Recipe[];
+  /** Present (true) only when older Undo entries than `history[0]` were dropped; lets the UI say so. */
+  historyTrimmed?: boolean };
 export type CollectionDraft = {
   collection: PresetCollection; revision?: number; selected?: string; expanded: boolean;
   editors: Record<string, EditorMemory>;
@@ -25,6 +27,7 @@ export function parseEditorMemory(value: unknown, recipe: Recipe): EditorMemory 
   if (Array.isArray(input?.history)) for (const item of input.history.slice(-80)) {
     try { out.history.push(parseRecipe(item)); } catch { /* Preserve usable history. */ }
   }
+  if (input?.historyTrimmed === true || (Array.isArray(input?.history) && input.history.length > 80)) out.historyTrimmed = true;
   out.fieldSelection = parseFieldSelection(input?.fieldSelection, recipe);
   return out;
 }

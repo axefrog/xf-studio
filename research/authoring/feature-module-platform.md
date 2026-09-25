@@ -178,6 +178,7 @@ type LookHistory = { entries: HistoryEntry[]; chunks: Map<ChunkId, string>; trim
 - **Part edits.** Actions, controls and gestures create `part` entries.
 - **Look transactions.** `app.transaction(label, features, fn)` creates one `look` entry containing several parts. Examples: "Apply character from save", "Paste look", "Reset look".
 - **Redo** keeps today's semantics: session-only, and valid only while the look is exactly what the last Undo produced. A gesture owns the transaction, forms can't begin inside a gesture, and Undo is refused while a transaction is open.
+- **Read model.** The History panel already reads `authoring.historyTimeline()` (`HistorySnapshot`: opaque step IDs, `HistoryLabel`s, optional times, `done`/`undone` state, current index, redo count, `trimmed`, `startId`) and jumps with `history.jumpTo {entryId}`. Neither exposes recipes, so the look history publishes the same shape: one step per `HistoryEntry` (a look transaction is one step), `trimmed` from `trimmedBefore`. It may add optional fields such as the touched features, never rename or remove the current ones.
 
 **Storage.** Each part is split by `codec.chunks()` into chunks stored once per look, addressed by content hash with collisions detected by comparing content. Eye makeup chunks one per layer plus a header. A gesture on one layer of a 32-layer look then costs one layer chunk per entry. A benchmark gate records the real saving at six presets × 80 steps.
 
