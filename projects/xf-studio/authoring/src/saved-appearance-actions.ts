@@ -2,7 +2,9 @@ import { parseSavedV, readSavedV, type SavedV } from "./save-reader";
 
 export type SavedAppearanceResult = { applied: string[]; appearanceReferences: number;
   matchedDetails: string[]; matchedHair: boolean; matchedPiercing: boolean;
-  eyeAppearance: { message: string } };
+  eyeAppearance: { message: string };
+  /** The eye-shape choice the saved `(eyes, target)` pair selects in the loaded head, when it has one. */
+  eyeShape?: number };
 export type SavedAppearanceState = { savedV?: SavedV; result?: SavedAppearanceResult; suggestedEyeShape?: number };
 export type SavedAppearancePort = { apply(savedV: SavedV): SavedAppearanceResult };
 export type SavedAppearanceAction = { kind: "savedV.load"; bytes: Uint8Array } |
@@ -26,10 +28,8 @@ export class SavedAppearanceActions {
     if (!allowed.available) throw Error(allowed.reason);
     const savedV = action.kind === "savedV.load" ? readSavedV(action.bytes) : parseSavedV(action.value);
     const result = this.port.apply(savedV);
-    const group = savedV.groups.head.find(g => g.name === "character_customization") ??
-      savedV.groups.head.find(g => g.name === "TPP");
-    const eye = group?.morphs.find(m => m.region === "eyes");
-    const suggestedEyeShape = eye ? Math.floor(Number(eye.target.slice(1)) / 10) : undefined;
+    // The renderer matches the saved pair against the head's own eye-shape choices.
+    const suggestedEyeShape = result.eyeShape;
     this.state = { savedV, result, suggestedEyeShape };
     for (const listener of this.listeners) listener();
     return this.snapshot();

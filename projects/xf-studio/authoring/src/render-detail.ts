@@ -16,6 +16,8 @@ export type RenderResource = {
   sha256: string | null;
   sources: RenderSource[];
 };
+/** The morph resource that supplied one mesh node's facial targets (paired across nodes by target and region). */
+export type RenderMorphSource = { node: string; depotPath: string; sha256: string | null };
 export type CoreTextureSlot = "head.albedo" | "head.normal" | "head.roughness" | "eyes.albedo";
 export const CORE_TEXTURE_SLOTS: readonly CoreTextureSlot[] = ["head.albedo", "head.normal", "head.roughness", "eyes.albedo"];
 export const CORE_TEXTURE_COLOUR: Record<CoreTextureSlot, "srgb" | "linear"> =
@@ -27,7 +29,9 @@ export type CoreDetail = {
   identity: string;
   origin: "game-files" | "prepared";
   provenance: { label: string; notes: string[] };
-  geometry: RenderResource & { nodes: { head: string; plate: string; eyes: string } };
+  geometry: RenderResource & { nodes: { head: string; plate: string; eyes: string };
+    /** Morph resource per node; absent for developer-prepared files, which record no source. */
+    morphs?: RenderMorphSource[] };
   textures: Record<CoreTextureSlot, RenderResource>;
 };
 
@@ -48,6 +52,12 @@ function resource(value: unknown, name: string): RenderResource {
   })) };
 }
 
+function morphSources(value: unknown): RenderMorphSource[] {
+  if (!Array.isArray(value) || value.length > 16) fail("geometry morphs are invalid.");
+  return (value as RenderMorphSource[]).map((entry, index) => ({ node: text(entry?.node, `morph ${index} node`),
+    depotPath: text(entry?.depotPath, `morph ${index} source`), sha256: sha(entry?.sha256 ?? null, `morph ${index}`) }));
+}
+
 /** Strict parse: an unexpected field shape never reaches the loader. */
 export function parseCoreDetail(value: unknown): CoreDetail {
   const doc = value as CoreDetail;
@@ -60,7 +70,8 @@ export function parseCoreDetail(value: unknown): CoreDetail {
     schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: text(doc.identity, "identity"), origin: doc.origin,
     provenance: { label: text(doc.provenance?.label, "provenance label"),
       notes: Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(note => text(note, "note")) : [] },
-    geometry: { ...resource(doc.geometry, "geometry"), nodes: { head: text(nodes.head, "head node"), plate: text(nodes.plate, "plate node"), eyes: text(nodes.eyes, "eyes node") } },
+    geometry: { ...resource(doc.geometry, "geometry"), nodes: { head: text(nodes.head, "head node"), plate: text(nodes.plate, "plate node"), eyes: text(nodes.eyes, "eyes node") },
+      ...(doc.geometry.morphs === undefined ? {} : { morphs: morphSources(doc.geometry.morphs) }) },
     textures,
   };
 }

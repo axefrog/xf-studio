@@ -23,6 +23,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       piercingOptions: () => scene.piercingStyles.map(style => ({ id: style.id, label: style.label,
         choices: style.choices.map(choice => ({ index: choice.index,
           definition: choice.definition, label: choice.label })) })),
+      eyeShapeOptions: scene.eyeShapeOptions,
       availability: target => target === "hair"
         ? !options.hasSavedAppearance() || !scene.hair.length ? "Saved hair preview is unavailable." : undefined
         : !scene.details[target] ? `${target} preview assets are unavailable.` : undefined,

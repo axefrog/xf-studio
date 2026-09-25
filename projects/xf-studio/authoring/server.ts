@@ -34,6 +34,7 @@ const previewCore = new PreviewCoreHost({
   log: message => console.log(message),
 });
 const previewCoreRequest = createPreviewCoreHandler(previewCore);
+const preferDerivedCore = process.env.XFS_PREVIEW_CORE === "derived";
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 const build = await buildBrowser(resolve(root, "build"));
@@ -86,9 +87,10 @@ const server = Bun.serve({
     }
     // Private prepared assets (public/assets or the overlay) win as a whole set; without a prepared
     // head the core preview files (and their render record) come from the derived cache.
-    const preparedHead = async () => await Bun.file(resolve(root, "assets", "head.glb")).exists() ||
-      (!!assetOverlay && await Bun.file(resolve(assetOverlay, "head.glb")).exists());
-    if (!(await file.exists()) && path.startsWith(resolve(root, "assets") + sep) && !(await preparedHead())) {
+    // `XFS_PREVIEW_CORE=derived` makes a ready derived core win over prepared files (developer check).
+    const preparedHead = async () => !preferDerivedCore && (await Bun.file(resolve(root, "assets", "head.glb")).exists() ||
+      (!!assetOverlay && await Bun.file(resolve(assetOverlay, "head.glb")).exists()));
+    if (path.startsWith(resolve(root, "assets") + sep) && (preferDerivedCore || !(await file.exists())) && !(await preparedHead())) {
       const derived = previewCore.assetPath(path.slice(resolve(root, "assets").length + 1));
       if (derived) file = Bun.file(derived);
     }
