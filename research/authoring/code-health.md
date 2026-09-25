@@ -104,6 +104,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-13:** dead history helpers; glitter measurements never pruned and keyed by layer IDs that repeat across presets; wrong import consequence text.
 - **CORE-14:** confusing names (`selectedCollection` returns a preset ID); `ReadonlyDeep` defined three times; shared mutable `glitterChoices`; stale test counts in the boundary doc.
 - **CORE-15:** preview reports ready for one frame after an edit; geometry cache recopies on double updates; reason codes come from matching message text.
+- **UI-19:** the header "Authoring category" drop-down still has a section that only says more categories are planned, with no action (`src/studio-ui/app.ts`). It breaks the actionable-menus rule.
+- **UI-20:** when the 3D preview is unavailable, the head view's input hints overlap the "3D preview unavailable" message.
 
 ## New subsystems since last review
 
