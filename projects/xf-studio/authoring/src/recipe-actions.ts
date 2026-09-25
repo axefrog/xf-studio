@@ -7,7 +7,8 @@ import { canonicalFinish, defaultFlakes, isIrregular, type Flakes } from "./fini
 import { glitterModel, glitterModels, selectGlitterModel, validGlitterSettings, validShiftSettings,
   type GlitterChoices, type GlitterModel } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
-import { clamp, DEFAULT_SHIFT, GAME_OPTICS_FINISHES, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
+import { hasGameOptics } from "./finish-export";
+import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { requiredRecipeSchema } from "./recipe-schema";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "./validation-issues";
@@ -124,7 +125,7 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refuse({ code: "mode", field: "model", message: "Select a direct-light Glitter model first." });
   if (action.kind === "glitter.setClassic" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)))
     return refuse({ code: "mode", field: "model", message: "Select a classic flake model first." });
-  if (action.kind === "layer.useGameOptics" && !GAME_OPTICS_FINISHES.includes(layer.finish))
+  if (action.kind === "layer.useGameOptics" && !hasGameOptics(layer.finish))
     return refuse({ code: "mode", field: "finish", message: "Only Glossy, Shimmer and Colour-shifting have a game-matched model." });
   if (action.kind === "layer.useGameOptics" && layer.optics)
     return refuse({ code: "mode", field: "optics", message: "This layer already uses the game-matched model." });
@@ -203,7 +204,7 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
     changed.finish = action.finish; effect = "immediate";
     // Choosing a finish that has a game-matched model uses it; older layers keep theirs until switched.
     delete changed.optics;
-    if (GAME_OPTICS_FINISHES.includes(action.finish))
+    if (hasGameOptics(action.finish))
       changed.optics = gameOptics(action.finish, validShiftSettings(memory.shift) ? memory.shift : DEFAULT_SHIFT);
   } else if (action.kind === "layer.useGameOptics") {
     changed.optics = gameOptics(layer.finish); effect = "immediate";

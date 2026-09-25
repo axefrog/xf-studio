@@ -1,7 +1,7 @@
 import { convertToBezier, tessellateBezier, interpolatedFeather, type Handles } from "./bezier-path";
 import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
-import { GAME_OPTICS_FINISH_IDS } from "./finish-export";
+import { hasGameOptics } from "./finish-export";
 import { validStudioIrregularSettings } from "./flake-field";
 import type {IrregularFlakes} from "./flake-field";
 import {isDirectGlint,type DirectGlintFlakes} from "./direct-glint-settings";
@@ -116,13 +116,11 @@ export function starterRecipe(): Recipe {
     { ...layer, id: "layer-1", name: "Eye makeup" },
   ] };
 }
-/** Finishes whose preview and export follow the game-matched model when `optics` is present (finish-export.ts). */
-export const GAME_OPTICS_FINISHES: readonly Finish[] = GAME_OPTICS_FINISH_IDS;
 export const DEFAULT_SHIFT = { color: "#3fd4c2", strength: 0.6 } as const;
 function validGameOptics(value: unknown, finish: Finish, schema: string): value is GameOptics {
   if (schema !== "xfs/recipe-11" || !value || typeof value !== "object" || Array.isArray(value)) return false;
   const o = value as GameOptics, keys = Object.keys(o).sort().join();
-  if (o.model !== "game-matched-1" || !GAME_OPTICS_FINISHES.includes(finish)) return false;
+  if (o.model !== "game-matched-1" || !hasGameOptics(finish)) return false;
   if (finish !== "iridescent") return keys === "model";
   const s = o.shift as { color?: unknown; strength?: unknown } | undefined;
   return keys === "model,shift" && !!s && typeof s === "object" && !Array.isArray(s) &&

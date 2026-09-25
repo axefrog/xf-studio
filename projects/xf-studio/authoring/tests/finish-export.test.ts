@@ -184,3 +184,17 @@ test("choosing a finish uses its game-matched model; earlier layers switch only 
   expect(recipeActionCapability(switched, { kind: "layer.useGameOptics", layerId: id }).available).toBe(false);
   expect(recipeActionCapability(state, { kind: "layer.useGameOptics", layerId: id }).available).toBe(false);
 });
+
+test("CORE-20/CORE-08: one finish table feeds game optics, surfaces, the catalogue and the setFinish choices", async () => {
+  const { FINISH_EXPORT, finishExportSummary, flatSurface, hasGameOptics } = await import("../src/finish-export");
+  const { finishCatalogue } = await import("../src/finish-catalogue");
+  const { ACTION_DESCRIPTORS } = await import("../src/studio-action-descriptors");
+  const ids = finishCatalogue().map(item => item.id);
+  expect([...ACTION_DESCRIPTORS["layer.setFinish"].payload.finish.values!]).toEqual([...ids, "satin"]);
+  expect(new Set<string>(ids)).toEqual(new Set(Object.keys(FINISH_EXPORT)));
+  expect(ids.filter(id => hasGameOptics(id))).toEqual(["shimmer", "glossy", "iridescent"]);
+  expect(hasGameOptics("satin")).toBe(false);
+  expect(flatSurface("satin")).toEqual(flatSurface("regular"));
+  expect(flatSurface("shimmer")).toBeUndefined();
+  for (const item of finishCatalogue()) expect(item.exportNote).toBe(finishExportSummary(item.id).note);
+});

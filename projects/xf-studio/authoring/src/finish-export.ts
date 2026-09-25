@@ -97,8 +97,8 @@ export const FINISH_EXPORT = {
 export const finishExportRule = (finish: Finish): FinishExportRule => FINISH_EXPORT[canonicalFinish(finish)];
 /** Constant surface of a flat-route finish; undefined for finishes with per-texel optics or no route. */
 export const flatSurface = (finish: Finish): Surface | undefined => finishExportRule(finish).surface;
-/** Finishes with a game-matched optics model. */
-export const GAME_OPTICS_FINISH_IDS: readonly FinishId[] = (Object.keys(FINISH_EXPORT) as FinishId[]).filter(id => FINISH_EXPORT[id].gameOptics);
+/** The finish has a game-matched optics model (recipe validation, finish actions and export read this). */
+export const hasGameOptics = (finish: Finish): boolean => finishExportRule(finish).gameOptics;
 
 const gameModel = (layer: Pick<Layer, "optics">): layer is { optics: GameOptics } => layer.optics?.model === "game-matched-1";
 const capitalised = (finish: Finish) => { const name = finishLabel(finish); return name[0].toUpperCase() + name.slice(1); };

@@ -30,7 +30,10 @@ const short: Record<FinishId, [string, string[]]> = {
   matte: ["Matte", []], regular: ["Satin", []], metallic: ["Metallic", ["foil"]], shimmer: ["Shimmer", ["pearl"]],
   glitter: ["Glitter", []], glossy: ["Glossy", ["wet look"]], iridescent: ["Colour-shift", ["duochrome"]],
 };
-const order: FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"];
+/** Finish IDs offered for new edits, in menu order. */
+export const FINISH_IDS: readonly FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"];
+/** Stored legacy names `layer.setFinish` still accepts (as the same finish) but never offers. */
+export const LEGACY_FINISH_ALIASES: readonly Finish[] = ["satin"];
 
 /**
  * Read-only finish taxonomy for presentations. Export status derives from the same route
@@ -38,7 +41,7 @@ const order: FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter",
  * eligibility. Descriptors are informational: Check decides.
  */
 export function finishCatalogue(): FinishDescriptor[] {
-  return order.map(id => {
+  return FINISH_IDS.map(id => {
     const summary = finishExportSummary(id as Finish);
     return {
       id, label: labels[id], shortLabel: short[id][0], aliases: short[id][1], description: finishDescription(id as Finish),
