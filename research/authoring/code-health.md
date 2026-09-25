@@ -147,7 +147,10 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-None. (The 3D preview setup service was reviewed at `ecb4b33`.)
+- **Eye-plate lift and export diagnostics** (claude/plate-depth): `plate-lift.ts`, `export-diagnostics.ts`, verifier `mod-verifier/plate-geometry.ts`.
+- **Head camera input adapter** (claude/camera-bindings): `head-camera-input.ts`.
+- **XF Runtime Bridge** (claude/runtime-baseline): new project `projects/xf-runtime-bridge` (RED4ext C++ plugin with a named-pipe bridge, redscript, CET Lua, TweakXL). First code that accepts commands from outside the game.
+- **Site knowledge generator** (claude/public-knowledge): `projects/xf-studio/site/tools/knowledge.ts`, `privacy.ts`.
 
 ## Fixed in claude/release-prep
 
