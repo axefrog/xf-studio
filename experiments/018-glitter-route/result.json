@@ -1,0 +1,3583 @@
+{
+ "experiment": "018-glitter-route",
+ "window": {
+  "u_mesh": [
+   0.2686,
+   0.7312
+  ],
+  "v_mesh": [
+   0.6733,
+   0.8243
+  ],
+  "v_gltf_top_left": [
+   0.1757,
+   0.3267
+  ],
+  "mm_per_uv": [
+   569.0,
+   405.0
+  ],
+  "size": [
+   4096,
+   1024
+  ],
+  "material_constants": {
+   "UVScaleX": 2.161695,
+   "UVOffsetX": 0.000216,
+   "UVScaleY": 6.622517,
+   "UVOffsetY": -1.647682
+  },
+  "texel_mm": [
+   0.0643,
+   0.0597
+  ],
+  "current_atlas_texel_mm_at_1024": [
+   0.556,
+   0.396
+  ]
+ },
+ "framings": {
+  "close-up (eyes fill frame)": {
+   "internal_px_per_mm": 16.0,
+   "lod": 0.0,
+   "representative_flake_mm": 0.2,
+   "representative_flake_px": 3.2
+  },
+  "face framing": {
+   "internal_px_per_mm": 3.0,
+   "lod": 2.37,
+   "representative_flake_mm": 0.514,
+   "representative_flake_px": 1.54
+  },
+  "gameplay (~1 m)": {
+   "internal_px_per_mm": 0.67,
+   "lod": 4.54,
+   "representative_flake_mm": null,
+   "representative_flake_px": null
+  }
+ },
+ "presets": [
+  {
+   "key": "A",
+   "name": "Glitter A \u00b7 base",
+   "name_length": 16,
+   "notes": "Primary recipe on the left lid; the same pigment without flakes on the right.",
+   "regions": {
+    "left lid glitter": {
+     "rect_gltf_uv": [
+      0.3,
+      0.211,
+      0.444,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "right lid satin control": {
+     "rect_gltf_uv": [
+      0.556,
+      0.211,
+      0.7,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": null
+    }
+   },
+   "levels": [
+    {
+     "level": 0,
+     "size": "4096x1024",
+     "texel_mm": [
+      0.0643,
+      0.0597
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 4568,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.798,
+        "after_taa_pct": 0.784
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.798,
+        "after_taa_pct": 0.784
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.805,
+        "after_taa_pct": 0.784
+       }
+      }
+     }
+    },
+    {
+     "level": 1,
+     "size": "2048x512",
+     "texel_mm": [
+      0.1285,
+      0.1194
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 3114,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.641,
+        "after_taa_pct": 0.593
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.594,
+        "after_taa_pct": 0.498
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.604,
+        "after_taa_pct": 0.5
+       }
+      }
+     }
+    },
+    {
+     "level": 2,
+     "size": "1024x256",
+     "texel_mm": [
+      0.2571,
+      0.2389
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 623,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.0971,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.446,
+        "after_taa_pct": 0.407
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.247,
+        "after_taa_pct": 0.128
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.249,
+        "after_taa_pct": 0.127
+       }
+      }
+     }
+    },
+    {
+     "level": 3,
+     "size": "512x128",
+     "texel_mm": [
+      0.5141,
+      0.4778
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 109,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0668,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.304,
+        "after_taa_pct": 0.276
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.026,
+        "after_taa_pct": 0.008
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.025,
+        "after_taa_pct": 0.008
+       }
+      }
+     }
+    },
+    {
+     "level": 4,
+     "size": "256x64",
+     "texel_mm": [
+      1.0282,
+      0.9555
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    },
+    {
+     "level": 5,
+     "size": "128x32",
+     "texel_mm": [
+      2.0564,
+      1.9111
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    }
+   ],
+   "accent": null
+  },
+  {
+   "key": "B",
+   "name": "Glitter B \u00b7 mips",
+   "name_length": 16,
+   "notes": "Identical base level (mirrored catalogue); only the mip chain differs.",
+   "regions": {
+    "left lid nested mips": {
+     "rect_gltf_uv": [
+      0.3,
+      0.211,
+      0.444,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "right lid box mips": {
+     "rect_gltf_uv": [
+      0.556,
+      0.211,
+      0.7,
+      0.248
+     ],
+     "mips": "box",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    }
+   },
+   "levels": [
+    {
+     "level": 0,
+     "size": "4096x1024",
+     "texel_mm": [
+      0.0643,
+      0.0597
+     ],
+     "regions": {
+      "left lid nested mips": {
+       "catalogue": 4568,
+       "represented": 4568,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.798,
+        "after_taa_pct": 0.784
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.798,
+        "after_taa_pct": 0.784
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.805,
+        "after_taa_pct": 0.784
+       }
+      },
+      "right lid box mips": {
+       "catalogue": 4568,
+       "represented": 4568,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.8,
+        "after_taa_pct": 0.785
+       }
+      }
+     }
+    },
+    {
+     "level": 1,
+     "size": "2048x512",
+     "texel_mm": [
+      0.1285,
+      0.1194
+     ],
+     "regions": {
+      "left lid nested mips": {
+       "catalogue": 4568,
+       "represented": 3114,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.641,
+        "after_taa_pct": 0.593
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.594,
+        "after_taa_pct": 0.498
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.604,
+        "after_taa_pct": 0.5
+       }
+      },
+      "right lid box mips": {
+       "catalogue": 4568,
+       "represented": 3114,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1366,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.596,
+        "after_taa_pct": 0.503
+       }
+      }
+     }
+    },
+    {
+     "level": 2,
+     "size": "1024x256",
+     "texel_mm": [
+      0.2571,
+      0.2389
+     ],
+     "regions": {
+      "left lid nested mips": {
+       "catalogue": 4568,
+       "represented": 623,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.0971,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.446,
+        "after_taa_pct": 0.407
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.247,
+        "after_taa_pct": 0.128
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.249,
+        "after_taa_pct": 0.127
+       }
+      },
+      "right lid box mips": {
+       "catalogue": 4568,
+       "represented": 623,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1356,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.254,
+        "after_taa_pct": 0.127
+       }
+      }
+     }
+    },
+    {
+     "level": 3,
+     "size": "512x128",
+     "texel_mm": [
+      0.5141,
+      0.4778
+     ],
+     "regions": {
+      "left lid nested mips": {
+       "catalogue": 4568,
+       "represented": 109,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0668,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.304,
+        "after_taa_pct": 0.276
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.026,
+        "after_taa_pct": 0.008
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.025,
+        "after_taa_pct": 0.008
+       }
+      },
+      "right lid box mips": {
+       "catalogue": 4568,
+       "represented": 109,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.1311,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.025,
+        "after_taa_pct": 0.009
+       }
+      }
+     }
+    },
+    {
+     "level": 4,
+     "size": "256x64",
+     "texel_mm": [
+      1.0282,
+      0.9555
+     ],
+     "regions": {
+      "left lid nested mips": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right lid box mips": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.1273,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    },
+    {
+     "level": 5,
+     "size": "128x32",
+     "texel_mm": [
+      2.0564,
+      1.9111
+     ],
+     "regions": {
+      "left lid nested mips": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right lid box mips": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.1173,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    }
+   ],
+   "accent": null
+  },
+  {
+   "key": "C",
+   "name": "Glitter C \u00b7 size",
+   "name_length": 16,
+   "notes": "Flake width 0.12 / 0.25 / 0.5 mm, outer to inner; right lid mirrors with another seed.",
+   "regions": {
+    "left 0.12 mm": {
+     "rect_gltf_uv": [
+      0.3,
+      0.211,
+      0.35,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.12,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "left 0.25 mm": {
+     "rect_gltf_uv": [
+      0.346,
+      0.211,
+      0.398,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.25,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "left 0.5 mm": {
+     "rect_gltf_uv": [
+      0.394,
+      0.211,
+      0.444,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.5,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "right 0.12 mm": {
+     "rect_gltf_uv": [
+      0.65,
+      0.211,
+      0.7,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.12,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    },
+    "right 0.25 mm": {
+     "rect_gltf_uv": [
+      0.602,
+      0.211,
+      0.654,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.25,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    },
+    "right 0.5 mm": {
+     "rect_gltf_uv": [
+      0.556,
+      0.211,
+      0.606,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.5,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    }
+   },
+   "levels": [
+    {
+     "level": 0,
+     "size": "4096x1024",
+     "texel_mm": [
+      0.0643,
+      0.0597
+     ],
+     "regions": {
+      "left 0.12 mm": {
+       "catalogue": 4405,
+       "represented": 3670,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1494,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.755,
+        "after_taa_pct": 0.712
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.755,
+        "after_taa_pct": 0.712
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.765,
+        "after_taa_pct": 0.713
+       }
+      },
+      "left 0.25 mm": {
+       "catalogue": 1042,
+       "represented": 1029,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1565,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.928,
+        "after_taa_pct": 0.913
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.928,
+        "after_taa_pct": 0.913
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.935,
+        "after_taa_pct": 0.914
+       }
+      },
+      "left 0.5 mm": {
+       "catalogue": 244,
+       "represented": 242,
+       "min_width_texels": 3.22,
+       "target_cover": 0.15,
+       "mask_mean": 0.1419,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.924,
+        "after_taa_pct": 0.918
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.924,
+        "after_taa_pct": 0.918
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.926,
+        "after_taa_pct": 0.917
+       }
+      },
+      "right 0.12 mm": {
+       "catalogue": 4518,
+       "represented": 3730,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1465,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.72,
+        "after_taa_pct": 0.68
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.72,
+        "after_taa_pct": 0.68
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.726,
+        "after_taa_pct": 0.677
+       }
+      },
+      "right 0.25 mm": {
+       "catalogue": 1097,
+       "represented": 1074,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1554,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.899,
+        "after_taa_pct": 0.885
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.899,
+        "after_taa_pct": 0.885
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.905,
+        "after_taa_pct": 0.884
+       }
+      },
+      "right 0.5 mm": {
+       "catalogue": 271,
+       "represented": 254,
+       "min_width_texels": 3.42,
+       "target_cover": 0.15,
+       "mask_mean": 0.1362,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.891,
+        "after_taa_pct": 0.885
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.891,
+        "after_taa_pct": 0.885
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.895,
+        "after_taa_pct": 0.886
+       }
+      }
+     }
+    },
+    {
+     "level": 1,
+     "size": "2048x512",
+     "texel_mm": [
+      0.1285,
+      0.1194
+     ],
+     "regions": {
+      "left 0.12 mm": {
+       "catalogue": 4405,
+       "represented": 864,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1087,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.503,
+        "after_taa_pct": 0.461
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.42,
+        "after_taa_pct": 0.269
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.429,
+        "after_taa_pct": 0.271
+       }
+      },
+      "left 0.25 mm": {
+       "catalogue": 1042,
+       "represented": 875,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1525,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.758,
+        "after_taa_pct": 0.722
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.75,
+        "after_taa_pct": 0.686
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.759,
+        "after_taa_pct": 0.686
+       }
+      },
+      "left 0.5 mm": {
+       "catalogue": 244,
+       "represented": 242,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1408,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.83,
+        "after_taa_pct": 0.82
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.828,
+        "after_taa_pct": 0.81
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.833,
+        "after_taa_pct": 0.809
+       }
+      },
+      "right 0.12 mm": {
+       "catalogue": 4518,
+       "represented": 869,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1063,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.503,
+        "after_taa_pct": 0.461
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.397,
+        "after_taa_pct": 0.247
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.407,
+        "after_taa_pct": 0.249
+       }
+      },
+      "right 0.25 mm": {
+       "catalogue": 1097,
+       "represented": 908,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1524,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.747,
+        "after_taa_pct": 0.711
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.739,
+        "after_taa_pct": 0.664
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.751,
+        "after_taa_pct": 0.665
+       }
+      },
+      "right 0.5 mm": {
+       "catalogue": 271,
+       "represented": 254,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1356,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.799,
+        "after_taa_pct": 0.787
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.808,
+        "after_taa_pct": 0.791
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.816,
+        "after_taa_pct": 0.793
+       }
+      }
+     }
+    },
+    {
+     "level": 2,
+     "size": "1024x256",
+     "texel_mm": [
+      0.2571,
+      0.2389
+     ],
+     "regions": {
+      "left 0.12 mm": {
+       "catalogue": 4405,
+       "represented": 153,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0729,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.3,
+        "after_taa_pct": 0.258
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.11,
+        "after_taa_pct": 0.057
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.107,
+        "after_taa_pct": 0.053
+       }
+      },
+      "left 0.25 mm": {
+       "catalogue": 1042,
+       "represented": 223,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1121,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.458,
+        "after_taa_pct": 0.415
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.453,
+        "after_taa_pct": 0.314
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.462,
+        "after_taa_pct": 0.318
+       }
+      },
+      "left 0.5 mm": {
+       "catalogue": 244,
+       "represented": 215,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1372,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.649,
+        "after_taa_pct": 0.619
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.639,
+        "after_taa_pct": 0.572
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.654,
+        "after_taa_pct": 0.581
+       }
+      },
+      "right 0.12 mm": {
+       "catalogue": 4518,
+       "represented": 152,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0739,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.341,
+        "after_taa_pct": 0.316
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.093,
+        "after_taa_pct": 0.043
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.087,
+        "after_taa_pct": 0.041
+       }
+      },
+      "right 0.25 mm": {
+       "catalogue": 1097,
+       "represented": 223,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1101,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.461,
+        "after_taa_pct": 0.418
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.451,
+        "after_taa_pct": 0.301
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.456,
+        "after_taa_pct": 0.296
+       }
+      },
+      "right 0.5 mm": {
+       "catalogue": 271,
+       "represented": 209,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1329,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.62,
+        "after_taa_pct": 0.583
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.645,
+        "after_taa_pct": 0.58
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.659,
+        "after_taa_pct": 0.585
+       }
+      }
+     }
+    },
+    {
+     "level": 3,
+     "size": "512x128",
+     "texel_mm": [
+      0.5141,
+      0.4778
+     ],
+     "regions": {
+      "left 0.12 mm": {
+       "catalogue": 4405,
+       "represented": 27,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0462,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.193,
+        "after_taa_pct": 0.171
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.021,
+        "after_taa_pct": 0.007
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.015,
+        "after_taa_pct": 0.009
+       }
+      },
+      "left 0.25 mm": {
+       "catalogue": 1042,
+       "represented": 38,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.077,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.432,
+        "after_taa_pct": 0.403
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.104,
+        "after_taa_pct": 0.043
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.103,
+        "after_taa_pct": 0.043
+       }
+      },
+      "left 0.5 mm": {
+       "catalogue": 244,
+       "represented": 54,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1033,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.547,
+        "after_taa_pct": 0.508
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.329,
+        "after_taa_pct": 0.187
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.343,
+        "after_taa_pct": 0.201
+       }
+      },
+      "right 0.12 mm": {
+       "catalogue": 4518,
+       "represented": 26,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0469,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.229,
+        "after_taa_pct": 0.21
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.005,
+        "after_taa_pct": 0.004
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.01,
+        "after_taa_pct": 0.003
+       }
+      },
+      "right 0.25 mm": {
+       "catalogue": 1097,
+       "represented": 39,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0725,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.351,
+        "after_taa_pct": 0.323
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.084,
+        "after_taa_pct": 0.037
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.094,
+        "after_taa_pct": 0.035
+       }
+      },
+      "right 0.5 mm": {
+       "catalogue": 271,
+       "represented": 50,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.0966,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.435,
+        "after_taa_pct": 0.392
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.327,
+        "after_taa_pct": 0.179
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.334,
+        "after_taa_pct": 0.178
+       }
+      }
+     }
+    },
+    {
+     "level": 4,
+     "size": "256x64",
+     "texel_mm": [
+      1.0282,
+      0.9555
+     ],
+     "regions": {
+      "left 0.12 mm": {
+       "catalogue": 4405,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.003,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left 0.25 mm": {
+       "catalogue": 1042,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.003,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.007,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left 0.5 mm": {
+       "catalogue": 244,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.044,
+        "after_taa_pct": 0.003
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.03,
+        "after_taa_pct": 0.007
+       }
+      },
+      "right 0.12 mm": {
+       "catalogue": 4518,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right 0.25 mm": {
+       "catalogue": 1097,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.003,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.003,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right 0.5 mm": {
+       "catalogue": 271,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.053,
+        "after_taa_pct": 0.007
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.053,
+        "after_taa_pct": 0.014
+       }
+      }
+     }
+    },
+    {
+     "level": 5,
+     "size": "128x32",
+     "texel_mm": [
+      2.0564,
+      1.9111
+     ],
+     "regions": {
+      "left 0.12 mm": {
+       "catalogue": 4405,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0252,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left 0.25 mm": {
+       "catalogue": 1042,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left 0.5 mm": {
+       "catalogue": 244,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right 0.12 mm": {
+       "catalogue": 4518,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0252,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right 0.25 mm": {
+       "catalogue": 1097,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right 0.5 mm": {
+       "catalogue": 271,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    }
+   ],
+   "accent": null
+  },
+  {
+   "key": "D",
+   "name": "Glitter D \u00b7 surface",
+   "name_length": 19,
+   "notes": "Left: flake roughness 0.12 / 0.22 / 0.35 at metal 0.85. Right: metal 1.0 / 0.6 / 0.25 at roughness 0.22.",
+   "regions": {
+    "left rough 0.12": {
+     "rect_gltf_uv": [
+      0.3,
+      0.211,
+      0.35,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.12,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "left rough 0.22": {
+     "rect_gltf_uv": [
+      0.346,
+      0.211,
+      0.398,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "left rough 0.35": {
+     "rect_gltf_uv": [
+      0.394,
+      0.211,
+      0.444,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.35,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "right metal 1.0": {
+     "rect_gltf_uv": [
+      0.65,
+      0.211,
+      0.7,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 1.0,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    },
+    "right metal 0.6": {
+     "rect_gltf_uv": [
+      0.602,
+      0.211,
+      0.654,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.6,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    },
+    "right metal 0.25": {
+     "rect_gltf_uv": [
+      0.556,
+      0.211,
+      0.606,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.25,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    }
+   },
+   "levels": [
+    {
+     "level": 0,
+     "size": "4096x1024",
+     "texel_mm": [
+      0.0643,
+      0.0597
+     ],
+     "regions": {
+      "left rough 0.12": {
+       "catalogue": 1572,
+       "represented": 1572,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1443,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.407,
+        "after_taa_pct": 0.365
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.407,
+        "after_taa_pct": 0.365
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.406,
+        "after_taa_pct": 0.36
+       }
+      },
+      "left rough 0.22": {
+       "catalogue": 1636,
+       "represented": 1636,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1526,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.829,
+        "after_taa_pct": 0.811
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.829,
+        "after_taa_pct": 0.811
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.835,
+        "after_taa_pct": 0.811
+       }
+      },
+      "left rough 0.35": {
+       "catalogue": 1572,
+       "represented": 1572,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1427,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.663,
+        "after_taa_pct": 0.648
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.663,
+        "after_taa_pct": 0.648
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.664,
+        "after_taa_pct": 0.647
+       }
+      },
+      "right metal 1.0": {
+       "catalogue": 1641,
+       "represented": 1641,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1485,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.874,
+        "after_taa_pct": 0.856
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.874,
+        "after_taa_pct": 0.856
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.884,
+        "after_taa_pct": 0.858
+       }
+      },
+      "right metal 0.6": {
+       "catalogue": 1706,
+       "represented": 1684,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1568,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.664,
+        "after_taa_pct": 0.646
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.664,
+        "after_taa_pct": 0.646
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.666,
+        "after_taa_pct": 0.642
+       }
+      },
+      "right metal 0.25": {
+       "catalogue": 1641,
+       "represented": 1641,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1482,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.175,
+        "after_taa_pct": 0.169
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.175,
+        "after_taa_pct": 0.169
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.175,
+        "after_taa_pct": 0.166
+       }
+      }
+     }
+    },
+    {
+     "level": 1,
+     "size": "2048x512",
+     "texel_mm": [
+      0.1285,
+      0.1194
+     ],
+     "regions": {
+      "left rough 0.12": {
+       "catalogue": 1572,
+       "represented": 1090,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1461,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.405,
+        "after_taa_pct": 0.332
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.417,
+        "after_taa_pct": 0.315
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.414,
+        "after_taa_pct": 0.309
+       }
+      },
+      "left rough 0.22": {
+       "catalogue": 1636,
+       "represented": 1135,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1597,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.696,
+        "after_taa_pct": 0.641
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.603,
+        "after_taa_pct": 0.503
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.612,
+        "after_taa_pct": 0.506
+       }
+      },
+      "left rough 0.35": {
+       "catalogue": 1572,
+       "represented": 1090,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1458,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.453,
+        "after_taa_pct": 0.349
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.393,
+        "after_taa_pct": 0.285
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.396,
+        "after_taa_pct": 0.285
+       }
+      },
+      "right metal 1.0": {
+       "catalogue": 1641,
+       "represented": 1117,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1474,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.736,
+        "after_taa_pct": 0.681
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.679,
+        "after_taa_pct": 0.569
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.691,
+        "after_taa_pct": 0.568
+       }
+      },
+      "right metal 0.6": {
+       "catalogue": 1706,
+       "represented": 1152,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1554,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.482,
+        "after_taa_pct": 0.381
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.45,
+        "after_taa_pct": 0.347
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.452,
+        "after_taa_pct": 0.343
+       }
+      },
+      "right metal 0.25": {
+       "catalogue": 1641,
+       "represented": 1117,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1488,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.134,
+        "after_taa_pct": 0.111
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.112,
+        "after_taa_pct": 0.084
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.109,
+        "after_taa_pct": 0.079
+       }
+      }
+     }
+    },
+    {
+     "level": 2,
+     "size": "1024x256",
+     "texel_mm": [
+      0.2571,
+      0.2389
+     ],
+     "regions": {
+      "left rough 0.12": {
+       "catalogue": 1572,
+       "represented": 218,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1033,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.281,
+        "after_taa_pct": 0.227
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.294,
+        "after_taa_pct": 0.167
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.279,
+        "after_taa_pct": 0.16
+       }
+      },
+      "left rough 0.22": {
+       "catalogue": 1636,
+       "represented": 223,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1113,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.456,
+        "after_taa_pct": 0.409
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.288,
+        "after_taa_pct": 0.15
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.289,
+        "after_taa_pct": 0.156
+       }
+      },
+      "left rough 0.35": {
+       "catalogue": 1572,
+       "represented": 218,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1045,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.267,
+        "after_taa_pct": 0.18
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.105,
+        "after_taa_pct": 0.038
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.108,
+        "after_taa_pct": 0.039
+       }
+      },
+      "right metal 1.0": {
+       "catalogue": 1641,
+       "represented": 219,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1009,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.491,
+        "after_taa_pct": 0.445
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.326,
+        "after_taa_pct": 0.177
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.33,
+        "after_taa_pct": 0.182
+       }
+      },
+      "right metal 0.6": {
+       "catalogue": 1706,
+       "represented": 227,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1133,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.304,
+        "after_taa_pct": 0.234
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.172,
+        "after_taa_pct": 0.07
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.166,
+        "after_taa_pct": 0.062
+       }
+      },
+      "right metal 0.25": {
+       "catalogue": 1641,
+       "represented": 219,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1032,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.081,
+        "after_taa_pct": 0.063
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.034,
+        "after_taa_pct": 0.012
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.032,
+        "after_taa_pct": 0.011
+       }
+      }
+     }
+    },
+    {
+     "level": 3,
+     "size": "512x128",
+     "texel_mm": [
+      0.5141,
+      0.4778
+     ],
+     "regions": {
+      "left rough 0.12": {
+       "catalogue": 1572,
+       "represented": 38,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0679,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.219,
+        "after_taa_pct": 0.177
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.058,
+        "after_taa_pct": 0.015
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.035,
+        "after_taa_pct": 0.011
+       }
+      },
+      "left rough 0.22": {
+       "catalogue": 1636,
+       "represented": 39,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0836,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.421,
+        "after_taa_pct": 0.37
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.032,
+        "after_taa_pct": 0.005
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.026,
+        "after_taa_pct": 0.004
+       }
+      },
+      "left rough 0.35": {
+       "catalogue": 1572,
+       "represented": 38,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0745,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.222,
+        "after_taa_pct": 0.148
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.005,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.006,
+        "after_taa_pct": 0.001
+       }
+      },
+      "right metal 1.0": {
+       "catalogue": 1641,
+       "represented": 37,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0648,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.298,
+        "after_taa_pct": 0.273
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.027,
+        "after_taa_pct": 0.007
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.021,
+        "after_taa_pct": 0.005
+       }
+      },
+      "right metal 0.6": {
+       "catalogue": 1706,
+       "represented": 40,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0807,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.153,
+        "after_taa_pct": 0.128
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.014,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.011,
+        "after_taa_pct": 0.001
+       }
+      },
+      "right metal 0.25": {
+       "catalogue": 1641,
+       "represented": 37,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0676,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.034,
+        "after_taa_pct": 0.028
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.002,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    },
+    {
+     "level": 4,
+     "size": "256x64",
+     "texel_mm": [
+      1.0282,
+      0.9555
+     ],
+     "regions": {
+      "left rough 0.12": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left rough 0.22": {
+       "catalogue": 1636,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left rough 0.35": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right metal 1.0": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right metal 0.6": {
+       "catalogue": 1706,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right metal 0.25": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    },
+    {
+     "level": 5,
+     "size": "128x32",
+     "texel_mm": [
+      2.0564,
+      1.9111
+     ],
+     "regions": {
+      "left rough 0.12": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left rough 0.22": {
+       "catalogue": 1636,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left rough 0.35": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right metal 1.0": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right metal 0.6": {
+       "catalogue": 1706,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right metal 0.25": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    }
+   ],
+   "accent": null
+  },
+  {
+   "key": "E",
+   "name": "Glitter E \u00b7 accent",
+   "name_length": 18,
+   "notes": "Primary on both lids; 8 % of the left lid's flakes also drive a mesh_decal_emissive_subsurface accent chunk.",
+   "regions": {
+    "left lid glitter": {
+     "rect_gltf_uv": [
+      0.3,
+      0.211,
+      0.444,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "right lid glitter": {
+     "rect_gltf_uv": [
+      0.556,
+      0.211,
+      0.7,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25.0,
+      "tilt_max": 50.0,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    }
+   },
+   "levels": [
+    {
+     "level": 0,
+     "size": "4096x1024",
+     "texel_mm": [
+      0.0643,
+      0.0597
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 4568,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.798,
+        "after_taa_pct": 0.784
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.798,
+        "after_taa_pct": 0.784
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.805,
+        "after_taa_pct": 0.784
+       }
+      },
+      "right lid glitter": {
+       "catalogue": 4568,
+       "represented": 4568,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.8,
+        "after_taa_pct": 0.785
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.8,
+        "after_taa_pct": 0.785
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.807,
+        "after_taa_pct": 0.786
+       }
+      }
+     }
+    },
+    {
+     "level": 1,
+     "size": "2048x512",
+     "texel_mm": [
+      0.1285,
+      0.1194
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 3114,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1374,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.641,
+        "after_taa_pct": 0.593
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.594,
+        "after_taa_pct": 0.498
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.604,
+        "after_taa_pct": 0.5
+       }
+      },
+      "right lid glitter": {
+       "catalogue": 4568,
+       "represented": 3114,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1375,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.645,
+        "after_taa_pct": 0.599
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.596,
+        "after_taa_pct": 0.503
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.608,
+        "after_taa_pct": 0.505
+       }
+      }
+     }
+    },
+    {
+     "level": 2,
+     "size": "1024x256",
+     "texel_mm": [
+      0.2571,
+      0.2389
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 623,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.0971,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.446,
+        "after_taa_pct": 0.407
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.247,
+        "after_taa_pct": 0.128
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.249,
+        "after_taa_pct": 0.127
+       }
+      },
+      "right lid glitter": {
+       "catalogue": 4568,
+       "represented": 623,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.0972,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.444,
+        "after_taa_pct": 0.407
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.254,
+        "after_taa_pct": 0.127
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.257,
+        "after_taa_pct": 0.126
+       }
+      }
+     }
+    },
+    {
+     "level": 3,
+     "size": "512x128",
+     "texel_mm": [
+      0.5141,
+      0.4778
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 109,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0668,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.304,
+        "after_taa_pct": 0.276
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.026,
+        "after_taa_pct": 0.008
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.025,
+        "after_taa_pct": 0.008
+       }
+      },
+      "right lid glitter": {
+       "catalogue": 4568,
+       "represented": 109,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0674,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.309,
+        "after_taa_pct": 0.282
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.025,
+        "after_taa_pct": 0.009
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.023,
+        "after_taa_pct": 0.005
+       }
+      }
+     }
+    },
+    {
+     "level": 4,
+     "size": "256x64",
+     "texel_mm": [
+      1.0282,
+      0.9555
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right lid glitter": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    },
+    {
+     "level": 5,
+     "size": "128x32",
+     "texel_mm": [
+      2.0564,
+      1.9111
+     ],
+     "regions": {
+      "left lid glitter": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right lid glitter": {
+       "catalogue": 4568,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    }
+   ],
+   "accent": {
+    "region": "left lid glitter",
+    "share": 0.08,
+    "flakes": 400,
+    "template": "base/materials/mesh_decal_emissive_subsurface.mt",
+    "note": "No UV transform in this template: the mask lives in the head UV atlas (2048 recommended, about 0.25 mm/texel on the lid); accent flakes are drawn at >= 2 texels there."
+   }
+  },
+  {
+   "key": "F",
+   "name": "Glitter F \u00b7 tilt",
+   "name_length": 16,
+   "notes": "Tilt spread sigma/max in degrees: 10/20, 25/50, 40/70, outer to inner.",
+   "regions": {
+    "left tilt 10/20": {
+     "rect_gltf_uv": [
+      0.3,
+      0.211,
+      0.35,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 10,
+      "tilt_max": 20,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "left tilt 25/50": {
+     "rect_gltf_uv": [
+      0.346,
+      0.211,
+      0.398,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25,
+      "tilt_max": 50,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "left tilt 40/70": {
+     "rect_gltf_uv": [
+      0.394,
+      0.211,
+      0.444,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 40,
+      "tilt_max": 70,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 2077
+     }
+    },
+    "right tilt 10/20": {
+     "rect_gltf_uv": [
+      0.65,
+      0.211,
+      0.7,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 10,
+      "tilt_max": 20,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    },
+    "right tilt 25/50": {
+     "rect_gltf_uv": [
+      0.602,
+      0.211,
+      0.654,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 25,
+      "tilt_max": 50,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    },
+    "right tilt 40/70": {
+     "rect_gltf_uv": [
+      0.556,
+      0.211,
+      0.606,
+      0.248
+     ],
+     "mips": "nested",
+     "flakes": {
+      "size_mm": 0.2,
+      "size_sigma": 0.35,
+      "cover": 0.15,
+      "tilt_sigma": 40,
+      "tilt_max": 70,
+      "rough": 0.22,
+      "metal": 0.85,
+      "colour": "#e8c46a",
+      "retention": 0.7,
+      "cap_mm": 1.2,
+      "seed": 4242
+     }
+    }
+   },
+   "levels": [
+    {
+     "level": 0,
+     "size": "4096x1024",
+     "texel_mm": [
+      0.0643,
+      0.0597
+     ],
+     "regions": {
+      "left tilt 10/20": {
+       "catalogue": 1572,
+       "represented": 1572,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1443,
+       "glint_shipped": {
+        "sparkle_px_pct": 1.453,
+        "after_taa_pct": 1.442
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 1.453,
+        "after_taa_pct": 1.442
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 1.457,
+        "after_taa_pct": 1.439
+       }
+      },
+      "left tilt 25/50": {
+       "catalogue": 1636,
+       "represented": 1636,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1526,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.914,
+        "after_taa_pct": 0.897
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.914,
+        "after_taa_pct": 0.897
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.92,
+        "after_taa_pct": 0.896
+       }
+      },
+      "left tilt 40/70": {
+       "catalogue": 1572,
+       "represented": 1572,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1427,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.584,
+        "after_taa_pct": 0.571
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.584,
+        "after_taa_pct": 0.571
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.59,
+        "after_taa_pct": 0.572
+       }
+      },
+      "right tilt 10/20": {
+       "catalogue": 1641,
+       "represented": 1641,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1485,
+       "glint_shipped": {
+        "sparkle_px_pct": 1.449,
+        "after_taa_pct": 1.44
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 1.449,
+        "after_taa_pct": 1.44
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 1.452,
+        "after_taa_pct": 1.435
+       }
+      },
+      "right tilt 25/50": {
+       "catalogue": 1706,
+       "represented": 1684,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1568,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.94,
+        "after_taa_pct": 0.924
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.94,
+        "after_taa_pct": 0.924
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.946,
+        "after_taa_pct": 0.922
+       }
+      },
+      "right tilt 40/70": {
+       "catalogue": 1641,
+       "represented": 1641,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1482,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.525,
+        "after_taa_pct": 0.512
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.525,
+        "after_taa_pct": 0.512
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.53,
+        "after_taa_pct": 0.511
+       }
+      }
+     }
+    },
+    {
+     "level": 1,
+     "size": "2048x512",
+     "texel_mm": [
+      0.1285,
+      0.1194
+     ],
+     "regions": {
+      "left tilt 10/20": {
+       "catalogue": 1572,
+       "represented": 1090,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1461,
+       "glint_shipped": {
+        "sparkle_px_pct": 1.134,
+        "after_taa_pct": 1.086
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 1.028,
+        "after_taa_pct": 0.904
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 1.034,
+        "after_taa_pct": 0.903
+       }
+      },
+      "left tilt 25/50": {
+       "catalogue": 1636,
+       "represented": 1135,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1597,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.763,
+        "after_taa_pct": 0.713
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.669,
+        "after_taa_pct": 0.568
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.681,
+        "after_taa_pct": 0.571
+       }
+      },
+      "left tilt 40/70": {
+       "catalogue": 1572,
+       "represented": 1090,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1458,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.463,
+        "after_taa_pct": 0.424
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.439,
+        "after_taa_pct": 0.366
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.445,
+        "after_taa_pct": 0.364
+       }
+      },
+      "right tilt 10/20": {
+       "catalogue": 1641,
+       "represented": 1117,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1474,
+       "glint_shipped": {
+        "sparkle_px_pct": 1.123,
+        "after_taa_pct": 1.069
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 1.03,
+        "after_taa_pct": 0.888
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 1.036,
+        "after_taa_pct": 0.884
+       }
+      },
+      "right tilt 25/50": {
+       "catalogue": 1706,
+       "represented": 1152,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1554,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.726,
+        "after_taa_pct": 0.675
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.715,
+        "after_taa_pct": 0.601
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.722,
+        "after_taa_pct": 0.597
+       }
+      },
+      "right tilt 40/70": {
+       "catalogue": 1641,
+       "represented": 1117,
+       "min_width_texels": 2.0,
+       "target_cover": 0.15,
+       "mask_mean": 0.1488,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.448,
+        "after_taa_pct": 0.408
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.397,
+        "after_taa_pct": 0.313
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.405,
+        "after_taa_pct": 0.316
+       }
+      }
+     }
+    },
+    {
+     "level": 2,
+     "size": "1024x256",
+     "texel_mm": [
+      0.2571,
+      0.2389
+     ],
+     "regions": {
+      "left tilt 10/20": {
+       "catalogue": 1572,
+       "represented": 218,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1033,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.729,
+        "after_taa_pct": 0.685
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.392,
+        "after_taa_pct": 0.228
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.387,
+        "after_taa_pct": 0.213
+       }
+      },
+      "left tilt 25/50": {
+       "catalogue": 1636,
+       "represented": 223,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1113,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.505,
+        "after_taa_pct": 0.463
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.316,
+        "after_taa_pct": 0.171
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.311,
+        "after_taa_pct": 0.172
+       }
+      },
+      "left tilt 40/70": {
+       "catalogue": 1572,
+       "represented": 218,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1045,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.288,
+        "after_taa_pct": 0.253
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.203,
+        "after_taa_pct": 0.109
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.203,
+        "after_taa_pct": 0.113
+       }
+      },
+      "right tilt 10/20": {
+       "catalogue": 1641,
+       "represented": 219,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1009,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.753,
+        "after_taa_pct": 0.706
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.38,
+        "after_taa_pct": 0.214
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.366,
+        "after_taa_pct": 0.203
+       }
+      },
+      "right tilt 25/50": {
+       "catalogue": 1706,
+       "represented": 227,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1133,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.467,
+        "after_taa_pct": 0.42
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.305,
+        "after_taa_pct": 0.165
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.307,
+        "after_taa_pct": 0.157
+       }
+      },
+      "right tilt 40/70": {
+       "catalogue": 1641,
+       "represented": 219,
+       "min_width_texels": 2.0,
+       "target_cover": 0.105,
+       "mask_mean": 0.1032,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.279,
+        "after_taa_pct": 0.248
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.205,
+        "after_taa_pct": 0.098
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.205,
+        "after_taa_pct": 0.093
+       }
+      }
+     }
+    },
+    {
+     "level": 3,
+     "size": "512x128",
+     "texel_mm": [
+      0.5141,
+      0.4778
+     ],
+     "regions": {
+      "left tilt 10/20": {
+       "catalogue": 1572,
+       "represented": 38,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0679,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.508,
+        "after_taa_pct": 0.486
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.021,
+        "after_taa_pct": 0.004
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.018,
+        "after_taa_pct": 0.005
+       }
+      },
+      "left tilt 25/50": {
+       "catalogue": 1636,
+       "represented": 39,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0836,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.476,
+        "after_taa_pct": 0.436
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.027,
+        "after_taa_pct": 0.007
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.027,
+        "after_taa_pct": 0.005
+       }
+      },
+      "left tilt 40/70": {
+       "catalogue": 1572,
+       "represented": 38,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0745,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.243,
+        "after_taa_pct": 0.219
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.023,
+        "after_taa_pct": 0.008
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.019,
+        "after_taa_pct": 0.004
+       }
+      },
+      "right tilt 10/20": {
+       "catalogue": 1641,
+       "represented": 37,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0648,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.485,
+        "after_taa_pct": 0.451
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.014,
+        "after_taa_pct": 0.004
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.012,
+        "after_taa_pct": 0.004
+       }
+      },
+      "right tilt 25/50": {
+       "catalogue": 1706,
+       "represented": 40,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0807,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.254,
+        "after_taa_pct": 0.229
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.024,
+        "after_taa_pct": 0.007
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.025,
+        "after_taa_pct": 0.006
+       }
+      },
+      "right tilt 40/70": {
+       "catalogue": 1641,
+       "represented": 37,
+       "min_width_texels": 2.0,
+       "target_cover": 0.0735,
+       "mask_mean": 0.0676,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.164,
+        "after_taa_pct": 0.13
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.014,
+        "after_taa_pct": 0.002
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.016,
+        "after_taa_pct": 0.005
+       }
+      }
+     }
+    },
+    {
+     "level": 4,
+     "size": "256x64",
+     "texel_mm": [
+      1.0282,
+      0.9555
+     ],
+     "regions": {
+      "left tilt 10/20": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left tilt 25/50": {
+       "catalogue": 1636,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left tilt 40/70": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right tilt 10/20": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right tilt 25/50": {
+       "catalogue": 1706,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right tilt 40/70": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.0514,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    },
+    {
+     "level": 5,
+     "size": "128x32",
+     "texel_mm": [
+      2.0564,
+      1.9111
+     ],
+     "regions": {
+      "left tilt 10/20": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left tilt 25/50": {
+       "catalogue": 1636,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "left tilt 40/70": {
+       "catalogue": 1572,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right tilt 10/20": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right tilt 25/50": {
+       "catalogue": 1706,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      },
+      "right tilt 40/70": {
+       "catalogue": 1641,
+       "represented": 0,
+       "min_width_texels": null,
+       "target_cover": 0.036,
+       "mask_mean": 0.0,
+       "glint_shipped": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_box_same_base": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       },
+       "glint_today_rule": {
+        "sparkle_px_pct": 0.0,
+        "after_taa_pct": 0.0
+       }
+      }
+     }
+    }
+   ],
+   "accent": null
+  }
+ ]
+}
