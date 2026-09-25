@@ -5,7 +5,10 @@ import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
 import type { Layer, Recipe, WarpField } from "./recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
-import type { StudioApplication } from "./studio-application";
+import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget } from "./studio-application";
+import type { EyeMakeupAction } from "./eye-makeup-model";
+import type { RecipeAction } from "./recipe-actions";
+import type { FieldLimit } from "./action-limits";
 import type { StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
@@ -16,6 +19,55 @@ import type { ProjectLink } from "./project-links";
 
 /** Opens one of XF Studio's own public pages; the host resolves the name, the view never sends a URL. */
 export type ProjectLinkPort = { open(link: ProjectLink): Promise<{ ok: true } | { ok: false; message: string }> };
+
+/** One registered feature module as the presentation sees it (feature-module platform §4, step 5). */
+export type FeatureInfo = { readonly id: string; readonly label: string; readonly stage: "stable" | "preview" | "dev" };
+/**
+ * A feature's typed facade: its actions only (another owner's kind is refused), their capability,
+ * limits and choices, and a read-only view of its live document for the selected look.
+ */
+export type FeatureFacade<A extends { kind: string } = { kind: string }> = FeatureInfo & {
+  /** The feature's action kinds, in catalogue order. */
+  kinds(): readonly A["kind"][];
+  capability(action: A): StudioCapability;
+  dispatch(action: A): StudioDispatchResult;
+  limitsFor(target: StudioTarget, kind: A["kind"], variant?: string): Record<string, FieldLimit>;
+  choicesFor(target: StudioTarget, kind: A["kind"], field: string, base?: Record<string, unknown>):
+    ReturnType<StudioApplication["choicesFor"]>;
+};
+/**
+ * Eye makeup's live editor view: cheap, cached and read-only, for repainting controls on every change.
+ * Returned objects are detached from the authored document; `revision` changes whenever geometry is
+ * published, including in-place gesture updates. (It was the port's `editor` before step 5.)
+ */
+export type EyeMakeupView = {
+  recipe(): ReadonlyDeep<Recipe>;
+  layer(): ReadonlyDeep<Layer> | undefined;
+  active(): number;
+  selected(): number;
+  selectedField(): ReadonlyDeep<WarpField> | undefined;
+  revision(): number;
+  canUndo(): boolean;
+};
+/** Eye makeup's facade: its actions, its editor view, its form-control transactions and its catalogues. */
+export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
+  view(): EyeMakeupView;
+  controlBegin(id: string, layerId: string): boolean;
+  controlEdit(id: string, action: RecipeAction): StudioDispatchResult;
+  controlCommit(id: string): void;
+  controlCancel(id: string): void;
+  layerExport: StudioApplication["layerExport"];
+  finishCatalogue: StudioApplication["finishCatalogue"];
+  glitterModelCatalogue: StudioApplication["glitterModelCatalogue"];
+};
+/** Any other feature's facade: its live part and editor memory for the selected look, detached. */
+export type GenericFeatureFacade = FeatureFacade & { view(): ReadonlyDeep<{ part?: unknown; editor?: unknown }> | undefined };
+/** The facades with a typed view, by feature ID; every other registered feature gets a `GenericFeatureFacade`. */
+export type PresentationFeatures = { readonly "eye-makeup": EyeMakeupFacade };
+export type FeatureLookup = {
+  <K extends keyof PresentationFeatures>(id: K): PresentationFeatures[K];
+  (id: string): (FeatureFacade & { view(): unknown }) | undefined;
+};
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
@@ -43,20 +95,10 @@ export type StudioPresentationPort<Slot> = {
     snapshot(): ReadonlyDeep<ReturnType<UIPreferenceActions["snapshot"]>>;
   };
   readonly previewReadiness: { snapshot(): Readonly<PreviewReadiness> };
-  /**
-   * Cheap, cached read-only editor view for repainting controls on every change.
-   * Returned objects are detached from the authored document; `revision` changes
-   * whenever geometry is published, including in-place gesture updates.
-   */
-  readonly editor: {
-    recipe(): ReadonlyDeep<Recipe>;
-    layer(): ReadonlyDeep<Layer> | undefined;
-    active(): number;
-    selected(): number;
-    selectedField(): ReadonlyDeep<WarpField> | undefined;
-    revision(): number;
-    canUndo(): boolean;
-  };
+  /** The registered feature modules, in catalogue order (feature-module platform §4). */
+  features(): readonly FeatureInfo[];
+  /** One feature's facade: typed for the features in `PresentationFeatures`, undefined for an unregistered ID. */
+  readonly feature: FeatureLookup;
   /** Browser draft autosave and optional preview-asset diagnostics from trusted adapters. */
   readonly status: { snapshot(): ReadonlyDeep<PresentationStatus> };
   readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
@@ -151,7 +193,7 @@ export function createStudioPresentation<Slot>(sources: {
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
   };
   const fallback = () => a.snapshot().document;
-  const editor: StudioPresentationPort<Slot>["editor"] = e ? {
+  const editor: EyeMakeupView = e ? {
     recipe: () => e.recipe(), layer: () => e.layer(), active: () => e.active, selected: () => e.selected,
     selectedField: () => e.selectedField(), revision: () => e.revision, canUndo: () => e.canUndo,
   } : {
@@ -161,6 +203,30 @@ export function createStudioPresentation<Slot>(sources: {
       return layer?.fields.find(field => field.id === d.fieldSelection[layer.id]) ?? layer?.fields[0]; },
     revision: () => -1, canUndo: () => a.capability({ kind: "history.undo" }).available,
   };
+  // Feature facades: each feature's own kinds only; eye makeup adds its editor view, controls and catalogues.
+  const infos: readonly FeatureInfo[] = Object.freeze(a.features().map(info => Object.freeze(info)));
+  const facade = (info: FeatureInfo): FeatureFacade => {
+    const own = (kind: string) => a.ownerOf(kind) === info.id;
+    const foreign = { available: false as const, code: "invalid_value" as const, reason: `That is not a ${info.label.toLowerCase()} command.` };
+    return { ...info,
+      kinds: () => a.actionKinds().filter(own),
+      capability: action => own(action.kind) ? a.capability(action as never) : foreign,
+      dispatch: action => own(action.kind) ? a.dispatch(action as never) : { ok: false, code: foreign.code, message: foreign.reason },
+      limitsFor: (target, kind, variant) => own(kind) ? a.limitsFor(target, kind as never, variant) : {},
+      choicesFor: (target, kind, field, base) => own(kind) ? a.choicesFor(target, kind as never, field, base) : [],
+    };
+  };
+  const facades = new Map<string, FeatureFacade>(infos.map(info => {
+    const base = facade(info);
+    if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id) }) as GenericFeatureFacade];
+    const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
+      controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, action),
+      controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
+      layerExport: layerId => a.layerExport(layerId), finishCatalogue: () => a.finishCatalogue(),
+      glitterModelCatalogue: () => a.glitterModelCatalogue() };
+    return [info.id, Object.freeze(eye)];
+  }));
+  const feature = ((id: string) => facades.get(id)) as FeatureLookup;
   const library: CollectionViewPort = {
     view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
     subscribe: listener => l.subscribe(listener),
@@ -213,7 +279,7 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, editor: Object.freeze(editor), localSetup: Object.freeze(localSetup),
+    previewReadiness, features: () => infos, feature, localSetup: Object.freeze(localSetup),
     installDetection: Object.freeze(installDetection), previewSetup: Object.freeze(previewSetup),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links,
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),

@@ -40,17 +40,17 @@ try {
   await browser.waitFor("!document.documentElement.dataset.testReload && document.querySelector('#studio.studio-ready') && !document.querySelector('#desktop-setup').open && !document.querySelector('#desktop-welcome').open");
   await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'unavailable'");
   const uvOnly = await browser.evaluate(`(() => {
-    const port = window.xfStudioPresentation, layer = port.editor.layer();
+    const port = window.xfStudioPresentation, layer = port.feature("eye-makeup").view().layer();
     const before = layer.color;
     const changed = port.authoring.dispatch({ kind: 'layer.setColor', layerId: layer.id, color: '#123456' });
-    const color = port.editor.layer().color;
+    const color = port.feature("eye-makeup").view().layer().color;
     const undo = port.authoring.dispatch({ kind: 'history.undo' });
     return { uv: port.viewport.snapshot().uv.phase, head: port.viewport.snapshot().head,
       readiness: port.previewReadiness.snapshot().phase,
       camera: port.authoring.capability({ kind: 'camera.front' }),
       mask: port.files.capability({ kind: 'mask.export' }),
       check: port.files.capability({ kind: 'package.check' }),
-      color, before, changed, undo, restored: port.editor.layer().color,
+      color, before, changed, undo, restored: port.feature("eye-makeup").view().layer().color,
       headFetches: performance.getEntriesByType('resource').filter(item => item.name.endsWith('/assets/head.glb')).length };
   })()`);
   // Waiting for the game folder is a neutral state (not an error) that says what the preview needs.

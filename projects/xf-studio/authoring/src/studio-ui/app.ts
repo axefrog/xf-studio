@@ -323,7 +323,7 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
 }
 
 function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>): Command[] {
-  const port = rt.port, layer = port.editor.layer(), field = port.editor.selectedField();
+  const port = rt.port, layer = rt.editor.layer(), field = rt.editor.selectedField();
   const act = (id: string, title: string, group: string, action: StudioAction | undefined, extra: Partial<Command> = {},
     missing = "Select a layer first."): Command => ({
     id, title, group, ...extra,
@@ -350,7 +350,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash", shortcut: `${shortcutLabel("rows.remove")} in Layers` }),
     act("layer.reset", "Reset selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "reset", id: layer.id } }, { icon: "reset" }),
     act("layer.toggle", layer?.enabled === false ? "Show selected layer" : "Hide selected layer", "Edit", layer && { kind: "layer.setEnabled", id: layer.id, enabled: !layer.enabled }, { icon: "eye" }),
-    act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: port.editor.selected() }, { icon: "trash" }),
+    act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: rt.editor.selected() }, { icon: "trash" }),
     act("path.bezier", "Enable Bézier handles", "Shape", layer && { kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } }, { icon: "shape" }),
     act("layer.mirror", layer?.symmetry ? "Stop mirroring across the face" : "Mirror across the face", "Shape", layer && { kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }, { icon: "mirror" }),
     act("field.add", "Add warp control", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),

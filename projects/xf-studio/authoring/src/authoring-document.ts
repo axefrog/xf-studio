@@ -7,6 +7,7 @@ import type { HistoryLabel } from "./history-labels";
 import { LOOK_HISTORY_1, type HistoryParts, type LookHistoryData } from "./platform/api";
 import { LookHistory } from "./platform/core/look-history";
 import type { TransactionHost } from "./platform/core/history-transaction";
+import type { LiveFeatureState, LiveFeatures } from "./platform/core/live-features";
 
 /**
  * The look's Undo history as the document is given it: its data (`LookHistoryData`, what this
@@ -17,19 +18,31 @@ export type DocumentHistory = LookHistoryData | Recipe[];
 export type DocumentState = { recipe: Recipe; active: number; selected: number;
   fieldSelection: FieldSelection; history: DocumentHistory;
   /** Present (true) only when older Undo entries than the oldest kept one were dropped. */
-  historyTrimmed?: boolean };
-export type DocumentChange = "recipe" | "selection" | "history" | "restore";
+  historyTrimmed?: boolean;
+  /**
+   * The look's other registered features' live state (their parts and editor memory), present only
+   * when the composition registers features beside the one this document edits (step 5).
+   */
+  liveFeatures?: Record<string, LiveFeatureState> };
+/** `part`: another feature's live part changed (an action of that feature, or an Undo or Redo). */
+export type DocumentChange = "recipe" | "selection" | "history" | "restore" | "part";
 export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
-/** Which feature's part the document edits and how the look history splits parts (the composition's part registry). */
-export type DocumentParts = { readonly feature: string; readonly parts: HistoryParts };
+/**
+ * Which feature's part the document edits and how the look history splits parts (the composition's part
+ * registry). `others` are the live documents of the look's other registered features: the look history
+ * reads and restores them too, so one step can span several parts (a look transaction).
+ */
+export type DocumentParts = { readonly feature: string; readonly parts: HistoryParts; readonly others?: LiveFeatures };
+/** What an Undo, Redo or reverted step restored: this document's recipe when the step touched it, and the other features it restored. */
+export type LookRestore = { recipe?: Recipe; features: string[] };
 
 /** A look history from either form; throws on a damaged entry (checked before anything is published). */
 function lookHistory(value: DocumentHistory | undefined, trimmed: boolean, parts: DocumentParts): LookHistory {
   if (Array.isArray(value) || value === undefined) return recipeHistory(value ?? [], trimmed, parts);
   if (!value || value.schema !== LOOK_HISTORY_1) throw Error("This look's Undo history is damaged.");
   const history = LookHistory.fromData(parts.parts, trimmed && !value.trimmed ? { ...value, trimmed: true } : value);
-  // The document edits one feature's part; a step of another feature's is not one it can undo.
-  if (history.features().some(feature => feature !== parts.feature))
+  // The document edits one feature's part beside its other live features; a step of any other feature's is not one it can undo.
+  if (history.features().some(feature => feature !== parts.feature && !parts.others?.has(feature)))
     throw Error("This look's Undo history changes parts this editor cannot show.");
   return history;
 }
@@ -50,10 +63,44 @@ export class AuthoringDocument {
       selected: clamp(initial.selected, recipe.layers[clamp(initial.active, recipe.layers.length)]?.points.length ?? 0),
       fieldSelection: parseFieldSelection(initial.fieldSelection, recipe) };
     this.history = lookHistory(initial.history, initial.historyTrimmed === true, parts);
+    parts.others?.load(initial.liveFeatures);
   }
-  /** The look as the history reads it: this document's feature is its recipe. */
-  private readonly read = (feature: string) => feature === this.parts.feature ? this.state.recipe : undefined;
+  /** The look as the history reads it: this document's feature is its recipe; the others are their live documents. */
+  private readonly read = (feature: string) => feature === this.parts.feature ? this.state.recipe : this.parts.others?.read(feature);
   private recipeOf(parts: Record<string, unknown> | undefined) { return parts?.[this.parts.feature] as Recipe | undefined; }
+  /** The feature this document edits. */
+  get feature() { return this.parts.feature; }
+  /** The look's other live feature documents (undefined unless the composition registers more features). */
+  get others(): LiveFeatures | undefined { return this.parts.others?.size ? this.parts.others : undefined; }
+  /**
+   * Apply restored parts: the other features' go to their live documents (announced once as `part`);
+   * this document's recipe is returned for the caller to publish.
+   */
+  private restored(parts: Record<string, unknown> | undefined): LookRestore {
+    const others = this.others && parts ? this.others.restore(parts) : [];
+    if (others.length) { this.otherRevision++; this.notify("part"); }
+    return { ...(parts && this.parts.feature in parts ? { recipe: this.recipeOf(parts) } : {}), features: others };
+  }
+  /**
+   * A fingerprint of the look's content (of `features` only, when given): the recipe's JSON, followed by
+   * the other live features' parts only when there are any, so it is the recipe's JSON while this
+   * document's feature is the only one.
+   */
+  contentKey(features?: readonly string[]): string {
+    const own = !features || features.includes(this.parts.feature) ? JSON.stringify(this.state.recipe) : "";
+    const others = this.others;
+    return others ? `${own}\n${others.content(features ?? others.features())}` : own;
+  }
+  /** Tell listeners that another feature's live part changed (its action was published). */
+  partChanged() { this.otherRevision++; this.notify("part"); }
+  /** Increments whenever another live feature's part changes (published, restored or loaded). */
+  private otherRevision = 0;
+  /** The other live features' parts as they are now (not copies) and their revision; undefined without other features. */
+  otherParts(): { revision: number; parts: Record<string, unknown | undefined> } | undefined {
+    const others = this.others;
+    return others && { revision: this.otherRevision,
+      parts: Object.fromEntries(others.features().map(feature => [feature, others.read(feature)])) };
+  }
   subscribe(listener: (change: DocumentChange) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
@@ -116,6 +163,18 @@ export class AuthoringDocument {
     this.notify("history");
     return added;
   }
+  /** Record a step for another live feature's part, before its action publishes; undefined when the top step already held it. */
+  checkpointFeature(feature: string, label?: HistoryLabel): HistoryEntryId | undefined {
+    const added = this.history.checkpoint(this.read, [feature], { label: label ?? this.pendingLabel });
+    this.notify("history");
+    return added;
+  }
+  /** Record one look step over several parts (a look transaction's checkpoint). */
+  checkpointLook(features: readonly string[], label: HistoryLabel): HistoryEntryId | undefined {
+    const added = this.history.checkpoint(this.read, features, { scope: "look", label });
+    this.notify("history");
+    return added;
+  }
   /** Name an open transaction's entry once its first edit shows what it does. */
   relabelCheckpoint(entry: HistoryEntryId, label: HistoryLabel) { this.history.relabel(entry, label); }
   /** True while `entry` is the one the next Undo restores. */
@@ -126,32 +185,43 @@ export class AuthoringDocument {
   }
   historyLabel() { return this.history.topLabel(); }
   /** The recipe the top step restores, leaving the history as it is (a cancelled transaction without its own step). */
-  topRecipe(): Recipe | undefined {
-    return this.history.canUndo ? this.recipeOf(this.history.stepParts(this.history.depth - 1)) : undefined;
-  }
+  topRecipe(): Recipe | undefined { return this.topLook()?.recipe; }
   /** Take the latest checkpoint off without Redo (a cancelled transaction); returns the recipe it restores. */
-  undoRecipe() {
-    if (!this.history.canUndo) return undefined;
-    const recipe = this.recipeOf(this.history.revert());
-    this.notify("history");
-    return recipe;
-  }
+  undoRecipe() { return this.revertLook()?.recipe; }
   /**
    * Undo `count` steps as one change (each onto the session's Redo list); returns the recipe to
    * show, which the caller publishes once. Undefined when fewer steps are kept.
    */
-  undoSteps(count: number): Recipe | undefined {
+  undoSteps(count: number): Recipe | undefined { return this.undoLook(count)?.recipe; }
+  /** Redo `count` steps as one change, keeping each step's identity; returns the recipe to show. */
+  redoSteps(count: number): Recipe | undefined { return this.redoLook(count)?.recipe; }
+  /**
+   * What the top step restores, leaving the history as it is: the other features' parts are restored at
+   * once and the recipe (when the step touched it) is returned for the caller to publish.
+   */
+  topLook(): LookRestore | undefined {
+    return this.history.canUndo ? this.restored(this.history.stepParts(this.history.depth - 1)) : undefined;
+  }
+  /** Take the latest step off without Redo (a cancelled transaction) and restore what it held. */
+  revertLook(): LookRestore | undefined {
+    if (!this.history.canUndo) return undefined;
+    const parts = this.history.revert();
+    this.notify("history");
+    return this.restored(parts);
+  }
+  /** Undo `count` steps as one change: the other features' parts are restored, the recipe returned to publish. */
+  undoLook(count: number): LookRestore | undefined {
     const result = this.history.undo(this.read, count);
     if (!result) return undefined;
     for (let i = 0; i < count; i++) this.notify("history");
-    return this.recipeOf(result.parts);
+    return this.restored(result.parts);
   }
-  /** Redo `count` steps as one change, keeping each step's identity; returns the recipe to show. */
-  redoSteps(count: number): Recipe | undefined {
+  /** Redo `count` steps as one change, keeping each step's identity. */
+  redoLook(count: number): LookRestore | undefined {
     const result = this.history.redo(this.read, count);
     if (!result) return undefined;
     for (let i = 0; i < result.pushed; i++) this.notify("history");
-    return this.recipeOf(result.parts);
+    return this.restored(result.parts);
   }
   /** Redo-able steps in Redo order (the next one first). Validity is the caller's decision. */
   redoList() { return this.history.redoSteps(); }
@@ -184,8 +254,9 @@ export class AuthoringDocument {
   snapshot(): ReadonlyDeep<DocumentState> { return this.export(); }
   /** The editor state with its look history as data (steps and chunks, never whole recipes per step). */
   export(): DocumentState {
+    const others = this.others;
     return { ...structuredClone(this.state), history: this.history.data(),
-      ...(this.history.trimmed ? { historyTrimmed: true } : {}) };
+      ...(this.history.trimmed ? { historyTrimmed: true } : {}), ...(others ? { liveFeatures: others.export() } : {}) };
   }
   /** For collection switches and workspace restore, publish the whole validated editor state at once. */
   restore(value: DocumentState) {
@@ -195,6 +266,7 @@ export class AuthoringDocument {
     this.state = { recipe, active, selected: clamp(value.selected, recipe.layers[active]?.points.length ?? 0),
       fieldSelection };
     this.history = history;
+    this.parts.others?.load(value.liveFeatures); this.otherRevision++;
     this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
     this.notify("restore");
   }

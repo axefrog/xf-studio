@@ -1,12 +1,15 @@
-import { COLLECTION_RECOVERY_LIMIT, collectionDraft, copyWorkspace, editPresets, emptyRecipe, liveMemory, livePart,
-  withLiveMemory, withLivePart, type CollectionWorkspace, type DocumentModel, type EditorMemory,
+import { COLLECTION_RECOVERY_LIMIT, collectionDraft, copyWorkspace, editPresets, emptyRecipe, liveFeatureStates, liveMemory, livePart,
+  withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace, type DocumentModel, type EditorMemory,
   type PresetCommand } from "./collection-workspace";
 import type { Recipe } from "./recipe";
+import type { LiveFeatureState } from "./platform/core/live-features";
 import type { LookCollection } from "./platform/api";
 import type { StoredCollection } from "./collection-store";
 
 /** The live editor document: its recipe (the look's eye-makeup part) and its memory for that look. */
-export type EditorSnapshot = EditorMemory & { recipe: Recipe };
+export type EditorSnapshot = EditorMemory & { recipe: Recipe;
+  /** The look's other registered features' live state; present only when the composition registers more features (step 5). */
+  liveFeatures?: Record<string, LiveFeatureState> };
 /**
  * Owns draft switching independently of markup, network requests and renderer. The live
  * document edits one feature's part of the selected look; every other part and feature memory
@@ -28,9 +31,12 @@ export class CollectionSession {
   private stashInto(state: CollectionWorkspace) {
     const preset = state.collection.presets.find(p => p.id === state.selected);
     if (!preset) return;
-    const { recipe, ...memory } = this.read();
+    const { recipe, liveFeatures, ...memory } = this.read();
     preset.parts = withLivePart(preset, recipe, this.model);
-    state.memory[preset.id] = withLiveMemory(state.memory[preset.id], structuredClone(memory), this.model);
+    const written = withLiveFeatures(preset, withLiveMemory(state.memory[preset.id], structuredClone(memory), this.model),
+      liveFeatures, this.model);
+    preset.parts = written.parts;
+    state.memory[preset.id] = written.memory;
   }
   stash() { this.stashInto(this.state); }
   /** A copy of the draft with the live editor's state in its selected look; the draft is not changed. */
@@ -41,8 +47,9 @@ export class CollectionSession {
   }
   display() {
     const preset = this.state.collection.presets.find(p => p.id === this.state.selected), recipe = livePart(preset, this.model);
+    const memory = preset ? this.state.memory[preset.id] : undefined, others = liveFeatureStates(preset, memory, this.model);
     this.show({ recipe: recipe ? structuredClone(recipe) : emptyRecipe(),
-      ...structuredClone(liveMemory(preset ? this.state.memory[preset.id] : undefined, this.model)) });
+      ...structuredClone(liveMemory(memory, this.model)), ...(others ? { liveFeatures: others } : {}) });
   }
   select(id: string) {
     if (!this.state.collection.presets.some(p => p.id === id)) throw Error("Preset not found.");

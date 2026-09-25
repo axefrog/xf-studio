@@ -20,8 +20,10 @@ import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceStat
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
   type ValueSchema } from "./studio-action-descriptors";
 import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
-  type Capability, type FeatureModule, type ReasonCode, type UndoPolicy, type ValidationIssue } from "./platform/api";
+  type Capability, type FeatureActionSpec, type FeatureModule, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
+  type ValidationIssue } from "./platform/api";
 import type { AnyOwner, Registry } from "./platform/core/registry";
+import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from "./platform/core/history-transaction";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
@@ -82,6 +84,8 @@ type AsyncHandlers = {
 type Services = { document: AuthoringDocument;
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
   eyeMakeup: EyeMakeupPort; undo: () => boolean;
+  /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
+  newId?: () => string;
   /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
   history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
@@ -103,13 +107,25 @@ export class StudioApplication {
   private readonly handlers: Handlers;
   /** One handler per asynchronous family (library requests, file workflows). */
   private readonly asyncHandlers: AsyncHandlers;
+  /**
+   * The other registered features' handlers: their pure capability and apply over their live
+   * documents (`document.others`), bound generically, so a feature module needs no handler of its own.
+   */
+  private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
+  /** The open look transaction (`transaction`): its actions record no steps of their own. */
+  private look?: { features: readonly string[] };
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>) {
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
     this.asyncHandlers = this.bindAsyncHandlers();
+    for (const owner of registry.owners())
+      if (owner.owner === "feature" && !(owner.id in this.handlers)) {
+        if (!services.document.others?.has(owner.id)) throw Error(`Feature ${owner.id} has no live document.`);
+        this.featureHandlers.set(owner.id, this.featureHandler(owner.id));
+      }
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
     const owners = registry.owners().map(owner => owner.id).sort(),
-      bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers)].sort();
+      bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers), ...this.featureHandlers.keys()].sort();
     if (owners.join() !== bound.join())
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
     this.subscribeSources();
@@ -158,6 +174,20 @@ export class StudioApplication {
   registry() {
     return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: this.routes.asyncDescriptors("library"),
       gestures: this.gestureDescriptors(), files: this.routes.asyncDescriptors("files") });
+  }
+  /** The registered feature modules in catalogue order, for the presentation's feature facades (step 5). */
+  features(): { id: string; label: string; stage: FeatureModule["stage"] }[] {
+    return this.routes.owners().flatMap(owner => owner.owner === "feature"
+      ? [{ id: owner.id as string, label: owner.label, stage: (owner as FeatureModule).stage }] : []);
+  }
+  /** The owner of a synchronous action kind (a family or feature ID), or undefined for an unknown kind. */
+  ownerOf(kind: string): string | undefined {
+    const route = this.routes.route(kind);
+    return route.ok ? route.owner.id : undefined;
+  }
+  /** A feature's live part and editor state for the selected look, detached (features beside the editor document). */
+  featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
+    return this.services.document.others?.document(feature)?.export();
   }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
@@ -379,6 +409,9 @@ export class StudioApplication {
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
+    // A look transaction records the parts it names: nothing else may change while it runs.
+    if (this.look && !this.look.features.includes(route.owner.id))
+      return { available: false, code: "busy", reason: "Only the parts this change names can be edited while it is applied." };
     // Descriptor payload types and ranges gate every entry point, not only context menus.
     const payload = payloadIssue(route.spec.descriptor, action);
     if (payload && payload.code !== "limit") return payload;
@@ -389,7 +422,79 @@ export class StudioApplication {
     if (!domain.available) return domain;
     return payload ?? domain;
   }
-  private handler(owner: string) { return this.handlers[owner as StudioOwnerId] as ActionHandler<StudioAction>; }
+  private handler(owner: string) {
+    return (this.handlers[owner as StudioOwnerId] ?? this.featureHandlers.get(owner)) as ActionHandler<StudioAction>;
+  }
+  /**
+   * A registered feature's handler over its live document: the spec's pure capability, then assign
+   * IDs, apply, record one `part` step when the action's Undo policy asks for one (not inside a look
+   * transaction, which records its own), and publish the result.
+   */
+  private featureHandler(feature: string): ActionHandler<{ kind: string }> {
+    const app = this;
+    const live = () => app.services.document.others?.document(feature);
+    const specOf = (action: { kind: string }) => {
+      const route = app.routes.route(action.kind);
+      if (!route.ok || route.owner.id !== feature) throw Error(`${action.kind} is not an action of ${feature}.`);
+      return route.spec as FeatureActionSpec<unknown, unknown, { kind: string }>;
+    };
+    return {
+      capability: action => {
+        const document = live();
+        return document ? specOf(action).capability(document.state(), action) : refusal("not_ready", "This feature is still loading.");
+      },
+      dispatch: action => {
+        const document = live()!, spec = specOf(action);
+        const concrete = spec.assignIds?.(action, app.services.newId ?? (() => crypto.randomUUID())) ?? action;
+        const result = spec.apply(document.state(), concrete);
+        if (!result.changed) return result.effect;
+        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.services.document.checkpointFeature(feature, spec.label(concrete));
+        document.set(result.part, result.editor);
+        app.services.document.partChanged();
+        return result.effect;
+      },
+    };
+  }
+  /**
+   * One Undo step over several parts of the look (feature-module platform §3): `fn` dispatches the
+   * features' actions, which record no steps of their own, and the look history records one `look` step
+   * named `label` for everything they changed. A transaction that changed nothing leaves no step; one
+   * whose `fn` throws or reports a failure is reverted to its start without Redo. Refused inside a
+   * gesture, a form-control adjustment or another transaction, and while no preset owns the editor.
+   */
+  transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => T): StudioDispatchResult {
+    const s = this.services;
+    if (this.look || this.gesture || s.controls.snapshot())
+      return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
+    if (this.unowned()) return { ok: false, code: "missing_target", message: NO_PRESET };
+    const unknown = features.filter(feature => feature !== s.document.feature && !s.document.others?.has(feature));
+    if (!features.length || unknown.length)
+      return { ok: false, code: "invalid_value", message: `These parts can't be changed together here: ${unknown.join(", ") || "none named"}.` };
+    const document = s.document, history = s.history;
+    const host: TransactionHost<HistoryEntryId> = {
+      checkpoint: () => document.checkpointLook(features, label), top: () => document.historyTop,
+      relabel: (step, name) => document.relabelCheckpoint(step, name), discard: step => document.discardCheckpoint(step),
+      revert: step => { if (history) history.revertTransaction(step); },
+      content: () => document.contentKey(features),
+    };
+    const transaction = HistoryTransaction.open(host, CONTROL_TRANSACTION, () => true);
+    this.look = { features };
+    let result: T;
+    try { result = fn(); }
+    catch (error) {
+      this.look = undefined; transaction.cancel(); this.notify();
+      return { ok: false, ...failure(undefined, error) };
+    }
+    this.look = undefined;
+    const failed = result && typeof result === "object" && (result as { ok?: unknown }).ok === false
+      ? result as unknown as { code?: string; message?: string } : undefined;
+    if (failed) { transaction.cancel(); this.notify();
+      return { ok: false, code: failed.code ?? "invalid_value", message: failed.message ?? "The change could not be applied." }; }
+    // A step the checkpoint could not add (the top step already held the start) takes the name when the change is kept.
+    transaction.applied(true, () => label);
+    transaction.commit(); this.notify();
+    return { ok: true, result };
+  }
   /** Eye makeup's registered spec for one of its actions: the module's pure capability and apply. */
   private eyeMakeupSpec(action: EyeMakeupAction) {
     const route = this.routes.route(action.kind);
@@ -404,7 +509,8 @@ export class StudioApplication {
   private bindHandlers(): Handlers {
     const app = this;
     // An action records an Undo entry by its Undo policy (its variant's first), never by its effect (CORE-32).
-    const recorded = (action: StudioAction) => this.routes.undoPolicy(action) !== "none";
+    // Inside a look transaction the transaction records the one step.
+    const recorded = (action: StudioAction) => !this.look && this.routes.undoPolicy(action) !== "none";
     return {
       history: {
         capability: action => {
@@ -520,7 +626,7 @@ export class StudioApplication {
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
-    if (this.gesture || this.unowned()) return false;
+    if (this.gesture || this.look || this.unowned()) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
   /**
@@ -571,7 +677,7 @@ export class StudioApplication {
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
     if (source === "surface" && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    if (this.gesture) return { available: false, code: "busy", reason: "Another gesture is active." };
+    if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
     return this.targetCapability({ kind: "layer", id: layerId });
   }
   gestureCapability(source: GestureSource, target: { kind: "shape" | "path" } |

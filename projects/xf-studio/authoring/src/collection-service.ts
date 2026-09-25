@@ -1,6 +1,6 @@
 import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
-import { collectionDraft, newLook, withLiveMemory, withLivePart, type CollectionWorkspace,
+import { collectionDraft, newLook, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
@@ -90,7 +90,9 @@ export class CollectionService {
     private read: () => EditorSnapshot, private show: (editor: EditorSnapshot) => void,
     private transport: CollectionTransport,
     /** Cheap live editor read for dirty checks; defaults to the full editor snapshot. */
-    private readRecipe?: () => { recipe: Recipe; revision: number }) {
+    private readRecipe?: () => { recipe: Recipe; revision: number;
+      /** The other live features' parts and their revision (present only when the composition registers more features). */
+      others?: { revision: number; parts: Record<string, unknown | undefined> } }) {
     if (restored) this.actions = new CollectionActions(model, restored, read, show);
   }
   /** Bookkeeping only: a baseline that cannot be recorded leaves dirty state unknown, never fails a request. */
@@ -110,7 +112,8 @@ export class CollectionService {
     if (!this.actions) return undefined;
     const summary = this.actions.summary(), live = this.readRecipe?.();
     // Without a cheap live read there is no editor revision to key a cache on.
-    const key = live && JSON.stringify([this.content, summary.id, summary.revision, summary.selected, live.revision]);
+    const key = live && JSON.stringify([this.content, summary.id, summary.revision, summary.selected, live.revision,
+      ...(live.others ? [live.others.revision] : [])]);
     if (key && this.persistenceCache?.key === key) return structuredClone(this.persistenceCache.value);
     const ids = summary.presets.map(preset => preset.id);
     let value: DraftPersistence;
@@ -123,7 +126,7 @@ export class CollectionService {
       const dirtyPresets = this.actions.presetsForComparison().filter(preset => {
         const saved = base.presets.get(preset.id);
         if (!saved || saved.name !== preset.name) return true;
-        const parts = preset.id === summary.selected ? liveParts(preset, liveRecipe, this.model) : preset.parts;
+        const parts = preset.id === summary.selected ? liveParts(preset, liveRecipe, this.model, live?.others?.parts) : preset.parts;
         if (JSON.stringify(parts) === saved.raw) return false;
         // Gestures edit in place and may reorder keys; compare canonically before calling it a change.
         try { return this.model.parts.canonicalParts(parts) !== saved.canonical; } catch { return true; }
@@ -293,8 +296,11 @@ export class CollectionService {
               }
             }
             // Keep every editor-memory field (historyTrimmed included); only the recipe lives in the preset.
-            const { recipe: _recipe, ...memory } = current;
+            const { recipe: _recipe, liveFeatures, ...memory } = current;
             draft.selected = id; draft.memory[id] = withLiveMemory(undefined, memory, model);
+            // The editor's other live features belong to this look too.
+            const look = draft.collection.presets.find(p => p.id === id)!, written = withLiveFeatures(look, draft.memory[id], liveFeatures, model);
+            look.parts = written.parts; draft.memory[id] = written.memory;
             this.actions = new CollectionActions(model, draft, this.read, this.show); this.content++;
             message = summaries.length
               ? "Existing looks and your current draft are retained. Save collection to store this arrangement."
@@ -380,7 +386,14 @@ export class CollectionService {
 }
 
 /** A look's parts with the live editor's recipe as its live-feature part (no parse; for dirty checks). */
-function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel): Look["parts"] {
-  if (!look.parts[model.live] && !recipe.layers.length) return look.parts;
-  return { ...look.parts, [model.live]: model.parts.envelope(model.live, recipe) };
+function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel,
+  others?: Readonly<Record<string, unknown | undefined>>): Look["parts"] {
+  let parts = look.parts;
+  if (look.parts[model.live] || recipe.layers.length) parts = { ...parts, [model.live]: model.parts.envelope(model.live, recipe) };
+  if (!others) return parts;
+  // The other live features' parts as the editor holds them (absent: the look lacks the feature).
+  parts = { ...parts };
+  for (const [feature, part] of Object.entries(others))
+    if (part === undefined) delete parts[feature]; else parts[feature] = model.parts.envelope(feature, part);
+  return parts;
 }

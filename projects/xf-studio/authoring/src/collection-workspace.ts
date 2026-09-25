@@ -13,6 +13,7 @@ import type { FieldSelection } from "./field-selection";
 import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection, type LookMemory,
   type PartMemory } from "./platform/api";
 import type { NewerPolicy, PartRegistry } from "./platform/core/document";
+import type { LiveFeatureState } from "./platform/core/live-features";
 import { emptyRecipe, type Recipe } from "./recipe";
 
 /**
@@ -78,6 +79,38 @@ export function withLivePart(look: Look, recipe: Recipe, model: DocumentModel): 
   const { parts, live } = model;
   if (!look.parts[live] && !recipe.layers.length) return look.parts;
   return { ...look.parts, [live]: parts.readPart(live, parts.envelope(live, recipe), false) };
+}
+/**
+ * The look's other registered features as live documents (feature-module platform §1, step 5): each
+ * registered feature other than the live one, with its parsed part (absent when the look lacks it) and
+ * its editor memory for the look. Empty while the live feature is the only one registered.
+ */
+export function liveFeatureStates(look: Pick<Look, "parts"> | undefined, memory: LookMemory | undefined,
+  model: DocumentModel): Record<string, LiveFeatureState> | undefined {
+  const others = model.parts.features().filter(feature => feature !== model.live);
+  if (!others.length) return undefined;
+  return Object.fromEntries(others.map(feature => {
+    const part = look ? model.parts.part(look, feature) : undefined;
+    return [feature, { ...(part === undefined ? {} : { part: structuredClone(part) }),
+      ...(memory?.[feature] ? { editor: structuredClone(memory[feature].editor) } : {}) }];
+  }));
+}
+/**
+ * `look` and its memory with the other live features' state written back: a part is set (or removed
+ * when the feature's document has none), and its editor memory replaces the stored one; a feature whose
+ * document is empty and that the look never had stays absent (looks are sparse).
+ */
+export function withLiveFeatures(look: Look, memory: LookMemory, states: Readonly<Record<string, LiveFeatureState>> | undefined,
+  model: DocumentModel): { parts: Look["parts"]; memory: LookMemory } {
+  if (!states) return { parts: look.parts, memory };
+  const parts = { ...look.parts }, next = { ...memory };
+  for (const [feature, state] of Object.entries(states)) {
+    if (feature === model.live || !model.parts.feature(feature)) continue;
+    if (state.part !== undefined) parts[feature] = model.parts.readPart(feature, model.parts.envelope(feature, state.part), false);
+    else delete parts[feature];
+    if (state.part !== undefined || next[feature]) next[feature] = { ...next[feature], editor: structuredClone(state.editor) };
+  }
+  return { parts, memory: next };
 }
 /** A new look: the live feature's empty part, as new presets have always had. */
 export function newLook(id: string, name: string, model: DocumentModel): Look {

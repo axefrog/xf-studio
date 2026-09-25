@@ -37,7 +37,10 @@ export class CollectionApplication implements CollectionViewPort {
       () => document.export(), editor => {
         document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
         onEditorRestored();
-      }, transport, () => ({ recipe: document.recipe, revision: document.geometryVersion.revision }));
+      }, transport, () => {
+        const others = document.otherParts();
+        return { recipe: document.recipe, revision: document.geometryVersion.revision, ...(others ? { others } : {}) };
+      });
     // Library requests and file workflows route through the application's registry (CORE-36).
     app.attach({ collection: this.service, files });
     files.attachCollection(this.service);

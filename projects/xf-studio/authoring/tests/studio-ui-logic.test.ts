@@ -63,7 +63,7 @@ test("every action ID has an activity source label", () => {
 
 test("a paint frame reads each port source at most once", () => {
   let reads = 0;
-  const port = { editor: { recipe: () => (reads++, initialRecipe()) }, library: { summary: () => (reads++, {}) } } as unknown as Port;
+  const port = { feature: () => ({ view: () => ({ recipe: () => (reads++, initialRecipe()) }) }), library: { summary: () => (reads++, {}) } } as unknown as Port;
   const frame = new Frame(port);
   void frame.recipe; void frame.recipe; void frame.library; void frame.library;
   expect(reads).toBe(2);
