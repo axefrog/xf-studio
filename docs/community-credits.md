@@ -198,6 +198,14 @@ Brian Karis (Epic Games), "Physically Based Hair Shading in Unreal" (SIGGRAPH 20
 
 Kneiphof and Klein, [Real-time Image-based Lighting of Glints](https://arxiv.org/abs/2507.02674v1). Showed that environment lighting is a separate filtering requirement.
 
+### Barré-Brisebois and Hill (2012)
+
+Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfshadow.com/publications/blending-in-detail/). Their reoriented normal mapping formula let us recognise how the game's decal composes a makeup normal map with the skin normal, which decided the Shimmer export design.
+
+### Toksvig (2005) and Olano and Baker (2010)
+
+Michael Toksvig, "Mipmapping Normal Maps" (Journal of Graphics Tools), and Marc Olano and Dan Baker, [LEAN Mapping](https://www.csee.umbc.edu/~olano/papers/lean/). Their idea of turning normal variance lost to mipmapping into wider roughness shapes the Shimmer export's lower mip levels.
+
 ## Reference imagery
 
 ### Jewellery form and fit references

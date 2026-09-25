@@ -1,5 +1,7 @@
 # Colour-shifting eye makeup: 2.31 stock-material feasibility
 
+**Current status:** superseded by the [Colour-shifting design](finish-designs/colour-shifting.md), which implements this route as an experimental export and resolves the unexplained `TEXCOORD3.w` factor: it is a camera-distance fade that the export disables. The evidence below remains valid.
+
 24 September 2026. Read-only inspection of the installed Cyberpunk 2077 2.31 resource archive and compiled shader cache. No material instance, archive, selector, game installation or game capture was made. This is a candidate for a later controlled test, not production export support.
 
 ## Decision

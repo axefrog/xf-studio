@@ -11,7 +11,15 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
+- **Glossy, Shimmer and Colour-shifting can now be built into your mod, as experiments.** Each now has a game-matched version whose preview follows how the game can actually draw it: Glossy is one sharp reflection (the game has no separate clear coat), Shimmer uses fine reflective facets that sparkle close up and soften into a sheen further away, and Colour-shifting turns toward a shift colour you choose as the lid curves away from view. Choosing one of these finishes uses the game-matched version; layers you made earlier keep their old look until you press **Use game-matched model**, and Check tells you which ones are waiting. A Colour-shifting preset can only contain that one colour-shift pigment for now. Check, Build and the package record label all three as experimental: the files were checked offline, but nobody has seen them in the game yet. Glitter stays preview-only.
+- **Shift colour and strength for Colour-shifting**, in the Colour & finish panel.
+
 ### Fixes and under the hood
+
+- **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
+- **Existing Matte, Satin and Metallic packages are unchanged.** A regression build of the four-preset test collection came out byte-for-byte identical after the new finishes were added.
+- **An all-black preset no longer fails Build.** The package checker's texture-orientation test now also looks at coverage, so black makeup is checked properly instead of being refused.
+- **Moving or scaling a direct-light Glitter layer** is no longer refused as out of range.
 
 - **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
 
