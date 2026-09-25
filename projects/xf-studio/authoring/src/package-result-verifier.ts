@@ -28,13 +28,15 @@ export function verifyPackageBuildResult(
 ): void {
   const final = resolve(built.package ?? "");
   const manifestPath = resolve(built.manifest ?? "");
-  const root = resolve(distRoot);
+  // The build service reports canonical paths (`realpathSync.native`), which expand Windows 8.3 short names
+  // such as a CI runner's `RUNNER~1` temp folder; compare against the same canonical form of the root.
+  const root = realpathSync.native(resolve(distRoot));
   if (!final.startsWith(root + sep) || manifestPath !== resolve(final, "manifest.json") || !statSync(manifestPath).isFile())
     throw Error("Package result is outside the local dist directory.");
-  const canonicalRoot = realpathSync(root);
-  const canonicalFinal = realpathSync(final);
+  const canonicalRoot = root;
+  const canonicalFinal = realpathSync.native(final);
   if (!canonicalFinal.startsWith(canonicalRoot + sep) || lstatSync(final).isSymbolicLink() ||
-      realpathSync(manifestPath) !== resolve(canonicalFinal, "manifest.json") || lstatSync(manifestPath).isSymbolicLink())
+      realpathSync.native(manifestPath) !== resolve(canonicalFinal, "manifest.json") || lstatSync(manifestPath).isSymbolicLink())
     throw Error("Package result is outside the local dist directory or uses a linked path.");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const sourceHash = createHash("sha256").update(sourceJson).digest("hex");
@@ -59,7 +61,7 @@ export function verifyPackageBuildResult(
     throw Error("Package contains unexpected files.");
   for (const entry of manifest.files) {
     const payload = resolve(final, entry.path);
-    if (!realpathSync(payload).startsWith(canonicalFinal + sep) ||
+    if (!realpathSync.native(payload).startsWith(canonicalFinal + sep) ||
         statSync(payload).size !== entry.bytes ||
         fileSha256(payload) !== entry.sha256)
       throw Error("Package payload does not match its manifest.");
