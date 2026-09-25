@@ -254,7 +254,7 @@ export class StudioApplication {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
       preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
-      eyeShapeOptions: s.preview?.eyeShapeOptions(), motion: s.motion?.snapshot(),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null, motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
   }
@@ -265,7 +265,7 @@ export class StudioApplication {
   previewState() {
     const s = this.services, saved = s.savedV?.snapshot();
     return structuredClone({ preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
-      eyeShapeOptions: s.preview?.eyeShapeOptions(),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
       motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },

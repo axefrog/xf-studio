@@ -21,6 +21,7 @@ import type { GameAssetExporter } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 import { CharacterDetailHost } from "../src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
+import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
@@ -114,6 +115,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: message => report(message) });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+  // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
+  const gradingLut = new GradingLutHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    settings: () => {
+      const settings = savedSettings();
+      return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
+        mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
+    },
+    log: message => report(message) });
+  const gradingLutRequest = createGradingLutHandler(gradingLut);
   const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
@@ -146,6 +156,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
+      if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(routedRequest);
       if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);
       if (url.pathname === "/api/desktop/open-link") {
         // Only named official pages from the host's own state; the view never supplies a URL.
@@ -222,6 +233,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       let path: string;
       let servedRoot = staticRoot;
       if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method);
+      if (url.pathname.startsWith(GRADING_LUT_ASSET_PREFIX)) return serveGradingLut(gradingLut, url.pathname, request.method);
       if (url.pathname.startsWith("/assets/")) {
         // Only the derived core preview files are served as assets; the installer carries none.
         let name: string;

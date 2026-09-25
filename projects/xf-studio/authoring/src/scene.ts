@@ -26,6 +26,8 @@ import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMo
 import { createViewportBackdrop } from "./viewport-backdrop";
 import { attachHeadCameraInput } from "./head-camera-input";
 import type { StageTheme } from "./stage-backdrop";
+import { createLightingPresetStage } from "./lighting-preset-stage";
+import { loadGradingLut } from "./browser-grading-lut-device";
 
 /** A mesh's morph target names in influence order (GLTFLoader keys the dictionary by `extras.targetNames`). */
 function morphTargetNames(mesh: THREE.Mesh): string[] {
@@ -137,6 +139,9 @@ async function assembleScene(
   fill.position.set(0.4, 1.65, -0.2);
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
+  // Lighting presets: this studio stage (default) or the game's creator screen (lighting-preset-stage.ts).
+  const lighting = createLightingPresetStage({ scene, renderer, studioLights: [key, fill], loadLut: () => loadGradingLut() });
+  releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await loadCoreDetail(renderer);
   const { gltf, meshes, head, plate } = core;
@@ -678,7 +683,7 @@ async function assembleScene(
       for (const update of frameListeners) update();
     }
     const renderStart=performance.now();
-    renderer.render(scene, camera);
+    lighting.render(camera);
     record(renderDurations,performance.now()-renderStart);
   });
   const evidence = {
@@ -716,6 +721,8 @@ async function assembleScene(
     renderer,
     controls,
     cameraInput,
+    /** Lighting preset device (studio stage or creator rig and display pass). */
+    lighting,
     head,
     eyes,
     plate,

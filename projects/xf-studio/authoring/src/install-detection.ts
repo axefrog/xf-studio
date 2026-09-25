@@ -5,6 +5,7 @@
  */
 import { basename, dirname, join, resolve } from "node:path";
 import { describeMo2Instance, parseNxmHandlerIni, type Mo2InstanceDescription } from "./mo2-instance";
+import { EYE_MAKEUP_MOD } from "./mod-branding";
 
 export const STEAM_APP_ID = "1091500";
 /** GOG product ID of the base game, observed in a GOG Galaxy registry entry whose gameName is
@@ -28,6 +29,10 @@ export interface DetectionHostPort {
   directories(path: string): readonly string[] | null;
   /** Immediate child file names, or null when unreadable. */
   files(path: string): readonly string[] | null;
+  /** Bounded binary read; null when missing, not a regular file or larger than maxBytes. */
+  readBinary(path: string, maxBytes: number): Uint8Array | null;
+  /** Roots of this computer's local drives (for example `C:\`), from the host's mounted-volume list. */
+  drives(): Promise<readonly string[]>;
 }
 
 export type GameInstallSource = "steam" | "gog" | "epic" | "mo2";
@@ -40,12 +45,23 @@ export interface GameInstallCandidate {
   readonly executableFound: true;
 }
 export interface DetectionIssue { readonly source: string; readonly code: string; readonly detail: string }
+/** A copy of the game from a store whose edition the mod's frameworks cannot load. Never offered as a candidate. */
+export interface UnsupportedGameInstall {
+  readonly source: "xbox";
+  /** The folder, when the store's records name one; null when only a package registration was found. */
+  readonly root: string | null;
+  readonly detail: string;
+  /** Plain-language explanation and the one next step, ready to show as is. */
+  readonly message: string;
+}
 export interface GameInstallDetection {
   readonly schema: "xfs/game-install-detection-1";
   readonly supported: boolean;
   readonly candidates: readonly GameInstallCandidate[];
-  /** Registered locations that did not contain the game executable. */
+  /** Registered locations that did not contain the game executable, or that the launcher marks as incomplete. */
   readonly rejected: readonly { readonly root: string; readonly source: GameInstallSource }[];
+  /** Installs recognised but not usable with the mod (currently the Xbox app / Microsoft Store). */
+  readonly unsupported: readonly UnsupportedGameInstall[];
   readonly issues: readonly DetectionIssue[];
   readonly limitations: readonly string[];
 }
@@ -145,53 +161,150 @@ export function steamInstallDir(manifest: VdfNode): string | null {
   return typeof installdir === "string" && installdir && !/[\\/]|^\.\.?$/.test(installdir) ? installdir : null;
 }
 
-/** Epic Games Launcher `.item` manifest fields needed for detection, or null when not JSON. */
-export function parseEpicManifest(text: string): { displayName: string; installLocation: string;
-  launchExecutable: string; appName: string } | null {
+/** Epic Games Launcher `.item` manifest fields needed for detection, or null when not a manifest. */
+export interface EpicManifest {
+  readonly displayName: string;
+  readonly installLocation: string;
+  readonly launchExecutable: string;
+  readonly appName: string;
+  /** The launcher's `bIsIncompleteInstall`: a download or install that has not finished. */
+  readonly incomplete: boolean;
+}
+const jsonText = (text: string) => JSON.parse(text.replace(/^﻿/, ""));
+const stringField = (field: unknown) => typeof field === "string" ? field : "";
+export function parseEpicManifest(text: string): EpicManifest | null {
   try {
-    const value = JSON.parse(text.replace(/^﻿/, ""));
-    if (!value || typeof value !== "object" || typeof value.InstallLocation !== "string") return null;
-    const text_ = (field: unknown) => typeof field === "string" ? field : "";
-    return { displayName: text_(value.DisplayName), installLocation: value.InstallLocation,
-      launchExecutable: text_(value.LaunchExecutable), appName: text_(value.AppName) };
+    const value = jsonText(text);
+    if (!value || typeof value !== "object" || typeof value.InstallLocation !== "string" || !value.InstallLocation) return null;
+    return { displayName: stringField(value.DisplayName), installLocation: value.InstallLocation,
+      launchExecutable: stringField(value.LaunchExecutable), appName: stringField(value.AppName),
+      incomplete: value.bIsIncompleteInstall === true };
   } catch { return null; }
 }
-const epicLooksLikeCyberpunk = (manifest: NonNullable<ReturnType<typeof parseEpicManifest>>) =>
+/** The launcher's second install list, `%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat`
+ * (`InstallationList` rows of `AppName` and `InstallLocation`). Unreadable or malformed text gives no rows. */
+export function parseEpicInstallList(text: string): { appName: string; installLocation: string }[] {
+  try {
+    const list: unknown = jsonText(text)?.InstallationList;
+    if (!Array.isArray(list)) return [];
+    return list.filter(row => row && typeof row.InstallLocation === "string" && row.InstallLocation)
+      .map(row => ({ appName: stringField(row.AppName), installLocation: row.InstallLocation as string }));
+  } catch { return []; }
+}
+const epicLooksLikeCyberpunk = (manifest: EpicManifest) =>
   manifest.launchExecutable.replaceAll("\\", "/").toLowerCase().endsWith("bin/x64/cyberpunk2077.exe") ||
   /cyberpunk\s*2077/i.test(manifest.displayName);
 
-const unsupported = "Automatic detection reads Windows launcher records; enter the folder manually on this host.";
+/** The Xbox app's default library folder name, checked on every drive besides any `.GamingRoot` names. */
+export const XBOX_DEFAULT_LIBRARY = "XboxGames";
+/** Parse a drive-root `.GamingRoot` file written by the Xbox app: the ASCII magic `RGBX`, a 32-bit
+ * value (1 in every file observed), then NUL-terminated UTF-16LE library folders relative to the drive
+ * root. Returns null for anything else; absolute or escaping paths are dropped. */
+export function parseGamingRoot(bytes: Uint8Array): string[] | null {
+  if (bytes.length < 8 || String.fromCharCode(...bytes.subarray(0, 4)) !== "RGBX") return null;
+  const body = bytes.subarray(8, 8 + ((bytes.length - 8) & ~1));
+  return new TextDecoder("utf-16le").decode(body).split("\0").map(path => path.trim())
+    .filter(path => path && !/^[\\/]|:|(^|[\\/])\.\.([\\/]|$)/.test(path));
+}
+/** Local drive roots from `reg query HKLM\SYSTEM\MountedDevices` (value names such as `\DosDevices\C:`). */
+export function parseMountedDrives(text: string): string[] {
+  const letters = new Set<string>();
+  for (const entry of parseRegQuery(text)) for (const value of entry.values) {
+    const match = /^\\DosDevices\\([A-Z]):$/i.exec(value.name);
+    if (match) letters.add(match[1]!.toUpperCase());
+  }
+  return [...letters].sort().map(letter => `${letter}:\\`);
+}
+/** What to tell someone whose copy comes from the Xbox app. Sources and limits:
+ * research/authoring/source-discovery-foundation.md, "Store coverage". */
+export const XBOX_UNSUPPORTED_MESSAGE = `This looks like the Xbox app copy of Cyberpunk 2077. ${EYE_MAKEUP_MOD.modName} ` +
+  "needs ArchiveXL, which installs into the Windows PC edition of the game sold on Steam, GOG and the Epic Games Store. " +
+  "The Xbox store sells Cyberpunk 2077 for Xbox consoles and cloud play. " +
+  "Install Cyberpunk 2077 from Steam, GOG or Epic Games, then choose that folder.";
+const cyberpunkFolder = /cyberpunk\s*2077/i;
+const cyberpunkPackage = /cyberpunk\s*2077|cyberpunk2077/i;
+/** Files an Xbox app install keeps in its `Content` folder (GDK and older UWP packages). */
+const XBOX_CONTENT_MARKERS = ["MicrosoftGame.config", "appxmanifest.xml"] as const;
+/** reg.exe prints in the console code page; a character outside it comes back as `?`, which no Windows path contains. */
+const lossy = (value: string) => /[?�]/.test(value);
+
+const unsupportedHost = "Automatic detection reads Windows launcher records; enter the folder manually on this host.";
 
 export async function detectGameInstalls(port: DetectionHostPort,
   mo2: Mo2Detection | null = null): Promise<GameInstallDetection> {
   const limitations = [
     "A launcher record and executable show where the game is installed, not which copy a launcher or MO2 will start.",
     "Detection does not read the game version, check file integrity or prove that mods load.",
+    "Xbox app copies are recognised from the Xbox app's library folders and package list, and are never offered.",
   ];
   if (port.platform !== "win32") return { schema: "xfs/game-install-detection-1", supported: false,
-    candidates: [], rejected: [], issues: [{ source: "host", code: "unsupported_platform", detail: unsupported }], limitations };
+    candidates: [], rejected: [], unsupported: [], limitations,
+    issues: [{ source: "host", code: "unsupported_platform", detail: unsupportedHost }] };
   const found = new Map<string, { root: string; evidence: GameInstallEvidence[] }>();
   const rejected: { root: string; source: GameInstallSource }[] = [];
+  const unsupported: UnsupportedGameInstall[] = [];
   const issues: DetectionIssue[] = [];
+  const reject = (absolute: string, source: GameInstallSource) => {
+    if (!rejected.some(row => key(row.root) === key(absolute) && row.source === source)) rejected.push({ root: absolute, source });
+  };
+  const flagXbox = (root: string | null, detail: string) => {
+    if (unsupported.some(row => root ? row.root !== null && key(row.root) === key(root) : row.detail === detail)) return;
+    unsupported.push({ source: "xbox", root, detail, message: XBOX_UNSUPPORTED_MESSAGE });
+  };
+  const readable = (source: string, value: string) => {
+    if (!lossy(value)) return true;
+    issues.push({ source: source.toLowerCase(), code: "registry_text_unreadable",
+      detail: `A ${source} registry path has characters this check can't read; choose the folder manually if it isn't found.` });
+    return false;
+  };
+
+  // Xbox app / Microsoft Store: each drive's `.GamingRoot` names its library folders (plus the default
+  // XboxGames); a game lives in <library>\<title>\Content. Found first so no other lead can offer one.
+  const xboxLibraries: string[] = [];
+  for (const drive of await port.drives()) {
+    const bytes = port.readBinary(join(drive, ".GamingRoot"), 64 * 1024);
+    for (const relative of [...(bytes ? parseGamingRoot(bytes) ?? [] : []), XBOX_DEFAULT_LIBRARY]) {
+      const library = resolve(drive, relative);
+      if (!xboxLibraries.some(row => key(row) === key(library)) && port.directories(library)) xboxLibraries.push(library);
+    }
+  }
+  const xboxContent = (folder: string) => XBOX_CONTENT_MARKERS.some(name => port.isFile(join(folder, name)));
+  const isXboxInstall = (absolute: string) => absolute.split(/[\\/]/).some(part => part.toLowerCase() === "windowsapps") ||
+    (basename(absolute).toLowerCase() === "content" && xboxLibraries.some(row => key(row) === key(dirname(dirname(absolute)))) &&
+      xboxContent(absolute));
+  for (const library of xboxLibraries) for (const title of port.directories(library) ?? []) {
+    const content = join(library, title, "Content");
+    if (xboxContent(content) && (cyberpunkFolder.test(title) || port.isFile(join(content, ...GAME_EXECUTABLE))))
+      flagXbox(content, `Xbox app library ${library}`);
+  }
+  if (!unsupported.length) {
+    const packages = await port.registry("HKLM\\SOFTWARE\\Microsoft\\GamingServices\\PackageRepository\\Package");
+    for (const entry of packages ? parseRegQuery(packages) : [])
+      for (const value of entry.values) if (cyberpunkPackage.test(value.name)) flagXbox(null, `Xbox app package ${value.name}`);
+  }
+
   const offer = (root: string, source: GameInstallSource, detail: string) => {
     const absolute = resolve(root);
-    if (!port.isFile(join(absolute, ...GAME_EXECUTABLE))) {
-      if (!rejected.some(row => key(row.root) === key(absolute) && row.source === source))
-        rejected.push({ root: absolute, source });
-      return;
-    }
+    if (isXboxInstall(absolute)) { flagXbox(absolute, `${detail} names an Xbox app folder`); return; }
+    if (!port.isFile(join(absolute, ...GAME_EXECUTABLE))) { reject(absolute, source); return; }
     const entry = found.get(key(absolute)) ?? { root: absolute, evidence: [] };
     if (!entry.evidence.some(row => row.source === source && row.detail === detail)) entry.evidence.push({ source, detail });
     found.set(key(absolute), entry);
   };
 
-  // Steam: SteamPath -> libraryfolders.vdf -> appmanifest_1091500.acf -> steamapps/common/<installdir>.
+  // Steam: SteamPath (HKCU) or InstallPath (HKLM), else the default Program Files folder ->
+  // libraryfolders.vdf (steamapps\ and config\) -> appmanifest_1091500.acf in any library -> steamapps/common/<installdir>.
   const steamRoots: string[] = [];
+  const addSteam = (value: string) => { if (!steamRoots.some(root => key(root) === key(value))) steamRoots.push(resolve(value)); };
   for (const [registryKey, name] of [["HKCU\\Software\\Valve\\Steam", "SteamPath"],
     ["HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam", "InstallPath"], ["HKLM\\SOFTWARE\\Valve\\Steam", "InstallPath"]] as const) {
     const text = await port.registry(registryKey);
     const value = text ? registryValue(parseRegQuery(text), name) : null;
-    if (value && !steamRoots.some(root => key(root) === key(value))) steamRoots.push(resolve(value));
+    if (value && readable("Steam", value)) addSteam(value);
+  }
+  for (const variable of ["ProgramFiles(x86)", "ProgramFiles"]) {
+    const base = port.env(variable);
+    if (base && port.directories(join(base, "Steam", "steamapps"))) addSteam(join(base, "Steam"));
   }
   const libraries: string[] = [];
   for (const steam of steamRoots) {
@@ -208,7 +321,10 @@ export async function detectGameInstalls(port: DetectionHostPort,
     if (text === null) continue;
     const installdir = steamInstallDir(parseVdf(text));
     if (!installdir) { issues.push({ source: "steam", code: "manifest_invalid", detail: "A Cyberpunk 2077 Steam manifest has no usable installdir." }); continue; }
-    offer(join(library, "steamapps", "common", installdir), "steam", `Steam app ${STEAM_APP_ID}`);
+    // Folder names compare without case on Windows; report the folder as it is spelled on disk.
+    const common = join(library, "steamapps", "common");
+    const onDisk = port.directories(common)?.find(name => name.toLowerCase() === installdir.toLowerCase()) ?? installdir;
+    offer(join(common, onDisk), "steam", `Steam app ${STEAM_APP_ID}`);
   }
 
   // GOG: every product under GOG.com\Games (native and WOW6432Node views) whose path holds the executable.
@@ -220,20 +336,44 @@ export async function detectGameInstalls(port: DetectionHostPort,
       const id = basename(entry.key.replaceAll("\\", "/"));
       const name = entry.values.find(value => value.name.toLowerCase() === "gamename")?.data;
       const cyberpunk = id === GOG_BASE_PRODUCT_ID || /cyberpunk\s*2077/i.test(name ?? "");
-      if (path && cyberpunk) offer(path, "gog", `GOG product ${id}${name ? ` (${name})` : ""}`);
+      if (path && cyberpunk && readable("GOG", path)) offer(path, "gog", `GOG product ${id}${name ? ` (${name})` : ""}`);
     }
   }
 
-  // Epic: launcher manifests under %ProgramData%.
+  // Epic: `.item` manifests in the launcher's data folder (the %ProgramData% default and the registered
+  // AppDataPath), then the launcher's install list. An unfinished install is never offered.
   const programData = port.env("ProgramData");
-  if (programData) {
-    const manifests = join(programData, "Epic", "EpicGamesLauncher", "Data", "Manifests");
+  const epicData: string[] = programData ? [resolve(programData, "Epic", "EpicGamesLauncher", "Data")] : [];
+  for (const registryKey of ["HKLM\\SOFTWARE\\WOW6432Node\\Epic Games\\EpicGamesLauncher", "HKLM\\SOFTWARE\\Epic Games\\EpicGamesLauncher"]) {
+    const text = await port.registry(registryKey);
+    const value = text ? registryValue(parseRegQuery(text), "AppDataPath") : null;
+    if (value && readable("Epic", value) && !epicData.some(root => key(root) === key(value))) epicData.push(resolve(value));
+  }
+  const epicApps = new Set<string>(), unfinished = new Set<string>();
+  for (const data of epicData) {
+    const manifests = join(data, "Manifests");
     for (const name of port.files(manifests) ?? []) {
       if (!name.toLowerCase().endsWith(".item")) continue;
       const text = port.readText(join(manifests, name), manifestBytes);
       const manifest = text === null ? null : parseEpicManifest(text);
-      if (manifest && epicLooksLikeCyberpunk(manifest))
-        offer(manifest.installLocation, "epic", `Epic app ${manifest.appName || "unknown"}`);
+      if (!manifest || !epicLooksLikeCyberpunk(manifest)) continue;
+      if (manifest.appName) epicApps.add(manifest.appName.toLowerCase());
+      if (manifest.incomplete) {
+        unfinished.add(key(manifest.installLocation));
+        reject(resolve(manifest.installLocation), "epic");
+        issues.push({ source: "epic", code: "install_incomplete", detail: "The Epic Games Launcher says a Cyberpunk 2077 " +
+          "install hasn't finished. Let it finish, or verify the game in the launcher, then look again." });
+        continue;
+      }
+      offer(manifest.installLocation, "epic", `Epic app ${manifest.appName || "unknown"}`);
+    }
+  }
+  if (programData) {
+    const text = port.readText(join(programData, "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat"), manifestBytes);
+    for (const row of text === null ? [] : parseEpicInstallList(text)) {
+      if (unfinished.has(key(row.installLocation))) continue;
+      if (epicApps.has(row.appName.toLowerCase()) || port.isFile(join(resolve(row.installLocation), ...GAME_EXECUTABLE)))
+        offer(row.installLocation, "epic", `Epic install list (${row.appName || "unknown app"})`);
     }
   }
 
@@ -242,10 +382,11 @@ export async function detectGameInstalls(port: DetectionHostPort,
     if (instance.managesCyberpunk && instance.gamePath)
       offer(instance.gamePath, "mo2", `MO2 ${instance.kind} instance "${instance.name}"`);
 
+  if (unsupported.length) issues.push({ source: "xbox", code: "store_unsupported", detail: XBOX_UNSUPPORTED_MESSAGE });
   const candidates = [...found.values()].map(entry => ({ root: entry.root, evidence: entry.evidence,
     executableFound: true as const })).sort((a, b) => b.evidence.length - a.evidence.length || a.root.localeCompare(b.root));
   return { schema: "xfs/game-install-detection-1", supported: true, candidates,
-    rejected: rejected.filter(row => !found.has(key(row.root))), issues, limitations };
+    rejected: rejected.filter(row => !found.has(key(row.root))), unsupported, issues, limitations };
 }
 
 /** Find global instances under %LOCALAPPDATA%\ModOrganizer and portable instances named by the
@@ -257,7 +398,7 @@ export async function detectMo2Instances(port: DetectionHostPort): Promise<Mo2De
     "A profile's enabled mods describe MO2's intended virtual files, not what a particular game launch loaded.",
   ];
   if (port.platform !== "win32") return { schema: "xfs/mo2-instance-detection-1", supported: false,
-    instances: [], issues: [{ source: "host", code: "unsupported_platform", detail: unsupported }], limitations };
+    instances: [], issues: [{ source: "host", code: "unsupported_platform", detail: unsupportedHost }], limitations };
   const issues: DetectionIssue[] = [];
   const instances = new Map<string, Mo2InstanceDescription>();
   const add = (root: string, kind: "global" | "portable", name: string) => {

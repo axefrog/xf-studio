@@ -17,6 +17,7 @@ import { createPreviewCoreHandler } from "./src/preview-core-server";
 import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
 import { CharacterDetailHost } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
+import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
@@ -58,6 +59,16 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
   },
   log: message => console.log(message) });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+// The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
+const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
+  resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
+  settings: () => {
+    const settings = localSettings.load().settings;
+    return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+      mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
+  },
+  log: message => console.log(message) });
+const gradingLutRequest = createGradingLutHandler(gradingLut);
 const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
@@ -79,6 +90,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
+    if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
@@ -91,6 +103,7 @@ const server = Bun.serve({
       return Response.json({ app: "xf-studio", version: "0.1.0" });
     // Resolved character details have one source: the host's content-addressed store.
     if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method);
+    if (url.pathname.startsWith(GRADING_LUT_ASSET_PREFIX)) return serveGradingLut(gradingLut, url.pathname, request.method);
     // Research pages pinned to historical private fixtures read them here, never through /assets.
     const research = url.pathname.startsWith("/research-assets/");
     let path: string;

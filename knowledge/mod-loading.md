@@ -69,6 +69,21 @@ This is how one hair-colour pack colours every hairstyle without shipping per-st
 
 On the reference installation the MO2 route mounts 1,079 archives (77 listed as not mounted), reads 1,000 visible `.xl` files and merges 242 female custom CCO resources; a cold resolve of the saved character takes about 9 minutes (WolvenKit extraction), a cached one about 16 s. Validation: [resolver validation](../research/character-customization/resolver-validation.md).
 
+## 7. Store editions: where the game is, and which copies can be modded
+
+Everything above starts from a game folder. Which store installed it changes only how that folder is found, not how files load.
+
+| Store | Where the install is recorded | XF Studio | Evidence |
+|---|---|---|---|
+| GOG | `HKLM\SOFTWARE\(WOW6432Node\)GOG.com\Games\<product>` `path` | Detected | [observed] on the development machine, plus fixtures |
+| Steam | `SteamPath`/`InstallPath`, then `libraryfolders.vdf`, then `appmanifest_1091500.acf` `installdir` in any library | Detected | Fixtures only; formats observed without the game |
+| Epic Games Store | `.item` manifests (`InstallLocation`, `bIsIncompleteInstall`) and `LauncherInstalled.dat` | Detected | Fixtures only; formats observed with other apps |
+| Xbox app / Microsoft Store | `.GamingRoot` library folders (`<drive>\XboxGames\<title>\Content` by default), Gaming Services package list | Recognised, never offered | Fixtures only |
+
+- **Frameworks install the same way on Steam, GOG and Epic.** RED4ext and ArchiveXL are extracted into the game folder, and RED4ext recognises the game by the executable's `ProductName` and the game's own `cyberpunk2077_addresses.json`, not by store. **[source]** RED4ext `src/dll/Image.cpp`, `src/dll/Addresses.cpp`.
+- **No framework mentions an Xbox app edition, and there isn't one for Windows.** Microsoft's store lists Cyberpunk 2077 for Xbox consoles and cloud only, and CD PROJEKT RED's REDmod and support pages name only Steam, GOG and Epic. **[source]** Citations, clone commits and the message XF Studio shows are in [store coverage](../research/authoring/source-discovery-foundation.md#store-coverage).
+- **Framework versions and launch routes do not depend on the store.** The version check reads files under the chosen folder (and the MO2 profile), whichever store installed it.
+
 ## Open questions
 
 1. REDengine's lookup across and within archive groups (mod over base, EP1 over content, content-internal order, collation). Decisive evidence: a version-matched read of `ResourceDepot` lookup, or a runtime probe logging which archive served a hash.
@@ -81,6 +96,7 @@ On the reference installation the MO2 route mounts 1,079 archives (77 listed as 
 
 1. **Mod over base, one resource.** With the reference profile, compare the lash colour with Alliekat's archive enabled and disabled (same save, same camera). A visible change confirms mod-over-base for `brown_liquorice.hp`.
 2. **Mod-versus-mod order.** In a throwaway MO2 profile, add a separate mod holding a copy of one PRC item archive under a name that sorts after `PRC_z_999_Framework_128.archive`, and disable the original item mod: the ring should disappear. Confirms first-alphabetical-wins without touching the installed mods.
+3. **First-run detection on a Steam copy (community).** A Steam user with the game in a second Steam library (not the drive Steam itself is on) starts XF Studio for the first time, with no game folder chosen. Expected: the 3D preview card says "We found Cyberpunk 2077 at …" naming that library's `steamapps\common\Cyberpunk 2077`, and **Use this folder** makes the framework check read that folder. Record the card text (with the user folder replaced by a placeholder) and the XF Studio version. The same run on an Epic copy would move Epic from fixture-only to real-machine evidence.
 
 ## Related pages
 

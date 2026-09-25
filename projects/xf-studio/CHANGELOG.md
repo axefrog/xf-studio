@@ -11,7 +11,13 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
+- **Finds Cyberpunk 2077 whichever PC store you use.** XF Studio looks for the game in every Steam library, GOG, the Epic Games Store and Mod Organizer 2, and skips an Epic copy that hasn't finished installing. If it finds only an Xbox app copy, it says plainly that XF Eye Artistry needs the PC edition sold on Steam, GOG or Epic Games, and how to get going. Checked on one PC with the GOG version; Steam, Epic and Xbox app setups are checked by automated tests only.
+- **Character creator lighting in the 3D preview.** Camera & light has a new **Lighting** choice: **Character creator** shows your V under the game's own character-creator and mirror lights, on black, through the colour grade your game uses, including one from an installed LUT mod. **Creator face** and **Creator hair** frame the head as those creator pages do. Switch back to **Studio** at any time; nothing else changes. It exists so the preview can be compared with the game's own screen. Light strengths and overall brightness still need matching against a screenshot, and shadows aren't simulated yet. Checked in the app on one PC; not yet compared with the game.
 - **Your V's own skin in the 3D preview.** The head now shows your V's skin type and skin tone, read from the same game and mod setup your Build uses, including installed complexion and skin-texture mods. Without a save it shows the character creator's default V; loading another save changes the skin with the rest of the character. Tone, skin detail and shine follow the game's own skin material; lighting under the skin is approximated, and it hasn't been compared with the game yet.
+
+### Fixes and under the hood
+
+- **A developer tool to calibrate creator lighting against a screenshot.** It measures the same patches in a creator screenshot and a matching preview render, fits the one brightness setting, and reports the pass marks. It only reads the images.
 
 ## 0.1.0-alpha.1
 

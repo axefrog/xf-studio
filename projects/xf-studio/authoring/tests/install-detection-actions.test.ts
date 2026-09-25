@@ -44,7 +44,8 @@ test("dispatch publishes a detached result, refuses overlap and rejects unexpect
 
 test("host endpoint is GET-only, same-origin and accepts only fixed targets", async () => {
   const host: DetectionHostPort = { platform: "linux", env: () => undefined, registry: async () => null,
-    readText: () => null, isFile: () => false, directories: () => null, files: () => null };
+    readText: () => null, isFile: () => false, directories: () => null, files: () => null, readBinary: () => null,
+    drives: async () => [] };
   const handle = createInstallDetectionHandler(() => host);
   const at = (path: string, init?: RequestInit) => handle(new Request(`http://127.0.0.1:4317${path}`, init));
   expect((await at("/api/install-detection?target=games")).status).toBe(200);

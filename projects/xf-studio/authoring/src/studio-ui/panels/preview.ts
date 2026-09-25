@@ -5,6 +5,8 @@ import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
+import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
+import type { LightingStatus } from "../../preview-actions";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
@@ -109,8 +111,44 @@ function fact(mark: Element, title: string, detail: string) {
   return h("div", { class: "fact" }, h("span", { class: "fact-mark" }, mark), h("div", {}, h("strong", { text: title }), h("p", { class: "muted small", text: detail })));
 }
 
+/** One plain line about the lighting preset and where its colour grade came from. */
+export function lightingPresetLine(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): string {
+  if (preset !== "creator") return "The Studio's own soft lighting, for authoring.";
+  const lut = status?.lut;
+  const grade = !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
+  return [`The game's character-creator lights (${status?.sex === "male" ? "male" : "female"} rig) on black, with fixed exposure.`, grade,
+    "Shadows are not simulated, and light strengths are still being calibrated."].filter(Boolean).join(" ");
+}
+
 export function lightingPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
+  const preset = new Segmented<LightingPreset>({ label: "Lighting", options: [
+    { value: "studio", label: "Studio", title: "The Studio's soft authoring light" },
+    { value: "creator", label: "Character creator", title: "The game's creator and mirror lighting, for comparing with the game" }],
+  onSelect: value => rt.dispatch({ kind: "preview.setLightingPreset", preset: value }) });
+  const presetNote = note("");
+  const creatorFace = button({ label: "Creator face", icon: "front", small: true, title: "The creator's face-page camera: 15° lens, 1.2 m",
+    onClick: () => rt.dispatch({ kind: "camera.creatorFraming", page: "face" }) });
+  const creatorHair = button({ label: "Creator hair", icon: "front", small: true, title: "The creator's hair-page camera: 15° lens, 2 m",
+    onClick: () => rt.dispatch({ kind: "camera.creatorFraming", page: "hair" }) });
+  const intensity = new Segmented<IntensityForm>({ label: "Light intensity from lumens", options: [
+    { value: "isotropic", label: "Φ ÷ 4π" }, { value: "cone", label: "Spread over cone" }],
+  onSelect: value => rt.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value }) });
+  const cone = new Segmented<ConeReading>({ label: "Stored cone angles are", options: [
+    { value: "full", label: "Full angles" }, { value: "half", label: "Half angles" }],
+  onSelect: value => rt.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value }) });
+  const log = (value: number) => Math.log10(value), exposureRange = rt.range("preview.setCreatorLighting", "value", "exposure");
+  const creatorExposure = new Slider({ label: "Creator exposure (k)", min: log(exposureRange.min), max: log(exposureRange.max), step: .01,
+    format: value => (10 ** value).toPrecision(3),
+    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); } } });
+  const resetExposure = button({ label: "Default exposure", icon: "reset", small: true, variant: "quiet",
+    onClick: () => {
+      const value = port.authoring.previewState().lighting?.defaultExposure;
+      if (value !== undefined) rt.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value });
+    } });
+  const diagnostics = h("details", { class: "section" }, h("summary", { text: "Advanced: creator lighting calibration" }),
+    note("For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise."),
+    intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetExposure));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
     transaction: {
@@ -138,8 +176,9 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const optics = new Toggle({ label: "Source eye roughness study", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
-    section("Camera", fov.element, fovNote, h("div", { class: "row" }, front)),
-    section("Light", exposure.element, angle.element),
+    section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, creatorFace, creatorHair)),
+    section("Light", preset.element, presetNote, exposure.element, angle.element),
+    diagnostics,
     section("Display", surface.element, wire.element, normals.element, optics.element, opticsNote),
     note("Camera and light are workspace preferences: they persist locally and never enter recipes, Undo or export."));
   return {
@@ -147,7 +186,25 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const preview = frame.preview.preview, ready = !!preview, assets = frame.status.assets;
       const loading = { disabled: !ready, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading." };
-      fov.update(preview?.camera.fov, loading); exposure.update(preview?.exposure, loading); angle.update(preview?.lightAngle, loading);
+      fov.update(preview?.camera.fov, loading);
+      const studioOnly = (action: Parameters<typeof port.authoring.capability>[0]) => {
+        const allowed = port.authoring.capability(action);
+        return ready ? { disabled: !allowed.available, reason: allowed.reason } : loading;
+      };
+      exposure.update(preview?.exposure, studioOnly({ kind: "preview.setExposure", value: preview?.exposure ?? 1.2 }));
+      angle.update(preview?.lightAngle, studioOnly({ kind: "preview.setKeyAngle", degrees: preview?.lightAngle ?? 0 }));
+      preset.update(preview?.lightingPreset, value => ready ? port.authoring.capability({ kind: "preview.setLightingPreset", preset: value }) : { available: false, reason: loading.reason });
+      setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
+      applyCapability(creatorFace, port.authoring.capability({ kind: "camera.creatorFraming", page: "face" }));
+      applyCapability(creatorHair, port.authoring.capability({ kind: "camera.creatorFraming", page: "hair" }));
+      const creator = preview?.creatorLighting;
+      intensity.update(creator?.intensity, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "intensity", value }));
+      cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
+      creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
+        note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
+      const defaultExposure = frame.preview.lighting?.defaultExposure;
+      applyCapability(resetExposure, defaultExposure === undefined ? { available: false, reason: loading.reason }
+        : port.authoring.capability({ kind: "preview.setCreatorLighting", key: "exposure", value: defaultExposure }));
       if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
