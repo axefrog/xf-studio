@@ -42,14 +42,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-01 | High | Pipeline | Built-in plate always cut from the vanilla head, not the head the game actually loads (head mods/patches) | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
 | PIPE-02 | High | Pipeline | Verifier trusts builder-produced roundtrip/export files; not data-independent; `.xl` only substring-checked | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
 | UI-01 | High | Desktop | Damaged/incompatible `workspace.json` bricks the desktop app; window can't close | **Fixed** (claude/alpha-readiness, 25 Sep) |
-| UI-02 | High | Rendering | Renderer hard-codes brow/lash identities and per-mod manifests; resolver output not connected to rendering | Partly fixed: core head/plate/eyes load through one typed render record; brows/lashes/hair/piercings follow-on |
+| UI-02 | High | Rendering | Renderer hard-codes brow/lash identities and per-mod manifests; resolver output not connected to rendering | Partly fixed: core head/plate/eyes load through one typed render record; brows, lashes and hair render from the resolver's character record through template adapters, with no per-mod identities or manifests (claude/render-resolver, 25 Sep). Piercings (vanilla and PRC manifests) remain |
 | CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
 | CORE-16 | High | Core | `selectGlitterModel` doesn't know `xfs/recipe-11`: choosing Fine/Clustered/Direct Glitter beside a game-matched Glossy/Shimmer layer is offered then refused, or silently downgrades the schema (`glitter-model.ts:62-65`, `recipe-actions.ts:178-180`). CORE-09 made worse | **Fixed** (claude/cleanup-core2, 25 Sep) |
 | PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
-| PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives. Worse since PIPE-01: Build cuts the plate from the head the launch route loads, while the preview still reads only `archive/pc/content` (`preview-core-recipe.ts:32` comment claims they share one head) | Open (platform step 7); the comment is corrected (claude/cleanup-pipeline2); a preview notice is still to add |
+| PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives. Worse since PIPE-01: Build cuts the plate from the head the launch route loads, while the preview still reads only `archive/pc/content` (`preview-core-recipe.ts:32` comment claims they share one head) | Open for the core head, skin and eyes (still base game only); the comment is corrected (claude/cleanup-pipeline2). Brows, lashes and hair now follow the launch route's winning archives (claude/render-resolver); the head moves in P1 |
 | PREV-04 | Med | Preview export | Catch-all blames WolvenKit for cache/disk/JSON errors | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-05 | Med | Preview export | 'Head missing' inferred from missing outputs; tool failure misreported as blocked | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-06 | Med | Preview export | Duplicated WolvenKit runner (sixth invocation path) with preview-specific errors | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
@@ -60,7 +60,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | RES-02 | Med | Resolver | A "None" choice (e.g. no scar) yields an empty entry and a missing-appearance warning instead of nothing | **Fixed** (claude/resolver-choices, 25 Sep): a definition named `None` emits no descriptor |
 | PREV-20 | Med | Presentation/startup | A head-load failure after the scene loads leaves head-bound wiring attached (theme binding, app attach, preview device, surface editor, controls listener) and `createScene` late errors leave an extra canvas; Try again then doubles them | **Fixed** (claude/release-prep, 25 Sep) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
-| PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Open (platform step 7) |
+| PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Partly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures and profiles; character details load with cancellation, supersede and dispose (claude/render-resolver). The core head record is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
 | PIPE-04 | Med | Resolver | Resolver WolvenKit runner: no timeout/exit check, poisoned promise chain, non-atomic cache, cache not keyed by WolvenKit version | Open |
 | PIPE-05 | Med | Pipeline | Readiness and diagnostic tools hard-code MO2 mods/profiles dirs | Open |
@@ -69,7 +69,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-08 | Med | Pipeline | Eight inconsistent path-containment helpers | Open |
 | PIPE-09 | Med | Pipeline | No single typed package manifest schema/parser | Open |
 | PIPE-10 | Med | Pipeline | Two MO2 journal/rollback engines and four modlist parsers | Open |
-| PIPE-11 | Med | Resolver | Per-mod intake paths/manifests bypass the resolver (PRC, lash, hair, brow, eyes) | Open (follows UI-02) |
+| PIPE-11 | Med | Resolver | Per-mod intake paths/manifests bypass the resolver (PRC, lash, hair, brow, eyes) | Partly fixed: the brow, lash and hair intake tools and manifests are removed (claude/render-resolver); PRC, vanilla piercings and eyes remain |
 | PIPE-12 | Med | Pipeline (design) | Build, inventory and verifier shaped for one product; need a mod-product descriptor before a second exporter | Open |
 | PIPE-13 | Med | CI | Authoring suite not run in CI on pushes to main; oracle/integration tests skip silently | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
 | PIPE-14 | Med | Pipeline | process-tree and WolvenKit error paths untested | Partly fixed: the shared WolvenKit runner's success policy, runtime detection and identity are tested (`tests/wolvenkit-cli.test.ts`); process-tree itself is still untested |
@@ -151,6 +151,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **Head camera input adapter** (claude/camera-bindings): `head-camera-input.ts`.
 - **XF Runtime Bridge** (claude/runtime-baseline): new project `projects/xf-runtime-bridge` (RED4ext C++ plugin with a named-pipe bridge, redscript, CET Lua, TweakXL). First code that accepts commands from outside the game.
 - **Site knowledge generator** (claude/public-knowledge): `projects/xf-studio/site/tools/knowledge.ts`, `privacy.ts`.
+- **Resolved character details** (claude/render-resolver, 25 Sep): host service and endpoint shared by both hosts (`character-detail-service/host/server.ts`, `/api/preview-character`, `/assets/character/`), the pure planner (`character-detail-plan.ts`), the render record version 2 (`render-detail.ts`), and the renderer's loader, material adapters and application service (`character-detail-loader.ts`, `character-material-adapters.ts`, `character-detail-actions.ts`). Reads the installed game and MO2 read-only; runs WolvenKit; serves content-addressed files. Not yet reviewed.
 
 ## Fixed in claude/release-prep
 

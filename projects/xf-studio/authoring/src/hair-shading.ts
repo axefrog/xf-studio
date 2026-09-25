@@ -1,19 +1,18 @@
 import * as THREE from "three";
-import type { HairStop } from "./hair-preview";
 import { bakeHairProfile, HAIR_DITHER, HAIR_LIGHTING_VANILLA, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
-  type ProfileEncoding } from "./hair-colour-model";
+  type ProfileEncoding, type ProfileStop } from "./hair-colour-model";
 
 /** Renderer adapter for the hair.mt colour model in hair-colour-model.ts.
  * Three keeps its own lighting; only base colour, coverage and roughness inputs
  * follow the compiled 2.31 programs. The deferred hair BRDF is not reproduced. */
 
 /** Encoded-space sample of the source stops (kept for callers that display raw profile colours). */
-export function sampleHairGradient(stops: HairStop[], value: number): [number, number, number] {
+export function sampleHairGradient(stops: readonly ProfileStop[], value: number): [number, number, number] {
   return sampleStopsEncoded(stops, value).map(Math.round) as [number, number, number];
 }
 
 /** The profile as the shader reads it: row 0 = ID samples, row 1 = root-to-tip samples, linear floats. */
-export function hairProfileTexture(profile: { id: HairStop[]; rootToTip: HairStop[] }, sampleCount: number,
+export function hairProfileTexture(profile: { id: readonly ProfileStop[]; rootToTip: readonly ProfileStop[] }, sampleCount: number,
                                    encoding: ProfileEncoding): THREE.DataTexture {
   const id = bakeHairProfile(profile.id, sampleCount, encoding);
   const root = bakeHairProfile(profile.rootToTip, sampleCount, encoding);

@@ -76,7 +76,10 @@ export function headPanel(rt: StudioRuntime): PanelController {
   });
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(rt, "head", slot, element);
-  element.append(slot, loading,
+  // Quiet, overlaid status for the V's brows, lashes and hair: progress while they prepare, one plain line
+  // when something can't be shown. Absolutely placed, so it never moves the viewport's other overlays.
+  const detailStatus = h("p", { class: "viewport-detail-status", role: "status", hidden: true });
+  element.append(slot, loading, detailStatus,
     h("div", { class: "viewport-top" }, context, h("div", { class: "viewport-tools" }, front, surface, wire, idle)),
     h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
   port.viewport.attach("head", slot);
@@ -135,6 +138,15 @@ export function headPanel(rt: StudioRuntime): PanelController {
       applyCapability(wire, port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }));
       applyCapability(idle, port.authoring.capability(!motion?.idle ? { kind: "motion.setIdle", enabled: true } :
         { kind: "motion.setPaused", paused: !motion.idlePaused }));
+      const details = frame.status.assets.characterDetails;
+      const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
+      const detailText = state.phase !== "ready" || !details ? ""
+        : details.phase === "preparing" ? "Preparing brows, lashes and hair…"
+        : details.phase === "failed" ? details.message
+        : unavailable?.message ?? "";
+      detailStatus.hidden = !detailText;
+      detailStatus.dataset.tone = details?.phase === "preparing" ? "progress" : "notice";
+      setText(detailStatus, detailText);
       const draft = frame.library.draft, presetName = draft?.presets.find(preset => preset.id === draft.selected)?.name;
       setText(context, [presetName, frame.layer?.name].filter(Boolean).join(" › ") || "No layer selected");
     },

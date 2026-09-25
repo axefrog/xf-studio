@@ -1,47 +1,43 @@
 import * as THREE from "three";
 
-/** Local, save-specific research assets. No extracted image is part of the source tree. */
-type ImageEntry = { url: string; sha256: string; width: number; height: number };
-export type BrowManifest = {
-  schema: "xfs/brow-preview-1";
-  appearanceHash: "10685882159528859062";
-  definition: "10_brown_ombre";
-  primary: ImageEntry;
-  secondary: ImageEntry;
-  gradient: ImageEntry;
+/**
+ * Adapter for `mesh_decal_double_diffuse.mt` (the brows' post-G-buffer decal), driven by the material's
+ * resolved parameters. Formula and grades: research/eye-artistry/brow-lash-fidelity.md [source].
+ */
+export type DoubleDiffuseParameters = {
+  /** `UseGradientMap`: the primary tint comes from the gradient instead of `DiffuseColor`. */
+  useGradient: boolean;
+  /** `GradientMapUV` (U of the constant gradient sample) and `GradientMapIntensity`. */
+  gradientUV: number; gradientIntensity: number;
+  /** `DiffuseColor` and `SecondaryDiffuseColor`, 8-bit sRGB as stored. */
+  diffuseColor: readonly [number, number, number]; secondaryColor: readonly [number, number, number];
+  /** `SecondaryDiffuseAlphaIntensity`. */
+  secondaryIntensity: number;
 };
+/** The vanilla default brow instance (`eyebrows_grad__default.mi` chain) values [resource]. */
+export const DOUBLE_DIFFUSE_BROW_DEFAULTS: Readonly<DoubleDiffuseParameters> = Object.freeze<DoubleDiffuseParameters>({
+  useGradient: true, gradientUV: 1, gradientIntensity: 0.5, diffuseColor: [103, 81, 71], secondaryColor: [62, 49, 42], secondaryIntensity: 0.7 });
 
-export function parseBrowManifest(input: unknown): BrowManifest {
-  if (!input || typeof input !== "object") throw Error("Invalid brow manifest");
-  const m = input as Record<string, unknown>;
-  if (m.schema !== "xfs/brow-preview-1" || m.appearanceHash !== "10685882159528859062" ||
-      m.definition !== "10_brown_ombre") throw Error("Brow manifest does not match the saved appearance");
-  for (const key of ["primary", "secondary", "gradient"] as const) {
-    const entry = m[key];
-    if (!entry || typeof entry !== "object") throw Error(`Missing ${key} brow image`);
-    const e = entry as Record<string, unknown>;
-    if (typeof e.url !== "string" || !/^\/assets\/brows\/[a-z-]+\.png$/.test(e.url) ||
-        typeof e.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(e.sha256) ||
-        !Number.isInteger(e.width) || !Number.isInteger(e.height) ||
-        (e.width as number) < 1 || (e.height as number) < 1 ||
-        (e.width as number) > 4096 || (e.height as number) > 4096)
-      throw Error(`Invalid ${key} brow image metadata`);
-  }
-  return input as BrowManifest;
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+/** Effective scalars and colours of a resolved chunk → the adapter's parameters (template defaults already applied). */
+export function doubleDiffuseParameters(scalars: Readonly<Record<string, number>>,
+  colours: Readonly<Record<string, readonly number[]>>): DoubleDiffuseParameters {
+  const rgb = (name: string, fallback: readonly [number, number, number]) => {
+    const value = colours[name];
+    return value && value.length >= 3 ? [value[0]!, value[1]!, value[2]!] as const : fallback;
+  };
+  const scalar = (name: string, fallback: number) => Number.isFinite(scalars[name]) ? scalars[name]! : fallback;
+  return { useGradient: scalar("UseGradientMap", 0) >= 0.5, gradientUV: clamp01(scalar("GradientMapUV", 1)),
+    gradientIntensity: Math.max(0, scalar("GradientMapIntensity", 1)), diffuseColor: rgb("DiffuseColor", [255, 255, 255]),
+    secondaryColor: rgb("SecondaryDiffuseColor", [255, 255, 255]), secondaryIntensity: clamp01(scalar("SecondaryDiffuseAlphaIntensity", 0)) };
 }
 
-export async function verifyBrowImage(bytes: ArrayBuffer, expected: string): Promise<void> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const actual = [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2, "0")).join("");
-  if (actual !== expected) throw Error("Local brow image digest mismatch");
-}
-
-/** This is the 2.31 double-diffuse post-G-buffer coverage at default contrast,
- * with the style-18 secondary intensity and the template's zero mask influence. */
-export function browCoverage(primaryAlpha: number, secondaryAlpha: number): number {
+/** The 2.31 double-diffuse post-G-buffer coverage at default contrast and the template's zero mask
+ * influence; `secondaryIntensity` is `SecondaryDiffuseAlphaIntensity` (0.7 in the vanilla brows). */
+export function browCoverage(primaryAlpha: number, secondaryAlpha: number, secondaryIntensity = 0.7): number {
   const p = THREE.MathUtils.clamp(primaryAlpha, 0, 1);
   const s = THREE.MathUtils.clamp(secondaryAlpha, 0, 1);
-  const combined = p + (1 - p) * s * 0.7;
+  const combined = p + (1 - p) * s * secondaryIntensity;
   return combined * combined;
 }
 
@@ -53,9 +49,11 @@ export function browCoverage(primaryAlpha: number, secondaryAlpha: number): numb
  * linearEquivalentDecal in hair-colour-model.ts. Without it, the older linear
  * blend is kept and reported as such.
  */
-export function createSavedBrowMaterial(primary: THREE.Texture, secondary: THREE.Texture,
+export function createDoubleDiffuseDecalMaterial(primary: THREE.Texture, secondary: THREE.Texture,
                                         gradient: THREE.Texture,
-                                        options: { gbufferBlend?: boolean } = {}): THREE.MeshStandardMaterial {
+                                        options: { gbufferBlend?: boolean; parameters?: DoubleDiffuseParameters } = {}): THREE.MeshStandardMaterial {
+  const parameters = options.parameters ?? DOUBLE_DIFFUSE_BROW_DEFAULTS;
+  const srgb = (rgb: readonly [number, number, number]) => new THREE.Color().setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
   const material = new THREE.MeshStandardMaterial({
     map: primary,
     alphaMap: secondary,
@@ -68,7 +66,10 @@ export function createSavedBrowMaterial(primary: THREE.Texture, secondary: THREE
   if (options.gbufferBlend) material.defines = { ...material.defines, XFS_GBUFFER_DECAL: "" };
   material.onBeforeCompile = shader => {
     shader.uniforms.browGradient = { value: gradient };
-    shader.uniforms.browSecondaryColor = { value: new THREE.Color(0x3e312a) };
+    shader.uniforms.browSecondaryColor = { value: srgb(parameters.secondaryColor) };
+    shader.uniforms.browDiffuseColor = { value: srgb(parameters.diffuseColor) };
+    shader.uniforms.browGradientParams = { value: new THREE.Vector4(parameters.useGradient ? 1 : 0, parameters.gradientUV,
+      parameters.gradientIntensity, parameters.secondaryIntensity) };
     if (options.gbufferBlend && shader.vertexShader) {
       shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
         attribute vec3 xfsUnderlay;
@@ -79,7 +80,8 @@ export function createSavedBrowMaterial(primary: THREE.Texture, secondary: THREE
       "#include <map_pars_fragment>",
       `#include <map_pars_fragment>
 uniform sampler2D browGradient;
-uniform vec3 browSecondaryColor;
+uniform vec3 browSecondaryColor, browDiffuseColor;
+uniform vec4 browGradientParams;
 #ifdef XFS_GBUFFER_DECAL
 varying vec3 vXfsUnderlay;
 #endif`,
@@ -92,10 +94,13 @@ varying vec3 vXfsUnderlay;
        vec4 browSecondary = texture2D(alphaMap, vAlphaMapUv);
        float browP = clamp(browPrimary.a, 0.0, 1.0);
        float browS = clamp(browSecondary.a, 0.0, 1.0);
-       vec3 browGradientColor = clamp(texture2D(browGradient, vec2(1.0, 0.5)).rgb * 0.5, 0.0, 1.0);
+       // UseGradientMap: the gradient at (GradientMapUV, 0.5) × GradientMapIntensity replaces DiffuseColor.
+       vec3 browGradientColor = browGradientParams.x > 0.5
+         ? clamp(texture2D(browGradient, vec2(browGradientParams.y, 0.5)).rgb * browGradientParams.z, 0.0, 1.0)
+         : browDiffuseColor;
        vec3 browColor = browGradientColor * browPrimary.rgb +
-         browSecondaryColor * (browS * (1.0 - browPrimary.a) * 0.7);
-       float browCombined = browP + (1.0 - browP) * browS * 0.7;
+         browSecondaryColor * (browS * (1.0 - browPrimary.a) * browGradientParams.w);
+       float browCombined = browP + (1.0 - browP) * browS * browGradientParams.w;
        float browAlpha = browCombined * browCombined;
 #ifdef XFS_GBUFFER_DECAL
        {
@@ -117,7 +122,7 @@ varying vec3 vXfsUnderlay;
     ).replace("#include <common>", `#include <common>
 vec3 a_pow2(vec3 v) { return v * v; }`);
   };
-  material.customProgramCacheKey = () => `xfs-saved-brow-double-diffuse-v2${options.gbufferBlend ? "-gbuffer" : ""}`;
+  material.customProgramCacheKey = () => `xfs-double-diffuse-decal-v3${options.gbufferBlend ? "-gbuffer" : ""}`;
   return material;
 }
 
@@ -157,37 +162,4 @@ export function sampleUnderlayAlbedo(targetPositions: ArrayLike<number>, sourceP
         (texel(x0, y0 + 1, c) * (1 - wx) + texel(x0 + 1, y0 + 1, c) * wx) * wy;
   }
   return { underlay, maxMatchedDistance, unmatched };
-}
-
-export async function loadSavedBrowMaterial(loader: THREE.TextureLoader, anisotropy: number,
-                                             options: { gbufferBlend?: boolean } = {}): Promise<THREE.MeshStandardMaterial | undefined> {
-  const response = await fetch("/assets/brows/manifest.json", { signal: AbortSignal.timeout(5000) });
-  if (response.status === 404) return undefined;
-  if (!response.ok) throw Error(`Local brow manifest: HTTP ${response.status}`);
-  const manifest = parseBrowManifest(await response.json());
-  const loaded: THREE.Texture[] = [];
-  try {
-    for (const entry of [manifest.primary, manifest.secondary, manifest.gradient]) {
-      const imageResponse = await fetch(entry.url, { signal: AbortSignal.timeout(10000) });
-      if (!imageResponse.ok) throw Error(`Local brow image: HTTP ${imageResponse.status}`);
-      const bytes = await imageResponse.arrayBuffer();
-      await verifyBrowImage(bytes, entry.sha256);
-      const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
-      try {
-        const texture = await loader.loadAsync(objectUrl);
-        if (texture.image.width !== entry.width || texture.image.height !== entry.height) {
-          texture.dispose(); throw Error("Local brow image dimensions do not match its manifest");
-        }
-        texture.flipY = false;
-        texture.colorSpace = loaded.length === 1 ? THREE.NoColorSpace : THREE.SRGBColorSpace;
-        texture.anisotropy = anisotropy;
-        if (loaded.length === 2) texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-        loaded.push(texture);
-      } finally { URL.revokeObjectURL(objectUrl); }
-    }
-    return createSavedBrowMaterial(loaded[0]!, loaded[1]!, loaded[2]!, options);
-  } catch (error) {
-    for (const t of loaded) t.dispose();
-    throw error;
-  }
 }

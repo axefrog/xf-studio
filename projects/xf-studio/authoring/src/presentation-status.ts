@@ -1,3 +1,4 @@
+import type { CharacterDetailStatus } from "./character-detail-actions";
 import type { WorkspaceSaveStatus } from "./workspace-persistence";
 
 /**
@@ -9,12 +10,8 @@ import type { WorkspaceSaveStatus } from "./workspace-persistence";
 export type PreviewAssetStatus = {
   /** Head scene and its optional details have finished loading (or failed). */
   loaded: boolean;
-  detailErrors: string[];
-  browMaterial?: "saved-double-diffuse" | "provisional";
-  lashColor?: "saved-hair-profile" | "provisional";
-  /** Which installed hair-profile provider the lash colour uses (explicit, from the local manifest). */
-  lashProfileLabel?: string;
-  hairError?: string;
+  /** Brows, lashes and hair resolved from the player's own installation for the shown V. */
+  characterDetails?: CharacterDetailStatus;
   piercingError?: string;
   prcError?: string;
   prcAvailable: boolean;
@@ -38,7 +35,7 @@ export type PresentationStatus = {
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {
   return { verification, workspace: { kind: "idle", message: "" },
-    assets: { loaded: false, detailErrors: [], prcAvailable: false }, glitter: [] };
+    assets: { loaded: false, prcAvailable: false }, glitter: [] };
 }
 
 /** Observable detached status; the trusted composition root calls `changed()`. */

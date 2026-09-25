@@ -91,6 +91,8 @@ export interface MeshModel {
   readonly localMaterials: JsonObject[];
   readonly externalMaterials: { ref: DepotRef | null; text: string | null }[];
   readonly renderChunks: number | null;
+  /** Each render chunk's LOD mask (bit 0 = the highest-detail level), when the blob lists them. */
+  readonly renderChunkLods: readonly number[] | null;
   /** snake_case context attributes from the `@context` local material and `resource.fix context`. */
   readonly contextAttrs: Map<string, string>;
   /** Raw `@context` params, which override same-named params of instantiated templates. */
@@ -103,6 +105,8 @@ export interface MorphModel {
   readonly baseMesh: DepotRef | null;
   readonly baseMeshAppearance: string;
   readonly renderChunks: number | null;
+  /** Each render chunk's LOD mask (bit 0 = the highest-detail level), when the blob lists them. */
+  readonly renderChunkLods: readonly number[] | null;
   readonly targets: { name: string; region: string }[];
   readonly blobFrom: DepotRef | null;
   readonly notes: RuleNote[];
@@ -149,6 +153,16 @@ const renderChunkCount = (blob: unknown, scope: HandleScope): number | null => {
   if (!data) return null;
   const header = isObject(data.header) ? data.header : null;
   return header ? asArray(header.renderChunkInfos).length : null;
+};
+
+const chunkLodMasks = (blob: unknown, scope: HandleScope): number[] | null => {
+  const data = scope.data(blob);
+  const header = data && isObject(data.header) ? data.header : null;
+  if (!header) return null;
+  return asArray(header.renderChunkInfos).map(info => {
+    const mask = isObject(info) ? Number(info.lodMask) : NaN;
+    return Number.isInteger(mask) && mask > 0 ? mask : 1;
+  });
 };
 
 export const snakeCase = (value: string) => {
@@ -331,6 +345,7 @@ export class ResourceGraph {
         externalMaterials: (asArray(root.externalMaterials).length ? asArray(root.externalMaterials) : asArray(root.preloadExternalMaterials))
           .map(item => ({ ref: depotRef(item), text: depotText(item) })),
         renderChunks: renderChunkCount(root.renderResourceBlob, scope),
+        renderChunkLods: chunkLodMasks(root.renderResourceBlob, scope),
       };
     };
     const base = read(loaded.root);
@@ -343,7 +358,7 @@ export class ResourceGraph {
     }
     const appearances: MeshAppearanceModel[] = base.appearances.map(a => ({ name: a.name, chunkMaterials: a.chunkMaterials,
       expansionTag: a.tags.length === 1 ? a.tags[0]! : null, patchSource: null, patchedFrom: null }));
-    let renderChunks = base.renderChunks, renderBlobFrom: DepotRef | null = null;
+    let renderChunks = base.renderChunks, renderChunkLods = base.renderChunkLods, renderBlobFrom: DepotRef | null = null;
     for (const patch of this.patchesFor(ref.hash)) {
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "mesh");
       if (!source) continue;
@@ -362,7 +377,7 @@ export class ResourceGraph {
         notes.push(note("R3-mesh-patch-appearances", "source", `${patch.sourcePath} adds/replaces mesh appearances (${patch.declaredBy}).`));
       }
       if (patchMesh.renderChunks !== null && patchModifies(patch, "renderResourceBlob", base.renderChunks !== null)) {
-        renderChunks = patchMesh.renderChunks; renderBlobFrom = source.ref;
+        renderChunks = patchMesh.renderChunks; renderChunkLods = patchMesh.renderChunkLods; renderBlobFrom = source.ref;
         notes.push(note("R3-mesh-patch-blob", "source", `${patch.sourcePath} replaces the render blob (${patch.declaredBy}).`));
       }
     }
@@ -379,7 +394,7 @@ export class ResourceGraph {
     }
     if (fix) for (const [name, value] of fix.context) contextAttrs.set(snakeCase(name), value);
     return { loaded, appearances, entries: base.entries, localMaterials: base.localMaterials, externalMaterials: base.externalMaterials,
-      renderChunks, contextAttrs, contextParams, renderBlobFrom, notes };
+      renderChunks, renderChunkLods, contextAttrs, contextParams, renderBlobFrom, notes };
   }
 
   morph(ref: DepotRef): Promise<MorphModel | null> {
@@ -397,12 +412,13 @@ export class ResourceGraph {
       return {
         baseMesh: depotRef(root.baseMesh), baseMeshAppearance: cname(root.baseMeshAppearance),
         blob, renderChunks: blob ? renderChunkCount(blob.baseBlob, scope) : null,
+        renderChunkLods: blob ? chunkLodMasks(blob.baseBlob, scope) : null,
         targets: asArray(root.targets).filter(isObject).map(target => ({ name: cname(target.name), region: cname(target.regionName) })),
       };
     };
     const base = read(loaded.root);
     const notes: RuleNote[] = [];
-    let { baseMesh, baseMeshAppearance, renderChunks } = base;
+    let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods } = base;
     const targets = [...base.targets];
     let blobFrom: DepotRef | null = null;
     // A patch source is never itself patched (OnMorphTargetResourceLoad returns early).
@@ -412,13 +428,13 @@ export class ResourceGraph {
       const patchMorph = read(source.root);
       if (patchMorph.baseMesh && patchModifies(patch, "baseMesh")) baseMesh = patchMorph.baseMesh;
       if (patchModifies(patch, "baseMeshAppearance", !patchMorph.baseMeshAppearance)) baseMeshAppearance = patchMorph.baseMeshAppearance;
-      if (patchMorph.blob && patchModifies(patch, "blob", !!base.blob)) { renderChunks = patchMorph.renderChunks; blobFrom = source.ref; }
+      if (patchMorph.blob && patchModifies(patch, "blob", !!base.blob)) { renderChunks = patchMorph.renderChunks; renderChunkLods = patchMorph.renderChunkLods; blobFrom = source.ref; }
       if (patchModifies(patch, "targets")) for (const target of patchMorph.targets) {
         const index = targets.findIndex(existing => existing.name === target.name);
         if (index >= 0) targets[index] = target; else targets.push(target);
       }
       notes.push(note("R3-morph-patch", "source", `${patch.sourcePath} patches this morph target (${[...patch.props].join(", ") || "all props"}; ${patch.declaredBy}).`));
     }
-    return { loaded, baseMesh, baseMeshAppearance, renderChunks, targets, blobFrom, notes };
+    return { loaded, baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, targets, blobFrom, notes };
   }
 }

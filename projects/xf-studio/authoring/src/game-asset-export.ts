@@ -240,3 +240,15 @@ export function gameContentSource(gameRoot: string): ExportSource {
   return { archivePath, gameRoot, fingerprint: createHash("sha256").update(`content\n${entries.join("\n")}`).digest("hex") };
 }
 
+
+/**
+ * One mounted archive as an export source: the winning archive of a resolved resource (a mod archive in
+ * MO2's virtual view, the ArchiveXL bundle or a base-game archive). Its fingerprint is the archive's own
+ * path, size and modification time, so the per-resource cache key is (depot hash, container fingerprint).
+ */
+export function archiveExportSource(archivePath: string, gameRoot: string): ExportSource {
+  const absolute = resolve(archivePath);
+  let identity = "unavailable";
+  try { const stat = statSync(absolute); identity = `${stat.size}|${Math.trunc(stat.mtimeMs)}`; } catch { /* Reported by the export itself. */ }
+  return { archivePath: absolute, gameRoot, fingerprint: createHash("sha256").update(`archive\n${absolute.toLowerCase()}|${identity}`).digest("hex") };
+}

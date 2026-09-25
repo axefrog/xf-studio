@@ -7,7 +7,9 @@
  * all, newest first, including the scene's renderer and canvas, so "Try again" starts from nothing
  * instead of doubling listeners (PREV-20). `dispose()` does the same for a head that loaded.
  */
+import { createBrowserCharacterDetailDevice } from "./browser-character-detail-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
+import { CharacterDetailActions, followShownCharacter } from "./character-detail-actions";
 import type { createBrowserPreviewDevice } from "./browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
 import type { MotionActions } from "./motion-actions";
@@ -46,6 +48,8 @@ export type AttachedHead = {
   savedAppearance: SavedAppearanceActions;
   preview: PreviewActions;
   motion: MotionActions;
+  /** Resolved brows, lashes and hair of the shown V (default or loaded save). */
+  characterDetails: CharacterDetailActions;
   /** Releases every head-bound connection and the scene. Safe to call more than once. */
   dispose(): void;
 };
@@ -66,7 +70,6 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     let savedAppearance: SavedAppearanceActions | undefined;
     const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => surface?.setEnabled(enabled),
-      hasSavedAppearance: () => !!ports.workspace.savedV || !!savedAppearance?.hasSavedV(),
     }));
     savedAppearance = services.savedAppearance;
     ports.attach({ savedV: savedAppearance });
@@ -80,10 +83,16 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
     ports.preview.presentInitialLayers();
+    // Brows, lashes and hair follow the shown V: the restored or newly loaded save, else the default V.
+    // Every save switch replaces them completely (CharacterDetailActions supersedes the previous V).
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
+    releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
+    releases.push(characterDetails.subscribe(ports.changed));
+    releases.push(followShownCharacter(characterDetails, savedAppearance));
     const cameraMoved = () => ports.persist();
     scene.controls.addEventListener("change", cameraMoved);
     releases.push(() => scene.controls.removeEventListener("change", cameraMoved));
-    return { scene, savedAppearance, preview, motion, dispose };
+    return { scene, savedAppearance, preview, motion, characterDetails, dispose };
   } catch (error) {
     dispose();
     throw error;

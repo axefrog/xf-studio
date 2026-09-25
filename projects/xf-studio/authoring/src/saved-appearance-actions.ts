@@ -1,7 +1,11 @@
 import { parseSavedV, readSavedV, type SavedV } from "./save-reader";
 
+/**
+ * What applying a save changed at once (facial shapes, eye colour, piercings). Brows, lashes and hair
+ * follow asynchronously from the resolved character record (character-detail-actions.ts).
+ */
 export type SavedAppearanceResult = { applied: string[]; appearanceReferences: number;
-  matchedDetails: string[]; matchedHair: boolean; matchedPiercing: boolean;
+  matchedPiercing: boolean;
   eyeAppearance: { message: string };
   /** The eye-shape choice the saved `(eyes, target)` pair selects in the loaded head, when it has one. */
   eyeShape?: number };

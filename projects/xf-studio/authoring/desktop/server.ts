@@ -19,6 +19,8 @@ import { PreviewCoreHost } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
+import { CharacterDetailHost } from "../src/character-detail-host";
+import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
@@ -102,6 +104,16 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, wolvenKitCli: wolvenKit.usable() }),
     log: message => report(message) });
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
+  // Brows, lashes and hair: resolved from the launch route Build uses (MO2, manual or game folder) and
+  // exported from the winning archives into the same private preview cache.
+  const characterDetails = new CharacterDetailHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+    settings: () => {
+      const settings = savedSettings();
+      return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
+        mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
+    },
+    log: message => report(message) });
+  const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
@@ -133,6 +145,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return Response.json(desktopCapabilities(previewCore.ready() ? "ready" : "missing", version, dataRoot, buildReady()),
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
+      if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
       if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);
       if (url.pathname === "/api/desktop/open-link") {
         // Only named official pages from the host's own state; the view never supplies a URL.
@@ -208,6 +221,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
       let servedRoot = staticRoot;
+      if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method);
       if (url.pathname.startsWith("/assets/")) {
         // Only the derived core preview files are served as assets; the installer carries none.
         let name: string;
@@ -246,8 +260,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     beginInstallTransaction() { return activity.begin("install"); },
     /** The derived 3D preview's host service (tests and shutdown). */
     previewCore,
+    /** Resolved brows, lashes and hair (tests and shutdown). */
+    characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { shutdown.abort(); previewCore.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    stop() { shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

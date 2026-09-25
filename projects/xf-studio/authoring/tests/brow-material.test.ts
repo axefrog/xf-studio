@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { browCoverage, createSavedBrowMaterial, parseBrowManifest, sampleUnderlayAlbedo, verifyBrowImage } from "../src/brow-material";
+import { browCoverage, createDoubleDiffuseDecalMaterial, doubleDiffuseParameters, DOUBLE_DIFFUSE_BROW_DEFAULTS, sampleUnderlayAlbedo } from "../src/brow-material";
+import { parseBrowManifest, verifyBrowImage } from "../src/brow-study-fixture";
 import { srgbToLinear } from "../src/hair-colour-model";
 import { extendSkin } from "../src/skin";
 
@@ -8,7 +9,7 @@ const image = (name: string) => ({ url: `/assets/brows/${name}.png`, sha256: "a"
 const manifest = { schema: "xfs/brow-preview-1", appearanceHash: "10685882159528859062",
   definition: "10_brown_ombre", primary: image("primary"), secondary: image("secondary"), gradient: image("gradient") } as const;
 
-test("brow manifest binds only the audited saved appearance and local digest-addressed images", async () => {
+test("the study-only brow fixture binds only the audited saved appearance and local digest-addressed images", async () => {
   expect(parseBrowManifest(manifest)).toEqual(manifest);
   expect(() => parseBrowManifest({ ...manifest, definition: "another" })).toThrow();
   expect(() => parseBrowManifest({ ...manifest, primary: { ...image("primary"), url: "https://example.invalid/other.png" } })).toThrow();
@@ -27,7 +28,7 @@ test("2.31 brow coverage combines filtered primary and secondary alpha before sq
   // Two edge texels (0 and 1) filtered at their midpoint give 0.25, whereas
   // filtering already-squared texels gives 0.5. Keep the nonlinear step in GLSL.
   expect(browCoverage(0.5, 0)).not.toBe((browCoverage(0, 0) + browCoverage(1, 0)) / 2);
-  const material = createSavedBrowMaterial(new THREE.Texture(), new THREE.Texture(), new THREE.Texture());
+  const material = createDoubleDiffuseDecalMaterial(new THREE.Texture(), new THREE.Texture(), new THREE.Texture());
   const shader = { uniforms: {}, fragmentShader: "#include <map_pars_fragment>\n#include <map_fragment>\n#include <alphamap_fragment>" };
   material.onBeforeCompile(shader as never, {} as never);
   expect(shader.fragmentShader).toContain("browPrimary.a");
@@ -44,7 +45,7 @@ test("2.31 brow coverage combines filtered primary and secondary alpha before sq
 });
 
 test("G-buffer decal blend is opt-in, declared per vertex and keeps the squared coverage", () => {
-  const material = createSavedBrowMaterial(new THREE.Texture(), new THREE.Texture(), new THREE.Texture(), { gbufferBlend: true });
+  const material = createDoubleDiffuseDecalMaterial(new THREE.Texture(), new THREE.Texture(), new THREE.Texture(), { gbufferBlend: true });
   expect(material.defines).toHaveProperty("XFS_GBUFFER_DECAL");
   const shader = { uniforms: {}, vertexShader: "#include <common>\n#include <begin_vertex>",
     fragmentShader: "#include <common>\n#include <map_pars_fragment>\n#include <map_fragment>\n#include <alphamap_fragment>" };
@@ -52,8 +53,24 @@ test("G-buffer decal blend is opt-in, declared per vertex and keeps the squared 
   expect(shader.vertexShader).toContain("attribute vec3 xfsUnderlay");
   expect(shader.fragmentShader).toContain("sqrt(underlay)");
   expect(shader.fragmentShader).toContain("browCombined * browCombined");
-  expect(material.customProgramCacheKey()).not.toBe(createSavedBrowMaterial(new THREE.Texture(), new THREE.Texture(),
+  expect(material.customProgramCacheKey()).not.toBe(createDoubleDiffuseDecalMaterial(new THREE.Texture(), new THREE.Texture(),
     new THREE.Texture()).customProgramCacheKey());
+});
+
+test("double-diffuse parameters come from the resolved chunk, with template defaults and the vanilla brow values", () => {
+  expect(browCoverage(0.5, 0.5, 0)).toBe(0.25);
+  // Vanilla brow instance chain: gradient tint at U = 1 × 0.5, secondary (62,49,42) × 0.7.
+  expect(doubleDiffuseParameters({ UseGradientMap: 1, GradientMapIntensity: 0.5, GradientMapUV: 1, SecondaryDiffuseAlphaIntensity: 0.699999988 },
+    { DiffuseColor: [103, 81, 71, 255], SecondaryDiffuseColor: [62, 49, 42, 255] })).toEqual({ ...DOUBLE_DIFFUSE_BROW_DEFAULTS, secondaryIntensity: 0.699999988 });
+  // Template defaults: no gradient, white diffuse, no secondary.
+  expect(doubleDiffuseParameters({ UseGradientMap: 0, SecondaryDiffuseAlphaIntensity: 0 }, {})).toMatchObject(
+    { useGradient: false, diffuseColor: [255, 255, 255], secondaryIntensity: 0 });
+  const material = createDoubleDiffuseDecalMaterial(new THREE.Texture(), new THREE.Texture(), new THREE.Texture(),
+    { parameters: { ...DOUBLE_DIFFUSE_BROW_DEFAULTS, useGradient: false, secondaryIntensity: 0.25 } });
+  const shader = { uniforms: {} as Record<string, { value: unknown }>, fragmentShader: "#include <common>\n#include <map_pars_fragment>\n#include <map_fragment>\n#include <alphamap_fragment>" };
+  material.onBeforeCompile(shader as never, {} as never);
+  expect((shader.uniforms.browGradientParams!.value as THREE.Vector4).toArray()).toEqual([0, 1, 0.5, 0.25]);
+  expect(shader.fragmentShader).toContain("browGradientParams.w");
 });
 
 test("underlay albedo samples the nearest source vertex UV bilinearly and decodes sRGB", () => {

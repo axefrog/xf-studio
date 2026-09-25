@@ -96,6 +96,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
     return { ...status, glitter: measurements.snapshot(), assets: { ...status.assets,
+      characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
   });
 
@@ -246,12 +247,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       head = attached;
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
       const evidence = attached.scene.evidence;
-      status = { ...status, assets: { ...status.assets, loaded: true, detailErrors: [...evidence.detailErrors],
-        browMaterial: evidence.browMaterial as "saved-double-diffuse" | "provisional",
-        lashColor: evidence.lashColor as "saved-hair-profile" | "provisional",
-        lashProfileLabel: evidence.lashProfile
-          ? `${evidence.lashProfile.winner} (${evidence.lashProfile.basis.replaceAll("-", " ")})` : undefined,
-        hairError: evidence.hairError || undefined, piercingError: evidence.piercingError || undefined,
+      status = { ...status, assets: { ...status.assets, loaded: true, piercingError: evidence.piercingError || undefined,
         prcError: evidence.prcError || undefined, prcAvailable: !!evidence.prc.styles } };
       viewportDevice.headReady();
       session.setPreviewReady(); session.flush(); drawUV();
