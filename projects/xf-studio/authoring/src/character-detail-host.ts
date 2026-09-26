@@ -7,7 +7,7 @@ import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache
 import { choiceKey, manifestHolds, readChoiceManifest, xlIdentity } from "./choice-manifest";
 import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
 import { clearPrepared, evictPrepared, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
-import { backgroundExtraction, foregroundExtraction } from "./resolver-host";
+import { backgroundExtraction, foregroundExtraction, type Installation, type InstallationOptions } from "./resolver-host";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
@@ -268,7 +268,7 @@ export class CharacterDetailHost {
   private async readiness(): Promise<(request: CharacterRequest) => boolean> {
     const route = this.route();
     if (!route) return () => false;
-    const installation = await acquireInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
+    const installation = await this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
     const exporter = this.exporterFor(route.wolvenKitCli), manifests = this.manifests(route);
     const check = { graph: installation.graph, fetcher: installation.fetcher, exporter, gameRoot: route.gameRoot, tool: installation.fetcher.tool,
       xl: xlIdentity(installation) };
@@ -286,8 +286,13 @@ export class CharacterDetailHost {
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
     const cache = this.shared.cache;
     return backgroundExtraction(this.resolverCache, () => (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
+      open: options => this.backgroundInstallation(options),
       derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal, lowPriority: true,
       manifests: this.manifests(route), log: this.options.log }));
+  }
+  /** The opened installation for background work, without the check a person's request makes (opened when it isn't yet). */
+  private async backgroundInstallation(options: InstallationOptions): Promise<Installation> {
+    return installations.peek(options) ?? acquireInstallation(options);
   }
   /** Resolves once no person's own change is being prepared. */
   private async foregroundIdle(): Promise<void> {
