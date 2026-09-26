@@ -70,6 +70,8 @@ In order:
 
    Feasibility, editor options, export plan and runtime questions: [expressions and idles brief](expressions-and-idles-brief.md). Phased design for static photo-mode expressions (the decided first scope): [expression editor design](../animation/expression-editor-design.md).
 6. Tattoos
+
+   How vanilla and modded tattoos work, a proposed XF Tattoos design (decal canvases cut from the V's own skin, placed stencils, per-look atlases), a phased plan and questions for the maintainer: [tattoos brief](../character-customization/tattoos-brief.md).
 7. Full body customisation
 8. World integration: quest design, area design
 
