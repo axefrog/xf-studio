@@ -225,3 +225,6 @@ Captures, contact sheets and Studio renders are private renders of local game as
 6. Do all feminine heads share one UV layout, so one label atlas serves every V (and one more for masculine heads)?
 
 Related: [creator lighting](../../knowledge/creator-lighting.md) · [photo mode](../../knowledge/photo-mode.md) · [runtime access](../../knowledge/runtime-access.md) · [runtime bridge design](../runtime/runtime-bridge-design.md) · [bridge autonomy](../backlog/bridge-autonomy.md) · [hair calibration](../eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request) · [preview quality contract](preview-quality-contract.md) · [preview fidelity](../backlog/preview-fidelity.md).
+
+**Provisional decisions (coordinator, 27 September 2026, for the maintainer's review):** Part E runs as an optional last part of session 3, moved to session 4 if session 3 runs long; ray-tracing-off and DLAA comparison frames wait for a later session.
+
