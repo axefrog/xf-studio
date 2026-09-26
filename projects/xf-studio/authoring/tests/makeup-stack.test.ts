@@ -104,3 +104,18 @@ test("disposing the stack frees its own geometry, never the anchor's shared buff
   expect(geometry.morphAttributes.position).toHaveLength(1);
   expect(root.children).toEqual([anchor]);
 });
+
+test("the preview's surfaces follow the export: Matte at roughness 1, game-matched Colour-shifting at metalness 0.08", () => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  const root = new THREE.Group(), anchor = new THREE.SkinnedMesh(geometry);
+  root.add(anchor);
+  const stack = createMakeupStack(anchor, 1), layer = initialRecipe().layers[0];
+  stack.setCanvases([0, 1, 2].map(() => ({ width: 8, height: 8 }) as HTMLCanvasElement));
+  stack.updateLayer(0, { ...layer, finish: "matte" });
+  stack.updateLayer(1, { ...layer, finish: "iridescent", optics: { model: "game-matched-1", shift: { color: "#3fd4c2", strength: .8 } } });
+  // An earlier (browser-study) Colour-shifting layer keeps the Metallic surface it was made with.
+  stack.updateLayer(2, { ...layer, finish: "iridescent" });
+  expect(stack.materials.map(m => [m.roughness, m.metalness])).toEqual([[1, 0], [.32, .08], [.27, .65]]);
+  stack.setCanvases([]);
+});

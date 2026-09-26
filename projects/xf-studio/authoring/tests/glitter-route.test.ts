@@ -17,7 +17,7 @@ import { normalRgba } from "../src/engines/layered-makeup/route-mip-chains";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { checkGlitterChains, levelDims, restatedTiltVariance } from "../src/features/eye-makeup/verify/glitter-checks";
 import { archiveKey } from "../src/features/eye-makeup/verify/resource-inventory";
-import { componentId, glitterOf } from "../src/features/eye-makeup/verify/resource-checks";
+import { componentId, expectedAccentValues, glitterOf } from "../src/features/eye-makeup/verify/resource-checks";
 import { expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/features/eye-makeup/verify/verify-build";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
@@ -43,7 +43,7 @@ function collection(extra: Record<string, unknown> = {}) {
     { id: ID(2), name: "Nested only", revision: 1, recipe: recipe([patch("left2", LEFT)]) },
   ], diagnostics: { schema: "xfs/export-diagnostics-1", presets: {
     [ID(1)]: { glitter: { base: { roughness: .5, metalness: 0 }, regions: [{ layer: "left", mips: "nested", flakes: FLAKES },
-      { layer: "right", mips: "box", mirrorOf: "left" }], accent: { layer: "left", share: .08, ev: 0 } } },
+      { layer: "right", mips: "box", mirrorOf: "left" }], accent: { layer: "left", share: .08, ev: 1 } } },
     [ID(2)]: { glitter: { base: { roughness: .5, metalness: 0 }, regions: [{ layer: "left2", mips: "nested", flakes: { ...FLAKES, seed: 7 } }] } },
   } }, ...extra };
 }
@@ -161,7 +161,9 @@ test("the glitter knob is validated, and only it reaches the route", () => {
   expect(bad({ ...knob.glitter, regions: [{ layer: "left", mips: "nested", flakes: { ...FLAKES, sizeMm: 3 } }] })).toThrow(/out of range/);
   expect(bad({ ...knob.glitter, regions: [{ layer: "left", mips: "sideways", flakes: FLAKES }] })).toThrow(/mips/);
   expect(bad({ ...knob.glitter, regions: [{ layer: "right", mips: "box", mirrorOf: "left" }] })).toThrow(/mirrors left/);
-  expect(bad({ ...knob.glitter, accent: { layer: "nowhere", share: .08, ev: 0 } })).toThrow(/accent names a layer/);
+  expect(bad({ ...knob.glitter, accent: { layer: "nowhere", share: .08, ev: 1 } })).toThrow(/accent names a layer/);
+  // The accent template multiplies its colour by EmissiveEV (not 2^EV), so an accent at 0 or below would be black.
+  for (const ev of [0, -1]) expect(bad({ ...knob.glitter, accent: { layer: "left", share: .08, ev } })).toThrow(/accent ev must be above 0/);
   expect(() => parseExportDiagnostics({ schema: "xfs/export-diagnostics-1", presets: { [ID(1)]: { ...knob, uvSpace: "head" } } }, ids)).toThrow(/cannot be combined/);
   // The Glitter finish is still guarded: no route, omitted with its reason, even inside a glitter-knob preset.
   expect(FINISH_EXPORT.glitter.route).toBeNull();
@@ -208,9 +210,14 @@ test("plan and materials: @glitter on the window, the accent on its own chunk, h
     UVScaleX: WINDOW.transform.UVScaleX, UVOffsetY: WINDOW.transform.UVOffsetY });
   expect(glitter.NormalAlphaTex.DepotPath.$value).toEndWith("{material}_flakes.xbm");
   expect(mesh.localMaterialBuffer.materials[1].baseMaterial.DepotPath.$value).toBe("base\\materials\\mesh_decal_emissive_subsurface.mt");
-  expect(accent).toMatchObject({ EmissiveEV: 0, AlphaThreshold: 0, EmissiveColor: { Red: 0xe8, Green: 0xc4, Blue: 0x6a, Alpha: 255 },
+  expect(accent).toMatchObject({ EmissiveEV: 1, AlphaThreshold: 0, EmissiveColor: { Red: 0xe8, Green: 0xc4, Blue: 0x6a, Alpha: 255 },
     EmissiveMaskChannel: { $type: "Vector4", X: 1, Y: 0, Z: 0, W: 0 } });
   expect(accent.EmissiveMask.DepotPath.$value).toEndWith("{material}_accent.xbm");
+  // The verifier restates the accent's EV and refuses one at 0 on its own (the knob parser refuses it first).
+  expect(expectedAccentValues(plan.presets[0] as never).EmissiveEV).toBe(1);
+  const black = structuredClone(plan.presets[0]);
+  black.diagnostics!.glitter!.accent!.ev = 0;
+  expect(() => expectedAccentValues(black as never)).toThrow(/EmissiveEV must be above 0/);
 });
 
 // ---- The independent verifier on a synthetic glitter build ----
@@ -384,7 +391,7 @@ test("glitter tampering fails: accent constants and binding, supplied chains, BO
       data[4096 * 1024 + y * 2048 + x] ^= 0x20; })],
     [/Accent and BOX was built for the flat route, but its recipe needs the glitter route/, undefined, b => editBuild(b, r => { r.plan.presets[0].route = "flat"; })],
     [/diagnostics for preset Accent and BOX differ from the packaged collection/, undefined, undefined,
-      (() => { const c = structuredClone(BAKED.packaged); c.diagnostics.presets[ID(1)].glitter.accent.ev = 1; return c; })()],
+      (() => { const c = structuredClone(BAKED.packaged); c.diagnostics.presets[ID(1)].glitter.accent.ev = 2; return c; })()],
     [/Plan accent chunk undefined differs from the expected 1/, undefined, b => editBuild(b, r => { delete r.plan.plate.accentChunk; })],
     // PIPE-74: an accent stored in natural row order, and an accent sampled at the plate against another layer's coverage.
     [/accent is not stored with reversed rows/, undefined, (b, p) => editMember(b, p.presets[0].textures.accent!, xbm => {

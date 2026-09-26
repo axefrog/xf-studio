@@ -333,6 +333,7 @@ Full format and reader: [save import](../research/eye-artistry/save-import.md). 
 - Each group is `{name, appearances[{resourceHash u64, definition, name (option name), censorFlag, censorFlagAction}], morphs[{region, target, censorFlag, censorFlagAction}]}`.
 - `resourceHash` = FNV-1a64 of the lower-case `.app` depot path. Verified for teeth, lip, cheek, neck and EP1 face-rig entries of the reference save [resource].
 - **The save stores resolved output, not UI state.** It lists, per consumer group, the active appearance options with their chosen definition, and the non-`None` morphs. It does not store switcher choices, link indices or colour-only controllers (`skin_color` never appears; its choice is visible only as the definition of `skin_type_05`, `body_color`, arms and so on). The same choice is repeated in every group that contains the option: in the reference save, eye colour appears in `TPP`, `TPP_photomode` and `character_customization`.
+- **The node mirrors the creator resource** [resource: two 2.31 saves against the installed feminine resources]: its head, arms and body group lists are the resource's `headGroups`, `armsGroups` and `bodyGroups` in the same order, empty groups included; its perspective list is the resource's `perspectiveInfo`; its preset version is the resource's `version` (12); vanilla options appear within each group in the resource's option order. Censor fields copy the option's own (`Censor_Nudity` = 1; `Activate` = 0, `Deactivate` = 1), so body entries carry non-zero values and both the censored and uncensored body variants are stored. The two tags are the chosen hair colour's and hairstyle's tags (colour name and length). Re-encoding a decoded node reproduces it byte for byte.
 - By contrast, the vanilla **UI preset** `.charcustpreset` (`gameuiCharacterCustomizationUiPreset`) stores the **index state**: `{optionName, isActive, value}` for every option, `value = 0xFFFFFFFF` when unset, plus `isMaleVO` [resource] [source]. WolvenKit also registers `.ccstate` as a `gameuiCharacterCustomizationPreset` resource, the same type as the save node [source: `FileTypeHelper.cs`].
 
 ### Writing back: what is known
@@ -344,7 +345,7 @@ Full format and reader: [save import](../research/eye-artistry/save-import.md). 
 | Consistency rules can be derived offline: for a chosen UI state, every group containing an active option must list it with the same definition, and linked followers must use the linked index. | How censor flags, `Unknown1`, `isBrainGenderMale` and tags (hair colour and length) are validated. |
 | Removing a mod leaves unresolvable hashes; ArchiveXL maps some old paths through app overrides. | How the game treats an entry whose app hash or definition no longer exists (drop, default, or corrupt). |
 
-The safe order is: generate the complete group set from an option state using the effective CCO, write to a copy, re-read with both the Studio reader and WolvenKit, then verify in game. CC presets for sharing should store the **UI state** (option names + choice identities, like `.charcustpreset` but by name rather than index) and derive the save representation, not the reverse.
+The safe order is: generate the complete group set from an option state using the effective CCO, write to a copy, re-read with both the Studio reader and WolvenKit, then verify in game. The container side is now measured: the node is root-level, childless and sits in the last compressed chunk of both saves, and `sav.dat` has no checksum; the [save write-back design](../research/character-customization/save-writeback-design.md) sets out a minimal-diff writer, its integrity gates and an alternative that applies the look in game through the bridge. CC presets for sharing should store the **UI state** (option names + choice identities, like `.charcustpreset` but by name rather than index) and derive the save representation, not the reverse.
 
 ## 8. Generic resolver specification
 
@@ -452,7 +453,7 @@ From the legacy xf-omega eye-makeup generator (female only, reference only) and 
 4. Does `entMorphTargetManagerComponent` silently skip components without a target, or does it fail? (Affects CCXL accessories lacking a region.)
 5. Is the link-wildcard branch in ArchiveXL's anonymous overlay intentionally tied to the slot suffix?
 6. Why do decal `.app` overrides name the head component `MorphTargetSkinnedMesh7243`?
-7. How are `censorFlag`/`censorFlagAction` used (all zero in the reference save)?
+7. How does the runtime use `censorFlag`/`censorFlagAction`? The save copies each option's values (non-zero on the body's nudity-dependent entries, §7), and stores both censored and uncensored variants.
 8. Does ArchiveXL remove and re-merge custom entries on every load, so that uninstalled options disappear cleanly?
 9. What is the native engine rule for a depot path present in both a base-game and a mod archive, and for bundle order? Tool sources (WolvenKit, ArchiveXL) put mods first; PRC depends on it, but the native lookup has not been read or measured.
 10. Are eye-makeup styles 21–36 in the EP1 CCO deliberately on a separate link key, and are all resource-listed choices visible in the UI?

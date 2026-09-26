@@ -4,7 +4,7 @@ One page per finish that goes beyond a flat colour. Each records the intended lo
 
 | Finish | Export status | Route | Evidence grade |
 |---|---|---|---|
-| Matte, Satin, Metallic | Exports (provisional values) | Flat `mesh_decal` | [source] route; [runtime] untested |
+| Matte, Satin, Metallic | Exports (provisional values: roughness 1.0, 0.38 and 0.27, Metallic at metalness 0.65) | Flat `mesh_decal` | [source] route; [runtime] untested |
 | [Glossy / wet look](glossy.md) | **Experimental** export, game-matched model only | Flat `mesh_decal`, one low-roughness lobe | [source]; look [hypothesis] |
 | [Shimmer / pearl](shimmer.md) | **Experimental** export, game-matched model only | `mesh_decal` + facet normals, `NormalsBlendingMode` 1, variance-widened roughness mips | [source]; look [hypothesis] |
 | [Colour-shifting](colour-shifting.md) | **Experimental** export, game-matched model, one pigment per preset | `mesh_decal_gradientmap_recolor_blendable` with an additive Fresnel colour | [source]; colour encoding and look [hypothesis] |
@@ -18,7 +18,9 @@ All four pages share three engine facts:
 
 1. **One surface per pixel.** The G-buffer stores one base colour, one normal, one roughness and one metalness per pixel; decals blend into those (`SrcAlpha/InvSrcAlpha`, colour in square-root space). No decal can add a clear coat or a second lobe.
 2. **One draw per preset.** The Studio flattens a preset into one decal draw on the eye plate. Per-texel inputs (textures) can vary within a preset; material constants cannot. That is why Colour-shifting, whose shift colour is a constant, is limited to one pigment per preset.
-3. **Metalness is the only way to raise specular.** Dielectric F0 is fixed at 0.04; F0 = lerp(0.04, albedo, metalness). Metalness ≥ 0.1 moves a Subsurface (skin) pixel off its SSS albedo path.
+3. **Metalness is the only way to raise specular.** Dielectric F0 is fixed at 0.04; F0 = lerp(0.04, albedo, metalness). Metalness ≥ 0.1 moves a Subsurface (skin) pixel off its SSS albedo path, so a finish that does not need to read metallic stays below it (Colour-shifting writes 0.08).
+
+**Defaults changed on 27 September 2026** (provisional, for review; [decal reference §10](../shader-decal.md#10-recommended-changes-ranked)): Matte roughness 0.88 → 1.0, Colour-shifting metalness 0.25 → 0.08, and the diagnostic glitter accent's `EmissiveEV` 0 → 1. Export and preview read the same values.
 
 The browser preview follows all three for the exported layers: it merges them into one decal, blends it over the skin and lights the blended surface once with the skin's light, so the SSS switch sits on the blended metalness ([head CC rendering §3](../../../knowledge/head-cc-rendering.md#3-the-head-decal-family)). What it predicts for Board 1, with and without the *Gloss D* values, is under [materials §6](../../../knowledge/materials-and-shaders.md#6-makeup-finish-implications).
 

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "pre-migration code, commit 9dbf576",
+ "capturedFrom": "pre-migration code, commit 9dbf576; finish defaults (Colour-shifting metalness 0.08) recaptured on claude/finish-defaults",
  "fixtures": {
   "005-preset-collection/collection.json": {
    "parsed": "3b041e67b224e33f01cc7acaf30f8d2f09face9f8c4c3b0e902057da515c9569",
@@ -13,8 +13,8 @@
   },
   "016-finish-board/finish-board.collection.json": {
    "parsed": "d759aa1e56d494f34ca767d1e7eaa44522d940d911bfd7378c84364e2f23bbd7",
-   "plan": "1764298533c38d1f12e81b07596c69b9a59c883f8962be075df6e4eccf527a92",
-   "packaged": "be38f51da97f063c63eacd4f911edd3e236b1e032c4d393bd1ca619e81019dec"
+   "plan": "a65cc4253d29974bd4a6d852a20de013cda23b92b60881a4ffa79f40d3b511d4",
+   "packaged": "6a6ea78dd83fed445d983b8b5b8419378e5c9baf5a4389c59cac176368ca5987"
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "parsed": "f31c45e98590fd2bd70924d3b52d884cbe0b869b9cee30acec934b7df0a5078e",

@@ -182,6 +182,8 @@ try {
   if (probe.linear) {
     const skinColour = decalColourUnits([214, 170, 150]);
     const count = 4;
+    // The skin quads are as rough as Matte, so a Matte plate over them and one face decal of the same values agree.
+    const MATTE_ROUGHNESS = flatSurface("matte")!.roughness;
     /** A skinned quad in front of the skin, bound to one bone at rest, carrying the skin under it as the plate's underlay. */
     const plateIn = (scene: THREE.Scene, roughness: number) => {
       const geometry = new THREE.PlaneGeometry(2, 2);
@@ -234,10 +236,10 @@ try {
     // so ratios of scene-linear pixels are ratios of colours: Board 5's steps and a stacked pair against the export.
     const flatScene = new THREE.Scene();
     flatScene.add(new THREE.AmbientLight(0xffffff, 1));
-    const matte = (rgb: Rgb) => { const m = new THREE.MeshPhysicalMaterial({ roughness: 0.88, metalness: 0 }); m.color.setRGB(...rgb, THREE.LinearSRGBColorSpace); return m; };
+    const matte = (rgb: Rgb) => { const m = new THREE.MeshPhysicalMaterial({ roughness: MATTE_ROUGHNESS, metalness: 0 }); m.color.setRGB(...rgb, THREE.LinearSRGBColorSpace); return m; };
     const skinQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matte(skinColour));
     flatScene.add(skinQuad);
-    const ambient = plateIn(flatScene, 0.88);
+    const ambient = plateIn(flatScene, MATTE_ROUGHNESS);
     ambient.stack.setCanvases([]);
     const bare = renderLinear(flatScene, ambient.stack);
     const ratio = (pixel: number[]) => pixel.map((value, k) => value / bare[k]!);
@@ -253,7 +255,7 @@ try {
     show(ambient.stack, ambient.underlay, pair, false);
     const linearPixel = renderLinear(flatScene, ambient.stack);
     ambient.stack.setCanvases([]);
-    (skinQuad.material as THREE.MeshPhysicalMaterial).color.setRGB(...plateSurface({ colour: skinColour, roughness: 0.88, metalness: 0 }, merged(pair)).colour,
+    (skinQuad.material as THREE.MeshPhysicalMaterial).color.setRGB(...plateSurface({ colour: skinColour, roughness: MATTE_ROUGHNESS, metalness: 0 }, merged(pair)).colour,
       THREE.LinearSRGBColorSpace);
     const targetPixel = renderLinear(flatScene, ambient.stack);
 
@@ -274,7 +276,7 @@ try {
     const sun = new THREE.DirectionalLight(0xffffff, 2.5);
     sun.position.set(0.35, 0.3, 1);
     litScene.add(sun);
-    const SKIN_ROUGHNESS = 0.88;
+    const SKIN_ROUGHNESS = MATTE_ROUGHNESS;
     const litQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), skinLit(skinColour, SKIN_ROUGHNESS, 0));
     litScene.add(litQuad);
     const lit = plateIn(litScene, SKIN_ROUGHNESS);
@@ -328,7 +330,7 @@ try {
     const parityItem = (finish: "matte" | "glossy"): Item[] => [{ color: "#6d4a7e", alpha: 92, finish }];
     show(lit.stack, lit.underlay, parityItem("matte"), true);
     const parityPlate = renderLinear(litScene, lit.stack);
-    const parityDecal = decalOver(plum, 153, 224);
+    const parityDecal = decalOver(plum, 153, Math.round(MATTE_ROUGHNESS * 255));
     show(lit.stack, lit.underlay, parityItem("glossy"), true);
     const glossyPlate = renderLinear(litScene, lit.stack);
     const glossyDecal = decalOver(plum, 153, 31);
