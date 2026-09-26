@@ -79,7 +79,11 @@ Reports should let a developer rebuild the setup locally, not ship it. For every
   - manual installs: nothing;
 - each involved archive's file name, size, modification time, SHA-256, and how many resources it won and lost.
 
-A mod with a Nexus Mods mod ID and file ID is **re-downloadable**: the identical file can be fetched and checked against its hash. One with only a mod ID or a page is **findable**. Anything else is **local only**. The game's own archives are identified by the game version and never hashed. Archives over 2 GB, or beyond 6 GB in total, are identified by size and date instead of a hash.
+A mod with a Nexus Mods mod ID and file ID is **re-downloadable**: the identical file can be fetched and checked against its hash. One with only a mod ID or a page is **findable**. Anything else is **local only**.
+
+**The game folder is not one mod.** The game's own archives (`content` and `ep1`) are one entry, "Cyberpunk 2077 (the game's own files)", identified by the game version: never looked for, never hashed. An archive Vortex deployed goes with its Vortex mod. Every other archive in the game folder is its own entry ("hair.archive (in the game folder)"), since nothing records which mod put it there. Archives in the game and manual folders are looked for only where the game loads them (`archive/pc/mod`, a level or two below it, and REDmod's `mods/<mod>/archives`), never by walking the whole folder; an MO2 mod's own folder is searched whole, within bounds.
+
+**Hashing is bounded in time.** A report hashes the involved archives smallest first for at most 10 seconds, while the review shows how far it is ("Fingerprinting the mod files involved (3 of 12)…", from `preparing` in `GET /api/diagnostics/state`). Archives that don't fit, archives over 2 GB and anything beyond 6 GB in total are identified by size and date instead (`identifiedBy` says which). Those that didn't fit in time are hashed afterwards in the background, one at a time, so preparing the report again includes their hashes.
 
 **Mod files are a last resort, never a default.** A report offers a mod's own archives (unticked) only when all of these hold:
 

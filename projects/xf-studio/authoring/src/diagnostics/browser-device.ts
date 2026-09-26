@@ -122,7 +122,7 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       return { browser: browserName(win.navigator.userAgent), gpu: renderer, webgl2 };
     },
     async state() {
-      try { return await api<{ mode: DiagnosticsMode; until: string | null; minutes: number }>("state"); } catch { return null; }
+      try { return await api<{ mode: DiagnosticsMode; until: string | null; minutes: number; preparing?: string | null }>("state"); } catch { return null; }
     },
     setMode: mode => api("mode", { mode }, "XF Studio couldn't change diagnostic mode. Try again."),
     prepare: ref => api<ReportManifest>("report", { ref }, "XF Studio couldn't prepare the report. Try again in a moment."),

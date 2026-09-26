@@ -126,7 +126,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     summaryFiles.hidden = !report.files;
     if (report.files) { setText(readme, report.files.readme); setText(index, report.files.index); }
     // The status follows the report's own steps; a message from the mode switch stays until the report says something new.
-    const said = report.phase === "preparing" ? "Preparing the report…" : report.busy === "saving" ? "Making the report file…"
+    const said = report.phase === "preparing" ? report.message ?? "Preparing the report…" : report.busy === "saving" ? "Making the report file…"
       : report.busy === "copying" ? "Copying…" : report.busy === "opening" ? "Opening the issue page…" : report.message ?? "";
     if (said !== lastSaid) { lastSaid = said; setText(status, said); }
     for (const group of report.groups) {
