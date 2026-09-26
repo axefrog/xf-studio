@@ -8,10 +8,17 @@ import type { Capability } from "./menu";
 export type Command = { id: string; title: string; group: string; icon?: IconName; shortcut?: string; keywords?: string;
   capability(): Capability; run(): void };
 
-/** Palette search: every whitespace-separated term must occur in the title, group or keywords. */
+/**
+ * Palette search: every whitespace-separated term must occur in the title, group or keywords. The matches come back grouped
+ * (UI-91): each group once, where it first appears, its commands in their own order.
+ */
 export function matchCommands<T extends Pick<Command, "title" | "group" | "keywords">>(commands: readonly T[], query: string): T[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return commands.filter(command => terms.every(term => `${command.title} ${command.group} ${command.keywords ?? ""}`.toLowerCase().includes(term)));
+  const found = commands.filter(command => terms.every(term => `${command.title} ${command.group} ${command.keywords ?? ""}`.toLowerCase().includes(term)));
+  const order = new Map<string, number>();
+  for (const command of found) if (!order.has(command.group)) order.set(command.group, order.size);
+  return found.map((command, index) => ({ command, index })).sort((a, b) => order.get(a.command.group)! - order.get(b.command.group)! || a.index - b.index)
+    .map(item => item.command);
 }
 
 /** Keyboard-first command palette. Disabled commands stay listed with their reason. */
@@ -26,12 +33,15 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
     h("div", { class: "palette-foot" }, h("span", { text: "↑↓ choose · Enter run · disabled commands explain why" })));
   let items: Command[] = [], active = 0;
   const all = commands();
+  // Each command's availability is asked once while the palette is open, not on every keystroke (UI-14); running one closes it.
+  const known = new Map<Command, Capability>();
+  const capabilityOf = (command: Command) => { let value = known.get(command); if (!value) known.set(command, value = command.capability()); return value; };
   const render = () => {
     items = matchCommands(all, input.value);
     active = Math.min(active, Math.max(0, items.length - 1));
     let group = "";
     list.replaceChildren(...items.flatMap((command, index) => {
-      const capability = command.capability();
+      const capability = capabilityOf(command);
       const nodes: HTMLElement[] = [];
       if (command.group !== group) { group = command.group; nodes.push(h("li", { class: "palette-group", role: "presentation", text: group })); }
       const option = h("li", { class: `palette-item${index === active ? " active" : ""}`, role: "option", id: `${listId}-${index}`,
@@ -51,6 +61,7 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
   };
   const run = (index: number) => {
     const command = items[index];
+    // Dispatch revalidates: the command's availability is asked again at the moment it runs.
     if (!command || !command.capability().available) return;
     close(true);
     command.run();

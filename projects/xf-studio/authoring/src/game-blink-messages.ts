@@ -9,8 +9,11 @@
  * grounded in that clip rather than a game timing.
  */
 export const BLINK_REPEAT_SECONDS = 2.45;
-/** The blink asset was never prepared on this computer (or can't be fetched). */
-export const GAME_BLINK_MISSING = "The game's blink hasn't been prepared on this computer yet.";
+/**
+ * The blink asset was never prepared on this computer (or can't be fetched). Preparing it needs developer tools, so a person is
+ * told plainly that it isn't there, with nothing to do (UI-86).
+ */
+export const GAME_BLINK_MISSING = "The game's blink isn't part of this version of XF Studio yet. The idle blinks on its own.";
 /** The asset is there but isn't a readable blink (cut short, overwritten, not a GLB). */
 export const GAME_BLINK_DAMAGED = "The prepared blink is damaged; prepare it again.";
 /** The asset reads, but none of its joints are in the preview head's skeleton. */

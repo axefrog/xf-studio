@@ -54,7 +54,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   const commitName = () => {
     const current = port.library.summary().draft?.name;
     if (!current || nameInput.value.trim() === current) { nameInput.value = current ?? ""; return; }
-    if (!nameInput.value.trim()) { rt.feedback.toast("warning", "Presets", "A collection needs a name; the previous name was kept."); nameInput.value = current; return; }
+    // The naming rules (a name can't be blank or too long) are the application's; a refusal says why and keeps the old name (UI-93).
     if (!rt.dispatch({ kind: "collection.rename", name: nameInput.value })) nameInput.value = current;
   };
   nameInput.addEventListener("change", commitName);
@@ -202,14 +202,17 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     exportMask: button({ label: "Export layer mask", icon: "export", small: true, onClick: () => void rt.file({ kind: "mask.export" }) }),
   };
   let savedSignature = "";
+  // A research tool (UI-85): the compiler plan is input for the offline compiler, not a mod.
+  const researchNote = note("Research: a compiler plan is input for the offline compiler, not a mod. Exporting one saves a version first.");
   const element = h("div", { class: "panel-content" },
     section("Local library", stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy),
-      note("Saving records an immutable revision in the local SQLite library. Edits made while a save runs stay in your draft.")),
+      note("Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.")),
     section("Saved collections", h("div", { class: "row between" }, h("span", { class: "muted small", text: "Opening keeps your current draft recoverable." }), refresh),
       savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
     section("Files", h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection, fileButtons.exportPlan,
       fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask),
-    note("Collection and recipe files keep editable work. Exporting a collection or compiler plan saves a library revision first. A compiler plan is input for the offline compiler, not a mod. Masks are 2048² white + alpha PNGs of the selected layer.")));
+    note("Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first. A layer mask is a picture of the selected layer's shape."),
+    researchNote));
   return {
     spec: { id: "library", ...PANEL_META["library"], element },
     update(frame) {
@@ -242,6 +245,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         }));
       }
       savedEmpty.hidden = library.summaries.length > 0;
+      const research = !!frame.preferences.researchTools;
+      fileButtons.exportPlan.hidden = !research; researchNote.hidden = !research;
       for (const [key, action] of [["importCollection", "collection.import"], ["exportCollection", "collection.export"], ["exportPlan", "collection.plan"],
         ["importRecipe", "recipe.import"], ["exportRecipe", "recipe.export"], ["exportMask", "mask.export"]] as const)
         applyCapability(fileButtons[key], port.files.capability({ kind: action }));
@@ -413,8 +418,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
   for (const product of r.products) {
     const block = h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: product.modName }),
       product.features.map(feature => ` · ${feature.label} in the “${feature.selectorLabel}” selector`).join("")));
+    // The game's own names for the looks (appearance IDs) are in Details, not the list (UI-85).
     if (!isBuild) block.append(h("ul", { class: "result-list" }, product.features.flatMap(feature => feature.presets.map(preset =>
-      h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: String(preset.appearance ?? "") }))))));
+      h("li", {}, icon("check"), h("span", { text: name(preset.id) }))))));
     // A built mod is added to the mod manager, or its folder shown, from here; its path is in Details (UI-82).
     if (isBuild) block.append(installRow(product.productId).element);
     card.append(block);
@@ -440,6 +446,8 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     ...(isBuild ? (r as ReadonlyDeep<PackageBuildResult>).products.flatMap(product => [[`${product.modName} files`, product.package],
       [`${product.modName} manifest`, product.manifest],
       [`${product.modName} archive SHA-256`, product.archiveSha256]] as [string, string][]) : []),
+    ...(!isBuild ? r.products.flatMap(product => product.features.flatMap(feature => feature.presets.map(preset =>
+      [`“${name(preset.id)}” in game`, String(preset.appearance ?? "")] as [string, string]))) : []),
     ["Collection fingerprint (SHA-256)", r.collectionSha256],
     ...r.products.flatMap(product => product.features.map(feature => [`${feature.label} fingerprint (SHA-256)`, feature.packagedSha256] as [string, string]))]));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));

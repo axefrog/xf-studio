@@ -7,6 +7,9 @@
  * - **History** (CORE-59): creator changes have their own small Undo history, separate from the makeup look's. Each step is one
  *   whole context state; loading a save or a preset is one step, and so is "hide my V's own makeup" (`character.hideOwnMakeup`, whose
  *   rule lives here: the host's projection marks the makeup section; CORE-71). It lives in memory only.
+ * - **One Undo for the Character panel** (UI-81): `character.undo` and `character.redo` step back and forward through every change
+ *   made in the panel, creator choices and Clothing alike, in the order they were made (`order`); a new change of either kind clears
+ *   what could be redone. `character.undoClothing` and `character.redoClothing` still step the Clothing setting's own steps alone.
  * - **A new V clears the choices made on the previous one**; `character.keepChanges` puts them back on the new V as one more step
  *   (offered until the next change).
  * - **Gating** (CORE-73): every action that changes choices needs the catalogue of the shown V's body (`not_ready` until then); a V
@@ -222,6 +225,9 @@ export class CharacterContextActions {
   private clothing: ClothingSetting = DEFAULT_CLOTHING;
   private clothingPast: { label: string; setting: ClothingSetting }[] = [];
   private clothingFuture: { label: string; setting: ClothingSetting }[] = [];
+  /** Which history each of the panel's steps is in, oldest first, and the undone ones (newest last): one order for Undo (UI-81). */
+  private order: ("v" | "clothing")[] = [];
+  private undone: ("v" | "clothing")[] = [];
 
   constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
     const stored = storedCharacterOf(initial.stored);
@@ -248,7 +254,7 @@ export class CharacterContextActions {
   snapshot(): CharacterContextSnapshot {
     const notes = summariseMissing(this.state.notCarried).summary.map(item => item.message);
     return structuredClone({ phase: this.catalogue.phase, message: this.catalogue.message, origin: this.state.origin, bodyGender: this.state.bodyGender,
-      set: this.state.choices.length, undo: this.past.at(-1)?.label ?? null, redo: this.future.at(-1)?.label ?? null,
+      set: this.state.choices.length, undo: this.stepLabel(this.order, this.past, this.clothingPast), redo: this.stepLabel(this.undone, this.future, this.clothingFuture),
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
       retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
       prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, clothing: this.clothingSnapshot(),
@@ -671,9 +677,9 @@ export class CharacterContextActions {
         if (this.prepared.clearing) return refusal("busy", "The prepared game files are being cleared.");
         return this.prepared.bytes === 0 ? refusal("invalid_value", "There are no prepared game files to clear.") : { available: true };
       case "character.undo":
-        return this.past.length ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
+        return this.order.length ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
       case "character.redo":
-        return this.future.length ? { available: true } : refusal("invalid_value", "There is no undone character change to redo.");
+        return this.undone.length ? { available: true } : refusal("invalid_value", "There is no undone character change to redo.");
       case "character.setClothing":
         if (this.clothing.state === action.state) return refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} is already shown.`);
         return this.offeredStates().includes(action.state) ? { available: true }
@@ -700,10 +706,26 @@ export class CharacterContextActions {
   private clothingStep(label: string, setting: ClothingSetting) {
     if (sameClothing(setting, this.clothing)) return;
     this.clothingPast.push({ label, setting: this.clothing });
-    if (this.clothingPast.length > HISTORY_LIMIT) this.clothingPast.shift();
-    this.clothingFuture = [];
+    this.ordered("clothing", this.clothingPast);
     this.clothing = setting;
     this.publish();
+  }
+  /** A new step of one kind: it joins the panel's order, the oldest step past the limit goes, and nothing can be redone any more. */
+  private ordered(kind: "v" | "clothing", past: unknown[]) {
+    this.order.push(kind);
+    if (past.length > HISTORY_LIMIT) { past.shift(); this.order.splice(this.order.indexOf(kind), 1); }
+    this.future = []; this.clothingFuture = []; this.undone = [];
+  }
+  /** The label of the step the panel's Undo (or Redo) would take next. */
+  private stepLabel(order: ("v" | "clothing")[], choices: { label: string }[], clothing: { label: string }[]) {
+    const kind = order.at(-1);
+    return (kind === "v" ? choices.at(-1)?.label : kind === "clothing" ? clothing.at(-1)?.label : undefined) ?? null;
+  }
+  /** Move the newest step of `kind` from one order to the other (the Clothing setting's own Undo and Redo). */
+  private reorder(kind: "v" | "clothing", from: ("v" | "clothing")[], to: ("v" | "clothing")[]) {
+    const at = from.lastIndexOf(kind);
+    if (at >= 0) from.splice(at, 1);
+    to.push(kind);
   }
   private clothingTravel(from: { label: string; setting: ClothingSetting }[], to: { label: string; setting: ClothingSetting }[]) {
     const entry = from.pop()!;
@@ -786,8 +808,19 @@ export class CharacterContextActions {
           .finally(() => { this.publish(); this.refreshPrepared(); });
         break;
       }
-      case "character.undo": this.travel(this.past, this.future); break;
-      case "character.redo": this.travel(this.future, this.past); break;
+      // The panel's one Undo (UI-81): the newest change, creator choice or Clothing.
+      case "character.undo": {
+        const kind = this.order.pop()!;
+        this.undone.push(kind);
+        if (kind === "v") this.travel(this.past, this.future); else this.clothingTravel(this.clothingPast, this.clothingFuture);
+        break;
+      }
+      case "character.redo": {
+        const kind = this.undone.pop()!;
+        this.order.push(kind);
+        if (kind === "v") this.travel(this.future, this.past); else this.clothingTravel(this.clothingFuture, this.clothingPast);
+        break;
+      }
       case "character.setClothing":
         this.clothingStep(`Clothing: ${CLOTHING_STATE_LABELS[action.state]}`, { state: action.state,
           custom: action.state === "custom" ? this.shownAreas() : this.clothing.custom });
@@ -799,8 +832,8 @@ export class CharacterContextActions {
           { state: "custom", custom: CLOTHING_AREAS.filter(area => shown.has(area)) });
         break;
       }
-      case "character.undoClothing": this.clothingTravel(this.clothingPast, this.clothingFuture); break;
-      case "character.redoClothing": this.clothingTravel(this.clothingFuture, this.clothingPast); break;
+      case "character.undoClothing": this.reorder("clothing", this.order, this.undone); this.clothingTravel(this.clothingPast, this.clothingFuture); break;
+      case "character.redoClothing": this.reorder("clothing", this.undone, this.order); this.clothingTravel(this.clothingFuture, this.clothingPast); break;
     }
     return {};
   }
@@ -820,8 +853,7 @@ export class CharacterContextActions {
   private step(label: string, next: State, clearKeep = true) {
     if (next === this.state || (sameChoices(next.choices, this.state.choices) && next.origin === this.state.origin && next.save === this.state.save)) return;
     this.past.push({ label, state: this.state });
-    if (this.past.length > HISTORY_LIMIT) this.past.shift();
-    this.future = [];
+    this.ordered("v", this.past);
     if (clearKeep) this.cleared = [];
     this.apply(next);
   }

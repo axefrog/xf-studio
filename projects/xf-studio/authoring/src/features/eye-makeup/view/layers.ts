@@ -49,7 +49,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       }
       setAttr(eye, "aria-pressed", String(layer.enabled));
       setAttr(eye, "aria-label", `${layer.enabled ? "Hide" : "Show"} ${layer.name}`);
-      eye.title = layer.enabled ? "Visible — hidden layers stay authored but are not packaged" : "Hidden — click to show";
+      eye.title = layer.enabled ? "Shown. A hidden layer is kept, but left out of your mod files." : "Hidden: left out of your mod files. Click to show it.";
       eye.tabIndex = selected ? 0 : -1;
       const swatch = row.lead.querySelector<HTMLElement>(".swatch")!;
       swatch.style.setProperty("--swatch", layer.color);
@@ -59,7 +59,9 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       const flag = row.trailing.querySelector<HTMLElement>(".finish-flag")!;
       const status = ctx.facade.layerExport(layer.id);
       flag.hidden = status ? status.exportable : descriptor?.exportAdapter !== "none";
-      flag.title = status && !status.exportable ? `Omitted from mod packages: ${status.reason}` : "Preview-study finish: omitted from mod packages";
+      flag.title = status && !status.exportable ? `Left out of your mod files: ${status.reason}` : "Preview only: left out of your mod files";
+      // The flag is drawn for sighted people; the row says the same to screen readers (UI-95).
+      setAttr(row.main, "aria-description", flag.hidden ? undefined : flag.title);
       if (!flag.childElementCount) flag.append(icon("warning"));
       row.element.classList.toggle("hidden-layer", !layer.enabled);
       const menu = row.trailing.querySelector<HTMLButtonElement>("button")!;
@@ -100,7 +102,9 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       if (locked) setText(newerBody, reason);
       empty.hidden = !hasPreset || locked || layers.length > 0;
       setText(count, String(layers.length));
-      count.title = "The current preview budget is 32 layers per preset.";
+      // The layer limit is the recipe's rule: the count names it only when it stops Add (UI-93).
+      const addable = addLayerCapability(ctx);
+      count.title = addable.available ? "Layers in this preset" : addable.reason ?? "";
       list.update([...layers].reverse().map(layer => {
         const descriptor = finishOf(layer.finish);
         return { id: layer.id, name: layer.name, meta: `${descriptor?.label.split(" /")[0] ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };

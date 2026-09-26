@@ -6,11 +6,13 @@
  * Options the 3D view can't draw say so.
  *
  * Every change is a typed `character.*` action with its own Undo history (CORE-59); the rules live in the application service, so this
- * module only dispatches (the quick action is `character.hideOwnMakeup`, CORE-71). Nothing here moves the layout on its own (UI-68):
+ * module only dispatches (the quick action is `character.hideOwnMakeup`, CORE-71). One Undo rule covers the whole panel (UI-81): its
+ * Undo and Redo, and Ctrl+Z / Ctrl+Y anywhere in it except a text box, step through the panel's changes (creator choices and
+ * Clothing) in the order they were made; the header's Undo covers the makeup only and says so. Nothing here moves the layout on its own (UI-68):
  * one status line of fixed height carries what is on its way or failed, with Try again and Keep my changes inline, and a Details
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
- * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72). The
- * preview-only controls (eye shape, visibility toggles) follow below.
+ * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72). What the 3D
+ * view shows (eye shape, visibility switches) comes before the long list of creator options (UI-96); files come last.
  *
  * An open row's choices are prepared ahead in the background (character-context-actions.ts `prefetch`), the ones in view first; each
  * choice not prepared yet carries a corner mark, one line under the search explains the marks once, and a first-time change says why
@@ -20,7 +22,7 @@
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
 import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
-import { h, setAttr, setText } from "../dom";
+import { h, isTextInput, setAttr, setText } from "../dom";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -73,8 +75,9 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const useDefault = button({ label: "Default V", icon: "character", small: true, variant: "quiet",
     title: "Show the character creator's default V (Undo shows your V again)",
     onClick: () => dispatch({ kind: "character.useDefault", bodyGender: "female" }) });
-  const undo = button({ label: "Undo character change", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
-  const redo = button({ label: "Redo character change", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
+  // The panel's one Undo and Redo (UI-81): creator choices and Clothing, in the order they were made.
+  const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
+  const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
   const hide = button({ label: "Hide my V's own makeup", icon: "eye", variant: "primary", onClick: () => dispatch({ kind: "character.hideOwnMakeup" }) });
   const resetAll = button({ label: "Reset all", icon: "reset", small: true, variant: "quiet", title: "Every creator change back to your V's own (Undo brings them back)",
     onClick: () => dispatch({ kind: "character.resetAll" }) });
@@ -101,10 +104,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const noMatch = note("No option or choice matches.");
   noMatch.hidden = true;
 
-  // ---- Clothing: which of V's clothes the 3D view shows (a viewing setting with its own Undo) ----
+  // ---- Clothing: which of V's clothes the 3D view shows (a viewing setting; the panel's Undo steps it too) ----
   const clothingState = new SelectField<ClothingState>({ label: "Clothes in the 3D view", onChange: state => dispatch({ kind: "character.setClothing", state }) });
-  const clothingUndo = button({ label: "Undo clothing change", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undoClothing" }) });
-  const clothingRedo = button({ label: "Redo clothing change", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redoClothing" }) });
   // One switch per clothing area the save dresses; switching one picks the areas yourself (the setting becomes "Choose areas").
   const areaToggles = new Map<ClothingArea, Toggle>();
   const clothingAreas = h("div", { class: "cc-clothing-areas" });
@@ -130,17 +131,19 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
       h("span", { class: "cc-history" }, undo, redo)), status, messages),
     h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
-    section("Clothing", h("div", { class: "row gap-s cc-clothing" }, clothingState.element, h("span", { class: "cc-history" }, clothingUndo, clothingRedo)),
-      clothingAreas, clothingNote),
+    section("Clothing", h("div", { class: "row gap-s cc-clothing" }, clothingState.element), clothingAreas, clothingNote),
+    // What the 3D view shows sits above the long list of creator options, so its switches are found without scrolling (UI-96).
+    section("In the 3D view", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, detailNote,
+      note("These change what the 3D view shows, never your V or your makeup.")),
     h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, legend, sections, noMatch),
-    section("3D view only", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, detailNote,
-      h("div", { class: "row wrap gap-s" }, exportV),
+    section("Files", h("div", { class: "row wrap gap-s" }, exportV),
       h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared),
-      note("These change what the 3D view shows, never your V or your makeup. A save is read locally and never changed or uploaded.")));
+      note("A save is read on this computer and never changed or uploaded.")));
 
-  // Creator changes have their own Undo: inside this panel the Undo keys step through them, not the makeup's history.
+  // One rule (UI-81): inside this panel the Undo keys step through the panel's own changes (creator choices and Clothing), whatever has
+  // focus (a switch, a list, a button), never the makeup's history. Only a text box keeps its own text Undo.
   element.addEventListener("keydown", event => {
-    if (event.target instanceof HTMLInputElement) return;
+    if (isTextInput(event.target) && (event.target as Element).tagName.toLowerCase() !== "select") return;
     const key = event.key.toLowerCase(), mod = event.ctrlKey || event.metaKey;
     if (!mod || event.altKey || (key !== "z" && key !== "y")) return;
     event.preventDefault();
@@ -159,7 +162,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   let aheadRow: string | null = null;
   const rowKey = (view: RowView) => `${view.row.part}/${view.row.slot}`;
   const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption) => [option.coverage[0] === "not-rendered" ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
-    option.dependsOn.length ? `Turned on by ${option.dependsOn.join(" or ")}.` : ""].filter(Boolean).join(" ");
+    option.dependsOn.length ? `Choose ${option.dependsOn.join(" or ")} first: this follows it.` : ""].filter(Boolean).join(" ");
 
   function buildRows(panel: Readonly<CcPanel>) {
     const rows: RowControls[] = [];
@@ -338,8 +341,11 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo") };
       applyCapability(undo, port.authoring.capability({ kind: "character.undo" }));
       applyCapability(redo, port.authoring.capability({ kind: "character.redo" }));
-      undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel)` : "No character change to undo.";
-      redo.title = context?.redo ? `Redo: ${context.redo} (${keys.redo} in this panel)` : "No undone character change to redo.";
+      undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel). Covers creator options and Clothing; the header's Undo covers your makeup.`
+        : "No change in this panel to undo.";
+      redo.title = context?.redo ? `Redo: ${context.redo} (${keys.redo} in this panel)` : "No undone change in this panel to redo.";
+      setAttr(undo, "aria-label", context?.undo ? `Undo in the Character panel: ${context.undo}` : "Undo in the Character panel");
+      setAttr(redo, "aria-label", context?.redo ? `Redo in the Character panel: ${context.redo}` : "Redo in the Character panel");
       // What couldn't be used, in plain lines, behind Details.
       const lines = [...(view?.missing.summary.map(item => item.message) ?? []), ...(context?.notes ?? []), ...(context?.viewError ? [context.viewError] : [])];
       const messageKey = JSON.stringify(lines);
@@ -377,10 +383,6 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // Clothing.
       const clothing = context?.clothing;
       clothingState.update(clothing?.states ?? [], clothing?.state, !clothing, "Your V appears once the 3D preview is ready.");
-      applyCapability(clothingUndo, port.authoring.capability({ kind: "character.undoClothing" }));
-      applyCapability(clothingRedo, port.authoring.capability({ kind: "character.redoClothing" }));
-      clothingUndo.title = clothing?.undo ? `Undo: ${clothing.undo}` : "No clothing change to undo.";
-      clothingRedo.title = clothing?.redo ? `Redo: ${clothing.redo}` : "No undone clothing change to redo.";
       // The switches follow the areas the save dresses (built once per area, so a change never rebuilds them).
       for (const { area, label } of clothing?.areas ?? []) if (!areaToggles.has(area)) {
         const toggle = new Toggle({ label, onChange: shown => dispatch({ kind: "character.setClothingArea", area, shown }) });
@@ -398,16 +400,20 @@ export function characterPanel(rt: StudioRuntime): PanelController {
 
       // Preview-only controls.
       const shapes = state.eyeShapeOptions?.choices ?? [];
+      // Plain names; the head's own shape IDs show only with research tools (UI-85).
+      const research = !!frame.preferences.researchTools;
       const shapeLabel = (index: number) => {
         const choice = shapes.find(entry => entry.index === index);
-        return choice ? `Eye shape ${choice.number}${choice.target ? ` (${choice.target})` : " (base)"}` : "";
+        return choice ? `Eye shape ${Number(choice.number)}${research ? choice.target ? ` (${choice.target})` : " (base)" : ""}` : "";
       };
-      eyeShape.update(shapes.map(choice => ({ value: String(choice.index), label: shapeLabel(choice.index) })), String(preview?.eyeShape ?? 9),
+      // The shown eye shape is the preview's own state; the view keeps no default of its own (UI-93).
+      eyeShape.update(shapes.map(choice => ({ value: String(choice.index), label: shapeLabel(choice.index) })), preview ? String(preview.eyeShape) : undefined,
         !preview || !shapes.length, (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
+      const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "These work once the 3D preview is ready.";
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
-      setText(eyeNote, overriding || "The 3D view's eye shape, which eye makeup is placed on. It overrides your V's Eyes row in the 3D view.");
-      const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading.";
+      // Before the preview is ready this line says why the section waits, once (UI-90).
+      setText(eyeNote, !preview ? loading : overriding || "The 3D view's eye shape, which eye makeup is placed on. It overrides your V's Eyes row in the 3D view.");
       for (const [control, detail] of [[brows, "brows"], [lashes, "lashes"]] as const) {
         const enabled = !!preview?.[detail], allowed = port.authoring.capability({ kind: "preview.setDetail", detail, enabled: true });
         control.update(enabled, { disabled: !preview || (!enabled && !allowed.available), reason: allowed.reason ?? loading });

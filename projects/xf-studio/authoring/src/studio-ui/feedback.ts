@@ -46,12 +46,16 @@ export class Feedback {
    * ordinary refusal (UI-80: nothing to undo, busy, out of range) is a warning that fades, whoever raised it.
    */
   toast(tone: Tone, source: string, message: string, actions: FeedbackAction[] = [], options: ToastOptions = {}) {
+    // The same notice already on screen isn't shown (or logged) again: a repeated refusal during a drag says it once (UI-15).
+    const key = `${tone}\u0000${source}\u0000${message}`;
+    const shown = [...this.toasts.children].find(child => (child as HTMLElement).dataset?.key === key && !child.classList.contains("leaving"));
+    if (shown && !options.ref) return () => { shown.classList.add("leaving"); setTimeout(() => shown.remove(), 160); };
     if (tone === "error" && options.ref === undefined && options.code !== undefined && this.diagnostics?.expected?.(options.code)) tone = "warning";
     const ref = options.ref !== undefined ? options.ref : tone === "error" ? this.diagnostics?.notice({ source, message, code: options.code }) ?? null : null;
     this.record(tone, source, message, ref ?? undefined);
     const all = ref && this.diagnostics ? [...actions, { label: "Report this problem", run: () => this.diagnostics!.report(ref) }] : actions;
     const close = () => { element.classList.add("leaving"); setTimeout(() => element.remove(), 160); };
-    const element = h("div", { class: `toast ${tone}`, role: tone === "error" ? "alert" : "status" },
+    const element = h("div", { class: `toast ${tone}`, role: tone === "error" ? "alert" : "status", "data-key": key },
       h("span", { class: "toast-icon" }, icon(toneIcon[tone])),
       h("div", { class: "toast-body" }, h("strong", { text: source }), h("p", { text: message }),
         ref ? h("p", { class: "toast-ref", text: `Reference ${ref}` }) : null,

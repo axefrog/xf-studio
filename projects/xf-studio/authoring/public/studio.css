@@ -168,6 +168,11 @@ span.category { border-color: transparent; background: transparent; padding-left
 .control-help, .control-note { font-size: var(--fs-xs); color: var(--text-muted); }
 .control-note { color: var(--warning); }
 .control-note.info { color: var(--text-muted); }
+/* A control's note line keeps its place once it has one (UI-90): an empty note keeps its height. */
+.control-note:not([hidden]) { display: block; min-height: 1.35em; }
+.control-note.empty { visibility: hidden; }
+/* A note whose text changes length as it counts keeps room for its longer form. */
+.note.steady-note { min-height: 4.2em; }
 .field { height: var(--control-h); padding: 0 var(--sp-4); background: var(--bg-sunken); border: 1px solid var(--line-strong); border-radius: 0 var(--bevel-sm) 0 0; min-width: 0; width: 100%; }
 .field:hover:not(:disabled) { border-color: var(--text-muted); }
 .field:focus-visible { outline-offset: 0; }
@@ -232,9 +237,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-tab { position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5); border: 0; border-right: 1px solid var(--line-soft); background: transparent;
   color: var(--text-muted); white-space: nowrap; font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .09em; text-transform: uppercase; touch-action: none; flex: none; }
 .dock-tab[aria-selected="true"] { padding-right: var(--sp-3); }
-/* Condensed strips keep the active tab's label; the others become icon tabs with an accessible name. */
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-4); }
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+/* Condensed strips keep the active tab's full label; the others keep a short visible label (never icon-only, UI-96), and the
+   strip scrolls when even that doesn't fit. */
+.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
+.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
 .dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
@@ -575,6 +581,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .viewport-top, .viewport-bottom { position: absolute; left: var(--sp-4); right: var(--sp-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); pointer-events: none; }
 .viewport-top { top: var(--sp-4); } .viewport-bottom { bottom: var(--sp-4); align-items: flex-end; }
 .viewport-top > *, .viewport-bottom > * { pointer-events: auto; }
+/* The readiness badge stays at the right, with or without the hint strip beside it (UI-90). */
+.viewport-bottom > .ready-badge { margin-left: auto; }
 .viewport-context { font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; background: var(--stage-chip); padding: 6px 8px; max-width: 60%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 2px solid var(--accent); }
 .viewport-tools { display: flex; gap: 1px; background: var(--stage-chip); padding: 2px; }

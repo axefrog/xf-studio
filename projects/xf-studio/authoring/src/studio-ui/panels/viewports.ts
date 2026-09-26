@@ -1,4 +1,5 @@
 import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel } from "../../input-bindings";
+import { readinessText } from "../readiness-text";
 import { ViewportInputHints } from "../input-hints";
 import type { ViewportHostKind } from "../../viewport-attachment";
 import { button, applyCapability } from "../controls";
@@ -31,15 +32,11 @@ function readinessBadge() {
   // Not a live region: it changes on every raster and would flood assistive technology (audit B-25).
   const element = h("span", { class: "ready-badge" });
   return { element, update(frame: Frame) {
-    const r = frame.readiness, label = r.size >= 1024 ? `${r.size / 1024}K` : String(r.size);
-    const headAvailable = frame.viewport.head.phase === "ready";
-    element.dataset.phase = r.phase;
-    setText(element, r.phase === "ready" ? `${headAvailable ? "Preview" : "UV masks"} ${label} · ready` : r.phase === "updating"
-      ? `Updating ${headAvailable ? "preview" : "UV masks"} ${label}${r.pending ? ` · ${r.pending} queued` : ""}` : `${headAvailable ? "Preview" : "UV masks"} blocked`);
-    element.title = r.error ?? (r.phase === "ready" ? headAvailable
-      ? "Every enabled layer shows its latest complete texture in the 3D preview."
-      : "UV masks are ready. The 3D head preview isn't available."
-      : "Showing the last complete textures while new ones compute.");
+    // The same wording as the status bar and Preview quality (UI-92).
+    const readiness = readinessText(frame);
+    element.dataset.phase = readiness.phase;
+    setText(element, readiness.label);
+    element.title = readiness.detail;
   } };
 }
 

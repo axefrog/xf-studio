@@ -5,12 +5,15 @@ import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
+import { readinessText } from "../readiness-text";
 import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
 import type { LightingStatus } from "../../preview-actions";
 import type { MotionState } from "../../motion-actions";
 import type { DetailLimit, DetailNotice } from "../../detail-limits";
 import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
 
+/** The field-of-view line: what the slider does, in plain words (UI-85). */
+const FOV_NOTE = "The camera moves closer or further as you change the lens angle, so your V's face stays the same size.";
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
 const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", piercings: "Piercings", body: "Body", clothing: "Clothes" } as const;
@@ -54,6 +57,13 @@ export function lightingPresetLine(preset: LightingPreset | undefined, status: L
 
 export function lightingPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
+  // Every camera and light change goes through the validated dispatch, and a refusal is said (UI-15); the feedback shows a repeated
+  // refusal once while it is on screen, so a slider drag can't flood it.
+  const edit = (action: Parameters<typeof port.authoring.dispatch>[0]) => {
+    const result = port.authoring.dispatch(action);
+    rt.report(action.kind, result);
+    return result;
+  };
   const preset = new Segmented<LightingPreset>({ label: "Lighting", options: [
     { value: "studio", label: "Studio", title: "The Studio's soft authoring light" },
     { value: "creator", label: "Character creator", title: "The game's creator and mirror lighting, for comparing with the game" }],
@@ -72,32 +82,32 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const log = (value: number) => Math.log10(value), exposureRange = rt.range("preview.setCreatorLighting", "value", "exposure");
   const creatorExposure = new Slider({ label: "Creator exposure (k)", min: log(exposureRange.min), max: log(exposureRange.max), step: .01,
     format: value => (10 ** value).toPrecision(3),
-    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); } } });
   const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
     title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
-  const diagnostics = h("details", { class: "section" }, h("summary", { text: "Advanced: creator lighting calibration" }),
+  // A research tool (UI-85): shown only with View preferences › Show research tools.
+  const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
     note("For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise."),
     intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
     transaction: {
       edit: value => {
-        const result = port.authoring.dispatch({ kind: "camera.setFov", degrees: value });
+        const result = edit({ kind: "camera.setFov", degrees: value });
         const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-        setText(fovNote, limited ? "Framing reached the camera limit. Pan or use Front view to recover the subject." :
-          "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
+        setText(fovNote, limited ? "Framing reached the camera limit. Pan or use Front view to bring your V back." : FOV_NOTE);
       },
-      commit: () => { port.authoring.dispatch({ kind: "camera.endFovGesture" }); },
-      cancel: () => { port.authoring.dispatch({ kind: "camera.endFovGesture" }); },
+      commit: () => { edit({ kind: "camera.endFovGesture" }); },
+      cancel: () => { edit({ kind: "camera.endFovGesture" }); },
     } });
   const front = button({ label: "Front view", icon: "front", small: true, onClick: () => {
-    const result = port.authoring.dispatch({ kind: "camera.front" });
+    const result = edit({ kind: "camera.front" });
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
     if (limited) setText(fovNote, "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV.");
   } });
   const bodyView = button({ label: "Whole body", icon: "body", small: true, title: "Frame your V's whole body", onClick: () => {
-    const result = port.authoring.dispatch({ kind: "camera.body" });
+    const result = edit({ kind: "camera.body" });
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
     if (limited) setText(fovNote, "This pane is too narrow to fit the whole body within the camera range. Widen the pane or increase FOV.");
   } });
@@ -110,14 +120,14 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const studioExposureRange = rt.range("preview.setExposure", "value"), stops = (value: number) => Math.log2(value);
   const exposure = new Slider({ label: "Exposure", min: stops(studioExposureRange.min), max: stops(studioExposureRange.max), step: .05,
     format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
-    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); } } });
   const angle = new Slider({ label: "Key light direction", ...rt.range("preview.setKeyAngle", "degrees"), step: 1,
     format: value => { const degrees = Math.round(value) % 360; return `${Math.round(value)}° ${degrees === 0 ? "front" : degrees === 180 ? "behind"
       : degrees < 180 ? "from V's right" : "from V's left"}`; },
-    transaction: { edit: degrees => { port.authoring.dispatch({ kind: "preview.setKeyAngle", degrees }); } } });
+    transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); } } });
   const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number) => new Slider({ label,
     ...rt.range("preview.setStudioLight", "value", key), step, format,
-    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setStudioLight", key, value }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); } } });
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   const elevation = studioSlider("elevation", "Key light height", value => `${Math.round(value)}°`, 1);
   const keyStrength = studioSlider("key", "Key light strength", percent, .05);
@@ -139,7 +149,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section("Light", preset.element, presetNote, studioControls),
     diagnostics,
-    section("Display", surface.element, wire.element, normals.element, optics.element, opticsNote),
+    section("Display", surface.element, normals.element, h("div", { class: "research-only" }, wire.element, optics.element, opticsNote)),
     note("Camera and light are workspace preferences: they persist locally and never enter recipes, Undo or export."));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
@@ -185,7 +195,13 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
         note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
-      if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
+      // The panel's loading reason is said once, in the line that is always there (UI-90).
+      if (!ready) setText(fovNote, loading.reason);
+      else if (!fovNote.textContent || fovNote.textContent === loading.reason) setText(fovNote, FOV_NOTE);
+      // Research tools (UI-85): the calibration and the display studies show only when asked for.
+      const research = !!frame.preferences.researchTools;
+      diagnostics.hidden = !research;
+      for (const node of element.querySelectorAll<HTMLElement>(".research-only")) node.hidden = !research;
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
@@ -213,25 +229,23 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value) });
   const idleNote = note("");
   const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
-    transaction: { edit: value => { port.authoring.dispatch({ kind: "motion.setBlink", value }); } } });
+    transaction: { edit: value => { const action = { kind: "motion.setBlink" as const, value }; rt.report(action.kind, port.authoring.dispatch(action)); } } });
   const play = button({ label: "Play blink", icon: "play", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.playBlink", playing: !motion?.blinkPlaying });
   } });
-  // The note links the preparation guide while the blink isn't ready (UI-62).
-  const blinkNoteText = h("span", {});
-  const blinkGuide = h("button", { class: "link-button", type: "button", text: "How to prepare the blink", hidden: true, onclick: () => {
-    void rt.port.links.open("blink-guide").then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Blink", outcome.message); });
-  } });
-  const blinkNote = h("p", { class: "note muted" }, blinkNoteText, " ", blinkGuide);
+  // Where the blink hasn't been prepared, its controls give way to one plain line (UI-86): preparing it needs developer tools, so the
+  // person is never sent to a developer guide.
+  const blinkNote = h("p", { class: "note muted" });
+  const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
   const element = h("div", { class: "panel-content" },
     section("Game idle", idle.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
-    section("Blink", blink.element, h("div", { class: "row" }, play), blinkNote));
+    section("Blink", blinkControls, blinkNote));
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
       const motion = frame.preview.motion;
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
-        (motion?.error ? `Idle unavailable: ${motion.error}` : "Motion preview is still loading.") };
+        motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       idle.update(!!motion?.idle, unavailable);
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
@@ -239,13 +253,13 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
       setText(idleNote, !motion?.available ? unavailable.reason : motion.idle
         ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "head moves" : "head still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
-        : "Extracted close-up body clip with offline-solved facial motion. Preview only; exact game timing is unverified.");
+        : "The character creator's close-up idle, made from your game files. Its timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
-      setText(blinkNoteText, blinkNoteLine(motion));
-      blinkGuide.hidden = !motion || motion.blinkAvailable;
+      blinkControls.hidden = !!motion && !motion.blinkAvailable;
+      setText(blinkNote, blinkNoteLine(motion));
     },
   };
 }
@@ -253,7 +267,8 @@ export function motionPanel(rt: StudioRuntime): PanelController {
 /** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
 export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError" | "blinkRepeatSeconds"> | undefined): string {
   if (!motion) return "";
-  if (!motion.blinkAvailable) return `${motion.blinkError ?? ""} It is made once from your own game files, like the idle.`.trim();
+  // Not prepared: one plain line and nothing to do (UI-86). A damaged or mismatched one says so (it was prepared, and can be again).
+  if (!motion.blinkAvailable) return motion.blinkError ?? "";
   const seconds = Number(motion.blinkRepeatSeconds.toFixed(2));
   return "The game's own normal blink, solved from your game files: lids, lashes, brows and makeup move together. Closure scrubs its closing half; "
     + `Play blink plays it at the game's speed, repeated every ${seconds} s (a Studio choice: the idle's average blink spacing). `
@@ -278,15 +293,11 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
       const key = JSON.stringify([readiness, frame.viewport.head.phase]);
       if (stateLine.dataset.key !== key) {
         stateLine.dataset.key = key;
-        const label = readiness.size >= 1024 ? `${readiness.size / 1024}K` : String(readiness.size);
-        stateLine.replaceChildren(
-          readiness.phase === "ready" ? badge(`${frame.viewport.head.phase === "ready" ? "Preview" : "UV masks"} ready · ${label}`, "success") :
-            readiness.phase === "updating" ? badge(`Updating UV masks · ${label}`, "info") : badge("UV masks blocked", "error"),
-          h("span", { class: "small", text: readiness.error ?? (readiness.phase === "updating"
-            ? `${readiness.pending} texture job${readiness.pending === 1 ? "" : "s"} queued${readiness.waiting ? "; some layers still show their previous complete result" : ""}.`
-            : frame.viewport.head.phase === "ready" ? "Every enabled layer shows its latest complete texture."
-              : "Generated UV masks are ready; the 3D head preview is unavailable.") }),
-          h("span", { class: "muted small", text: `Estimated generated-texture peak ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB; native assets and browser overhead are additional.` }));
+        // The same wording as the status bar and the head's badge (UI-92).
+        const text = readinessText(frame);
+        stateLine.replaceChildren(badge(text.label, readiness.phase === "ready" ? "success" : readiness.phase === "updating" ? "info" : "error"),
+          h("span", { class: "small", text: text.detail }),
+          h("span", { class: "muted small", text: `The makeup textures use about ${Math.ceil(readiness.estimatedBytes / 1048576)} MB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));
     },
