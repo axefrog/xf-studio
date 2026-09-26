@@ -6,12 +6,11 @@
  * terminating a worker releases everything it allocated.
  */
 import { createHash } from "node:crypto";
-import type { NativeArchivePool } from "./archive-reader";
+import type { NativeArchive, NativeArchivePool } from "./archive-reader";
 import { Cr2wFile } from "./cr2w-file";
 import type { Decompress } from "./kark";
 import { DecodeSession, DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
-import type { NativeArchive } from "./archive-reader";
 import { readResourceJson } from "./resource-document";
 
 export interface NativeDecodeRequest {
@@ -120,7 +119,7 @@ export class WorkerDecoder implements NativeDecoder {
   private worker: Worker | null = null;
   private ready: Promise<void> | null = null;
   private readonly queue: Pending[] = [];
-  private busy: { pending: Pending; timer: ReturnType<typeof setTimeout> } | null = null;
+  private busy: { pending: Pending; timer: ReturnType<typeof setTimeout> | null } | null = null;
   private closed = false;
   /** Workers started (1 + replacements after timeouts or crashes). */
   started = 0;
@@ -160,10 +159,8 @@ export class WorkerDecoder implements NativeDecoder {
     if (!this.worker) this.spawn();
     const pending = this.queue.shift()!;
     const worker = this.worker!;
-    const timer = setTimeout(() => this.timeout(worker), this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS);
-    this.busy = { pending, timer };
     // The budget starts once the worker is ready: a cold start (library load, JIT) is not charged to the resource.
-    clearTimeout(timer);
+    this.busy = { pending, timer: null };
     this.ready!.then(() => {
       if (this.busy?.pending !== pending || this.worker !== worker) return;
       this.busy.timer = setTimeout(() => this.timeout(worker), this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS);
@@ -173,7 +170,7 @@ export class WorkerDecoder implements NativeDecoder {
 
   private finish(outcome: NativeDecodeOutcome): void {
     const busy = this.busy!;
-    clearTimeout(busy.timer);
+    if (busy.timer) clearTimeout(busy.timer);
     this.busy = null;
     busy.pending.resolve(outcome);
     this.pump();
@@ -199,7 +196,7 @@ export class WorkerDecoder implements NativeDecoder {
   close(): void {
     this.closed = true;
     this.stopWorker();
-    if (this.busy) { clearTimeout(this.busy.timer); this.busy.pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." }); this.busy = null; }
+    if (this.busy) { if (this.busy.timer) clearTimeout(this.busy.timer); this.busy.pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." }); this.busy = null; }
     for (const pending of this.queue.splice(0)) pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." });
   }
 }

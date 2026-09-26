@@ -80,10 +80,13 @@ export function isPublisherSignature(result: AuthenticodeResult, sha256: string)
  */
 export function authenticodeSignature(path: string): AuthenticodeResult {
   const shell = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const script = "$p=$env:XFS_AUTHENTICODE_PATH; $s=Get-AuthenticodeSignature -LiteralPath $p; $h=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash;"
+  const script = "Import-Module Microsoft.PowerShell.Security, Microsoft.PowerShell.Utility; $p=$env:XFS_AUTHENTICODE_PATH;"
+    + " $s=Get-AuthenticodeSignature -LiteralPath $p; $h=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash;"
     + " [pscustomobject]@{status=[string]$s.Status; subject=[string]$s.SignerCertificate.Subject; sha256=[string]$h} | ConvertTo-Json -Compress";
-  const run = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script],
-    { env: { ...process.env, XFS_AUTHENTICODE_PATH: path }, encoding: "utf8", timeout: 30_000, windowsHide: true });
+  // A PSModulePath inherited from PowerShell 7 points Windows PowerShell 5.1 at modules it cannot load; let it use its own.
+  const env: Record<string, string | undefined> = { ...process.env, XFS_AUTHENTICODE_PATH: path };
+  for (const key of Object.keys(env)) if (key.toUpperCase() === "PSMODULEPATH") delete env[key];
+  const run = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script], { env, encoding: "utf8", timeout: 30_000, windowsHide: true });
   if (run.status !== 0) throw new OodleUnavailableError(`The Oodle library's signature could not be checked (PowerShell exit ${run.status ?? run.error?.message}).`);
   let parsed: Partial<AuthenticodeResult>;
   try { parsed = JSON.parse(run.stdout) as Partial<AuthenticodeResult>; }
@@ -96,6 +99,7 @@ export const defaultOodleVerifier: OodleVerifier = (path, sha256) => {
   if (Object.hasOwn(KNOWN_OODLE_SHA256, sha256)) return { trustedBy: "known-hash" };
   const verdict = authenticodeSignature(path);
   if (isPublisherSignature(verdict, sha256)) return { trustedBy: "authenticode" };
+  if (!verdict.sha256 || !verdict.status) return { refused: "The Oodle library's signature could not be checked." };
   return { refused: verdict.sha256.toLowerCase() !== sha256 ? "The Oodle library changed while it was checked."
     : `The Oodle library is not signed by ${OODLE_SIGNER} (signature ${verdict.status || "missing"}).` };
 };

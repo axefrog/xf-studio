@@ -9,7 +9,15 @@
  * 3. With `--cache`, every resource of the resolver's JSON cache decoded with no caps: decoded bytes, values, JSON values, nesting,
  *    longest name, largest parsed buffer and decode time, plus the notes and watched-default reports the reader makes.
  *
- *   bun tools/native-limits.ts --game <game folder> [--mods <MO2 mods folder>] [--cache <resolver-cache/json>] [--big <bytes>]
+ * With `--uncapped`, every resource decoded in passes 2 and 3 is also checked against `DEFAULT_LIMITS`: `defaults.overDefaults` lists
+ * the caps real resources would pass (no resolver-cache resource may appear there), and `jsonValuesPerValuePastAllowance` is the
+ * largest JSON-to-decoded ratio seen. Without it, a refusal shows as a `NativeBudgetError` outcome instead.
+ *
+ *   bun tools/native-limits.ts --game <game folder> [--mods <MO2 mods folder>] [--cache <resolver-cache/json>] [--big <bytes>] [--uncapped]
+ *
+ * Memory: reads and decodes run under `DEFAULT_LIMITS`, so a resource over a cap is counted as refused instead of measured, and
+ * the run stays near 1 GB. `--uncapped` measures true maxima with no caps; the largest game meshes then take several GB, so use it
+ * only on an otherwise idle machine. Pass 1 reads indexes only.
  *
  * The output names no mods: archive names are replaced by their group (content, ep1, mod, bundle, mo2).
  */
@@ -26,6 +34,7 @@ import { readResource } from "../src/native/resource-document";
 const args = process.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const game = option("game"), mods = option("mods"), cache = option("cache"), big = Number(option("big") ?? 2 ** 20);
+const decodeLimits = args.includes("--uncapped") ? UNLIMITED : DEFAULT_LIMITS;
 if (!game) { console.error("usage: bun tools/native-limits.ts --game <folder> [--mods <MO2 mods>] [--cache <json folder>] [--big <bytes>]"); process.exit(2); }
 
 const archives: { path: string; group: string }[] = [];
@@ -57,7 +66,7 @@ const malformed = new Map<string, number>();
 const started = performance.now();
 for (const { path, group } of archives) {
   let archive: NativeArchive;
-  try { archive = NativeArchive.open(path, oodle.decompress, UNLIMITED); } catch { unreadable++; continue; }
+  try { archive = NativeArchive.open(path, oodle.decompress, decodeLimits); } catch { unreadable++; continue; }
   max.entries = Math.max(max.entries, archive.index.fileCount);
   max.nameBlock = Math.max(max.nameBlock, archive.index.header.customDataLength);
   if (archive.index.header.customDataLength) try { max.nameList = Math.max(max.nameList, archive.names().join("\0").length); } catch { /* not an LXRS block */ }
@@ -87,7 +96,8 @@ const noUsage = (): Usage => ({ decodedBytes: 0, nodes: 0, jsonNodes: 0, depth: 
 const byClass = new Map<string, ClassRow>();
 for (const item of bigOnes) {
   let root = "(unreadable)", bytes: Uint8Array | null = null;
-  try { bytes = item.archive.read(item.hash)!; root = new Cr2wFile(bytes, new DecodeSession(UNLIMITED)).exports[0]?.className ?? "(no exports)"; } catch { /* not CR2W */ }
+  try { bytes = item.archive.read(item.hash)!; root = new Cr2wFile(bytes, new DecodeSession(decodeLimits)).exports[0]?.className ?? "(no exports)"; }
+  catch (error) { if ((error as Error).name === "NativeBudgetError") root = "(over the read caps)"; }
   const row = byClass.get(root) ?? { count: 0, body: 0, resource: 0, groups: new Set<string>(), usage: noUsage(), outcomes: new Map<string, number>() };
   row.count++; row.body = Math.max(row.body, item.body); row.resource = Math.max(row.resource, item.resource); row.groups.add(item.group);
   byClass.set(root, row);
@@ -95,7 +105,7 @@ for (const item of bigOnes) {
   const start = performance.now();
   let outcome = "decoded";
   try {
-    const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, UNLIMITED);
+    const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, decodeLimits);
     row.usage.ms = Math.max(row.usage.ms, performance.now() - start);
     for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "largestBuffer"] as const) row.usage[key] = Math.max(row.usage[key], result.usage[key]);
     checkDefaults(result.usage, bytes, root);
@@ -112,7 +122,7 @@ let cached = 0;
 if (cache) {
   const byName = new Map<string, string[]>();
   for (const { path } of archives) { const name = path.split(/[\\/]/).pop()!; byName.set(name, [...(byName.get(name) ?? []), path]); }
-  const pool = new NativeArchivePool(oodle.decompress, 64, UNLIMITED);
+  const pool = new NativeArchivePool(oodle.decompress, 64, decodeLimits);
   const seen = new Set<string>();
   for (const name of readdirSync(cache).filter(file => file.endsWith(".json")).sort()) {
     const { meta } = JSON.parse(readFileSync(join(cache, name), "utf8")) as { meta: { hash: string; archive: string; extractedSha256: string } };
@@ -128,7 +138,7 @@ if (cache) {
       usage.resourceBytes = Math.max(usage.resourceBytes, bytes.length);
       const start = performance.now();
       try {
-        const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, UNLIMITED);
+        const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, decodeLimits);
         usage.ms = Math.max(usage.ms, performance.now() - start);
         for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "largestBuffer"] as const) usage[key] = Math.max(usage[key], result.usage[key]);
         checkDefaults(result.usage, bytes, "cached");

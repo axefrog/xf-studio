@@ -38,18 +38,19 @@ export interface NativeLimits {
 /**
  * Defaults, from tools/native-limits.ts on game 2.31 and the reference mod list (1,157 archives, 647,849 entries; the resolver's
  * 1,722 distinct cached resources and the 406 verified-class resources whose body is 1 MiB or more). Measured maximum → cap:
- * verified resource 32.8 MiB → 256 MiB; verified body 31.8 MiB → 128 MiB; any buffer in any archive 85.3 MiB (largest parsed
- * buffer 11.1 MiB) → 128 MiB; decoded names and parsed buffers 15.6 MiB → 64 MiB; values 33.2 M (a large game mesh; the largest
- * cached resource has 0.6 M) → 2^27; JSON values 33.2 M → 2^27, and at most 8 per decoded value past 2^20; nesting 11 → 128;
- * name 159 bytes → 1 KiB; name list 0.37 MiB → 16 MiB. Details: research/backlog/native-archive-reader.md#budgets.
+ * verified resource 32.8 MiB → 128 MiB; verified body 31.8 MiB → 128 MiB; any buffer in any archive 85.3 MiB (largest parsed
+ * buffer 11.1 MiB) → 128 MiB; decoded names and parsed buffers 15.6 MiB → 64 MiB; values 0.6 M in the resources the resolver
+ * reads → 8 M (a few large world meshes of 33 M fall back to WolvenKit, which keeps one decode's memory near 1 GB at worst);
+ * JSON values 1.3 M → 16 M, and at most 8 per decoded value past 2^20 (measured 0.97); nesting 11 → 128; name 159 bytes → 1 KiB;
+ * name list 0.37 MiB → 16 MiB. Details: research/backlog/native-archive-reader.md#budgets.
  */
 export const DEFAULT_LIMITS: NativeLimits = Object.freeze({
-  maxResourceBytes: 256 * 2 ** 20,
+  maxResourceBytes: 128 * 2 ** 20,
   maxBodyBytes: 128 * 2 ** 20,
   maxBufferBytes: 128 * 2 ** 20,
   maxDecodedBytes: 64 * 2 ** 20,
-  maxNodes: 2 ** 27,
-  maxJsonNodes: 2 ** 27,
+  maxNodes: 8_000_000,
+  maxJsonNodes: 16_000_000,
   maxJsonNodesPerValue: 8,
   jsonNodesAllowance: 2 ** 20,
   maxDepth: 128,

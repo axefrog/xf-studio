@@ -13,9 +13,9 @@ import { readResource } from "../src/native/resource-document";
 import { fakeDecompress, kark, syntheticArchive } from "./fixtures/native-archive";
 import { buildPackage, Cr2wBuilder, materialValues, prop, v } from "./fixtures/native-cr2w";
 
-/** mulberry32: a small deterministic generator. */
+/** A 32-bit linear congruential generator: deterministic, and enough to pick mutations. */
 function random(seed: number) {
-  return () => { seed = (seed + 0x6d2b79f5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32; };
+  return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
 }
 
 function materialInstance(): Uint8Array {
