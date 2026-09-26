@@ -15,6 +15,7 @@ import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
+import { rasterRegion } from "./engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-workspace-device";
 import { collectionTransport } from "./collection-transport";
@@ -32,7 +33,12 @@ import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
+import { STUDIO_RENDERERS } from "./compose/renderers";
+import { eyeMakeupRenderer } from "./features/eye-makeup/render";
 import { UIPreferenceActions } from "./ui-preferences";
+import { DiagnosticsActions } from "./diagnostics/actions";
+import { createBrowserDiagnostics } from "./diagnostics/browser-device";
+import { pageFailure, setPageDiagnostics } from "./diagnostics/page-sink";
 
 export type StudioHost = {
   /** Where the workspace draft is stored: browser storage, or the desktop's host-owned file. */
@@ -67,14 +73,33 @@ export function startStudio(host: StudioHost): Promise<void> {
   const root = byId("studio");
   return start(host, root).catch(error => {
     root.removeAttribute("aria-busy");
+    const ref = pageFailure("startup", "start_failed", "XF Studio couldn't start.", error);
     root.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error",
-      textContent: "XF Studio couldn't start. Reload the page, or restart XF Studio if this keeps happening." }));
-    console.error(error);
+      textContent: `XF Studio couldn't start. Reload the page, or restart XF Studio if this keeps happening.${ref ? ` If you report it, mention ${ref}.` : ""}` }));
   });
 }
 
 async function start(host: StudioHost, root: HTMLElement) {
   const verification = new URLSearchParams(location.search).has("verify");
+  // Diagnostics first, so everything after is trapped (docs/diagnostics.md): page failures reach the host log, notices carry a
+  // reference, and "Report a problem" prepares a report for review. Nothing is sent anywhere by itself.
+  const fileDevice = createBrowserFileDevice({ document, pickers: {
+    recipe: byId<HTMLInputElement>("device-recipe-picker"),
+    collection: byId<HTMLInputElement>("device-collection-picker"),
+    savedV: byId<HTMLInputElement>("device-save-picker"),
+    characterPreset: byId<HTMLInputElement>("device-character-picker"),
+  } });
+  let port: StudioPresentationPort<HTMLElement> | undefined;
+  const diagnosticsDevice = createBrowserDiagnostics({ window, download: (blob, name) => fileDevice.download(blob, name),
+    state: () => {
+      const preview = port?.authoring.previewState(), head = port?.viewport.snapshot().head;
+      return { "verification workspace": verification ? "yes" : "no", "3D head": head?.phase ?? "unknown",
+        "preview quality": String(preview?.quality?.size ?? "unknown"), "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
+    } });
+  const diagnostics = new DiagnosticsActions(diagnosticsDevice.device);
+  diagnosticsDevice.install(diagnostics);
+  setPageDiagnostics((area, code, message, error, options) => diagnostics.failure(area, code, message, error, options));
+  void diagnostics.refresh();
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
@@ -91,12 +116,12 @@ async function start(host: StudioHost, root: HTMLElement) {
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
   let scene: Awaited<ReturnType<ReturnType<typeof createBrowserViewportDevice>["loadHead"]>> | undefined;
   let uvEditor: ReturnType<ReturnType<typeof createBrowserViewportDevice>["mountUV"]> | undefined;
-  let port: StudioPresentationPort<HTMLElement> | undefined;
 
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
+  const region = STUDIO_COMPOSITION.region;
   const measurements = new GlitterMeasurements({
-    layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size });
+    layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
     return { ...status, glitter: measurements.snapshot(), assets: { ...status.assets,
@@ -114,7 +139,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
   const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
+  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS,
+    onContext: event => event === "lost" ? diagnostics.contextLost("3D head view") : diagnostics.contextRestored("3D head view") });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     capture: {
@@ -135,7 +161,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const persist = () => session.request();
   const drawUV = () => viewportDevice.drawUV();
   previewDevice = createBrowserPreviewDevice({
-    document: core.document, initialSize: workspace.preview.textureSize,
+    document: core.document, region: rasterRegion(region), initialSize: workspace.preview.textureSize,
     makeWorker: () => new Worker("/build/raster-worker.js", { type: "module" }),
     frame: run => requestAnimationFrame(run),
     refresh: () => { drawUV(); persist(); }, refreshSelection: () => { drawUV(); persist(); },
@@ -189,19 +215,14 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice: createBrowserFileDevice({ document, pickers: {
-      recipe: byId<HTMLInputElement>("device-recipe-picker"),
-      collection: byId<HTMLInputElement>("device-collection-picker"),
-      savedV: byId<HTMLInputElement>("device-save-picker"),
-      characterPreset: byId<HTMLInputElement>("device-character-picker"),
-    } }),
+    fileDevice, diagnostics,
   });
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, STUDIO_VIEW_COMPOSITION); });
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: scene.plateBlendEvidence() }) : null,
+      frames: scene.frameTiming(), plateBlend: eyeMakeupRenderer(scene)?.evidence() ?? null, features: scene.featureEvidence() }) : null,
     xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
@@ -246,6 +267,12 @@ async function start(host: StudioHost, root: HTMLElement) {
     try {
       attached = await attachBrowserHead({
         workspace, viewport: viewportDevice, preview: previewDevice, preferences,
+        // Eye makeup's renderer draws the layers the preview device fills and the on-head editor edits.
+        layeredMakeup: loaded => {
+          const renderer = eyeMakeupRenderer(loaded);
+          if (!renderer) throw Error("Eye makeup's renderer is not composed.");
+          return renderer;
+        },
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
         attach: services => core.app.attach(services),
@@ -271,7 +298,8 @@ async function start(host: StudioHost, root: HTMLElement) {
       releaseHead(attached);
       status = { ...status, assets: priorAssets };
       statusSource.changed();
-      console.error(error); session.flush();
+      pageFailure("preview", "head_load_failed", "The 3D head couldn't be loaded.", error);
+      session.flush();
       throw error;
     }
   }

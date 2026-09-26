@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("surface shape gestures share one transaction, preserve mirror/pivot and reject stale or invalid edits", async () => {
   class Canvas extends EventTarget {
@@ -34,7 +35,7 @@ test("surface shape gestures share one transaction, preserve mirror/pivot and re
     let checkpoints = 0, cancellations = 0, cameraEvents = 0, undo: Layer | undefined;
     const viewer = { renderer:{domElement:canvas}, scene,camera,plate,head,eyes,controls,
       onFrame:(fn:()=>void)=>{frame=fn;} };
-    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
       layer:()=>layer, selected:()=>selected, select:i=>{selected=i;}, selectedField:()=>undefined,selectField:()=>{},
       begin:()=>{checkpoints++;undo=structuredClone(layer);},apply:action=>applyAdapterProposal(layer,action),
       cancel:()=>{cancellations++;if(undo)Object.assign(layer,structuredClone(undo));},message:text=>messages.push(text),

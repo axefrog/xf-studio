@@ -6,10 +6,11 @@ import { createDesktopServer } from "../server";
 import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { createPackageHandler } from "../../src/package-server";
 import { collectionDraft } from "../../src/collection-workspace";
-import { freshWorkspace, loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
+import { loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
+import { freshWorkspace } from "../../tests/fixtures/eye-region";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
+import { createPackageHandler } from "../../tests/fixtures/eye-exporter";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -401,4 +402,18 @@ test("the desktop reports and prepares the derived 3D preview through its sessio
     expect(exports).toHaveLength(1);
     expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(404);
   } finally { trial.stop(); }
+});
+
+test("the desktop host serves diagnostics behind its session and logs to its data folder", async () => {
+  const base = `http://127.0.0.1:${app.port}`;
+  expect((await fetch(base + "/api/diagnostics/state")).status).toBe(403);
+  const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
+  const state = await fetch(base + "/api/diagnostics/state", { headers: { Cookie: cookie } });
+  expect(await state.json()).toMatchObject({ schema: "xfs/diagnostics-state-1", mode: "normal" });
+  const forward = await fetch(base + "/api/diagnostics/entries", { method: "POST", headers: { Cookie: cookie, Origin: base, "Content-Type": "application/json" },
+    body: JSON.stringify({ schema: "xfs/diagnostic-forward-1", entries: [{ level: "error", area: "notice", code: "failed", message: "desktop check", ref: "XF-D35K" }] }) });
+  expect(forward.status).toBe(204);
+  const log = readFileSync(resolve(dataRoot, "diagnostics", "log.jsonl"), "utf8");
+  expect(log).toContain("XF-D35K");
+  expect(log).toContain("WebView requested the Studio page.");
 });

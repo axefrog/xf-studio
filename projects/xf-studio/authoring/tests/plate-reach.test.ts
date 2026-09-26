@@ -2,20 +2,21 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { bakeCollection, type BakedRecord } from "../src/package-bake";
-import { describePackageOmissions, OFF_PLATE_REASON, preparePackageCollection } from "../src/package-filter";
-import { preflightPackageCollection } from "../src/package-preflight";
-import { PLATE_REACH_MIN_BYTE, presetReachesPlate } from "../src/plate-reach";
+import { type BakedRecord } from "../src/package-bake";
+import { describePackageOmissions, OFF_PLATE_REASON } from "../src/package-filter";
+import { PLATE_REACH_MIN_BYTE } from "../src/plate-reach";
 import { plateReachInput } from "../src/plate-uv-footprint-io";
 import { parsePlateUvFootprint, plateSamplePoints, plateUvBounds, plateUvFootprint, plateUvWindow, PLATE_UV_FOOTPRINT_SCHEMA,
   type PlateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { VerificationError } from "../src/mod-verifier/resource-checks";
 import { errorStats } from "../src/mod-verifier/texture-checks";
 import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plateUvSamples, type PlateUvSamples } from "../src/mod-verifier/uv-window";
 import { checkMapping, MAPPING_LIMITS } from "../src/mod-verifier/verify-build";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
+import { initialRecipe } from "./fixtures/eye-region";
+import { bakeCollection, preparePackageCollection, preflightPackageCollection, presetReachesPlate } from "./fixtures/eye-exporter";
 
 /** A synthetic plate with UVs over the built-in plate's lid area (stored U .3–.7, V .7–.8; authored v .2–.3). */
 const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);

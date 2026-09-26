@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { freshWorkspace } from "../src/workspace-state";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 // Layer-stack edits dispatch through the registered eye-makeup apply and its port (CORE-31); the
 // former AuthoringLayerActions service is gone.

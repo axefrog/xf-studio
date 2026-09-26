@@ -6,9 +6,10 @@ import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/pr
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace } from "../src/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 function port(options: { creator?: boolean } = {}) {
   const calls: string[] = [], listeners = new Set<() => void>();

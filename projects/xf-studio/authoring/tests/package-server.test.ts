@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createPackageHandler, localPackageTools, localPlateRouteKey } from "../src/package-server";
-import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
+import { localPackageTools, localPlateRouteKey } from "../src/package-server";
+import { packagePresetIdentities } from "../src/package-filter";
 import { createHash } from "node:crypto";
 import { packageErrorCode, type PackageAction, type PackageCheck } from "../src/package-action";
 import { LocalSettingsStore } from "../src/local-settings-store";
@@ -13,13 +13,13 @@ import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/eye-plate-service";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/package-filter";
-import { preflightPackageCollection } from "../src/package-preflight";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { tmpdir } from "node:os";
 import { withGlitterKnob } from "./glitter-knob-fixture";
 import { join } from "node:path";
+import { createPackageHandler, preparePackageCollection, preflightPackageCollection } from "./fixtures/eye-exporter";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const url = "http://127.0.0.1:4317/api/package";

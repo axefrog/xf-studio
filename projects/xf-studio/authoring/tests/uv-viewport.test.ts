@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { canvasResolution } from "../src/canvas-resolution";
 import { defaultUVView, fitUVView, frameAspect, MAX_UV_VIEW_SPAN, MIN_UV_VIEW_SPAN, panUVView, parseUVView, pixelToUV, reflectUV,
   uvAspect, uvToPixel, uvViewRegion, uvViewScale, zoomUVView, type UVInsets, type UVView } from "../src/uv-view";
+import { initialRecipe } from "./fixtures/eye-region";
 
 // The UV viewport fills its whole pane; these are the pane shapes it must handle: docked narrow and
 // wide, a floating square, a tall strip and a tiny pane where the insets would not fit.

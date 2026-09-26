@@ -6,7 +6,7 @@
 
 The older proposal's separate `flake-worker.ts`, synchronous `makeup-stack` baking warning, fixed 1024 sizing, and recipe-5 assumption are superseded. Current production uses recipe-6, supports 512/1024/2048/4096, and already has one cancellable combined mask/optical job. Extend that path; a second independent worker would add synchronization and peak allocation without a demonstrated need.
 
-Concrete inspected sources, relative to `projects/xf-studio/authoring/`:
+Concrete inspected sources at `2c1d622`, relative to `projects/xf-studio/authoring/` (the raster-processor and makeup-stack modules now live under `src/engines/layered-makeup/`, and the legacy `src/main.ts` shell has been retired): <!-- historical-paths -->
 
 | Source | Established behavior | Candidate integration implication |
 |---|---|---|
@@ -19,6 +19,8 @@ Concrete inspected sources, relative to `projects/xf-studio/authoring/`:
 | `src/uv-editor.ts` | Source-size-aware masks, display-sized tint scratch, sharp vector guides independent of texture size. | Preserve authoritative mask semantics. UV remains the shape/coverage editing view; no need to make it an optical preview. |
 
 The current worker yields approximately every eight milliseconds of inner-loop work, but that is a scheduling target, not a cancellation-latency guarantee: allocation, job construction and an unusually expensive work unit can exceed it. New catalogue construction, raster initialization, channel extraction and albedo composition also need bounded `advance()` work. A loop surrounding an unbounded polygon/subsample operation does not establish responsiveness.
+
+<!-- /historical-paths -->
 
 ## Version and dependency boundaries
 

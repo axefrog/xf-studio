@@ -16,14 +16,11 @@ import { EYE_MAKEUP, EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, eyeMakeupPartCodec } 
 import { defaultFlakes } from "../src/engines/layered-makeup/finish";
 import { defaultStudioIrregularFlakes } from "../src/engines/layered-makeup/flake-field";
 import { selectGlitterModel } from "../src/engines/layered-makeup/glitter-model";
-import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank,
-  type RecipeFileSchema } from "../src/engines/layered-makeup/layer-models";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { eyeMakeupCollection } from "../src/preset-collection";
-import { initialRecipe, newLayerTemplate, parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE,
-  type Layer, type Recipe, type RecipeFile } from "../src/engines/layered-makeup/recipe";
-import { applyRecipeAction, type RecipeAction } from "../src/engines/layered-makeup/recipe-actions";
+import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type RecipeAction } from "../src/engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_FEATURE, portableRecipe, readPortableRecipe, recipeFile } from "../src/recipe-schema";
 import { loadWorkspace } from "../src/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
@@ -31,6 +28,8 @@ import { recipeOf, storedWorkspace } from "./fixtures/looks";
 import { glitterFixtures, part2Observation, recipeSchemaFixtures } from "./fixtures/part-2-parity";
 import { restore } from "./fixtures/workspace-observable";
 import { fixedId, opticsRecipe, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
+import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank, type RecipeFileSchema, readRecipe as parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE, type RecipeFile } from "../src/recipe-schema";
+import { initialRecipe, newLayerTemplate, applyRecipeAction } from "./fixtures/eye-region";
 
 const EYE = "eye-makeup";
 const golden = JSON.parse(readFileSync(new URL("./golden/part-2-parity.json", import.meta.url), "utf8"));

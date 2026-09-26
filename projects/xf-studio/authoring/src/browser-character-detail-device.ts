@@ -1,12 +1,12 @@
 import type { CharacterDetailPort, HostCharacterState } from "./character-detail-actions";
-import { loadCharacterDetails, readCharacterRecord, type CharacterDetailFetch, type LoadedCharacterDetails } from "./character-detail-loader";
+import { readCharacterRecord, type CharacterDetailFetch, type LoadedCharacterDetails } from "./character-detail-loader";
 import { parseCharacterRequest } from "./character-detail-request";
 import { DetailVersionSkewError, type DetailLimit, type SlotLimits } from "./detail-limits";
 import { CHARACTER_DETAIL_SCHEMA, RenderDetailVersionError, type DetailSlot } from "./render-detail";
-import type { createScene } from "./scene";
+import type { SceneHost } from "./platform/scene/scene-host";
 
-type Scene = Pick<Awaited<ReturnType<typeof createScene>>, "setCharacterDetails" | "detailContext" | "renderer"> &
-  Partial<Pick<Awaited<ReturnType<typeof createScene>>, "onBakeLimits">>;
+/** The scene host's character side: its detail loader and the swap into the scene (feature-module platform §5). */
+type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<SceneHost, "onBakeLimits">>;
 
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)
@@ -76,8 +76,8 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         if (error instanceof RenderDetailVersionError) throw new DetailVersionSkewError(`the record is ${error.direction} than this page reads.`);
         throw error;
       }
-      const loaded = await loadCharacterDetails(record, { fetcher, signal, anisotropy: Math.min(8, scene.renderer.capabilities.getMaxAnisotropy()),
-        context: (slot: DetailSlot) => scene.detailContext(slot), reuse: shown });
+      // Through the host's detail loader: each chunk through the adapter for its template, with the host's anisotropy and skin placement.
+      const loaded = await scene.details.load(record, { fetcher, signal, reuse: shown });
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
       const placed = scene.setCharacterDetails(loaded);
       shown = loaded;

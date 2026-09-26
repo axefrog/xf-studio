@@ -2,15 +2,16 @@ import { expect, test } from "bun:test";
 import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/engines/layered-makeup/finish-export";
 import { glitterModel, glitterModels, parseGlitterChoices } from "../src/engines/layered-makeup/glitter-model";
 import { historyLabel } from "../src/history-labels";
-import { initialRecipe, parseRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 
 /** The schema the recipe is written in: the in-memory recipe has none (part-2), so no action can change one. */
 const written = (recipe: Recipe) => { expect(recipe).not.toHaveProperty("schema"); return recipeFile(recipe)!.schema; };
 import { StudioApplication, type StudioAction } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 // Finish, game-optics and Glitter-model actions through the application (CORE-16/17/18/21).
 

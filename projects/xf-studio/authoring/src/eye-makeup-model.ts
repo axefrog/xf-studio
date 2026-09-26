@@ -7,7 +7,7 @@
 import type { FeatureResult, FeatureState } from "./platform/api";
 import type { FieldSelection } from "./engines/layered-makeup/field-selection";
 import type { LayerChoices } from "./engines/layered-makeup/glitter-model";
-import type { LayerAction } from "./editor-actions";
+import type { LayerAction } from "./engines/layered-makeup/layer-stack";
 import type { RecipeAction, RecipeActionEffect } from "./engines/layered-makeup/recipe-actions";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 

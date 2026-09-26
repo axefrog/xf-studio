@@ -1,13 +1,12 @@
 import { expect, test } from "bun:test";
 import { bakeFlakes, shimmerFacetSampler } from "../src/engines/layered-makeup/finish";
-import { HEAD_TEXTURE_SIZE, ROUTE_UV_WINDOW, WINDOW_TEXTURE } from "../src/engines/layered-makeup/finish-export";
+import { ROUTE_UV_WINDOW } from "../src/engines/layered-makeup/finish-export";
 import { flatMipChain, mipDimensions } from "../src/engines/layered-makeup/flat-mip-chain";
 import { REFERENCE_GRID, referenceCrop } from "../src/package-bake";
 import { halfToNumber, HEAD_UV_WINDOW, PLATE_UV_MARGIN, plateUvBounds, plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
 import { texelUv } from "./window-fixture";
-import { compilePreset, presetCoverage } from "../src/engines/layered-makeup/preset-compiler";
 import { planCollection } from "../src/preset-collection";
-import { initialRecipe, raster, rasterWindow, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { facetedMipChain, maskMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { VERIFIER_HEAD_TEXTURE, VERIFIER_ROUTE_WINDOW, VERIFIER_WINDOW_TEXTURE } from "../src/mod-verifier/resource-checks";
 import { facetedReference, maskReference } from "../src/mod-verifier/texture-checks";
@@ -15,6 +14,7 @@ import { expectedUvConstants, expectedWindow, storedBc4Level0, VERIFIER_UV_MARGI
 import { VERIFIER_REFERENCE_GRID } from "../src/mod-verifier/verify-build";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
+import { HEAD_TEXTURE_SIZE, WINDOW_TEXTURE, compilePreset, presetCoverage, initialRecipe, raster, rasterWindow } from "./fixtures/eye-region";
 
 /** The built-in plate's stored UV0 bounds (game 2.31), as the builder and the verifier decode them. */
 const BUILT_IN = { uMin: 0.273193359375, uMax: 0.7265625, vMin: 0.67626953125, vMax: 0.8212890625 };
@@ -41,7 +41,7 @@ test("the plate window: margins, constants and the shader mapping put authored r
 
 test("the verifier's restated window rule, grids and constants agree with the builder's", () => {
   expect(VERIFIER_UV_MARGIN).toBe(PLATE_UV_MARGIN);
-  expect(VERIFIER_WINDOW_TEXTURE).toEqual({ ...WINDOW_TEXTURE });
+  expect({ ...VERIFIER_WINDOW_TEXTURE } as { width: number; height: number }).toEqual({ ...WINDOW_TEXTURE });
   expect(VERIFIER_HEAD_TEXTURE).toBe(HEAD_TEXTURE_SIZE);
   expect(VERIFIER_ROUTE_WINDOW).toEqual(ROUTE_UV_WINDOW);
   expect(REFERENCE_GRID).toBeGreaterThanOrEqual(VERIFIER_REFERENCE_GRID);

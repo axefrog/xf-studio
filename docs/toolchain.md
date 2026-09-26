@@ -9,7 +9,7 @@ Versions actually pinned or used by current XF Studio work. Lockfiles and `packa
 | Tool | Version | Used for | Pinned by |
 |---|---|---|---|
 | [Bun](https://bun.sh/) | 1.4.2 | Studio server, bundling, tests; desktop main; public site | `@types/bun` in each `package.json`; `bun-version` in `.github/workflows/pages.yml` |
-| TypeScript | 7.0.2 (authoring), 5.9.3 (desktop) | `tsc --noEmit` checks | `projects/xf-studio/authoring/package.json`, `authoring/desktop/package.json` |
+| TypeScript | 7.0.2 (authoring), 5.9.3 (desktop) | `tsc --noEmit` checks (authoring: `bun run check` also covers `tools/` and the experiment scripts) | `projects/xf-studio/authoring/package.json`, `authoring/desktop/package.json` |
 | three.js | 0.186.0 | Browser renderer; skinning shader patches are pinned to this version | `authoring/package.json` (with `@types/three` 0.186.0) |
 | [Electrobun](https://github.com/blackboardsh/electrobun) | 2.0.1 (compatible global Hutch 0.24.3 as builder fallback) | Private Windows desktop trial | `authoring/desktop/package.json` and its `bunx electrobun@2.0.1` scripts |
 | [Inno Setup](https://jrsoftware.org/isinfo.php) | 6.7.3 | Wraps Electrobun's setup ZIP into the single downloadable setup program (`authoring/desktop/single-installer.ts`, script `installer/xf-studio-setup.iss`) | `authoring/desktop/inno-setup.ts` (official GitHub release URL and SHA-256); unpacked in portable mode into `XFS_INNO_SETUP_HOME` (CI: job-local; development PC: `D:/Dev/tools/innosetup/6.7.3/compiler`) or the ignored `desktop/installer-tools/` |

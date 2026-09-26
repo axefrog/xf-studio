@@ -3,7 +3,7 @@
  * memory and the feature-wide memory.
  *
  * - Part 2 (`xfs/eye-makeup-part-2`, current) is the in-memory recipe: no recipe-level schema;
- *   each layer's optical models are validated by the model registry (`layer-models.ts`).
+ *   each layer's optical models are validated by the model registry (`recipe-schema.ts`, over the engine's `layer-models.ts`).
  * - Part 1 (`xfs/eye-makeup-part-1`) is a recipe file body with its `xfs/recipe-N` schema. It
  *   reads into part 2 without any appearance change, and `downgrade` writes it back in the
  *   oldest recipe schema that holds every layer's models, so the minimal writers keep producing
@@ -13,15 +13,15 @@
 import type { EditorCodec, MemoryCodec, PartCodec, PartEnvelope } from "../../platform/api";
 import { parseFieldSelection, type FieldSelection } from "../../engines/layered-makeup/field-selection";
 import { parseGlitterChoices, type GlitterChoices } from "../../engines/layered-makeup/glitter-model";
-import { LAYER_MODELS, type LayerModelRegistry } from "../../engines/layered-makeup/layer-models";
-import { emptyRecipe, joinRecipe, recipeChunks, starterRecipe, type Recipe } from "../../engines/layered-makeup/recipe";
-import { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readPortableRecipe, recipeFile,
-  RECIPE_SCHEMAS } from "../../recipe-schema";
+import { emptyRecipe, joinRecipe, recipeChunks, type Recipe } from "../../engines/layered-makeup/recipe";
+import { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, LAYER_MODELS, parseEyeMakeupPart, readPortableRecipe, recipeFile,
+  RECIPE_SCHEMAS, type RecipeModelRegistry } from "../../recipe-schema";
+import { starterRecipe } from "./region";
 
 export { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, RECIPE_SCHEMAS };
 
 /** Eye makeup's part codec over a layer-model registry (the build's own by default; tests pass others). */
-export function eyeMakeupPartCodec(models: LayerModelRegistry = LAYER_MODELS): PartCodec<Recipe> {
+export function eyeMakeupPartCodec(models: RecipeModelRegistry = LAYER_MODELS): PartCodec<Recipe> {
   return Object.freeze({
     current: EYE_MAKEUP_PART_2,
     /** Oldest first: `downgrade` targets and the minimal writers try them in this order. */

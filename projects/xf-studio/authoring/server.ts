@@ -5,6 +5,7 @@ import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { createPackageHandler, localPackageTools, localPlateCache, localToolsRoot } from "./src/package-server";
+import { EYE_MAKEUP_REGION } from "./src/features/eye-makeup/region";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
 import { eyePlateReadiness } from "./src/eye-plate-cache";
@@ -21,8 +22,13 @@ import { CharacterDetailHost } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
+import { consoleEcho, hostDiagnosticsAt, setProcessDiagnostics } from "./src/diagnostics/host-log";
+import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
+// One structured log and rolling detail window in data/diagnostics/ (docs/diagnostics.md); routine events still print here.
+const diagnostics = hostDiagnosticsAt(dataRoot, { echo: consoleEcho });
+setProcessDiagnostics(diagnostics);
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
@@ -30,7 +36,7 @@ const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verific
 const localSettings = new LocalSettingsStore();
 // WolvenKit: XFS_PACKAGE_WOLVENKIT, then Local setup, then XF Studio's own copy (downloaded only with consent).
 const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
-  configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: message => console.log(message) });
+  configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: diagnostics.log.logger("wolvenkit") });
 const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: false,
   wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
   eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) }),
@@ -40,7 +46,7 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
   const settings = localSettings.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
 } });
-const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
+const packageRequest = createPackageHandler(EYE_MAKEUP_REGION, action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings, process.env, wolvenKit.managedExecutable()));
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
@@ -48,7 +54,7 @@ const previewCacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(i
 const previewCore = new PreviewCoreHost({
   cacheRoot: previewCacheRoot,
   settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, wolvenKitCli: wolvenKit.usable() }),
-  log: message => console.log(message),
+  log: diagnostics.log.logger("preview"),
 });
 const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // Brows, lashes and hair: resolved from the launch route Build uses and exported from the winning archives.
@@ -60,7 +66,7 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
     return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
   },
-  log: message => console.log(message) });
+  log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh() });
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
@@ -71,8 +77,22 @@ const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
     return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
   },
-  log: message => console.log(message) });
+  log: diagnostics.log.logger("lut") });
 const gradingLutRequest = createGradingLutHandler(gradingLut);
+// Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
+const commit = (() => {
+  try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });
+    return run.exitCode === 0 ? run.stdout.toString().trim() || null : null; } catch { return null; }
+})();
+const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
+  app: () => ({ version: "0.1.0", commit, channel: null, host: "localhost" }),
+  settings: () => { const settings = localSettings.load().settings; return { ...settings, gameRoot: packageToolPaths(settings).gamepath }; },
+  wolvenKit: () => { const state = wolvenKit.snapshot(); return { version: state.version, source: state.source, phase: state.phase }; },
+  roots: () => [{ label: "<data>", path: dataRoot }, { label: "<tools>", path: localToolsRoot() }, { label: "<preview-cache>", path: previewCacheRoot },
+    { label: "<studio>", path: import.meta.dir }],
+  resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
+  testHook: process.env.XFS_DIAGNOSTICS_TEST_HOOK === "1",
+});
 const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
@@ -87,10 +107,12 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.PORT ?? 4317),
   maxRequestBodySize: 16_000_000,
-  async fetch(request) {
+  // Each request runs in the diagnostics context: a failure is logged with a reference the page can show.
+  fetch: withRequestDiagnostics(diagnostics, async request => {
     const url = new URL(request.url);
     // The API accepts only the 127.0.0.1 origin; send `localhost` visitors there so the library and settings work.
     if (url.hostname === "localhost") { url.hostname = "127.0.0.1"; return Response.redirect(url.toString(), 308); }
+    if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(request);
     if (url.pathname === "/api/package") return packageRequest(request);
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
@@ -154,6 +176,6 @@ const server = Bun.serve({
         "X-Content-Type-Options": "nosniff",
       },
     });
-  },
+  }),
 });
-console.log(`XF Studio: ${server.url}`);
+diagnostics.log.info("server", "started", `XF Studio: ${server.url}`);

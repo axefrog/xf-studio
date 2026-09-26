@@ -27,7 +27,7 @@ test("renderer limit codes are worded only by the presentation, one plain senten
 test("renderer and device modules carry codes, not the sentences", () => {
   const { readFileSync } = require("node:fs") as typeof import("node:fs");
   const { resolve } = require("node:path") as typeof import("node:path");
-  for (const file of ["scene.ts", "head-skin-placement.ts", "character-material-adapters.ts", "character-detail-loader.ts", "browser-character-detail-device.ts"]) {
+  for (const file of ["platform/scene/scene-host.ts", "platform/scene/character-renderer.ts", "platform/scene/head-rig.ts", "head-skin-placement.ts", "character-material-adapters.ts", "character-detail-loader.ts", "browser-character-detail-device.ts"]) {
     const source = readFileSync(resolve(import.meta.dir, "..", "src", file), "utf8");
     for (const text of Object.values(DETAIL_LIMIT_TEXT)) expect({ file, found: source.includes(text) }).toEqual({ file, found: false });
   }

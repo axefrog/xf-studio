@@ -8,10 +8,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { parseExportDiagnostics } from "../src/export-diagnostics";
 import { FINISH_EXPORT, layerExport } from "../src/engines/layered-makeup/finish-export";
 import { encodeDds } from "../src/engines/layered-makeup/flat-mip-chain";
-import { compileGlitterPreset, flakeCatalogue, mirrorCatalogue, randomStream, tiltVariance } from "../src/glitter-route";
-import { bakeCollection, referenceCrop } from "../src/package-bake";
-import { presetCoverage } from "../src/engines/layered-makeup/preset-compiler";
-import { preparePackageCollection } from "../src/package-filter";
+import { flakeCatalogue, randomStream, tiltVariance } from "../src/glitter-route";
+import { referenceCrop } from "../src/package-bake";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
 import { liftPlate } from "../src/plate-lift";
 import { planCollection } from "../src/preset-collection";
@@ -24,6 +22,8 @@ import { expectedChain } from "../src/mod-verifier/texture-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { encodedBc4, plateWindow, storedBc4 } from "./window-fixture";
+import { presetCoverage } from "./fixtures/eye-region";
+import { compileGlitterPreset, mirrorCatalogue, bakeCollection, preparePackageCollection } from "./fixtures/eye-exporter";
 
 // Asset-free: a synthetic plate with plate-like UVs, Satin pigment rectangles and generated flakes.
 const CUT = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);

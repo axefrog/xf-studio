@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  MAX_FIELDS, coverage, curve, initialRecipe, parseRecipe, parseRecipeFile, raster, warp, warpFields,
-  type Field, type Layer, type Point, type WarpField,
-} from "../src/engines/layered-makeup/recipe";
+import { MAX_FIELDS, curve, warp, warpFields, type Field, type Layer, type Point, type WarpField } from "../src/engines/layered-makeup/recipe";
+import { coverage, initialRecipe, raster } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
 
 type LegacyLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field: Field };
 const oldLayer = (): LegacyLayer => ({

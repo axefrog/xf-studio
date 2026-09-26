@@ -2,15 +2,14 @@ import { expect, test } from "bun:test";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { decodeDec4Normal, liftPlate, MAX_PLATE_LIFT_MM, PLATE_LIFT_MM } from "../src/plate-lift";
 import { parseCollection, planCollection } from "../src/preset-collection";
-import { preparePackageCollection } from "../src/package-filter";
-import { preflightPackageCollection } from "../src/package-preflight";
 import { HandleCounter, HIDDEN_CHUNK_ENTRY, rewritePlateMesh } from "../src/package-resources";
 import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
 import { SURFACE_OVERRIDE_RANGES } from "../src/export-diagnostics";
 import { VERIFIER_PLATE_LIFT_MM } from "../src/mod-verifier/plate-geometry";
 import { VERIFIER_SURFACE_RANGES } from "../src/mod-verifier/resource-checks";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
+import { initialRecipe } from "./fixtures/eye-region";
+import { preparePackageCollection, preflightPackageCollection } from "./fixtures/eye-exporter";
 
 const plate = () => derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh");
 const blobOf = (mesh: any) => mesh.Data.RootChunk.renderResourceBlob.Data;

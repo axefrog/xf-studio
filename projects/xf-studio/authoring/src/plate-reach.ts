@@ -8,6 +8,7 @@
 import { planPresetExport } from "./engines/layered-makeup/finish-export";
 import { plateSamplePoints, type PlateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import { layerCoverageSampler, type Recipe } from "./engines/layered-makeup/recipe";
+import type { Mirror } from "./engines/layered-makeup/region";
 
 /**
  * Smallest coverage byte, at one plate sample, that counts as reaching the plate. The verifier counts a sample
@@ -26,12 +27,12 @@ export const plateUvRecord = (plate: PlateReachInput): PlateUvRecord =>
 /** Sample points per footprint object, computed once per plate. */
 const pointCache = new WeakMap<PlateUvFootprint, Float64Array>();
 
-/** True when any exportable active layer of `recipe` reaches the plate at one of its sample points. */
-export function presetReachesPlate(recipe: Pick<Recipe, "layers">, footprint: PlateUvFootprint): boolean {
+/** True when any exportable active layer of `recipe` (mirrored across the feature's `mirror`) reaches the plate at one of its sample points. */
+export function presetReachesPlate(recipe: Pick<Recipe, "layers">, footprint: PlateUvFootprint, mirror: Mirror): boolean {
   let points = pointCache.get(footprint);
   if (!points) { points = plateSamplePoints(footprint); pointCache.set(footprint, points); }
   for (const layer of planPresetExport(recipe).included) {
-    const sample = layerCoverageSampler(layer);
+    const sample = layerCoverageSampler(layer, mirror);
     for (let i = 0; i < points.length; i += 2) if (Math.round(255 * sample(points[i], points[i + 1])) >= PLATE_REACH_MIN_BYTE) return true;
   }
   return false;

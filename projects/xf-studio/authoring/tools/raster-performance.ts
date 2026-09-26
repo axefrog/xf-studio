@@ -1,7 +1,9 @@
 /** Fixed authored fixtures for byte-preserving mask performance comparisons. */
-import { initialRecipe, parseRecipe, raster, curve, type Layer } from "../src/engines/layered-makeup/recipe";
+import { raster, curve, type Layer } from "../src/engines/layered-makeup/recipe";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
 const base = initialRecipe().layers[0];
 const varied = structuredClone(base);
 varied.points.forEach((p,i) => {p.weight=i===0?0:1;p.feather=.001+i*.008;});
@@ -18,7 +20,7 @@ if(input)fixtures.splice(0,fixtures.length,...parseRecipe(JSON.parse(readFileSyn
   .filter(layer=>layer.enabled).map(layer=>[layer.name,layer] as [string,Layer]));
 const records=[];
 for(const [name,layer] of fixtures) for(const size of input?[1024,2048]:[512,1024]) {
-  const start=performance.now();const bytes=raster(layer,size);
+  const start=performance.now();const bytes=raster(layer, size, EYE_MAKEUP_REGION.mirror);
   records.push({name,size,segments:curve(layer.points,6).length,ms:performance.now()-start,
     sha256:createHash("sha256").update(bytes).digest("hex"),layer});
 }

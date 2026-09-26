@@ -3,7 +3,7 @@
 # no preview assets and walks a first-time user's session through Windows UI Automation
 # (sandbox-ui.ps1): WebView2 consent if needed, welcome, UV editor, edit and Undo, library save,
 # fixture import and Check, About and Licences, close and relaunch, then uninstall. It records
-# WebView2 presence, the loopback server, the app's desktop.log and app-window screenshots in the
+# WebView2 presence, the loopback server, the app's diagnostics log and app-window screenshots in the
 # mapped results folder; with -AutoClose the sandbox shuts itself down when done.
 param([switch]$AutoClose)
 $ErrorActionPreference = "Continue"
@@ -254,8 +254,8 @@ if ($launcher) {
   }
   StopApp
   $dataRoot = Join-Path $env:LOCALAPPDATA "dev.axefrog.xf-studio\canary"
-  $log = Join-Path $dataRoot "desktop.log"
-  if (Test-Path $log) { Copy-Item $log (Join-Path $out "desktop.log") }
+  $log = Join-Path (Join-Path $dataRoot "diagnostics") "log.jsonl"
+  if (Test-Path $log) { Copy-Item $log (Join-Path $out "diagnostics-log.jsonl") }
   $report.dataRootBeforeUninstall = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
   # Default App uninstall: removes the app, keeps the library and settings.
   $uninstaller = Join-Path $dataRoot "uninstall.exe"
@@ -269,5 +269,5 @@ if ($launcher) {
 }
 $report.finished = (Get-Date).ToString("o")
 Save
-Write-Host "Finished. report.json, desktop.log and screenshots are in the results folder."
+Write-Host "Finished. report.json, diagnostics-log.jsonl and screenshots are in the results folder."
 if ($AutoClose) { Start-Sleep -Seconds 3; Stop-Computer -Force }

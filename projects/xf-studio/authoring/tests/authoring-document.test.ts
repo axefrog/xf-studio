@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { WorkspacePersistence } from "../src/workspace-persistence";
-import { freshWorkspace, workspaceKeys } from "../src/workspace-state";
+import { workspaceKeys } from "../src/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 test("authoring document owns selection and Undo, and exposes detached snapshots", () => {
   const workspace = freshWorkspace();

@@ -448,7 +448,7 @@ export class StudioApplication {
     return this.services.history?.snapshot() ?? historyTimeline(this.services.document);
   }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
-  finishCatalogue() { return finishCatalogue(); }
+  finishCatalogue() { return finishCatalogue(this.services.eyeMakeup.region.wording); }
   /**
    * Game-export status of one layer in the current preset, from the same preset-level plan
    * Check uses: a layer whose finish exports on its own can still be left out because of the
@@ -464,7 +464,7 @@ export class StudioApplication {
     const excluded = plan.excluded.find(item => item.layer === shown);
     return excluded ? { exportable: false, reason: excluded.reason, blockedBy: "preset" } : alone;
   }
-  glitterModelCatalogue() { return glitterModelCatalogue(); }
+  glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);

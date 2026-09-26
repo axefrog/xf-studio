@@ -194,6 +194,24 @@ The snapshot holds the latest `xfs/game-install-detection-1`, `xfs/mo2-instance-
 
 These results are private host metadata. Detection changes no setting: a setup view offers a candidate, and saving the choice goes through `setup.save`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2|frameworks`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
 
+### Diagnostics and problem reports
+
+`port.diagnostics` ([`src/diagnostics/actions.ts`](../../projects/xf-studio/authoring/src/diagnostics/actions.ts); [how it works](../../docs/diagnostics.md)) has `snapshot()`, `capability(action)`, `dispatch(action)` and `descriptors()` (`DIAGNOSTICS_DESCRIPTORS`: scope `host`, no Undo; none touches a recipe, Undo or the library, and none sends anything by itself), plus `notice({source, message, code?})`. The shell's `Feedback` calls `notice` for an error notice about to be shown: it returns null for an expected refusal (`isExpectedFailure`: the platform reason codes plus `cancelled`, `conflict`, `stale_result`, `invalid_json`, `invalid_collection`, `no_exportable_content`), and otherwise logs the failure and returns its reference (the host's, when a failed host request answered with `X-XFS-Error-Ref` moments before). The notice shows the reference and **Report this problem**. `snapshot().notice` is the newest failure an app service asked to show (`pageFailure(…, {notify: true})`); the shell shows each once, with its reference.
+
+| Action | Payload | Effect |
+|---|---|---|
+| `diagnostics.prepareReport` | `{ref?, activity?}`: an `XF-XXXX` reference; the recent notices the person saw | Asks the host to prepare a report (`POST /api/diagnostics/report`) and publishes `snapshot().report`: the groups, their items (label, detail, size, ticked, preview) and the running total against the 20 MB limit. `opens` increments. Refused while preparing |
+| `diagnostics.setIncluded` | `{item, included}` | Ticks or unticks one part. Refused before a report is ready, for an unknown part, over the limit (`limit`), and for a mod's own files until the sharing confirmation (`needs_input`) |
+| `diagnostics.confirmSharing` | `{confirmed}` | The person's confirmation that they may share the offered mods' files. Unconfirming unticks them |
+| `diagnostics.setDescription` | `{text}` (at most 4,000 characters) | The person's own description, placed first in the report |
+| `diagnostics.saveReport` | none | The host makes one ZIP of the ticked parts (`POST /api/diagnostics/bundle`); the page saves it through the file device |
+| `diagnostics.copySummary` | none | Copies the readable summary |
+| `diagnostics.openIssue` | none | Opens a pre-filled GitHub issue: the title and a short summary only. The desktop host opens it in the person's browser; a browser opens a new tab |
+| `diagnostics.setMode` | `{mode: "normal" \| "deep"}` | Diagnostic mode: a wider rolling window with every resource read, for 24 hours |
+| `diagnostics.closeReport` | none | Forgets the prepared report on the page |
+
+The report window (`studio-ui/diagnostics/report-dialog.ts`), Help's **Report a problem…** and the palette's **Report a problem…** and **Turn diagnostic mode on/off** use only these. App services report a failure a person may see with `pageFailure(area, code, message, error, options)` on the page and `hostFailure(area, code, message, error)` on a host: one line at the catch site, with no logger to hold.
+
 ## Persistence, async boundaries and truthful state
 
 | Kind of state | Current owner and safe read | Persistence/Undo rule |

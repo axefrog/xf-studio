@@ -12,9 +12,9 @@ import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail } from "../src/render-det
 import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved-appearance-actions";
 import type { SavedV } from "../src/save-reader";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 // Application-level save switching (A → B → A) over records the real preparation produced from the
 // synthetic installation (character-detail-fixtures.ts), never from the private saves.
@@ -256,8 +256,11 @@ test("a change that can't be prepared keeps the V as it was shown and says why; 
 
 test("a host of another version is reported with the version-skew code, not as silence (the app updated while it ran)", async () => {
   const { createBrowserCharacterDetailDevice } = await import("../src/browser-character-detail-device");
-  const scene = { setCharacterDetails: () => ({ limits: [] }), detailContext: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }),
-    renderer: { capabilities: { getMaxAnisotropy: () => 1 } } } as never;
+  const { loadCharacterDetails } = await import("../src/character-detail-loader");
+  // The scene host's detail loader, as the host binds it (platform/scene/character-renderer.ts).
+  const scene = { setCharacterDetails: () => ({ limits: [] }), details: { load: (record: Parameters<typeof loadCharacterDetails>[0],
+    options: Omit<Parameters<typeof loadCharacterDetails>[1], "anisotropy" | "context">) => loadCharacterDetails(record,
+    { ...options, anisotropy: 1, context: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }) }) } } as never;
   const run = async (answer: (url: string, init?: RequestInit) => Response) => {
     const details = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, async (url, init) => answer(url, init)));
     await details.setCharacter(REQUEST_A);

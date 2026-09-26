@@ -6,7 +6,7 @@
 import { writeFileSync } from "node:fs";
 import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../../src/trusted-authoring-core";
-import { freshWorkspace } from "../../src/workspace-state";
+import { freshWorkspace } from "./eye-region";
 
 const { app } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
 const golden = { actionKinds: app.actionKinds(), actionDescriptors: app.actionDescriptors(), registry: app.registry() };

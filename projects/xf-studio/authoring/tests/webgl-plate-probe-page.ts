@@ -14,15 +14,17 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { LightProbeGenerator } from "three/addons/lights/LightProbeGenerator.js";
 import { flatSurface } from "../src/engines/layered-makeup/finish-export";
-import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { FULL_WINDOW } from "../src/engines/layered-makeup/render/plate-blend";
 import { createPlateComposite, type CompositeTextures } from "../src/engines/layered-makeup/render/plate-composite";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { facetedMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { createStudioEnvironment, ROOM_ENVIRONMENT_SH } from "../src/studio-environment";
 import { createLayeredMaterial, layerBakeParameters, layeredContextRestored } from "../src/layered-material";
 import type { RenderLayer } from "../src/render-detail";
 import { readTextureLevel } from "./webgl-harness-page";
+import { initialRecipe } from "./fixtures/eye-region";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 export type ChainComparison = { level: number; roughnessMaxError: number; normalMaxError: number; coverageMaxError: number; texels: number };
 export type PlateCompositeProbe = {
@@ -266,7 +268,7 @@ try {
   probe.layered.states.push(part.handle.state);
   probe.layered.unhooked = renderLinear(partScene, 32);
   check("drawing the layered part without the restore path");
-  // The scene's restore path (scene.ts `restored`): forget the renderer's shared bakes, reset each handle, bake again.
+  // The scene host's restore path (platform/scene/character-renderer.ts `contextRestored`): forget the renderer's shared bakes, reset each handle, bake again.
   layeredContextRestored(renderer);
   part.handle.contextRestored();
   probe.layered.states.push(part.handle.state);

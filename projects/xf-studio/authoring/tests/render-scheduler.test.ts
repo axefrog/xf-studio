@@ -184,28 +184,36 @@ test("the idle reports every change other than playback: enable, pause, seek, co
  * - It decides what is a mutator by name (a `set`/`apply`/`animate`/`restore`/`update`/`reconcile` prefix, or the
  *   listed exceptions). A new method that changes the picture under another name (say `toggleX` or `loadY`) is not
  *   caught; add it to the exception list, or name it with one of the prefixes.
- * - It reads the `api` object literal's keys by indentation and layout, so a reformatted `scene.ts` (a nested
+ * - It reads the `api` object literal's keys by indentation and layout, so a reformatted scene host (a nested
  *   object, a spread, a key on the same line as another) can hide keys from it. The count floor catches only a
  *   wholesale miss.
  * - It proves a mutator is wrapped, not that the wrapped call changes anything or that a change made elsewhere
  *   (a closure, an event handler, an async continuation) requests a frame. Those are covered by the trigger tests
  *   above and the browser check.
  */
+/** The scene host (platform/scene/scene-host.ts) and its character renderer (platform/scene/character-renderer.ts), as source. */
+const sceneSource = (file: "scene-host" | "character-renderer") =>
+  require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", `${file}.ts`), "utf8") as string;
+
 test("every scene method that changes what is drawn is wrapped to request a frame; readers are not", () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
   const body = source.slice(source.indexOf("  const api = {"), source.indexOf("  // Every call that changes what is drawn"));
   const keys = [...body.matchAll(/^    (?:\/\/.*\n    )?([A-Za-z]+)(?::|,)/gm)].map(match => match[1]!);
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   expect(keys.length).toBeGreaterThan(40);
-  const mutators = keys.filter(key => /^(set|apply|animate|restore|update|reconcile)/.test(key) || ["eyeShape", "front", "resize", "onFrame"].includes(key));
+  const mutators = keys.filter(key => /^(set|apply|animate|restore|update|reconcile)/.test(key) || ["eyeShape", "front", "resize"].includes(key));
   expect(mutators.filter(key => !wrapped.includes(key))).toEqual([]);
+  // Adding or removing a frame listener draws a frame by itself (the scene port's `onFrame` is the same function).
+  expect(source).toMatch(/frameListeners\.add\(callback\);\s+invalidate\(\);/);
+  expect(source).toContain("return () => { frameListeners.delete(callback); invalidate(); };");
   // Reading state, evidence or timing never draws a frame (a measurement must not keep the viewport busy).
   for (const reader of ["cameraState", "frameTiming", "characterDetailsEvidence", "eyeAppearance", "eyeShapeOptions", "piercingSelection", "pick"])
     expect(wrapped).not.toContain(reader);
   // Every eye change draws a frame: a V's eyes arrive and leave with its details (the core eye hides or returns in
   // the same call), the roughness switch, and a save's facial shapes; the eye evidence is a reader.
   for (const eyeChange of ["setCharacterDetails", "setEyeOptics", "applySavedV", "eyeShape"]) expect(wrapped).toContain(eyeChange);
-  const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  const ray = new THREE.Raycaster()"));
+  expect(source).toContain("setCharacterDetails: character.setCharacterDetails,");
+  const details = character.slice(character.indexOf("  function setCharacterDetails("), character.indexOf("  function bakeLayered()"));
   expect(details).toContain("eyes.visible = true;");
   expect(details).toContain("eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;");
   // Layered stacks (piercings, eye designs) bake inside the same wrapped call, so the frame that follows draws the baked maps.
@@ -220,27 +228,29 @@ test("every scene method that changes what is drawn is wrapped to request a fram
 });
 
 test("the authored plate's light, skin and composite change only inside calls that request a frame, and idle costs nothing", async () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
-  // The skin light and the skin under the plate arrive and leave with the V's details (setCharacterDetails, wrapped).
-  const refresh = source.slice(source.indexOf("  function refreshPlateUnderlay() {"), source.indexOf("  refreshPlateUnderlay();\n"));
-  expect(refresh).toContain("makeup.setSkinLight(item?.skin?.handle.parameters ?? null);");
-  const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  const ray = new THREE.Raycaster()"));
-  expect(details.split("refreshPlateUnderlay();").length - 1).toBe(2);
-  expect(source.split("refreshPlateUnderlay();").length - 1).toBe(3);
-  for (const change of ["setCharacterDetails", "setNormals", "updateLayer", "setLayerCanvas", "setLayerCanvases", "reconcileLayerCanvases", "setWire"])
-    expect(wrapped).toContain(change);
-  // The normals toggle reaches the plate's facets; the composite is brought up to date inside the frame, before drawing.
+  // The drawn skin changes only with the V's details (setCharacterDetails, wrapped): feature renderers read its light and the skin
+  // under their surfaces again then (tests/scene-feature-renderers.test.ts drives eye makeup's renderer through the port).
+  const details = character.slice(character.indexOf("  function setCharacterDetails("), character.indexOf("  function bakeLayered()"));
+  expect(details.split("skinChanged();").length - 1).toBe(2);
+  expect(character.split("skinChanged();").length - 1).toBe(2);
+  expect(source).toContain("skin: character.skin,");
+  for (const change of ["setCharacterDetails", "setNormals", "setWire"]) expect(wrapped).toContain(change);
+  // The normals and wireframe toggles reach every feature renderer; each brings its GPU state up to date inside the frame, before drawing.
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
-  expect(normals).toContain("makeup.setNormals(v);");
+  expect(normals).toContain("features?.setNormals(v);");
+  expect(source).toContain("setWire: (v: boolean) => features?.setWireframe(v),");
   const frame = source.slice(source.indexOf("    frame(dt) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
-  expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeGreaterThan(-1);
-  expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
-  // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and redraws the composite (PREV-58).
+  expect(frame.indexOf("features?.beforeDraw();")).toBeGreaterThan(-1);
+  expect(frame.indexOf("features?.beforeDraw();")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
+  // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and lets each feature redraw its targets (PREV-58).
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
-  expect(source).toContain("studio.restore(); makeup.contextRestored();");
+  expect(source).toContain("studio.restore(); features?.contextRestored();");
   // …and bakes the shown V's layered parts again from their stacks (PREV-62).
-  const restore = source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)"));
+  expect(source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)")))
+    .toContain("character.contextRestored();");
+  const restore = character.slice(character.indexOf("  function contextRestored() {"), character.indexOf("  return {", character.indexOf("  function contextRestored() {")));
   expect(restore).toContain("layeredContextRestored(renderer);");
   expect(restore).toContain("handle.contextRestored()");
   // The re-bake's limits reach the panel and the core eye follows whether a layered eye design baked again (PREV-74).
@@ -248,15 +258,15 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(restore).toContain("eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;");
   expect(source).toContain(`renderer.domElement.addEventListener("webglcontextrestored", restored);`);
   // A slot shown later publishes its bakes' limits too (PREV-74).
-  const visibility = source.slice(source.indexOf("function refreshDetailVisibility() {"), source.indexOf("function setHair("));
+  const visibility = character.slice(character.indexOf("function refreshDetailVisibility() {"), character.indexOf("const bakeLimitListeners"));
   expect(visibility).toContain("publishBakeLimits([...skinLimits(), ...bakeLayered()]);");
   // The previous V is released only after the new one has baked, so a try can share a bake it keeps (PREV-78).
-  const swap = source.slice(source.indexOf("function setCharacterDetails("), source.indexOf("function bakeLayered()"));
+  const swap = character.slice(character.indexOf("function setCharacterDetails("), character.indexOf("function bakeLayered()"));
   expect(swap.indexOf("const bakeLimits = bakeLayered();")).toBeGreaterThan(-1);
   expect(swap.indexOf("releasePrevious();", swap.indexOf("const bakeLimits = bakeLayered();"))).toBeGreaterThan(swap.indexOf("const bakeLimits = bakeLayered();"));
   expect(swap).not.toContain("previous.dispose(kept);\n    }");
   // Behaviour: a skin-light change needs no composite pass, and an unchanged stack draws nothing more.
-  const { createMakeupStack } = await import("../src/engines/layered-makeup/render/makeup-stack");
+  const { createMakeupStack, initialRecipe } = await import("./fixtures/eye-region");
   const THREE = await import("three");
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
@@ -273,7 +283,7 @@ test("the authored plate's light, skin and composite change only inside calls th
     roughness: new THREE.BufferAttribute(new Float32Array(n).fill(0.6), 1), metalness: new THREE.BufferAttribute(new Float32Array(n), 1) });
   stack.setCanvases([{ width: 16, height: 16 } as HTMLCanvasElement]);
   stack.setUnderlaySource(underlay);
-  stack.updateLayer(0, (await import("../src/engines/layered-makeup/recipe")).initialRecipe().layers[0]!);
+  stack.updateLayer(0, initialRecipe().layers[0]!);
   stack.prepareBlend(renderer);
   // One composite update: the layer, the resolve and the 9 × 3 composite's four roughness levels (plate-composite.ts).
   expect(stack.blendDiagnostics().plate.compositeDraws).toEqual({ layerDraws: 1, resolves: 1, levelDraws: 4 });
@@ -286,14 +296,15 @@ test("the authored plate's light, skin and composite change only inside calls th
 });
 
 test("face details request frames when they arrive, leave or change normals, and draw between the skin and the makeup plates", async () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   for (const change of ["setCharacterDetails", "setNormals", "applySavedV", "setStage"]) expect(wrapped).toContain(change);
   // The normals toggle reaches every loaded decal; a new V's decals take the current setting.
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
-  expect(normals).toContain("decal.handle.setNormals(v)");
-  expect(source).toContain("for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);");
-  const { faceDecalRenderOrder } = await import("../src/scene");
+  expect(normals).toContain("character.setNormals(v);");
+  expect(character.slice(character.indexOf("    setNormals(enabled: boolean) {"))).toContain("decal.handle.setNormals(enabled)");
+  expect(character).toContain("for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);");
+  const { faceDecalRenderOrder } = await import("../src/platform/scene/character-renderer");
   const normal = [0, 1, 2, 399, 5000].map(index => faceDecalRenderOrder("EMP_Normal", index));
   // Above the opaque skin (0), below the editable makeup plates (10 and up), the eye shell (99), brows (100) and lashes (101).
   expect(normal[0]!).toBeGreaterThan(0);

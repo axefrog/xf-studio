@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { createBrowserFileDevice } from "../src/browser-file-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../src/browser-workspace-device";
-import { freshWorkspace } from "../src/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 class Picker extends EventTarget {
   files?: File[];

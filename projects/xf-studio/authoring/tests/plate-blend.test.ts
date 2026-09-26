@@ -3,13 +3,15 @@ import * as THREE from "three";
 import { decodeSrgbByte } from "../src/decal-underlay";
 import { gbufferColour, type Rgb } from "../src/face-decal-material";
 import { flatSurface, planPresetExport } from "../src/engines/layered-makeup/finish-export";
-import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { accumulateComposite, compositeTargetSize, createPlateLightMaterial, EMPTY_COMPOSITE, MODE1_FULL_TILT, patchPlateLightShader, plateBlendWindow,
   plateDrawnAlpha, plateSurface, residualForward, unfadeFacet, type PlateComposite, type PlateSkin, type PlateSurface, type PlateTexel } from "../src/engines/layered-makeup/render/plate-blend";
 import { mergeFlatSample, type MergedSample } from "../src/engines/layered-makeup/preset-compiler";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { previewFacetChains } from "../src/engines/layered-makeup/route-mip-chains";
 import { skinParameters } from "../src/skin-material";
+import { initialRecipe } from "./fixtures/eye-region";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 const hex = (value: string): Rgb => [1, 3, 5].map(i => decodeSrgbByte(parseInt(value.slice(i, i + 2), 16))) as Rgb;
 const texel = (colour: string, coverage: number, finish: "matte" | "regular" | "metallic" | "glossy" = "matte"): PlateTexel =>

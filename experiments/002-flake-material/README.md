@@ -10,7 +10,7 @@ Use **Head & lighting → Key light angle** and orbit separately to assess the r
 
 ## Reproduce
 
-From `projects/xf-studio/authoring`, run `bun tools/bake_finish_study.ts`. It uses the same `src/finish.ts` baker as the browser, writes under this experiment's ignored `generated/` folder and uses local Pillow to encode PNGs. Two 1024-square candidates produce ten PNGs: normal XYZ, packed coverage/roughness/metalness, and each scalar channel separately. Both raw maps remain available for byte comparisons. [Result](result.json) records hashes and exact PNG decode comparisons for all ten files.
+From `projects/xf-studio/authoring`, run `bun tools/bake_finish_study.ts`. It uses the same `src/engines/layered-makeup/finish.ts` baker as the browser, writes under this experiment's ignored `generated/` folder and uses local Pillow to encode PNGs. Two 1024-square candidates produce ten PNGs: normal XYZ, packed coverage/roughness/metalness, and each scalar channel separately. Both raw maps remain available for byte comparisons. [Result](result.json) records hashes and exact PNG decode comparisons for all ten files.
 
 The browser interprets normal XYZ as linear tangent-space data, with UV0 top-left and no Y image flip. That states our convention; it is not proof of REDengine import conventions. Do not ship the PNGs merely by naming them `.xbm`. Verify importer texture groups, normal channel encoding, compression, orientation and all relevant `mesh_decal` blend weights first. Main editor **Export mask** still exports shape coverage only; these CLI-baked finish maps are a separate research output.
 

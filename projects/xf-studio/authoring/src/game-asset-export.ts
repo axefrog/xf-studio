@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256 } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
@@ -42,6 +42,11 @@ export type ExportedGeometry = {
    */
   complete: boolean;
   cached: boolean;
+  /**
+   * When the tool could not write the resource as it is and the GLB came from a repaired copy (`GameAssetExporterOptions.repairGeometry`):
+   * one plain line saying what the copy changed. Null for a direct export.
+   */
+  repair?: string | null;
 };
 export type ExportedTexture = { depotPath: string; hash: string; png: string; pngSha256: string; cached: boolean };
 /** A `.mlmask` decoded into one PNG per mask layer (index = layer), as WolvenKit writes them (`<name>_layers/<name>_<i>.png`). */
@@ -88,12 +93,23 @@ export interface GameAssetExporter {
  */
 export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; outDir: string; withMaterials: boolean; signal?: AbortSignal;
   byHash?: boolean }) => Promise<void>;
+/**
+ * A second route for a mesh the tool read (`raw`) but could not write as a GLB: export a repaired copy into `workDir` (mesh-export-repair.ts).
+ * Returns the GLB, the materials file and one plain line on what the copy changed, or null when no repair applies or it failed too.
+ * A tool failure inside the repair leaves the original outcome standing; only cancellation and a missing tool or runtime are thrown.
+ */
+export type GeometryRepair = (input: { source: ExportSource; depotPath: string; raw: string; workDir: string; signal?: AbortSignal }) =>
+  Promise<{ glb: string; materials: string | null; detail: string } | null>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
   tool?: ExportTool;
   /** Archive index lookup: which decimal depot hashes the source contains. May throw when unreadable. */
   contains?: (source: ExportSource, hashes: readonly string[]) => Set<string>;
+  /** Repair route for a mesh whose GLB the tool could not write. */
+  repairGeometry?: GeometryRepair;
 };
+/** The cache file that records a repaired export's plain line (`ExportedGeometry.repair`). */
+const REPAIR_NOTE = "repair.txt";
 const UNKNOWN_TOOL: ExportTool = { key: "unknown", label: "an unidentified exporter" };
 /** How many by-hash launches one session runs at once (each WolvenKit call selects one resource by its hash). */
 export const BY_HASH_CONCURRENCY = 4;
@@ -197,11 +213,15 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
       // Textures WolvenKit decoded while resolving materials are reused before a second uncook.
       const decoded = () => work ? join(work, "geometry") : null;
       const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
+      const repairOf = (files: Record<string, string>) => {
+        if (!files[REPAIR_NOTE]) return null;
+        try { return readFileSync(files[REPAIR_NOTE]!, "utf8").trim().slice(0, 400) || null; } catch { return null; }
+      };
       const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean): ExportedGeometry => ({
         depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: fileSha256(files.raw!),
         glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
         materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
-        complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached });
+        complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached, repair: repairOf(files) });
       const present = (depotPaths: readonly string[]): Set<string> | null => {
         if (!options.contains) return null;
         try {
@@ -233,6 +253,24 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
             const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
             if (existsSync(glb)) files["export.glb"] = glb;
             if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
+            // The tool read the mesh but could not write it (e.g. WolvenKit refusing a skin it built too small): try a repaired copy.
+            if (!files["export.glb"] && /\.mesh$/i.test(depotPath) && options.repairGeometry) {
+              const repairDir = join(workDir(), "repair", depotHash(depotPath));
+              mkdirSync(repairDir, { recursive: true });
+              let repaired: Awaited<ReturnType<GeometryRepair>> = null;
+              try { repaired = await options.repairGeometry({ source, depotPath, raw, workDir: repairDir, signal }); }
+              catch (error) {
+                if (error instanceof GameAssetExportError && error.code !== "tool_failed") throw error;
+                repaired = null;
+              }
+              if (repaired && existsSync(repaired.glb)) {
+                files["export.glb"] = repaired.glb;
+                if (!files["materials.json"] && repaired.materials && existsSync(repaired.materials)) files["materials.json"] = repaired.materials;
+                const note = join(repairDir, REPAIR_NOTE);
+                writeFileSync(note, repaired.detail);
+                files[REPAIR_NOTE] = note;
+              }
+            }
             // A partial export (WolvenKit can exit 0 with per-file failures) is reported but never cached.
             const complete = requiredGeometryFiles(depotPath).every(name => files[name]);
             out.set(depotPath, geometryFiles(depotPath, complete ? cache.write(depotPath, source, files) : files, false));

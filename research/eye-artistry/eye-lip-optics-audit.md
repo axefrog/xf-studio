@@ -4,7 +4,7 @@
 
 ## Evidence that changes the eye plan
 
-The saved eye remains Kala's `eye_16_diffuse` through Unique Eyes to CCXL; the [resolution](modded-eye-resolution.md) and [preview adapter](eye-preview-adapter-plan.md) retain the exact app-hash/definition and ignored texture hashes. The browser currently gives that 512² sRGB diffuse to one opaque `MeshStandardMaterial` with constant `roughness: 0.18`, no eye normal/roughness map, and a RoomEnvironment plus two directional lights (`authoring/src/scene.ts`, lines 44–62 and 99–146). The user-supplied close-up's “waxy” description is valid feedback, but the current source does not yet identify which optical term is responsible.
+The saved eye remains Kala's `eye_16_diffuse` through Unique Eyes to CCXL; the [resolution](modded-eye-resolution.md) and [preview adapter](eye-preview-adapter-plan.md) retain the exact app-hash/definition and ignored texture hashes. The browser currently gives that 512² sRGB diffuse to one opaque `MeshStandardMaterial` with constant `roughness: 0.18`, no eye normal/roughness map, and a RoomEnvironment plus two directional lights (`authoring/src/scene.ts` (since split into `src/platform/scene/`), lines 44–62 and 99–146). The user-supplied close-up's “waxy” description is valid feedback, but the current source does not yet identify which optical term is responsible. <!-- historical-paths --><!-- /historical-paths -->
 
 The **installed 2.31** `shader_final.cache` (SHA-256 `339145371a3b5aaa08eb4ef82d558f445b632e28603ee0f3b4860270dfc3ccfa`) contains 10 `eye` MeshSkinned variants. The G-buffer pixel program GUID `14845425953312192161` (DXBC SHA-256 `38cc7fb4b2800be113c1075e428eb609a49036c5b8a61ca008286612926f42d3`) provides stronger evidence than the prior Blender-adapter guess:
 

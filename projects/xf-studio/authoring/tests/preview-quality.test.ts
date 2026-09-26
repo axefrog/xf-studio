@@ -1,7 +1,7 @@
 import {expect,test} from "bun:test";
-import {initialRecipe} from "../src/engines/layered-makeup/recipe";
 import {assessPreviewQuality,DEFAULT_PREVIEW_BUDGET_BYTES,DEFAULT_PREVIEW_TEXTURE_SIZE,isPreviewTextureSize,
   parsePreviewTextureSize,PREVIEW_TEXTURE_SIZES} from "../src/preview-quality";
+import { initialRecipe } from "./fixtures/eye-region";
 
 test("preview texture sizes validate strictly while saved invalid preferences use the default",()=>{
   expect(DEFAULT_PREVIEW_TEXTURE_SIZE).toBe(1024);

@@ -4,7 +4,9 @@ import type { ViewportHit, ViewportHostKind } from "../src/viewport-attachment";
 import type { Feedback } from "../src/studio-ui/feedback";
 import { menuFromSections, menuSections, type MenuItem } from "../src/studio-ui/menu";
 import { StudioRuntime, type Port } from "../src/studio-ui/runtime";
-import { collectionSections, layerSections, presetSections, viewportSections } from "../src/studio-ui/target-menus";
+import { collectionSections, presetSections, viewportSections } from "../src/studio-ui/target-menus";
+import { featureViewContext } from "../src/studio-ui/views/feature-context";
+import { layerSections } from "../src/features/eye-makeup/view/layer-menu";
 import { trustedFixture } from "./studio-presentation-fixture";
 
 /**
@@ -67,9 +69,10 @@ test("every context-menu section for every target kind holds an action; no infor
     // Keyboard invocation targets the selected point, then the view.
     expect(menu(kind, undefined, false).map(section => section.label)).toEqual(["Selected point 1", view[kind]]);
   }
-  const port = rt.port;
+  const port = rt.port, eye = featureViewContext(rt, "eye-makeup");
+  // Eye makeup's layer menu comes from its view: the layer's application-bound entries, then its own commands.
   for (const layer of rt.editor.recipe().layers)
-    for (const section of menuSections(menuFromSections(layerSections(rt, layer.id, anchor)))) expect(actionable(section.items)).toBe(true);
+    for (const section of menuSections(menuFromSections(layerSections(eye, layer.id, anchor)))) expect(actionable(section.items)).toBe(true);
   for (const preset of port.library.summary().draft?.presets ?? [])
     for (const section of menuSections(menuFromSections(presetSections(rt, preset.id, anchor)))) expect(actionable(section.items)).toBe(true);
   for (const section of menuSections(menuFromSections(collectionSections(rt, anchor)))) expect(actionable(section.items)).toBe(true);
