@@ -3,7 +3,7 @@ import { convertToBezier, tangentEndpoint } from "../src/engines/layered-makeup/
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, fitUVView, parseUVView, reflectUV, uvRegion, uvToPixel } from "../src/uv-view";
-import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
+import { initialRecipe, EYE_REGION, EYE_MIRROR } from "./fixtures/eye-region";
 
 test("UV Fit includes all explicit tangents, including outside-atlas and mirrored endpoints", () => {
   const layer = convertToBezier(initialRecipe().layers[0]);
@@ -11,9 +11,9 @@ test("UV Fit includes all explicit tangents, including outside-atlas and mirrore
   layer.points[0].handles!.out = { u: -.2, v: .15 };
   const before = structuredClone(layer);
   for (const mode of ["both", "single"] as const) for (const side of ["low", "high"] as const) {
-    const view = fitUVView({ ...defaultUVView(), mode, side }, layer), region = uvRegion(view);
+    const view = fitUVView({ ...defaultUVView(), mode, side }, layer, EYE_MIRROR), region = uvRegion(view);
     for (const point of layer.points) for (const arm of ["in", "out"] as const) for (const mirror of [false, true]) {
-      const endpoint = reflectUV(tangentEndpoint(point, arm), mirror);
+      const endpoint = reflectUV(tangentEndpoint(point, arm), mirror, EYE_MIRROR);
       if (mode === "single" && (side === "low" ? endpoint.u > .5 : endpoint.u < .5)) continue;
       const pixel = uvToPixel(endpoint, region, 720, mode === "both" ? 310 : 520);
       expect(pixel.x).toBeGreaterThan(0); expect(pixel.x).toBeLessThan(720);
@@ -30,12 +30,12 @@ test("UV Fit and persisted bounds expose extreme legal arms on their owner's eye
   layer.points[1].u = .3; layer.points[1].v = 1;
   layer.points[1].handles = { in: { u: 1, v: 1 }, out: { u: -1, v: -1 }, mode: "symmetric" };
   for (const mode of ["both", "single"] as const) for (const side of ["low", "high"] as const) {
-    const view = fitUVView({ ...defaultUVView(), mode, side }, layer);
+    const view = fitUVView({ ...defaultUVView(), mode, side }, layer, EYE_MIRROR);
     expect(parseUVView(JSON.parse(JSON.stringify(view)))).toEqual(view);
     for (const point of layer.points) for (const arm of ["in", "out"] as const) for (const mirror of [false, true]) {
-      const owner = reflectUV(point, mirror);
+      const owner = reflectUV(point, mirror, EYE_MIRROR);
       if (mode === "single" && (side === "low" ? owner.u > .5 : owner.u < .5)) continue;
-      const pixel = uvToPixel(reflectUV(tangentEndpoint(point, arm), mirror), uvRegion(view), 720, mode === "both" ? 310 : 520);
+      const pixel = uvToPixel(reflectUV(tangentEndpoint(point, arm), mirror, EYE_MIRROR), uvRegion(view), 720, mode === "both" ? 310 : 520);
       expect(pixel.x).toBeGreaterThan(0); expect(pixel.x).toBeLessThan(720);
       expect(pixel.y).toBeGreaterThan(0); expect(pixel.y).toBeLessThan(mode === "both" ? 310 : 520);
     }

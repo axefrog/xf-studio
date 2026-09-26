@@ -6,7 +6,7 @@ import { isCameraEffect } from "./head-camera-input";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./engines/layered-makeup/recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./engines/layered-makeup/bezier-path";
 import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer } from "./engines/layered-makeup/shape-transform";
-import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
+import { mirrored as mirrorPoint, type LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import {
   SurfaceMap,
   anchorPosition,
@@ -155,7 +155,9 @@ export function createSurfaceEditor(
     kind: "translate" | "rotate"; start: UV; last: UV; pointer: number; controlsEnabled: boolean;
   }) | undefined;
   let wheel: (ShapeGesture & { factor: number; timer?: ReturnType<typeof setTimeout> }) | undefined;
-  const canonical = (uv: UV, mirror: boolean): UV => ({ u: mirror ? 1 - uv.u : uv.u, v: uv.v });
+  /** A symmetric layer's mirrored instance, across the live feature's mirror line (CORE-82); it is its own inverse. */
+  const across = mirrorPoint(hooks.region.mirror);
+  const canonical = (uv: UV, mirror: boolean): UV => { if (!mirror) return uv; const [u, v] = across(uv.u, uv.v); return { u, v }; };
   const validShape = (state: ShapeGesture) => enabled && hooks.layer() === state.layer && state.layer.enabled
     && hooks.selected() === state.selected && JSON.stringify(state.layer) === state.expected;
   function finishWheel(cancel = false) {
@@ -253,7 +255,7 @@ export function createSurfaceEditor(
       }
     }
     for (const mirror of layer.symmetry ? [false, true] : [false]) {
-      const reflect = (p: UV) => ({ u: mirror ? 1 - p.u : p.u, v: p.v });
+      const reflect = (p: UV) => canonical(p, mirror);
       layer.points.forEach((p, i) => handle("point", i, reflect(p), mirror));
       const outline = curve(layer.points, 6);
       path([...outline, outline[0]].map(reflect));
@@ -637,8 +639,7 @@ export function createSurfaceEditor(
       }
       const l = drag.layer;
       const h = drag.handle,
-        u = h.mirror ? 1 - uv.u : uv.u,
-        v = uv.v;
+        { u, v } = canonical(uv, h.mirror);
       let accepted = false;
       if (h.kind === "point") {
         accepted = hooks.apply({ kind: "point.replace", index: h.index, next: { u: clamp(u), v: clamp(v) } });

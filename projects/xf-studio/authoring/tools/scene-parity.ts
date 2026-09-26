@@ -4,34 +4,45 @@
  * the 1K and 2K preview sizes, in an isolated `?verify=1` workspace with disposable data and a throwaway Chrome profile.
  *
  *   bun tools/scene-parity.ts capture <out dir under evidence/screenshots> [port]
- *   bun tools/scene-parity.ts compare <before dir> <after dir>
+ *   bun tools/scene-parity.ts compare <after dir> <base dir> [<another base dir> …]
  *
- * Capture a build of the code before the change and one after, then compare: every frame must match pixel for pixel. Outputs are
- * private renders of local game assets: keep them in the ignored evidence/screenshots tree.
+ * Capture the code before the change (twice or more: the first creator frame can differ between runs of the same build by a few pixels
+ * one step apart) and after it, then compare: every frame after must match one of the base captures pixel for pixel (PREV-98). Outputs
+ * are private renders of local game assets: keep them in the ignored evidence/screenshots tree.
  */
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { decodePng } from "../src/png";
 import { launch, startServer } from "./cdp";
 
-const [mode, first, second] = process.argv.slice(2);
+const [mode, first, second, ...more] = process.argv.slice(2);
+
+/** How two frames differ: `size` when their sizes do, else the differing pixels and the largest channel step. */
+function difference(a: ReturnType<typeof decodePng>, b: ReturnType<typeof decodePng>) {
+  if (a.width !== b.width || a.height !== b.height) return { size: `${a.width}x${a.height} vs ${b.width}x${b.height}`, pixels: -1, max: 0 };
+  let pixels = 0, max = 0;
+  for (let i = 0; i < a.data.length; i += 4) {
+    const d = Math.max(Math.abs(a.data[i]! - b.data[i]!), Math.abs(a.data[i + 1]! - b.data[i + 1]!), Math.abs(a.data[i + 2]! - b.data[i + 2]!));
+    if (d) { pixels++; max = Math.max(max, d); }
+  }
+  return { size: null, pixels, max };
+}
 
 if (mode === "compare") {
-  if (!first || !second) throw Error("Usage: bun tools/scene-parity.ts compare <before dir> <after dir>");
+  if (!first || !second) throw Error("Usage: bun tools/scene-parity.ts compare <after dir> <base dir> [<another base dir> …]");
+  const bases = [second, ...more];
   const frames = readdirSync(resolve(first)).filter(file => file.endsWith(".png")).sort();
   let failed = 0;
   for (const file of frames) {
-    const a = decodePng(readFileSync(resolve(first, file))), b = decodePng(readFileSync(resolve(second, file)));
-    if (a.width !== b.width || a.height !== b.height) { console.log(`${file}: size ${a.width}x${a.height} vs ${b.width}x${b.height}`); failed++; continue; }
-    let differing = 0, max = 0;
-    for (let i = 0; i < a.data.length; i += 4) {
-      const d = Math.max(Math.abs(a.data[i]! - b.data[i]!), Math.abs(a.data[i + 1]! - b.data[i + 1]!), Math.abs(a.data[i + 2]! - b.data[i + 2]!));
-      if (d) { differing++; max = Math.max(max, d); }
-    }
-    if (differing) failed++;
-    console.log(`${file.padEnd(40)} ${differing ? `DIFFERS: ${differing} pixels, max ${max}` : "identical"}`);
+    const after = decodePng(readFileSync(resolve(first, file)));
+    const results = bases.map(base => ({ base, ...difference(after, decodePng(readFileSync(resolve(base, file)))) }));
+    const match = results.find(result => !result.size && result.pixels === 0);
+    if (!match) failed++;
+    const nearest = results.reduce((best, result) => result.size ? best : !best || result.pixels < best.pixels ? result : best, undefined as typeof results[number] | undefined);
+    console.log(`${file.padEnd(40)} ${match ? `identical to ${bases.length > 1 ? match.base : "the base"}`
+      : nearest ? `DIFFERS: ${nearest.pixels} pixels, max ${nearest.max} (nearest ${nearest.base})` : `DIFFERS: size ${results[0]!.size}`}`);
   }
-  console.log(`${frames.length} frames, ${failed} differ`);
+  console.log(`${frames.length} frames, ${failed} match none of ${bases.length} base capture${bases.length > 1 ? "s" : ""}`);
   process.exit(failed ? 1 : 0);
 }
 
