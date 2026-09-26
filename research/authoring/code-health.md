@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `023cbf7` | 2026-09-26 | Platform step 7: scene host, port, head rig, character renderer, feature renderers | 0 High, 5 Medium, 11 Low (PREV-89..98, CORE-86..89, UI-76..77; renumbered from the reviewer's CORE-82..85). No regressions; UI-11 fixed, UI-02 architecture and PIPE-11 preview confirmed. The Mediums block a second feature and are scheduled before module #2 |
 | `81bcac9` | 2026-09-26 | Platform step 5 file moves: `engines/layered-makeup`, `features/eye-makeup/view`, composed views, UI-52 | 0 High, 5 Medium, 6 Low (CORE-75..81, UI-73..75, PREV-88). Nothing broken; the engine isn't region-generic yet and the new boundary tests have holes. UI-52 and CORE-03's layout part confirmed. Fixes in claude/cleanup-engine |
 | `6a1ff15` | 2026-09-26 | CC controls slice 2: Character panel, context actions, catalogue endpoint, request-4 | 1 High (PIPE-78), 7 Medium, 11 Low (PIPE-78..83, PREV-86..87, UI-67..72, CORE-70..74; renumbered from the reviewer's IDs, which collided with the blink review). Open Highs 2. All fixed in claude/cleanup-ccpanel |
 | `e1219fd` | 2026-09-26 | Game blink (solved clip, per-eye-shape seats, lash and brow binding) | 0 High, 1 Medium, 7 Low (PREV-80..85, UI-61..62, CORE-65). No drift over 5,000 scrubs; no GPL code copied |
@@ -102,6 +103,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-29 | Med | Core (design) | Nine non-root modules import `compose/studio-registry` as a service locator; the boundary test only checks direct `features/` imports | **Fixed** (claude/cleanup-platform, 26 Sep): registry, part registry and live feature injected from the startup and server roots; only `compose/` and roots import `compose/`; the feature-import test is transitive |
 | CORE-38 | Med | Core | Export and Build plan save to the library first, which the CORE-30 guard refuses for any collection needing `xfs/collection-2`, so the export fails too and its message says to export to a file (`collection-service.ts:324-325`). Every multi-feature collection will hit this | **Fixed** (claude/cleanup-platform2, 26 Sep): the draft is saved first only when the library takes it; otherwise its snapshot is exported unsaved, with a plain message; test with the real library |
 | CORE-39 | Med | Core (data) | A one-feature history is always stored as whole parts (12–17× the `xfs/look-history-1` form), so `fitWorkspace` drops steps instead of switching form: a heavy 32-layer look keeps 4 of 80 steps, below the floor of 10 (`document.ts:380`, `workspace-budget.ts:98-144`) | **Fixed** (claude/cleanup-platform2, 26 Sep): `fitWorkspace` stores every history look-level before dropping steps (whole parts kept whenever they fit); the heavy look keeps all 80; the desktop host keeps that form |
+| PREV-89 | Med | Rendering (design) | `supersedes` works per whole slot and is read once: lips superseding `face` would hide every face decal, brows would hide vanilla brows even without authored ones, and `skin` misbehaves in both head modes (`platform/api/scene.ts:93`, `feature-renderers.ts:116`, `character-renderer.ts:147-149`) | Open (before module #2) |
+| PREV-90 | Med | Rendering (design) | The scene port can't join a feature's bones to the idle/blink rig, so feature-drawn meshes with their own skeleton stay still (`platform/api/scene.ts:63`) | Open (before module #2) |
+| PREV-91 | Med | Rendering (design) | The layered engine hard-codes draw order `10 + i`; a second layered feature (lips, cheek) would interleave with eye makeup (`makeup-stack.ts:100,137,289`) | Open (before module #2) |
+| CORE-86 | Med | Core (design) | Scene-host and feature-renderer boundary rules check direct imports only; through the 31-module allowlist `platform/scene` already reaches app services and eye-specific modules (type-only today) (`architecture-import-boundary.test.ts:205,238`) | Open (before module #2) |
+| UI-76 | Med | Presentation (design) | The preview wiring handles exactly one layered surface (one preview device and on-head editor, eye makeup named in startup): a second layered feature needs edits beyond the composition list (`browser-head-attachment.ts:101-104`, `studio-startup.ts:206,252`) | Open (before module #2) |
 | CORE-75 | Med | Core (design) | The layered-makeup engine still holds eye makeup's region config: the new-layer/reset contour and starter, the fine-Glitter UV regions and cache key, the 2048×512/4096×1024 plate texture grids and a mirror fixed at u=0.5; the design doc says the opposite (`engines/layered-makeup/recipe.ts:106-128`, `layer-stack.ts`, `flake-field.ts`, `raster-processor.ts`, `finish-export.ts`) | Open (claude/cleanup-engine) |
 | CORE-77 | Med | Core (design) | The feature-core boundary checks direct imports only with a permissive allowlist and no globals check; eye makeup's core already reaches `platform/core/look-history` through `editor-actions` (`tests/architecture-import-boundary.test.ts:181-199`) | Open (claude/cleanup-engine) |
 | CORE-78 | Med | Core (design) | "Three only in `render/`" is direct-only (a pure engine module may import its own `render/`), and the `window` allowance hides `const w = window` and other globals (`tests/architecture-import-boundary.test.ts:207-226`) | Open (claude/cleanup-engine) |
@@ -228,6 +234,18 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **PREV-92..98, CORE-87..89, UI-77** (step 7 review at `023cbf7`), Open (before module #2):
+  - **PREV-92:** registry cleanup is incomplete: a renderer throwing after `attach`/`onFrame` leaves both, and `skin`/`subscribeCharacter`/`subscribeLighting` subscriptions aren't tracked for dispose.
+  - **PREV-93:** a morph-following attach captures its meshes at attach time; meshes added later ignore facial shapes.
+  - **PREV-94:** one renderer's `beforeDraw` throwing stops the frame for every feature.
+  - **PREV-95:** `skin.subscribe` fires twice per V switch, the first with no identity.
+  - **PREV-96:** `CharacterView.drawn` omits `skin` in core-head mode and includes hidden or superseded slots.
+  - **PREV-97:** `anchors()` hands out platform-owned meshes that eye makeup's stack mutates; dispose frees a material the anchor still uses.
+  - **PREV-98:** test gaps: no behavioural character-renderer test; scheduler and skin checks match source text; the GPU probe skips resolved skin, context loss and failing renderers; the rendering-boundary list is hard-coded; `scene-parity compare` can't express "matches either base".
+  - **CORE-87:** the import scan misses `require("…")`, template-literal and computed `import()`.
+  - **CORE-88:** a value import of `three` in `platform/api` isn't refused.
+  - **CORE-89:** the head rig's surfaces map is hard-wired to the plate.
+  - **UI-77:** `features.get(id)` is untyped; `pick` and `diagnostics` have no callers.
 - **CORE-76, CORE-79..81, UI-74, PREV-88** (step 5 moves review at `81bcac9`), Open (claude/cleanup-engine):
   - **CORE-76:** eye-only lineage in the engine: `parseRecipe` reads `eye-artistry/recipe-*` and defaults to eye layer models; `RecipeActions` is an application publisher; user text says "eye" and "lid".
   - **CORE-79:** the design doc's "what stays in `src/`" list is incomplete and names no destinations.
@@ -267,7 +285,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- `src/platform/scene/` (the scene host, head rig, character renderer and feature-renderer registry), the scene port `src/platform/api/scene.ts`, `src/features/eye-makeup/render/` (eye makeup's `FeatureRenderer`) and `src/compose/renderers.ts`: platform step 7, claude/platform-step7. Split and moved code plus the new port and registry; a new boundary exception (the scene host's device modules, [boundary assessment](ui-architecture-boundary.md#open-work)).
+- None.
 
 ## Fixed in claude/platform-step7
 
