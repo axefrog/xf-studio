@@ -78,7 +78,7 @@ By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/Wo
 
 ### Blender
 
-By the Blender Foundation and contributors. [blender.org](https://www.blender.org/). Blender powers our offline mesh work, eye-plate clearance studies and diagnostic renders; its BVH ray-casting API made it possible to tell visible intersections from hidden ones. Its status bar, which shows what the mouse and held modifier keys do in the current context, is the model for the Studio's viewport input hints.
+By the Blender Foundation and contributors. [blender.org](https://www.blender.org/). Blender powers our offline mesh work, eye-plate clearance studies and diagnostic renders; its BVH ray-casting API made it possible to tell visible intersections from hidden ones. Its status bar, which shows what the mouse and held modifier keys do in the current context, is the model for the Studio's viewport input hints. Its workspaces, saved sets of editors and layout switched from header tabs, are the model for the Studio's planned named workspaces over combinable modules.
 
 ### Bun
 
@@ -158,7 +158,7 @@ By the SQLite project. [sqlite.org](https://sqlite.org/). SQLite stores XF Studi
 
 ### Three.js
 
-By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build.
+By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views.
 
 ### wgpu
 

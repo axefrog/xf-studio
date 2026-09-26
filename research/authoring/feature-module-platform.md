@@ -1,6 +1,6 @@
 # XF Studio feature-module platform
 
-**Status:** accepted design, 25 September 2026; implementation per §8, with steps 1 (registry and routing), 2 (the look/part document model) and 3 (per-layer models) built on 26 September, the review of steps 1–3 fixed ([cleanup](#cleanup-after-steps-13)), step 4 (the look history, platform transactions and budgets) built on 26 September ([step 4 status](#step-4-status)), and step 5 (presentation facades, a live document per feature, view contributions, the Undo port, spec fields and per-look "not editable in this version", then the file moves into `engines/layered-makeup/`, `features/eye-makeup/view/` and `compose/`) built on 26 September ([step 5 status](#step-5-status)), step 7 (the scene host in `platform/scene/`, the scene port, feature renderers with eye makeup's as the first, and the platform's character renderer with the host's detail loader) built on 26 September ([step 7 status](#step-7-status)), and step 8 (the exporter and verifier contract, the product planner and package plan, the export host in `platform/export/` with `runProductBuild` for both hosts, `xfs/local-package-2`, eye makeup's exporter and verifier) built on 26 September ([step 8 status](#step-8-status)). It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
+**Status:** accepted design, 25 September 2026; implementation per §8, with steps 1 (registry and routing), 2 (the look/part document model) and 3 (per-layer models) built on 26 September, the review of steps 1–3 fixed ([cleanup](#cleanup-after-steps-13)), step 4 (the look history, platform transactions and budgets) built on 26 September ([step 4 status](#step-4-status)), and step 5 (presentation facades, a live document per feature, view contributions, the Undo port, spec fields and per-look "not editable in this version", then the file moves into `engines/layered-makeup/`, `features/eye-makeup/view/` and `compose/`) built on 26 September ([step 5 status](#step-5-status)), step 7 (the scene host in `platform/scene/`, the scene port, feature renderers with eye makeup's as the first, and the platform's character renderer with the host's detail loader) built on 26 September ([step 7 status](#step-7-status)), and step 8 (the exporter and verifier contract, the product planner and package plan, the export host in `platform/export/` with `runProductBuild` for both hosts, `xfs/local-package-2`, eye makeup's exporter and verifier) built on 26 September ([step 8 status](#step-8-status)). It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. **More than one 3D view, and modules beyond eye makeup:** the [view graph and Studio modules design](view-graph-design.md) (27 September, design ready) extends §1, §4 and §5. Camera, lights, display and view tools become workspace graph nodes that views share or fork, and Studio modules (with or without a document part) contribute panels, view tools and scene kinds that a person shows or hides. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
 
 **Why.** XF Studio is a platform. Eye makeup is its first feature module. Planned modules each get a dedicated effort:
 
@@ -37,7 +37,7 @@ The design splits this into three parts:
 | Routing, registry, catalogue, reason codes | Targets and context hits (existence checks, candidates) |
 | Job scheduler (worker pool, fairness, cancellation) | Preview job policy on the scheduler (e.g. the layer queue) |
 | Character context: resolver input, `ResolvedCharacter`, detail loading, material adapters | Resolver consumption (catalogue reads, character-input contribution, slots it supersedes) |
-| Scene host: renderer, camera, lights, frame loop, picking dispatch, dispose | Renderer for its parts; picking inside its own objects |
+| Scene host: renderer, camera, lights, frame loop, picking dispatch, dispose (with the [view graph](view-graph-design.md): one GPU context and loop for every view; camera, lights, display and tools as graph nodes) | Renderer for its parts; picking inside its own objects; view tools, summaries and scene kinds of its Studio module |
 | Export host: product plan, Check/Build/verify/promote, manifest, install transport | Exporter (eligibility, plan, inventory, `.xl` fragment, build) and an independent verifier |
 | UI shell: docking, palette, menus, feedback, preferences | View contributions: panels, inspectors, extra commands, input bindings |
 
@@ -278,6 +278,12 @@ export interface MaterialAdapter { matches(template: DepotRef): boolean;
 - **The platform's character renderer** loads every drawing, non-superseded component through `DetailLoader` and the adapter matching its material template. This replaces the exact-hash special cases for brows, lashes, hair, eyes and PRC.
 
 **Lifecycle.** Host ready → create renderers → `sync` on each part change or preset switch (`"reset"` on preset switch or quality change) → `dispose` on teardown. Readiness aggregates per feature into `PreviewReadiness`. Raster arithmetic, cooperative cancellation and complete-bundle publication stay unchanged.
+
+**One scene host is one viewport (corrections for more than one view).** The built host fuses one WebGL context, one scene, one camera and controls, one light rig and one subject, and the layers above it assume exactly one ([audit](view-graph-design.md#2-audit-where-the-code-assumes-one-viewport)). The [view graph design](view-graph-design.md) splits it into per-scene, per-view and per-rig runtimes under one context and one loop (its phase P3). Three consequences for this section:
+
+- **Renderers are view-independent.** A feature renderer is created per *scene node*, not per view. It must never depend on the camera or the light rig that draws it. The port's `lighting()` and `subscribeLighting` assume one rig per scene; no renderer uses them, and they are removed in phase P1. Per-view differences, such as eye makeup's plate wireframe, reach a renderer only through an optional `viewTools` hook.
+- **Surface controls and Plate wireframe are eye makeup's view tools.** They are not preview-family toggles: they become its `ViewToolContribution`s, and the head toolbar is derived rather than hard-coded.
+- **The `viewport` target and the camera and preview actions gain a view.** `StudioTarget {kind: "viewport"}` and the camera and preview actions gain an optional view, which defaults to the focused view (§4).
 
 ## 6. Export: mod products and the package plan (PIPE-12)
 
@@ -911,6 +917,8 @@ Done 26 September in `claude/cleanup-batch2`: the step 8 review's CORE-91 and PI
 With the default plan, a collection containing both features builds one "XF Looks" mod with two selectors. Splitting lips out is a plan edit and a rebuild.
 
 If either module needs a platform change beyond the composition list, the design has failed; record the gap in the [boundary assessment](ui-architecture-boundary.md).
+
+**Modules without a part.** Poses (V-centric, no document part) and World (not about V, with its own `location` scene kind) are Studio modules that register no feature module. They plug in through the [view graph design](view-graph-design.md#5-placeholder-modules)'s module manifest, view contributions, view tools and scene kinds, under the same acceptance rule: only the `compose/` lists change outside their folders.
 
 ## Decisions
 
