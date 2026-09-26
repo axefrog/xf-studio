@@ -156,7 +156,7 @@ Hairstyles draw a cap under the cards with **`mesh_decal_gradientmap_recolor.mt`
 
 - `DiffuseTexture` is an **ID map**: its R addresses a `GradientMap` texture, the per-colour `hh_cap_grad__<colour>.xbm` (sRGB, `isGamma` 1) [observed].
 - `MaskTexture` gives the coverage; colour blends in **square-root space** like every decal ([materials §2.4](../../knowledge/materials-and-shaders.md#24-what-a-post_gbuffer-decal-does-to-the-pixel-under-it)).
-- The cap therefore does not use the `.hp` at all: a hair-colour mod must ship matching cap gradients, or the scalp and strands disagree. The plain template's colour and coverage arithmetic is taken from its decompiled `_blendable` sibling [hypothesis for the plain template].
+- The cap therefore does not use the `.hp` at all: a hair-colour mod must ship matching cap gradients, or the scalp and strands disagree. The plain template's own program (`5232451138945967528`) has since been read: colour `DiffuseColor × GradientMap(saturate(DiffuseTexture.R), 0.5)` in square-root space, linear and unsaturated coverage from `DiffuseAlpha × gradient alpha × MaskTexture.R`, no UV transform [observed] ([decal reference §5.3](shader-decal.md#53-the-gradient-recolour-trio)).
 
 ## 9. Lashes
 

@@ -57,7 +57,7 @@ export interface CoverageInput {
 
 const RANK: Record<RenderStatus, number> = { "not-rendered": 0, conditional: 1, rendered: 2 };
 const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face detail", brows: "the eyebrows", lashes: "the eyelashes",
-  hair: "the hair", eyes: "the eyes", piercings: "the piercings", body: "the body" };
+  hair: "the hair", eyes: "the eyes", piercings: "the piercings", body: "the body", clothing: "the clothes" };
 
 export const NOT_HEAD = "The preview doesn't draw this part of the body, so changing it shows nothing.";
 export const UNDER_COVER = "Covered by the game's underwear in the 3D view, so it isn't drawn.";

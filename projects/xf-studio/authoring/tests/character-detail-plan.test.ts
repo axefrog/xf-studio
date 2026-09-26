@@ -38,7 +38,9 @@ describe("resolver selection for brows, lashes and hair", () => {
       { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" },
       { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 01, silver" },
       // V "A" as saved here lists no body part.
-      { slot: "body", state: "none", label: "None" }]);
+      { slot: "body", state: "none", label: "None" },
+      // No clothing requested.
+      { slot: "clothing", state: "none", label: "None" }]);
     expect(result.components.map(c => `${c.slot}:${c.option}:${c.component}`)).toEqual(
       ["skin:skin_type_01:head", "face:makeupLips_05:hx_lips", "face:makeupCheeks_05:hx_freckles", "brows:eyebrows_color1:brow",
         "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes", "piercings:piercings_01:earring_01"]);

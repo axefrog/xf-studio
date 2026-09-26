@@ -30,6 +30,8 @@ import { CREATOR_LIMITS, isCreatorName, isModName } from "./creator-names";
 import { depotHash, refFromHash } from "./depot-path";
 import type { Ambiguity } from "./resolution-evidence";
 import { actionTable, type ActionDescriptor, familyId, type SystemFamily, type ValueSchema } from "./platform/api";
+import { CLOTHING_STATES, type ClothingState } from "./clothing-dressing";
+import { CLOTHING_AREAS, type ClothingArea } from "./save-loadout";
 
 /** One body gender's creator: the catalogue and the merged resource R5 derives descriptors from. */
 export interface CharacterSource { readonly catalogue: CcCatalogue; readonly cco: CcoResource; readonly index?: CatalogueIndex }
@@ -479,7 +481,13 @@ export type CharacterContextAction =
   /** Remove the game files prepared for the 3D view on this computer; they are read from the game again when needed. */
   | { kind: "character.clearPreparedFiles" }
   | { kind: "character.undo" }
-  | { kind: "character.redo" };
+  | { kind: "character.redo" }
+  /** Which of V's clothes the preview shows (clothing-dressing.ts); a viewing setting with its own Undo. */
+  | { kind: "character.setClothing"; state: ClothingState }
+  /** Show or hide one clothing area (the setting becomes `custom`, starting from the areas shown now). */
+  | { kind: "character.setClothingArea"; area: ClothingArea; shown: boolean }
+  | { kind: "character.undoClothing" }
+  | { kind: "character.redoClothing" };
 
 const input = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: true, from: "input", ...extra });
 const optional = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: false, from: "input", ...extra });
@@ -502,6 +510,10 @@ export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.clearPreparedFiles": desc("viewport", "file", {}),
   "character.undo": desc("viewport", "workspace", {}),
   "character.redo": desc("viewport", "workspace", {}),
+  "character.setClothing": desc("viewport", "workspace", { state: input("enum", { values: CLOTHING_STATES }) }),
+  "character.setClothingArea": desc("viewport", "workspace", { area: input("enum", { values: CLOTHING_AREAS }), shown: input("boolean") }),
+  "character.undoClothing": desc("viewport", "workspace", {}),
+  "character.redoClothing": desc("viewport", "workspace", {}),
 } satisfies Record<CharacterContextAction["kind"], ActionDescriptor<Scope>>;
 
 const CHARACTER_ID = familyId("characterContext");
@@ -510,5 +522,6 @@ export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scop
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
     "character.setOption": true, "character.setOptions": true, "character.hideOwnMakeup": true, "character.reset": true, "character.resetAll": true,
     "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
-    "character.undo": true, "character.redo": true }),
+    "character.undo": true, "character.redo": true, "character.setClothing": true, "character.setClothingArea": true,
+    "character.undoClothing": true, "character.redoClothing": true }),
 });

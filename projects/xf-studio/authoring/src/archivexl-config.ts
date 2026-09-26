@@ -15,6 +15,9 @@
  * - `localization.onscreens`: Localization/Config.cpp (a map of language code → path or list, whose first language is
  *   the fallback; a bare path or list means English) and Extension.cpp Configure (a unit with `extend` appends its paths
  *   to the named unit, the `.xl` file name, and is dropped).
+ * - `factories`: FactoryIndex/Config.cpp and Extension.cpp Configure (a path or list; each existing factory is loaded after the game's own);
+ * - `overrides.tags`: Garment/Config.cpp `GarmentOverrideConfig::LoadYAML` (tag → component name or prefix → `{hide|show: chunks | mask}`,
+ *   a chunk list, or a numeric mask) and ChunkMask.hpp (a hide list keeps every other chunk; `hide: 0` hides the whole component).
  * The installed ArchiveXL may be older than this source; each rule is still read from the installed files.
  */
 import { depotHash } from "./depot-path";
@@ -56,6 +59,12 @@ export interface XlLocalization {
 export const XL_LANGUAGES: readonly string[] = ["ar-ar", "cz-cz", "de-de", "en-us", "es-es", "es-mx", "fr-fr", "hu-hu", "it-it",
   "jp-jp", "kr-kr", "pl-pl", "pt-br", "ru-ru", "th-th", "tr-tr", "ua-ua", "zh-cn", "zh-tw"];
 
+/**
+ * One `overrides.tags` rule for one component name or prefix: `hide` is ANDed into the component's chunk mask, `show` ORed in
+ * (Garment ChunkMask: a hide list becomes the mask of every other chunk; a bare number is a hiding mask as written).
+ */
+export interface XlTagRule { readonly component: string; readonly hide: bigint | null; readonly show: bigint | null; readonly declaredBy: string }
+
 export interface ArchiveXlConfig {
   readonly customizations: { readonly female: readonly XlCustomization[]; readonly male: readonly XlCustomization[] };
   /** Flattened scope → leaf members. */
@@ -70,7 +79,43 @@ export interface ArchiveXlConfig {
   readonly paths: ReadonlyMap<string, string>;
   /** Text declarations in load order, `extend` units already folded into their targets. */
   readonly localization: readonly XlLocalization[];
+  /** Item factories (`.csv`) `.xl` files add, in load order (existence is checked by the consumer, as FactoryIndex does). */
+  readonly factories: readonly { readonly path: string; readonly declaredBy: string }[];
+  /** Visual tag → chunk-mask rules, every file's in load order (ArchiveXL's bundled `VisualTags.xl` among them). */
+  readonly tagRules: ReadonlyMap<string, readonly XlTagRule[]>;
   readonly issues: readonly string[];
+}
+
+const ALL_CHUNKS = (1n << 64n) - 1n;
+/** A chunk list as ArchiveXL's `ChunkMask(set, chunks)` builds it: the chunks' bits, inverted for hiding (`1 << chunk` on a 32-bit int). */
+function chunkBits(chunks: readonly number[]): bigint {
+  let bits = 0n;
+  for (const chunk of chunks) if (Number.isInteger(chunk) && chunk >= 0 && chunk < 32) bits |= 1n << BigInt(chunk);
+  return bits;
+}
+/** Parse one `overrides.tags` component entry into a rule, or null when it is malformed. */
+export function tagRuleOf(component: string, value: unknown, declaredBy: string): XlTagRule | null {
+  const numbers = (x: unknown) => Array.isArray(x) && x.every(n => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 255) ? x as number[] : null;
+  const mask = (x: unknown): bigint | null => {
+    if (typeof x === "number" && Number.isInteger(x) && x >= 0) return BigInt(x) & ALL_CHUNKS;
+    if (typeof x === "string" && /^(0x[0-9a-f]{1,16}|[0-9]{1,20})$/i.test(x.trim())) { const n = BigInt(x.trim()); return n <= ALL_CHUNKS ? n : null; }
+    return null;
+  };
+  if (isMap(value)) {
+    for (const op of ["hide", "show"] as const) {
+      if (value[op] === undefined) continue;
+      const list = numbers(value[op]), bits = list ? chunkBits(list) : mask(value[op]);
+      if (bits === null) return null;
+      // A hide list keeps every other chunk (an empty list, a zero mask, hides them all, as `ChunkMask::Set` leaves it); a number is the mask as written.
+      if (op === "hide") return { component, hide: list ? ~bits & ALL_CHUNKS & (bits ? ALL_CHUNKS : 0n) : bits, show: null, declaredBy };
+      return { component, hide: null, show: bits, declaredBy };
+    }
+    return null;
+  }
+  const list = numbers(value);
+  if (list) { const bits = chunkBits(list); return { component, hide: bits ? ~bits & ALL_CHUNKS : 0n, show: null, declaredBy }; }
+  const bits = mask(value);
+  return bits === null ? null : { component, hide: bits, show: null, declaredBy };
 }
 
 const isMap = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -90,6 +135,8 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   const issues: string[] = [];
   const known = (path: string) => { const hash = depotHash(path); if (hash !== "0") paths.set(hash, path); return hash; };
   const localization: { name: string; declaredBy: string; onscreens: Map<string, string[]>; fallback: string | null; extend: string | null }[] = [];
+  const factories: { path: string; declaredBy: string }[] = [];
+  const tagRules = new Map<string, XlTagRule[]>();
 
   for (const { id, document } of documents) {
     if (!isMap(document)) continue;
@@ -108,6 +155,20 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
         add(language, value);
       } else if (node !== undefined) add("en-us", node);
       if (unit.onscreens.size || unit.extend) localization.push(unit);
+    }
+    for (const path of list(document.factories)) { known(path); factories.push({ path, declaredBy: id }); }
+    const overrides = document.overrides;
+    if (isMap(overrides) && overrides.tags !== undefined) {
+      if (!isMap(overrides.tags)) issues.push(`${id}: overrides.tags must be a map of tags.`);
+      else for (const [tag, components] of Object.entries(overrides.tags)) {
+        if (!isMap(components)) { issues.push(`${id}: overrides.tags.${tag} must be a map of components.`); continue; }
+        const rules = tagRules.get(tag) ?? [];
+        for (const [component, value] of Object.entries(components)) {
+          const rule = tagRuleOf(component, value, id);
+          if (rule) rules.push(rule); else issues.push(`${id}: overrides.tags.${tag}.${component} is not a chunk rule.`);
+        }
+        if (rules.length) tagRules.set(tag, rules);
+      }
     }
     const custom = document.customizations;
     if (custom !== undefined) {
@@ -193,7 +254,7 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   }
   const texts: XlLocalization[] = localization.filter(unit => !unit.extend && unit.onscreens.size)
     .map(({ name, declaredBy, onscreens, fallback }) => ({ name, declaredBy, onscreens, fallback }));
-  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, issues };
+  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, factories, tagRules, issues };
 }
 
 export const inScope = (config: ArchiveXlConfig, scopePath: string, hash: string) =>

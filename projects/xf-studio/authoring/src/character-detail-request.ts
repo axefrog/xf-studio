@@ -8,7 +8,9 @@
  * the creator does; `-4` replaces the tried choice with the whole creator state (CORE-58): `choices` a person set, and a save's
  * descriptors of every part (`part` on each, head when absent). The host interprets the choices with the installed creator catalogue
  * (`deriveCharacter`), so a choice never names a resource. A v1–v3 request without an override still parses; a v3 tried choice is a
- * page built apart from this host and is refused, which that page reports as a version skew.
+ * page built apart from this host and is refused, which that page reports as a version skew. `-5` adds `clothing`: the save's clothing
+ * areas (item record IDs and hide flags), the areas the viewer's Clothing setting shows, and the creator's hair type (clothing-dressing.ts);
+ * a v4 request is a V without clothes.
  */
 import type { AppearanceDescriptor, CcoPart, MorphDescriptor } from "./cco-model";
 import type { BodyGender, CharacterInput } from "./character-resolver";
@@ -16,9 +18,13 @@ import { type CharacterChoice, characterChoiceOf, type SavedDescriptors } from "
 import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 import { refFromHash } from "./depot-path";
 import type { SavedV } from "./save-reader";
+import { type CharacterClothing, HAIR_TYPES, type HairType } from "./clothing-dressing";
+import { CLOTHING_AREAS, isClothingArea } from "./save-loadout";
 
-export const CHARACTER_REQUEST_SCHEMA = "xfs/character-request-4" as const;
-const EARLIER_REQUEST_SCHEMAS: readonly string[] = ["xfs/character-request-1", "xfs/character-request-2", "xfs/character-request-3"];
+export const CHARACTER_REQUEST_SCHEMA = "xfs/character-request-5" as const;
+const EARLIER_REQUEST_SCHEMAS: readonly string[] = ["xfs/character-request-1", "xfs/character-request-2", "xfs/character-request-3", "xfs/character-request-4"];
+/** Earlier versions that carry creator choices and parts (v4). */
+const CHOICE_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-4"];
 
 /** A request whose version this host doesn't read (the page and the host were built apart). */
 export class CharacterRequestVersionError extends Error {
@@ -27,9 +33,9 @@ export class CharacterRequestVersionError extends Error {
 export type SavedAppearance = { part: CcoPart; group: string; option: string; app: string; definition: string };
 export type SavedMorph = { part: CcoPart; group: string; region: string; target: string };
 export type CharacterRequest =
-  | { schema: typeof CHARACTER_REQUEST_SCHEMA; source: "default"; bodyGender: BodyGender; choices?: CharacterChoice[] }
+  | { schema: typeof CHARACTER_REQUEST_SCHEMA; source: "default"; bodyGender: BodyGender; choices?: CharacterChoice[]; clothing?: CharacterClothing }
   | { schema: typeof CHARACTER_REQUEST_SCHEMA; source: "save"; bodyGender: BodyGender;
-      appearances: SavedAppearance[]; morphs: SavedMorph[]; choices?: CharacterChoice[] };
+      appearances: SavedAppearance[]; morphs: SavedMorph[]; choices?: CharacterChoice[]; clothing?: CharacterClothing };
 
 export const DEFAULT_CHARACTER: CharacterRequest = Object.freeze({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female" });
 const MAX_APPEARANCES = CREATOR_LIMITS.appearances, MAX_MORPHS = CREATOR_LIMITS.morphs, MAX_CHOICES = CREATOR_LIMITS.choices;
@@ -43,10 +49,11 @@ export function characterRequestFromSave(v: SavedV, parts: readonly CcoPart[] = 
     morphs: parts.flatMap(part => (v.groups[part] ?? []).flatMap(group => group.morphs.map(morph =>
       ({ part, group: group.name, region: morph.region, target: morph.target })))).slice(0, MAX_MORPHS) };
 }
-/** A request from a context's base (the save's descriptors) and choices. */
+/** A request from a context's base (the save's descriptors), choices and clothing. */
 export function characterRequestOf(base: { bodyGender: BodyGender; saved: SavedDescriptors | null }, choices: readonly CharacterChoice[] = [],
-  parts: readonly CcoPart[] = ["head", "body", "arms"]): CharacterRequest {
-  const with_ = choices.length ? { choices: choices.map(choice => ({ ...choice, ...(choice.activates ? { activates: [...choice.activates] } : {}) })) } : {};
+  parts: readonly CcoPart[] = ["head", "body", "arms"], clothing: CharacterClothing | null = null): CharacterRequest {
+  const with_ = { ...(choices.length ? { choices: choices.map(choice => ({ ...choice, ...(choice.activates ? { activates: [...choice.activates] } : {}) })) } : {}),
+    ...(clothing ? { clothing: { hairType: clothing.hairType, worn: clothing.worn.map(entry => ({ ...entry })), shown: [...clothing.shown] } } : {}) };
   if (!base.saved) return { schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: base.bodyGender, ...with_ };
   return { schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: base.bodyGender,
     appearances: base.saved.appearances.filter(item => parts.includes(item.part)).map(item => ({ ...item })),
@@ -63,6 +70,22 @@ const exactKeys = (value: object, keys: string[], optional: string[] = []) => {
   return keys.every(key => present.includes(key)) && present.every(key => keys.includes(key) || optional.includes(key));
 };
 const partOf = (value: unknown) => value === undefined ? "head" : PARTS.includes(value as string) ? value as CcoPart : fail("a part is invalid.");
+/** The clothing a request carries: each clothing area at most once, items as decimal record IDs. */
+export function clothingOf(value: unknown): CharacterClothing {
+  const doc = value as Record<string, unknown>;
+  if (!doc || typeof doc !== "object" || Array.isArray(doc) || !exactKeys(doc, ["hairType", "worn", "shown"])) return fail("the clothing is invalid.");
+  if (!HAIR_TYPES.includes(doc.hairType as HairType)) fail("the hair type is invalid.");
+  if (!Array.isArray(doc.worn) || doc.worn.length > CLOTHING_AREAS.length || !Array.isArray(doc.shown) || doc.shown.length > CLOTHING_AREAS.length)
+    fail("the clothing is invalid.");
+  const worn = (doc.worn as Record<string, unknown>[]).map(item => {
+    if (!item || typeof item !== "object" || !exactKeys(item, ["area", "item", "hidden"]) || !isClothingArea(item.area) || typeof item.hidden !== "boolean")
+      return fail("a worn item is invalid.");
+    return { area: item.area, item: hash(item.item), hidden: item.hidden };
+  });
+  const shown = (doc.shown as unknown[]).map(area => isClothingArea(area) ? area : fail("a clothing area is invalid."));
+  if (new Set(worn.map(item => item.area)).size !== worn.length || new Set(shown).size !== shown.length) fail("a clothing area is listed twice.");
+  return { hairType: doc.hairType as HairType, worn, shown };
+}
 
 /** Strict parse: anything else than the documented fields is refused. */
 export function parseCharacterRequest(value: unknown): CharacterRequest {
@@ -74,25 +97,27 @@ export function parseCharacterRequest(value: unknown): CharacterRequest {
     if (typeof doc.schema === "string" && /^xfs\/character-request-[0-9]{1,4}$/.test(doc.schema)) throw new CharacterRequestVersionError(doc.schema);
     fail("unsupported request.");
   }
-  // An earlier request carries neither choices nor parts; a tried choice (v2, v3) is refused.
-  const optional = current ? ["choices"] : [];
-  let choices: { choices?: CharacterChoice[] } = {};
-  if (current && doc.choices !== undefined) {
+  // An earlier request carries neither choices nor parts (v4 carries both, and no clothing); a tried choice (v2, v3) is refused.
+  const withChoices = CHOICE_SCHEMAS.includes(String(doc.schema));
+  const optional = current ? ["choices", "clothing"] : withChoices ? ["choices"] : [];
+  let choices: { choices?: CharacterChoice[]; clothing?: CharacterClothing } = {};
+  if (current && doc.clothing !== undefined) choices.clothing = clothingOf(doc.clothing);
+  if (withChoices && doc.choices !== undefined) {
     if (!Array.isArray(doc.choices) || doc.choices.length > MAX_CHOICES) fail("the creator choices are invalid.");
     const list = (doc.choices as unknown[]).map(item => characterChoiceOf(item) ?? fail("a creator choice is invalid."));
-    if (list.length) choices = { choices: list };
+    if (list.length) choices = { ...choices, choices: list };
   }
   if (doc.bodyGender !== "female" && doc.bodyGender !== "male") fail("body gender is invalid.");
   if (doc.source === "default") {
     if (!exactKeys(doc, ["schema", "source", "bodyGender"], optional)) fail("unknown fields.");
     // Earlier hosts drew only the female default V; a request for another is current only.
-    if (!current && doc.bodyGender !== "female") fail("the default V is female only.");
+    if (!withChoices && doc.bodyGender !== "female") fail("the default V is female only.");
     return { schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: doc.bodyGender as BodyGender, ...choices };
   }
   if (doc.source !== "save" || !exactKeys(doc, ["schema", "source", "bodyGender", "appearances", "morphs"], optional)) fail("unknown source.");
   if (!Array.isArray(doc.appearances) || doc.appearances.length > MAX_APPEARANCES) fail("appearances are invalid.");
   if (!Array.isArray(doc.morphs) || doc.morphs.length > MAX_MORPHS) fail("morphs are invalid.");
-  const withPart = current ? ["part"] : [];
+  const withPart = withChoices ? ["part"] : [];
   const appearances = (doc.appearances as Record<string, unknown>[]).map(item => {
     if (!item || typeof item !== "object" || !exactKeys(item, ["group", "option", "app", "definition"], withPart)) fail("an appearance is invalid.");
     return { part: partOf(item.part), group: cname(item.group, "group"), option: cname(item.option, "option"), app: hash(item.app),
@@ -110,9 +135,9 @@ export function characterRequestFor(v: SavedV | undefined): CharacterRequest {
   return v && !v.isMale ? characterRequestFromSave(v) : DEFAULT_CHARACTER;
 }
 
-/** The same V, whatever choices are set on it (a change of choices keeps the V's other details on screen). */
+/** The same V, whatever choices and clothing are set on it (a change of either keeps the V's other details on screen). */
 export function sameCharacter(a: CharacterRequest, b: CharacterRequest): boolean {
-  const { choices: _a, ...left } = a, { choices: _b, ...right } = b;
+  const { choices: _a, clothing: _c, ...left } = a, { choices: _b, clothing: _d, ...right } = b;
   return JSON.stringify(left) === JSON.stringify(right);
 }
 

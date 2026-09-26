@@ -34,7 +34,10 @@ import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
 import { planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
-import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter, type ResolvedParam } from "./character-resolver";
+import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
+  type ResolvedParam } from "./character-resolver";
+import { resolveClothing, type ResolvedClothing } from "./clothing-resolver";
+import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
@@ -56,7 +59,7 @@ import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolut
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair, piercings and body" },
+  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair, piercings, body and clothes" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -472,14 +475,16 @@ const transientFailures = (installation: Installation) => {
 
 /** Resolve the V through the cache: each distinct descriptor once per installation and set of morphs, in `resolveCharacter`'s order. */
 async function resolveThrough(graph: ResourceGraph, input: CharacterInput, cco: Awaited<ReturnType<typeof loadMergedCco>>,
-  cache: CharacterPreparationCache): Promise<{ resolved: ResolvedCharacter; reused: number }> {
+  cache: CharacterPreparationCache, overrides: ComponentOverrides = NO_OVERRIDES): Promise<{ resolved: ResolvedCharacter; reused: number }> {
   const morphKey = canonical([...input.morphs].map(morph => `${morph.region}|${morph.target}`).sort());
+  // Worn items' overrides change the body's and arms' parts, never the head's (character-resolver.ts), so only those keys carry them.
+  const worn = overridesKey(overrides);
   const keyOf = (descriptor: CharacterInput["appearances"][number]) =>
-    `${input.bodyGender}|${descriptor.part}|${descriptor.option}|${descriptor.app.hash}|${descriptor.definition}|${morphKey}`;
+    `${input.bodyGender}|${descriptor.part}|${descriptor.option}|${descriptor.app.hash}|${descriptor.definition}|${morphKey}${descriptor.part === "head" || !worn ? "" : `|${worn}`}`;
   const unique = new Map<string, string[]>();
   for (const descriptor of input.appearances) { const key = keyOf(descriptor); unique.set(key, [...unique.get(key) ?? [], descriptor.group]); }
   const missing = input.appearances.filter(descriptor => !cache.appearances.has(keyOf(descriptor)));
-  const fresh = await resolveCharacter(graph, { ...input, appearances: missing }, cco);
+  const fresh = await resolveCharacter(graph, { ...input, appearances: missing }, cco, overrides);
   // `resolveCharacter` resolves each distinct descriptor once, in first-seen order: the same order as these keys.
   const missingKeys = [...new Set(missing.map(keyOf))];
   const freshByKey = new Map(fresh.appearances.map((entry, index) => [missingKeys[index]!, entry]));
@@ -780,15 +785,19 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     input = plainV();
   }
   cancelled();
+  // What V wears first: the feet group and the items' overrides of the body follow from it.
+  const clothing = await dress(graph, request, options, log);
+  cancelled();
+  const bodyState = { feet: clothing?.feet ?? "flat" } as const;
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
-  input = previewInput(input);
-  const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
+  input = previewInput(input, bodyState);
+  const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
   trace.event("character", "resolved", resolutionTrace(resolved), RESOLUTION_TRACE_OPTIONS);
   cancelled();
-  const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
-    .map(material => material.template).filter((template): template is Provenance => !!template)));
+  const templates = [...resolved.appearances.flatMap(entry => entry.components), ...clothingComponents(clothing)].flatMap(component => component.materials
+    .map(material => material.template).filter((template): template is Provenance => !!template));
   await loadTemplates(graph, templates, cache);
-  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities);
+  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, clothing);
   time("resolve and plan");
   cancelled();
 
@@ -1010,7 +1019,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
           ...(hexSha(component.drawnFrom.extractedSha256) ? { sha256: hexSha(component.drawnFrom.extractedSha256)! } : {}) }] },
       renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
       ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}),
-      ...(component.morphs ? { morphs: component.morphs } : {}) };
+      ...(component.morphs ? { morphs: component.morphs } : {}), ...(component.garment ? { garment: component.garment } : {}) };
   };
   let reusedComponents = 0;
   for (const component of plan.components) {
@@ -1088,6 +1097,25 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   return { record, recordFile: recordName, degraded, ...(choicesNote ? { note: choicesNote } : {}) };
 }
 
+/** The components of the garments a V draws. */
+const clothingComponents = (clothing: ResolvedClothing | null) => clothing?.garments.flatMap(garment => garment.status === "drawn" ? garment.components : []) ?? [];
+
+/**
+ * What a request's V wears (clothing-resolver.ts), or null without clothing. The item records come from the installation's TweakDB and the
+ * cooked visual-tag preset (clothing-host.ts). A failure leaves V without clothes, with a log line, rather than failing the V.
+ */
+async function dress(graph: ResourceGraph, request: CharacterRequest, options: { route: CharacterRoute; resolverCache: string }, log: (message: string) => void):
+  Promise<ResolvedClothing | null> {
+  if (!request.clothing) return null;
+  try {
+    const ports = clothingPorts(graph, options.route.gameRoot, options.resolverCache, log);
+    return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
+  } catch (error) {
+    log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);
+    return null;
+  }
+}
+
 /** The most notes a record's provenance carries. */
 export const RECORD_NOTE_CAP = 32;
 /** A record's notes: each once, drop notes first, so the cap cuts informational notes and never a part left out (PIPE-84). */
@@ -1144,11 +1172,15 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
       return { bodyGender: request.bodyGender, origin: "ui-state" as const, appearances: derived.appearances, morphs: derived.morphs };
     }));
     // Every request resolves at once, so each level of their chains is one extraction batch.
-    const resolved = await Promise.all(inputs.map(input => input ? resolveThrough(graph, previewInput(input), cco, cache).then(result => result.resolved) : null));
+    const clothes = await Promise.all(requests.map(request => dress(graph, request, options, log)));
     cancelled();
-    await loadTemplates(graph, resolved.flatMap(entry => entry ? entry.appearances.flatMap(appearance => appearance.components.flatMap(component =>
-      component.materials.map(material => material.template).filter((template): template is Provenance => !!template))) : []), cache);
-    const plans = resolved.map(entry => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities) : null);
+    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: clothes[index]?.feet ?? "flat" }), cco, cache,
+      clothes[index]?.overrides).then(result => result.resolved) : null));
+    cancelled();
+    await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(clothes[index] ?? null)]
+      .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
+    const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
+      { feet: clothes[index]?.feet ?? "flat" }, clothes[index] ?? null) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
     for (const plan of plans) for (const component of plan?.components ?? []) {

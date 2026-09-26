@@ -302,7 +302,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material",
   "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
-  "red-json", "depot-path", "archive-precedence", "resolution-evidence",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "save-loadout", "save-package",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
 const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;

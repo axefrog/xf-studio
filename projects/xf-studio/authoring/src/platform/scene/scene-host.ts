@@ -298,8 +298,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     characterDetailsEvidence: () => ({ ...character.evidence(), memory: { ...renderer.info.memory } }),
     /** Piercings are a visibility preference: the V's own (or a tried style) arrive with the character record and follow it. */
     setPiercings: (enabled: boolean) => character.setSlotVisible("piercings", enabled),
-    /** The V's body (body, arms, hands, feet and their decals) is a visibility preference too; it arrives with the character record. */
-    setBody: (enabled: boolean) => character.setSlotVisible("body", enabled),
+    /** The V's body (body, arms, hands, feet and their decals, and the clothes on it) is a visibility preference too; it arrives with the character record. */
+    setBody: (enabled: boolean) => { character.setSlotVisible("body", enabled); character.setSlotVisible("clothing", enabled); },
     /** Developer evidence: each baked layered part's packed maps read back at their centre texel. */
     layeredSamples: character.layeredSamples,
     /** The idle rig; its own changes (seek, pause) request a frame through `onChange`. */

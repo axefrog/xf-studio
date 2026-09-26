@@ -27,6 +27,8 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { characterDetailLine } from "./preview";
 import { ChoiceList } from "./character-choices";
+import type { ClothingState } from "../../clothing-dressing";
+import type { ClothingArea } from "../../save-loadout";
 
 const NOT_SHOWN = "Not shown in the 3D view yet.";
 /** The status line while a choice that wasn't prepared ahead is prepared. */
@@ -99,6 +101,15 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const noMatch = note("No option or choice matches.");
   noMatch.hidden = true;
 
+  // ---- Clothing: which of V's clothes the 3D view shows (a viewing setting with its own Undo) ----
+  const clothingState = new SelectField<ClothingState>({ label: "Clothes in the 3D view", onChange: state => dispatch({ kind: "character.setClothing", state }) });
+  const clothingUndo = button({ label: "Undo clothing change", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undoClothing" }) });
+  const clothingRedo = button({ label: "Redo clothing change", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redoClothing" }) });
+  // One switch per clothing area the save dresses; switching one picks the areas yourself (the setting becomes "Choose areas").
+  const areaToggles = new Map<ClothingArea, Toggle>();
+  const clothingAreas = h("div", { class: "cc-clothing-areas" });
+  const clothingNote = note("");
+
   // ---- Preview-only controls (not creator choices) ----
   const eyeShape = new SelectField<string>({ label: "Eye shape in the 3D view", onChange: value => dispatch({ kind: "preview.setEyeShape", index: Number(value) }) });
   const eyeNote = note("");
@@ -119,6 +130,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
       h("span", { class: "cc-history" }, undo, redo)), status, messages),
     h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
+    section("Clothing", h("div", { class: "row gap-s cc-clothing" }, clothingState.element, h("span", { class: "cc-history" }, clothingUndo, clothingRedo)),
+      clothingAreas, clothingNote),
     h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, legend, sections, noMatch),
     section("3D view only", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, detailNote,
       h("div", { class: "row wrap gap-s" }, exportV),
@@ -361,6 +374,28 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       if (panel) updateRows(frame, panel, view);
       else if (built) { for (const controls of built.rows) stopPrefetch(controls); sections.replaceChildren(); built = null; }
 
+      // Clothing.
+      const clothing = context?.clothing;
+      clothingState.update(clothing?.states ?? [], clothing?.state, !clothing, "Your V appears once the 3D preview is ready.");
+      applyCapability(clothingUndo, port.authoring.capability({ kind: "character.undoClothing" }));
+      applyCapability(clothingRedo, port.authoring.capability({ kind: "character.redoClothing" }));
+      clothingUndo.title = clothing?.undo ? `Undo: ${clothing.undo}` : "No clothing change to undo.";
+      clothingRedo.title = clothing?.redo ? `Redo: ${clothing.redo}` : "No undone clothing change to redo.";
+      // The switches follow the areas the save dresses (built once per area, so a change never rebuilds them).
+      for (const { area, label } of clothing?.areas ?? []) if (!areaToggles.has(area)) {
+        const toggle = new Toggle({ label, onChange: shown => dispatch({ kind: "character.setClothingArea", area, shown }) });
+        areaToggles.set(area, toggle);
+        clothingAreas.append(toggle.element);
+      }
+      for (const [area, toggle] of areaToggles) {
+        toggle.element.hidden = !clothing?.worn.includes(area);
+        toggle.update(!!clothing?.shown.includes(area), { disabled: !clothing });
+      }
+      clothingAreas.hidden = !clothing?.worn.length;
+      const clothesSlot = details?.slots.find(slot => slot.slot === "clothing");
+      setText(clothingNote, clothing?.note || (clothesSlot?.state === "unavailable" || clothesSlot?.message ? clothesSlot.message ?? ""
+        : "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges."));
+
       // Preview-only controls.
       const shapes = state.eyeShapeOptions?.choices ?? [];
       const shapeLabel = (index: number) => {
@@ -384,7 +419,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // Absent means shown (workspace-state.ts); a head-only preview can't show a body.
       const bodyShown = preview?.body ?? true, bodyAllowed = port.authoring.capability({ kind: "preview.setBody", enabled: !bodyShown });
       body.update(!!preview && bodyShown && bodyAllowed.available, { disabled: !preview || !bodyAllowed.available, reason: bodyAllowed.reason ?? loading,
-        note: "Shown in the game's own underwear, as your V wears no clothing here." });
+        note: "The body and the clothes on it. Where no clothes are shown, the game's own underwear covers it." });
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
       const prepared = context?.prepared;
       setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"

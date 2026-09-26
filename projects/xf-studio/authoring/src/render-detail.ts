@@ -43,12 +43,16 @@
  *   rules; knowledge/body-rendering.md), and a component may carry the `morphs` the resolver applied to it (`<target>_<region>`, e.g.
  *   the breast size and nail length, which the body does not share with the head's facial shapes). A v8 reader refuses v2 to v7
  *   character records.
+ * - `xfs/render-detail-9`: the character record gains the `clothing` slot (the garments V wears, resolved from worn item records through
+ *   their factories, root entities and `.app`s; knowledge/clothing.md), each garment component carrying its `garment` (clothing area, item
+ *   record ID and layer score), and body components whose chunk masks worn items changed (ArchiveXL tag rules, entity-wide parts
+ *   overrides). A v9 reader refuses v2 to v8 character records.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-8" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-9" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
 export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5",
-  "xfs/render-detail-6", "xfs/render-detail-7"];
+  "xfs/render-detail-6", "xfs/render-detail-7", "xfs/render-detail-8"];
 
 /**
  * A record from a host of another version: older (a retired schema) or newer (a schema this reader doesn't know yet). It means the host
@@ -172,12 +176,12 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 // ---------------------------------------------------------------------------------------------
 // The character record (the resolved head skin, face details, brows, lashes, hair, eyes, piercings and body of the player's own game).
 
-export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings" | "body";
+export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings" | "body" | "clothing";
 /**
- * Record and load order: the skin first, so decals over it can blend against the resolved skin colour; the body last (its own skin loads
- * before its decals, and the head's parts keep their order and draw order).
+ * Record and load order: the skin first, so decals over it can blend against the resolved skin colour; then the body (its own skin loads
+ * before its decals, and the head's parts keep their order and draw order), and the clothes last, over the body they follow.
  */
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body"];
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"];
 /**
  * Slots whose decal chunks draw through the post-G-buffer decal family (face-decal-material.ts) over the skin under them: the face's
  * decals over the head, and the body's (tattoos, scars, the underwear cover) over the body.
@@ -295,6 +299,11 @@ export type RenderComponent = {
    * shape keys), each at full weight. Head parts follow the head's facial shapes instead.
    */
   morphs?: string[];
+  /**
+   * Garment components (the `clothing` slot): the clothing area and item record (the save's decimal TweakDB record ID) that brought it,
+   * and its layer score (component prefix and size tag; null when its prefix has none), which orders coincident layers.
+   */
+  garment?: { area: string; item: string; layer: number | null };
 };
 export type DetailSlotState = { slot: DetailSlot; state: "shown" | "none" | "unavailable";
   /** Short plain label (the resolved choice), for the character panel. */
@@ -321,7 +330,7 @@ export type CharacterDetail = {
 };
 
 /** A framework that fills slots with inline components (one per filled slot) can bring many parts to one piercing choice. */
-export const RECORD_LIMITS = Object.freeze({ components: 96, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, notes: 64,
+export const RECORD_LIMITS = Object.freeze({ components: 128, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, notes: 64,
   /**
    * Decoded texels one record may serve, over every distinct texture (PIPE-43): about four times what the reference save's skin, hair,
    * face details, eyes and piercings take together. The host leaves textures beyond it out with a note; the loader refuses a record
@@ -344,7 +353,8 @@ export function clampLayer(value: unknown, range: keyof typeof LAYER_RANGES, fal
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
   skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
   hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" },
-  piercings: { noun: "piercings", not: "aren't", pronoun: "they" }, body: { noun: "body", not: "isn't", pronoun: "it" } });
+  piercings: { noun: "piercings", not: "aren't", pronoun: "they" }, body: { noun: "body", not: "isn't", pronoun: "it" },
+  clothing: { noun: "clothes", not: "aren't", pronoun: "they" } });
 const paramName = (value: unknown, what: string) => typeof value === "string" && /^[A-Za-z0-9_.@:+ -]{1,96}$/.test(value) ? value : fail(`${what} is invalid.`);
 const int = (value: unknown, what: string, min: number, max: number) =>
   Number.isInteger(value) && (value as number) >= min && (value as number) <= max ? value as number : fail(`${what} is out of range.`);
@@ -485,6 +495,10 @@ function component(value: unknown, index: number): RenderComponent {
   if (rule !== undefined && (!rule || typeof rule !== "object")) fail(`${what} morph texture rule is invalid.`);
   const morphs = item.morphs;
   if (morphs !== undefined && (!Array.isArray(morphs) || morphs.length > 16)) fail(`${what} morphs are invalid.`);
+  const garment = item.garment;
+  if (garment !== undefined && (!garment || typeof garment !== "object" || item.slot !== "clothing" || !/^[A-Za-z]{1,32}$/.test(String(garment.area)) ||
+    !/^[1-9][0-9]{0,19}$/.test(String(garment.item)) || !(garment.layer === null || (Number.isInteger(garment.layer) && Math.abs(garment.layer) <= 100_000))))
+    fail(`${what} garment is invalid.`);
   return { id: text(item.id, `${what} id`), slot: item.slot, option: text(item.option, `${what} option`),
     definition: text(item.definition, `${what} definition`), component: text(item.component, `${what} component`),
     geometry: { ...resource(geometry, `${what} geometry`), depotPath: text(geometry?.depotPath, `${what} geometry path`),
@@ -493,7 +507,8 @@ function component(value: unknown, index: number): RenderComponent {
     renderChunks, chunks, materials,
     ...(rule ? { morphTexture: { morph: text(rule.morph, `${what} morph`), texture: rule.texture === null ? null : text(rule.texture, `${what} morph texture`),
       parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}),
-    ...(morphs ? { morphs: morphs.map((name, k) => paramName(name, `${what} morph ${k}`)) } : {}) };
+    ...(morphs ? { morphs: morphs.map((name, k) => paramName(name, `${what} morph ${k}`)) } : {}),
+    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer } } : {}) };
 }
 
 /**

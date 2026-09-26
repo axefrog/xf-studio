@@ -58,9 +58,13 @@ export type TweakValue =
   /** A resource reference: the depot hash as a decimal string. */
   | { readonly type: "raRef:CResource"; readonly value: string }
   /** A localisation key: `LocKey#<n>`. */
-  | { readonly type: "gamedataLocKeyWrapper"; readonly value: string };
+  | { readonly type: "gamedataLocKeyWrapper"; readonly value: string }
+  | { readonly type: "Int32" | "Bool"; readonly value: number }
+  | { readonly type: "Float"; readonly value: number }
+  | { readonly type: "array:CName"; readonly value: readonly string[] };
 export type TweakType = TweakValue["type"];
-export const TWEAK_TYPES: readonly TweakType[] = ["CName", "String", "TweakDBID", "array:TweakDBID", "raRef:CResource", "gamedataLocKeyWrapper"];
+export const TWEAK_TYPES: readonly TweakType[] = ["CName", "String", "TweakDBID", "array:TweakDBID", "raRef:CResource", "gamedataLocKeyWrapper", "Int32", "Bool",
+  "Float", "array:CName"];
 
 interface FlatType { type: TweakType; values: number; keys: number; offset: number; valueStarts: Uint32Array | null; keyTable: number }
 
@@ -128,6 +132,15 @@ export class TweakDbBlob {
         break;
       }
       case "array:TweakDBID": { const [length, next] = this.vlq(pos); size = next - pos + Math.abs(length) * 8; break; }
+      case "array:CName": {
+        let [length, at] = this.vlq(pos);
+        if (Math.abs(length) > this.bytes.byteLength - at) throw Error("TweakDB blob is truncated.");
+        for (let i = 0; i < Math.abs(length); i++) at += this.skip("CName", at);
+        size = at - pos;
+        break;
+      }
+      case "Int32": case "Float": size = 4; break;
+      case "Bool": size = 1; break;
       default: size = 8;
     }
     this.within(pos, size);
@@ -149,6 +162,19 @@ export class TweakDbBlob {
       }
       case "raRef:CResource": return { type, value: this.view.getBigUint64(pos, true).toString() };
       case "gamedataLocKeyWrapper": return { type, value: `LocKey#${this.view.getBigUint64(pos, true).toString()}` };
+      case "Int32": return { type, value: this.view.getInt32(pos, true) };
+      case "Float": return { type, value: this.view.getFloat32(pos, true) };
+      case "Bool": return { type, value: this.view.getUint8(pos) };
+      case "array:CName": {
+        const [length, next] = this.vlq(pos);
+        const names: string[] = [];
+        for (let i = 0, at = next; i < Math.abs(length); i++) {
+          const name = this.decode("CName", at) as { value: string };
+          names.push(name.value);
+          at += this.skip("CName", at);
+        }
+        return { type, value: names };
+      }
     }
   }
   /** Value offsets of one type, computed once. */
@@ -157,7 +183,8 @@ export class TweakDbBlob {
     let pos = flat.offset;
     const count = this.u32(pos); pos += 4;
     // Each value takes at least one byte (eight for fixed-size types): a larger count cannot fit, so nothing is allocated for it.
-    const least = flat.type === "CName" || flat.type === "String" || flat.type === "array:TweakDBID" ? 1 : 8;
+    const least = flat.type === "CName" || flat.type === "String" || flat.type === "array:TweakDBID" || flat.type === "array:CName" || flat.type === "Bool" ? 1
+      : flat.type === "Int32" || flat.type === "Float" ? 4 : 8;
     if (count * least > this.bytes.byteLength - pos) throw Error("TweakDB blob is truncated.");
     const starts = new Uint32Array(count);
     for (let i = 0; i < count; i++) { starts[i] = pos; pos += this.skip(flat.type, pos); }

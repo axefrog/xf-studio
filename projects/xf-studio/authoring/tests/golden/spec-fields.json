@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render)",
  "states": {
   "starter": {
    "modes": {
@@ -455,6 +455,12 @@
     "layer/character.useDefault": {
      "bodyGender": {}
     },
+    "layer/character.setClothing": {
+     "state": {}
+    },
+    "layer/character.setClothingArea": {
+     "area": {}
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -901,6 +907,12 @@
     "point/character.useDefault": {
      "bodyGender": {}
     },
+    "point/character.setClothing": {
+     "state": {}
+    },
+    "point/character.setClothingArea": {
+     "area": {}
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -1343,6 +1355,12 @@
     },
     "viewport/character.useDefault": {
      "bodyGender": {}
+    },
+    "viewport/character.setClothing": {
+     "state": {}
+    },
+    "viewport/character.setClothingArea": {
+     "area": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -1787,6 +1805,12 @@
     "collection/character.useDefault": {
      "bodyGender": {}
     },
+    "collection/character.setClothing": {
+     "state": {}
+    },
+    "collection/character.setClothingArea": {
+     "area": {}
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -2229,6 +2253,12 @@
     },
     "preset/character.useDefault": {
      "bodyGender": {}
+    },
+    "preset/character.setClothing": {
+     "state": {}
+    },
+    "preset/character.setClothingArea": {
+     "area": {}
     }
    },
    "consequences": {
@@ -2881,6 +2911,12 @@
     "layer/character.useDefault": {
      "bodyGender": {}
     },
+    "layer/character.setClothing": {
+     "state": {}
+    },
+    "layer/character.setClothingArea": {
+     "area": {}
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -3334,6 +3370,12 @@
     "point/character.useDefault": {
      "bodyGender": {}
     },
+    "point/character.setClothing": {
+     "state": {}
+    },
+    "point/character.setClothingArea": {
+     "area": {}
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -3776,6 +3818,12 @@
     },
     "viewport/character.useDefault": {
      "bodyGender": {}
+    },
+    "viewport/character.setClothing": {
+     "state": {}
+    },
+    "viewport/character.setClothingArea": {
+     "area": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -4220,6 +4268,12 @@
     "collection/character.useDefault": {
      "bodyGender": {}
     },
+    "collection/character.setClothing": {
+     "state": {}
+    },
+    "collection/character.setClothingArea": {
+     "area": {}
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -4662,6 +4716,12 @@
     },
     "preset/character.useDefault": {
      "bodyGender": {}
+    },
+    "preset/character.setClothing": {
+     "state": {}
+    },
+    "preset/character.setClothingArea": {
+     "area": {}
     }
    },
    "consequences": {
@@ -5315,6 +5375,12 @@
     "layer/character.useDefault": {
      "bodyGender": {}
     },
+    "layer/character.setClothing": {
+     "state": {}
+    },
+    "layer/character.setClothingArea": {
+     "area": {}
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -5769,6 +5835,12 @@
     "point/character.useDefault": {
      "bodyGender": {}
     },
+    "point/character.setClothing": {
+     "state": {}
+    },
+    "point/character.setClothingArea": {
+     "area": {}
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -6211,6 +6283,12 @@
     },
     "viewport/character.useDefault": {
      "bodyGender": {}
+    },
+    "viewport/character.setClothing": {
+     "state": {}
+    },
+    "viewport/character.setClothingArea": {
+     "area": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -6655,6 +6733,12 @@
     "collection/character.useDefault": {
      "bodyGender": {}
     },
+    "collection/character.setClothing": {
+     "state": {}
+    },
+    "collection/character.setClothingArea": {
+     "area": {}
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -7097,6 +7181,12 @@
     },
     "preset/character.useDefault": {
      "bodyGender": {}
+    },
+    "preset/character.setClothing": {
+     "state": {}
+    },
+    "preset/character.setClothingArea": {
+     "area": {}
     }
    },
    "consequences": {
@@ -7749,6 +7839,12 @@
     "layer/character.useDefault": {
      "bodyGender": {}
     },
+    "layer/character.setClothing": {
+     "state": {}
+    },
+    "layer/character.setClothingArea": {
+     "area": {}
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -8202,6 +8298,12 @@
     "point/character.useDefault": {
      "bodyGender": {}
     },
+    "point/character.setClothing": {
+     "state": {}
+    },
+    "point/character.setClothingArea": {
+     "area": {}
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -8644,6 +8746,12 @@
     },
     "viewport/character.useDefault": {
      "bodyGender": {}
+    },
+    "viewport/character.setClothing": {
+     "state": {}
+    },
+    "viewport/character.setClothingArea": {
+     "area": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -9088,6 +9196,12 @@
     "collection/character.useDefault": {
      "bodyGender": {}
     },
+    "collection/character.setClothing": {
+     "state": {}
+    },
+    "collection/character.setClothingArea": {
+     "area": {}
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -9530,6 +9644,12 @@
     },
     "preset/character.useDefault": {
      "bodyGender": {}
+    },
+    "preset/character.setClothing": {
+     "state": {}
+    },
+    "preset/character.setClothingArea": {
+     "area": {}
     }
    },
    "consequences": {
@@ -10182,6 +10302,12 @@
     "layer/character.useDefault": {
      "bodyGender": {}
     },
+    "layer/character.setClothing": {
+     "state": {}
+    },
+    "layer/character.setClothingArea": {
+     "area": {}
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -10635,6 +10761,12 @@
     "point/character.useDefault": {
      "bodyGender": {}
     },
+    "point/character.setClothing": {
+     "state": {}
+    },
+    "point/character.setClothingArea": {
+     "area": {}
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -11077,6 +11209,12 @@
     },
     "viewport/character.useDefault": {
      "bodyGender": {}
+    },
+    "viewport/character.setClothing": {
+     "state": {}
+    },
+    "viewport/character.setClothingArea": {
+     "area": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -11521,6 +11659,12 @@
     "collection/character.useDefault": {
      "bodyGender": {}
     },
+    "collection/character.setClothing": {
+     "state": {}
+    },
+    "collection/character.setClothingArea": {
+     "area": {}
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -11963,6 +12107,12 @@
     },
     "preset/character.useDefault": {
      "bodyGender": {}
+    },
+    "preset/character.setClothing": {
+     "state": {}
+    },
+    "preset/character.setClothingArea": {
+     "area": {}
     }
    },
    "consequences": {
@@ -12618,6 +12768,12 @@
     "layer/character.useDefault": {
      "bodyGender": {}
     },
+    "layer/character.setClothing": {
+     "state": {}
+    },
+    "layer/character.setClothingArea": {
+     "area": {}
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -13074,6 +13230,12 @@
     "point/character.useDefault": {
      "bodyGender": {}
     },
+    "point/character.setClothing": {
+     "state": {}
+    },
+    "point/character.setClothingArea": {
+     "area": {}
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -13516,6 +13678,12 @@
     },
     "viewport/character.useDefault": {
      "bodyGender": {}
+    },
+    "viewport/character.setClothing": {
+     "state": {}
+    },
+    "viewport/character.setClothingArea": {
+     "area": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -13960,6 +14128,12 @@
     "collection/character.useDefault": {
      "bodyGender": {}
     },
+    "collection/character.setClothing": {
+     "state": {}
+    },
+    "collection/character.setClothingArea": {
+     "area": {}
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -14402,6 +14576,12 @@
     },
     "preset/character.useDefault": {
      "bodyGender": {}
+    },
+    "preset/character.setClothing": {
+     "state": {}
+    },
+    "preset/character.setClothingArea": {
+     "area": {}
     }
    },
    "consequences": {

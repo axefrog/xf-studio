@@ -29,6 +29,9 @@
  *   (`prefetch`); a hover or focus hint moves one choice to the front, and closing the row stops it (`stopPrefetch`). A change to a
  *   choice that wasn't ready is marked first-time (`snapshot().firstTime`), so the status line can say why it takes a moment.
  * - **Prepared game files**: their size on this computer, and `character.clearPreparedFiles` removes them (prepared-files.ts).
+ * - **Clothing** (clothing-dressing.ts): which of V's clothes the preview dresses her in, a viewing setting with its own small Undo history
+ *   (`character.setClothing`, `character.setClothingArea`, `character.undoClothing`, `character.redoClothing`). It survives a change of V,
+ *   is stored with the workspace only when it differs from the default, and goes into every request the context builds.
  *
  * Presentation reads it through `snapshot()` (small, cloned) and the frozen `panel()`, `view()`, `choices(option)` and `search(query)`
  * (large, shared read-only objects, never cloned per paint).
@@ -44,6 +47,9 @@ import { characterRequestOf, DEFAULT_CHARACTER, type CharacterRequest } from "./
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
 import { refusal, type Capability } from "./platform/api";
 import type { SavedV } from "./save-reader";
+import { CLOTHING_AREA_LABELS, CLOTHING_STATE_LABELS, CLOTHING_STATES, type ClothingSetting, clothingSettingOf, type ClothingState, DEFAULT_CLOTHING,
+  dressingFor, HEADWEAR_AREAS, UNDERWEAR_AREAS } from "./clothing-dressing";
+import { CLOTHING_AREAS, type ClothingArea, wornAreas } from "./save-loadout";
 
 /** The host side of the context: the installed catalogue's panel, pages, searches, views and presets (cc-catalogue-server.ts). */
 export type CreatorPort = {
@@ -94,9 +100,17 @@ type State = {
   /** A loaded preset's entries the page couldn't carry to the host (PIPE-79): reported, never sent. */
   readonly notCarried: readonly MissingChoice[];
 };
-/** The workspace's form (preview state `character`): what was set and where the V came from. */
+/** The workspace's form (preview state `character`): what was set and where the V came from, and the Clothing setting when not the default. */
 export type StoredCharacter = { origin: "default" | "save" | "preset"; name?: string; bodyGender?: BodyGender; choices: CharacterChoice[];
-  kept?: Record<string, unknown> };
+  kept?: Record<string, unknown>; clothing?: ClothingSetting };
+/**
+ * The Clothing setting as the presentation reads it: the state, the areas `custom` shows, the areas the save dresses (what can be picked),
+ * where the clothes come from, one plain line when there is something to say, and the setting's own Undo and Redo labels.
+ */
+export type ClothingSnapshot = { state: ClothingState; custom: ClothingArea[]; worn: ClothingArea[];
+  /** The areas the current state shows, and the states and areas as the control words them (so the presentation derives nothing). */
+  shown: ClothingArea[]; states: { value: ClothingState; label: string }[]; areas: { area: ClothingArea; label: string }[];
+  source: "save" | "none" | "unread" | "older"; note: string; undo: string | null; redo: string | null };
 export type CharacterChoicesState = { readonly choices: readonly CcPanelChoice[]; readonly total: number; readonly loading: boolean; readonly error: string | null };
 export type CharacterSearchState = { readonly query: string; readonly options: ReadonlySet<string> | null; readonly more: boolean; readonly loading: boolean;
   readonly error: string | null };
@@ -123,6 +137,8 @@ export type CharacterContextSnapshot = {
   firstTime: boolean;
   /** The prepared game files' size in bytes (null until known), and whether they are being cleared. */
   prepared: { bytes: number | null; clearing: boolean; freed: number | null };
+  /** Which of V's clothes the preview shows (clothing-dressing.ts). */
+  clothing: ClothingSnapshot;
   /** Bumps on every change of state, panel, view or pages. */
   revision: number;
 };
@@ -140,6 +156,7 @@ const deepFreeze = <T>(value: T): T => {
   return value;
 };
 const sameChoices = (a: readonly CharacterChoice[], b: readonly CharacterChoice[]) => JSON.stringify(a) === JSON.stringify(b);
+const sameClothing = (a: ClothingSetting, b: ClothingSetting) => a.state === b.state && a.custom.join() === b.custom.join();
 const sameSet = (a: readonly string[] | undefined, b: readonly string[] | undefined) =>
   (a?.length ?? 0) === (b?.length ?? 0) && [...a ?? []].sort().join("\u0000") === [...b ?? []].sort().join("\u0000");
 /** A save's identity by content (the saved-V service hands out copies). */
@@ -160,8 +177,10 @@ export function storedCharacterOf(value: unknown): StoredCharacter | null {
   const choices = v.choices.slice(0, CREATOR_LIMITS.choices).flatMap(item => { const choice = characterChoiceOf(item); return choice ? [choice] : []; });
   let kept: Record<string, unknown> | undefined;
   if (v.kept !== undefined) { try { kept = serializeCcPreset(parseCcPreset(v.kept)); } catch { kept = undefined; } }
+  const clothing = v.clothing === undefined ? undefined : clothingSettingOf(v.clothing);
   return { origin: v.origin as StoredCharacter["origin"], ...(isPresetName(v.name) ? { name: v.name } : {}),
-    ...(v.bodyGender === "female" || v.bodyGender === "male" ? { bodyGender: v.bodyGender } : {}), choices, ...(kept ? { kept } : {}) };
+    ...(v.bodyGender === "female" || v.bodyGender === "male" ? { bodyGender: v.bodyGender } : {}), choices, ...(kept ? { kept } : {}),
+    ...(clothing && !sameClothing(clothing, DEFAULT_CLOTHING) ? { clothing } : {}) };
 }
 
 export class CharacterContextActions {
@@ -199,6 +218,10 @@ export class CharacterContextActions {
     stopped: "time" | "disk" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
   private firstTime = false;
   private prepared: { bytes: number | null; clearing: boolean; freed: number | null; asking: boolean } = { bytes: null, clearing: false, freed: null, asking: false };
+  /** The Clothing setting and its own Undo history (it is not a creator choice). */
+  private clothing: ClothingSetting = DEFAULT_CLOTHING;
+  private clothingPast: { label: string; setting: ClothingSetting }[] = [];
+  private clothingFuture: { label: string; setting: ClothingSetting }[] = [];
 
   constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
     const stored = storedCharacterOf(initial.stored);
@@ -211,6 +234,7 @@ export class CharacterContextActions {
       save: origin.kind === "save" ? save : null, choices: stored?.choices ?? [], kept, notCarried: [] };
     this.knownSave = saveKey(initial.save);
     this.legacy = !stored && initial.legacy?.style && initial.legacy.definition ? { ...initial.legacy } : null;
+    this.clothing = stored?.clothing ?? DEFAULT_CLOTHING;
   }
   /** The save the saved-V service shows now (its content key), as this service last saw it: a change it didn't make is a new V. */
   private knownSave: string;
@@ -227,7 +251,28 @@ export class CharacterContextActions {
       set: this.state.choices.length, undo: this.past.at(-1)?.label ?? null, redo: this.future.at(-1)?.label ?? null,
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
       retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
-      prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, revision: this.revision });
+      prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, clothing: this.clothingSnapshot(),
+      revision: this.revision });
+  }
+  /** The Clothing setting's read (see `ClothingSnapshot`). */
+  private clothingSnapshot(): ClothingSnapshot {
+    const save = this.state.save?.value;
+    const loadout = save?.loadout;
+    const worn = loadout ? [...new Set(wornAreas(loadout).map(entry => entry.area))] : [];
+    const source = !save ? "none" : loadout === undefined ? "older" : loadout === null ? "unread" : "save";
+    const note = source === "none" ? "The default V wears nothing of her own; Underwear only dresses her in the game's basic underwear."
+      : source === "older" ? "This save was loaded before XF Studio read clothes. Load it again to see what your V wears."
+      : source === "unread" ? "XF Studio couldn't read what your V wears from this save, so her clothes aren't shown."
+      : !worn.length ? "Your V wears nothing in this save." : "";
+    return { state: this.clothing.state, custom: [...this.clothing.custom], worn, shown: this.shownAreas(),
+      states: CLOTHING_STATES.map(value => ({ value, label: CLOTHING_STATE_LABELS[value] })),
+      areas: worn.map(area => ({ area, label: CLOTHING_AREA_LABELS[area] })), source, note,
+      undo: this.clothingPast.at(-1)?.label ?? null, redo: this.clothingFuture.at(-1)?.label ?? null };
+  }
+  /** What the Clothing setting dresses the shown V in, for a request (null: nothing worn). */
+  private dressing() {
+    const save = this.state.save?.value;
+    return dressingFor(this.clothing, save?.loadout, this.state.bodyGender, save?.tags ?? []);
   }
   /** The panel's options for the shown V's body (frozen; shared, never copied). Reading it marks the panel as looked at. */
   panel(): Readonly<CcPanel> | null {
@@ -330,7 +375,7 @@ export class CharacterContextActions {
    */
   detailRequest(): CharacterRequest {
     if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
-    return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices);
+    return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing());
   }
   /** The whole state as the host interprets it (every part). */
   request(): CharacterRequest {
@@ -339,10 +384,11 @@ export class CharacterContextActions {
   /** The workspace's form; undefined when nothing needs storing (the V as loaded, nothing set). */
   stored(): StoredCharacter | undefined {
     const { origin, choices, kept } = this.state;
-    if (!choices.length && origin.kind !== "preset" && !(origin.kind === "default" && this.knownSave)) return undefined;
+    const clothing = sameClothing(this.clothing, DEFAULT_CLOTHING) ? null : this.clothing;
+    if (!choices.length && !clothing && origin.kind !== "preset" && !(origin.kind === "default" && this.knownSave)) return undefined;
     return { origin: origin.kind, ...(origin.kind === "preset" && origin.name ? { name: origin.name } : {}),
       ...(origin.kind !== "save" ? { bodyGender: this.state.bodyGender } : {}), choices: choices.map(choice => ({ ...choice })),
-      ...(kept ? { kept: serializeCcPreset(kept) } : {}) };
+      ...(kept ? { kept: serializeCcPreset(kept) } : {}), ...(clothing ? { clothing: { state: clothing.state, custom: [...clothing.custom] } } : {}) };
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -595,7 +641,40 @@ export class CharacterContextActions {
         return this.past.length ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
       case "character.redo":
         return this.future.length ? { available: true } : refusal("invalid_value", "There is no undone character change to redo.");
+      case "character.setClothing":
+        return this.clothing.state === action.state ? refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} is already shown.`) : { available: true };
+      case "character.setClothingArea": {
+        const shown = this.shownAreas().includes(action.area);
+        return shown === action.shown ? refusal("invalid_value", action.shown ? "That area is already shown." : "That area is already hidden.") : { available: true };
+      }
+      case "character.undoClothing":
+        return this.clothingPast.length ? { available: true } : refusal("invalid_value", "There is no clothing change to undo.");
+      case "character.redoClothing":
+        return this.clothingFuture.length ? { available: true } : refusal("invalid_value", "There is no undone clothing change to redo.");
     }
+  }
+  /** The clothing areas the current setting shows (`custom` starts from them when an area is picked in another state). */
+  private shownAreas(): ClothingArea[] {
+    switch (this.clothing.state) {
+      case "custom": return [...this.clothing.custom];
+      case "underwear": return [...UNDERWEAR_AREAS];
+      case "no-headwear": return CLOTHING_AREAS.filter(area => !HEADWEAR_AREAS.includes(area));
+      case "saved": return [...CLOTHING_AREAS];
+    }
+  }
+  private clothingStep(label: string, setting: ClothingSetting) {
+    if (sameClothing(setting, this.clothing)) return;
+    this.clothingPast.push({ label, setting: this.clothing });
+    if (this.clothingPast.length > HISTORY_LIMIT) this.clothingPast.shift();
+    this.clothingFuture = [];
+    this.clothing = setting;
+    this.publish();
+  }
+  private clothingTravel(from: { label: string; setting: ClothingSetting }[], to: { label: string; setting: ClothingSetting }[]) {
+    const entry = from.pop()!;
+    to.push({ label: entry.label, setting: this.clothing });
+    this.clothing = entry.setting;
+    this.publish();
   }
 
   /** Apply an action; throws the refusal's reason when the capability refuses. */
@@ -674,6 +753,18 @@ export class CharacterContextActions {
       }
       case "character.undo": this.travel(this.past, this.future); break;
       case "character.redo": this.travel(this.future, this.past); break;
+      case "character.setClothing":
+        this.clothingStep(`Clothing: ${CLOTHING_STATE_LABELS[action.state]}`, { state: action.state,
+          custom: action.state === "custom" ? this.shownAreas() : this.clothing.custom });
+        break;
+      case "character.setClothingArea": {
+        const shown = new Set(this.shownAreas());
+        if (action.shown) shown.add(action.area); else shown.delete(action.area);
+        this.clothingStep(`${action.shown ? "Show" : "Hide"} ${action.area}`, { state: "custom", custom: CLOTHING_AREAS.filter(area => shown.has(area)) });
+        break;
+      }
+      case "character.undoClothing": this.clothingTravel(this.clothingPast, this.clothingFuture); break;
+      case "character.redoClothing": this.clothingTravel(this.clothingFuture, this.clothingPast); break;
     }
     return {};
   }
