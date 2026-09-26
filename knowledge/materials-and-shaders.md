@@ -9,7 +9,7 @@ This page explains how Cyberpunk 2077 materials work well enough to:
 
 Hair is covered only at overview level here. See [hair shading](hair-shading.md) for the in-depth study.
 
-**Per-family references.** The systematic shader study keeps one evidence-level reference per template family, with every parameter, pass, program hash and grade: [skin](../research/materials/shader-skin.md), [hair](../research/materials/shader-hair.md), [eye](../research/materials/shader-eye.md), [decals](../research/materials/shader-decal.md) and [multilayered](../research/materials/shader-multilayered.md). The [shader fact index](../research/materials/shader-fact-index.md) maps each engine fact to the Studio preview materials and export compilers that rely on it, so a correction reaches all of them.
+**Per-family references.** The systematic shader study keeps one evidence-level reference per template family, with every parameter, pass, program hash and grade: [skin](../research/materials/shader-skin.md), [hair](../research/materials/shader-hair.md), [eye](../research/materials/shader-eye.md), [decals](../research/materials/shader-decal.md), [multilayered](../research/materials/shader-multilayered.md) and [metal and glass](../research/materials/shader-metal-glass.md). The [shader fact index](../research/materials/shader-fact-index.md) maps each engine fact to the Studio preview materials and export compilers that rely on it, so a correction reaches all of them.
 
 **Evidence grades:**
 
@@ -296,7 +296,10 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | `mesh_decal_emissive` `post_gbuffer` (target 2 is additive on B/A, so over skin it would add into GBuffer2.z/.w [hypothesis for the visible effect]) | `9453098283293843067` | [annotation results](../research/materials/shader-system/annotation-results.md#basematerialsmesh_decal_emissivemt) |
 | `mesh_decal_emissive_subsurface` `subsurface_emissive` / `highlights` | `8986576764202126900` / `7960168020925993542` | [decal reference §5.4](../research/materials/shader-decal.md#54-emissive-decals), [glint feasibility](../research/materials/redengine-glint-feasibility.md) |
 | `metal_base_glitter` `gbuffer_regular` | `15760075574186250120` | [glitter investigation](../research/materials/glitter-shader-investigation.md) |
-| `metal_base` `gbuffer_regular` | `1846801220589112223` | [evidence note](../research/materials/shader-system/README.md) |
+| `metal_base` `gbuffer_regular` Index 1 / Discarded (alpha test) / Index 2 (weather) | `4684655453878116559` / `6427363791120029564` / `1846801220589112223` | [metal and glass §3](../research/materials/shader-metal-glass.md#3-metal_baseremt), [evidence note](../research/materials/shader-system/README.md) |
+| `metal_base` `post_gbuffer` (decal mode) | `14174891702035234925` | [metal and glass §3.5](../research/materials/shader-metal-glass.md#35-the-post_gbuffer-decal-mode-observed) |
+| `glass_onesided` `transparent` / `distortion` / `transparent_mark_rt` | `4256218839974653439` / `16640676567101803185` / `15548066001076791090` | [metal and glass §4](../research/materials/shader-metal-glass.md#4-glass_onesidedmt) |
+| static ambient and emissive composite (decodes the Standard emissive byte) | `10393055107398307099` | [metal and glass §3.6](../research/materials/shader-metal-glass.md#36-emission-observed), [eye reference §6.3](../research/materials/shader-eye.md#63-ambient-probes) |
 | `eye_shadow` `transparent_back_face` | `14043594489545752539` | [eye reference](../research/materials/shader-eye.md), [evidence note](../research/materials/shader-system/README.md), [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) |
 | `multilayered_clear_coat` `unlit` / `gbuffer_regular` (coat mask in GBuffer2.z) | `5403688829342147459` / `3911537533623547427` | [multilayered reference §6](../research/materials/shader-multilayered.md#6-the-clear-coat-multilayered_clear_coat), [evidence note](../research/materials/shader-system/README.md) |
 | `multilayered_baked` `gbuffer_regular` (virtual-texture surface cache) | `9875025106086992270` | [multilayered reference §7](../research/materials/shader-multilayered.md#7-the-baked-surface-cache-multilayered_baked) |
@@ -468,23 +471,30 @@ Colour maps are sRGB (`isGamma`), roughness, metalness, normals and microblends 
 
 **Multilayered and makeup.** On a face plate, any multilayered template would be an opaque Standard surface replacing the skin: no soft coverage, no SSS or skin lobes, no skin normal, black where no layer covers. Mixed finishes are already expressible per texel in a decal, which keeps the skin, and both are limited to one surface per pixel; the coat's second lobe cannot sit over skin. The makeup export therefore stays on the decal family [source] ([multilayered reference §8](../research/materials/shader-multilayered.md#8-what-this-means-for-makeup-on-a-face-plate)).
 
-### 4.7 `engine\materials\metal_base.remt` and relatives (future body and clothing work)
+### 4.7 `engine\materials\metal_base.remt` and `glass_onesided.mt`
 
-`metal_base.remt` is Standard class with an opaque G-buffer pass plus a `post_gbuffer` pass. It has the broadest vertex-factory list [resource]:
+Full reference: [metal and glass](../research/materials/shader-metal-glass.md). Both appear on arm cyberware (Gorilla Arms, Mantis Blades), the teeth mesh's unused `default` appearance and many clothing items; the preview has no adapter for either yet.
 
-- `BaseColor` with `BaseColorScale` (Vector);
-- `Metalness`, `Roughness` (texture × scale + bias);
-- `Normal` with `NormalStrength`;
-- `Emissive` with `EmissiveColor/EV/Lift/Directionality`, ray-traced emissive switches;
-- `AlphaThreshold` (default 0.38), `LayerTile`.
+**`metal_base.remt`** is Standard class: a depth prepass, an opaque G-buffer pass (Index 1; Index 2 adds rain), and a `post_gbuffer` decal mode [resource] [source].
 
-Transparency needs `enableMask` [wiki] (`textured-material-properties.md` L25).
+- **Inputs** [source]: `saturate(BaseColor.rgb × BaseColorScale.rgb)`; metalness and roughness each from the **R** channel of their own map through `saturate(x·scale + bias)`; an RG normal with Z reconstructed and XY × `NormalStrength`; every UV × `LayerTile` except `Emissive`. Defaults: grey colour, metalness 0, roughness 1, flat normal.
+- **Output** [source]: the plain Standard G-buffer (`sqrt(colour)`, the normal with `.w` 0, metalness, roughness, 1/3), lit by the Standard deferred light and ambient composite (§2.3). Nothing about metal is special to the template: it is metalness and roughness.
+- **Alpha test** [source]: the Discarded variant discards where `BaseColor.a < AlphaThreshold` (0.38) when an engine flag is set; the cyberware decal chunks set `enableMask` 1 [resource], and the wiki ties transparency to `enableMask` [wiki] (`textured-material-properties.md` L25); the link between them is [hypothesis].
+- **Emission** [source]: only when `EmissiveEV > 0`: the colour lerps toward `EmissiveColor × BaseColor` by the emissive mask, and GBuffer2.w stores a flag and `sqrt(EV/10)` in 7 bits, `EV = max(log2(mask) + EmissiveEV, 0)`; the ambient composite adds the albedo times a per-frame function of it (`2^EV` if its constant is `10·ln 2` [hypothesis]).
+
+**`glass_onesided.mt`** writes no G-buffer. It is a forward `transparent` pass with dual-source blending, `out = radiance + background × T` per channel, plus a `distortion` pass and a `transparent_mark_rt` pass [resource] [source]:
+
+- **Transmittance** `T = lerp(1, tint′·(1 − mask), Opacity)`, where `tint′` is `GlassTint × TintColor` darkened and saturated toward grazing angles. It ignores the reflection's Fresnel [source].
+- **Reflection**: F0 comes from `FresnelBias` (0 → 0.25, **1 (default) → 0.08**, 2 → 0.04), not from `IOR`, which only the distortion pass reads. Roughness is `saturate(GlassRoughnessBias + Roughness.R)` (default 0). The environment term is Karis's analytic environment BRDF over box-projected probes; the direct term is a **sun-only** GGX lobe. The program has **no local-light loop**, so point, spot and photo-mode lights do not reflect in it [source].
+- **Distortion**: active only when `IOR > 1` or `BlurRadius > 0`. It adds a screen-space refraction offset (Snell's law 50 units along the ray, or a slab of `RefractionDepth`) and a blur radius [source].
+- **Gorilla Arms glass** sets `GlassSpecularColor` to black: it reflects nothing, only tints (`TintColor` 240, 235, 228), refracts (`IOR` 1.32) and blurs (`BlurRadius` 1) the mechanism behind it [resource].
+- `glass.mt` is the same with a back-face pass first (`OpacityBackFace`, `BackFacesReflectionPower`); its parameters are documented in [wiki] `glass-material-properties.md`.
 
 **Relatives:**
 
 - `pbr_simple.mt` has scalar `Color`, `Roughness` and `Metalness` only [resource].
 - `metal_base_glitter.mt` is noise/time emissive, not a glint BRDF [source] [glitter investigation](../research/materials/glitter-shader-investigation.md).
-- `glass.mt` is a forward transparent pass with `IOR`, tint, reflection power and blur [resource]; its parameters are documented in [wiki] `glass-material-properties.md`.
+- `metal_base_blackbody.mt` drives the Gorilla Arms thermal glow chunks (`EmissiveEV` 10) [resource]; not read.
 
 ---
 
@@ -555,6 +565,7 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 13. **Decal depth bias.** What depth bias does `OFFSET_DecalBias` apply, and does it explain why a coincident decal failed only close up?
 14. **Temporal filtering and upscalers.** Which program is the main anti-aliasing? Does the engine apply a negative texture LOD bias under DLSS, FSR3 or XeSS? How do the upscalers treat stable 2–3 pixel glints? Tracked in [Glitter in game](glitter-in-game.md#open-questions).
 15. **Decal normal source.** A mode-1 decal composes with a copy of the G-buffer normal (`t74`). Is it refreshed between decal draws, so that overlapping normal-writing decals compose with each other rather than with the skin ([decal reference §4.5](../research/materials/shader-decal.md#45-normal))?
+16. **Glass and local lights.** The `glass_onesided` transparent program reflects only the sun and the probes; it has no local-light loop [source]. Confirm with a photo-mode light moved across the Gorilla Arms window, and settle what enables `metal_base`'s alpha-test variant and its `post_gbuffer` pass ([metal and glass §8–9](../research/materials/shader-metal-glass.md#8-open-questions)).
 
 ## In-game test asks
 

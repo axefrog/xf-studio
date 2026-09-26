@@ -2,7 +2,7 @@
 
 The [materials and shader study](../backlog/materials-shader-re.md) asks for this index so that a corrected fact reaches every adapter that relies on it. Each row names one engine fact, its grade and where it is documented, then the preview material (browser) and the export compiler or verifier that depend on it. Paths are under `projects/xf-studio/authoring/src/`; "verify" means `features/eye-makeup/verify/`, "engine" means `engines/layered-makeup/`.
 
-**When a fact changes:** update its source page, then every file in its row, then the tests those files name. Rows marked **changed in this study** are the ones the [skin](shader-skin.md), [hair](shader-hair.md), [eye](shader-eye.md), [decal](shader-decal.md) and [multilayered](shader-multilayered.md) references confirmed or corrected on 26 September 2026.
+**When a fact changes:** update its source page, then every file in its row, then the tests those files name. Rows marked **changed in this study** are the ones the [skin](shader-skin.md), [hair](shader-hair.md), [eye](shader-eye.md), [decal](shader-decal.md) and [multilayered](shader-multilayered.md) references confirmed or corrected on 26 September 2026. The [metal and glass](shader-metal-glass.md) rows were added on 27 September 2026; no Studio code relies on them yet.
 
 Grades: **[observed]** compiled 2.31 program or installed resource; **[source-supported]**; **[hypothesis]**.
 
@@ -110,4 +110,18 @@ The evidence is the [multilayered reference](shader-multilayered.md) and its [li
 | Clear coat: the coat amount of layers in `[CoatLayerMin, CoatLayerMax]` is stored in GBuffer2.z; the `unlit` pass (depth `Equal`) adds a coat lobe weighted by `saturate((z − 1/3)·1.5) × Opacity`, dual-source. **New in this study** | [observed] | [multilayered §6](shader-multilayered.md#6-the-clear-coat-multilayered_clear_coat) | Not drawn (`render-templates.ts` has no clear-coat adapter) | — |
 | `multilayered_baked` reads a virtual-texture surface cache filled by the same layer arithmetic. **New in this study** | [observed]; switch-over [hypothesis] | [multilayered §7](shader-multilayered.md#7-the-baked-surface-cache-multilayered_baked) | One bake covers both paths | — |
 
-Related: [skin reference](shader-skin.md) · [hair reference](shader-hair.md) · [eye reference](shader-eye.md) · [decal reference](shader-decal.md) · [multilayered reference](shader-multilayered.md) · [materials and shaders](../../knowledge/materials-and-shaders.md) · [backlog](../backlog/materials-shader-re.md).
+## Metal and glass
+
+The evidence is the [metal and glass reference](shader-metal-glass.md). Neither template has a preview adapter yet (`render-templates.ts` does not list them, so their chunks stay hidden); the Preview column names the code a new adapter would change.
+
+| Fact | Grade | Documented in | Preview | Export / verify |
+|---|---|---|---|---|
+| `metal_base`: colour `saturate(BaseColor × BaseColorScale)`; metalness and roughness each the **R** of their own map through `saturate(x·scale + bias)`; RG normal, Z reconstructed, XY × `NormalStrength`; UV × `LayerTile` except `Emissive`; plain Standard G-buffer | [observed] | [metal and glass §3.1, §3.3](shader-metal-glass.md#33-the-g-buffer-program-observed) | Not drawn; a new `metal-base` adapter in `character-material-adapters.ts` and `render-templates.ts` (ranked plan §7) | — |
+| `metal_base` Discarded variant: `discard` where `BaseColor.a < AlphaThreshold` (0.38) when `MaterialModifiersConsts[0].x ≠ 0`; the cyberware decal chunks set `enableMask` 1 | [observed]; `enableMask` → flag [hypothesis] | [metal and glass §3.3](shader-metal-glass.md#33-the-g-buffer-program-observed) | Not drawn; would be Three's `alphaTest` | — |
+| `metal_base` emission: only when `EmissiveEV > 0`; colour lerps toward `EmissiveColor × BaseColor`, GBuffer2.w = flag + `sqrt(EV/10)`; the composite's per-frame scale | [observed]; `2^EV` [hypothesis] | [metal and glass §3.6](shader-metal-glass.md#36-emission-observed) | Not drawn (no character instance uses it) | — |
+| `glass_onesided` writes no G-buffer: forward `transparent` pass, `out = radiance + background × T` (dual source), `T = lerp(1, tint′·(1 − mask), Opacity)`, no Fresnel on transmission | [observed] | [metal and glass §4.3](shader-metal-glass.md#43-the-transparent-program-observed) | Not drawn; needs a two-pass forward adapter (WebGL has no dual-source blend) | — |
+| Glass F0 from `FresnelBias` (0.25 / **0.08** / 0.04 at 0 / 1 / 2); `IOR` only moves the distortion; roughness `saturate(GlassRoughnessBias + R)`; Karis analytic environment BRDF; **sun-only** direct light, no local lights | [observed] | [metal and glass §4.3](shader-metal-glass.md#43-the-transparent-program-observed) | Not drawn | — |
+| Gorilla Arms glass: `GlassSpecularColor` black, so no reflection; tint (240, 235, 228), `IOR` 1.32, `BlurRadius` 1 | [observed, resource] | [metal and glass §5](shader-metal-glass.md#5-what-the-character-assets-set-observed-resource) | Not drawn | — |
+| Creator preset has no environment (`scene.environment = null`), while in game Standard pixels also take the ambient composite's probe diffuse and reflection | [observed, source]; what the creator scene's probes hold [hypothesis] | [metal and glass §6](shader-metal-glass.md#6-how-far-the-preview-is) | `lighting-preset-stage.ts`, `studio-environment.ts`; affects `layered-material.ts` metals today | — |
+
+Related: [skin reference](shader-skin.md) · [hair reference](shader-hair.md) · [eye reference](shader-eye.md) · [decal reference](shader-decal.md) · [multilayered reference](shader-multilayered.md) · [metal and glass reference](shader-metal-glass.md) · [materials and shaders](../../knowledge/materials-and-shaders.md) · [backlog](../backlog/materials-shader-re.md).
