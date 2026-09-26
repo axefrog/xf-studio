@@ -1,6 +1,6 @@
 # Worn clothing
 
-**Maturity: Draft.** Consolidated on 26 September 2026 from the installed 2.31 game (scripts, TweakDB, one vanilla item's full resource chain, the player body resources), the scripting RTTI dump, WolvenKit's save parsers, ArchiveXL 1.27.3 and EquipmentEx source, one decoded 2.31 save and the Modding Docs. Nothing on this page has runtime evidence yet, and the Studio renders no clothing today. Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established. The build plan is in the [clothing render backlog](../research/backlog/clothing-render.md).
+**Maturity: Draft.** Consolidated on 26 September 2026 from the installed 2.31 game (scripts, TweakDB, one vanilla item's full resource chain, the player body resources), the scripting RTTI dump, WolvenKit's save parsers, ArchiveXL 1.27.3 and EquipmentEx source, one decoded 2.31 save and the Modding Docs. Nothing on this page has runtime evidence yet, and the Studio renders no clothing today; the unclothed body it will dress renders since 26 September ([body rendering](body-rendering.md)). Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established. The build plan is in the [clothing render backlog](../research/backlog/clothing-render.md).
 
 This page answers five questions for XF Studio agents:
 
@@ -234,4 +234,4 @@ Batch these into one session once the save reader and resolver exist (see the [b
 
 ## Related pages
 
-[CC file chain](cc-file-chain.md) · [Head CC rendering](head-cc-rendering.md) · [Mod loading](mod-loading.md) · [Materials and shaders](materials-and-shaders.md) · [Archive and resource formats](archive-format.md) · [Piercings and jewellery](jewellery-resources.md) · [Runtime access](runtime-access.md) · [Save import](../research/eye-artistry/save-import.md) · [Clothing render backlog](../research/backlog/clothing-render.md)
+[CC file chain](cc-file-chain.md) · [Head CC rendering](head-cc-rendering.md) · [Body rendering](body-rendering.md) · [Mod loading](mod-loading.md) · [Materials and shaders](materials-and-shaders.md) · [Archive and resource formats](archive-format.md) · [Piercings and jewellery](jewellery-resources.md) · [Runtime access](runtime-access.md) · [Save import](../research/eye-artistry/save-import.md) · [Clothing render backlog](../research/backlog/clothing-render.md)

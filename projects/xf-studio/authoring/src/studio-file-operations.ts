@@ -184,7 +184,7 @@ export class StudioFileOperations {
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
           if (file.size > 128 * 1024 * 1024) throw new FileOperationError("too_large", "Save is larger than the supported limit.");
           const savedAppearance = this.sources.loadSavedV(await file.bytes());
-          outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, face details, eyes, brows, lashes, hair and piercings follow in a moment.",
+          outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.",
             savedAppearance }; break;
         }
         case "savedV.export":
@@ -197,7 +197,7 @@ export class StudioFileOperations {
           if (file.size > CC_PRESET_LIMITS.bytes) throw new FileOperationError("too_large", "This character preset can't be read: the file is larger than 1 MB.");
           // The JSON is read once here and the preset once by the context (CORE-55).
           this.sources.characterPreset!.load(readPresetJson(await file.bytes()));
-          outcome = { ok: true, code: "loaded", message: `Loaded ${file.name}. Your V's skin, face details, eyes, brows, lashes, hair and piercings follow in a moment.` }; break;
+          outcome = { ok: true, code: "loaded", message: `Loaded ${file.name}. Your V's skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.` }; break;
         }
         case "characterPreset.export": {
           const saved = await this.sources.characterPreset!.save();

@@ -1,0 +1,111 @@
+# V's body: resources, rig and the Studio's body render
+
+**Maturity: Draft.** Consolidated on 26 September 2026 from the installed 2.31 game (the Phantom Liberty creator resources, the player body `.app`, `.mesh` and `.morphtarget` resources, the decompiled game scripts), the generic resolver's output for the default V, a new-game save and a V with body choices set, WolvenKit 9.0.1 exports of the body parts, ArchiveXL 1.27.3 source and the Modding Docs. Nothing on this page has runtime evidence yet. Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established. Provenance (hashes, commits, the resolver runs and the joint comparison) is in the [body render evidence](../research/character-customization/body-render-evidence.md).
+
+This page answers, for the V without clothing: which resources make up the player's body per body gender, how the creator's choices select them, how the body shares skin with the head, what the game's censorship rules do, how the body is rigged and animated, and how the Studio draws it. Clothing, which builds on it, is in [worn clothing](clothing.md); the head's options are in [head CC rendering](head-cc-rendering.md) and the option catalogue in the [CC file chain](cc-file-chain.md#4-every-cc-detail-and-what-drives-it).
+
+## 1. Which parts make the third-person body
+
+The creator resource has three parts, `head`, `body` and `arms`, each with options and consumer groups [resource] ([file chain §2](cc-file-chain.md#2-the-inkcharcustomization-resource)). A save stores every group's resolved appearances, and the default V's rule R5 activates every group too, so a V lists the first-person body, every arm-cyberware holster state and both feet states at once [resource]. Which of them the third-person V draws is decided by the consumers:
+
+| Consumer | Groups it reads | Evidence |
+|---|---|---|
+| Third-person body | `TPP_Body`: the `tpp` half of the creator resource's first `perspectiveInfo` entry (`FPP_Body` → `FPP_Body` / `TPP_Body`) | [resource] `perspectiveInfo` of both creator resources |
+| Arms | the default holster state's third-person group: `holstered_default_tpp` (feminine; the masculine resource does not split it: `holstered_default`). The other states (`holstered_strong`, `…_nanowire`, `…_launcher`, `…_mantis` and their `unholstered_*`) belong to equipped arm cyberware | [resource] `perspectiveInfo`; state selection by equipped cyberware [hypothesis] |
+| Genitals controller | `genitals` (lower body) and `breast` (upper body) | [resource] `gameuiCharacterCustomizationGenitalsController {bottomBodyGroupName, upperBodyGroupName}` |
+| Feet controller | `flat_feet` when no footwear is equipped, `lifted_feet` in ordinary shoes (female V; the masculine resource has no feet groups) | [wiki] ArchiveXL's `{feet}` substitution table ([suffixes and substitutions](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/core-mods-explained/archivexl/archivexl-suffixes-and-substitutions.md), manavortex); the creator's own puppet group `character_creation` lists `lifted_feet` [resource] |
+| Nails controller | `nails` (the length morphs `nails_l`, `nails_r`); the nail colour option sits in the holster groups | [resource] |
+
+Female V's parts, as the resolver finds them on the base game (paths abbreviate `base\characters\common\player_base_bodies\` as `…\`) [resource]:
+
+| Part | Option → `.app` | Component | Geometry | Chunks and template |
+|---|---|---|---|---|
+| Body skin | `body_color` (hidden, link `skin color`) → `…\appearances\t0_000_base__full.app` | `t0_000_pwa_base__full` (`entMorphTargetSkinnedMeshComponent`, listed twice in the appearance) | `…\player_female_average\t0_000_pwa_base__full.morphtarget` (targets `t0_000_wa_base__full_breast_small` and `…_big`, region `breast`) over `t0_000_pwa_base__full.mesh` | 8 chunks: 0–3 torso (chest, collarbone, upper and lower abdomen), 4 thighs, 5 calves, 6 ankles, 7 feet [source: ArchiveXL `VisualTags.xl`; wiki: LadyLea's tag diagrams]; the appearance's chunk mask hides 5–7, which the feet draw. Every chunk `skin.mt` through the tone's `.mi` chain (mesh appearance = tone) |
+| Censored body | `body_color_censored` → `t0_000_base__full_censored.app` | the same component name and morph target, mesh appearance `<tone>_censored` | as above | as above |
+| Feet | `flat_feet` → `…\appearances\l0_000_base__cs_flat.app`; `lifted_feet` → `l0_000_base__full.app` | `l0_000_pwa_base__cs_flat` (garment) | `l0_000_pwa_base__cs_flat.mesh` | 3 chunks (calves, ankles, feet), `skin.mt` |
+| Arms and hands | `h_default_arms_colors_tpp` (hidden, link `skin color`) → `…\appearances\a0_000_base__full.app` | `a0_001_pwa_base_hq__full` and `…full8640` (garments), `a0_001__personal_link_tpp4537` | `arms_hq\a0_000_pwa_base_hq__l.mesh` (4 chunks), `…__r.mesh` (3), `base\characters\cyberware\player\a0_001__personal_link\a0_001__personal_link_tpp.mesh` | `skin.mt`; the left arm's fourth chunk and the port are `multilayered.mt` (the personal link) |
+| Nails | `nails_color_tpp` (54 colours, link `nails_color`) → `a0_000_base__nails.app` | `a0_000_pwa_base_nails_l`, `…_r` (morph components; `parentTransform` binds to `root`) | `arms_hq\nails\a0_000_pwa_base__nails_l.morphtarget` (one target per hand, regions `nails_l` / `nails_r`) | one chunk; plain colours `skin.mt`, the `…__multilayer` designs layered [resource on a nails framework's install: `skin.mt` with the framework's albedo] |
+| Underwear cover | `underpants` (hidden, the game's censorship underwear) → `t0_000_base__censored_items.app` | `i0_000_pwa_base_full_censored8504` (garment) | `i0_000_pwa_base_full_censored.mesh` | one chunk, `mesh_decal.mt` (a decal over the body); carries garment-support data |
+| Nipples | `nipples` switcher → `nipples_01…04` | female options name no resource (the body's albedo carries them); male `i0_000_base__nipple.app` | – | – |
+| Genitals | `genitals` switcher → `genitals_01…04` + `penis_*` size morphs + hair switchers → `i0_000_base__genitals.app` | `i0_000_pwa_base__genitals_none` etc. (garment) | `genitals\i0_000_pwa_base__genitals_*.mesh` | `skin.mt` |
+| Body tattoos | `body_tattoo` switcher → `body_tattoo_01…07` (tone-linked) → `t0_000_base__tattoo_NN.app` | `tx_000_pwa_base__full_tattoo_NN` (morph component with the breast targets) | `tattoos\tx_000_pwa_base__full_tattoo_NN.morphtarget` | `mesh_decal.mt` |
+| Body scars | `body_scars` switcher → `body_scars_00…04` → `scars_000_base.app` | `t0_000_pwa_base__scars7164` (morph component, chunk mask per scar) | `scars\t0_000_pwa_base__scars.morphtarget` | 4 chunks, `mesh_decal.mt` with normal and roughness |
+
+Male differences [resource]: the body is a plain mesh, `player_man_average\t0_000_pma_base__full.mesh` (no breast morph); the arms' groups are not split per perspective; there are no feet groups; nipples have their own two-choice option with an `.app`. The preview draws no male V yet (the core head is female).
+
+**First person** uses its own parts (`t0_000_pwa_fpp__torso.mesh`, `a0_000_pwa_fpp__full_l/_r.mesh`, `n0_000_pwa_fpp__neck.mesh`) in the `FPP_Body` and `holstered_*_fpp` groups [resource] [wiki: [body cheat sheet](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/references-lists-and-overviews/cheat-sheet-body.md), manavortex]. The wiki lists `t0_000_pwa_base__full_seamfix.mesh` as a seam cover at the shoulders; the resolved third-person appearances name no seam-fix component, and the head's seam-fix part uses `metal_base.remt`, which the preview does not draw [resource].
+
+## 2. Skin: one skin model for the head and the body
+
+Every body skin part (body, feet, arms, genitals) is `skin.mt` with a local material per tone over the same four-level tone chain as the head, so a skin tone is again only `TintColor`, `TintScale` and the tint mask ([head CC rendering §2](head-cc-rendering.md#2-skin-type-tone-and-the-complexion-texture-set)) [resource]. The tone reaches the body through the creator's link: `body_color`, the arms options, the feet, nipples and genitals are followers of the `skin color` link, as the head's skin types are ([file chain "Links"](cc-file-chain.md#links-how-one-colour-follows-several-options-resource)) [resource]. Unlike the head, the body has no skin *type*: its albedo, normal and roughness are shared by every tone (vanilla `base\4k\common\body\wa\textures\d02_naked.xbm`, `n02_naked.xbm`, `wa_base_rm02.xbm`), with a full-body overlay (`base\4k\common\overlays\fullbody_overlay_d01.xbm`) as the `SecondaryAlbedo` that body tattoo frameworks replace [resource]. A body texture mod can replace these maps at their vanilla paths; on the reference profile they are 8192² [resource].
+
+## 3. Censorship and nudity [resource] [source]
+
+Body options carry a censorship rule, `censorFlag` `Censor_Nudity` with `censorFlagAction` `Activate` or `Deactivate` [resource]. While the game censors nudity, `Deactivate` options turn off and `Activate` options turn on:
+
+| Option | Rule | Censored | Uncensored |
+|---|---|---|---|
+| `body_color` (and FPP twin) | Deactivate | off | the body skin |
+| `body_color_censored` (same creator slot) | Activate | the body skin, censored appearance | off |
+| `underpants` | Activate | the underwear cover | off |
+| `nipples`, `genitals` and their parts, `breast` (morph) | Deactivate | off (default breast shape) | as chosen |
+| tattoos, scars, feet, arms, nails | none | as chosen | as chosen |
+
+Whether nudity is allowed is native (`gameuiICharacterCustomizationSystem.IsNudityAllowed()`); the scripts use it to equip the basic underwear items (`Items.Underwear_Basic_01_Bottom`, and `_Top` for a female V) on the creator puppet when nudity is not allowed, and to keep the underwear bottom on in gameplay unless genitals were chosen [source: `preGameMenuGameController.script` `UpdateCensorshipItems`, `equipmentSystem.script` `IsBuildCensored`, `ShouldShowGenitals`]. In ordinary gameplay without clothing V wears that underwear, a clothing item ([clothing §2.3](clothing.md#23-the-hide-flags-source)).
+
+**The Studio's policy** (the maintainer's, provisional; [clothing render backlog](../research/backlog/clothing-render.md)): the Studio never shows more than the game's own uncensored mode, and by default the V wears underwear. Until clothing renders, the preview's body is the V with nudity allowed and no clothing, covered by the game's own censorship underwear, decided from the creator's own rules only (`bodyOptionDraws` in `character-detail-plan.ts`):
+
+- options without a rule draw as the game draws them;
+- of a pair the rule swaps on one creator slot (the body skin and its censored twin), the uncensored one draws;
+- an option the rule only turns on (the underwear cover) draws, standing in for the default underwear, which is clothing;
+- an option the rule turns off and that has no twin (nipples, genitals) does not draw: the cover sits over it;
+- morphs apply (the breast size shapes the body under the cover).
+
+## 4. How the Studio draws the body
+
+**Record** (`xfs/render-detail-8`, `src/render-detail.ts`): a `body` slot, last in the load order, and on each body component the shape keys the resolver applied to it (`morphs`: `<target>_<region>`, as WolvenKit names a morph target's shape keys: `t0_000_wa_base__full_breast_big_breast`, `a0_000_pwa_base__nails_l_nails_l`) [resource].
+
+**Planning** (`planBody`, `src/character-detail-plan.ts`): the body and arms appearances the consumers above read, the censorship policy, one component per repeated part (the body skin is listed twice in its appearance) [hypothesis: one component per name in an entity], the skin's parts first so the decals read it, then the creator's option order. `previewInput` resolves only the head and those body groups (a save lists every perspective and holster state). The feet state is a `BodyState` (`flat` by default), so worn footwear can set it later. No option, mod or resource is named: a body replacer, a UV framework or a nails framework resolves by archive precedence and ArchiveXL patches like everything else.
+
+**Textures**: the host serves a texture larger than 4096 on a side halved until it fits (2×2 means of its bytes, like a mip level; `SERVED_TEXTURE_MAX`, once per export), and says so in the record's notes. Every vanilla head, face and eye map is at most 4096², so the head is served as before.
+
+**Materials**: the body's skin parts use the head's skin adapter (`skin-material.ts`: the same tone tint, detail and microdetail arithmetic, the same dual-lobe light and subsurface stand-in); layered chunks (the personal link, layered nail designs) the layered adapter; the body's decals (tattoos, scars, the underwear cover) the face decals' decal family, lit by the body skin's light and blended against the skin under each vertex, read on the body, feet and arms (`skinSurfaceUnderlay`).
+
+**Shape**: each body component's influences are the record's `morphs` at full weight; the body never follows the head's facial shapes. A body decal with no shape keys of its own (the underwear cover, a plain garment) gets the body skin's applied shape carried over from the nearest body vertex as one shape key, `xfs_body_shape` (`transferDeltas`), so the cover stays over an enlarged breast [hypothesis: an approximation of the game's garment support, which pushes a garment out over the body; the cover carries garment-support data of its own].
+
+**Rig and idle** [resource] [hypothesis]: WolvenKit 9.0.1 exports each body part with its joints flat under the armature. The main joints (`Hips`, `Spine…`, `LeftArm`, `LeftForeArm`, `LeftHand`, `Neck` and so on) have the same names and the same rest transforms as the `woman_base.rig` the creator's close-up idle clip is decoded with (measured within 0.001 of a metre and of a quaternion component), so the idle drives them directly. Their helper, muscle and twist joints (`l_deltoid_…_JNT`, `l_Wrist_0_JNT`, the knuckle joints) are not in that rig: the game drives them by rig constraints the preview doesn't have, and the preview moves each rigidly with the rig segment nearest it (`IdleAnimation.nearestDriver`) [hypothesis]. Without that, the arm's vertices weighted to them stayed at the bind pose while the arm moved. With the idle off, the body stands in the bind pose (the arms at about 45°).
+
+**Rigid parts**: a body part exported without its skin (the reference profile's nails, from a nails morph mod) is bound whole to one bone at its centre, which the idle moves with the nearest rig segment, so the nails stay with the hand but don't bend with the fingers; the slot reports `rigid-body-part`. A rigid piercing part still stays where the export placed it (`rigid-part`).
+
+**Scene**: the body shows by default and has its own visibility toggle (`preview.setBody`, the Character panel's **Body**); the whole-body view (`camera.body`: the viewport toolbar, the Preview panel, the head menu and the command palette) frames a standing V at the current lens; while the body shows the depth range covers it (`bodyClipPlanes`), and the head views keep exactly their planes. The orbit reaches 5 m (it was 3.5 m) so the whole body fits at the default lens.
+
+**What it looks like** (reference MO2 profile, default V and a V with senna tone, body tattoo 1, body scar 1, big breasts, long nails and a layered nail design; private captures `evidence/screenshots/body-render/`): the neck joins the head without a visible seam and the tone matches; the body, feet, arms, hands and nails align with the head in the bind pose and in the idle; the underwear covers the chest and groin at every breast size; tattoos and scars follow the breast shape. Not compared with the game.
+
+## 5. For clothing later (the four requirements)
+
+The [clothing render plan](../research/backlog/clothing-render.md#coordination-with-body-render) needs four things from the body, and gets them without special cases:
+
+1. **Components by resource name**: every body component keeps its component name and depot path in the record (`t0_000_pwa_base__full`, `a0_001_pwa_base_hq__full`, `l0_000_pwa_base__cs_flat`, `i0_000_…`), so tag rules can match names and prefixes.
+2. **Chunk masks as data**: the resolver applies each component's chunk mask (`ResolvedComponent.chunkMask` → the record's `chunks`), and the served geometry is a chunk copy of the cached export, so a tag or `partsOverrides` mask re-plans and re-copies without exporting again. Drawing all chunks and hiding by mask at draw time would need the resolver to resolve the masked chunks' materials too.
+3. **Feet state**: `BodyState.feet` picks the feet group (`flat_feet` or `lifted_feet`); the `HighHeels` and `FlatShoes` tags mask body chunks 5–7 and show the matching `l0_` chunks instead.
+4. **Garment support**: the arms, feet and the cover carry `_GARMENTSUPPORTWEIGHT`, `_GARMENTSUPPORTCAP` and a `GarmentSupport` shape key in their exports [resource]; nothing reads them yet, and the loader keeps every attribute, so a later per-vertex offset has its data.
+
+## Open questions
+
+1. Does the game draw the body's helper and twist joints from rig constraints (which the preview approximates rigidly), and which rig resource holds them?
+2. How does the game move the underwear cover over a changed breast shape: its garment-support data, or a morph the preview doesn't read?
+3. Does the running game draw exactly the parts §1 lists for a V without clothing (for example, no seam-fix component at the shoulders)?
+4. Does the arms' holster state follow equipped arm cyberware alone, and which state does the creator puppet use?
+5. Why does WolvenKit export the reference profile's nails morph target without its skin: the mod's mesh, or the morph-target export?
+
+## In-game test asks
+
+Batch with the next session; record ArchiveXL and the body, UV and nail mods in use.
+
+1. **Body against the preview.** Photo mode, a V without clothing (strip every slot), frontal and side full-body frames under one light: compare with the preview's whole-body view (studio and creator presets): tone match at the neck and wrists, the feet shape (flat), the underwear's coverage.
+2. **Breast size under the underwear.** Creator body page, big breasts: the underwear must cover as in the preview; a gap in game but not in the preview (or the reverse) answers open question 2.
+3. **Idle arms.** Creator face page idle, a close-up of a shoulder and a wrist: the deltoid and wrist shapes against the preview's rigid helpers.
+
+## Related pages
+
+[Head CC rendering](head-cc-rendering.md) · [CC file chain](cc-file-chain.md) · [Worn clothing](clothing.md) · [Materials and shaders](materials-and-shaders.md) · [Facial animation](facial-animation.md) · [Body render evidence](../research/character-customization/body-render-evidence.md)

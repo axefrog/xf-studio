@@ -29,14 +29,14 @@ export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
 };
 /** Why none of the V's details are shown, when a code says so (detail-limits.ts). */
 export const DETAIL_NOTICE_TEXT: Readonly<Record<DetailNotice, string>> = {
-  "version-skew": "XF Studio was updated while it was running. Restart it to see your V's skin, face details, eyes, brows, lashes, hair and piercings.",
+  "version-skew": "XF Studio was updated while it was running. Restart it to see your V's skin, face details, eyes, brows, lashes, hair, piercings and body.",
 };
 
-/** One plain line about the shown V's skin, face details, eyes, brows, lashes, hair and piercings, from the resolved-detail status. */
+/** One plain line about the shown V's skin, face details, eyes, brows, lashes, hair, piercings and body, from the resolved-detail status. */
 export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
   if (!details || details.phase === "idle") return { done: false, text: "" };
   const who = details.source === "save" ? "your V" : "the default V";
-  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, face details, eyes, brows, lashes, hair and piercings from your game files…` };
+  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, face details, eyes, brows, lashes, hair, piercings and body from your game files…` };
   if (details.phase === "failed") return { done: true, text: details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message };
   const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
   const limits = [...new Set(details.slots.flatMap(slot => slot.state === "shown" ? slot.limits ?? [] : []))].map(limit => DETAIL_LIMIT_TEXT[limit]);

@@ -69,7 +69,7 @@ export type AttachedHead = {
   savedAppearance: SavedAppearanceActions;
   preview: PreviewActions;
   motion: MotionActions;
-  /** Resolved skin, face details, eyes, brows, lashes, hair and piercings of the shown V (default or loaded save). */
+  /** Resolved skin, face details, eyes, brows, lashes, hair, piercings and body of the shown V (default or loaded save). */
   characterDetails: CharacterDetailActions;
   /** Which V is shown and every creator choice set on it (CORE-58). */
   characterContext: CharacterContextActions;
@@ -94,7 +94,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
     let savedAppearance: SavedAppearanceActions | undefined;
-    // Skin, face details, eyes, brows, lashes, hair and piercings follow the character context: the restored or newly loaded save, else
+    // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the character context: the restored or newly loaded save, else
     // the default V, with the creator choices set on it. A save switch replaces them completely (CharacterDetailActions supersedes the
     // previous V); a changed choice on the same V keeps it on screen. It starts following once the preview services have restored the
     // workspace.

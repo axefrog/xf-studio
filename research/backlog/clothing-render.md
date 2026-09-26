@@ -67,6 +67,8 @@ That track (`D:/Dev/worktrees/body-render`) is building V's body now. This work 
 3. The feet variants (`l0_000_pwa_base__cs_flat` and the heel meshes) resolved from a feet state the resolver can set.
 4. Room for a per-vertex offset on body meshes later, for garment support (the female body mesh carries GarmentSupport data).
 
+How the body track met them (26 September; [body rendering §5](../../knowledge/body-rendering.md#5-for-clothing-later-the-four-requirements)): component names and depot paths are in the record; the resolver applies each chunk mask and the served geometry is a chunk copy of the cached export, so a changed mask re-plans without exporting again (drawing every chunk and masking at draw time would need the masked chunks' materials resolved too); `BodyState.feet` picks the feet group; the garment-support attributes and shape key are in the exports and kept by the loader. The body's underwear cover already follows the body's shape through a carried-over shape key, a first stand-in for garment support. Nudity follows point 3 of the decisions below: the body is drawn with the game's own underwear cover over it.
+
 ### Export
 
 Viewing clothes exports nothing. Two export consequences follow from the research:

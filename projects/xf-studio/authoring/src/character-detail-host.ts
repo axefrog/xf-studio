@@ -88,9 +88,9 @@ export type CharacterDetailHostOptions = {
 /** How often, at most, the prepared files are checked against their budget. */
 const EVICT_INTERVAL_MS = 60_000;
 
-const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair and piercings appear once your game folder and WolvenKit are set up.";
-const PREPARING = "Preparing your V's skin, face details, eyes, brows, lashes, hair and piercings…";
-const FAILED = "Something went wrong while preparing your V's skin, face details, eyes, brows, lashes, hair and piercings, so they aren't shown. The head still works.";
+const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body appear once your game folder and WolvenKit are set up.";
+const PREPARING = "Preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body…";
+const FAILED = "Something went wrong while preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body, so they aren't shown. The head still works.";
 /** Request key: the character and the installation fingerprint it is prepared from (`installationFingerprint`). */
 export const characterRequestKey = (request: CharacterRequest, installation = "") =>
   createHash("sha256").update(canonicalJson(request)).update("\n" + installation).digest("hex").slice(0, 32);
@@ -218,14 +218,14 @@ export class CharacterDetailHost {
         if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
         this.prefetch.prepared(request, !result.degraded);
         void this.keepWithinBudget();
-        this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
+        this.options.log?.(`Skin, face details, eyes, brows, lashes, hair, piercings and body prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
       })
       .catch(error => {
         const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || controller.signal.aborted;
         this.prefetch.prepared(request, false);
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
-        this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
+        this.options.log?.(`Skin, face details, eyes, brows, lashes, hair, piercings and body were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
         hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null });
       })

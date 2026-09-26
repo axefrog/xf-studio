@@ -10,7 +10,7 @@ import type { WorkspaceSaveStatus } from "./workspace-persistence";
 export type PreviewAssetStatus = {
   /** Head scene and its optional details have finished loading (or failed). */
   loaded: boolean;
-  /** Skin, face details, eyes, brows, lashes, hair and piercings resolved from the player's own installation for the shown V. */
+  /** Skin, face details, eyes, brows, lashes, hair, piercings and body resolved from the player's own installation for the shown V. */
   characterDetails?: CharacterDetailStatus;
   eyeOptics?: { requested: boolean; active: boolean; reason: string; error?: string };
 };
