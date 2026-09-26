@@ -62,6 +62,10 @@ The [next-sessions plan](../runtime/next-sessions-plan.md#bridge-suggestions-for
 | B9 | `cc.page` | **Built:** the creator's camera by body region (the menu's own `RequestCameraChange`); cheap and camera-only. `cc.apply` through a row already moves the camera to that option's region |
 | B10 | Photo-mode NPC hiding (rank 7) | Queued |
 
+## In-game XF interface (consideration, 27 September 2026)
+
+Integrated XF UI inside the running game is welcome where it helps, CET overlays especially, because changes show live. First candidate: a small CET panel for the bridge (connection status, **reconnect after the kill switch** without restarting the game, the write switch state). In the first bridge session, reconnecting after a disconnect needed a game restart.
+
 ## Decisions for the maintainer
 
 All three approved on 26 September 2026, each confined to the test profile's -writes build:
