@@ -265,14 +265,36 @@ export class CharacterContextActions {
       : source === "unread" ? "XF Studio couldn't read what your V wears from this save, so her clothes aren't shown."
       : !worn.length ? "Your V wears nothing in this save." : "";
     return { state: this.clothing.state, custom: [...this.clothing.custom], worn, shown: this.shownAreas(),
-      states: CLOTHING_STATES.map(value => ({ value, label: CLOTHING_STATE_LABELS[value] })),
+      states: this.offeredStates().map(value => ({ value, label: CLOTHING_STATE_LABELS[value] })),
       areas: worn.map(area => ({ area, label: CLOTHING_AREA_LABELS[area] })), source, note,
       undo: this.clothingPast.at(-1)?.label ?? null, redo: this.clothingFuture.at(-1)?.label ?? null };
   }
   /** What the Clothing setting dresses the shown V in, for a request (null: nothing worn). */
-  private dressing() {
+  private dressing(setting: ClothingSetting = this.clothing) {
     const save = this.state.save?.value;
-    return dressingFor(this.clothing, save?.loadout, this.state.bodyGender, save?.tags ?? []);
+    return dressingFor(setting, save?.loadout, this.state.bodyGender, save?.tags ?? []);
+  }
+  /**
+   * The Clothing states that apply to the shown V (UI-79): the current one, and each other one that dresses V differently from every state
+   * offered before it (the default V, or a save without head or face items, has fewer). "Choose areas" is offered only while the save
+   * dresses an area to choose.
+   */
+  private offeredStates(): ClothingState[] {
+    const save = this.state.save?.value, worn = save?.loadout ? wornAreas(save.loadout).length : 0;
+    // What a state dresses V in: the worn items and which of their areas show (an area shown with nothing in it changes nothing).
+    const key = (state: ClothingState) => {
+      const dressed = this.dressing({ state, custom: state === "custom" ? this.shownAreas() : this.clothing.custom });
+      return dressed ? JSON.stringify([dressed.worn, dressed.shown.filter(area => dressed.worn.some(entry => entry.area === area))]) : "";
+    };
+    const offered: ClothingState[] = [], seen = new Set<string>([key(this.clothing.state)]);
+    for (const state of CLOTHING_STATES) {
+      if (state === this.clothing.state || (state === "custom" && worn)) { offered.push(state); continue; }
+      if (state === "custom") continue;
+      const dressed = key(state);
+      if (!seen.has(dressed)) offered.push(state);
+      seen.add(dressed);
+    }
+    return offered;
   }
   /** The panel's options for the shown V's body (frozen; shared, never copied). Reading it marks the panel as looked at. */
   panel(): Readonly<CcPanel> | null {
@@ -375,8 +397,19 @@ export class CharacterContextActions {
    */
   detailRequest(): CharacterRequest {
     if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
-    return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing());
+    return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing(),
+      this.bodyShown);
   }
+  /**
+   * Whether the viewer shows V's body (the preview's Body switch): with it off, the request asks for the head alone, so the host neither
+   * dresses nor prepares the body and the scene releases what it drew (PREV-108). A composition root keeps it in step with the switch.
+   */
+  setBodyShown(shown: boolean): void {
+    if (shown === this.bodyShown) return;
+    this.bodyShown = shown;
+    this.publish();
+  }
+  private bodyShown = true;
   /** The whole state as the host interprets it (every part). */
   request(): CharacterRequest {
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices);
@@ -642,7 +675,9 @@ export class CharacterContextActions {
       case "character.redo":
         return this.future.length ? { available: true } : refusal("invalid_value", "There is no undone character change to redo.");
       case "character.setClothing":
-        return this.clothing.state === action.state ? refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} is already shown.`) : { available: true };
+        if (this.clothing.state === action.state) return refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} is already shown.`);
+        return this.offeredStates().includes(action.state) ? { available: true }
+          : refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} wouldn't change what your V wears.`);
       case "character.setClothingArea": {
         const shown = this.shownAreas().includes(action.area);
         return shown === action.shown ? refusal("invalid_value", action.shown ? "That area is already shown." : "That area is already hidden.") : { available: true };
@@ -760,7 +795,8 @@ export class CharacterContextActions {
       case "character.setClothingArea": {
         const shown = new Set(this.shownAreas());
         if (action.shown) shown.add(action.area); else shown.delete(action.area);
-        this.clothingStep(`${action.shown ? "Show" : "Hide"} ${action.area}`, { state: "custom", custom: CLOTHING_AREAS.filter(area => shown.has(area)) });
+        this.clothingStep(`${action.shown ? "Show" : "Hide"} ${CLOTHING_AREA_LABELS[action.area].toLowerCase()}`,
+          { state: "custom", custom: CLOTHING_AREAS.filter(area => shown.has(area)) });
         break;
       }
       case "character.undoClothing": this.clothingTravel(this.clothingPast, this.clothingFuture); break;

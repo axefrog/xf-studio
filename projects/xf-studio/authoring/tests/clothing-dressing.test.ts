@@ -74,6 +74,54 @@ describe("Clothing setting", () => {
     expect(older.detailRequest().clothing).toBeUndefined();
   });
 
+  test("UI-78: an area's Undo label uses its plain name", () => {
+    const context = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: save(), stored: { origin: "save", choices: [] } });
+    context.dispatch({ kind: "character.setClothingArea", area: "InnerChest", shown: false });
+    expect(context.snapshot().clothing.undo).toBe("Hide inner torso");
+    context.dispatch({ kind: "character.setClothingArea", area: "UnderwearBottom", shown: false });
+    expect(context.snapshot().clothing.undo).toBe("Hide underwear bottom");
+  });
+
+  test("UI-79: only the Clothing states that change what V wears are offered, and the others are refused with the reason", () => {
+    const states = (context: CharacterContextActions) => context.snapshot().clothing.states.map(state => state.value);
+    // The save dresses the head: every state differs.
+    const dressed = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: save(), stored: { origin: "save", choices: [] } });
+    expect(states(dressed)).toEqual(["saved", "no-headwear", "underwear", "custom"]);
+    // No head or face item: "As saved" is the current state's look, so only the current one of the two is offered.
+    const bareHead: SavedLoadout = { ...loadout, equipped: loadout.equipped.filter(entry => entry.area !== "Head") };
+    const noHat = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: save(bareHead), stored: { origin: "save", choices: [] } });
+    expect(states(noHat)).toEqual(["no-headwear", "underwear", "custom"]);
+    expect(noHat.capability({ kind: "character.setClothing", state: "saved" })).toMatchObject({ available: false, code: "invalid_value",
+      reason: "As saved wouldn't change what your V wears." });
+    // The default V wears nothing of her own: only the underwear state changes anything, and there are no areas to choose.
+    const plain = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: undefined, stored: undefined });
+    expect(states(plain)).toEqual(["no-headwear", "underwear"]);
+    expect(plain.capability({ kind: "character.setClothing", state: "custom" }).available).toBe(false);
+    expect(plain.capability({ kind: "character.setClothing", state: "underwear" }).available).toBe(true);
+  });
+
+  test("PREV-108: with the body off the request asks for the head alone, without clothes, and asks again when it comes back", () => {
+    const context = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: save(), stored: { origin: "save", choices: [] } });
+    let published = 0;
+    context.subscribe(() => published++);
+    const shown = context.detailRequest();
+    context.setBodyShown(false);
+    const hidden = context.detailRequest();
+    expect(hidden).toMatchObject({ body: false });
+    expect(hidden.clothing).toBeUndefined();
+    expect(sameCharacter(shown, hidden)).toBe(true);
+    expect(published).toBe(1);
+    context.setBodyShown(false);
+    expect(published).toBe(1);
+    context.setBodyShown(true);
+    expect(context.detailRequest()).toEqual(shown);
+    // The host reads it strictly: a body switch is only ever `false`, and never with clothes.
+    expect(parseCharacterRequest(JSON.parse(JSON.stringify(hidden)))).toEqual(hidden);
+    expect(() => parseCharacterRequest({ ...hidden, body: true })).toThrow("body switch is invalid");
+    expect(() => parseCharacterRequest({ ...hidden, clothing: shown.clothing })).toThrow("wears no clothes");
+    expect(() => parseCharacterRequest({ ...hidden, schema: "xfs/character-request-5" })).toThrow();
+  });
+
   test("the request carries clothing (v5), strictly; a v4 request is a V without clothes", () => {
     const request = { schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female",
       clothing: { hairType: "Long", worn: [{ area: "Legs", item: "102", hidden: false }], shown: ["Legs"] } };

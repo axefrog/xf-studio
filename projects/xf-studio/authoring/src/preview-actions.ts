@@ -164,6 +164,8 @@ export class PreviewActions {
     }
     if ((action.kind === "camera.body" && !this.port.frameBody) || (action.kind === "preview.setBody" && !this.port.setBody))
       return refusal("unavailable", NO_BODY);
+    // Framing a body that isn't shown frames nothing (UI-79).
+    if (action.kind === "camera.body" && this.state.body === false) return refusal("incompatible_mode", "Turn the body on to see the whole body.");
     if (action.kind === "preview.setBody" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
     if (action.kind === "camera.creatorFraming") {
       if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
