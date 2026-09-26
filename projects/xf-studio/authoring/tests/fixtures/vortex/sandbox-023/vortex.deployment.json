@@ -1,0 +1,47 @@
+{
+  "instance": "bd4ee12d-7bf6-4784-a79f-fb54a81f527f",
+  "version": 1,
+  "deploymentMethod": "hardlink_activator",
+  "gameId": "cyberpunk2077",
+  "deploymentTime": 1790398940592,
+  "stagingPath": "C:\\Users\\WDAGUtilityAccount\\AppData\\Roaming\\Vortex\\cyberpunk2077\\mods",
+  "targetPath": "C:\\Games\\Cyberpunk 2077",
+  "files": [
+    {
+      "relPath": "archive\\pc\\mod\\xf_test_a.archive.xl",
+      "source": "XF Test Mod A",
+      "target": "",
+      "time": 1790398688000
+    },
+    {
+      "relPath": "archive\\pc\\mod\\xf_test_a.archive",
+      "source": "XF Test Mod A",
+      "target": "",
+      "time": 1790398688000
+    },
+    {
+      "relPath": "archive\\pc\\mod\\xf_test_b.archive",
+      "source": "XF Test Mod B-9001-1-0-1727000000",
+      "target": "",
+      "time": 1790398688000
+    },
+    {
+      "relPath": "archive\\pc\\mod\\Preexisting.archive",
+      "source": "XF Test Mod B-9001-1-0-1727000000",
+      "target": "",
+      "time": 1790398688000
+    },
+    {
+      "relPath": "archive\\pc\\mod\\XF Test Shared.archive",
+      "source": "XF Test Mod B-9001-1-0-1727000000",
+      "target": "",
+      "time": 1790398688000
+    },
+    {
+      "relPath": "archive\\pc\\mod\\xf_test_d.archive",
+      "source": "XF Test Mod D",
+      "target": "",
+      "time": 1790398688000
+    }
+  ]
+}

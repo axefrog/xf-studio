@@ -5,6 +5,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { parseLocalSettings, type LocalSettings } from "./local-settings";
 import { describeMo2Instance, parseMo2Modlist } from "./mo2-instance";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
+import { attributeVortexFile, type VortexAttribution } from "./vortex-deployment";
+import { readVortexManifests } from "./vortex-host";
 
 /** Physical inventory only. An archive has no known depot members until an index adapter examines it. */
 export type SourceFileKind = "archive" | "archive-xl" | "loose-customization" | "archive-modlist";
@@ -31,6 +33,11 @@ export interface SourceCandidate {
   readonly sha256: null;
   readonly discoveredAt: string;
   readonly limitations: readonly string[];
+  /**
+   * The mod manager's record of which mod put this game-folder file here: Vortex's deployment manifest (vortex-host.ts).
+   * `providerName` then names that mod. Evidence of the last deployment, not of what the game loaded.
+   */
+  readonly deployedBy?: VortexAttribution;
 }
 
 /**
@@ -269,6 +276,19 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
         "MO2 overwrite", true, modlist.overwritePriority, "", profileId, "MO2 overwrite ranks above every profile mod"); }
       catch { /* optional */ }
     }
+  }
+
+  // Vortex deploys mods into the game folder itself and records which mod each file came from (knowledge/vortex.md).
+  if (settings.gameRoot) {
+    const vortex = readVortexManifests(settings.gameRoot, path => pathStamp(lstatOrNull(path)));
+    watched.push(...vortex.watched);
+    for (const problem of vortex.problems) note("vortex_manifest_unreadable", problem);
+    if (vortex.deployment) candidates.forEach((candidate, index) => {
+      if (candidate.provider !== "game") return;
+      const deployedBy = attributeVortexFile(vortex.deployment!, candidate.virtualPath, candidate.modifiedMs);
+      if (deployedBy) candidates[index] = { ...candidate, providerName: deployedBy.label, deployedBy,
+        priorityEvidence: `Deployed by Vortex from mod "${deployedBy.modId}" (${deployedBy.manifest})` };
+    });
   }
 
   candidates.sort((a, b) => a.virtualPath.localeCompare(b.virtualPath) || a.provider.localeCompare(b.provider) ||

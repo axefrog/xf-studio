@@ -237,6 +237,35 @@ describe("mods involved, for reproduction without their files", () => {
     expect(byName.get("My Tweaks")).toMatchObject({ status: "local-only", archives: [{ name: "tweak.archive", lost: 1 }] });
     expect(byName.get("Cyberpunk 2077 (the game's own files)")).toMatchObject({ status: "base-game" });
   });
+
+  test("Vortex mods: Nexus IDs from Vortex's state, else the staging name's mod ID only when it follows Nexus's naming", async () => {
+    const game = join(root, "vortex-game"), appData = join(root, "vortex-appdata"), mod = join(game, "archive", "pc", "mod");
+    mkdirSync(mod, { recursive: true });
+    for (const name of ["hair.archive", "tweak.archive", "odd.archive", "hand.archive"]) writeFileSync(join(mod, name), name);
+    const files = [["hair.archive", "Hair Pack-12345-1-2-1727000000"], ["tweak.archive", "My Tweaks-54321-1-0-1727000001"], ["odd.archive", "Cool Hair-1-2-3"]]
+      .map(([file, source]) => ({ relPath: `archive\\pc\\mod\\${file}`, source, time: 1 }));
+    writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ version: 1, instance: "i1", gameId: "cyberpunk2077", files }));
+    const state = { app: { instanceId: "i1" }, settings: { profiles: { activeProfileId: "p" } },
+      persistent: { profiles: { p: { gameId: "cyberpunk2077", modState: { "Hair Pack-12345-1-2-1727000000": { enabled: true } } } },
+        mods: { cyberpunk2077: { "Hair Pack-12345-1-2-1727000000": { installationPath: "Hair Pack-12345-1-2-1727000000",
+          attributes: { logicalFileName: "Hair Pack", version: "1.2", modId: 12345, fileId: 67890, source: "nexus", downloadGame: "cyberpunk2077" } } } } } };
+    mkdirSync(join(appData, "Vortex", "temp", "state_backups_full"), { recursive: true });
+    writeFileSync(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), JSON.stringify(state));
+    const settings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" as const };
+    // Source discovery names a Vortex-deployed provider after its staging folder; a file Vortex didn't deploy stays "Installed game".
+    const mods = await involvedMods([
+      { archive: "hair.archive", provider: "Hair Pack-12345-1-2-1727000000", group: "mod", alternatives: ["tweak.archive (mod, My Tweaks-54321-1-0-1727000001)"] },
+      { archive: "odd.archive", provider: "Cool Hair-1-2-3", group: "mod", alternatives: ["hand.archive (mod, Installed game)"] },
+    ], settings, name => name === "APPDATA" ? appData : undefined);
+    const byName = new Map(mods.map(row => [row.name, row]));
+    expect(byName.get("Hair Pack")).toMatchObject({ kind: "vortex-mod", version: "1.2", status: "re-downloadable",
+      source: { site: "nexusmods", modId: "12345", fileId: "67890" }, archives: [{ name: "hair.archive", bytes: 12, won: 1 }] });
+    expect(byName.get("My Tweaks-54321-1-0-1727000001")).toMatchObject({ kind: "vortex-mod", status: "findable",
+      source: { site: "vortex", staging: "My Tweaks-54321-1-0-1727000001", modId: "54321" } });
+    // A name without Nexus's upload-time suffix yields no guessed mod ID.
+    expect(byName.get("Cool Hair-1-2-3")).toMatchObject({ kind: "vortex-mod", status: "local-only", source: { site: "vortex", modId: null } });
+    expect(byName.get("Installed game")).toMatchObject({ kind: "game-folder", source: null });
+  });
 });
 
 describe("the diagnostics actions", () => {

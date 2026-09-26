@@ -73,5 +73,5 @@ No hidden duplicate framework copies remain in either profile. In both profiles 
 
 - The check reads installed files only. It does not prove which versions a past or future session loaded, and it does not check the RED4ext loader in `bin/x64`.
 - redscript installed directly in the game folder has no readable version.
-- Vortex and manual deployment trees are covered only through the game-folder route.
+- Vortex and manual deployment trees are covered only through the game-folder route. That is where Vortex puts a framework (it hard-links deployed files into the game folder), so the game-folder column is right for Vortex users; the framework's Vortex mod name and version are not reported yet ([Vortex](../../knowledge/vortex.md)).
 - MO2's `overwrite` is treated as a single top provider. Its generated logs are not frameworks.

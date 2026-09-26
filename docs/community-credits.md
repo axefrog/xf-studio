@@ -46,6 +46,10 @@ By jac3km4 and contributors. [GitHub](https://github.com/jac3km4/redscript). Its
 
 ## Modding tools
 
+### Cyberpunk 2077 Support for Vortex
+
+By Ellie Peterson (E1337Kat), Auska, Bladehawke and contributors, published by Nexus Mods. [GitHub](https://github.com/E1337Kat/cyberpunk2077_ext_redux), [Nexus Mods](https://www.nexusmods.com/site/mods/196). Its source taught us how Vortex installs Cyberpunk mods: one installer pipeline for every layout, everything deployed from the game folder, archives left in the game's alphabetical order and a separate REDmod load order. Studied only.
+
 ### Cyberpunk Blender Add-on (IO Suite)
 
 By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement, and the game's own blink on V's lids, lashes and brows. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato and current maintenance by DoctorPresto, showed how community tools read each shader template's parameters and texture channels, including its empirical hair-profile colour handling. Its world-sector importer's light conversion showed which local axis a light shines along, and its multilayered material setup was the community reading we compared with the game's compiled layer program when building the preview's layered materials. Its animation export also showed how facial control curves travel through glTF as float-track keys, the format a future expression export would write. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
@@ -64,7 +68,7 @@ By Patrick Mours (crosire) and contributors. [GitHub](https://github.com/crosire
 
 ### Vortex
 
-By Nexus Mods. [GitHub](https://github.com/Nexus-Mods/Vortex). The deployment manifest it writes into a game folder, and its staging folder names that carry the Nexus Mods mod ID, let a problem report say where a Vortex-installed mod came from. Studied only.
+By Black Tree Gaming Ltd. (Nexus Mods) and contributors. [GitHub](https://github.com/Nexus-Mods/Vortex). Vortex's source showed us how it stages mods, deploys the winning files into the game folder, records each deployment in a manifest and keeps each mod's Nexus Mods ids in its state, which is how XF Studio tells which Vortex mod put a file in the game folder and how a problem report says where a Vortex-installed mod came from. Studied only; XF Studio reads Vortex's files but includes no Vortex code, and our Vortex tests run in a disposable Windows Sandbox.
 
 ### WolvenKit
 

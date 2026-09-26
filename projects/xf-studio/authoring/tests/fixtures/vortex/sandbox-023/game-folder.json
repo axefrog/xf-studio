@@ -1,0 +1,65 @@
+{
+  "about": "The synthetic game folder after experiment 023 step 7, as run.ps1 recorded it (paths relative to the game folder, modification times in ms, NTFS hard-link counts).",
+  "files": [
+    {
+      "path": "vortex.deployment.json",
+      "modifiedMs": 1790398940593,
+      "hardLinks": 1
+    },
+    {
+      "path": "archive/pc/content/basegame_1_engine.archive",
+      "modifiedMs": 1790398660837,
+      "hardLinks": 1
+    },
+    {
+      "path": "archive/pc/mod/Hand Installed.archive",
+      "modifiedMs": 1790398660837,
+      "hardLinks": 1
+    },
+    {
+      "path": "archive/pc/mod/Preexisting.archive",
+      "modifiedMs": 1790398688000,
+      "hardLinks": 2
+    },
+    {
+      "path": "archive/pc/mod/Preexisting.archive.vortex_backup",
+      "modifiedMs": 1790398660839,
+      "hardLinks": 1
+    },
+    {
+      "path": "archive/pc/mod/XF Eye Artistry.archive",
+      "modifiedMs": 1790398894940,
+      "hardLinks": 1
+    },
+    {
+      "path": "archive/pc/mod/XF Test Shared.archive",
+      "modifiedMs": 1790398688000,
+      "hardLinks": 2
+    },
+    {
+      "path": "archive/pc/mod/xf_test_a.archive",
+      "modifiedMs": 1790398688000,
+      "hardLinks": 2
+    },
+    {
+      "path": "archive/pc/mod/xf_test_a.archive.xl",
+      "modifiedMs": 1790398688000,
+      "hardLinks": 2
+    },
+    {
+      "path": "archive/pc/mod/xf_test_b.archive",
+      "modifiedMs": 1790398688000,
+      "hardLinks": 2
+    },
+    {
+      "path": "archive/pc/mod/xf_test_d.archive",
+      "modifiedMs": 1790398688000,
+      "hardLinks": 2
+    },
+    {
+      "path": "bin/x64/Cyberpunk2077.exe",
+      "modifiedMs": 1790398660837,
+      "hardLinks": 1
+    }
+  ]
+}
