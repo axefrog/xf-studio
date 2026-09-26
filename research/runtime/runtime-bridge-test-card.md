@@ -23,15 +23,15 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Build record** (26 September 2026, `main` at `fa2447295b48`, clean tree; self-test 95 of 95 and `bun test tools` 50 of 50 passed on that build). The staged zip is the `-writes` one:
+   **Build record** (26 September 2026, `main` at `e22363aa3a3e`, clean tree, with the review fixes RB-12, RB-13, RB-15 and RB-24; `xfb_selftest --unit` OK, self-test 100 of 100 and `bun test tools` 50 of 50 passed on that build). The staged zip is the `-writes` one:
 
    | Zip | SHA-256 |
    |---|---|
-   | `-writes` | `0e30dd10b4a0c8144ed0c276d052aea05a63de9249c08e46f7e01345d00f56c3` |
-   | `-diagnostic` | `387f7167721989987a532e0cb2989ad6520f1755b6a7559d190f563eb17a4bde` |
-   | default | `cdf6ff5a7e730a39fafc917302314db838d3d9884ab8e7f2a1ea9db28802623d` |
+   | `-writes` | `06bdfd2b07c2891736f352838f12afde67108b3e949fe61d8515ad7c114df18b` |
+   | `-diagnostic` | `00c1dda951ab2371f119c2698a9c029b9c4980abde38e31b60a0687613abd9f1` |
+   | default | `b3967923ecfcc0e20dd8cad1025e5f1614f2002a0faea09241eaaf746631225b` |
 
-   **Staged** on 26 September 2026: the `-writes` zip unpacked into the MO2 mod `XF Runtime Bridge`, enabled as the first row of the test profile's `modlist.txt`; nothing else changed. Baseline capture `bridge-phase2-pre` taken.
+   **Staged** on 26 September 2026: the `-writes` zip unpacked into the MO2 mod `XF Runtime Bridge`, enabled as the first row of the test profile's `modlist.txt`; nothing else changed. Baseline capture `bridge-phase2-pre` taken before the restage (only the bridge's own files differ).
 
    A rebuild after merging gives new hashes (the DLL embeds the commit); record them here if the staged zip is rebuilt. Check the zip's SHA-256 against the build record, and that its `red4ext/plugins/XFRuntimeBridge/manifest.json` says `"variant": "writes"`, `"allow_writes": true` and the expected `commit`. The self-test (`bun tools/selftest.ts`) and `bun test tools` must pass on that commit.
 
