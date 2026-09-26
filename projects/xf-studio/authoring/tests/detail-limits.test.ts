@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { DETAIL_LIMITS, DETAIL_NOTICES } from "../src/detail-limits";
+import { HOST_SLOT_LIMITS } from "../src/render-detail";
 import { characterDetailLine, DETAIL_LIMIT_TEXT, DETAIL_NOTICE_TEXT } from "../src/studio-ui/panels/preview";
 
 test("a host of another version is worded as one plain line from its code, never silence", () => {
@@ -11,6 +12,8 @@ test("a host of another version is worded as one plain line from its code, never
 
 test("renderer limit codes are worded only by the presentation, one plain sentence each (UI-38)", () => {
   expect(Object.keys(DETAIL_LIMIT_TEXT).sort()).toEqual([...DETAIL_LIMITS].sort());
+  // The codes a host writes on a record's slot are limit codes too (PIPE-84).
+  for (const code of HOST_SLOT_LIMITS) expect(DETAIL_LIMITS).toContain(code);
   const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], slots: [
     { slot: "skin", state: "shown", label: "Pale", limits: ["head-shape", "skin-glow"] },
     { slot: "brows", state: "shown", label: "Style 3" },

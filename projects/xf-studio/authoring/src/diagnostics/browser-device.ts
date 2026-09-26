@@ -7,7 +7,7 @@
  */
 import type { DiagnosticsActions, DiagnosticsDevice, DiagnosticsMode } from "./actions";
 import { diagnosticEntry, DIAGNOSTIC_FORWARD_SCHEMA, DIAGNOSTIC_LIMITS, isErrorRef, type DiagnosticEntry } from "./model";
-import { issueUrl, type PageFacts, type ReportManifest } from "./report";
+import { ISSUE_BASE, ISSUE_URL_LIMIT, type PageFacts, type ReportManifest } from "./report";
 
 const ERROR_REF_HEADER = "X-XFS-Error-Ref";
 /** A notice takes a failed host request's reference only this soon after the answer, so an unrelated later notice doesn't (DIAG-12). */
@@ -154,11 +154,18 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       if (!copied) throw Error("Your browser didn't allow copying. Save the report instead, or select the text and copy it.");
     },
     async openIssue(title, body) {
-      try { await api<unknown>("open-issue", { title, body }); return; }
-      catch (error) {
-        if ((error as { status?: number }).status !== 501) throw Error("XF Studio couldn't open the issue page in your browser. Try again.");
-      }
-      const opened = win.open(issueUrl(title, body), "_blank");
+      // The host builds the link, redacted with the configured folders the page doesn't know (DIAG-19): the desktop opens it in the
+      // person's browser (204); the dev server answers it for the page to open.
+      const failed = "XF Studio couldn't open the issue page in your browser. Try again.";
+      let response: Response;
+      try {
+        response = await send(`${endpoint}/open-issue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, body }) });
+      } catch { throw Error(failed); }
+      if (response.status === 204) return;
+      const answer = response.ok ? await response.json().catch(() => null) as { url?: unknown } | null : null;
+      const url = typeof answer?.url === "string" ? answer.url : null;
+      if (!url || !url.startsWith(`${ISSUE_BASE}?`) || url.length > ISSUE_URL_LIMIT) throw Error(failed);
+      const opened = win.open(url, "_blank");
       if (!opened) throw Error("Your browser blocked the new tab. Allow pop-ups for XF Studio, then try again.");
       opened.opener = null;
     },

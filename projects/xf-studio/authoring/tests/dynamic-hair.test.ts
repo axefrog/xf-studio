@@ -154,13 +154,15 @@ describe("exporting a mesh WolvenKit refuses as it is", () => {
       writeFileSync(file, "raw mesh");
     }
   };
-  const fakeRepair = (outcome: "glb" | "none" | "tool_failed" | "cancelled", calls: string[] = []): GeometryRepair => async ({ depotPath, workDir }) => {
+  const fakeRepair = (outcome: "glb" | "none" | "failed" | "tool_failed" | "cancelled" | "disk", calls: string[] = []): GeometryRepair => async ({ depotPath, workDir }) => {
     calls.push(depotPath);
     if (outcome === "tool_failed" || outcome === "cancelled") throw new GameAssetExportError(outcome, "fake");
-    if (outcome === "none") return null;
+    if (outcome === "disk") throw Object.assign(Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+    if (outcome === "none") return { outcome: "not-applicable", detail: "no known repair fits this mesh" };
+    if (outcome === "failed") return { outcome: "failed", step: "pack", detail: "WolvenKit wrote no archive" };
     writeFileSync(join(workDir, "copy.glb"), "glTF");
     writeFileSync(join(workDir, "copy.Material.json"), "{}");
-    return { glb: join(workDir, "copy.glb"), materials: join(workDir, "copy.Material.json"), detail: "the copy's repair" };
+    return { outcome: "repaired", glb: join(workDir, "copy.glb"), materials: join(workDir, "copy.Material.json"), detail: "the copy's repair" };
   };
   const source = archiveExportSource(join(root, "hair.archive"), join(root, "game"));
 
@@ -179,13 +181,21 @@ describe("exporting a mesh WolvenKit refuses as it is", () => {
   });
 
   test("without a repair (or when it fails) the export stays incomplete and uncached; cancellation still stops it", async () => {
-    for (const outcome of ["none", "tool_failed"] as const) {
-      const exporter = createGameAssetExporter(join(root, `export-${outcome}`), fakeRun(), { repairGeometry: fakeRepair(outcome) });
+    // Each outcome is reported with the step it stopped at (PIPE-86).
+    const reported: [string, string, string | null][] = [];
+    for (const outcome of ["none", "failed", "tool_failed"] as const) {
+      const exporter = createGameAssetExporter(join(root, `export-${outcome}`), fakeRun(), { repairGeometry: fakeRepair(outcome),
+        onRepair: (depotPath, result) => reported.push([depotPath, result.outcome, result.outcome === "failed" ? result.step : null]) });
       const session = exporter.open(source);
       const exported = (await session.geometry([PONY])).get(PONY)!;
       session.close();
       expect(exported).toMatchObject({ glb: null, complete: false, cached: false, repair: null });
     }
+    expect(reported).toEqual([[PONY, "not-applicable", null], [PONY, "failed", "pack"], [PONY, "failed", "tool"]]);
+    // A failure that isn't the tool's (a full disk) is never taken for WolvenKit's: it stops the export with its own error (PIPE-86).
+    const disk = createGameAssetExporter(join(root, "export-disk"), fakeRun(), { repairGeometry: fakeRepair("disk") }).open(source);
+    await expect(disk.geometry([PONY])).rejects.toMatchObject({ code: "ENOSPC" });
+    disk.close();
     const exporter = createGameAssetExporter(join(root, "export-cancelled"), fakeRun(), { repairGeometry: fakeRepair("cancelled") });
     const session = exporter.open(source);
     await expect(session.geometry([PONY])).rejects.toMatchObject({ code: "cancelled" });

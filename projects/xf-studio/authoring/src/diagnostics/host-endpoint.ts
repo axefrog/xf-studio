@@ -3,7 +3,8 @@
  *
  * - `POST /api/diagnostics/entries`: the page forwards its failures to the host log. Bounded: one body is at most
  *   `DIAGNOSTIC_LIMITS.body` bytes and `batch` entries, at most `perMinute` entries a minute are kept, and the same page entry
- *   repeating within a minute is kept once (the rest are counted in one "dropped" line). A page failure without a host reference
+ *   (with the same reference) repeating within a minute is kept once (the rest are counted in one "dropped" line). An entry with a
+ *   reference of its own is one the page showed a person, so another reference is never folded into it (DIAG-22). A page failure without a host reference
  *   of its own is linked to the few host failures of the seconds before it (`details.related`). An entry that can't be recorded
  *   is skipped, never answered with an error the page would retry forever.
  * - `GET /api/diagnostics/state`, `POST /api/diagnostics/mode`: the rolling window's size and diagnostic mode, and while a report is
@@ -12,8 +13,9 @@
  * - `POST /api/diagnostics/item`: one prepared item's whole text, for the review's full view.
  * - `POST /api/diagnostics/bundle`: the report file (a ZIP) with only the items the person left ticked, for the page to save. Its
  *   `README.md` and `report.json` are built from those items alone; a mod's own files need `sharingConfirmed`.
- * - `POST /api/diagnostics/open-issue`: the desktop opens the pre-filled issue page in the person's browser (the host builds the
- *   link; the page sends only the title and summary, which are redacted again).
+ * - `POST /api/diagnostics/open-issue`: the host builds the pre-filled issue link from the title and summary the page sends,
+ *   redacting them again with the configured folders, and the desktop opens it in the person's browser; without that (the localhost
+ *   dev server), the host answers the redacted link and the page opens it (DIAG-19). The page never builds the link itself.
  *
  * Nothing here sends anything anywhere. `withRequestDiagnostics` wraps a whole server: each request runs in the log's context, an
  * exception becomes a logged failure and a plain 500 with its reference, and any other 5xx API answer is logged with one. Creating
@@ -38,7 +40,7 @@ export const PAGE_ITEMS: Readonly<Record<string, ReportGroup>> = Object.freeze({
 const PAGE_ITEMS_BYTES = 256 * 1024;
 /** A page failure is linked only to host failures this recent, and to at most `RELATED_MAX` of them (DIAG-12). */
 const RELATED_MS = 15_000, RELATED_MAX = 3;
-/** The same page entry (area, code and message) repeating within this long is kept once and counted after. */
+/** The same page entry (area, code, message and reference) repeating within this long is kept once and counted after. */
 const REPEAT_MS = 60_000;
 
 export type DiagnosticsHandlerOptions = HostReportSources & {
@@ -88,7 +90,9 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
     const recent = diagnostics.log.recentFailures(RELATED_MS, at);
     for (const entry of entries) {
       try {
-        const key = `${entry.area}|${entry.code}|${entry.message}`;
+        // The reference is part of the key: the page records a failure once per ten seconds and shows that reference, which a
+        // report must then find (DIAG-22).
+        const key = `${entry.area}|${entry.code}|${entry.message}|${entry.ref ?? ""}`;
         if (minute.kept >= DIAGNOSTIC_LIMITS.perMinute || at - (repeats.get(key) ?? -Infinity) < REPEAT_MS) { minute.dropped++; continue; }
         repeats.set(key, at);
         if (repeats.size > 500) repeats.delete(repeats.keys().next().value!);
@@ -135,7 +139,7 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
         let bytes: Uint8Array;
         try { bytes = readFileSync(file.path); }
         catch { return refuse(409, "file_unreadable", `“${file.name}” couldn't be read any more. Untick it, or prepare the report again.`); }
-        entries.push({ name: `optional/mod-files/${safeName(file.mod)}/${safeName(file.name)}`, data: bytes });
+        entries.push({ name: modFileEntryName(file.mod, file.name, redact), data: bytes });
       }
     }
     for (const item of pageItems) if (include.has(item.id)) entries.push({ name: `${item.view.group}/${item.id}.json`, data: item.text });
@@ -193,11 +197,13 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
     }
     if (route === "bundle") return bundle(value);
     if (route === "open-issue") {
-      if (!options.openExternal) return refuse(501, "open_in_page", "The window opens this page itself.");
       if (!value || typeof value.title !== "string" || typeof value.body !== "string" || value.title.length > 300 || value.body.length > 8_000)
         return refuse(400, "invalid_issue", "Expected a short title and summary.");
+      // Redacted here with the configured folders on every host, before the link reaches a browser (DIAG-19).
       const redact = redactor();
-      const opened = options.openExternal(issueUrl(redact(value.title), redact(value.body)));
+      const link = issueUrl(redact(value.title), redact(value.body));
+      if (!options.openExternal) return json({ code: "open_in_page", url: link });
+      const opened = options.openExternal(link);
       return new Response(null, { status: opened === false ? 502 : 204 });
     }
     return refuse(404, "not_found", "Not found.");
@@ -205,6 +211,12 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
 }
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").replace(/^\.+/, "_").slice(0, 120) || "file";
+/**
+ * A mod file's name in the report's ZIP. Redacted with the report's folders like every other part (DIAG-23): the names come from the
+ * rolling window, redacted with the folders known when it was written, and a mod or archive may be named after a folder or the account.
+ */
+export const modFileEntryName = (mod: string, file: string, redact: Redactor) =>
+  `optional/mod-files/${safeName(redact(mod))}/${safeName(redact(file))}`;
 
 function validPageFacts(value: unknown, redact: Redactor): PageFacts | null {
   if (!value || typeof value !== "object") return null;

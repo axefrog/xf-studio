@@ -14,9 +14,15 @@
  * put it there. Archives are looked for only where the game loads them (`archive/pc/mod`, REDmod's `mods/`), never by walking the
  * whole game folder.
  *
- * **Hashing is bounded in time (DIAG-11).** Archives are hashed smallest first within `hashBudgetMs`; the rest are identified by size
- * and date, and hashed afterwards in the background, one at a time, so preparing the report again includes them. Progress is reported
- * as it goes.
+ * **A Vortex mod is one Vortex still vouches for.** An archive goes with a Vortex mod only while the file in the game folder is the
+ * one Vortex deployed: its modification time matches the manifest's (VORTEX-03). A file replaced since (by hand, or by another tool)
+ * is its own game-folder entry, never credited with the Vortex mod's Nexus IDs. On the Mod Organizer 2 route, an MO2 mod whose folder
+ * holds the archive stays an MO2 mod even when a leftover manifest names a Vortex mod of the same name (VORTEX-04).
+ *
+ * **Everything is bounded in time (DIAG-11, DIAG-24, VORTEX-05).** One budget (`hashBudgetMs`) covers reading Vortex's state and
+ * hashing: archives are hashed smallest first, a hash still running when the budget ends stops there, and the rest are identified by
+ * size and date and hashed afterwards in the background, one at a time, so preparing the report again includes them. Progress is
+ * reported as it goes.
  *
  * A mod with a Nexus Mods mod and file ID is **re-downloadable**; one with only a mod ID or a page is **findable**; anything else is
  * **local only**, and only a small local-only mod may be offered, unticked, for inclusion (`MOD_FILE_LIMIT`). Host-only (reads files).
@@ -25,6 +31,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { LocalSettings } from "../local-settings";
 import { describeMo2Instance, parseQSettingsIni } from "../mo2-instance";
+import { attributeVortexFile } from "../vortex-deployment";
 import { inspectVortexSetup, readVortexManifests, type VortexSetup } from "../vortex-host";
 
 /** A local-only mod may be offered for inclusion up to this size (all its involved archives together). */
@@ -37,7 +44,7 @@ const HASH_TOTAL_LIMIT = 6 * 1024 ** 3;
 /** How long one report spends hashing before it identifies the rest by size and date. */
 export const HASH_BUDGET_MS = 10_000;
 /** The game folder's provider name in source discovery, and the base game's entry. */
-const GAME = "Installed game", BASE_GAME = "\u0000base-game", GAME_FILE = "\u0000game-file\u0000";
+const GAME = "Installed game", BASE_GAME = "\u0000base-game", GAME_FILE = "\u0000game-file\u0000", VORTEX_MOD = "\u0000vortex\u0000";
 
 export type ModStatus = "re-downloadable" | "findable" | "local-only" | "base-game";
 export type ModSource = { site: "nexusmods"; modId: string | null; fileId: string | null; url: string | null; installationFile: string | null }
@@ -67,18 +74,60 @@ const ALTERNATIVE = /^(.+?) \(([a-z0-9-]+), (.+)\)$/i;
 export async function involvedMods(winners: readonly Winner[] | null, settings: LocalSettings | null,
   env: (name: string) => string | undefined = name => process.env[name], options: IdentityOptions = {}): Promise<InvolvedMod[]> {
   if (!winners) return [];
+  const now = options.now ?? Date.now, started = now(), deadline = started + (options.hashBudgetMs ?? HASH_BUDGET_MS);
   const mo2 = mo2Folders(settings);
-  // Vortex's state is read only for a game folder Vortex has deployed into.
-  const vortex = settings?.gameRoot && readVortexManifests(settings.gameRoot).deployment ? inspectVortexSetup(settings.gameRoot, env) : null;
-  // Source discovery names a Vortex-deployed file's provider after its Vortex mod (the manifest's `source`).
-  const vortexMods = new Set([...(vortex?.deployment?.byPath.values() ?? [])].map(entry => entry.file.source));
-  /** Which entry an archive belongs to: its provider, except in the game folder (see the module note). */
+  const gameRoot = settings?.gameRoot ?? null;
+  // Vortex's state is read only for a game folder Vortex has deployed into, within the report's time budget (VORTEX-05).
+  const vortex = gameRoot && readVortexManifests(gameRoot).deployment ? await inspectVortexSetup(gameRoot, env, { deadline, now }) : null;
+  /** The game folder's archives Vortex deployed, by lower-cased file name (the manifest's paths under `archive/pc/mod`). */
+  const deployed = new Map<string, string>();
+  for (const [key, entry] of vortex?.deployment?.byPath ?? []) {
+    if (!key.startsWith("archive/pc/mod/")) continue;
+    const name = key.slice(key.lastIndexOf("/") + 1);
+    const known = deployed.get(name);
+    if (!known || entry.file.virtualPath.length < known.length) deployed.set(name, entry.file.virtualPath);
+  }
+  /**
+   * The Vortex mod that deployed an archive, only while the game folder still holds the file it deployed (its time matches the
+   * manifest's, VORTEX-03), and, when a provider is named, only when that is the mod (source discovery names a Vortex-deployed file's
+   * provider after its Vortex mod).
+   */
+  const vouched = new Map<string, string | null>();
+  const deployedBy = (archive: string, provider: string | null): string | null => {
+    const virtualPath = deployed.get(archive.toLowerCase());
+    if (!virtualPath || !gameRoot || !vortex?.deployment) return null;
+    let staging = vouched.get(virtualPath);
+    if (staging === undefined) {
+      let modified: number | null = null;
+      try { modified = statSync(join(gameRoot, ...virtualPath.split("/"))).mtimeMs; } catch { /* Gone: nothing to credit. */ }
+      const attribution = modified === null ? null : attributeVortexFile(vortex.deployment, virtualPath, modified);
+      staging = attribution?.state === "deployed" ? attribution.modId : null;
+      vouched.set(virtualPath, staging);
+    }
+    return staging && (provider === null || provider === staging) ? staging : null;
+  };
+  /** On the MO2 route, an MO2 mod whose own folder holds the archive (VORTEX-04). */
+  const mo2Holds = (provider: string, archive: string) => settings?.launchRoute === "mo2" && !!mo2 && existsSync(join(mo2.mods, provider)) &&
+    findFile(join(mo2.mods, provider), archive) !== null;
+  /** Which entry an archive belongs to: its provider, except in the game folder and for Vortex's mods (see the module note). */
+  const entries = new Map<string, string>();
   const entryOf = (provider: string, archive: string, group: string | null) => {
-    if (provider !== GAME) return provider;
-    if (group === "content" || group === "ep1") return BASE_GAME;
-    const staging = vortex?.deployment?.byPath.get(`archive/pc/mod/${archive}`.toLowerCase())?.file.source;
-    if (staging) { vortexMods.add(staging); return staging; }
-    return `${GAME_FILE}${archive}`;
+    const id = `${provider}\u0000${archive}\u0000${group}`;
+    let entry = entries.get(id);
+    if (entry !== undefined) return entry;
+    if (provider === GAME) {
+      if (group === "content" || group === "ep1") entry = BASE_GAME;
+      else {
+        const staging = deployedBy(archive, null);
+        entry = staging ? `${VORTEX_MOD}${staging}` : `${GAME_FILE}${archive}`;
+      }
+    } else if (mo2Holds(provider, archive)) entry = provider;
+    else {
+      const staging = deployedBy(archive, provider);
+      entry = staging ? `${VORTEX_MOD}${staging}` : provider;
+    }
+    entries.set(id, entry);
+    return entry;
   };
   const byMod = new Map<string, { group: string | null; archives: Map<string, { group: string | null; won: number; lost: number }> }>();
   const add = (provider: string, archive: string, group: string | null, won: boolean) => {
@@ -99,8 +148,10 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
   }
   const mods: InvolvedMod[] = [];
   const stamps = new Map<InvolvedArchive, number>();
-  for (const [name, mod] of [...byMod].sort(([a], [b]) => a.localeCompare(b))) {
-    const kind = name === BASE_GAME ? "base-game" : name.startsWith(GAME_FILE) ? "game-folder" : vortexMods.has(name) ? "vortex-mod" : modKind(name, mo2);
+  const order = (key: string) => key.startsWith(VORTEX_MOD) ? key.slice(VORTEX_MOD.length) : key;
+  for (const [key, mod] of [...byMod].sort(([a], [b]) => order(a).localeCompare(order(b)))) {
+    const vortexMod = key.startsWith(VORTEX_MOD), name = vortexMod ? key.slice(VORTEX_MOD.length) : key;
+    const kind = key === BASE_GAME ? "base-game" : key.startsWith(GAME_FILE) ? "game-folder" : vortexMod ? "vortex-mod" : modKind(name, mo2);
     const meta = kind === "mo2-mod" && mo2 ? readMeta(join(mo2.mods, name)) : null;
     const archives: InvolvedArchive[] = [];
     for (const [archive, entry] of [...mod.archives].sort(([a], [b]) => a.localeCompare(b))) {
@@ -125,16 +176,17 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
       : kind === "vortex-mod" ? identity?.name ?? name : name, kind,
       version: meta?.get("version") || identity?.version || null, source, status, archives });
   }
-  await fingerprint(stamps, options);
+  await fingerprint(stamps, { ...options, now }, started);
   return mods;
 }
 
 /**
- * Hash the located archives, smallest first, within the time budget (DIAG-11). Known hashes (same path, size and date) cost nothing;
- * what doesn't fit keeps its size and date here and is hashed in the background for the next report.
+ * Hash the located archives, smallest first, within what is left of the time budget that began at `started` (DIAG-11). Known hashes
+ * (same path, size and date) cost nothing; a hash still running when the budget ends stops there (DIAG-24); what doesn't fit keeps its
+ * size and date here and is hashed in the background for the next report.
  */
-async function fingerprint(stamps: Map<InvolvedArchive, number>, options: IdentityOptions) {
-  const now = options.now ?? Date.now, started = now(), budget = options.hashBudgetMs ?? HASH_BUDGET_MS;
+async function fingerprint(stamps: Map<InvolvedArchive, number>, options: IdentityOptions, started: number) {
+  const now = options.now ?? Date.now, budget = options.hashBudgetMs ?? HASH_BUDGET_MS, deadline = started + budget;
   let total = 0;
   const wanted = [...stamps].filter(([item]) => item.bytes! <= HASH_FILE_LIMIT).sort(([a], [b]) => a.bytes! - b.bytes!)
     .filter(([item]) => (total += item.bytes!) <= HASH_TOTAL_LIMIT);
@@ -144,8 +196,9 @@ async function fingerprint(stamps: Map<InvolvedArchive, number>, options: Identi
     const key = hashKey(item.path!, item.bytes!, stamp);
     const known = hashes.get(key);
     if (known) item.sha256 = known;
-    else if (now() - started < budget) {
-      try { item.sha256 = await sha256Of(item.path!, item.bytes!, stamp); } catch { /* Unreadable now: size and date. */ }
+    else if (now() < deadline) {
+      try { item.sha256 = await sha256Of(item.path!, item.bytes!, stamp, () => now() >= deadline); } catch { /* Unreadable now: size and date. */ }
+      if (!item.sha256) hashLater(item.path!, item.bytes!, stamp);
     } else hashLater(item.path!, item.bytes!, stamp);
     if (item.sha256) item.identifiedBy = "sha-256";
     options.progress?.(++done, wanted.length);
@@ -267,12 +320,21 @@ function hashLater(path: string, size: number, modified: number) {
 }
 /** Wait for the background hashing (tests). */
 export const hashingSettled = async () => { while (draining) await draining; };
-async function sha256Of(path: string, size: number, modified: number): Promise<string> {
+/** An archive's SHA-256, or null when `stop` says the time is up before it is done (the rest is never read then, DIAG-24). */
+async function sha256Of(path: string, size: number, modified: number, stop: () => boolean = () => false): Promise<string | null> {
   const key = hashKey(path, size, modified);
   const known = hashes.get(key);
   if (known) return known;
   const hasher = new Bun.CryptoHasher("sha256");
-  for await (const chunk of Bun.file(path).stream()) hasher.update(chunk);
+  const reader = Bun.file(path).stream().getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hasher.update(value);
+      if (stop()) return null;
+    }
+  } finally { reader.releaseLock(); }
   const digest = hasher.digest("hex");
   hashes.set(key, digest);
   return digest;

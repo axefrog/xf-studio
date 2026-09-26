@@ -35,7 +35,8 @@ export interface SourceCandidate {
   readonly limitations: readonly string[];
   /**
    * The mod manager's record of which mod put this game-folder file here: Vortex's deployment manifest (vortex-host.ts).
-   * `providerName` then names that mod. Evidence of the last deployment, not of what the game loaded.
+   * While the file is as deployed (`state: "deployed"`), `providerName` names that mod; a file changed since keeps the game folder's
+   * name (VORTEX-03). Evidence of the last deployment, not of what the game loaded.
    */
   readonly deployedBy?: VortexAttribution;
 }
@@ -286,8 +287,12 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
     if (vortex.deployment) candidates.forEach((candidate, index) => {
       if (candidate.provider !== "game") return;
       const deployedBy = attributeVortexFile(vortex.deployment!, candidate.virtualPath, candidate.modifiedMs);
-      if (deployedBy) candidates[index] = { ...candidate, providerName: deployedBy.label, deployedBy,
-        priorityEvidence: `Deployed by Vortex from mod "${deployedBy.modId}" (${deployedBy.manifest})` };
+      if (!deployedBy) return;
+      // A file changed after Vortex deployed it (replaced by hand or by another tool) is no longer that mod's file: it keeps the
+      // game folder as its provider, so nothing credits the Vortex mod with it (VORTEX-03).
+      candidates[index] = deployedBy.state === "deployed"
+        ? { ...candidate, providerName: deployedBy.label, deployedBy, priorityEvidence: `Deployed by Vortex from mod "${deployedBy.modId}" (${deployedBy.manifest})` }
+        : { ...candidate, deployedBy, priorityEvidence: `Listed by Vortex for mod "${deployedBy.modId}" (${deployedBy.manifest}), but changed after it was deployed` };
     });
   }
 

@@ -32,7 +32,7 @@ export type CharacterDetailPort = {
    * Load a prepared record and swap it into the scene, replacing whatever was there (parts whose content is unchanged are kept as they
    * are); returns per-slot outcomes, with the limit codes of a shown slot the preview draws only in part.
    */
-  show(record: string, signal: AbortSignal): Promise<{ slots: (DetailSlotState & { limits?: DetailLimit[] })[];
+  show(record: string, signal: AbortSignal): Promise<{ slots: (Omit<DetailSlotState, "limits"> & { limits?: DetailLimit[] })[];
     /** The head options whose parts the shown record draws. */
     drawn?: string[] }>;
   /** Remove every resolved detail from the scene. */

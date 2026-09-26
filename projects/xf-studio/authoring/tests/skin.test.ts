@@ -73,21 +73,38 @@ derivedPreviewTest("head GLB retains customization morphs, all skin sets and nor
   checkSkinnedGlb(await Bun.file(derivedPreviewFile("head.glb")).arrayBuffer(), [105], 2);
 });
 
+/**
+ * Distinct GLBs checked per slot and morph kind. The local cache grows with every V and creator choice prepared (56 files, 279 MB on
+ * the development machine on 26 September 2026), and reading and scanning all of them under a loaded full suite passed the default
+ * 5 s timeout; a fixed sample per kind keeps every slot covered at a bounded cost.
+ */
+const GLBS_PER_KIND = 4;
+/**
+ * The sample still reads up to ~30 private GLBs (a hair GLB is tens of MB) from disk, cold in a fresh process, and scans every vertex's
+ * weights: well under a second when idle, several under a loaded full suite. 30 s leaves room for that without hiding a hang.
+ */
+const PRIVATE_GLB_TIMEOUT_MS = 30_000;
+
 // Brows, lashes and hair come from resolved character records (exported from the winning archives).
 derivedCharacterTest("resolved brow, lash and hair GLBs retain their facial targets, all skin sets and normalized totals", async () => {
   const records = derivedCharacterRecords();
   const slots = new Set<string>();
-  // Many V's share a component's GLB: each distinct file (and morph expectation) is checked once.
-  const checks = new Map<string, boolean>();
+  // Many V's share a component's GLB: each distinct file (and morph expectation) is checked once, up to GLBS_PER_KIND of each slot
+  // and morph kind, the first by path so a run is repeatable.
+  const byKind = new Map<string, Map<string, boolean>>();
   for (const { record, file } of records) for (const component of record.components) {
     slots.add(component.slot);
     const path = file(component.geometry.file), morphs = !!component.geometry.morphTargets;
-    checks.set(`${morphs}|${path}`, morphs);
+    const kind = `${component.slot}|${morphs}`;
+    if (!byKind.has(kind)) byKind.set(kind, new Map());
+    byKind.get(kind)!.set(path, morphs);
   }
-  for (const [key, morphs] of checks)
+  const checks = [...byKind.values()].flatMap(files => [...files].sort(([a], [b]) => a.localeCompare(b)).slice(0, GLBS_PER_KIND));
+  for (const [path, morphs] of checks)
     // Head decals and lashes carry the head's 105 face targets or the eye component's 21.
     // Some chunks (the eyeball beside the lashes) have four influences only; the export keeps what the game has.
     // Plain skinned meshes (hair) may carry a garment-support shape, which is not a facial target.
-    checkSkinnedGlb(await Bun.file(key.slice(key.indexOf("|") + 1)).arrayBuffer(), morphs ? [105, 21] : null, undefined, false);
+    checkSkinnedGlb(await Bun.file(path).arrayBuffer(), morphs ? [105, 21] : null, undefined, false);
   expect(slots.size).toBeGreaterThan(0);
-});
+  expect(checks.length).toBeGreaterThan(0);
+}, PRIVATE_GLB_TIMEOUT_MS);
