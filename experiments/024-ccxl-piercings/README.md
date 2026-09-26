@@ -144,3 +144,8 @@ Tool names are the runtime bridge's MCP names ([bridge test card](../../research
 - [`fixture.ts`](fixture.ts): the probe's identity, pieces and rows; site calibration, anchors and procedural geometry; the byte-level mesh and morph writers; the `.app`, creator resource and `.archive.xl`. Pure.
 - [`verify.ts`](verify.ts): the independent structural checks and the additive-merge check. Pure.
 - [`build.ts`](build.ts): the host script (route, extraction, conversion, packing, verification, build record).
+
+## Staging
+
+26 September 2026: the two files of run `20260926T132240` (hashes above) are in the MO2 mod folder `XF Piercings Probe`, not yet enabled: MO2 was open, so its profile list wasn't edited under it. Before the session, enable `XF Piercings Probe` in the test profile (it appears after a refresh), or the coordinator adds it once MO2 is closed. Nothing else changes.
+
