@@ -266,6 +266,9 @@ test("a newer backup is read when the database is incomplete, even though the da
   cpSync(join(sandbox, "state.v2-closed"), db, { recursive: true });
   // A log Vortex holds open while it runs: the database reads with a gap, and still lists the three mods it had.
   mkdirSync(join(db, "000099.log"));
+  // The copy may keep the fixture's own file times; give every database file one known time so "newer" and "older" are exact.
+  const stamp = Date.now() / 1000;
+  for (const name of readdirSync(db)) utimesSync(join(db, name), stamp, stamp);
   const backupPath = join(folder, "temp", "state_backups_full", "hourly.json");
   const backup = stateFromPairs(pairs).state;
   const newest = Math.max(...readdirSync(db).map(name => statSync(join(db, name)).mtimeMs));
