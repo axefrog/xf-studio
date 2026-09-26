@@ -126,7 +126,7 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 
 ### Pillow
 
-By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images.
+By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images; its BCn decoder reads the game's compressed textures so their levels, mips and normal-map conventions can be measured offline.
 
 ### PKWARE ZIP specification
 

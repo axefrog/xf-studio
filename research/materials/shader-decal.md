@@ -213,7 +213,8 @@ colour = UseGradientMap > 0.5
 - **The gradient tint is saturated per channel after the intensity**: at the vanilla `GradientMapIntensity` 2, any gradient channel above 0.5 clips to 1, so bright colours (platinum, pastel ombrés) lose their tint and fall back to the texture's RGB [observed]. The gradient uses a second sampler, `s1`, at the constant coordinate `(GradientMapUV, 0.5)`.
 - The colour is a sum, not a mix normalised by coverage: the powder term is premultiplied by its own alpha, the primary term is not [observed].
 - The UV transform applies to all textures as in `mesh_decal` (answers [eyebrows open question 3](../../knowledge/brows.md#open-questions)); template defaults: `MetalnessTexture` `black.xbm`, `NormalAlphaTex` `white.xbm`, `DepthThreshold` 0 (answers question 4) [observed].
-- Normal and surface as §4.5–4.6 [observed].
+- Normal and surface as §4.5–4.6 [observed]. The frame is the mesh's: the MeshSkinned vertex program `17205971338381575357` passes T and B = cross(N, T) · w, and the map's x runs along T, y along B; on the brow strip that puts green down the face on both brows ([experiment 025](../../experiments/025-brow-facts/README.md), fact 8) [observed].
+- The secondary texture is read for `.a` only; its RGB is unused. The template's sampler `s1` (the gradient) clamps with linear filtering and no anisotropy, while `s0` wraps with anisotropic filtering, so `GradientMapUV` 1 reads exactly the ramp's last texel [observed in the serialized template's `samplerStates`].
 
 ### 5.2 The Fresnel colour (`mesh_decal_blendable`, `…_gradientmap_recolor_blendable`)
 
