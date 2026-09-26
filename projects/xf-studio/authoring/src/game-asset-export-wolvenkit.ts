@@ -2,7 +2,8 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { basename, join } from "node:path";
 import { depotHash } from "./depot-path";
 import { depotPathRegex } from "./eye-plate-wolvenkit";
-import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, type UncookRun } from "./game-asset-export";
+import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, type GeometryRepairOutcome, type GeometryRepairStep,
+  type UncookRun } from "./game-asset-export";
 import { MESH_EXPORT_REPAIR_VERSION, repairMeshForExport } from "./mesh-export-repair";
 import type { JsonObject } from "./red-json";
 import { archiveSourceContains } from "./rdar-index-fs";
@@ -70,36 +71,57 @@ const toExportError = (error: unknown) => {
  * mesh, apply the known repair (mesh-export-repair.ts), turn it back into a resource, pack it alone into a private archive at its own
  * depot path and uncook it from there exactly as before. Four launches, only for a mesh that failed; the result is cached like any
  * complete export. Nothing outside the session's work folder is written.
+ *
+ * Each outcome is typed (PIPE-86): a step WolvenKit fails at or writes nothing for is `failed` with that step; a mesh the repair doesn't
+ * fit is `not-applicable`. Cancellation, a missing tool, and anything that isn't WolvenKit's failure (the disk, a bug) are thrown.
+ * `run` is the process runner (tests pass a fake).
  */
-export function createWolvenKitMeshRepair(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS): GeometryRepair {
-  return async ({ source, depotPath, raw, workDir, signal, lowPriority }) => {
-    const run = async (args: string[]) => {
-      try { await runWolvenKit(cli, args, { signal, timeoutMs, keep: 64_000, lowPriority }); }
-      catch (error) { throw toExportError(error); }
+export function createWolvenKitMeshRepair(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS, run: typeof runWolvenKit = runWolvenKit): GeometryRepair {
+  return async ({ source, depotPath, raw, workDir, signal, lowPriority }): Promise<GeometryRepairOutcome> => {
+    const failed = (step: GeometryRepairStep, detail: string): GeometryRepairOutcome => ({ outcome: "failed", step, detail });
+    /** One launch: null when it ran, a `failed` outcome when WolvenKit failed at it; cancellation and a missing tool are thrown. */
+    const launch = async (step: GeometryRepairStep, args: string[]): Promise<GeometryRepairOutcome | null> => {
+      try { await run(cli, args, { signal, timeoutMs, keep: 64_000, lowPriority }); return null; }
+      catch (error) {
+        const mapped = toExportError(error);
+        if (mapped instanceof GameAssetExportError && mapped.code === "tool_failed") return failed(step, `WolvenKit's ${step} failed: ${mapped.message}`);
+        throw mapped;
+      }
     };
     const name = basename(depotPath.split("\\").join("/"));
     const dirs = { raw: join(workDir, "raw"), json: join(workDir, "json"), fixedJson: join(workDir, "fixed-json"), fixed: join(workDir, "fixed"),
       pack: join(workDir, "pack"), archive: join(workDir, "archive"), out: join(workDir, "out") };
     for (const dir of Object.values(dirs)) mkdirSync(dir, { recursive: true });
     copyFileSync(raw, join(dirs.raw, name));
-    await run(["convert", "serialize", join(dirs.raw, name), "-o", dirs.json]);
+    const serializing = await launch("serialize", ["convert", "serialize", join(dirs.raw, name), "-o", dirs.json]);
+    if (serializing) return serializing;
     const serialized = join(dirs.json, `${name}.json`);
-    if (!existsSync(serialized)) return null;
-    const repair = repairMeshForExport(JSON.parse(readFileSync(serialized, "utf8")) as JsonObject);
-    if (!repair) return null;
+    if (!existsSync(serialized)) return failed("serialize", "WolvenKit wrote no serialized mesh");
+    let document: JsonObject;
+    try { document = JSON.parse(readFileSync(serialized, "utf8")) as JsonObject; }
+    catch (error) {
+      // WolvenKit's own output that isn't JSON is its failure; a read error is the disk's, and thrown.
+      if (error instanceof SyntaxError) return failed("serialize", "WolvenKit's serialized mesh isn't valid JSON");
+      throw error;
+    }
+    const repair = repairMeshForExport(document);
+    if (!repair) return { outcome: "not-applicable", detail: "no known repair fits this mesh" };
     writeFileSync(join(dirs.fixedJson, `${name}.json`), JSON.stringify(repair.document));
-    await run(["convert", "deserialize", dirs.fixedJson, "-o", dirs.fixed]);
-    if (!existsSync(join(dirs.fixed, name))) return null;
+    const deserializing = await launch("deserialize", ["convert", "deserialize", dirs.fixedJson, "-o", dirs.fixed]);
+    if (deserializing) return deserializing;
+    if (!existsSync(join(dirs.fixed, name))) return failed("deserialize", "WolvenKit wrote no repaired mesh");
     const packed = join(dirs.pack, ...depotPath.split("\\"));
     mkdirSync(join(packed, ".."), { recursive: true });
     copyFileSync(join(dirs.fixed, name), packed);
-    await run(["pack", dirs.pack, "-o", dirs.archive]);
+    const packing = await launch("pack", ["pack", dirs.pack, "-o", dirs.archive]);
+    if (packing) return packing;
     const archive = join(dirs.archive, "pack.archive");
-    if (!existsSync(archive)) return null;
-    await run(uncookArguments(archive, [depotPath], dirs.out, source.gameRoot));
+    if (!existsSync(archive)) return failed("pack", "WolvenKit wrote no archive");
+    const uncooking = await launch("uncook", uncookArguments(archive, [depotPath], dirs.out, source.gameRoot));
+    if (uncooking) return uncooking;
     const stem = join(dirs.out, ...depotPath.replace(/\.mesh$/i, "").split("\\"));
-    if (!existsSync(`${stem}.glb`)) return null;
-    return { glb: `${stem}.glb`, materials: existsSync(`${stem}.Material.json`) ? `${stem}.Material.json` : null, detail: repair.detail };
+    if (!existsSync(`${stem}.glb`)) return failed("uncook", "WolvenKit wrote no GLB for the repaired copy");
+    return { outcome: "repaired", glb: `${stem}.glb`, materials: existsSync(`${stem}.Material.json`) ? `${stem}.Material.json` : null, detail: repair.detail };
   };
 }
 

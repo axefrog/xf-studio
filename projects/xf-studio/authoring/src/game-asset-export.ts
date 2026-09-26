@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256, writeFileAtomic } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
+import { hostFailure, hostTrace } from "./diagnostics/host-log";
 
 /**
  * Generic export of game resources into renderer formats: any `.mesh` or `.morphtarget`
@@ -119,14 +120,25 @@ export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; ou
   /** Every archive the launch reads (`exportAll`'s batch; `source` alone otherwise). Their requested resources never collide. */
   sources?: readonly ExportSource[];
   lowPriority?: boolean }) => Promise<void>;
+/** The steps of the repair route, so a failed repair says where it stopped (PIPE-86). `tool`: a tool failure outside a named step. */
+export type GeometryRepairStep = "serialize" | "deserialize" | "pack" | "uncook" | "tool";
+/**
+ * What the repair route did with one mesh (PIPE-86): `repaired` (the GLB, the materials file and one plain line on what the copy
+ * changed), `not-applicable` (no known repair fits this mesh), or `failed` at a step (the tool failed there or wrote nothing). Either
+ * of the last two leaves the original outcome standing.
+ */
+export type GeometryRepairOutcome =
+  | { readonly outcome: "repaired"; readonly glb: string; readonly materials: string | null; readonly detail: string }
+  | { readonly outcome: "not-applicable"; readonly detail: string }
+  | { readonly outcome: "failed"; readonly step: GeometryRepairStep; readonly detail: string };
 /**
  * A second route for a mesh the tool read (`raw`) but could not write as a GLB: export a repaired copy into `workDir` (mesh-export-repair.ts).
- * Returns the GLB, the materials file and one plain line on what the copy changed, or null when no repair applies or it failed too.
- * A tool failure inside the repair leaves the original outcome standing; only cancellation and a missing tool or runtime are thrown.
+ * A tool failure is a `failed` outcome. Cancellation, a missing tool or runtime, and anything that isn't the tool's own failure (a full
+ * disk, a bug) are thrown, never reported as the tool's (PIPE-86).
  */
 export type GeometryRepair = (input: { source: ExportSource; depotPath: string; raw: string; workDir: string; signal?: AbortSignal;
   /** Background work (a prefetch): the tool runs at a lower process priority. */ lowPriority?: boolean }) =>
-  Promise<{ glb: string; materials: string | null; detail: string } | null>;
+  Promise<GeometryRepairOutcome>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
   tool?: ExportTool;
@@ -134,6 +146,8 @@ export type GameAssetExporterOptions = {
   contains?: (source: ExportSource, hashes: readonly string[]) => Set<string>;
   /** Repair route for a mesh whose GLB the tool could not write. */
   repairGeometry?: GeometryRepair;
+  /** Told each repair's outcome (default: the diagnostics window's `wolvenkit/repair` event, and a warning in the log for a failed one). */
+  onRepair?: (depotPath: string, outcome: GeometryRepairOutcome) => void;
   /**
    * Identity of `repairGeometry` (its version). With the tool's key it identifies every lasting outcome (a settled "nothing exported",
    * a lasting partial export): one recorded without this repair, or by another version of it, is tried again.
@@ -336,6 +350,11 @@ export const MAX_SOURCES_PER_LAUNCH = 24;
 export function createGameAssetExporter(cacheRoot: string, run: UncookRun, options: GameAssetExporterOptions = {}): GameAssetExporter {
   const tool = options.tool ?? UNKNOWN_TOOL;
   const cache = new GameAssetExportCache(cacheRoot, tool, options.repairGeometry ? options.repairKey ?? "unversioned" : "none");
+  const reportRepair = options.onRepair ?? ((depotPath: string, outcome: GeometryRepairOutcome) => {
+    hostTrace().event("wolvenkit", "repair", { depotPath, outcome: outcome.outcome, step: outcome.outcome === "failed" ? outcome.step : null, detail: outcome.detail });
+    if (outcome.outcome === "failed")
+      hostFailure("wolvenkit", "mesh_repair_failed", `The repaired copy of ${depotPath} couldn't be exported (${outcome.step}): ${outcome.detail}`, undefined, "warn");
+  });
   const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
   /** The files a geometry export needs: with materials, `requiredGeometryFiles`; without, the raw resource and its GLB. */
   const required = (depotPath: string, materials: boolean) => materials ? requiredGeometryFiles(depotPath) : ["raw", "export.glb"];
@@ -357,13 +376,17 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
     if (files["export.glb"] || !/\.mesh$/i.test(depotPath) || !options.repairGeometry) return;
     const repairDir = join(repairRoot, depotHash(depotPath));
     mkdirSync(repairDir, { recursive: true });
-    let repaired: Awaited<ReturnType<GeometryRepair>> = null;
-    try { repaired = await options.repairGeometry({ source, depotPath, raw: files.raw!, workDir: repairDir, signal, lowPriority }); }
+    let outcome: GeometryRepairOutcome;
+    try { outcome = await options.repairGeometry({ source, depotPath, raw: files.raw!, workDir: repairDir, signal, lowPriority }); }
     catch (error) {
-      if (error instanceof GameAssetExportError && error.code !== "tool_failed") throw error;
-      repaired = null;
+      // Only the tool's own failure leaves the original outcome standing; anything else is not WolvenKit's fault and is thrown (PIPE-86).
+      if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
+      outcome = { outcome: "failed", step: "tool", detail: error.message };
     }
-    if (!repaired || !existsSync(repaired.glb)) return;
+    if (outcome.outcome === "repaired" && !existsSync(outcome.glb)) outcome = { outcome: "failed", step: "uncook", detail: "the repaired copy's GLB is missing" };
+    reportRepair(depotPath, outcome);
+    if (outcome.outcome !== "repaired") return;
+    const repaired = outcome;
     files["export.glb"] = repaired.glb;
     if (!files["materials.json"] && repaired.materials && existsSync(repaired.materials)) files["materials.json"] = repaired.materials;
     const note = join(repairDir, REPAIR_NOTE);

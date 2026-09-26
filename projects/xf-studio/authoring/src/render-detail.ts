@@ -39,6 +39,7 @@
  *   choice is the character context's (character-context.ts), which the host derives into the V before planning (CORE-58, PIPE-82). A
  *   v7 reader refuses v2 to v6 character records, so a page and a host of different versions say so (the version-skew notice).
  */
+import { DETAIL_LIMITS, type DetailLimit } from "./detail-limits";
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
 export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-7" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
@@ -282,7 +283,9 @@ export type DetailSlotState = { slot: DetailSlot; state: "shown" | "none" | "una
   /** Short plain label (the resolved choice), for the character panel. */
   label: string;
   /** One plain line when the slot could not be shown in full. */
-  message?: string };
+  message?: string;
+  /** A shown slot drawn only in part, as the host found it: `part-unread` when some of its parts couldn't be prepared (PIPE-84). */
+  limits?: DetailLimit[] };
 export type CharacterDetail = {
   schema: typeof CHARACTER_DETAIL_SCHEMA;
   detail: "character";
@@ -507,7 +510,10 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
       const { noun, not, pronoun } = SLOT_WORDS[slot];
       return { slot, state: "unavailable", label, message: `XF Studio couldn't read your V's ${noun} from the prepared details, so ${pronoun} ${not} shown.` };
     }
-    return { slot, state: entry.state, label, ...(message === undefined ? {} : { message }) };
+    // Limit codes this reader knows, on a shown slot only; another version's codes are left out.
+    const limits = entry.state === "shown" && Array.isArray(entry.limits)
+      ? [...new Set((entry.limits as unknown[]).filter((code): code is DetailLimit => (DETAIL_LIMITS as readonly unknown[]).includes(code)))] : [];
+    return { slot, state: entry.state, label, ...(message === undefined ? {} : { message }), ...(limits.length ? { limits } : {}) };
   });
   const notes = Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(entry => text(entry, "note")) : [];
   if (left.length) {

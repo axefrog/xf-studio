@@ -39,13 +39,13 @@ function hostState(value: unknown): HostCharacterState {
 export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init)): CharacterDetailPort {
   /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
   let shown: LoadedCharacterDetails | null = null;
-  /** The slots the last `show` answered with (their limits follow the scene's). */
-  let shownSlots: readonly { slot: DetailSlot; state: string }[] = [];
+  /** The slots the last `show` answered with (their limits follow the scene's, plus the host's own codes, `hostLimits`). */
+  let shownSlots: readonly { slot: DetailSlot; state: string; hostLimits: readonly DetailLimit[] }[] = [];
   const limitListeners = new Set<(update: SlotLimits) => void>();
   /** Each shown slot's limit codes: the loaded parts' and the placed V's (skin placement, bakes). */
   const slotLimits = (loaded: LoadedCharacterDetails, placed: readonly { slot: DetailSlot; limit: DetailLimit }[]) =>
     shownSlots.filter(slot => slot.state === "shown").map(slot => ({ slot: slot.slot,
-      limits: [...new Set([...loaded.limits, ...placed].filter(item => item.slot === slot.slot).map(item => item.limit))] }));
+      limits: [...new Set([...slot.hostLimits, ...[...loaded.limits, ...placed].filter(item => item.slot === slot.slot).map(item => item.limit)])] }));
   scene.onBakeLimits?.(placed => {
     if (!shown) return;
     const update = slotLimits(shown, placed);
@@ -81,7 +81,8 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
       const placed = scene.setCharacterDetails(loaded);
       shown = loaded;
-      shownSlots = record.slots.map(slot => ({ slot: slot.slot, state: loaded.problems.some(item => item.slot === slot.slot) ? "unavailable" : slot.state }));
+      shownSlots = record.slots.map(slot => ({ slot: slot.slot, state: loaded.problems.some(item => item.slot === slot.slot) ? "unavailable" : slot.state,
+        hostLimits: slot.limits ?? [] }));
       const limits = [...loaded.limits, ...(placed?.limits ?? [])];
       // Record outcomes, overridden by anything that failed to load in this browser; a shown slot with a part
       // the preview can't draw yet keeps its state and carries the limit codes (the presentation words them).
@@ -89,8 +90,10 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       return { drawn: [...new Set(record.components.map(component => component.option))], slots: record.slots.map(slot => {
         const problem = loaded.problems.find(item => item.slot === slot.slot);
         if (problem) return { slot: slot.slot, state: "unavailable" as const, label: slot.label, message: problem.message };
-        const codes = slot.state === "shown" ? [...new Set(limits.filter(item => item.slot === slot.slot).map(item => item.limit))] : [];
-        return codes.length ? { ...slot, limits: codes } : slot;
+        // The host's codes (a part it couldn't prepare, PIPE-84) come first, then this browser's.
+        const { limits: host, ...rest } = slot;
+        const codes = slot.state === "shown" ? [...new Set([...(host ?? []), ...limits.filter(item => item.slot === slot.slot).map(item => item.limit)])] : [];
+        return codes.length ? { ...rest, limits: codes } : rest;
       }) };
     },
     clear() { scene.setCharacterDetails(null); shown = null; shownSlots = []; },
