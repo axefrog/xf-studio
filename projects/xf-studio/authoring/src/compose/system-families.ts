@@ -50,7 +50,7 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
     "camera.navigate": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
     "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
     "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
-    "preview.setEyeShape": true, "preview.setPiercings": true, "preview.setBody": true,
+    "preview.setEyeShape": true, "preview.setPiercings": true, "preview.setBody": true, "preview.setUncensored": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
     "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true },
     { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" },

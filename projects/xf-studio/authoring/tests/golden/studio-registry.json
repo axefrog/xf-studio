@@ -61,6 +61,7 @@
   "preview.setEyeShape",
   "preview.setPiercings",
   "preview.setBody",
+  "preview.setUncensored",
   "preview.setSurfaceControls",
   "preview.setWire",
   "preview.setNormals",
@@ -1868,6 +1869,20 @@
     }
    }
   },
+  "preview.setUncensored": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
   "preview.setSurfaceControls": {
    "scope": [
     "viewport"
@@ -2904,6 +2919,15 @@
   },
   {
    "id": "preview.setBody",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setUncensored",
    "family": "action",
    "scope": [
     "viewport"

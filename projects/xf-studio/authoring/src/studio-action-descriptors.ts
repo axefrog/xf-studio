@@ -71,6 +71,7 @@ export const ACTION_DESCRIPTORS = {
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
   "preview.setPiercings": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setBody": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setUncensored": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setSurfaceControls": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setWire": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setNormals": desc("viewport", "workspace", "none", { enabled: input("boolean") }),

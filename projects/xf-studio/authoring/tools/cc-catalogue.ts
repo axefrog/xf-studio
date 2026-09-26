@@ -54,7 +54,7 @@ console.log(`options ${catalogue.counts.options} (user-facing ${catalogue.counts
 console.log(`option labels by source: ${JSON.stringify(Object.fromEntries(labelSources))}; choice labels: ${JSON.stringify(Object.fromEntries(choiceSources))}`);
 // Preview coverage is the preview's projection of the catalogue, not stored in it (CORE-60).
 const coverage = catalogueCoverage(catalogue);
-const coverageCounts = { rendered: 0, conditional: 0, "not-rendered": 0 };
+const coverageCounts = { rendered: 0, conditional: 0, uncensored: 0, "not-rendered": 0 };
 for (const item of catalogue.options.filter(o => userFacing(o))) coverageCounts[coverage.get(item.id)!.status]++;
 console.log(`preview coverage of user-facing options: ${JSON.stringify(coverageCounts)}`);
 for (const section of catalogue.sections) {

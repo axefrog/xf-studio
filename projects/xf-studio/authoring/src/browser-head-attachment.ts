@@ -136,8 +136,13 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => characterContext.dispose());
     ports.attach({ characterContext });
     releases.push(() => ports.attach({ characterContext: undefined }));
-    // The Body switch decides whether the body is prepared at all (PREV-108): the context's request follows it.
-    const followBody = () => characterContext.setBodyShown(preview.snapshot().body !== false);
+    // The Body switch decides whether the body is prepared at all (PREV-108), and the uncensored setting how the game would draw it: the
+    // context's request follows both.
+    const followBody = () => {
+      const shown = preview.snapshot();
+      characterContext.setBodyShown(shown.body !== false);
+      characterContext.setUncensored(shown.uncensored === true);
+    };
     followBody();
     releases.push(preview.subscribe(followBody));
     releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));

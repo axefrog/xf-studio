@@ -4,8 +4,9 @@
  *
  * - The preview draws a **female V** only: every option of a masculine V is not drawn.
  * - **Body and arm** options the third-person body's consumers read (`bodyGroups`, the V with no clothing) are drawn as the body, except those the game's
- *   censorship rule leaves under the underwear cover the preview draws (`bodyOptionDraws`: nipples, genitals); body and arm morphs
- *   (breast size, nail length) shape the body. Other body and arm options (first-person twins, arm cyberware states) are not drawn.
+ *   censorship rule leaves under the underwear cover the preview draws (`bodyOptionDraws`: nipples, genitals), which are drawn only while
+ *   the viewer shows V uncensored (`uncensored`, character-detail-plan.ts `bodyRole`); body and arm morphs (breast size, nail length) shape
+ *   the body. Other body and arm options (first-person twins, arm cyberware states) are not drawn.
  * - **Morph** options on the head shape the head and every drawn part carrying the same `(target, region)` pair
  *   (face-morphs.ts).
  * - An **appearance** option on one of the preview's detail slots (`DETAIL_UI_SLOTS`: skin type, brows, lashes, hair,
@@ -23,12 +24,13 @@
  * Coverage is the preview's projection of a catalogue (`catalogueCoverage`), computed when it is asked for, never stored in
  * the catalogue: a host-cached catalogue stays right when the preview learns to draw more (CORE-60).
  */
-import { bodyGroups, bodyOptionDraws, DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups, type CensorOption } from "./character-detail-plan";
+import { bodyGroups, bodyOptionDraws, bodyRole, DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups, type CensorOption } from "./character-detail-plan";
 import type { CcoPart } from "./cco-model";
 import type { CcCatalogue } from "./cc-catalogue";
 import type { DetailSlot } from "./render-detail";
 
-export type RenderStatus = "rendered" | "conditional" | "not-rendered";
+/** `uncensored`: drawn only while the viewer shows V uncensored (the Character panel's setting); otherwise the game's underwear covers it. */
+export type RenderStatus = "rendered" | "conditional" | "uncensored" | "not-rendered";
 export interface RenderCoverage {
   readonly status: RenderStatus;
   /** The preview detail that draws it (`morph`: the facial shape), when there is one. */
@@ -55,12 +57,12 @@ export interface CoverageInput {
   readonly censor?: CensorOption["censor"];
 }
 
-const RANK: Record<RenderStatus, number> = { "not-rendered": 0, conditional: 1, rendered: 2 };
+const RANK: Record<RenderStatus, number> = { "not-rendered": 0, uncensored: 1, conditional: 2, rendered: 3 };
 const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face detail", brows: "the eyebrows", lashes: "the eyelashes",
   hair: "the hair", eyes: "the eyes", teeth: "the teeth", piercings: "the piercings", body: "the body", clothing: "the clothes" };
 
 export const NOT_HEAD = "The preview doesn't draw this part of the body, so changing it shows nothing.";
-export const UNDER_COVER = "Covered by the game's underwear in the 3D view, so it isn't drawn.";
+export const UNDER_COVER = "The game's underwear covers it in the 3D view unless your V is shown uncensored (under Body).";
 export const NO_MALE_HEAD = "The preview has no masculine head yet, so this isn't drawn.";
 export const NO_MALE_BODY = "The preview has no masculine body yet, so this isn't drawn.";
 const NOT_CONSUMED = "The head the preview draws doesn't use this option, so changing it shows nothing.";
@@ -77,8 +79,10 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
       const consumed = option.groups.some(group => bodyGroups(option.part as "body" | "arms").includes(group));
       if (option.type === "morph") return { status: "rendered", detail: "body", note: "Shapes the body." };
       if (option.type !== "appearance" || !option.hasResource || !consumed) return { status: "not-rendered", detail: null, note: NOT_HEAD };
-      return bodyOptionDraws(byPart(option.part), option.name) ? { status: "rendered", detail: "body", note: "Drawn as part of the body." }
-        : { status: "not-rendered", detail: null, note: UNDER_COVER };
+      if (bodyOptionDraws(byPart(option.part), option.name)) return { status: "rendered", detail: "body", note: "Drawn as part of the body." };
+      // What the game turns off while it censors nudity draws in the uncensored look; any other rule, or no creator entry, never does.
+      return bodyRole(byPart(option.part), option.name, "nudity") === "plain" ? { status: "uncensored", detail: "body", note: UNDER_COVER }
+        : { status: "not-rendered", detail: null, note: NOT_HEAD };
     }
     if (option.type === "morph") return { status: "rendered", detail: "morph", note: "Shapes the head and the parts that follow it." };
     if (option.type !== "appearance" || !option.hasResource) return { status: "not-rendered", detail: null, note: NOT_CONSUMED };

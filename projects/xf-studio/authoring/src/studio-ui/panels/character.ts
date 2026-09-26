@@ -123,6 +123,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const hair = new Toggle({ label: "Hair", onChange: enabled => dispatch({ kind: "preview.setHair", enabled }) });
   const piercings = new Toggle({ label: "Piercings", onChange: enabled => dispatch({ kind: "preview.setPiercings", enabled }) });
   const body = new Toggle({ label: "Body", onChange: enabled => dispatch({ kind: "preview.setBody", enabled }) });
+  const uncensored = new Toggle({ label: "Show my V uncensored, as the game can", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }) });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const detailNote = note("");
   // The game files prepared for the 3D view on this computer, and clearing them.
@@ -137,7 +138,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
     section("Clothing", h("div", { class: "row gap-s cc-clothing" }, clothingState.element), clothingAreas, clothingNote),
     // What the 3D view shows sits above the long list of creator options, so its switches are found without scrolling (UI-96).
-    section("In the 3D view", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, detailNote,
+    section("In the 3D view", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, uncensored.element, detailNote,
       note("These change what the 3D view shows, never your V or your makeup.")),
     h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, legend, sections, noMatch),
     section("Files", h("div", { class: "row wrap gap-s" }, exportV),
@@ -165,7 +166,9 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   /** The one open row whose choices are prepared ahead: the one opened or pointed at last. */
   let aheadRow: string | null = null;
   const rowKey = (view: RowView) => `${view.row.part}/${view.row.slot}`;
-  const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption) => [option.coverage[0] === "not-rendered" ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
+  /** Coverage that hides the row now: not drawn at all, or drawn only in the uncensored look while it is off. */
+  const notDrawn = (option: CcPanelOption, uncensoredOn: boolean) => option.coverage[0] === "not-rendered" || (option.coverage[0] === "uncensored" && !uncensoredOn);
+  const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption, uncensoredOn: boolean) => [notDrawn(option, uncensoredOn) ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
     option.dependsOn.length ? `Choose ${option.dependsOn.join(" or ")} first: this follows it.` : ""].filter(Boolean).join(" ");
 
   function buildRows(panel: Readonly<CcPanel>) {
@@ -185,7 +188,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
           off: h("button", { class: "chip-button cc-off", type: "button", text: "Off" }),
           reset: button({ label: "Back to your V's own", icon: "reset", iconOnly: true, small: true, variant: "quiet", onClick: () => {} }),
           // A detail line is reserved only where one of the row's options has one, so it never appears or vanishes (UI-68).
-          detail: view.options.some(option => staticDetail(panel, option)) ? h("p", { class: "cc-row-detail" }) : null,
+          detail: view.options.some(option => staticDetail(panel, option, false)) ? h("p", { class: "cc-row-detail" }) : null,
           list: new ChoiceList(id, choice => {
             const option = current(controls);
             if (option) dispatch({ kind: "character.setOption", part: option.part, option: option.name, choice: choice.key, ...(choice.activates ? { activates: [...choice.activates] } : {}) });
@@ -260,6 +263,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     const found = query ? port.authoring.characterSearch(query) : null;
     let stopped: "time" | "disk" | "setup" | null = null;
     const details = frame.status.assets.characterDetails, drawn = new Set(details?.drawn ?? []);
+    const uncensoredOn = frame.preview.preview?.uncensored === true;
     let visibleRows = 0;
     for (const controls of built!.rows) {
       const option = rowOption(panel, controls.view.row, view);
@@ -296,8 +300,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       controls.reset.title = value?.set ? `Back to your V's own: ${value.ownLabel}` : "This is your V's own choice.";
       setAttr(controls.reset, "aria-label", controls.reset.title);
       applyCapability(controls.reset, port.authoring.capability({ kind: "character.reset", part: option.part, option: option.name }));
-      if (controls.detail) setText(controls.detail, staticDetail(panel, option));
-      controls.element.classList.toggle("not-shown", option.coverage[0] === "not-rendered" || conditionalHidden);
+      if (controls.detail) setText(controls.detail, staticDetail(panel, option, uncensoredOn));
+      controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
       controls.list.element.hidden = !controls.open;
       if (!controls.open) { controls.more.hidden = true; continue; }
       // An open row lists every choice, or with a search that only its choices match, the matching ones.
@@ -434,7 +438,12 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // Absent means shown (workspace-state.ts); a head-only preview can't show a body.
       const bodyShown = preview?.body ?? true, bodyAllowed = port.authoring.capability({ kind: "preview.setBody", enabled: !bodyShown });
       body.update(!!preview && bodyShown && bodyAllowed.available, { disabled: !preview || !bodyAllowed.available, reason: bodyAllowed.reason ?? loading,
-        note: "The body and the clothes on it. Where no clothes are shown, the game's own underwear covers it." });
+        note: preview?.uncensored ? "The body and the clothes on it." : "The body and the clothes on it. Where no clothes are shown, the game's own underwear covers it." });
+      // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
+      const uncensoredOn = preview?.uncensored === true, uncensoredAllowed = port.authoring.capability({ kind: "preview.setUncensored", enabled: !uncensoredOn });
+      uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading,
+        note: uncensoredOn ? "Nipples and genitals as you chose them, with no underwear, as the game shows them when nudity is allowed."
+          : "Off: the game's censored look, with its underwear. On: your V as the game shows it when nudity is allowed." });
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
       const prepared = context?.prepared;
       setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"
