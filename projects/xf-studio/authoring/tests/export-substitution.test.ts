@@ -159,7 +159,8 @@ describe("the repair route's export of the repaired copy (game-asset-export-wolv
       const step = args[0] === "convert" ? args[1] : args[0];
       const out = args[args.indexOf("-o") + 1]!;
       if (step === "serialize") writeFileSync(join(out, `${basename(args[2]!)}.json`), JSON.stringify(armMesh([6], [12])));
-      if (step === "deserialize") writeFileSync(join(out, basename(ARM)), "the repaired arm");
+      // A depot path is backslash-separated on every OS; the file WolvenKit writes is named by its last part.
+      if (step === "deserialize") writeFileSync(join(out, ARM.split("\\").at(-1)!), "the repaired arm");
       if (step === "pack") writeFileSync(join(out, "pack.archive"), "archive");
       if (step === "uncook") {
         const withGame = args.includes("-gp");

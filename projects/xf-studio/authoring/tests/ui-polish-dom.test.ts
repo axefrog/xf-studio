@@ -7,10 +7,7 @@ import { LocalSetupActions, type LocalSetupTransport } from "../src/local-setup-
 import { ModInstallActions, type ModInstallPlan } from "../src/mod-install-actions";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
-beforeAll(() => {
-  installLightDom();
-  Object.assign(globalThis, { requestAnimationFrame: (run: () => void) => setTimeout(run, 0) });
-});
+beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 5) => new Promise(resolve => setTimeout(resolve, ms));
 /** Wait (up to a second, for a busy full run) until `ready` holds, repainting between tries. */
