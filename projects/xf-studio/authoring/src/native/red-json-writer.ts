@@ -16,7 +16,7 @@
 import { DecodeSession } from "./limits";
 import { defaultValue, learnedDefault, learnedKeys } from "./red-defaults";
 import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
-import { classProperties } from "./rtti";
+import { classProperties, propertyTypes } from "./rtti";
 
 export interface JsonWriteOptions {
   /** "trim": buffers as `{$trimmedBase64Length}` (no decompression); "base64": their decompressed bytes. */
@@ -49,12 +49,31 @@ class JsonWriter {
   /** Keys and indexes from the document root to the value being written, kept only when properties are watched. */
   private readonly path: (string | number)[] = [];
   private readonly tracking: boolean;
-  constructor(private readonly options: JsonWriteOptions, private readonly session: DecodeSession) { this.tracking = session.watched.size > 0; }
+  /** Watched property names by class (`rendChunk` → `renderMask`). */
+  private readonly watched = new Map<string, Set<string>>();
+  constructor(private readonly options: JsonWriteOptions, private readonly session: DecodeSession) {
+    this.tracking = session.watched.size > 0;
+    for (const name of session.watched) {
+      const dot = name.lastIndexOf(".");
+      const set = this.watched.get(name.slice(0, dot)) ?? new Set<string>();
+      set.add(name.slice(dot + 1));
+      this.watched.set(name.slice(0, dot), set);
+    }
+  }
 
   at(key: string | number, write: () => unknown): unknown {
     if (!this.tracking) return write();
     this.path.push(key);
     try { return write(); } finally { this.path.pop(); }
+  }
+
+  /** `this.value(item)` under `key` (inline for the hot paths: no closure; a throw abandons the whole write, so no finally). */
+  private nested(key: string | number, item: unknown): unknown {
+    if (!this.tracking) return this.value(item);
+    this.path.push(key);
+    const out = this.value(item);
+    this.path.pop();
+    return out;
   }
 
   private pathText(): string {
@@ -68,7 +87,8 @@ class JsonWriter {
     if (Array.isArray(value)) {
       this.session.jsonNodes(value.length);
       this.session.enter();
-      const out = value.map((item, i) => isNested(item) ? this.at(i, () => this.value(item)) : item);
+      const out = new Array(value.length);
+      for (let i = 0; i < value.length; i++) { const item = value[i]; out[i] = isNested(item) ? this.nested(i, item) : item; }
       this.session.leave();
       return out;
     }
@@ -76,7 +96,7 @@ class JsonWriter {
       const entries = Object.entries(value);
       this.session.jsonNodes(entries.length);
       const out: Record<string, unknown> = {};
-      for (const [key, item] of entries) out[key] = isNested(item) ? this.at(key, () => this.value(item)) : item;
+      for (const [key, item] of entries) out[key] = isNested(item) ? this.nested(key, item) : item;
       return out;
     }
     return value;
@@ -84,21 +104,23 @@ class JsonWriter {
 
   object(object: RedObject): Record<string, unknown> {
     const props = this.options.omitDefaults ? null : classProperties(object.type);
-    const types = new Map(props ?? []);
+    const types = this.options.omitDefaults ? null : propertyTypes(object.type);
     const keys = new Set(Object.keys(object.fields));
     for (const [name] of props ?? []) keys.add(name);
     if (!this.options.omitDefaults) for (const name of learnedKeys(object.type)) keys.add(name);
     this.session.jsonNodes(keys.size + 1);
     this.session.enter();
     const out: Record<string, unknown> = { $type: object.type };
+    const watched = this.tracking ? this.watched.get(object.type) : undefined;
     for (const key of ordered([...keys])) {
       if (Object.hasOwn(object.fields, key)) {
         const item = object.fields[key];
-        out[key] = isNested(item) ? this.at(key, () => this.value(item)) : item;
+        out[key] = isNested(item) ? this.nested(key, item) : item;
       } else {
         const learned = learnedDefault(object.type, key);
-        out[key] = learned !== undefined ? structuredClone(learned) : types.has(key) ? this.at(key, () => this.value(defaultValue(types.get(key)!))) : null;
-        if (this.tracking && this.session.watched.has(`${object.type}.${key}`)) this.session.defaulted(`${object.type}.${key}`, () => `${this.pathText()}.${key}`);
+        const type = types?.get(key);
+        out[key] = learned !== undefined ? structuredClone(learned) : type !== undefined ? this.nested(key, defaultValue(type)) : null;
+        if (watched?.has(key)) this.session.defaulted(`${object.type}.${key}`, () => `${this.pathText()}.${key}`);
       }
     }
     this.session.leave();

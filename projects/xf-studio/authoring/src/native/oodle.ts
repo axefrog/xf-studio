@@ -21,6 +21,7 @@
  * the identity comes from the same bytes that were checked. Anything else is refused with `OodleUnavailableError`, and the caller
  * uses WolvenKit instead.
  */
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -81,9 +82,12 @@ export function authenticodeSignature(path: string): AuthenticodeResult {
   const shell = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const script = "$p=$env:XFS_AUTHENTICODE_PATH; $s=Get-AuthenticodeSignature -LiteralPath $p; $h=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash;"
     + " [pscustomobject]@{status=[string]$s.Status; subject=[string]$s.SignerCertificate.Subject; sha256=[string]$h} | ConvertTo-Json -Compress";
-  const run = Bun.spawnSync([shell, "-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, XFS_AUTHENTICODE_PATH: path }, timeout: 30_000 });
-  if (run.exitCode !== 0) throw new OodleUnavailableError(`The Oodle library's signature could not be checked (PowerShell exit ${run.exitCode}).`);
-  const parsed = JSON.parse(run.stdout.toString()) as Partial<AuthenticodeResult>;
+  const run = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script],
+    { env: { ...process.env, XFS_AUTHENTICODE_PATH: path }, encoding: "utf8", timeout: 30_000, windowsHide: true });
+  if (run.status !== 0) throw new OodleUnavailableError(`The Oodle library's signature could not be checked (PowerShell exit ${run.status ?? run.error?.message}).`);
+  let parsed: Partial<AuthenticodeResult>;
+  try { parsed = JSON.parse(run.stdout) as Partial<AuthenticodeResult>; }
+  catch { throw new OodleUnavailableError("The Oodle library's signature could not be checked (unreadable PowerShell output)."); }
   return { status: String(parsed.status ?? ""), subject: String(parsed.subject ?? ""), sha256: String(parsed.sha256 ?? "") };
 }
 

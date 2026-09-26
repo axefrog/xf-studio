@@ -59,15 +59,14 @@ function nameOf(archive: NativeArchive, hash: string, depotHash: (path: string) 
 export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, request: NativeDecodeRequest, options: NativeDecodeOptions,
   depotHash: (path: string) => string): NativeDecodeOutcome {
   try {
-    const archive = pool.get(request.archivePath);
-    const bytes = archive.read(request.hash);
+    const bytes = pool.read(request.archivePath, request.hash);
     if (!bytes) return { ok: false, kind: "not-indexed", message: "The archive does not list the resource." };
     const session = new DecodeSession(options.limits ?? DEFAULT_LIMITS);
     const root = new Cr2wFile(bytes, session).exports[0]?.className;
     if (!root || !options.roots.has(root)) return { ok: false, kind: "not-verified", message: `Root class ${root ?? "(none)"} is not verified.` };
     const document = readResourceJson(bytes, decompress, { buffers: "trim", header: { XfsNativeReader: options.identity } }, session);
     return { ok: true, document, extractedSha256: createHash("sha256").update(bytes).digest("hex"), root,
-      name: request.needName ? nameOf(archive, request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties };
+      name: request.needName ? nameOf(pool.get(request.archivePath), request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties };
   } catch (error) {
     const kind = classifyNativeFailure(error);
     const failure = error as { name?: unknown; message?: unknown; stack?: unknown } | null;

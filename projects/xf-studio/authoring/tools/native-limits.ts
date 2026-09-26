@@ -18,7 +18,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NativeArchive, NativeArchivePool } from "../src/native/archive-reader";
 import { Cr2wFile } from "../src/native/cr2w-file";
-import { DecodeSession, UNLIMITED } from "../src/native/limits";
+import { DecodeSession, DEFAULT_LIMITS, type NativeUsage, UNLIMITED } from "../src/native/limits";
 import { NATIVE_ROOTS } from "../src/native/native-fetch-port";
 import { loadGameOodle } from "../src/native/oodle";
 import { readResource } from "../src/native/resource-document";
@@ -35,6 +35,21 @@ addDir(join(game, "red4ext", "plugins", "ArchiveXL", "Bundle"), "bundle");
 if (mods && existsSync(mods)) for (const mod of readdirSync(mods)) addDir(join(mods, mod, "archive", "pc", "mod"), "mo2");
 
 const oodle = loadGameOodle(game);
+/** Which default caps a decoded resource would pass (none for every real resource the defaults were derived from). */
+const overDefaults = new Map<string, number>();
+let jsonPerValue = 0;
+function checkDefaults(usage: NativeUsage, bytes: Uint8Array, root: string): void {
+  const L = DEFAULT_LIMITS, over: string[] = [];
+  if (bytes.length > L.maxResourceBytes) over.push("resource bytes");
+  if (usage.decodedBytes > L.maxDecodedBytes) over.push("decoded bytes");
+  if (usage.nodes > L.maxNodes) over.push("values");
+  if (usage.jsonNodes > L.maxJsonNodes || usage.jsonNodes > usage.nodes * L.maxJsonNodesPerValue + L.jsonNodesAllowance) over.push("JSON values");
+  if (usage.depth > L.maxDepth) over.push("depth");
+  if (usage.longestName > L.maxNameBytes) over.push("name");
+  if (usage.largestBuffer > L.maxBufferBytes) over.push("buffer");
+  if (usage.nodes) jsonPerValue = Math.max(jsonPerValue, (usage.jsonNodes - L.jsonNodesAllowance) / usage.nodes);
+  for (const cap of over) overDefaults.set(`${root}: ${cap}`, (overDefaults.get(`${root}: ${cap}`) ?? 0) + 1);
+}
 const max = { body: 0, bodyStored: 0, buffer: 0, bufferStored: 0, resource: 0, segments: 0, nameBlock: 0, nameList: 0, entries: 0 };
 const bigOnes: { archive: NativeArchive; group: string; hash: string; body: number; resource: number }[] = [];
 let entries = 0, unreadable = 0;
@@ -65,15 +80,28 @@ for (const { path, group } of archives) {
 }
 const indexMs = performance.now() - started;
 
-// Pass 2: the root class of every big resource.
-type ClassRow = { count: number; body: number; resource: number; groups: Set<string> };
+// Pass 2: the root class of every big resource; the verified ones are decoded without caps too.
+type Usage = { decodedBytes: number; nodes: number; jsonNodes: number; depth: number; longestName: number; largestBuffer: number; ms: number };
+type ClassRow = { count: number; body: number; resource: number; groups: Set<string>; usage: Usage; outcomes: Map<string, number> };
+const noUsage = (): Usage => ({ decodedBytes: 0, nodes: 0, jsonNodes: 0, depth: 0, longestName: 0, largestBuffer: 0, ms: 0 });
 const byClass = new Map<string, ClassRow>();
 for (const item of bigOnes) {
-  let root = "(unreadable)";
-  try { root = new Cr2wFile(item.archive.read(item.hash)!, new DecodeSession(UNLIMITED)).exports[0]?.className ?? "(no exports)"; } catch { /* not CR2W */ }
-  const row = byClass.get(root) ?? { count: 0, body: 0, resource: 0, groups: new Set<string>() };
+  let root = "(unreadable)", bytes: Uint8Array | null = null;
+  try { bytes = item.archive.read(item.hash)!; root = new Cr2wFile(bytes, new DecodeSession(UNLIMITED)).exports[0]?.className ?? "(no exports)"; } catch { /* not CR2W */ }
+  const row = byClass.get(root) ?? { count: 0, body: 0, resource: 0, groups: new Set<string>(), usage: noUsage(), outcomes: new Map<string, number>() };
   row.count++; row.body = Math.max(row.body, item.body); row.resource = Math.max(row.resource, item.resource); row.groups.add(item.group);
   byClass.set(root, row);
+  if (!bytes || !NATIVE_ROOTS.has(root)) continue;
+  const start = performance.now();
+  let outcome = "decoded";
+  try {
+    const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, UNLIMITED);
+    row.usage.ms = Math.max(row.usage.ms, performance.now() - start);
+    for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "largestBuffer"] as const) row.usage[key] = Math.max(row.usage[key], result.usage[key]);
+    checkDefaults(result.usage, bytes, root);
+    for (const note of result.notes) outcome = `decoded, note ${note.property}: ${note.stored} (RTTI ${note.rtti})`;
+  } catch (error) { outcome = `${(error as Error).name}: ${(error as Error).message.replace(/[0-9]+/g, "N").slice(0, 100)}`; }
+  row.outcomes.set(outcome, (row.outcomes.get(outcome) ?? 0) + 1);
 }
 const verifiedBig = [...byClass].filter(([name]) => NATIVE_ROOTS.has(name));
 
@@ -103,6 +131,7 @@ if (cache) {
         const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, UNLIMITED);
         usage.ms = Math.max(usage.ms, performance.now() - start);
         for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "largestBuffer"] as const) usage[key] = Math.max(usage[key], result.usage[key]);
+        checkDefaults(result.usage, bytes, "cached");
         for (const note of result.notes) notes.set(`${note.property}: ${note.stored} (RTTI ${note.rtti})`, (notes.get(`${note.property}: ${note.stored} (RTTI ${note.rtti})`) ?? 0) + 1);
         for (const row of result.defaulted) defaulted.set(row.property, (defaulted.get(row.property) ?? 0) + row.count);
       } catch (error) { notes.set(`refused: ${(error as Error).name}`, (notes.get(`refused: ${(error as Error).name}`) ?? 0) + 1); }
@@ -119,9 +148,11 @@ console.log(JSON.stringify({
   indexMaxima: { bodyMiB: mib(max.body), bodyStoredMiB: mib(max.bodyStored), bufferMiB: mib(max.buffer), bufferStoredMiB: mib(max.bufferStored),
     resourceMiB: mib(max.resource), segments: max.segments, entriesInOneArchive: max.entries, nameBlockMiB: mib(max.nameBlock), nameListMiB: mib(max.nameList) },
   bigResources: { threshold: big, count: bigOnes.length,
-    verifiedRootClasses: Object.fromEntries(verifiedBig.map(([name, row]) => [name, { count: row.count, bodyMiB: mib(row.body), resourceMiB: mib(row.resource), groups: [...row.groups] }])),
+    verifiedRootClasses: Object.fromEntries(verifiedBig.map(([name, row]) => [name, { count: row.count, bodyMiB: mib(row.body), resourceMiB: mib(row.resource), groups: [...row.groups],
+      usage: { ...row.usage, decodedMiB: mib(row.usage.decodedBytes), largestBufferMiB: mib(row.usage.largestBuffer), ms: Math.round(row.usage.ms) }, outcomes: Object.fromEntries(row.outcomes) }])),
     largestOtherClasses: Object.fromEntries([...byClass].filter(([name]) => !NATIVE_ROOTS.has(name)).sort((a, b) => b[1].body - a[1].body).slice(0, 8)
       .map(([name, row]) => [name, { count: row.count, bodyMiB: mib(row.body), resourceMiB: mib(row.resource) }])) },
+  defaults: { overDefaults: Object.fromEntries(overDefaults), jsonValuesPerValuePastAllowance: Math.round(jsonPerValue * 100) / 100 },
   resolverCache: cache ? { resources: cached, maxima: { ...usage, decodedMiB: mib(usage.decodedBytes), largestBufferMiB: mib(usage.largestBuffer), resourceMiB: mib(usage.resourceBytes), ms: Math.round(usage.ms) },
     notes: Object.fromEntries(notes), defaulted: Object.fromEntries(defaulted) } : null,
 }, null, 1));

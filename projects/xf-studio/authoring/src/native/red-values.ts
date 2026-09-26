@@ -11,19 +11,22 @@ import { doubleValue, float32Value } from "./json-numbers";
 import type { DecodeSession } from "./limits";
 import { NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { RedBuffer, type RedHandle, type RedObject } from "./red-model";
-import { bitfieldMembers, kindOf, propertyType, sameType } from "./rtti";
+import { bitfieldMembers, kindOf, sameType } from "./rtti";
 
 export class Cursor {
   readonly view: DataView;
-  constructor(readonly bytes: Uint8Array, public pos = 0, public end = bytes.length) {
-    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    if (!Number.isSafeInteger(pos) || !Number.isSafeInteger(end) || pos < 0 || end < pos || end > bytes.length)
-      throw new NativeMalformedError(`A read window ${pos}..${end} lies outside ${bytes.length} bytes.`);
+  /** `view` must view exactly `bytes` (a window of a parent cursor shares its view instead of allocating one per record). */
+  constructor(readonly bytes: Uint8Array, public pos = 0, public end = bytes.length, view?: DataView) {
+    this.view = view ?? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    // Written so that NaN fails too; positions come from u32 arithmetic, so they are integers.
+    if (!(pos >= 0 && end >= pos && end <= bytes.length)) throw new NativeMalformedError(`A read window ${pos}..${end} lies outside ${bytes.length} bytes.`);
   }
   /** Bytes left before `end`. */
   get remaining() { return this.end - this.pos; }
+  /** A cursor over `start..end` of the same bytes, sharing this one's view. */
+  span(start: number, end: number) { return new Cursor(this.bytes, start, end, this.view); }
+  /** Bounds check for the fixed-size reads (their sizes are constants). */
   private need(n: number) {
-    if (!Number.isSafeInteger(n) || n < 0) throw new NativeMalformedError(`A read of ${n} bytes is not a size.`);
     if (this.pos + n > this.end) throw new NativeMalformedError(`Read of ${n} bytes at ${this.pos} passes the end (${this.end}).`);
   }
   u8() { this.need(1); return this.view.getUint8(this.pos++); }
@@ -36,7 +39,12 @@ export class Cursor {
   i64() { this.need(8); const v = this.view.getBigInt64(this.pos, true); this.pos += 8; return v; }
   f32() { this.need(4); const v = this.view.getFloat32(this.pos, true); this.pos += 4; return v; }
   f64() { this.need(8); const v = this.view.getFloat64(this.pos, true); this.pos += 8; return v; }
-  take(n: number) { this.need(n); const v = this.bytes.subarray(this.pos, this.pos + n); this.pos += n; return v; }
+  /** `n` bytes; `n` comes from the file, so it must be a non-negative integer that fits. */
+  take(n: number) {
+    if (!Number.isSafeInteger(n) || n < 0) throw new NativeMalformedError(`A read of ${n} bytes is not a size.`);
+    this.need(n);
+    const v = this.bytes.subarray(this.pos, this.pos + n); this.pos += n; return v;
+  }
   /** A u32 element count, refused when more elements than bytes remain (every encoded value takes at least one byte). */
   count(what: string) {
     const count = this.u32();
@@ -193,7 +201,7 @@ function readVariant(ctx: ValueContext, cursor: Cursor, owner: string): unknown 
   const start = cursor.pos, size = cursor.u32();
   if (size <= 4) return null;
   if (start + size > cursor.end) throw new NativeMalformedError(`CVariant of ${type} claims ${size} bytes, past the end of its value.`);
-  const inner = new Cursor(cursor.bytes, cursor.pos, start + size);
+  const inner = cursor.span(cursor.pos, start + size);
   const value = readValue(ctx, inner, type, owner);
   if (inner.pos !== start + size) throw new NativeMalformedError(`CVariant of ${type} read ${inner.pos - start} of ${size} bytes.`);
   cursor.pos = inner.pos;
@@ -204,9 +212,9 @@ function readVariant(ctx: ValueContext, cursor: Cursor, owner: string): unknown 
  * Record a property stored with a type the RTTI slice disagrees with (a mod's `castShadows` stored as `Bool` where the RTTI has
  * `shadowsShadowCastingMode`). The value is still decoded by the stored type; the note lets a consumer say so.
  */
-export function noteStoredType(session: DecodeSession, className: string, property: string, stored: string): void {
-  const rtti = propertyType(className, property);
-  if (rtti !== null && !sameType(stored, rtti)) session.typeMismatch(`${className}.${property}`, stored, rtti);
+export function noteStoredType(session: DecodeSession, className: string, types: ReadonlyMap<string, string> | null, property: string, stored: string): void {
+  const rtti = types?.get(property);
+  if (rtti !== undefined && rtti !== stored && !sameType(stored, rtti)) session.typeMismatch(`${className}.${property}`, stored, rtti);
 }
 
 /** Test hook: how many compiled decoders the bounded cache holds. */

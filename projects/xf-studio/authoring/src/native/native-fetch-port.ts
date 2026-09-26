@@ -29,6 +29,7 @@ import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecoder, WorkerD
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "./native-errors";
 import { loadGameOodle, type OodleVerifier } from "./oodle";
 import { NATIVE_READER_VERSION } from "./resource-document";
+import rttiClassHashes from "./rtti-class-hashes.json";
 import rttiSubset from "./rtti-subset.json";
 import rttiDefaults from "./rtti-defaults.json";
 
@@ -53,7 +54,7 @@ export interface NativeReader {
   close(): void;
 }
 
-const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).digest("hex").slice(0, 12);
+const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassHashes)).digest("hex").slice(0, 12);
 export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATIVE_READER_VERSION}:${dataHash}:${decompressor}`;
 
 /** The native reader over a game installation, or the reason it can't be used (then every read goes to the fallback). */

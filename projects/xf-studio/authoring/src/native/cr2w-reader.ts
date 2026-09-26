@@ -17,6 +17,7 @@ import { NativeUnsupportedError } from "./native-errors";
 import { readPackage } from "./red-package";
 import { RedBuffer, RedHandle, RedObject, type RedDocument } from "./red-model";
 import { cname, Cursor, emptyReference, importFlagsText, normalizedPath, noteStoredType, readValue, readVarString, type ValueContext } from "./red-values";
+import { propertyTypes } from "./rtti";
 
 /** Which buffers are parsed, by owning `Class.property` (others stay bytes). */
 const PARSED_BUFFERS: Record<string, "package" | "cr2w-list"> = {
@@ -42,7 +43,7 @@ export class Cr2wDecoder implements ValueContext {
     object = new RedObject(entry.className);
     this.objects.set(index, object);
     this.session.enter();
-    const cursor = new Cursor(this.file.bytes, entry.dataOffset, entry.dataOffset + entry.dataSize);
+    const cursor = new Cursor(this.file.bytes, entry.dataOffset, entry.dataOffset + entry.dataSize, this.file.view);
     this.readBody(cursor, object);
     this.readAppendix(cursor, object);
     if (cursor.pos !== cursor.end) throw new NativeUnsupportedError(`${entry.className} has ${cursor.end - cursor.pos} bytes of data after its properties that this reader does not decode.`);
@@ -54,6 +55,7 @@ export class Cr2wDecoder implements ValueContext {
   private readBody(cursor: Cursor, object: RedObject): void {
     const lead = cursor.u8();
     if (lead !== 0) throw new Cr2wError(`${object.type}: property list starts with ${lead}, not 0.`);
+    const types = propertyTypes(object.type);
     for (;;) {
       const nameIndex = cursor.u16();
       if (nameIndex === 0) return;
@@ -62,8 +64,8 @@ export class Cr2wDecoder implements ValueContext {
       const name = this.name(nameIndex);
       const end = start + size;
       if (size < 4 || end > cursor.end) throw new Cr2wError(`${object.type}.${name}: record size ${size} is out of range.`);
-      noteStoredType(this.session, object.type, name, type);
-      const inner = new Cursor(cursor.bytes, cursor.pos, end);
+      noteStoredType(this.session, object.type, types, name, type);
+      const inner = cursor.span(cursor.pos, end);
       object.fields[name] = readValue(this, inner, type, `${object.type}.${name}`);
       if (inner.pos !== end) throw new Cr2wError(`${object.type}.${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
       cursor.pos = end;
@@ -81,7 +83,7 @@ export class Cr2wDecoder implements ValueContext {
         const start = cursor.pos, size = cursor.u32();
         const name = this.name(cursor.u16()), type = this.name(cursor.u16());
         if (size < 8 || start + size > cursor.end) throw new Cr2wError(`CMaterialInstance value ${name}: size ${size} is out of range.`);
-        const inner = new Cursor(cursor.bytes, cursor.pos, start + size);
+        const inner = cursor.span(cursor.pos, start + size);
         const value = readValue(this, inner, type, `CMaterialInstance.values`);
         if (inner.pos !== start + size) throw new Cr2wError(`CMaterialInstance value ${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
         cursor.pos = start + size;

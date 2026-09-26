@@ -77,6 +77,8 @@ test("the pool reuses open archives, bounds how many stay open and reopens a cha
     const reopened = pool.get(first);
     expect(reopened).not.toBe(one);
     writeFileSync(first, syntheticArchive([{ path: "a\\3.mi", segments: [{ bytes: bytes(3, 3) }] }]));
-    expect(pool.get(first).read(depotHash("a\\3.mi"))).toEqual(bytes(3, 3));
+    expect(pool.read(first, depotHash("a\\3.mi"))).toEqual(bytes(3, 3));
+    writeFileSync(first, syntheticArchive([{ path: "a\\4.mi", segments: [{ bytes: bytes(4, 4, 4) }] }]));
+    expect(pool.get(first).read(depotHash("a\\4.mi"))).toEqual(bytes(4, 4, 4));
   } finally { pool.close(); }
 });

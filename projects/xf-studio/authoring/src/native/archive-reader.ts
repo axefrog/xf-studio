@@ -145,9 +145,32 @@ export class NativeArchivePool {
   private readonly open = new Map<string, NativeArchive>();
   constructor(private readonly decompress: Decompress, private readonly limit = 64, private readonly limits: NativeLimits = DEFAULT_LIMITS) {}
 
+  /** The archive at `path`, re-indexed first if the file changed (one `stat`). */
   get(path: string): NativeArchive {
+    const archive = this.open.get(path);
+    if (archive && archive.stale()) this.drop(path);
+    return this.indexed(path);
+  }
+
+  /**
+   * One resource (see `NativeArchive.read`). Skips `get`'s `stat` on the common path: the read's own `fstat` check notices a
+   * replaced file, which is then re-indexed and read once more. A hash the cached index lacks costs a `stat`, since a replaced
+   * file may list it.
+   */
+  read(path: string, hash: string): Uint8Array | null {
+    try {
+      const archive = this.indexed(path), found = archive.read(hash);
+      if (found !== null || !archive.stale()) return found;
+    } catch (error) { if (!(error instanceof ArchiveChangedError)) throw error; }
+    this.drop(path);
+    return this.indexed(path).read(hash);
+  }
+
+  private drop(path: string): void { this.open.get(path)?.close(); this.open.delete(path); }
+
+  /** The cached index for `path` (most recently used), or a freshly parsed one. */
+  private indexed(path: string): NativeArchive {
     let archive = this.open.get(path);
-    if (archive && archive.stale()) { archive.close(); this.open.delete(path); archive = undefined; }
     if (archive) { this.open.delete(path); this.open.set(path, archive); return archive; }
     archive = NativeArchive.open(path, this.decompress, this.limits);
     this.open.set(path, archive);

@@ -3,9 +3,8 @@
  *
  * Every size the reader allocates comes from the file, so each is checked against a cap before anything is allocated, and the work
  * a small file can cause (decoded values, JSON values written, nesting) is counted. The defaults are the largest values measured on
- * real resources times a margin (tools/native-limits.ts prints the measurements; the basis is recorded in
- * research/backlog/native-archive-reader.md#budgets). A resource over a cap is refused with `NativeBudgetError`, and the caller
- * falls back to another reader, so a cap that is too tight costs speed, never correctness.
+ * real resources times a margin (tools/native-limits.ts prints the measurements). A resource over a cap is refused with
+ * `NativeBudgetError`, and the caller falls back to another reader, so a cap that is too tight costs speed, never correctness.
  */
 import { NativeBudgetError } from "./native-errors";
 
@@ -22,6 +21,12 @@ export interface NativeLimits {
   readonly maxNodes: number;
   /** Values written to the JSON document (object keys and array elements, defaults included). */
   readonly maxJsonNodes: number;
+  /**
+   * JSON values per decoded value beyond `jsonNodesAllowance`: defaults let a few bytes ask for a large object, so the document may
+   * outgrow the decoded data only by this factor.
+   */
+  readonly maxJsonNodesPerValue: number;
+  readonly jsonNodesAllowance: number;
   /** Object nesting while decoding, deriving and writing. */
   readonly maxDepth: number;
   /** One entry of a CR2W string pool (a name or an import path). */
@@ -31,19 +36,25 @@ export interface NativeLimits {
 }
 
 /**
- * Defaults: the measured maximum over the resolver's 2,348 cached resources and the largest resources of the verified root
- * classes in the game and the reference mod list, times at least 4 (see the backlog page's budget table).
+ * Defaults, from tools/native-limits.ts on game 2.31 and the reference mod list (1,157 archives, 647,849 entries; the resolver's
+ * 1,722 distinct cached resources and the 406 verified-class resources whose body is 1 MiB or more). Measured maximum → cap:
+ * verified resource 32.8 MiB → 256 MiB; verified body 31.8 MiB → 128 MiB; any buffer in any archive 85.3 MiB (largest parsed
+ * buffer 11.1 MiB) → 128 MiB; decoded names and parsed buffers 15.6 MiB → 64 MiB; values 33.2 M (a large game mesh; the largest
+ * cached resource has 0.6 M) → 2^27; JSON values 33.2 M → 2^27, and at most 8 per decoded value past 2^20; nesting 11 → 128;
+ * name 159 bytes → 1 KiB; name list 0.37 MiB → 16 MiB. Details: research/backlog/native-archive-reader.md#budgets.
  */
 export const DEFAULT_LIMITS: NativeLimits = Object.freeze({
   maxResourceBytes: 256 * 2 ** 20,
-  maxBodyBytes: 64 * 2 ** 20,
-  maxBufferBytes: 192 * 2 ** 20,
-  maxDecodedBytes: 128 * 2 ** 20,
-  maxNodes: 8_000_000,
-  maxJsonNodes: 16_000_000,
-  maxDepth: 256,
-  maxNameBytes: 4096,
-  maxNameListBytes: 64 * 2 ** 20,
+  maxBodyBytes: 128 * 2 ** 20,
+  maxBufferBytes: 128 * 2 ** 20,
+  maxDecodedBytes: 64 * 2 ** 20,
+  maxNodes: 2 ** 27,
+  maxJsonNodes: 2 ** 27,
+  maxJsonNodesPerValue: 8,
+  jsonNodesAllowance: 2 ** 20,
+  maxDepth: 128,
+  maxNameBytes: 1024,
+  maxNameListBytes: 16 * 2 ** 20,
 });
 
 /** Something the reader noticed about a resource that the JSON document cannot say (its value is still readable). */
@@ -109,6 +120,9 @@ export class DecodeSession {
   jsonNodes(count: number): void {
     this.jsonNodeCount += count;
     if (this.jsonNodeCount > this.limits.maxJsonNodes) throw new NativeBudgetError(`The document passes the ${this.limits.maxJsonNodes}-value budget.`);
+    // The ratio needs the decoded count: it applies when this session also decoded the document (the normal path).
+    if (this.nodeCount > 0 && this.jsonNodeCount > this.nodeCount * this.limits.maxJsonNodesPerValue + this.limits.jsonNodesAllowance)
+      throw new NativeBudgetError(`The document outgrows its ${this.nodeCount} decoded values more than ${this.limits.maxJsonNodesPerValue}-fold.`);
   }
 
   /** Enter one level of object nesting (decode, derive or write); pair with `leave`. */
@@ -145,6 +159,7 @@ export class DecodeSession {
 /** Limits with no effective cap, for measuring real resources (tools/native-limits.ts). */
 export const UNLIMITED: NativeLimits = Object.freeze({
   maxResourceBytes: Number.MAX_SAFE_INTEGER, maxBodyBytes: Number.MAX_SAFE_INTEGER, maxBufferBytes: Number.MAX_SAFE_INTEGER,
-  maxDecodedBytes: Number.MAX_SAFE_INTEGER, maxNodes: Number.MAX_SAFE_INTEGER, maxJsonNodes: Number.MAX_SAFE_INTEGER, maxDepth: 100_000,
+  maxDecodedBytes: Number.MAX_SAFE_INTEGER, maxNodes: Number.MAX_SAFE_INTEGER, maxJsonNodes: Number.MAX_SAFE_INTEGER, maxJsonNodesPerValue: Number.MAX_SAFE_INTEGER,
+  jsonNodesAllowance: Number.MAX_SAFE_INTEGER, maxDepth: 100_000,
   maxNameBytes: Number.MAX_SAFE_INTEGER, maxNameListBytes: Number.MAX_SAFE_INTEGER,
 });

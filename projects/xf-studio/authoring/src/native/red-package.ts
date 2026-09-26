@@ -17,14 +17,15 @@
  * Strictness, so file-chosen offsets cannot make one value decode many times: the sections lie in order inside the package; within
  * an object the first value starts right after the field table, offsets strictly increase and each value ends exactly where the
  * next begins; a chunk ends at or before the next chunk's start. Only version 4 is decoded (versions 2-3 differ, e.g. in
- * TweakDBIDs, and none was verified), and a type the RTTI slice does not know is refused rather than read as a struct.
+ * TweakDBIDs, and none was verified), and a type name the RTTI does not know as a class (rtti.ts `kindOf`) is refused rather than
+ * read as a struct.
  */
 import { float32Value } from "./json-numbers";
 import { DecodeSession } from "./limits";
 import { NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { type ParsedBuffer, RedBuffer, RedHandle, RedObject } from "./red-model";
 import { cname, Cursor, emptyReference, normalizedPath, noteStoredType, readValue, type ValueContext } from "./red-values";
-import { kindOf } from "./rtti";
+import { kindOf, propertyTypes } from "./rtti";
 
 const utf8 = new TextDecoder();
 
@@ -39,11 +40,12 @@ class PackageDecoder implements ValueContext {
   readonly chunks: { type: string; offset: number; end: number }[] = [];
   private readonly objects = new Map<number, RedObject>();
   readonly referenced = new Set<number>();
+  private readonly view: DataView;
 
   constructor(private readonly bytes: Uint8Array, private readonly base: number, header: Sections, hashReferences: boolean,
     /** The header's second byte (2 in game 2.x packages): with 2, compiled effect infos keep their arrays in memory layout. */
     readonly layout: number, readonly session: DecodeSession) {
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const view = this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const size = bytes.length - base;
     const region = (offset: number, length: number, what: string) => {
       if (offset + length > size) throw new NativeMalformedError(`Package ${what} lies outside the package.`);
@@ -98,7 +100,7 @@ class PackageDecoder implements ValueContext {
     object = new RedObject(entry.type);
     this.objects.set(index, object);
     this.session.enter();
-    this.readFields(new Cursor(this.bytes, this.base + entry.offset, this.base + entry.end), object);
+    this.readFields(new Cursor(this.bytes, this.base + entry.offset, this.base + entry.end, this.view), object);
     this.session.leave();
     return object;
   }
@@ -114,15 +116,16 @@ class PackageDecoder implements ValueContext {
     const fields: { name: string; type: string; offset: number }[] = [];
     for (let i = 0; i < count; i++) fields.push({ name: this.name(cursor.u16()), type: this.name(cursor.u16()), offset: cursor.u32() });
     let expected = cursor.pos - start;
+    const types = propertyTypes(object.type);
     for (let i = 0; i < fields.length; i++) {
       const field = fields[i]!, next = fields[i + 1];
       if (field.offset !== expected) throw new NativeMalformedError(`${object.type}.${field.name}: value at ${field.offset}, expected ${expected}.`);
       if (next && next.offset <= field.offset) throw new NativeMalformedError(`${object.type}.${next.name}: field offsets do not increase.`);
       const valueEnd = next ? start + next.offset : cursor.end;
       if (valueEnd > cursor.end) throw new NativeMalformedError(`${object.type}.${field.name}: value passes the end of its object.`);
-      const value = new Cursor(this.bytes, start + field.offset, valueEnd);
+      const value = cursor.span(start + field.offset, valueEnd);
       try {
-        noteStoredType(this.session, object.type, field.name, field.type);
+        noteStoredType(this.session, object.type, types, field.name, field.type);
         const compiled = this.layout === 2 && object.type === "worldCompiledEffectInfo" ? readCompiledEffectField(this, value, field.name) : undefined;
         object.fields[field.name] = compiled !== undefined ? compiled : readValue(this, value, field.type, `${object.type}.${field.name}`);
       }
@@ -137,8 +140,9 @@ class PackageDecoder implements ValueContext {
   }
 
   object(cursor: Cursor, type: string): RedObject {
-    // A type outside the RTTI slice may be an enum or struct from a newer game; reading it as a struct would guess its layout.
-    if (kindOf(type) !== "class") throw new NativeUnsupportedError(`Package values of type ${type} are not decoded (not in the RTTI slice).`);
+    // A name the RTTI does not know may be an enum or struct from a newer game; reading it as a struct would guess its layout.
+    const kind = kindOf(type);
+    if (kind !== "class" && kind !== "unsliced-class") throw new NativeUnsupportedError(`Package values of type ${type} are not decoded (not a class the RTTI knows).`);
     const object = new RedObject(type);
     this.session.enter();
     this.readFields(cursor, object);
