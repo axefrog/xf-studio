@@ -59,6 +59,8 @@ const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1600, h
 const run = (action: object) => page.evaluate(`window.xfStudioShell.runtime.dispatch(${JSON.stringify(action)})`);
 const settle = async () => {
   await page.waitFor("window.xfStudioPresentation.previewReadiness.snapshot().phase === 'ready'", 120000);
+  // The creator preset's grade arrives from the host after the preset turns on; the neutral grade shows until then.
+  await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase !== 'loading'", 60000);
   await page.wait(800);
   await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return e && !e.frames.running; })()", 30000);
   await page.wait(300);
