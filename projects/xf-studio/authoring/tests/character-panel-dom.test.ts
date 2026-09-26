@@ -20,7 +20,8 @@ async function harness() {
   const index = new CatalogueIndex(source.catalogue);
   // The fixture has no makeup category: its scars section stands in for it.
   const marked = { ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) };
-  let failView = false;
+  let failView = false, holdViews = false, updating = false;
+  const held: (() => void)[] = [];
   const prefetches: { option: string; positions: number[]; focus: number | null }[] = [], stops: true[] = [];
   const fetchStates = new Map<number, string>();
   const port: CreatorPort = {
@@ -28,6 +29,7 @@ async function harness() {
     page: async (_gender, option, offset, _signal, query) => choicePage(index, mods, option, offset, { identity: "fixture", query })!,
     search: async (_gender, query) => searchChoices(index, query, "fixture"),
     view: async request => {
+      if (holdViews) await new Promise<void>(resolve => held.push(resolve));
       if (failView) throw Error("XF Studio couldn't reach its preview host. Restart XF Studio if this keeps happening.");
       const { view } = deriveCharacter(source, { kind: "default" }, request.choices ?? []);
       const values = Object.fromEntries(Object.entries(view.values).map(([id, value]) => [id, { ...value, label: value.choice, color: null, ownLabel: value.own }]));
@@ -62,11 +64,13 @@ async function harness() {
   const root = controller.spec.element as unknown as LightElement;
   lightDocument.body.append(root);
   const frame = () => ({ preview: { character: context.snapshot(), preview: undefined, savedV: {}, eyeShapeOptions: undefined },
-    status: { assets: { characterDetails: undefined } }, viewport: { head: { error: null, message: null } } }) as never;
+    status: { assets: { characterDetails: updating ? { phase: "ready", updating: true, drawn: [], slots: [] } : undefined } }, viewport: { head: { error: null, message: null } } }) as never;
   const paint = () => controller.update(frame());
   context.start(); await settle();
   paint(); await settle(); paint();
-  return { context, root, paint, dispatched, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates };
+  return { context, root, paint, dispatched, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates,
+    holdViews: (value: boolean) => { holdViews = value; }, releaseViews: () => { while (held.length) held.shift()!(); },
+    setUpdating: (value: boolean) => { updating = value; } };
 }
 const row = (root: LightElement, label: string) => root.querySelectorAll(".cc-row").find(element => element.querySelector(".cc-row-label")?.textContent === label)!;
 const items = (element: LightElement) => element.querySelectorAll(".cc-choice");
@@ -98,6 +102,30 @@ describe("the Character panel's DOM", () => {
     expect(lightDocument.activeElement).toBe(before[1]!);
     expect(after.filter(item => item.getAttribute("aria-selected") === "true").map(item => item.getAttribute("data-position"))).toEqual(["1"]);
     expect(after.filter(item => item.tabIndex === 0)).toEqual([before[1]!]);
+  });
+
+  test("a clicked choice is marked at once and while the host is busy, and shows it is being prepared until the V is (optimistic selection)", async () => {
+    const h = await harness();
+    const eyes = row(h.root, "Eye Color");
+    eyes.querySelector(".cc-row-main")!.click();
+    h.paint(); await settle(); h.paint();
+    const list = items(eyes);
+    const selected = () => items(eyes).filter(item => item.getAttribute("aria-selected") === "true").map(item => item.getAttribute("data-position"));
+    expect(selected()).toEqual(["0"]);
+    h.holdViews(true);
+    h.setUpdating(true);
+    list[2]!.click();
+    // Marked in the click itself, before any paint; a paint while the host's view is on its way keeps it.
+    expect(selected()).toEqual(["2"]);
+    h.paint(); await settle(); h.paint();
+    expect(selected()).toEqual(["2"]);
+    expect(list[2]!.getAttribute("data-fetch")).toBe("fetching");
+    expect(list[2]!.getAttribute("aria-description")).toContain("being prepared");
+    h.holdViews(false); h.releaseViews(); await settle();
+    h.setUpdating(false);
+    h.paint(); await settle(); h.paint();
+    expect(selected()).toEqual(["2"]);
+    expect(list[2]!.getAttribute("data-fetch")).not.toBe("fetching");
   });
 
   test("the status line and its actions never add or remove nodes; Keep and Try again are reserved in place", async () => {

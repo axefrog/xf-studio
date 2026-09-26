@@ -36,6 +36,7 @@ import { loadGameOodle, type OodleLibrary, OodleUnavailableError, openGameOodle,
 import { NATIVE_READER_VERSION } from "./resource-document";
 import rttiClassHashes from "./rtti-class-hashes.json";
 import rttiSubset from "./rtti-subset.json";
+import rttiClassDefaults from "./rtti-class-defaults.json";
 import rttiDefaults from "./rtti-defaults.json";
 
 /** Root classes whose documents matched the reference JSON on every resolver field in the differential harness. */
@@ -70,10 +71,10 @@ export interface NativeReader {
 
 /**
  * Hash of everything besides the version that decides which resources the reader answers and what their documents hold: the RTTI slice,
- * the learned defaults and class list, the verified roots and payloads, and the default budgets (a resource over a cap falls back, so
+ * the learned and class defaults and class list, the verified roots and payloads, and the default budgets (a resource over a cap falls back, so
  * a changed cap changes which answers were native; NATIVE-30).
  */
-const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassHashes))
+const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassDefaults)).update(JSON.stringify(rttiClassHashes))
   .update(JSON.stringify([...NATIVE_ROOTS].sort())).update(JSON.stringify([...NATIVE_JSON_PAYLOADS].sort())).update(JSON.stringify(DEFAULT_LIMITS)).digest("hex").slice(0, 12);
 export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATIVE_READER_VERSION}:${dataHash}:${decompressor}`;
 

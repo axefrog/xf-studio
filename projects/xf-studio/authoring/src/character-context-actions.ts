@@ -202,6 +202,8 @@ export class CharacterContextActions {
   private searching: (CharacterSearchState & { controller: AbortController | null }) | null = null;
   private currentView: CreatorView | null = null;
   private viewKey: string | null = null;
+  /** The host's last view with the current state's choices shown on it while the host's view of that state is on its way (`view`). */
+  private shownView: { key: string; from: CreatorView; view: CreatorView } | null = null;
   private viewing: { key: string; controller: AbortController } | null = null;
   private viewError: string | null = null;
   /**
@@ -310,7 +312,34 @@ export class CharacterContextActions {
     return this.catalogue.gender === this.state.bodyGender ? this.catalogue.panel : null;
   }
   /** Every active row's current choice, the V's own and what couldn't be honoured (frozen), for the current state once it arrives. */
-  view(): Readonly<CreatorView> | null { return this.currentView; }
+  view(): Readonly<CreatorView> | null {
+    const view = this.currentView;
+    if (!view || this.viewCurrent()) return view;
+    const key = JSON.stringify(this.request());
+    if (this.shownView?.key !== key || this.shownView.from !== view) this.shownView = { key, from: view, view: deepFreeze(this.optimistic(view)) };
+    return this.shownView.view;
+  }
+  /**
+   * Every interaction shows its effect at once: until the host's view of the current state arrives, each row the last view shows takes
+   * the current state's choice (or the V's own, where the choice was reset), as the loaded choices name it. The host's view replaces it
+   * when it arrives, so a choice the host couldn't honour is shown as the host says. A row the change newly activates waits for the host.
+   */
+  private optimistic(view: CreatorView): CreatorView {
+    const chosen = new Map(this.state.choices.map(choice => [`${choice.part}/${choice.option}`, choice]));
+    let values: Record<string, CreatorView["values"][string]> | null = null;
+    for (const [id, value] of Object.entries(view.values)) {
+      const option = this.byId.get(id);
+      if (!option) continue;
+      const choice = chosen.get(`${option.part}/${option.name}`) ?? null;
+      const page = this.pages.get(pageKey(option.id, ""));
+      const item = choice ? page?.choices.find(entry => entry.position === this.positionOf(choice))
+        : value.set ? page?.choices.find(entry => entry.key === value.own) : undefined;
+      if (!item || (item.position === value.position && !!choice === value.set)) continue;
+      values ??= { ...view.values };
+      values[id] = { ...value, choice: item.key, position: item.position, set: !!choice, label: item.label, color: item.color };
+    }
+    return values ? { ...view, values } : view;
+  }
   /** Whether `view()` answers the current state (not an earlier one still shown while the new view is on its way). */
   viewCurrent(): boolean { return !!this.currentView && this.viewKey === JSON.stringify(this.request()); }
   /** An option's choices loaded so far (with `query`, its choices matching it); asking starts loading the next page. */

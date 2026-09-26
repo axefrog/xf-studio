@@ -34,6 +34,7 @@ Later-domain research queue (below the body and appearance work): [world, termin
 
 ## Queued R&D and background work
 
+- **Load time and responsiveness** (standing research track, 27 September 2026): the goal is that everything is ready the moment the interface appears and every change shows with no perceivable wait. Budgets, measurements and the ranked costs: [performance](performance.md).
 - **Runtime access baseline** (early mod R&D; baseline built and hardened after its security review, awaiting its first game session): heavily logged base mods per type (RED4ext C++, redscript, CET Lua, TweakXL data) and a local named-pipe bridge, read-only by default, in [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md). Phase 2 (command catalogue, MCP server, CLI, session scripts, writes behind `allow_writes`) is built offline. Next: the [first session](../runtime/runtime-bridge-test-card.md), then session 2 through the bridge. See [runtime access baseline](runtime-access-baseline.md).
 - **Runtime bridge autonomy** (R&D done, nothing built): ranked bridge features that remove the player's remaining steps in a test session — light on/off, hiding the photo-mode cursor, camera presets for repeatable framing, opening and leaving the creator from script, row labels that follow scripted changes, NPC hiding and a fixed studio spot, and the full photo mode via the player's key. Evidence in [photo mode](../../knowledge/photo-mode.md). See [bridge autonomy](bridge-autonomy.md).
 - **Worn clothing rendering** (phases 1–4 built on `claude/clothing-render`; standing direction step 5): V's loadout, wardrobe overrides and hidden slots read from the save, vanilla items resolved through TweakDB, factories, suffixes and the cooked visual-tag preset, items and body chunks hidden by the game's and ArchiveXL's rules, garments drawn over the body with a Clothing control (as saved, without headwear and face items, underwear only, choose areas). Open: phases 5–8 (TweakXL and ArchiveXL dynamic items, the bridge's worn-item snapshot, garment support, a wardrobe), the in-game checks, and four questions for the maintainer, including whether EquipmentEx's saved outfits may be read. See [clothing render](clothing-render.md) and [knowledge/clothing.md](../../knowledge/clothing.md).
@@ -52,6 +53,22 @@ Later-domain research queue (below the body and appearance work): [world, termin
 - **Full save editor (R&D; design first)** (study done 27 September, nothing built): saves are a tree of named nodes in three encodings, and the save carries its own type database, so every script system's data, mods' included (EquipmentEx's outfits, for example), and nearly all world-object state decode generically with no per-mod schema; inventory, facts, the journal and the wardrobe need small hand-written codecs. Proposed: a read-only Save Explorer first (one container codec, one generic object layer with a type oracle, domain views), then gated value edits after one batched session; structural changes through the bridge. Six questions for the maintainer. See the [save editor design](../save/save-editor-design.md) and [knowledge/save-files.md](../../knowledge/save-files.md).
 
 - **AI integration through MCP** (direction set 26 September): an optional, off-by-default MCP server so users can connect their own AI tools to the game (through the runtime bridge) and later to the Studio's typed actions. See [AI integration](ai-integration-mcp.md).
+
+- **Activity view: what's happening to bring each view up to date** (requested 27 September 2026). Every background job that feeds a view becomes a visible, live entry, which fits the reactive graph:
+  - V preparations and their stages;
+  - a hairstyle's export;
+  - texture decodes;
+  - prefetch;
+  - catalogue reads;
+  - WolvenKit launches.
+
+  Each entry shows a plain label and its state: pending, running with progress or the current step, done, or failed with a plain reason, an error reference and the one next step. For example: "Loading hairstyle LONG PAK - #007 … 33%", "Reading textures … decoding", "Clothing … waiting", "Couldn't load X".
+
+  It appears in two places, fed by the same job stream:
+  - an **Activity panel**, the full list, grouped per view;
+  - an optional **translucent overlay in each 3D view**, a view tool, showing only that view's jobs.
+
+  The host publishes job events (the preparation already has stage timings and `progress {index, total, label}`) as one ordered stream to the page. The page keeps a job store the views subscribe to. Nothing here replaces the instant selection and in-place "still working" indicators (the "respond instantly" rule); it is the detailed view beneath them. Build it after the hair/lag fix and view graph P2, which add the per-view tool slot.
 
 - **Pose library for the full-body view** (requested 27 September 2026; design first): show the full-body V in any photo-mode pose, vanilla or added by mods, from its own panel with search and starred favourites. Poses must come from the game's and frameworks' own data (photo-mode pose records and their `.anims` clips, mod pose packs through ArchiveXL/TweakXL), never per-pack adapters. Builds on the decoded creator idle (body clips on `woman_base.rig`, [body rendering](../../knowledge/body-rendering.md)) and the photo-mode facts in [photo mode](../../knowledge/photo-mode.md) and [facial expressions](../../knowledge/facial-expressions.md). Design ready: [pose library](../animation/pose-library-design.md) (phases P0–P3 about two and a half weeks, with a shared TweakXL reader and `.anims` decoder that clothing and expressions also need; ten questions for the maintainer with proposed defaults; in-game checks G1–G7). Facts: [poses](../../knowledge/poses.md).
 

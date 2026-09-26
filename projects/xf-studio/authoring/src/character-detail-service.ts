@@ -138,6 +138,9 @@ export function textureIsGamma(root: JsonObject | null | undefined): boolean | n
   return setup.isGamma === 1 || setup.isGamma === true;
 }
 
+/** `CHairProfile.sampleCount`'s class default (native/rtti-class-defaults.json). */
+const HAIR_PROFILE_DEFAULT_SAMPLES = 64;
+
 /** A serialized `CHairProfile` as the record carries it (stored order and 8-bit colours kept). */
 export function hairProfileStops(root: JsonObject): Pick<RenderProfile, "sampleCount" | "id" | "rootToTip"> | null {
   if (root.$type !== "CHairProfile") return null;
@@ -147,7 +150,8 @@ export function hairProfileStops(root: JsonObject): Pick<RenderProfile, "sampleC
     return { value: Math.max(0, Math.min(1, Number(entry.value) || 0)), color: [channel(colour.Red), channel(colour.Green), channel(colour.Blue)] };
   });
   const id = read(root.gradientEntriesID), rootToTip = read(root.gradientEntriesRootToTip);
-  const sampleCount = Number(root.sampleCount);
+  // Omitted, `sampleCount` is its class default, 64 (native/rtti-class-defaults.json; vanilla `purple_ombre.hp` omits it, PIPE-110).
+  const sampleCount = root.sampleCount === undefined ? HAIR_PROFILE_DEFAULT_SAMPLES : Number(root.sampleCount);
   if (!id.length || !rootToTip.length || !Number.isInteger(sampleCount) || sampleCount < 2 || sampleCount > 1024) return null;
   return { sampleCount, id: id.slice(0, 32), rootToTip: rootToTip.slice(0, 32) };
 }
@@ -164,9 +168,9 @@ export function skinProfileValues(root: JsonObject): Omit<RenderSkinProfile, "de
     const channel = (v: unknown) => Math.max(0, Math.min(255, Math.round(Number(v ?? 255)) || 0));
     return [channel(c.Red), channel(c.Green), channel(c.Blue)];
   };
-  // Serializers omit fields at their type defaults; a missing field reads as the class default (1 for scales, white colours).
-  return { roughness0: number(root.roughness0, 1, 16), roughness1: number(root.roughness1, 1, 16), lobeMix: number(root.lobeMix, 0, 16),
-    blurSize: number(root.blurSize, 0, 64), diffuse: colour(root.diffuse), falloff: colour(root.falloff) };
+  // Serializers omit fields at their class defaults; a missing scale reads as its class default (native/rtti-class-defaults.json).
+  return { roughness0: number(root.roughness0, 0.75, 16), roughness1: number(root.roughness1, 1.25, 16), lobeMix: number(root.lobeMix, 0.8, 16),
+    blurSize: number(root.blurSize, 1.2, 64), diffuse: colour(root.diffuse), falloff: colour(root.falloff) };
 }
 
 /** A serialized `CGradient` as the record carries it: 8-bit RGBA stops sorted by value (stored order is not sorted). */
@@ -611,8 +615,11 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
         geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks] })), signal, { lowPriority: ctx.lowPriority });
       answers.forEach((answer, index) => {
         const archive = list[index]!.archive;
-        if (answer.failed) { failed(answer.failed, [archive]); return; }
+        // What the archive's launches did answer is kept even when one of them failed: a texture both readers refuse (its WolvenKit
+        // fallback launch failing) must not take the archive's geometry and natively decoded textures with it (PIPE-108). The failure
+        // still marks the archive, so the preparation is degraded and prepared again.
         for (const kind of ["geometry", "textures", "masks"] as const) for (const [path, value] of answer[kind]) keep(kind, archive.id, path, value);
+        if (answer.failed) failed(answer.failed, [archive]);
       });
     } catch (error) { failed(error, list.map(group => group.archive)); }
     return exporter.tool?.label;
