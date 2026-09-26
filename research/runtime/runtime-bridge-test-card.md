@@ -89,6 +89,8 @@ Each check proves one new bridge feature in the game before session 2's script r
 | A11 | C | `cc_apply {option: "XF", index: 5}`, wait 1.5 s, `capture_screenshot {region: "cc-eyes"}` | The preview changes and **the XF row shows Gloss A's name** (`route: "row"`); the `cc-eyes` crop frames both eyes and brows | Row still shows the old name: record `route` |
 | A12 | C | `cc_confirm` | The creator closes and V keeps Gloss A in the world (`kept: true`); `game_status` shows `bridge_save_lock: true` | `creator_leave_disabled`: wrong build. `not_in_character_menu`: M presses Confirm |
 
+| A13 | M, C | With an XF Eye Artistry look on, M equips a full-head item that hides V's head in first person or all views (a full helmet or mask with `hide_Head`). C: `capture_screenshot {region: "face"}` in photo mode | The makeup hides with the head. If it floats in the air, the export's component prefix (`xfs_c<key>_makeup`) isn't covered by ArchiveXL's `hide_Head` rule ([clothing knowledge](../../knowledge/clothing.md)); record it for a rename decision | Record and carry on |
+
 Then run session 2 continued (below). The kill-switch check with the cursor hidden is at the [wrap-up](#kill-switch-and-wrap-up).
 
 ## Script-call check (first)
