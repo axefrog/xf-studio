@@ -28,7 +28,7 @@ export function depotPathRegex(paths: readonly string[]): string {
 }
 
 export function createWolvenKitEyePlateTools(cli: string, timeoutMs = defaultTimeoutMs): EyePlateTools {
-  const require = (path: string, message: string) => { if (!existsSync(path) || !statSync(path).isFile()) throw new ToolRunError("plate_tool_failed", message); };
+  const requireFile = (path: string, message: string) => { if (!existsSync(path) || !statSync(path).isFile()) throw new ToolRunError("plate_tool_failed", message); };
   return {
     async extract({ archive, depotPaths, outDir, signal }) {
       await runTool(cli, ["unbundle", resolve(archive), "-o", outDir, "-r", depotPathRegex(depotPaths)], signal, timeoutMs);
@@ -36,12 +36,12 @@ export function createWolvenKitEyePlateTools(cli: string, timeoutMs = defaultTim
     async serialize({ file, outDir, signal }) {
       await runTool(cli, ["convert", "serialize", file, "-o", outDir], signal, timeoutMs);
       const json = join(outDir, basename(file) + ".json");
-      require(json, `WolvenKit did not serialize ${basename(file)}.`);
+      requireFile(json, `WolvenKit did not serialize ${basename(file)}.`);
       return json;
     },
     async deserialize({ jsonDir, outDir, names, signal }) {
       await runTool(cli, ["convert", "deserialize", jsonDir, "-o", outDir], signal, timeoutMs);
-      for (const name of names) require(join(outDir, name), `WolvenKit did not convert ${name}.`);
+      for (const name of names) requireFile(join(outDir, name), `WolvenKit did not convert ${name}.`);
     },
   };
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { imports, importUses, resolveFrom } from "./fixtures/import-scan";
+import { COMPUTED, imports, importUses, resolveFrom } from "./fixtures/import-scan";
 import { codeOnly, pageGlobals, PAGE_GLOBALS } from "./fixtures/code-scan";
 
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
@@ -16,7 +16,19 @@ test("the import scan sees static, bare, dynamic, inline type and require import
     `type E = import("./e").E;`, `let f: typeof import('node:fs');`, `import type { G } from "./g";`,
     `const h = require("./h");`, `const i = import.meta.require("./i");`].join("\n")))
     .toEqual(["./a", "./b", "./c", "./d", "./e", "node:fs", "./g", "./h", "./i"]);
-  expect(imports(`const later = importer("./x"); reimport ("./y"); prerequire("./z");`)).toEqual([]);
+  expect(imports(`const later = importer("./x"); reimport ("./y"); prerequire("./z"); x.import("./w"); import();`)).toEqual([]);
+});
+
+test("the import scan sees template-literal specifiers and records computed imports, which no module has (CORE-87)", () => {
+  expect(imports(["const a = await import(`./a`);", "const b = require(`./b`);", "const c = import.meta.require(`./c`);",
+    "type D = import(`./d`).D;"].join("\n"))).toEqual(["./a", "./b", "./c", "./d"]);
+  // An argument that is not one literal loads something no scan can name.
+  for (const text of ["await import(name)", "require(dir + \"/x\")", "import(`./x/${n}`)", "import(/* chunk */ \"./d\")", "require (\n  load())",
+    "import(\"./a\" + suffix)"]) expect(imports(text), text).toEqual([COMPUTED]);
+  expect(importUses("const m = await import(name);")).toEqual([{ specifier: COMPUTED, typeOnly: false, names: ["<computed>"] }]);
+  expect(importUses("const t = import(`./t`);")).toEqual([{ specifier: "./t", typeOnly: false, names: ["<dynamic>"] }]);
+  // No source module loads code the boundary scans cannot see.
+  expect(every().filter(name => imports(source(name)).includes(COMPUTED))).toEqual([]);
 });
 
 test("pure-code scans read code only and see every page or host global (CORE-78)", () => {
@@ -204,21 +216,33 @@ function reachIn(tree: Tree, start: string, values = false): Set<string> {
 }
 const reach = (start: string) => new Set([...reachIn(DISK, start)].filter(name => DISK.names.includes(name)));
 
+/** A module's value imports of a bare package (the imports that load it at run time), for the type-only rules. */
+const valueImportsOf = (tree: Tree, name: string, specifier: RegExp) =>
+  importUses(tree.text(name)).filter(use => !use.typeOnly && specifier.test(use.specifier)).map(use => use.specifier);
+
+/**
+ * The platform rule (§7 rule 5): platform code outside the scene host imports only the platform, and the scene port names Three by
+ * type only (CORE-88); the api index never re-exports the port, so a feature's core never sees Three.
+ */
+function platformViolations(tree: Tree): string[] {
+  const pure = tree.names.filter(name => name.startsWith("platform/") && !name.startsWith("platform/scene/"));
+  return pure.flatMap(name => [
+    ...resolvedIn(tree, name).filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/"))
+      .filter(path => !(name === "platform/api/scene" && path === "three")).map(path => `${name} -> ${path}`),
+    ...valueImportsOf(tree, name, /^three(?:\/|$)/).map(path => `${name} -> ${path} (value)`),
+    ...(name === "platform/api/index" && /["']\.\/scene["']/.test(tree.text(name)) ? [`${name} re-exports platform/api/scene`] : []),
+  ]);
+}
+
 test("platform code imports only the platform: nothing from features, engines, compose or legacy src", () => {
   const platform = walk("platform");
   expect(platform).toContain("platform/api/index");
   expect(platform).toContain("platform/core/registry");
   expect(platform).toContain("platform/scene/feature-renderers");
-  // The scene host (platform/scene) is the platform's renderer: Three, the browser and the scene's device modules (below) are its own.
-  const pure = platform.filter(name => !name.startsWith("platform/scene/"));
-  const violations = pure.flatMap(name => resolved(name)
-    // The scene port's types name Three objects (type-only; the api index does not re-export it, so a feature's core never sees Three).
-    .filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/"))
-    .filter(path => !(name === "platform/api/scene" && path === "three")).map(path => `${name} -> ${path}`));
-  expect(violations).toEqual([]);
+  expect(platformViolations(DISK)).toEqual([]);
   expect(source("platform/api/scene")).toMatch(/import type \* as THREE from "three"/);
-  expect(source("platform/api/index")).not.toContain("./scene");
-  for (const name of pure) expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+  for (const name of platform.filter(name => !name.startsWith("platform/scene/")))
+    expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
 });
 
 /**
@@ -237,19 +261,55 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the save's V.
   "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "save-reader",
 ]);
+/**
+ * What the device modules build on in turn, reached only through them (types included): the materials, lights and grading they
+ * compose, the binding catalogue the camera input resolves presses with, and the pure record readers under them (CORE-86).
+ */
+const SCENE_SUPPORT_MODULES = new Set<string>([
+  "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material",
+  "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence",
+]);
+/** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
+const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;
+const sceneAllowed = (path: string) => path.startsWith("platform/api/") || path.startsWith("platform/scene/") || path === "three" ||
+  path.startsWith("three/addons/") || SCENE_DEVICE_MODULES.has(path);
+
+/**
+ * The scene host rule (§7, step 7; CORE-86): it imports the platform, Three and its listed device modules only, and everything it
+ * reaches through them, types included, is a listed device or support module; never a feature, engine, compose, the UI or an
+ * application service, even by type.
+ */
+function sceneViolations(tree: Tree): string[] {
+  return tree.names.filter(name => name.startsWith("platform/scene/")).flatMap(name => [
+    ...resolvedIn(tree, name).filter(path => !sceneAllowed(path)).map(path => `${name} -> ${path}`),
+    ...[...reachIn(tree, name)].filter(path => !(sceneAllowed(path) || SCENE_SUPPORT_MODULES.has(path)) || SCENE_UNREACHABLE.test(path))
+      .map(path => `${name} ->* ${path}`),
+  ]);
+}
 
 test("the scene host imports the platform, Three and its listed device modules only; never a feature, engine, compose or the UI", () => {
-  const scene = walk("platform/scene");
-  const violations = scene.flatMap(name => resolved(name).filter(path => !(
-    path.startsWith("platform/") || path === "three" || path.startsWith("three/addons/") || SCENE_DEVICE_MODULES.has(path)))
-    .map(path => `${name} -> ${path}`));
-  expect(violations).toEqual([]);
+  expect(sceneViolations(DISK)).toEqual([]);
+  // The lists name modules that exist and are none of the unreachable kinds.
+  for (const name of [...SCENE_DEVICE_MODULES, ...SCENE_SUPPORT_MODULES]) {
+    expect(DISK.names, name).toContain(name);
+    expect(name).not.toMatch(SCENE_UNREACHABLE);
+  }
+  // Each support module is still reached (the list only shrinks as modules move under platform/scene).
+  const reached = new Set(walk("platform/scene").flatMap(name => [...reachIn(DISK, name)]));
+  expect([...SCENE_SUPPORT_MODULES].filter(name => !reached.has(name))).toEqual([]);
 });
 
 /** Pure shared helpers any engine or feature core may use. */
 const PURE_HELPERS = new Set(["read-only", "validation-issues"]);
-/** The scene's shared material modules an engine renderer may build on (they move to `platform/scene` with step 7). */
+/** The scene's shared material modules an engine renderer may build on (they move under `platform/scene` in step 9). */
 const SCENE_MATERIALS = new Set(["skin", "skin-material", "face-decal-material", "linear-display"]);
+/** What those materials build on in turn, reached only through them: record types, template priorities and the display's grading (CORE-86). */
+const SCENE_MATERIAL_SUPPORT = new Set(["render-detail", "render-templates", "grading-lut", "creator-lighting", "red-json", "depot-path",
+  "archive-precedence", "resolution-evidence"]);
+/** What a renderer (an engine's or a feature's `render/`) may reach beyond its feature's core: the port, engines, Three and the scene's materials. */
+const rendererMayReach = (path: string) => path.startsWith("platform/api/") || path.startsWith("engines/") || path === "three" ||
+  path.startsWith("three/addons/") || PURE_HELPERS.has(path) || SCENE_MATERIALS.has(path) || SCENE_MATERIAL_SUPPORT.has(path);
 const isRenderer = (name: string) => /^(?:engines|features)\/[\w-]+\/render\//.test(name);
 const isView = (name: string) => /^features\/[\w-]+\/view\//.test(name);
 /** Platform internals no feature reaches, even through other modules: only `platform/api` is a feature's. */
@@ -265,7 +325,8 @@ function engineViolations(tree: Tree): string[] {
     const render = isRenderer(name);
     const direct = resolvedIn(tree, name).filter(path => !(path.startsWith("engines/") || path.startsWith("platform/api") ||
       PURE_HELPERS.has(path) || render && (path === "three" || SCENE_MATERIALS.has(path)))).map(path => `${name} -> ${path}`);
-    if (render) return direct;
+    // A renderer reaches only engines, the port, Three and the scene's materials, types included (CORE-86).
+    if (render) return [...direct, ...[...reachIn(tree, name)].filter(path => !rendererMayReach(path)).map(path => `${name} ->* ${path}`)];
     const reached = [...reachIn(tree, name)].filter(path => isRenderer(path) || /^three(?:\/|$)/.test(path)).map(path => `${name} ->* ${path}`);
     return [...direct, ...reached, ...pageGlobals(tree.text(name)).map(global => `${name} reads ${global}`)];
   });
@@ -341,17 +402,57 @@ test("a feature's core imports only its allowlist, and the legacy list only shri
   expect(reach("features/eye-makeup/index")).not.toContain("platform/core/look-history");
 });
 
+/**
+ * The feature renderer rule (§5, step 7; CORE-86): a feature's `render/` imports only `platform/api`, engines, Three and its own
+ * feature's core, and what it reaches beyond what its core reaches (the core has its own rules) is only the port, engines, Three and the
+ * scene's materials, types included: never `platform/scene`, a device, an application service or another feature.
+ */
+function rendererViolations(tree: Tree): string[] {
+  return tree.names.filter(name => /^features\/[\w-]+\/render\//.test(name)).flatMap(name => {
+    const own = name.split("/").slice(0, 2).join("/");
+    const ownCore = (path: string) => (path === own || path.startsWith(`${own}/`)) && !/\/(?:view|render|export|verify)(?:\/|$)/.test(path.slice(own.length));
+    const direct = resolvedIn(tree, name).filter(path => !(path.startsWith("platform/api/") || path.startsWith("engines/") || path === "three" ||
+      ownCore(path) || path.startsWith(`${own}/render/`))).map(path => `${name} -> ${path}`);
+    const core = new Set(tree.names.filter(ownCore).flatMap(module => [module, ...reachIn(tree, module)]));
+    const reached = [...reachIn(tree, name)].filter(path => !core.has(path) && !path.startsWith(`${own}/render/`) && !rendererMayReach(path))
+      .map(path => `${name} ->* ${path}`);
+    return [...direct, ...reached];
+  });
+}
+
 test("a feature renderer reaches the scene only through the scene port: platform/api, engines, Three and its own core", () => {
   const renderers = walk("features").filter(name => /^features\/[\w-]+\/render\//.test(name));
   expect(renderers).toContain("features/eye-makeup/render/index");
-  const violations = renderers.flatMap(name => {
-    const own = name.split("/").slice(0, 2).join("/");
-    return resolved(name).filter(path => !(path.startsWith("platform/api/") || path.startsWith("engines/") || path === "three" ||
-      path === own || path.startsWith(`${own}/`) && !path.startsWith(`${own}/view`))).map(path => `${name} -> ${path}`);
-  });
-  expect(violations).toEqual([]);
-  // In particular never the host's internals.
-  for (const name of renderers) expect(resolved(name).filter(path => path.startsWith("platform/scene"))).toEqual([]);
+  expect(rendererViolations(DISK)).toEqual([]);
+  // In particular never the host's internals, even through other modules.
+  for (const name of renderers) expect([...reachIn(DISK, name)].filter(path => path.startsWith("platform/scene"))).toEqual([]);
+});
+
+test("the scene host and feature renderer rules fail on injected transitive leaks, and platform/api names Three by type only (CORE-86, CORE-88)", () => {
+  // A device module the host builds on reaches an application service, and a scene material reaches an engine, by type only.
+  const scene = sceneViolations(probed({
+    "head-camera-input": `import type { StudioAction as __Probe } from "./studio-application";`,
+    "skin-material": `import type { Layer as __Probe } from "./engines/layered-makeup/recipe";`,
+  }));
+  expect(scene).toContain("platform/scene/scene-host ->* studio-application");
+  expect(scene).toContain("platform/scene/character-renderer ->* engines/layered-makeup/recipe");
+  expect(scene).not.toContain("platform/scene/scene-host -> studio-application");
+  // A new direct import outside the lists.
+  expect(sceneViolations(probed({ "platform/scene/head-rig": `import type { AuthoringDocument as __Probe } from "../../authoring-document";` })))
+    .toContain("platform/scene/head-rig -> authoring-document");
+  // A scene material eye makeup's renderer builds on reaches the authoring core; an engine renderer reaches the host.
+  const renderer = rendererViolations(probed({ "skin-material": `import type { AuthoringDocument as __Probe } from "./authoring-document";` }));
+  expect(renderer).toContain("features/eye-makeup/render/index ->* authoring-document");
+  const engine = [...engineViolations(probed({ "engines/layered-makeup/render/plate-blend": `import type { HeadRig as __Probe } from "../../../platform/scene/head-rig";` })),
+    ...rendererViolations(probed({ "engines/layered-makeup/render/plate-blend": `import type { HeadRig as __Probe } from "../../../platform/scene/head-rig";` }))];
+  expect(engine).toContain("engines/layered-makeup/render/plate-blend -> platform/scene/head-rig");
+  expect(engine).toContain("engines/layered-makeup/render/makeup-stack ->* platform/scene/head-rig");
+  expect(engine).toContain("features/eye-makeup/render/index ->* platform/scene/head-rig");
+  // CORE-88: a value import of Three in the scene port, and the api index re-exporting it.
+  const platform = platformViolations(probed({ "platform/api/scene": `import * as __THREE from "three";`,
+    "platform/api/index": `export * from "./scene";` }));
+  expect(platform).toContain("platform/api/scene -> three (value)");
+  expect(platform).toContain("platform/api/index re-exports platform/api/scene");
 });
 
 test("engines import no feature, UI, composition or platform internals; only their render/ uses Three (CORE-78)", () => {
@@ -381,6 +482,11 @@ test("the engine and feature rules fail on the review's probes (CORE-77, CORE-78
   for (const violation of ["features/eye-makeup/core -> raster-client", "features/eye-makeup/core -> authoring-document",
     "features/eye-makeup/core -> three", "features/eye-makeup/core ->* three", "features/eye-makeup/core reads document.",
     "features/eye-makeup/core ->* platform/core/look-history"]) expect(feature).toContain(violation);
+  // CORE-87: a template-literal import reaches a device; a computed one could load anything.
+  const hidden = featureViolations(probed({ "features/eye-makeup/core": [
+    "export const __probeT = () => import(`../../raster-client`);", "export const __probeC = (name: string) => import(name);"].join("\n") }));
+  expect(hidden).toContain("features/eye-makeup/core -> raster-client");
+  expect(hidden).toContain(`features/eye-makeup/core -> ${COMPUTED}`);
   // The leak the review found: a legacy module that reaches the look history through editor-actions, even by type.
   const leak = featureViolations(probed({ "history-labels": `import type { HistoryEntryId as __Probe } from "./editor-actions";` }));
   expect(leak).toContain("features/eye-makeup/index ->* platform/core/look-history");

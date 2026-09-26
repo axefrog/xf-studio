@@ -2,10 +2,10 @@ import type { CameraState } from "./workspace-state";
 import type { UVSelectionVisibility, UVView } from "./uv-view";
 import type { StudioApplication } from "./studio-application";
 import type { StudioContextHit } from "./studio-context-targets";
-import { NO_MODIFIERS, type EditorInputState, type HeldModifiers } from "./input-bindings";
+import { NO_MODIFIERS, type EditorInputState, type HeldModifiers, type UVViewCommand } from "./input-bindings";
 
+export type { UVViewCommand };
 export type ViewportHostKind = "head" | "uv";
-export type UVViewCommand = "both" | "single" | "other" | "fit";
 /** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
 export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
 import { visibleViewportSize, type ViewportSize } from "./viewport-size";
