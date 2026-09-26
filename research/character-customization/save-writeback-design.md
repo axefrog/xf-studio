@@ -222,3 +222,6 @@ Per the [architecture contract](../authoring/architecture-contract.md):
 ## Related
 
 [CC controls and presets backlog](../backlog/cc-controls-and-presets.md) · [Save import](../eye-artistry/save-import.md) · [CC file chain](../../knowledge/cc-file-chain.md#7-how-a-save-stores-cc-choices) · [Photo mode and the creator](../../knowledge/photo-mode.md#33-what-confirm-and-back-do) · [Runtime bridge design](../runtime/runtime-bridge-design.md) · [Choice icons design](choice-icons-design.md)
+
+**Provisional decisions (coordinator, 27 September 2026, for the maintainer's review):** apply-in-game is the first way to write a look; voice (brain gender) stays as saved and isn't offered; offline-written saves default to the next `ManualSave-<n>` beside the original and never replace it.
+
