@@ -5,7 +5,9 @@ import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
-import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, windowsProcessRunning } from "../src/mod-install-host";
+import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
+  windowsRunningApps } from "../src/mod-install-host";
+import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
@@ -58,6 +60,11 @@ export type DesktopHostOptions = {
    * preset's decode start this file. Absent (tests, running from source): the source file next to the reader.
    */
   nativeDecodeWorker?: string;
+  /**
+   * Where install receipts live: the app passes the per-user folder it shares with localhost (host-state.ts
+   * `machineInstallReceiptsRoot`, INSTALL-04). Absent (tests): `<data>/install-receipts`, so a test never touches the real one.
+   */
+  installReceipts?: string;
 };
 
 /**
@@ -82,6 +89,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
+  // A verification workspace (?verify) edits its own copy of the settings, starting from these, and never adds a mod (UI-98).
+  const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => settingsStore.load().settings });
   const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
@@ -116,14 +125,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     catch { return false; }
   };
   // The settings view passes effective settings: its own path, or XF Studio's WolvenKit.
-  const localSettings = createLocalSettingsHandler(settingsStore, {},
-    settings => {
-      const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes);
-      return { updater: false, installer: true, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
-        wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
-        eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
-        frameworks: hostFrameworkCheck(settings) };
-    }, () => wolvenKit.managedExecutable());
+  const settingsFeatures = (settings: LocalSettings) => {
+    const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes);
+    return { updater: false, installer: true, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
+      wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
+      eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
+      frameworks: hostFrameworkCheck(settings) };
+  };
+  const localSettings = createLocalSettingsHandler(settingsStore, {}, settingsFeatures, () => wolvenKit.managedExecutable());
+  const verificationLocalSettings = createLocalSettingsHandler(verificationSettings, {}, settingsFeatures, () => wolvenKit.managedExecutable());
   const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
   const token = randomBytes(32).toString("hex");
@@ -165,15 +175,21 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   });
   // "Add to my mod manager" (UI-82): a verified build into the MO2 profile or game folder Game & tools names, only after the person
   // accepted its plan; an update restart waits for it (the work activity).
-  const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ candidateStore: resolve(dataRoot, "package-candidates"),
-    receiptsRoot: installReceiptsRoot(dataRoot), settings: () => settingsStore.load().settings,
-    mo2Running: () => windowsProcessRunning("ModOrganizer.exe"), frameworkMods: settings => profileFrameworkMods(settings),
-    reveal: hostOptions.revealPath,
-    transaction: work => {
+  // Receipts are per user on this computer, shared with localhost (INSTALL-04); the app's own earlier folder is taken over.
+  const receiptsRoot = resolve(hostOptions.installReceipts ?? installReceiptsRoot(dataRoot));
+  const installPorts = { candidateStore: resolve(dataRoot, "package-candidates"), running: () => windowsRunningApps(), ansiCodePage: systemAnsiCodePage,
+    frameworkMods: (settings: LocalSettings) => profileFrameworkMods(settings), reveal: hostOptions.revealPath };
+  const installLog = (code: string, message: string, error: unknown) => { hostFailure("install", code, message, error); };
+  const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ ...installPorts, receiptsRoot,
+    legacyReceiptsRoots: receiptsRoot === installReceiptsRoot(dataRoot) ? [] : [installReceiptsRoot(dataRoot)],
+    settings: () => settingsStore.load().settings,
+    transaction: async work => {
       const end = activity.begin("install");
       if (!end) throw new ModInstallError("install_unavailable", "An update restart is being prepared. Let it finish, then try again.");
-      try { return work(); } finally { end(); }
-    } }), (code, message, error) => { hostFailure("install", code, message, error); });
+      try { return await work(); } finally { end(); }
+    } }), installLog);
+  const verificationModInstallRequest = createModInstallHandler(() => new ModInstallHost({ ...installPorts,
+    receiptsRoot: verificationInstallReceipts(dataRoot), settings: () => verificationSettings.load().settings, readOnly: READ_ONLY_VERIFICATION }), installLog);
   const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
@@ -278,7 +294,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: logTo("package"),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
+      if (url.pathname === "/api/verification/local-settings") return verificationLocalSettings(routedRequest);
       if (url.pathname === "/api/mod-install") return modInstallRequest(routedRequest);
+      if (url.pathname === "/api/verification/mod-install") return verificationModInstallRequest(routedRequest);
       if (url.pathname === "/api/desktop/pick-folder") {
         // A native folder picker for Game & tools (UI-83); the host returns only the folder the person chose.
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });

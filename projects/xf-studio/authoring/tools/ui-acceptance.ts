@@ -1,8 +1,9 @@
 /**
  * Isolated acceptance pass for the XF Studio presentation.
  *   bun tools/ui-acceptance.ts [--build]
- * Uses ?verify=1 (separate browser workspace key and /api/verification library), a
- * disposable XFAS_DATA_DIR and a throwaway Chrome profile. Never touches the working draft.
+ * Uses ?verify=1 (separate browser workspace key, /api/verification library and settings), a
+ * disposable XFAS_DATA_DIR (its own settings and install receipts; it never adds a mod) and a
+ * throwaway Chrome profile. Never touches the working draft or the real settings.
  * Full screenshots go to evidence/screenshots/ (ignored); asset-free masked copies
  * go to evidence/ui-overhaul-2026-09-24/ for review.
  */

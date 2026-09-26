@@ -41,17 +41,36 @@ export const FRAMEWORK_SECTION_NAME =
 const SEPARATOR = /_separator$/i;
 
 type Row = { index: number; name: string; prefix: string } | null;
+/**
+ * The file's rows exactly as written: each line's text (trailing spaces kept) and its own line ending (CRLF, LF, or none for a
+ * last line without one), so a rewrite changes only the row it adds or switches on (INSTALL-05). A BOM is kept aside.
+ */
+function lines(text: string) {
+  const bom = text.startsWith("\uFEFF") ? "\uFEFF" : "";
+  const body = text.slice(bom.length);
+  const rows: string[] = [], endings: string[] = [];
+  const breaks = /\r?\n/g;
+  let start = 0, match: RegExpExecArray | null;
+  while ((match = breaks.exec(body))) { rows.push(body.slice(start, match.index)); endings.push(match[0]); start = match.index + match[0].length; }
+  if (start < body.length) { rows.push(body.slice(start)); endings.push(""); }
+  return { bom, rows, endings };
+}
 function rows(text: string) {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  if (lines.length && lines.at(-1) === "") lines.pop();
-  const parsed: Row[] = lines.map((raw, index) => {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) return null;
-    const prefix = ["+", "-", "*"].includes(line[0]!) ? line[0]! : "";
-    const name = (prefix ? line.slice(1) : line).trim();
+  const { rows: raw } = lines(text);
+  const parsed: Row[] = raw.map((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return null;
+    const prefix = ["+", "-", "*"].includes(trimmed[0]!) ? trimmed[0]! : "";
+    const name = (prefix ? trimmed.slice(1) : trimmed).trim();
     return name ? { index, name, prefix } : null;
   });
-  return { lines, parsed };
+  return { lines: raw, parsed };
+}
+/** A mod's row in a mod list: "+" on, "-" off, null when it isn't listed (separators and `*` rows count as listed as written). */
+export function mo2ModlistEntry(text: string, modName: string): "+" | "-" | null {
+  for (const row of rows(text).parsed) if (row && row.name.toLowerCase() === modName.toLowerCase())
+    return row.prefix === "-" ? "-" : "+";
+  return null;
 }
 const displayName = (separator: string) => separator.replace(SEPARATOR, "");
 
@@ -102,20 +121,29 @@ export function planMo2Placement(text: string, modName: string, options: Mo2Plac
       "Every section in this profile holds frameworks, so you may want to move it." };
 }
 
-/** Add (or, for an existing row, only enable/disable) the placed mod; every other row is unchanged. */
+/**
+ * Add (or, for an existing row, only enable/disable) the placed mod; every other row is unchanged, byte for byte in the text: its
+ * line ending, trailing spaces and the BOM stay as they were. The added row takes the line ending of the row it goes above (the
+ * file's usual one at the end).
+ */
 export function applyMo2Placement(text: string, placement: Mo2Placement, enabled = true): string {
-  const newline = text.includes("\r\n") ? "\r\n" : "\n";
-  const bom = text.startsWith("﻿") ? "﻿" : "";
-  const { lines } = rows(text);
-  const entry = `${enabled ? "+" : "-"}${placement.modName}`;
+  const { bom, rows: list, endings } = lines(text);
+  const crlf = endings.filter(ending => ending === "\r\n").length, lf = endings.filter(ending => ending === "\n").length;
+  const usual = crlf >= lf && crlf > 0 ? "\r\n" : "\n";
+  const sign = enabled ? "+" : "-";
   if (placement.rule === "existing") {
-    const current = lines[placement.row]?.trim() ?? "";
-    const name = ["+", "-"].includes(current[0] ?? "") ? current.slice(1).trim() : current;
+    const current = list[placement.row] ?? "";
+    const start = current.length - current.trimStart().length, trimmed = current.trim();
+    const prefixed = ["+", "-"].includes(trimmed[0] ?? "");
+    const name = prefixed ? trimmed.slice(1).trim() : trimmed;
     if (name.toLowerCase() !== placement.modName.toLowerCase()) throw Error("Placement no longer matches the modlist.");
-    lines[placement.row] = `${enabled ? "+" : "-"}${name}`;
+    list[placement.row] = current.slice(0, start) + sign + current.slice(start + (prefixed ? 1 : 0));
   } else {
-    if (placement.row < 0 || placement.row > lines.length) throw Error("Placement no longer matches the modlist.");
-    lines.splice(placement.row, 0, entry);
+    if (placement.row < 0 || placement.row > list.length) throw Error("Placement no longer matches the modlist.");
+    let ending = endings[placement.row] || usual;
+    if (placement.row === list.length && list.length && !endings.at(-1)) { endings[list.length - 1] = usual; ending = ""; }
+    list.splice(placement.row, 0, `${sign}${placement.modName}`);
+    endings.splice(placement.row, 0, ending);
   }
-  return bom + lines.join(newline) + newline;
+  return bom + list.map((line, index) => line + endings[index]).join("");
 }

@@ -136,7 +136,7 @@ test("interrupted paired swap is restored from a journal and verified backups", 
       names: next.map((x: {path: string}) => x.path.split("/").at(-1)), next, prior, backup,
     }));
     writeFileSync(join(f.target, "xfs_test.archive"), "two-0");
-    expect(f.transport.recover()).toEqual({ recovered: true, conflicts: [] });
+    expect(f.transport.recover()).toEqual({ recovered: true, conflicts: [], direction: "back" });
     expect(readFileSync(join(f.target, "xfs_test.archive"), "utf8")).toBe("one-0");
     expect(readFileSync(join(f.target, "xfs_test.archive.xl"), "utf8")).toBe("one-1");
   } finally { f.cleanup(); }
@@ -332,5 +332,104 @@ test("declared resources: what an ArchiveXL declaration registers, and installed
       place("Other looks", "customizations:\r\n  female: q\\r.inkcharcustomization\r\n"), { label: "Missing", folder: join(f.root, "none") }];
     expect(installedDuplicates("customizations:\r\n  female: a\\b.inkcharcustomization\r\n", places)).toEqual(["Same looks"]);
     expect(installedDuplicates("candidate-1", places)).toEqual([]);
+  } finally { f.cleanup(); }
+});
+
+/** An update interrupted after `done` of its two renames: the journal a real install leaves (with the receipt it was about to write). */
+function interrupt(f: ReturnType<typeof fixture>, next: string, done: 0 | 1 | 2) {
+  const prior = f.transport.receipt()!;
+  const backup = join(f.receiptsRoot, `${prior.targetId}-test-backup`); mkdirSync(backup);
+  for (const entry of prior.files) writeFileSync(join(backup, entry.path.split("/").at(-1)!), readFileSync(join(f.target, entry.path.split("/").at(-1)!)));
+  const files = JSON.parse(readFileSync(join(f.store, next, "manifest.json"), "utf8")).files as { path: string }[];
+  const pending = { ...prior, candidateId: next, files, installedAt: new Date().toISOString(), rollback: { prior: { ...prior, rollback: null }, backup } };
+  writeFileSync(join(f.receiptsRoot, `${prior.targetId}.journal.json`), JSON.stringify({ schema: "xfs/install-journal-1", targetId: prior.targetId,
+    target: prior.target, names: files.map(x => x.path.split("/").at(-1)), next: files, prior, backup, pending }));
+  for (const entry of files.slice(0, done)) writeFileSync(join(f.target, entry.path.split("/").at(-1)!), readFileSync(join(f.store, next, ...entry.path.split("/"))));
+}
+
+test("recovery follows the journal: finished when every new file is in place, undone when only some are, forgotten when all are gone (INSTALL-02)", () => {
+  for (const [done, direction, archive, owner] of [[2, "forward", "two-0", "second"], [1, "back", "one-0", "first"]] as const) {
+    const f = fixture("direct");
+    try {
+      f.candidate("first", "one"); f.candidate("second", "two");
+      f.transport.install("first");
+      interrupt(f, "second", done);
+      expect(f.transport.pending()).toBe(true);
+      expect(() => f.transport.preflight("second")).toThrow("interrupted install needs recovery");
+      expect(f.transport.recover()).toEqual({ recovered: true, conflicts: [], direction });
+      expect(f.transport.pending()).toBe(false);
+      expect(readFileSync(join(f.target, "xfs_test.archive"), "utf8")).toBe(archive);
+      expect(f.transport.receipt()!.candidateId).toBe(owner);
+    } finally { f.cleanup(); }
+  }
+  const g = fixture("direct");
+  try {
+    g.candidate("first", "one"); g.candidate("second", "two");
+    g.transport.install("first");
+    interrupt(g, "second", 1);
+    for (const name of ["xfs_test.archive", "xfs_test.archive.xl"]) rmSync(join(g.target, name));
+    expect(g.transport.recover()).toEqual({ recovered: true, conflicts: [], direction: "cleared" });
+    expect(g.transport.record()).toBeNull();
+    expect(g.transport.preflight("second").replacingOwned).toBe(false);
+  } finally { g.cleanup(); }
+});
+
+test("a recorded install whose files are gone is installed afresh, but a file XF Studio didn't put there still refuses (INSTALL-03)", () => {
+  const f = fixture("mo2");
+  try {
+    f.candidate("first", "one"); f.candidate("second", "two");
+    f.transport.install("first");
+    const folder = join(f.mo2, "mods", EYE_MAKEUP_MOD.modName);
+    // Removed in MO2: the whole folder goes.
+    rmSync(folder, { recursive: true });
+    expect(f.transport.preflight("second")).toMatchObject({ replacingOwned: false, reinstalling: true });
+    expect(f.transport.install("second").rollback).toBeNull();
+    // One file deleted by hand, MO2's meta.ini beside it: the other file is still ours (by hash) and is replaced.
+    writeFileSync(join(folder, "meta.ini"), "[General]\n");
+    rmSync(join(f.target, "xfs_test.archive"));
+    expect(f.transport.preflight("first")).toMatchObject({ replacingOwned: false, reinstalling: true });
+    // A file of that name someone else put there is never replaced.
+    writeFileSync(join(f.target, "xfs_test.archive"), "someone else's");
+    expect(() => f.transport.preflight("first")).toThrow("unowned or changed");
+    rmSync(join(f.target, "xfs_test.archive"));
+    writeFileSync(join(f.target, "xfs_test.archive.xl"), "edited");
+    expect(() => f.transport.preflight("first")).toThrow("unowned or changed");
+    // Other files in a folder whose install is gone make it someone else's.
+    rmSync(join(f.target, "xfs_test.archive.xl"));
+    writeFileSync(join(folder, "readme.txt"), "a mod someone else put here");
+    expect(() => f.transport.preflight("first")).toThrow("didn't put there");
+  } finally { f.cleanup(); }
+});
+
+test("a first install that fails before any file is in place leaves no empty mod folder behind (INSTALL-09)", () => {
+  const f = fixture("mo2");
+  try {
+    f.candidate("first", "one");
+    const failing = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings,
+      afterStaging: () => { throw Error("disk full"); } });
+    expect(() => failing.install("first")).toThrow("disk full");
+    expect(existsSync(join(f.mo2, "mods", EYE_MAKEUP_MOD.modName))).toBe(false);
+    expect(readdirSync(join(f.mo2, "mods"))).toEqual([]);
+    // Folders that were already there stay.
+    mkdirSync(join(f.mo2, "mods", EYE_MAKEUP_MOD.modName, "archive"), { recursive: true });
+    expect(() => failing.install("first")).toThrow("disk full");
+    expect(readdirSync(join(f.mo2, "mods", EYE_MAKEUP_MOD.modName))).toEqual(["archive"]);
+  } finally { f.cleanup(); }
+});
+
+test("a receipt from another receipts folder is adopted once, without its rollback, and set aside there (INSTALL-04)", () => {
+  const f = fixture("direct");
+  try {
+    f.candidate("first", "one");
+    const earlier = f.transport.install("first");
+    const shared = createModInstallTransport({ candidateStore: f.store, receiptsRoot: join(f.root, "shared"), settings: f.settings });
+    expect(shared.record()).toBeNull();
+    expect(shared.adopt(f.transport.record()!)).toBe(true);
+    f.transport.retire();
+    expect(shared.receipt()).toMatchObject({ candidateId: "first", installedAt: earlier.installedAt, rollback: null });
+    expect(f.transport.record()).toBeNull();
+    expect(readdirSync(f.receiptsRoot).some(name => name.includes(".json.adopted-"))).toBe(true);
+    expect(shared.adopt(earlier)).toBe(false);
+    expect(shared.preflight("first").replacingOwned).toBe(true);
   } finally { f.cleanup(); }
 });

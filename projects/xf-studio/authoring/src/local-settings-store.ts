@@ -14,19 +14,29 @@ export function localSettingsDirectory(platform = process.platform, env = proces
 }
 
 export type SettingsLoad = { settings: LocalSettings; source: "new" | "primary" | "backup"; migrated: boolean };
+export type LocalSettingsStoreOptions = {
+  /**
+   * Where a store with no file of its own starts from, read only: a verification workspace's store starts from the host's settings
+   * and keeps every change to itself, so a test never changes where the person's next build or install goes (INSTALL-01, UI-98).
+   */
+  seed?: () => LocalSettings;
+};
 export class LocalSettingsStore {
   readonly file: string;
   readonly backup: string;
 
-  constructor(directory = localSettingsDirectory()) {
+  constructor(directory = localSettingsDirectory(), private readonly options: LocalSettingsStoreOptions = {}) {
     if (!isAbsolute(directory)) throw Error("Settings directory must be absolute.");
     this.file = join(resolve(directory), "settings.json");
     this.backup = `${this.file}.previous`;
   }
 
   load(): SettingsLoad {
-    if (!existsSync(this.file) && !existsSync(this.backup))
-      return { settings: defaultLocalSettings(), source: "new", migrated: false };
+    if (!existsSync(this.file) && !existsSync(this.backup)) {
+      let settings = defaultLocalSettings();
+      if (this.options.seed) try { settings = this.options.seed(); } catch { /* An unreadable seed starts from the defaults. */ }
+      return { settings, source: "new", migrated: false };
+    }
     for (const [file, source] of [[this.file, "primary"], [this.backup, "backup"]] as const) {
       if (!existsSync(file)) continue;
       try {

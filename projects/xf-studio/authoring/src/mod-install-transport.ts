@@ -4,7 +4,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
-  readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
+  readdirSync, readFileSync, readSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { LocalSettings } from "./local-settings";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
@@ -25,15 +25,23 @@ export type InstallReceipt = { schema: typeof schema; targetId: string; route: I
   features?: { feature: string; namespace: string }[];
   rollback: null | { prior: InstallReceipt; backup: string } };
 type Journal = { schema: "xfs/install-journal-1"; targetId: string; target: string;
-  names: string[]; next: FileEntry[]; prior: InstallReceipt | null; backup: string | null };
+  names: string[]; next: FileEntry[]; prior: InstallReceipt | null; backup: string | null;
+  /** The receipt a completed install writes; with it, recovery finishes an install whose files are all in place (INSTALL-02). */
+  pending?: InstallReceipt };
+/** What recovery did: finished the interrupted install, undid it, or (its files all gone) only forgot it. */
+export type RecoveryResult = { recovered: boolean; conflicts: string[]; direction?: "forward" | "back" | "cleared" };
 export type InstallTransportConfig = { candidateStore: string; receiptsRoot: string; settings: LocalSettings;
   /**
    * The mod this transport places (its MO2 folder): the product's mod name as its manifest records it, so a renamed mod
    * can be placed (PIPE-90); defaults to eye makeup's brand. A candidate of another mod is refused.
    */
-  modName?: string };
+  modName?: string;
+  /** Test seam: runs once the payload is staged, before the journal (a test makes an install fail there). */
+  afterStaging?: () => void };
 export type InstallPreview = { route: InstallRoute; target: string; candidateId: string;
-  files: FileEntry[]; replacingOwned: boolean; activation: string };
+  files: FileEntry[]; replacingOwned: boolean; activation: string;
+  /** An earlier install was recorded but its files are gone (removed in the mod manager or by hand): installed afresh (INSTALL-03). */
+  reinstalling: boolean };
 
 const hash = (file: string) => {
   const digest = createHash("sha256"), fd = openSync(file, "r"), chunk = Buffer.allocUnsafe(1024 * 1024);
@@ -156,13 +164,31 @@ function targetFor(settings: LocalSettings, modName: string): Target {
     activation: `Enable the dedicated ${modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
 }
 
-/** Whether a folder holds any file below it (links are not followed). */
-function holdsFiles(folder: string): boolean {
+/**
+ * Whether a folder holds any file below it (links are not followed), leaving out `ignored` (lower-case absolute paths). MO2
+ * writes its own `meta.ini` into every mod folder it lists, including an empty one an interrupted first install left.
+ */
+function holdsFiles(folder: string, ignored: ReadonlySet<string> = new Set(), top = true): boolean {
   for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name);
+    if (ignored.has(path.toLowerCase()) || (top && entry.isFile() && entry.name.toLowerCase() === "meta.ini")) continue;
     if (!entry.isDirectory() || entry.isSymbolicLink()) return true;
-    if (holdsFiles(join(folder, entry.name))) return true;
+    if (holdsFiles(path, ignored, false)) return true;
   }
   return false;
+}
+
+/** The folders `mkdirSync(path, { recursive: true })` would create, outermost first. */
+function missingFolders(path: string): string[] {
+  const missing: string[] = [];
+  let cursor = resolve(path);
+  while (!existsSync(cursor)) {
+    missing.unshift(cursor);
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  return missing;
 }
 
 /**
@@ -188,18 +214,28 @@ export function declaredResources(text: string): string[] {
  * receipts of one stage see only that stage.
  */
 export function installedDuplicates(candidateXl: string, places: readonly { label: string; folder: string }[]): string[] {
+  return findInstalledDuplicates(candidateXl, places).map(found => found.place.label);
+}
+
+/** The most `.xl` files read in one place, and the largest read: the scan stays bounded however many mods there are (INSTALL-10). */
+const XL_FILES_PER_PLACE = 64, XL_BYTES = 1_000_000;
+
+/** `installedDuplicates` with the `.archive.xl` file that holds part of the candidate in each place. */
+export function findInstalledDuplicates<P extends { label: string; folder: string }>(candidateXl: string, places: readonly P[],
+  skip: (file: string) => boolean = () => false): { place: P; file: string }[] {
   const ours = new Set(declaredResources(candidateXl));
   if (!ours.size) return [];
-  const found: string[] = [];
-  for (const { label, folder } of places) {
+  const found: { place: P; file: string }[] = [];
+  for (const place of places) {
     let names: string[];
-    try { names = readdirSync(folder).filter(name => name.toLowerCase().endsWith(".xl")); } catch { continue; }
+    try { names = readdirSync(place.folder).filter(name => name.toLowerCase().endsWith(".xl")).sort().slice(0, XL_FILES_PER_PLACE); } catch { continue; }
     for (const name of names) {
-      const file = join(folder, name);
+      const file = join(place.folder, name);
+      if (skip(file)) continue;
       try {
         const stat = lstatSync(file);
-        if (!stat.isFile() || stat.size > 1_000_000) continue;
-        if (declaredResources(readFileSync(file, "utf8")).some(entry => ours.has(entry))) { found.push(label); break; }
+        if (!stat.isFile() || stat.size > XL_BYTES) continue;
+        if (declaredResources(readFileSync(file, "utf8")).some(entry => ours.has(entry))) { found.push({ place, file }); break; }
       } catch { /* An unreadable file of another mod is not ours to judge. */ }
     }
   }
@@ -256,6 +292,16 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     if (receipt) assert(validReceipt(receipt), "Install receipt target or files mismatch.");
     return receipt;
   };
+  /**
+   * The recorded install: `live` while every file it names is present (checked by hash before any change), `gone` once one
+   * is missing, as after removing the mod in MO2 or deleting its files. A gone install is treated as uninstalled: the next
+   * install is a fresh one, and a file of it still present is replaced only while it is exactly the one recorded (INSTALL-03).
+   */
+  const recorded = (): { live: InstallReceipt | null; gone: InstallReceipt | null } => {
+    const receipt = owned();
+    if (!receipt) return { live: null, gone: null };
+    return receipt.files.every(entry => existsSync(destination(entry))) ? { live: receipt, gone: null } : { live: null, gone: receipt };
+  };
   const lockedByLiveProcess = () => {
     let owner: { pid?: number; started?: number };
     try { owner = JSON.parse(readFileSync(lockFile, "utf8")); }
@@ -278,33 +324,41 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     try { return work(); } finally { closeSync(fd); rmSync(lockFile); }
   };
   const destination = (entry: FileEntry) => join(target.target, basename(entry.path));
-  const checkCurrent = (receipt: InstallReceipt | null, files: FileEntry[]) => {
+  /**
+   * Every file of `files` present at its destination must be the one `receipt` (the live install) or `gone` (a recorded install
+   * whose files are partly gone) says XF Studio put there; a live install's files must all be present.
+   */
+  const checkCurrent = (receipt: InstallReceipt | null, files: FileEntry[], gone: InstallReceipt | null = null) => {
     const previous = new Map(receipt?.files.map(file => [basename(file.path), file]));
+    const forgotten = new Map(gone?.files.map(file => [basename(file.path), file]));
     if (receipt && receipt.namespace !== basename(files[0].path, ".archive"))
       throw Error("Changing the installed namespace requires uninstalling the owned pair first.");
     for (const entry of files) {
-      const file = destination(entry), old = previous.get(basename(entry.path));
+      const file = destination(entry), old = previous.get(basename(entry.path)) ?? forgotten.get(basename(entry.path));
       noLinks(file);
       if (existsSync(file)) {
         assert(old && regular(file).size === old.bytes && hash(file) === old.sha256,
           `Existing file is unowned or changed: ${file}`);
-      } else assert(!old, `Owned installed file is missing: ${file}`);
+      } else assert(!previous.get(basename(entry.path)), `Owned installed file is missing: ${file}`);
     }
   };
   /**
-   * An MO2 folder of this name that XF Studio didn't create (no receipt of ours, and files in it): never written into,
-   * whatever it holds (PIPE-90). An empty tree an interrupted first install left is ours to reuse.
+   * An MO2 folder of this name that XF Studio didn't create (no live install of ours, and files in it): never written into,
+   * whatever it holds (PIPE-90). An empty tree an interrupted first install left (with MO2's `meta.ini`) is ours to reuse, and
+   * so are the files of a recorded install that is partly gone (checked by hash).
    */
-  const foreignFolder = () => !!target.modFolder && existsSync(target.modFolder) && !existsSync(receiptFile) && !existsSync(journalFile) &&
-    holdsFiles(target.modFolder);
+  const foreignFolder = (live: InstallReceipt | null, gone: InstallReceipt | null) => !!target.modFolder && existsSync(target.modFolder) &&
+    !live && !existsSync(journalFile) &&
+    holdsFiles(target.modFolder, new Set((gone?.files ?? []).map(entry => destination(entry).toLowerCase())));
   const preflight = (candidateId: string): InstallPreview => {
     noLinks(journalFile);
     assert(!existsSync(journalFile), "An interrupted install needs recovery before another action.");
-    assert(!foreignFolder(), `Mod Organizer 2 already has a mod called “${modName}” that XF Studio didn't put there, so nothing was ` +
+    const { live: prior, gone } = recorded();
+    assert(!foreignFolder(prior, gone), `Mod Organizer 2 already has a mod called “${modName}” that XF Studio didn't put there, so nothing was ` +
       "installed. Rename your mod in Mod package, or rename that mod in Mod Organizer 2, then try again.");
     assert(!target.legacyInstall, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} install under the legacy ` +
       `folder "${target.legacyInstall}". Roll back or remove that diagnostic mod before installing "${EYE_MAKEUP_MOD.modName}".`);
-    const { manifest } = candidate(candidateId), prior = owned();
+    const { manifest } = candidate(candidateId);
     // A product of another mod belongs in that mod's own folder.
     assert(manifest.schema === "xfs/local-package-1" || manifest.modName === modName,
       `This build is the mod “${manifest.modName}”, but this transfer places “${modName}”. Nothing was installed.`);
@@ -313,14 +367,14 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     const duplicated = duplicatedNamespaces(manifest, elsewhere);
     assert(!duplicated.length, `Part of this build is already installed in another XF mod (${duplicated.join(", ")}). ` +
       "Uninstall that mod first, or build both mods from the same package plan and install them together. Nothing was installed.");
-    checkCurrent(prior, manifest.files);
+    checkCurrent(prior, manifest.files, gone);
     const { legacyInstall: _legacy, ...route } = target;
-    return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior };
+    return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior, reinstalling: !!gone };
   };
-  const recover = (): { recovered: boolean; conflicts: string[] } => withLock(() => {
+  const readJournal = (): Journal | null => {
     noLinks(journalFile);
     const journal = readJson<Journal>(journalFile);
-    if (!journal) return { recovered: false, conflicts: [] };
+    if (!journal) return null;
     assert(journal.schema === "xfs/install-journal-1" && journal.targetId === targetId &&
       journal.target === target.target && validEntries(journal.next,
         basename(journal.next?.[0]?.path ?? "", ".archive")) &&
@@ -328,21 +382,47 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       journal.names.every((name, index) => name === basename(journal.next[index].path)) &&
       ((journal.prior === null && journal.backup === null) ||
         (validReceipt(journal.prior) && typeof journal.backup === "string" &&
-        isAbsolute(journal.backup) && inside(resolve(journal.backup), receipts))),
+        isAbsolute(journal.backup) && inside(resolve(journal.backup), receipts))) &&
+      (journal.pending === undefined || (validReceipt(journal.pending) &&
+        JSON.stringify(journal.pending.files) === JSON.stringify(journal.next))),
       "Install journal target or files mismatch.");
+    return journal;
+  };
+  /**
+   * Finish or undo an interrupted install, following its journal (INSTALL-02):
+   * - **forward** when every new file is already in place and the journal holds the receipt it was about to write;
+   * - **cleared** when none of its files is there any more (removed in the mod manager or by hand): the record is forgotten;
+   * - **back** otherwise: the earlier files come back from their verified backup, and new ones XF Studio added are removed.
+   * A file that is neither the new nor the earlier one is a conflict: nothing is changed and it is named.
+   */
+  const recover = (): RecoveryResult => withLock(() => {
+    const journal = readJournal();
+    if (!journal) return { recovered: false, conflicts: [] };
     if (journal.backup) {
       assert(inside(resolve(journal.backup), receipts), "Journal backup escapes the private receipt root.");
       noLinks(journal.backup); directory(journal.backup);
     }
     const conflicts: string[] = [];
+    const present = new Map<string, string>();
     for (const entry of journal.next) {
       const file = destination(entry), previous = journal.prior?.files.find(p => basename(p.path) === basename(entry.path));
       noLinks(file);
       if (!existsSync(file)) continue;
       const current = hash(file);
+      present.set(file, current);
       if (current !== entry.sha256 && current !== previous?.sha256) conflicts.push(file);
     }
     if (conflicts.length) return { recovered: false, conflicts };
+    if (journal.pending && journal.next.every(entry => present.get(destination(entry)) === entry.sha256)) {
+      atomicJson(receiptFile, journal.pending);
+      rmSync(journalFile);
+      return { recovered: true, conflicts: [], direction: "forward" };
+    }
+    if (!present.size) {
+      if (existsSync(receiptFile)) rmSync(receiptFile);
+      rmSync(journalFile);
+      return { recovered: true, conflicts: [], direction: "cleared" };
+    }
     if (journal.prior && journal.backup) for (const entry of journal.prior.files) {
       const saved = join(journal.backup, basename(entry.path));
       noLinks(saved);
@@ -364,12 +444,15 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     if (journal.prior) atomicJson(receiptFile, journal.prior);
     else if (existsSync(receiptFile)) rmSync(receiptFile);
     rmSync(journalFile);
-    return { recovered: true, conflicts: [] };
+    return { recovered: true, conflicts: [], direction: "back" };
   });
   const install = (candidateId: string): InstallReceipt => withLock(() => {
     const plan = preflight(candidateId);
     const { root, manifest } = candidate(candidateId);
-    const prior = owned();
+    const { live: prior, gone } = recorded();
+    // The folders this install creates are removed again if it fails before any file is in place, so MO2 never lists an
+    // empty mod (INSTALL-09).
+    const created = missingFolders(target.target);
     mkdirSync(target.target, { recursive: true });
     noLinks(target.target);
     const backup = prior ? join(receipts, `${targetId}-${randomUUID()}`) : null;
@@ -392,26 +475,48 @@ export function createModInstallTransport(config: InstallTransportConfig) {
         assert(regular(temp).size === entry.bytes && hash(temp) === entry.sha256, "Staged payload changed.");
         flush(temp);
       }
-      checkCurrent(prior, manifest.files);
-      atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
-        names: manifest.files.map(f => basename(f.path)), next: manifest.files, prior, backup } satisfies Journal);
-      for (let i = 0; i < manifest.files.length; i++) renameSync(staged[i], destination(manifest.files[i]));
-      for (const entry of manifest.files) assert(hash(destination(entry)) === entry.sha256, "Installed payload changed.");
+      config.afterStaging?.();
+      checkCurrent(prior, manifest.files, gone);
       const receipt: InstallReceipt = { schema, targetId, route: target.route, target: target.target,
         candidateId: plan.candidateId, namespace: manifest.namespace, files: manifest.files,
         installedAt: new Date().toISOString(), features: manifest.features.map(({ feature, namespace }) => ({ feature, namespace })),
         rollback: prior && backup ? { prior: { ...prior, rollback: null }, backup } : null };
+      atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
+        names: manifest.files.map(f => basename(f.path)), next: manifest.files, prior, backup, pending: receipt } satisfies Journal);
+      for (let i = 0; i < manifest.files.length; i++) renameSync(staged[i], destination(manifest.files[i]));
+      for (const entry of manifest.files) assert(hash(destination(entry)) === entry.sha256, "Installed payload changed.");
       atomicJson(receiptFile, receipt);
       rmSync(journalFile);
       return receipt;
     } catch (error) {
+      for (const temp of staged) if (existsSync(temp)) rmSync(temp);
       if (existsSync(journalFile)) {
-        // Recovery remains explicit if an external edit or locked file prevents rollback.
-        for (const temp of staged) if (existsSync(temp)) rmSync(temp);
+        // Recovery (on the next plan) finishes or undoes it; a locked or edited file is never forced.
         throw Error(`Install failed; recover the pending transaction before retrying: ${(error as Error).message}`);
+      }
+      if (backup) rmSync(backup, { recursive: true, force: true });
+      for (const folder of created.reverse()) {
+        try { rmdirSync(folder); } catch { break; /* Not empty (or gone): leave it and its parents. */ }
       }
       throw error;
     } finally { for (const temp of staged) if (existsSync(temp)) rmSync(temp); }
+  });
+  /**
+   * Take over a receipt another store recorded for this same target (an earlier per-host receipts folder, INSTALL-04). Only
+   * when this store has no record or journal of its own; the adopted receipt keeps no rollback (its backup stays where it was).
+   */
+  const adopt = (receipt: InstallReceipt): boolean => withLock(() => {
+    noLinks(receiptFile); noLinks(journalFile);
+    if (existsSync(receiptFile) || existsSync(journalFile)) return false;
+    const adopted: InstallReceipt = { ...receipt, rollback: null };
+    if (!validReceipt(adopted)) return false;
+    atomicJson(receiptFile, adopted);
+    return true;
+  });
+  /** Set a receipt this store no longer answers for aside (kept, renamed), after another store adopted it. */
+  const retire = (): void => withLock(() => {
+    noLinks(receiptFile);
+    if (existsSync(receiptFile)) renameSync(receiptFile, `${receiptFile}.adopted-${Date.now()}`);
   });
   const uninstall = (): void => withLock(() => {
     assert(!existsSync(journalFile), "Recover the pending transaction first.");
@@ -473,5 +578,9 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     if (current) checkCurrent(current, current.files);
     return current;
   };
-  return { preflight, install, recover, uninstall, rollback, receipt };
+  /** The recorded receipt as it is, without looking at the installed files (its validity is still checked). */
+  const record = () => owned();
+  /** Whether an interrupted install's journal is waiting for `recover`. */
+  const pending = () => { noLinks(journalFile); return existsSync(journalFile); };
+  return { preflight, install, recover, uninstall, rollback, receipt, record, pending, adopt, retire };
 }

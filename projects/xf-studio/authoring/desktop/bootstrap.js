@@ -239,7 +239,7 @@ welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" ari
 document.body.append(welcome);
 const aboutReadiness = about.querySelector("#desktop-setup-readiness");
 // One settings service and one form (the Studio's Game & tools, UI-03), with the desktop's own folder picker (UI-83).
-const setupActions = createBrowserLocalSetup({ pickFolder: desktopFolderPicker });
+const setupActions = createBrowserLocalSetup({ pickFolder: desktopFolderPicker, verification });
 let setupView;
 function showSetup(view) {
   setupView = view;

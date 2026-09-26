@@ -309,8 +309,12 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const installRow = (product: string) => {
     let row = installRows.get(product);
     if (!row) {
-      const add = button({ label: "Add to my mod manager…", icon: "package", small: true, variant: "primary",
-        onClick: () => { openModInstallSheet(rt, product, { openSetup: showSetup }); } });
+      const add: HTMLButtonElement = button({ label: "Add to my mod manager…", icon: "package", small: true, variant: "primary",
+        onClick: () => { openModInstallSheet(rt, product, { openSetup: showSetup, rename: () => {
+          // A name MO2 or the game folder can't take: rename the mod where its name is set (UI-99).
+          const summary = port.library.summary().products?.find(item => item.id === product);
+          if (summary) renameMod(summary, add);
+        } }); } });
       const show = button({ label: "Show in folder", icon: "folder", small: true, onClick: () => void port.modInstall.dispatch({ kind: "modInstall.reveal", product })
         .then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Mod package", outcome.message, [], { code: outcome.code }); }) });
       const line = h("p", { class: "install-line small", role: "status" });
