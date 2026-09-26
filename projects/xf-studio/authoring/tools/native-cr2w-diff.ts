@@ -25,12 +25,12 @@ import { gradientStops, hairProfileStops, skinProfileValues, templateIdentity, t
 import { refFromHash } from "../src/depot-path";
 import { readSetup, readTemplate } from "../src/layered-setup";
 import { templateDefaults } from "../src/material-template";
+import { tweakDbId } from "../src/tweakdb-flats";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { loadGameOodle } from "../src/native/oodle";
 import { writeResourceJson } from "../src/native/red-json-writer";
 import { NativeUnsupportedError } from "../src/native/red-model";
 import { readResourceModel } from "../src/native/resource-document";
-import { baseClasses, classProperties } from "../src/native/rtti";
 import { cr2wRoot, depotRef, type JsonObject, materialParams } from "../src/red-json";
 import { ResourceGraph } from "../src/resource-graph";
 
@@ -54,8 +54,6 @@ const pool = new NativeArchivePool(oodle.decompress);
 type Doc = { Data: { RootChunk: JsonObject } };
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 
-/** Where a `$type`'s property is declared (so subclasses share a learned default); the class itself for keys outside the RTTI slice. */
-const declaring = (type: string, key: string) => [...baseClasses(type)].reverse().find((name: string) => classProperties(name)?.some(([prop]) => prop === key)) ?? type;
 
 // ---- learning --------------------------------------------------------------------------------------------------------------
 const observed = new Map<string, Map<string, Map<string, number>>>();
@@ -67,7 +65,8 @@ function observe(mine: unknown, reference: unknown, depth = 0): void {
   for (const [key, value] of Object.entries(reference)) {
     if (key in mine) { observe(mine[key], value, depth + 1); continue; }
     if (!type || key === "Bytes") continue;
-    const owner = declaring(type, key);
+    // Per concrete class: a base property's default can differ between subclasses (entIVisualComponent.autoHideDistance).
+    const owner = type;
     const row = observed.get(owner) ?? new Map<string, Map<string, number>>();
     observed.set(owner, row);
     const values = row.get(key) ?? new Map<string, number>();
@@ -88,6 +87,10 @@ function compare(mine: unknown, reference: unknown, path: string, out: Mismatch[
   }
   if (isObject(mine) && isObject(reference)) {
     const type = typeof reference.$type === "string" ? reference.$type : owner;
+    if (reference.$type === "TweakDBID" && mine.$type === "TweakDBID" && mine.$storage === "uint64" && reference.$storage === "string") {
+      const same = String(tweakDbId(String(reference.$value))) === String(BigInt(String(mine.$value)) & ((1n << 40n) - 1n));
+      out.push({ path, kind: same ? "TweakDB name unavailable (hash-only TweakDBID, same id)" : "TweakDBID: different id", mine: text(mine.$value), reference: text(reference.$value) }); return;
+    }
     if (reference.$type === "ResourcePath" && mine.$type === "ResourcePath" && mine.$storage === "uint64" && reference.$storage === "string") {
       out.push({ path, kind: "path text unavailable (hash-only reference)", mine: text(mine.$value), reference: text(reference.$value) }); return;
     }
@@ -128,10 +131,21 @@ async function projection(document: unknown, hash: string): Promise<unknown> {
     case "Multilayer_Setup": return readSetup(root);
     case "Multilayer_LayerTemplate": return readTemplate(root);
     case "CBitmapTexture": return textureIsGamma(root);
-    case "gameuiCharacterCustomizationInfoResource": return { cco: readCco(root, "x"), presentation: readCcoWithPresentation(root, "x") };
+    case "gameuiCharacterCustomizationInfoResource": return { cco: readCco(root, "x"), presentation: iconsById(readCcoWithPresentation(root, "x")) };
     default: return null;
   }
 }
+/**
+ * Icon records compare by TweakDB id: a name (`OptionsIcons.BrownLiquorice`) and a hash-only key (`#117106207571`) that name the
+ * same record are the same icon to the catalogue (cc-presentation.ts `iconKey`).
+ */
+function iconsById(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(iconsById);
+  if (!isObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, key === "icon" && typeof item === "string"
+    ? item.startsWith("#") ? item : `#${tweakDbId(item)}` : iconsById(item)]));
+}
+
 /** Hash-only references compare by hash: drop the path text where either side lacks it. */
 function hashesOnly(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(hashesOnly);
@@ -182,10 +196,10 @@ for (const name of files) {
   const mismatches: Mismatch[] = [];
   compare(mine.Data, entry.document.Data, "", mismatches);
   if (!mismatches.length) row.docsEqual++;
-  else if (mismatches.every(m => m.kind.startsWith("path text unavailable"))) row.docsEqualButPaths++;
+  else if (mismatches.every(m => m.kind.startsWith("path text unavailable") || m.kind.startsWith("TweakDB name unavailable"))) row.docsEqualButPaths++;
   for (const mismatch of mismatches) {
     row.mismatchKinds.set(mismatch.kind, (row.mismatchKinds.get(mismatch.kind) ?? 0) + 1);
-    if (row.examples.length < 6 && !mismatch.kind.startsWith("path text")) row.examples.push(`${meta.path ?? meta.hash}${mismatch.path}: ${mismatch.mine} vs ${mismatch.reference}`);
+    if (row.examples.length < 6 && !/^(path text|TweakDB name) unavailable/.test(mismatch.kind)) row.examples.push(`${meta.path ?? meta.hash}${mismatch.path}: ${mismatch.mine} vs ${mismatch.reference}`);
   }
   try {
     const [a, b] = await Promise.all([projection(mine, meta.hash), projection(entry.document, meta.hash)]);
@@ -212,7 +226,7 @@ if (learn) {
     conflicts, failures: failures.slice(0, 20) }, null, 1));
 } else {
   const report = { resources: seen, skipped, holdout, byExtension: Object.fromEntries([...rows].sort((a, b) => b[1].count - a[1].count).map(([ext, row]) => [ext, {
-    count: row.count, unsupported: row.unsupported, errors: row.errors, docsEqual: row.docsEqual, docsEqualExceptHashOnlyPaths: row.docsEqualButPaths,
+    count: row.count, unsupported: row.unsupported, errors: row.errors, docsEqual: row.docsEqual, docsEqualExceptHashOnlyNames: row.docsEqualButPaths,
     resolverModels: row.projected, resolverModelsEqual: row.projectionEqual, resolverModelsEqualByHash: row.projectionEqualByHash,
     msPerResource: row.count - row.unsupported - row.errors ? Math.round(row.ms / (row.count - row.unsupported - row.errors) * 100) / 100 : null,
     mismatchKinds: Object.fromEntries([...row.mismatchKinds].sort((a, b) => b[1] - a[1]).slice(0, 12)), examples: row.examples }])), failures: failures.slice(0, 40) };

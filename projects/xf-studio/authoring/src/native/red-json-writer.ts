@@ -9,7 +9,7 @@
  * - Buffers: `{BufferId, Flags, Bytes}`, numbered in write order; parsed ones carry `Type` and `Data` instead of `Bytes`. With
  *   `buffers: "trim"` the bytes are left out as `{$trimmedBase64Length}`, as the resolver's cache stores them.
  */
-import { defaultValue, learnedDefault } from "./red-defaults";
+import { defaultValue, learnedDefault, learnedKeys } from "./red-defaults";
 import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
 import { classProperties } from "./rtti";
 
@@ -59,12 +59,13 @@ class JsonWriter {
     const types = new Map(props ?? []);
     const keys = new Set(Object.keys(object.fields));
     for (const [name] of props ?? []) keys.add(name);
+    if (!this.options.omitDefaults) for (const name of learnedKeys(object.type)) keys.add(name);
     const out: Record<string, unknown> = { $type: object.type };
     for (const key of ordered([...keys])) {
       if (Object.hasOwn(object.fields, key)) out[key] = this.value(object.fields[key]);
       else {
         const learned = learnedDefault(object.type, key);
-        out[key] = learned !== undefined ? structuredClone(learned) : this.value(defaultValue(types.get(key)!));
+        out[key] = learned !== undefined ? structuredClone(learned) : types.has(key) ? this.value(defaultValue(types.get(key)!)) : null;
       }
     }
     return out;

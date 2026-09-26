@@ -52,7 +52,7 @@ export interface ValueContext {
   object(cursor: Cursor, type: string): RedObject;
   handle(cursor: Cursor): RedHandle;
   /** An `rRef`/`raRef` value as JSON (`{DepotPath, Flags}`). */
-  reference(cursor: Cursor, async: boolean): unknown;
+  reference(cursor: Cursor): unknown;
   string(cursor: Cursor): string;
   nodeRef(cursor: Cursor): string;
   /** A bitfield's set member names, in file order. */
@@ -84,59 +84,75 @@ export function bitfieldText(type: string, names: readonly string[]): string {
   return [...names].sort((a, b) => (bits.get(a) ?? 64) - (bits.get(b) ?? 64)).join(", ");
 }
 
-/** Decode one value of `type` (a type string such as `array:handle:meshMeshAppearance`). */
-export function readValue(ctx: ValueContext, cursor: Cursor, type: string, owner: string): unknown {
+/** A compiled decoder for one type string. */
+type Decoder = (ctx: ValueContext, cursor: Cursor, owner: string) => unknown;
+const decoders = new Map<string, Decoder>();
+
+const unsupported = (type: string): Decoder => () => { throw new NativeUnsupportedError(`Values of type ${type} are not decoded.`); };
+
+const FUNDAMENTALS: Record<string, Decoder> = {
+  Bool: (_, c) => c.u8() ? 1 : 0,
+  Int8: (_, c) => c.i8(), Uint8: (_, c) => c.u8(), Int16: (_, c) => c.i16(), Uint16: (_, c) => c.u16(), Int32: (_, c) => c.i32(), Uint32: (_, c) => c.u32(),
+  Int64: (_, c) => c.i64().toString(), Uint64: (_, c) => c.u64().toString(),
+  Float: (_, c) => float32Value(c.f32()), Double: (_, c) => doubleValue(c.f64()),
+  CName: (ctx, c) => cname(ctx.name(c.u16())),
+  String: (ctx, c) => ctx.string(c),
+  NodeRef: (ctx, c) => ({ $type: "NodeRef", $storage: "string", $value: ctx.nodeRef(c) }),
+  LocalizationString: (ctx, c) => { const unk1 = c.u64().toString(); return { unk1, value: ctx.string(c) }; },
+  TweakDBID: (_, c) => ({ $type: "TweakDBID", $storage: "uint64", $value: c.u64().toString() }),
+  CRUID: (_, c) => c.u64().toString(),
+  gamedataLocKeyWrapper: (_, c) => { c.u64(); return {}; },
+  CGUID: (_, c) => Buffer.from(c.take(16)).toString("base64"),
+  CDateTime: (_, c) => { const value = c.u64(); return (value === 0n ? 1048576n : value & ~0x3ffn).toString(); },
+  DataBuffer: (ctx, c, owner) => ctx.buffer(c, false, owner),
+  serializationDeferredDataBuffer: (ctx, c, owner) => ctx.buffer(c, true, owner),
+  SharedDataBuffer: (_, c) => { const size = c.u32(); const bytes = c.take(size); return new RedBuffer(0, size, () => bytes, null, true); },
+  CVariant: (ctx, c, owner) => readVariant(ctx, c, owner),
+  EditorObjectID: unsupported("EditorObjectID"), MessageResourcePath: unsupported("MessageResourcePath"),
+  CRUIDRef: unsupported("CRUIDRef"), RuntimeEntityRef: unsupported("RuntimeEntityRef"),
+};
+
+function compile(type: string): Decoder {
   let match: RegExpExecArray | null;
   if ((match = /^array:(.+)$/.exec(type))) {
-    const count = cursor.u32();
-    const inner = match[1]!;
-    const out: unknown[] = new Array(count);
-    for (let i = 0; i < count; i++) out[i] = readValue(ctx, cursor, inner, owner);
-    return out;
+    const inner = decoderFor(match[1]!);
+    return (ctx, cursor, owner) => {
+      const count = cursor.u32();
+      const out: unknown[] = new Array(count);
+      for (let i = 0; i < count; i++) out[i] = inner(ctx, cursor, owner);
+      return out;
+    };
   }
   if ((match = /^static:\d+,(.+)$/.exec(type)) || (match = /^\[\d+\](.+)$/.exec(type))) {
-    const count = cursor.u32();
-    const out: unknown[] = new Array(count);
-    for (let i = 0; i < count; i++) out[i] = readValue(ctx, cursor, match[1]!, owner);
-    return { Elements: out };
+    const inner = decoderFor(match[1]!);
+    return (ctx, cursor, owner) => {
+      const count = cursor.u32();
+      const out: unknown[] = new Array(count);
+      for (let i = 0; i < count; i++) out[i] = inner(ctx, cursor, owner);
+      return { Elements: out };
+    };
   }
-  if (/^w?handle:/.test(type)) return ctx.handle(cursor);
-  if (/^rRef:/.test(type)) return ctx.reference(cursor, false);
-  if (/^raRef:/.test(type)) return ctx.reference(cursor, true);
+  if (/^w?handle:/.test(type)) return (ctx, cursor) => ctx.handle(cursor);
+  if (/^r(?:a)?Ref:/.test(type)) return (ctx, cursor) => ctx.reference(cursor);
   // Curves (`curveData:T`, `multiChannelCurve:T`) do not occur in the resource types this reader serves; they are refused.
-  if (/^(?:curveData|multiChannelCurve):/.test(type)) throw new NativeUnsupportedError(`Values of type ${type} are not decoded.`);
-  switch (type) {
-    case "Bool": return cursor.u8() ? 1 : 0;
-    case "Int8": return cursor.i8();
-    case "Uint8": return cursor.u8();
-    case "Int16": return cursor.i16();
-    case "Uint16": return cursor.u16();
-    case "Int32": return cursor.i32();
-    case "Uint32": return cursor.u32();
-    case "Int64": return cursor.i64().toString();
-    case "Uint64": return cursor.u64().toString();
-    case "Float": return float32Value(cursor.f32());
-    case "Double": return doubleValue(cursor.f64());
-    case "CName": return cname(ctx.name(cursor.u16()));
-    case "String": return ctx.string(cursor);
-    case "NodeRef": return { $type: "NodeRef", $storage: "string", $value: ctx.nodeRef(cursor) };
-    case "LocalizationString": { const unk1 = cursor.u64().toString(); return { unk1, value: ctx.string(cursor) }; }
-    case "TweakDBID": return { $type: "TweakDBID", $storage: "uint64", $value: cursor.u64().toString() };
-    case "CRUID": return cursor.u64().toString();
-    case "gamedataLocKeyWrapper": cursor.u64(); return {};
-    case "CGUID": return Buffer.from(cursor.take(16)).toString("base64");
-    case "CDateTime": { const value = cursor.u64(); return (value === 0n ? 1048576n : value & ~0x3ffn).toString(); }
-    case "DataBuffer": return ctx.buffer(cursor, false, owner);
-    case "serializationDeferredDataBuffer": return ctx.buffer(cursor, true, owner);
-    case "SharedDataBuffer": { const size = cursor.u32(); const bytes = cursor.take(size); return new RedBuffer(0, size, () => bytes, null, true); }
-    case "CVariant": return readVariant(ctx, cursor, owner);
-    case "EditorObjectID": case "MessageResourcePath": case "CRUIDRef": case "RuntimeEntityRef":
-      throw new NativeUnsupportedError(`Values of type ${type} are not decoded.`);
-  }
+  if (/^(?:curveData|multiChannelCurve):/.test(type)) return unsupported(type);
+  const fundamental = FUNDAMENTALS[type];
+  if (fundamental) return fundamental;
   const kind = kindOf(type);
-  if (kind === "enum") return ctx.name(cursor.u16());
-  if (kind === "bitfield") return bitfieldText(type, ctx.bitfield(cursor));
-  return ctx.object(cursor, type);
+  if (kind === "enum") return (ctx, cursor) => ctx.name(cursor.u16());
+  if (kind === "bitfield") return (ctx, cursor) => bitfieldText(type, ctx.bitfield(cursor));
+  return (ctx, cursor) => ctx.object(cursor, type);
+}
+
+function decoderFor(type: string): Decoder {
+  let decoder = decoders.get(type);
+  if (!decoder) { decoder = compile(type); decoders.set(type, decoder); }
+  return decoder;
+}
+
+/** Decode one value of `type` (a type string such as `array:handle:meshMeshAppearance`). */
+export function readValue(ctx: ValueContext, cursor: Cursor, type: string, owner: string): unknown {
+  return decoderFor(type)(ctx, cursor, owner);
 }
 
 function readVariant(ctx: ValueContext, cursor: Cursor, owner: string): unknown {

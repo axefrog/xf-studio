@@ -16,7 +16,8 @@
  */
 import { Cr2wError } from "./cr2w-file";
 import { NativeUnsupportedError, type ParsedBuffer, RedBuffer, RedHandle, RedObject } from "./red-model";
-import { Cursor, emptyReference, normalizedPath, readValue, type ValueContext } from "./red-values";
+import { float32Value } from "./json-numbers";
+import { cname, Cursor, emptyReference, normalizedPath, readValue, type ValueContext } from "./red-values";
 
 const utf8 = new TextDecoder();
 
@@ -27,7 +28,9 @@ class PackageDecoder implements ValueContext {
   private readonly objects = new Map<number, RedObject>();
   readonly referenced = new Set<number>();
 
-  constructor(private readonly bytes: Uint8Array, private readonly base: number, header: { refDesc: number; refData: number; nameDesc: number; nameData: number; chunkDesc: number; chunkData: number }, private readonly version: number) {
+  constructor(private readonly bytes: Uint8Array, private readonly base: number, header: { refDesc: number; refData: number; nameDesc: number; nameData: number; chunkDesc: number; chunkData: number }, private readonly version: number,
+    /** The header's second byte (2 in game 2.x packages): with 2, compiled effect infos keep their arrays in memory layout. */
+    readonly layout: number) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const at = (offset: number) => base + offset;
     for (let o = header.nameDesc; o < header.nameData; o += 4) {
@@ -68,7 +71,14 @@ class PackageDecoder implements ValueContext {
     let end = cursor.pos;
     for (const field of fields) {
       const value = new Cursor(this.bytes, start + field.offset);
-      object.fields[field.name] = readValue(this, value, field.type, `${object.type}.${field.name}`);
+      try {
+        const compiled = this.layout === 2 && object.type === "worldCompiledEffectInfo" ? readCompiledEffectField(this, value, field.name) : undefined;
+        object.fields[field.name] = compiled !== undefined ? compiled : readValue(this, value, field.type, `${object.type}.${field.name}`);
+      }
+      catch (error) {
+        if (error instanceof Error && !error.message.startsWith("In ")) error.message = `In ${object.type}.${field.name} (${field.type}): ${error.message}`;
+        throw error;
+      }
       end = Math.max(end, value.pos);
     }
     cursor.pos = end;
@@ -87,9 +97,10 @@ class PackageDecoder implements ValueContext {
     return new RedHandle(this.chunk(index));
   }
 
-  reference(cursor: Cursor, async: boolean): unknown {
+  reference(cursor: Cursor): unknown {
     const index = cursor.i16();
-    if (index < 0) return emptyReference(async);
+    // An empty reference in a package is written with the Default flag, whichever kind it is [resource: WolvenKit 9.0.1 output].
+    if (index < 0) return emptyReference(false);
     const entry = this.references[index];
     if (!entry) throw new Cr2wError(`Package reference ${index} does not exist.`);
     const flags = entry.sync ? "Obligatory" : "Default";
@@ -114,6 +125,30 @@ class PackageDecoder implements ValueContext {
   }
 }
 
+/**
+ * `worldCompiledEffectInfo` in a package whose second header byte is 2 stores its arrays as i32 count and elements in memory
+ * layout, not as field lists [source: knowledge/archive-format.md §5.3]: names as u16 name indexes, `Vector3` as 3 f32,
+ * `Quaternion` as 4 f32 (i, j, k, r), placement infos as 4 u8, and event infos as u64 CRUID, u64, u64, u8 and 7 padding bytes.
+ */
+function readCompiledEffectField(ctx: PackageDecoder, cursor: Cursor, name: string): unknown {
+  const list = <T>(read: () => T) => { const count = cursor.i32(); return Array.from({ length: Math.max(0, count) }, read); };
+  const f32 = () => float32Value(cursor.f32());
+  switch (name) {
+    case "placementTags": case "componentNames": return list(() => cname(ctx.name(cursor.u16())));
+    case "relativePositions": return list(() => new RedObject("Vector3", { X: f32(), Y: f32(), Z: f32() }));
+    case "relativeRotations": return list(() => new RedObject("Quaternion", { i: f32(), j: f32(), k: f32(), r: f32() }));
+    case "placementInfos": return list(() => new RedObject("worldCompiledEffectPlacementInfo",
+      { placementTagIndex: cursor.u8(), relativePositionIndex: cursor.u8(), relativeRotationIndex: cursor.u8(), flags: cursor.u8() }));
+    case "eventsSortedByRUID": return list(() => {
+      const event = new RedObject("worldCompiledEffectEventInfo", { eventRUID: cursor.u64().toString(), placementIndexMask: cursor.u64().toString(),
+        componentIndexMask: cursor.u64().toString(), flags: cursor.u8() });
+      cursor.take(7);
+      return event;
+    });
+  }
+  return undefined;
+}
+
 /** Path text holds no NUL and only printable bytes; a hash almost never does. */
 const isPathText = (data: Uint8Array) => data.every(byte => byte >= 0x20 && byte < 0x7f);
 
@@ -122,7 +157,7 @@ export function readPackage(bytes: Uint8Array, owner: string): ParsedBuffer {
   const cursor = new Cursor(bytes);
   const version = cursor.u8();
   if (version < 2 || version > 4) throw new NativeUnsupportedError(`${owner}: package version ${version} is not decoded.`);
-  cursor.u8();
+  const layout = cursor.u8();
   const sections = cursor.u16();
   cursor.u32(); // root count
   let refDesc = 0, refData = 0;
@@ -133,7 +168,7 @@ export function readPackage(bytes: Uint8Array, owner: string): ParsedBuffer {
   const cruidCount = cursor.u16();
   const cruids: string[] = [];
   for (let i = 0; i < cruidCount; i++) cruids.push(cursor.u64().toString());
-  const decoder = new PackageDecoder(bytes, cursor.pos, { refDesc, refData, nameDesc, nameData, chunkDesc, chunkData }, version);
+  const decoder = new PackageDecoder(bytes, cursor.pos, { refDesc, refData, nameDesc, nameData, chunkDesc, chunkData }, version, layout);
   for (let i = 0; i < decoder.chunks.length; i++) decoder.chunk(i);
   const roots: RedObject[] = [];
   for (let i = 0; i < decoder.chunks.length; i++) if (!decoder.referenced.has(i)) roots.push(decoder.chunk(i));

@@ -25,6 +25,20 @@ export function learnedDefault(type: string, property: string): unknown {
   return undefined;
 }
 
+const keysMemo = new Map<string, string[]>();
+/**
+ * Properties the reference JSON writes for `type` beyond its RTTI ones (derived or newer properties, learned with their defaults),
+ * along its base classes.
+ */
+export function learnedKeys(type: string): string[] {
+  let keys = keysMemo.get(type);
+  if (!keys) {
+    keys = [...new Set(baseClasses(type).flatMap(name => Object.keys(table[name] ?? {})))];
+    keysMemo.set(type, keys);
+  }
+  return keys;
+}
+
 /** The zero value of a type string. */
 export function defaultValue(type: string): unknown {
   if (/^array:/.test(type)) return [];

@@ -106,7 +106,7 @@ export class Cr2wDecoder implements ValueContext {
     return new RedHandle(value <= 0 ? null : this.exportObject(value - 1));
   }
 
-  reference(cursor: Cursor, async: boolean): unknown {
+  reference(cursor: Cursor): unknown {
     const value = cursor.u16();
     if (value === 0) return emptyReference(false);
     const entry = this.file.imports[value - 1];
@@ -133,7 +133,8 @@ export class Cr2wDecoder implements ValueContext {
       index = value - 1;
     } else {
       const value = cursor.u32();
-      if (value === 0x80000000) return null;
+      // 0x80000000 is an empty buffer, which the reference JSON still writes as one (with an id and no bytes).
+      if (value === 0x80000000) return new RedBuffer(0, 0, () => new Uint8Array(0));
       if (value < 0x80000000) {
         const bytes = cursor.take(value);
         return this.parsed(0, bytes.length, () => bytes, owner);
@@ -147,7 +148,8 @@ export class Cr2wDecoder implements ValueContext {
   }
 
   private parsed(flags: number, memSize: number, bytes: () => Uint8Array, owner: string): RedBuffer {
-    const kind = PARSED_BUFFERS[owner];
+    // An empty buffer stays bytes (nothing to parse).
+    const kind = memSize ? PARSED_BUFFERS[owner] : undefined;
     if (kind === "package") return new RedBuffer(flags, memSize, bytes, readPackage(bytes(), owner));
     if (kind === "cr2w-list") return new RedBuffer(flags, memSize, bytes, { kind: "cr2w-list", files: readCr2wList(bytes(), this.decompress) });
     return new RedBuffer(flags, memSize, bytes);
