@@ -266,7 +266,8 @@ export function writeCollectionWorkspace(workspace: CollectionWorkspace, model: 
   const parts = model.parts;
   const draft = (value: CollectionDraft) => ({
     collection: { schema: COLLECTION_2, id: value.collection.id, name: value.collection.name,
-      presets: value.collection.presets.map(look => parts.minimalLook(look, false)) },
+      presets: value.collection.presets.map(look => parts.minimalLook(look, false)),
+      ...(value.collection.packagePlan ? { packagePlan: value.collection.packagePlan } : {}) },
     ...(value.revision !== undefined ? { revision: value.revision } : {}),
     ...(value.selected !== undefined ? { selected: value.selected } : {}),
     memory: Object.fromEntries(Object.entries(value.memory).map(([id, memory]) => [id, parts.writeMemory(memory, options)])),

@@ -107,6 +107,13 @@ Prepared as a single session, after the offline pieces exist. The first three ca
 
 Runtime-bridge experiments worth adding to its phase 2: a read-only `face_rig` dump (R1), a write-gated "apply photo-mode facial index" call (R2), and later "apply this control vector" for live preview in game.
 
+## Decisions (26 September 2026)
+
+1. **Scope:** static photo-mode expressions first; animated or looping faces and idles follow.
+2. **Expression table precedence:** the Studio names its archive so its expression table wins, and carries the other installed mods' rows forward so their expressions keep working; it explains this in plain words when it happens.
+
+Still open: questions 2 and 4–7 below.
+
 ## Questions for the maintainer
 
 1. **Scope of the first version**: static expressions only, or animated/looping faces too? Static needs no graph override and has the cleanest registration.

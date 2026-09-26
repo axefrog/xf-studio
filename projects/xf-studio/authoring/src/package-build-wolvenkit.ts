@@ -1,26 +1,16 @@
 // Process adapter: the package builder's WolvenKit command lines and how WolvenKit reports success
 // for them; the shared WolvenKit runner owns the process. The builder decides what to convert.
 import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, WolvenKitRunError } from "./wolvenkit-cli";
+import type { ResourceTools, ToolStep } from "./platform/api";
+export type { TextureImportSettings, ToolStep } from "./platform/api";
 
 export type PackageToolCode = "package_tool_failed" | "package_build_cancelled" | "package_build_timeout";
 export class PackageToolError extends Error {
   constructor(readonly code: PackageToolCode, message: string, readonly log = "") { super(message); }
 }
 
-/** WolvenKit's XBM import settings, passed as `XbmImportArgs__*` environment values. */
-export interface TextureImportSettings {
-  IsGamma: boolean; TextureGroup: string; RawFormat: string; Compression: string;
-  GenerateMipMaps: boolean; IsStreamable: boolean; PremultiplyAlpha: boolean;
-}
-export interface ToolStep { readonly exitCode: number; readonly log: string }
-
-/** The WolvenKit operations one package build needs. Each resolves with the step's exit code and log. */
-export interface PackageResourceTools {
-  importTextures(input: string, output: string, settings: TextureImportSettings): Promise<ToolStep>;
-  serialize(input: string, output: string): Promise<ToolStep>;
-  deserialize(input: string, output: string): Promise<ToolStep>;
-  pack(input: string, output: string): Promise<ToolStep>;
-}
+/** The WolvenKit operations one package build needs (the platform's `ResourceTools`). Each resolves with the step's exit code and log. */
+export type PackageResourceTools = ResourceTools;
 
 export const DEFAULT_STEP_TIMEOUT_MS = 240_000;
 const tail = (value: string) => value.slice(-3000);

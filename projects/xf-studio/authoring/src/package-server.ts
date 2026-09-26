@@ -1,33 +1,27 @@
-import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+/**
+ * The localhost package route: HTTP checks (loopback, same origin, JSON, size) in front of the package host
+ * service both hosts share (platform/export/product-host, PIPE-03). This module is only localhost's adapter:
+ * its tool paths and developer overrides, its private roots in the project's ignored `build/` and `dist/`, the
+ * builder run from the source tree, and the server log.
+ */
+import { randomUUID } from "node:crypto";
+import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseCollection } from "./preset-collection";
-import { originalPresetCount, packagePresetIdentities, preparePackageCollection } from "./package-filter";
-import { packageErrorCode, type PackageAction, type PackageBuild, type PackageCheck } from "./package-action";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
-import { verifyPackageBuildResult } from "./package-result-verifier";
-import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateHeadOverride, eyePlateRouteKey, type EyePlateManifest,
-  type EyePlateTools } from "./eye-plate-service";
-import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
-import { plateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
-import type { PlateReachInput } from "./plate-reach";
-import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
-import { createInstalledHeadSource } from "./eye-plate-head-resolver";
-import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
+import { eyePlateHeadOverride } from "./eye-plate-service";
+import { eyePlatePrerequisite, eyePlateRouteKeyFor } from "./eye-plate-prerequisite";
 import { runProcessTree } from "./process-tree";
 import { hostFailure } from "./diagnostics/host-log";
+import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction, type PackageHostAdapter } from "./platform/export/product-host";
+import type { FeatureExporterEntry } from "./platform/api";
 
 const app = resolve(import.meta.dir, "..");
-const hq = resolve(app, "../../..");
 const project = resolve(app, "..");
-const dist = resolve(project, "dist");
-/** The TypeScript package CLI; Bun runs it as a child so compiling and verifying never block this server. */
+/** The TypeScript builder CLI; Bun runs it as a child so compiling and verifying never block this server. */
 const script = resolve(app, "tools/build_collection_package.ts");
-export const localCheckDeadlineMs = 120_000;
-export const localBuildDeadlineMs = 40 * 60_000;
-const maxBytes = 16_000_000;
+/** The Check worker entry, from the source tree. */
+export const localCheckWorker = resolve(app, "tools/package_check_worker.ts");
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 /**
  * `plate` is empty unless the hidden `XFS_PACKAGE_PLATE` developer override names a plate directory;
@@ -36,9 +30,7 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
  * `XFS_EYE_PLATE_HEAD=base-game` developer override).
  */
 export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string;
-  route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game";
-  /** Check only: the manifest of the plate the cache last prepared, whose UV footprint Check plans on (set by the handler). */
-  checkPlateManifest?: string };
+  route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game" };
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
@@ -60,181 +52,90 @@ export function localPackageTools(settings: LocalSettings = defaultLocalSettings
   };
 }
 
-export type PlateToolsFactory = (wolvenkit: string) => EyePlateTools;
-
-const localRoute = (tools: PackageTools) => tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null };
+const localRoute = (tools: PackageTools) => ({ gameRoot: tools.gamepath,
+  ...(tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null }) });
 /** The route and head choice a plate prepared for these tools is recorded under (PIPE-36). */
-export const localPlateRouteKey = (tools: PackageTools) => tools.gamepath ? eyePlateRouteKey({ gameRoot: tools.gamepath, ...localRoute(tools) }, tools.headOverride) : null;
+export const localPlateRouteKey = (tools: PackageTools) => eyePlateRouteKeyFor({ route: localRoute(tools), headOverride: tools.headOverride });
 
-/** The override plate's UV footprint, read with the host's own WolvenKit serialize of its mesh. */
-async function overridePlateReach(plate: string, tools: PackageTools, plateTools: PlateToolsFactory): Promise<PlateReachInput> {
-  const meshes = ["xfs_eye_plate.mesh", "xfas_eye_plate.mesh"].map(name => join(plate, name)).filter(path => {
-    try { return statSync(path).isFile(); } catch { return false; }
-  });
-  if (meshes.length !== 1) throw Error("The XFS_PACKAGE_PLATE developer override must hold exactly one eye plate mesh.");
-  const work = mkdtempSync(resolve(tmpdir(), "xfs-plate-uv-"));
-  try {
-    const json = await plateTools(tools.wolvenkit).serialize({ file: meshes[0], outDir: work });
-    return plateReachInput(plateUvFootprint(JSON.parse(readFileSync(json, "utf8").replace(/^\uFEFF/, "")).Data.RootChunk));
-  } finally { rmSync(work, { recursive: true, force: true }); }
-}
+/** Eye makeup's plate prerequisite for these localhost tools: the developer override, or the verified built-in plate. */
+export const localEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
+  eyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
+    ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
 
-/**
- * Resolve the plate for a localhost Build: the developer override, or the verified built-in plate; with the
- * plate's UV footprint, which the host's own filter plans on.
- */
-async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): Promise<{ args: string[]; manifest?: EyePlateManifest; manifestFile?: string; reach: PlateReachInput }> {
-  if (tools.plate) {
+/** What localhost's Build needs before anything starts, in plain words, or null. */
+export function localBuildIssue(tools: PackageTools): string | null {
+  for (const [name, path, kind] of [["WolvenKit", tools.wolvenkit, "file"], ["Game", tools.gamepath, "directory"]] as const) {
     let valid = false;
-    try { valid = statSync(tools.plate).isDirectory(); } catch { /* Missing override. */ }
-    if (!valid) throw Error("The XFS_PACKAGE_PLATE developer override does not name a directory.");
-    return { args: ["--plate", tools.plate], reach: await overridePlateReach(tools.plate, tools, plateTools) };
+    try { const stat = statSync(path); valid = kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { /* Missing local tool. */ }
+    if (!valid) return name === "WolvenKit"
+      ? "WolvenKit isn't set up yet. Let XF Studio download it (bun tools/setup-wolvenkit.ts), set its path in Local setup, or use the XFS_PACKAGE_WOLVENKIT server override."
+      : "Game input is unavailable. Set its path in Local setup or use the XFS_PACKAGE_GAMEPATH server override.";
   }
-  try {
-    const route = localRoute(tools);
-    const plate = await ensureEyePlate({ gameRoot: tools.gamepath, cacheRoot: tools.plateCache, tools: plateTools(tools.wolvenkit),
-      headSource: createInstalledHeadSource({ gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit, ...route },
-        join(tools.plateCache, "resolver")), headOverride: tools.headOverride, routeKey: localPlateRouteKey(tools) ?? undefined });
-    const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
-    if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
-    return { args: ["--plate", plate.directory, "--plate-manifest", plate.manifestFile], manifest: plate.manifest, manifestFile: plate.manifestFile, reach };
-  } catch (error) {
-    if (error instanceof EyePlateError) hostFailure("eye-plate", error.code, "The eye plate couldn't be prepared.", { code: error.code, message: error.message, detail: error.detail?.slice(-3000) });
-    else hostFailure("eye-plate", "plate_failed", "The eye plate couldn't be prepared.", error);
-    throw error;
+  for (const [name, path] of [["game executable", join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe")],
+    ["game archive directory", join(tools.gamepath, "archive", "pc")]] as const) {
+    try { if (name.endsWith("directory") ? statSync(path).isDirectory() : statSync(path).isFile()) continue; }
+    catch { /* Missing game input. */ }
+    return `The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Local setup.`;
   }
+  if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
+    let valid = false;
+    try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
+    if (!valid) return "The configured Bun executable is unavailable. Check Local setup.";
+  }
+  return null;
 }
 
 /**
- * Run the TypeScript package CLI as a bounded child process; the host keeps its own identity gates. Build reports
- * the prepared plate's UV footprint through `onPlate` before the CLI starts, so the host can plan on it too.
+ * Localhost's package host adapter: `prerequisites` makes each feature's host prerequisites for these tools
+ * (the root binds eye makeup's plate to its prerequisite ID). Private roots live in the project's ignored
+ * `build/` (one snapshot, work and stage folder per Build) and verified candidates in its ignored `dist/`.
  */
-export async function runLocalPackage(action: PackageAction, file: string, tools: PackageTools,
-  plateTools: PlateToolsFactory = createWolvenKitEyePlateTools, signal?: AbortSignal,
-  onPlate?: (plate: PlateReachInput) => void): Promise<PackageCheck | PackageBuild> {
-  if (action === "build") {
-    for (const [name, path, kind] of [["WolvenKit", tools.wolvenkit, "file"], ["Game", tools.gamepath, "directory"]] as const) {
-      let valid = false;
-      try { const stat = statSync(path); valid = kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { /* Missing local tool. */ }
-      if (!valid) throw Error(name === "WolvenKit"
-        ? "WolvenKit isn't set up yet. Let XF Studio download it (bun tools/setup-wolvenkit.ts), set its path in Local setup, or use the XFS_PACKAGE_WOLVENKIT server override."
-        : "Game input is unavailable. Set its path in Local setup or use the XFS_PACKAGE_GAMEPATH server override.");
-    }
-    for (const [name, path] of [["game executable", join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe")],
-      ["game archive directory", join(tools.gamepath, "archive", "pc")]] as const) {
-      try { if (name.endsWith("directory") ? statSync(path).isDirectory() : statSync(path).isFile()) continue; }
-      catch { /* Missing game input. */ }
-      throw Error(`The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Local setup.`);
-    }
-    if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
-      let valid = false;
-      try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
-      if (!valid) throw Error("The configured Bun executable is unavailable. Check Local setup.");
-    }
-  }
-  const started = Date.now(), deadline = action === "check" ? localCheckDeadlineMs : localBuildDeadlineMs;
-  for (let attempt = 0; ; attempt++) {
-    const plate = action === "build" ? await localPlate(tools, plateTools)
-      : { args: tools.checkPlateManifest ? ["--plate-manifest", tools.checkPlateManifest] : [] } as { args: string[]; manifest?: EyePlateManifest; manifestFile?: string };
-    if (action === "build" && "reach" in plate) onPlate?.(plate.reach as PlateReachInput);
-    const args = [script, "--collection", file, "--machine-result",
-      ...(action === "check" ? ["--check", ...plate.args] : [...plate.args, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
-    const run = await runProcessTree(tools.bun, args, { cwd: hq, signal, timeoutMs: Math.max(1, deadline - (Date.now() - started)) });
-    if (run.stopped) throw Error(`Package ${action} ${run.stopped === "timeout" ? "exceeded its time limit and was stopped" : "was cancelled"}. ` +
-      "Your draft is unchanged; no package was installed.");
-    if (run.exitCode !== 0) {
-      // The builder found the cached plate's recorded UV footprint stale: discard that entry and build once more on a fresh plate (PIPE-37).
-      if (action === "build" && attempt === 0 && plate.manifestFile && packageErrorCode(run.stderr) === "package_plate_stale") {
-        console.error("Local package build: the cached eye plate's UV footprint was stale; preparing the plate again.");
-        discardCachedPlate(tools.plateCache, plate.manifestFile);
-        continue;
-      }
-      hostFailure("package", `${action}_tool_failed`, `Package ${action} failed in the local build tool (exit ${run.exitCode}).`, { message: (run.error?.message ?? run.stderr.trim()).slice(-3_500) });
-      throw Error(`Package ${action} failed in the local build tool. See the studio server log for details. Your draft is unchanged; no package was installed.`);
-    }
-    const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
-    if (!line) throw Error("Package tool completed without a result.");
-    const result = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageCheck | PackageBuild;
-    if (action === "build" && plate.manifest) {
-      const built = result as PackageBuild;
-      if (built.plate?.source !== "derived" || built.plate.meshSha256 !== plate.manifest.files.mesh.sha256 ||
-          built.plate.morphSha256 !== plate.manifest.files.morph.sha256)
-        throw Error("Package was not built from the prepared eye plate.");
-    }
-    return result;
-  }
+export function localPackageAdapter(options: { exporters: readonly FeatureExporterEntry[]; tools: PackageTools;
+  prerequisites: (tools: PackageTools) => Readonly<Record<string, HostPrerequisite>>; roots?: { build: string; dist: string } }): PackageHostAdapter {
+  const { tools } = options, build = options.roots?.build ?? resolve(project, "build"), dist = options.roots?.dist ?? resolve(project, "dist");
+  return {
+    exporters: options.exporters,
+    prerequisites: options.prerequisites(tools),
+    checkWorker: localCheckWorker,
+    buildIssue: () => localBuildIssue(tools),
+    buildSetup: () => {
+      const id = randomUUID();
+      return { snapshot: resolve(build, "package-snapshots", id), work: resolve(build, "package-work", id),
+        stage: resolve(build, "package-stage", id), candidates: dist, wolvenkit: tools.wolvenkit, gamepath: tools.gamepath };
+    },
+    runBuilder: (args, run) => runProcessTree(tools.bun, [script, ...args], { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs }),
+    log: (scope, code, message, detail) => hostFailure("package", code, `Package ${scope}: ${message}`, detail,
+      code === "invalid_collection" || code === "no_exportable_content" ? "warn" : "error"),
+  };
 }
 
-
-type Runner = (action: PackageAction, file: string, tools: PackageTools, onPlate?: (plate: PlateReachInput) => void) => Promise<PackageCheck | PackageBuild>;
-const defaultRunner: Runner = (action, file, tools, onPlate) => runLocalPackage(action, file, tools, undefined, undefined, onPlate);
-/** One active build per server; requests carry only a validated collection snapshot. */
 /**
- * The localhost package route. `region` is eye makeup's layered-makeup region (its mirror decides which presets
- * reach the plate), handed in by the server root.
+ * The localhost package route: requests carry only `{ action, collection }` (the server decides every path and
+ * tool), and one Check and one Build run at a time. `adapter` makes the host adapter for each request, so
+ * Local setup changes apply to the next Build.
  */
-export function createPackageHandler(region: Pick<LayeredMakeupRegion, "mirror">,
-  tools: PackageTools | ((action: PackageAction) => PackageTools) = () => localPackageTools(), runner: Runner = defaultRunner) {
-  let building = false;
+export function createPackageHandler(adapter: (action: PackageAction) => PackageHostAdapter) {
+  const service = new PackageHostService();
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.hostname !== "127.0.0.1" || request.headers.get("Origin") !== url.origin ||
         request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
       return json({ error: "Use the local studio to build packages." }, 403);
     if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
-    if (Number(request.headers.get("Content-Length")) > maxBytes) return json({ error: "Collection exceeds 16 MB." }, 413);
+    if (Number(request.headers.get("Content-Length")) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
     let body: string;
     try { body = await request.text(); } catch { return json({ error: "Could not read collection snapshot." }, 400); }
-    if (Buffer.byteLength(body) > maxBytes) return json({ error: "Collection exceeds 16 MB." }, 413);
-    let action: PackageAction, collection;
-    try {
-      const input = JSON.parse(body);
-      if (!input || (input.action !== "check" && input.action !== "build") || Object.keys(input).some(key => key !== "action" && key !== "collection"))
-        throw Error("Expected a package action and collection only.");
-      action = input.action;
-      collection = parseCollection(input.collection);
-    } catch (error) { return json({ error: (error as Error).message }, 400); }
-    if (building) return json({ error: "A local package build is already running. Wait for its result before starting another." }, 409);
-    let actionTools = typeof tools === "function" ? tools(action) : tools;
-    // Check plans on the plate the cache last prepared for this game, if any; Build on the plate it prepares.
-    const cached = action === "check" ? cachedPlateReach(actionTools.plateCache, actionTools.gamepath, localPlateRouteKey(actionTools)) : null;
-    if (cached) actionTools = { ...actionTools, checkPlateManifest: cached.manifestFile };
-    let prepared: ReturnType<typeof preparePackageCollection>;
-    try { prepared = preparePackageCollection(collection, region, cached?.plate ?? null); }
-    catch (error) { return json({ error: (error as Error).message, code: "no_exportable_content" }, 422); }
-    const { plan, omissions, experimental, packaged } = prepared;
-    const source = JSON.stringify(collection);
-    const packagedHash = createHash("sha256").update(JSON.stringify(packaged)).digest("hex");
-    const work = mkdtempSync(resolve(tmpdir(), "xfs-ui-package-"));
-    const file = resolve(work, "collection.json");
-    writeFileSync(file, source);
-    if (action === "build") building = true;
-    try {
-      const packagedPlate: { reach: PlateReachInput | null } = { reach: null };
-      const result = await runner(action, file, actionTools, reach => { packagedPlate.reach = reach; });
-      if (action === "check") {
-        const checked = result as PackageCheck;
-        if (checked.ready !== true || checked.collectionId !== collection.id || checked.namespace !== plan.namespace ||
-            checked.modName !== plan.modName || checked.selectorLabel !== plan.selectorLabel ||
-            checked.originalPresetCount !== originalPresetCount(prepared.source) || checked.packagedCollectionSha256 !== packagedHash ||
-            JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
-            JSON.stringify(checked.experimental ?? []) !== JSON.stringify(experimental) ||
-            JSON.stringify(checked.presets) !== JSON.stringify(packagePresetIdentities(plan)) ||
-            JSON.stringify(checked.plateLiftsMm) !== JSON.stringify(plan.plate.liftsMm) ||
-            JSON.stringify(checked.plateUv ?? null) !== JSON.stringify(prepared.plateUv))
-          throw Error("Package preflight returned a different collection identity.");
-        return json(checked);
-      }
-      const built = result as PackageBuild;
-      // The host's own filter on the plate the build packaged: presets that do not reach it are omitted.
-      verifyPackageBuildResult(built, collection, packagedPlate.reach ? preparePackageCollection(collection, region, packagedPlate.reach) : prepared, source, dist);
-      return json(built);
-    } catch (error) {
-      hostFailure("package", `${action}_failed`, `Package ${action} failed: ${(error as Error).message}`, error);
-      return json({ error: (error as Error).message, ...(error instanceof EyePlateError ? { code: error.code } : {}) }, 422);
-    } finally {
-      if (action === "build") building = false;
-      rmSync(work, { recursive: true, force: true });
-    }
+    if (Buffer.byteLength(body) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
+    let input: { action?: unknown; collection?: unknown };
+    try { input = JSON.parse(body); } catch { return json({ error: "Expected a package action and collection only." }, 400); }
+    if (!input || typeof input !== "object" || Array.isArray(input) || (input.action !== "check" && input.action !== "build") ||
+        Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
+      return json({ error: "Expected a package action and collection only." }, 400);
+    const action = input.action as PackageAction;
+    if (service.busy(action)) return json({ code: `package_${action}_busy`, error: action === "build"
+      ? "A local package build is already running. Wait for its result before starting another."
+      : "A package Check is already running. Wait for its result before starting another." }, 409);
+    const outcome = await service.run(adapter(action), action, input.collection, request.signal);
+    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);
   };
 }

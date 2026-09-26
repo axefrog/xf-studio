@@ -9,19 +9,25 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import type { LocalSettings } from "./local-settings";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { readConfiguredMo2Instance } from "./install-detection-host";
+import { duplicatedNamespaces, readPackageManifest, type PackageManifestView } from "./platform/export/manifest";
+import { EYE_MAKEUP_FEATURE } from "./recipe-schema";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
 type FileEntry = { path: string; sha256: string; bytes: number };
-type PackageManifest = { schema: "xfs/local-package-1"; namespace: string; verifiedUnpackedFiles: number;
-  installed: false; gameRenderingVerified: false; files: FileEntry[] };
+/** A verified candidate's manifest (`xfs/local-package-1` or `-2`), read by the platform's one reader (PIPE-09). */
+type PackageManifest = PackageManifestView & { namespace: string; files: FileEntry[] };
 export type InstallRoute = "direct" | "mo2";
 export type InstallReceipt = { schema: typeof schema; targetId: string; route: InstallRoute; target: string;
   candidateId: string; namespace: string; files: FileEntry[]; installedAt: string;
+  /** The feature namespaces the installed archive holds (receipts from before products lack it: then its archive name). */
+  features?: { feature: string; namespace: string }[];
   rollback: null | { prior: InstallReceipt; backup: string } };
 type Journal = { schema: "xfs/install-journal-1"; targetId: string; target: string;
   names: string[]; next: FileEntry[]; prior: InstallReceipt | null; backup: string | null };
-export type InstallTransportConfig = { candidateStore: string; receiptsRoot: string; settings: LocalSettings };
+export type InstallTransportConfig = { candidateStore: string; receiptsRoot: string; settings: LocalSettings;
+  /** The mod this transport places (its MO2 folder); defaults to eye makeup's. A candidate of another mod is refused. */
+  modName?: string };
 export type InstallPreview = { route: InstallRoute; target: string; candidateId: string;
   files: FileEntry[]; replacingOwned: boolean; activation: string };
 
@@ -74,22 +80,18 @@ function noLinks(path: string) {
 function parseManifest(root: string): PackageManifest {
   const file = join(root, "manifest.json");
   regular(file);
-  const value = JSON.parse(readFileSync(file, "utf8")) as PackageManifest;
-  assert(value?.schema === "xfs/local-package-1" && safeName(value.namespace) && value.namespace.startsWith("xfs_") &&
-    value.installed === false && value.gameRenderingVerified === false &&
-    Number.isSafeInteger(value.verifiedUnpackedFiles) && value.verifiedUnpackedFiles > 0 &&
-    Array.isArray(value.files) && value.files.length === 2, "Candidate manifest is not a verified two-file package.");
+  // Version 1 was written only by the eye-makeup exporter, whose feature namespace was its archive name.
+  const value = readPackageManifest(JSON.parse(readFileSync(file, "utf8")), EYE_MAKEUP_FEATURE);
+  assert(safeName(value.archive), "Candidate manifest is not a verified two-file package.");
   for (let i = 0; i < 2; i++) {
     const entry = value.files[i];
-    assert(entry && entry.path === `archive/pc/mod/${value.namespace}.${fileNames[i]}` &&
-      /^[a-f0-9]{64}$/.test(entry.sha256) && Number.isSafeInteger(entry.bytes) && entry.bytes > 0,
-    "Candidate manifest contains an unexpected file or hash.");
+    assert(entry.path === `archive/pc/mod/${value.archive}.${fileNames[i]}`, "Candidate manifest contains an unexpected file or hash.");
     const payload = join(root, ...entry.path.split("/"));
     noLinks(payload);
     assert(regular(payload).size === entry.bytes && hash(payload) === entry.sha256,
       "Candidate payload differs from the verified manifest.");
   }
-  return value;
+  return { ...value, namespace: value.archive, files: [...value.files] };
 }
 /** Read-only payload check for a host-owned candidate. This checks the exact
  * paired files and hashes, but does not repeat the independent archive verifier. */
@@ -115,7 +117,7 @@ function atomicJson(path: string, value: unknown) {
   renameSync(temp, path);
 }
 type Target = { route: InstallRoute; target: string; activation: string; legacyInstall: string | null };
-function targetFor(settings: LocalSettings): Target {
+function targetFor(settings: LocalSettings, modName: string): Target {
   const route = settings.installMode;
   assert(route !== "none" && route === settings.launchRoute, "Select a matching install and launch route.");
   assert(settings.gameRoot && isAbsolute(settings.gameRoot), "Configured game root is missing.");
@@ -142,10 +144,10 @@ function targetFor(settings: LocalSettings): Target {
   // Install refuses rather than silently creating a second copy beside it (see preflight).
   const legacyInstall = readdirSync(paths.mods).find(entry =>
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
-  const target = join(paths.mods, EYE_MAKEUP_MOD.modName, "archive", "pc", "mod");
+  const target = join(paths.mods, modName, "archive", "pc", "mod");
   noLinks(target);
   return { route, target, legacyInstall,
-    activation: `Enable the dedicated ${EYE_MAKEUP_MOD.modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
+    activation: `Enable the dedicated ${modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
 }
 
 /** The host owns this object; never expose its root paths as renderer-editable options. */
@@ -156,7 +158,8 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   directory(store);
   noLinks(store); noLinks(receipts);
   mkdirSync(receipts, { recursive: true });
-  const target = targetFor(config.settings);
+  const modName = config.modName ?? EYE_MAKEUP_MOD.modName;
+  const target = targetFor(config.settings, modName);
   assert(target.target !== store && target.target !== receipts &&
     !inside(target.target, store) && !inside(target.target, receipts) &&
     !inside(store, target.target) && !inside(receipts, target.target),
@@ -180,6 +183,15 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   const candidate = (candidateId: string) => {
     return inspectLocalPackageCandidate(store, candidateId);
   };
+  /** What every other target's receipt says is installed there (their feature namespaces). */
+  const otherReceipts = () => readdirSync(receipts).filter(name => /^[a-f0-9]{24}\.json$/.test(name) && name !== `${targetId}.json`)
+    .flatMap(name => {
+      try {
+        const receipt = JSON.parse(readFileSync(join(receipts, name), "utf8")) as InstallReceipt;
+        if (receipt?.schema !== schema || !safeName(receipt.namespace)) return [];
+        return [{ features: Array.isArray(receipt.features) ? receipt.features : [{ feature: EYE_MAKEUP_FEATURE, namespace: receipt.namespace }] }];
+      } catch { return []; }
+    });
   const owned = (): InstallReceipt | null => {
     noLinks(receiptFile);
     const receipt = readJson<InstallReceipt>(receiptFile);
@@ -227,6 +239,14 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     assert(!target.legacyInstall, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} install under the legacy ` +
       `folder "${target.legacyInstall}". Roll back or remove that diagnostic mod before installing "${EYE_MAKEUP_MOD.modName}".`);
     const { manifest } = candidate(candidateId), prior = owned();
+    // A product of another mod belongs in that mod's own folder.
+    assert(manifest.schema === "xfs/local-package-1" || manifest.modName === modName,
+      `This build is the mod “${manifest.modName}”, but this transfer places “${modName}”. Nothing was installed.`);
+    // A feature namespace may be present in only one installed XF mod (feature-module platform §6).
+    const elsewhere = otherReceipts();
+    const duplicated = duplicatedNamespaces(manifest, elsewhere);
+    assert(!duplicated.length, `Part of this build is already installed in another XF mod (${duplicated.join(", ")}). ` +
+      "Uninstall that mod first, or build both mods from the same package plan and install them together. Nothing was installed.");
     checkCurrent(prior, manifest.files);
     const { legacyInstall: _legacy, ...route } = target;
     return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior };
@@ -313,7 +333,8 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       for (const entry of manifest.files) assert(hash(destination(entry)) === entry.sha256, "Installed payload changed.");
       const receipt: InstallReceipt = { schema, targetId, route: target.route, target: target.target,
         candidateId: plan.candidateId, namespace: manifest.namespace, files: manifest.files,
-        installedAt: new Date().toISOString(), rollback: prior && backup ? { prior: { ...prior, rollback: null }, backup } : null };
+        installedAt: new Date().toISOString(), features: manifest.features.map(({ feature, namespace }) => ({ feature, namespace })),
+        rollback: prior && backup ? { prior: { ...prior, rollback: null }, backup } : null };
       atomicJson(receiptFile, receipt);
       rmSync(journalFile);
       return receipt;

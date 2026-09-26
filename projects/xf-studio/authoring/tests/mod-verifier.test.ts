@@ -6,11 +6,11 @@ import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the compiler: it writes the fixture's supplied chains, which the
 // independent verifier must then reproduce from its own arithmetic.
 import { encodeFlatDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
-import { readDdsChain } from "../src/mod-verifier/dds-reader";
-import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/mod-verifier/resource-inventory";
-import { componentId, sameJson } from "../src/mod-verifier/resource-checks";
-import { errorStats, expectedChain } from "../src/mod-verifier/texture-checks";
-import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
+import { readDdsChain } from "../src/features/eye-makeup/verify/dds-reader";
+import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/features/eye-makeup/verify/resource-inventory";
+import { componentId, sameJson } from "../src/features/eye-makeup/verify/resource-checks";
+import { errorStats, expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
+import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/features/eye-makeup/verify/verify-build";
 import { oracleTest } from "./optional-oracles";
 // Test-only use of the plate cut and lift: they make a real single-chunk plate and its packaged form,
 // which the verifier's own decoder must accept (and reject when tampered).
@@ -19,17 +19,18 @@ import { liftPlate } from "../src/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
 
-const verifierDir = resolve(import.meta.dir, "../src/mod-verifier");
+const verifierDir = resolve(import.meta.dir, "../src/features/eye-makeup/verify");
 
 
 test("the verifier imports nothing from the compiler or other Studio modules", () => {
   const files = readdirSync(verifierDir).filter(name => name.endsWith(".ts"));
-  expect(files.sort()).toEqual(["dds-reader.ts", "glitter-checks.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "uv-window.ts", "verify-build.ts"]);
+  expect(files.sort()).toEqual(["dds-reader.ts", "glitter-checks.ts", "index.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "uv-window.ts", "verify-build.ts"]);
   for (const name of files) {
     const code = readFileSync(join(verifierDir, name), "utf8");
     const specifiers = [...code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(m => m[1]);
     for (const specifier of specifiers)
-      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|glitter-checks|plate-geometry|resource-checks|resource-inventory|texture-checks|uv-window|verify-build))$/);
+      // Its own folder, Node, the platform's export contract (types) and eye makeup's export info (the exporter ID); never the exporter.
+      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|glitter-checks|plate-geometry|resource-checks|resource-inventory|texture-checks|uv-window|verify-build)|\.\.\/\.\.\/\.\.\/platform\/api|\.\.\/export-info)$/);
     expect(code, `${name} uses require()`).not.toMatch(/\brequire\s*\(/);
   }
 });

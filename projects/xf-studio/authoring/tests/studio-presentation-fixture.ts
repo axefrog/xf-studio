@@ -1,3 +1,4 @@
+import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/authoring-control-edits";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringGestures } from "../src/authoring-gestures";
@@ -43,12 +44,8 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const transport: CollectionTransport = {
     list: async () => [], get: async () => { throw Error("No saved fixture collection."); },
     save: async () => { throw Error("No SQLite write in this fixture."); },
-    package: async (_action, value) => { packageInput = value; return {
-      ready: true, collectionId: value.id, namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: value.presets.length,
-      omissions: [], packagedCollectionSha256: "fixture-hash",
-      presets: value.presets.map(preset => ({ id: preset.id, revision: preset.revision,
-        appearance: "xfs_fixture" })),
-    }; },
+    package: async (_action, input) => { const value = input as PresetCollection; packageInput = value;
+      return eyeCheck(value, { presets: value.presets.map(preset => ({ id: preset.id, revision: preset.revision, appearance: "xfs_fixture" })) }); },
   };
   const downloads: string[] = [];
   let library!: CollectionApplication;

@@ -17,8 +17,10 @@ test("package preflight accepts a Studio collection without writing a package", 
   expect(result.exitCode).toBe(0);
   const summary = JSON.parse(result.stdout.toString());
   expect(summary.ready).toBe(true);
-  expect(summary.presets).toHaveLength(4);
-  expect(summary.presets[0].appearance).toStartWith("xfs_");
+  expect(summary.products.map((product: { modName: string }) => product.modName)).toEqual(["XF Eye Artistry"]);
+  const eyes = summary.products[0].features[0];
+  expect(eyes.presets).toHaveLength(4);
+  expect(eyes.presets[0].appearance).toStartWith("xfs_");
 });
 
 test("package preflight reports partial export and keeps the source collection unchanged", () => {
@@ -30,7 +32,7 @@ test("package preflight reports partial export and keeps the source collection u
     writeFileSync(file, JSON.stringify(collection));
     const result = run(file);
     expect(result.exitCode).toBe(0);
-    const summary = JSON.parse(result.stdout.toString());
+    const summary = JSON.parse(result.stdout.toString()).products[0].features[0];
     expect(summary.omissions).toEqual([
       expect.objectContaining({ kind: "layer", finish: "glitter", layerName: "Petal wash" }),
       expect.objectContaining({ kind: "preset", presetName: "Verification — metallic copy" }),
@@ -72,7 +74,7 @@ test("PIPE-70: the CLI honours diagnostic knobs only with an explicit --diagnost
     expect(refused.stderr.toString()).toContain("Pass --diagnostics to build one on purpose");
     const accepted = run(file, undefined, ["--diagnostics"]);
     expect(accepted.exitCode).toBe(0);
-    const summary = JSON.parse(accepted.stdout.toString());
+    const summary = JSON.parse(accepted.stdout.toString()).products[0].features[0];
     expect(summary.presets.map((p: { route: string }) => p.route)).toContain("glitter");
     expect(summary.presets.some((p: { diagnostics?: { glitter?: unknown } }) => p.diagnostics?.glitter)).toBe(true);
   } finally { rmSync(dir, { recursive: true, force: true }); }

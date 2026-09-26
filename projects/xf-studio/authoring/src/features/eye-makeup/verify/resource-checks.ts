@@ -657,15 +657,26 @@ const depotText = (path: string) => path.replaceAll("/", "\\");
  * The parsed `.archive.xl` declaration must hold exactly the female customization registration and the
  * app's `player_customization.app` scope membership, with the planned depot paths, and nothing else.
  */
-export function checkArchiveXl(plan: VerifierPlan, declaration: Node): void {
-  ensure(keysAre(declaration, ["customizations", "resource"]), "ArchiveXL declaration must contain exactly customizations and resource");
-  const custom = declaration.customizations;
-  ensure(keysAre(custom, ["female"]), "ArchiveXL customizations must declare only the female list");
-  const female = Array.isArray(custom.female) ? custom.female : [custom.female];
-  ensure(sameJson(female, [depotText(plan.customization)]), "ArchiveXL declaration does not register exactly the planned customization");
-  ensure(keysAre(declaration.resource, ["scope"]) && keysAre(declaration.resource.scope, ["player_customization.app"]),
-    "ArchiveXL resource section must hold only the player_customization.app scope");
-  const members = declaration.resource.scope["player_customization.app"];
-  ensure(sameJson(Array.isArray(members) ? members : [members], [depotText(plan.app)]),
-    "ArchiveXL scope does not list exactly the planned app");
+export function checkArchiveXl(plan: VerifierPlan, declaration: Node, alone = true): void {
+  if (alone) {
+    ensure(keysAre(declaration, ["customizations", "resource"]), "ArchiveXL declaration must contain exactly customizations and resource");
+    const custom = declaration.customizations;
+    ensure(keysAre(custom, ["female"]), "ArchiveXL customizations must declare only the female list");
+    const female = Array.isArray(custom.female) ? custom.female : [custom.female];
+    ensure(sameJson(female, [depotText(plan.customization)]), "ArchiveXL declaration does not register exactly the planned customization");
+    ensure(keysAre(declaration.resource, ["scope"]) && keysAre(declaration.resource.scope, ["player_customization.app"]),
+      "ArchiveXL resource section must hold only the player_customization.app scope");
+    const members = declaration.resource.scope["player_customization.app"];
+    ensure(sameJson(Array.isArray(members) ? members : [members], [depotText(plan.app)]),
+      "ArchiveXL scope does not list exactly the planned app");
+    return;
+  }
+  // Beside other features in one product (whose merged declaration the product verifier compared exactly):
+  // this feature's customization and app are each declared once.
+  const list = (value: Node) => value === undefined ? [] : Array.isArray(value) ? value : [value];
+  const female = list(declaration?.customizations?.female), apps = list(declaration?.resource?.scope?.["player_customization.app"]);
+  ensure(female.filter((path: unknown) => path === depotText(plan.customization)).length === 1,
+    "ArchiveXL declaration does not register the planned customization exactly once");
+  ensure(apps.filter((path: unknown) => path === depotText(plan.app)).length === 1,
+    "ArchiveXL scope does not list the planned app exactly once");
 }

@@ -1,4 +1,4 @@
-import type { PackageBuild, PackageCheck } from "../../package-action";
+import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
 import type { LocalSetupFields } from "../../local-settings-server";
 import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
@@ -7,7 +7,9 @@ import { h, setAttr, setText, setValue } from "../dom";
 import type { PanelSpec } from "../dock/dock-view";
 import { icon } from "../icons";
 import { ItemList } from "../item-list";
-import { openMenu, type MenuAnchor } from "../menu";
+import { openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "../menu";
+import type { PackageProductSummary as ProductSummary } from "../../collection-actions";
+type PackageProductSummary = ReadonlyDeep<ProductSummary>;
 import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
@@ -307,6 +309,40 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     h("p", { class: "progress-text" }), note("A started build cannot be cancelled here. Closing the page does not stop it.", "warning"));
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   let resultSignature = "";
+  // Which XF mods the draft builds: one by default, named after its feature; the person may rename a mod and, once the
+  // collection has more than one exportable feature, move a feature into a mod of its own (feature-module platform §6).
+  const mods = h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" });
+  let modsSignature = "";
+  const renameMod = (product: PackageProductSummary, anchor: Element) => {
+    const make = (modName: string) => ({ kind: "package.rename" as const, productId: product.id, modName });
+    openValuePopover({ kind: "text", label: "Mod name (as it appears in your mod manager)", value: product.modName, maxLength: 80 }, anchor,
+      { title: "Rename mod", apply: "Rename", validate: value => port.authoring.capability(make(String(value))),
+        commit: value => { if (rt.dispatch(make(String(value)))) rt.feedback.announce(`Mod renamed to ${String(value).trim() || "its default name"}`); } });
+  };
+  const modMenu = (product: PackageProductSummary, products: readonly PackageProductSummary[], anchor: Element) => {
+    const items: MenuItem[] = [{ kind: "action", label: "Rename…", icon: "rename", run: () => renameMod(product, anchor) }];
+    if (product.nameSource === "plan") items.push({ kind: "action", label: "Use the default name", icon: "reset",
+      capability: port.authoring.capability({ kind: "package.rename", productId: product.id, modName: "" }),
+      run: () => { rt.dispatch({ kind: "package.rename", productId: product.id, modName: "" }); } });
+    // Moving features between mods is offered only where there is something to move.
+    if (product.features.length > 1) for (const feature of product.features) items.push({ kind: "action", label: `Make ${feature.label.toLowerCase()} a mod of its own`,
+      icon: "export", capability: port.authoring.capability({ kind: "package.split", feature: feature.id }),
+      run: () => { rt.dispatch({ kind: "package.split", feature: feature.id }); } });
+    for (const other of products) if (other.id !== product.id) items.push({ kind: "action", label: `Merge into “${other.modName}”`, icon: "import",
+      capability: port.authoring.capability({ kind: "package.merge", productId: product.id, intoId: other.id }),
+      run: () => { rt.dispatch({ kind: "package.merge", productId: product.id, intoId: other.id }); } });
+    openMenu(items, anchor, { label: `${product.modName} options`, invoker: anchor });
+  };
+  const renderMods = (products: readonly PackageProductSummary[]) => {
+    const signature = JSON.stringify(products);
+    if (signature === modsSignature) return;
+    modsSignature = signature;
+    mods.replaceChildren(...products.map(product => h("li", {}, icon("package"),
+      h("span", {}, h("strong", { text: product.modName }), h("span", { class: "muted", text: ` · ${product.features.map(feature => feature.label).join(", ")}` })),
+      button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true,
+        onClick: event => modMenu(product, products, event.currentTarget as Element) }))));
+    mods.hidden = !products.length;
+  };
   async function runPackage(action: "check" | "build") {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
   }
@@ -326,8 +362,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     setupState, setupReadiness,
     h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup));
   const element = h("div", { class: "panel-content" },
-    section("Mod package", note(`Builds your own copy of ${EYE_MAKEUP_MOD.modName}, the eye-makeup mod, from the current draft (including unsaved edits). Each preset becomes one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
-      h("div", { class: "row wrap gap-s" }, check, build), progress),
+    section("Mod package", note(`Builds your own copy of your XF mods from the current draft (including unsaved edits), ready for your mod manager. Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
+      mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
     setupSection,
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
@@ -347,6 +383,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
+      renderMods(frame.library.products ?? []);
       const setup = frame.localSetup;
       if (setup.view && !dirty && setup.view.revision !== loadedRevision) {
         loadedRevision = setup.view.revision;
@@ -398,40 +435,44 @@ function technicalDetails(rows: [string, string][], footnote?: string) {
     footnote ? h("p", { class: "muted small", text: footnote }) : null, copy);
 }
 
-type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheck; freshness: "current" | "stale" } |
-  { kind: "packageBuild"; result: PackageBuild; freshness: "current" | "stale" }>;
+type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheckResult; freshness: "current" | "stale" } |
+  { kind: "packageBuild"; result: PackageBuildResult; freshness: "current" | "stale" }>;
 function renderResult(pkg: PackageResultView, presets: readonly { id: string; name: string }[]) {
   const name = (id: string) => presets.find(preset => preset.id === id)?.name ?? "Preset no longer in draft";
   const isBuild = pkg.kind === "packageBuild";
   const r = pkg.result;
-  const build = r as ReadonlyDeep<PackageBuild>, check = r as ReadonlyDeep<PackageCheck>;
-  const retained = isBuild ? build.presetCount : check.presets.length;
+  const retained = new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.presets.map(look => look.id)))).size;
   const card = h("div", { class: `result-card ${pkg.freshness === "stale" ? "stale" : "ok"}` },
     h("div", { class: "result-head" }, h("strong", { text: isBuild ? "Build result" : "Check result" }),
       pkg.freshness === "current" ? badge("Current", "success") : badge("Stale — draft changed since", "warning")),
     h("p", { class: "result-summary", text: `${retained} of ${r.originalPresetCount} preset${r.originalPresetCount === 1 ? "" : "s"} can become mod files.${isBuild ? "" : " This check created no files."}` }));
-  // Results restored from before mod branding lack these fields; show them only when present.
-  if (r.modName) card.append(h("p", { class: "muted small" }, "Mod ", h("strong", { text: r.modName }),
-    r.selectorLabel ? ` · in-game selector “${r.selectorLabel}”` : ""));
-  if (!isBuild) card.append(h("ul", { class: "result-list" }, check.presets.map(preset =>
-    h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
+  // One block per mod the collection builds (one by default); each feature in it has its own selector.
+  for (const product of r.products) {
+    const block = h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: product.modName }),
+      product.features.map(feature => ` · ${feature.label} in the “${feature.selectorLabel}” selector`).join("")));
+    if (!isBuild) block.append(h("ul", { class: "result-list" }, product.features.flatMap(feature => feature.presets.map(preset =>
+      h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: String(preset.appearance ?? "") }))))));
+    if (isBuild && "package" in product) block.append(h("dl", { class: "facts" },
+      h("dt", { text: "Mod files" }), h("dd", {}, h("code", { text: product.package }))));
+    card.append(block);
+  }
   // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
-  if (!isBuild) for (const text of check.notes ?? []) card.append(note(text, "info"));
-  if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
-    h("ul", { class: "result-list" }, r.omissions.map(item => h("li", {}, icon("warning"),
+  if (!isBuild) for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
+  const omissions = [...r.omissions, ...r.products.flatMap(product => product.features.flatMap(feature => feature.omissions))];
+  if (omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
+    h("ul", { class: "result-list" }, omissions.map(item => h("li", {}, icon("warning"),
       h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` :
         item.kind === "part" ? `The ${item.feature} part of “${item.presetName}” — ${item.reason}` :
+        item.kind === "feature" ? `${item.label} — ${item.reason}` :
         `Whole preset “${item.presetName}” — ${item.reason}` }))))));
-  if (isBuild) {
-    const b = build;
-    card.append(h("dl", { class: "facts" },
-      h("dt", { text: "Mod files" }), h("dd", {}, h("code", { text: b.package }))),
-    note("Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed.", "info"));
-  }
+  if (isBuild) card.append(note(r.products.length === 1 ? "Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed."
+    : "Your mods were built and checked. They haven't been tested in game yet, and nothing was installed.", "info"));
   // Technical facts stay available for bug reports without crowding the result.
   card.append(technicalDetails([
-    ...(isBuild ? [["Manifest", build.manifest], ["Archive SHA-256", build.archiveSha256]] as [string, string][] : []),
-    ["Collection fingerprint (SHA-256)", r.packagedCollectionSha256]]));
+    ...(isBuild ? (r as ReadonlyDeep<PackageBuildResult>).products.flatMap(product => [[`${product.modName} manifest`, product.manifest],
+      [`${product.modName} archive SHA-256`, product.archiveSha256]] as [string, string][]) : []),
+    ["Collection fingerprint (SHA-256)", r.collectionSha256],
+    ...r.products.flatMap(product => product.features.map(feature => [`${feature.label} fingerprint (SHA-256)`, feature.packagedSha256] as [string, string]))]));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;
