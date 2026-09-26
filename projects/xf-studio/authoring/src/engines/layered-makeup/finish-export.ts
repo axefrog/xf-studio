@@ -44,8 +44,9 @@ export const ROUTE_UV_WINDOW: Record<ExportRoute, boolean> = { flat: true, facet
 /** Entry suffix of a flat or faceted preset that a diagnostic keeps on head UV (no UV transform). */
 export const HEAD_UV_ENTRY_SUFFIX = "_head";
 
-/** Colour-shifting base surface: a soft, slightly metallic sheen under the Fresnel tint. */
-export const FRESNEL_SURFACE = { roughness: .32, metalness: .25 } as const;
+/** Colour-shifting base surface: a soft sheen under the Fresnel tint. The tint is added to the base colour and needs no
+ * metalness; 0.08 stays below the 0.1 at which a skin pixel leaves subsurface scattering (research/materials/shader-decal.md §10 item 2). */
+export const FRESNEL_SURFACE = { roughness: .32, metalness: .08 } as const;
 /** Shift strength 1 maps to this FresnelColorIntensity (before scaling by the colour's peak channel). */
 export const FRESNEL_MAX_INTENSITY = 2;
 /** The template's default exponent; the angle weight is saturate(|1 − N·V|^exponent). */
@@ -89,7 +90,8 @@ const FLAT_SUMMARY = "Can be built into your mod as a flat colour. How it looks 
  * restates it on purpose (mod-verifier/resource-checks.ts); a test fails if the two disagree.
  */
 export const FINISH_EXPORT = {
-  matte: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: .88, metalness: 0 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
+  // Matte writes the rough end (vanilla matte lipstick writes 1.0); research/materials/shader-decal.md §10 item 5.
+  matte: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: 1, metalness: 0 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
   regular: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: .38, metalness: 0 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
   metallic: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: .27, metalness: .65 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
   // One G-buffer lobe: a low-roughness dielectric. The engine clamps roughness at 0.04 and

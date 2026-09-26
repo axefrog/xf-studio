@@ -1,5 +1,5 @@
 {
- "capturedFrom": "step-2 code, commit 2dced39 (before part-2)",
+ "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults",
  "recipes": {
   "eye-artistry/recipe-1": {
    "recipe": "bec95166e1104aeaccba8465585abc6b204848a14aae7bb2721f47049b573fc1",
@@ -46,7 +46,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "1b812f462e0dff6f67b72320accfbf3c64188701b314890b4f66ade090b41009",
-     "roughness": "65d78a43763fa5530df3633cf3fbce0cf956841ddbc94ffc884d5014f66ad190",
+     "roughness": "1731f830fdf7b7083cd92214170aaa0c58bb751e8cb6b91608a5b8a19b3e173f",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "fd00c1159bfd88990b2027f24d3570d699a0e655b69991ac10915c9b57a76471"
@@ -148,7 +148,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "8ac6fa00fa2215363dbf1d5c1e5a3a52d1e49a8db779dc4c62d1f88d5777af19",
-     "roughness": "ba27beaab257998a94fdca77f9adbdba4843feca16f81d89f0343d60d07ab921",
+     "roughness": "63a780d832de1a41b4202c1c3da7c88ab4a349a9d513895d70e2f510bad6a484",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "4a88271d4b714caa03160760c6d2345a79a7e778c273b39075ddd80f053d250b"
@@ -199,7 +199,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "8ac6fa00fa2215363dbf1d5c1e5a3a52d1e49a8db779dc4c62d1f88d5777af19",
-     "roughness": "ba27beaab257998a94fdca77f9adbdba4843feca16f81d89f0343d60d07ab921",
+     "roughness": "63a780d832de1a41b4202c1c3da7c88ab4a349a9d513895d70e2f510bad6a484",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "4a88271d4b714caa03160760c6d2345a79a7e778c273b39075ddd80f053d250b"
@@ -250,7 +250,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "afebc3beb601a3072ce2041479e3aaabc6b7e8f01005bea332ab1f587891dd8a",
-     "roughness": "ee49acaa76869f76dbc568e94bdcba876cc32ca35dee7fe8df389804a3da8ff2",
+     "roughness": "841060a6ae39e7958e6053eb521b7ca3653059faa4b6182a1ace2a21d040bfef",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "c9f34c02e95f8a7b4aaa1977f380d5e391f714e2db917d4ac673ccca4826ba01"
@@ -301,7 +301,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "afebc3beb601a3072ce2041479e3aaabc6b7e8f01005bea332ab1f587891dd8a",
-     "roughness": "ee49acaa76869f76dbc568e94bdcba876cc32ca35dee7fe8df389804a3da8ff2",
+     "roughness": "841060a6ae39e7958e6053eb521b7ca3653059faa4b6182a1ace2a21d040bfef",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "c9f34c02e95f8a7b4aaa1977f380d5e391f714e2db917d4ac673ccca4826ba01"
@@ -352,7 +352,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "afebc3beb601a3072ce2041479e3aaabc6b7e8f01005bea332ab1f587891dd8a",
-     "roughness": "ee49acaa76869f76dbc568e94bdcba876cc32ca35dee7fe8df389804a3da8ff2",
+     "roughness": "841060a6ae39e7958e6053eb521b7ca3653059faa4b6182a1ace2a21d040bfef",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "c9f34c02e95f8a7b4aaa1977f380d5e391f714e2db917d4ac673ccca4826ba01"
@@ -403,7 +403,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "afebc3beb601a3072ce2041479e3aaabc6b7e8f01005bea332ab1f587891dd8a",
-     "roughness": "ee49acaa76869f76dbc568e94bdcba876cc32ca35dee7fe8df389804a3da8ff2",
+     "roughness": "841060a6ae39e7958e6053eb521b7ca3653059faa4b6182a1ace2a21d040bfef",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "c9f34c02e95f8a7b4aaa1977f380d5e391f714e2db917d4ac673ccca4826ba01"
@@ -454,7 +454,7 @@
     "route": "flat",
     "maps": {
      "diffuse": "afebc3beb601a3072ce2041479e3aaabc6b7e8f01005bea332ab1f587891dd8a",
-     "roughness": "ee49acaa76869f76dbc568e94bdcba876cc32ca35dee7fe8df389804a3da8ff2",
+     "roughness": "841060a6ae39e7958e6053eb521b7ca3653059faa4b6182a1ace2a21d040bfef",
      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
     },
     "metadata": "c9f34c02e95f8a7b4aaa1977f380d5e391f714e2db917d4ac673ccca4826ba01"
@@ -1109,7 +1109,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "f91cfca9be6da056920ed5be22aacab750ef040a7d8a7be490a4209f820b0344",
-      "roughness": "0f8439bdf7ce531cd2c6d0b62c6e87a0b3de66bdc0563ef76f6d4249c41ceaca",
+      "roughness": "1e96c568aa9b5ab2bcdc378d52fb1d206950478656b4e5f93dd02cd7e6f1ea2a",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "dea56cc915cb530162ab26c627e0d9dc58a64eb17baf1d39c96b6b271c4705ed"
@@ -1240,7 +1240,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "4c1cc1a7977c0b759d44322ec5069ac3e87cafa45baceef9d910fe622737eb61",
-      "roughness": "2d93ea51796743800488b4a60cf6d3e5d4f04fa91a39e22cbbf646715f0c6f8d",
+      "roughness": "fa959cac159e1b3aced3ff20e60860b57b0606bc27911ae81056705aebc682b9",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "a623f91a374d2dd228261d6bbf038a7f37d82b04c4c4d19114b090f69c1f6b32"
@@ -1279,7 +1279,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "4c1cc1a7977c0b759d44322ec5069ac3e87cafa45baceef9d910fe622737eb61",
-      "roughness": "2d93ea51796743800488b4a60cf6d3e5d4f04fa91a39e22cbbf646715f0c6f8d",
+      "roughness": "fa959cac159e1b3aced3ff20e60860b57b0606bc27911ae81056705aebc682b9",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "a623f91a374d2dd228261d6bbf038a7f37d82b04c4c4d19114b090f69c1f6b32"
@@ -1318,7 +1318,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "21131c4f75ccea9778354280f513b64162b33ee5721bcf75c30bc1393538e74f",
-      "roughness": "651036dd03ac88f1f413c66664b9b23e4fb6846890fc62cd90acd543da66da2a",
+      "roughness": "bbd8e2f9130b1da8197296a3965fc6929b977af2a0a7bc9d4f9b1ea5700009b3",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "7c9a9193001d69d0d9411ced3262a8151ba5eb917805441732f50fd2c7a4bfc2"
@@ -1357,7 +1357,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "21131c4f75ccea9778354280f513b64162b33ee5721bcf75c30bc1393538e74f",
-      "roughness": "651036dd03ac88f1f413c66664b9b23e4fb6846890fc62cd90acd543da66da2a",
+      "roughness": "bbd8e2f9130b1da8197296a3965fc6929b977af2a0a7bc9d4f9b1ea5700009b3",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "7c9a9193001d69d0d9411ced3262a8151ba5eb917805441732f50fd2c7a4bfc2"
@@ -1396,7 +1396,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "21131c4f75ccea9778354280f513b64162b33ee5721bcf75c30bc1393538e74f",
-      "roughness": "70d592da2003d4759aad73a97238db4f9e496a11894f5cee61604c0019320e9c",
+      "roughness": "3590a9e43727b2b793d1bf4e1094c81437309e18078a0a811be5ab3a04214653",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "a0937da3c79987c92ad964a6595a6a4f7f3eeff5c447c4aefe304d4d1e556e07"
@@ -1435,7 +1435,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "21131c4f75ccea9778354280f513b64162b33ee5721bcf75c30bc1393538e74f",
-      "roughness": "70d592da2003d4759aad73a97238db4f9e496a11894f5cee61604c0019320e9c",
+      "roughness": "3590a9e43727b2b793d1bf4e1094c81437309e18078a0a811be5ab3a04214653",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "a0937da3c79987c92ad964a6595a6a4f7f3eeff5c447c4aefe304d4d1e556e07"
@@ -1474,7 +1474,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "af953f6ec8f79f6aa1557776f7e4188918cee498f277d67087672c726e451498",
-      "roughness": "70d592da2003d4759aad73a97238db4f9e496a11894f5cee61604c0019320e9c",
+      "roughness": "3590a9e43727b2b793d1bf4e1094c81437309e18078a0a811be5ab3a04214653",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "9581bede4b9300fd52b2cf502d33e89f033d1874136a58c6a9e5070e96847a33"
@@ -1513,7 +1513,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "af953f6ec8f79f6aa1557776f7e4188918cee498f277d67087672c726e451498",
-      "roughness": "70d592da2003d4759aad73a97238db4f9e496a11894f5cee61604c0019320e9c",
+      "roughness": "3590a9e43727b2b793d1bf4e1094c81437309e18078a0a811be5ab3a04214653",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "9581bede4b9300fd52b2cf502d33e89f033d1874136a58c6a9e5070e96847a33"
@@ -1552,7 +1552,7 @@
      "route": "flat",
      "maps": {
       "diffuse": "af953f6ec8f79f6aa1557776f7e4188918cee498f277d67087672c726e451498",
-      "roughness": "70d592da2003d4759aad73a97238db4f9e496a11894f5cee61604c0019320e9c",
+      "roughness": "3590a9e43727b2b793d1bf4e1094c81437309e18078a0a811be5ab3a04214653",
       "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
      },
      "metadata": "9581bede4b9300fd52b2cf502d33e89f033d1874136a58c6a9e5070e96847a33"
@@ -1920,18 +1920,18 @@
   "016-finish-board/finish-board.collection.json": {
    "direct": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "03b61536509977681de479258d083973d783cd23f7d130112d7c84aec6b00dfb",
-    "packaged": "1ea001019d3a3d9650ee272f70b7d94570201802969f5ea1b5537647442f445d"
+    "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
+    "packaged": "5ea7ac5e02510335379219bde4f316a36c6b48302468f4f1fc758fd0d7e2322c"
    },
    "minimal": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "03b61536509977681de479258d083973d783cd23f7d130112d7c84aec6b00dfb",
-    "packaged": "1ea001019d3a3d9650ee272f70b7d94570201802969f5ea1b5537647442f445d"
+    "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
+    "packaged": "5ea7ac5e02510335379219bde4f316a36c6b48302468f4f1fc758fd0d7e2322c"
    },
    "collection-2": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "03b61536509977681de479258d083973d783cd23f7d130112d7c84aec6b00dfb",
-    "packaged": "1ea001019d3a3d9650ee272f70b7d94570201802969f5ea1b5537647442f445d"
+    "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
+    "packaged": "5ea7ac5e02510335379219bde4f316a36c6b48302468f4f1fc758fd0d7e2322c"
    }
   },
   "017-plate-depth/depth-candidate.collection.json": {
