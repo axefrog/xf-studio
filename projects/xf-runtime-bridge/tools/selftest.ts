@@ -298,6 +298,14 @@ const nested = (depth: number) => "[".repeat(depth) + "]".repeat(depth);
   check("PowerShell CLI prints the duration as <n>ms", /^OK {3}ping cid=ps-smoke-\S+ \d+ms \{/m.test(pwsh.stdout));
   await sleep(200);
 
+  // The Bun CLI's `run` goes through the command API (the same path as the MCP server).
+  const runStatus = spawnSync(process.execPath, [join(projectDir, "tools", "bridge-client.ts"), "run", "game.status", "--runtime-dir", host.dir], { encoding: "utf8" });
+  check("Bun CLI run game.status answers through the command API", runStatus.status === 0 && /"phase": "gameplay"/.test(runStatus.stdout), { status: runStatus.status, out: runStatus.stdout.trim().split("\n")[0] });
+  await sleep(200);
+  const runWrite = spawnSync(process.execPath, [join(projectDir, "tools", "bridge-client.ts"), "run", "photo.enter", "--runtime-dir", host.dir], { encoding: "utf8" });
+  check("Bun CLI run of a write explains that changes are switched off (exit 1)", runWrite.status === 1 && runWrite.stdout.includes("writes_disabled") && runWrite.stdout.includes("switched off"), { status: runWrite.status });
+  await sleep(200);
+
   // A session.json naming another PID: both clients refuse before sending the token.
   const fakeDir = join(host.dir, "wrong-pid");
   mkdirSync(fakeDir);

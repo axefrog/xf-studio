@@ -3,6 +3,8 @@
 //
 //   bun tools/package.ts            -> dist/xf-runtime-bridge-<version>.zip             (bridge off)
 //                                      dist/xf-runtime-bridge-<version>-diagnostic.zip  (bridge on, read-only)
+//                                      dist/xf-runtime-bridge-<version>-writes.zip      (bridge on, writes allowed;
+//                                                                                        the XF test profile only)
 //
 // Layout inside each zip (paths relative to the game folder, i.e. an MO2 mod root):
 //   red4ext/plugins/XFRuntimeBridge/XFRuntimeBridge.dll
@@ -72,7 +74,15 @@ function listFiles(dir: string): string[] {
   return out;
 }
 
-function stage(variant: "default" | "diagnostic") {
+type Variant = "default" | "diagnostic" | "writes";
+const SUFFIX: Record<Variant, string> = { default: "", diagnostic: "-diagnostic", writes: "-writes" };
+const DESCRIBE: Record<Variant, string> = {
+  default: "bridge OFF",
+  diagnostic: "bridge ON, read-only",
+  writes: "bridge ON, WRITES ALLOWED (dedicated test profile only)",
+};
+
+function stage(variant: Variant) {
   const stageDir = join(projectDir, "dist", "stage", variant);
   rmSync(stageDir, { recursive: true, force: true });
   const put = (from: string, to: string) => {
@@ -85,9 +95,17 @@ function stage(variant: "default" | "diagnostic") {
   put(dll, `${plugin}/XFRuntimeBridge.dll`);
   put(notices, `${plugin}/THIRD_PARTY_NOTICES.txt`);
   let config = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8");
-  if (variant === "diagnostic") {
+  if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
+  if (variant !== "default") {
     config = config.replace(/^enabled = false$/m, "enabled = true");
-    if (!/^enabled = true$/m.test(config)) throw new Error("diagnostic config did not enable the bridge");
+    if (!/^enabled = true$/m.test(config)) throw new Error(`${variant} config did not enable the bridge`);
+  }
+  if (variant === "writes") {
+    config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
+    if (!/^allow_writes = true$/m.test(config)) throw new Error("writes config did not allow writes");
+    const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
+    config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
+    if (!config.includes(warning)) throw new Error("writes config lost its warning");
   }
   mkdirSync(join(stageDir, plugin), { recursive: true });
   writeFileSync(join(stageDir, plugin, "config.ini"), config);
@@ -109,8 +127,8 @@ function stage(variant: "default" | "diagnostic") {
     name: "XF Runtime Bridge",
     version,
     variant,
-    bridge_enabled: variant === "diagnostic",
-    allow_writes: false,
+    bridge_enabled: variant !== "default",
+    allow_writes: variant === "writes",
     commit: builtCommit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {
@@ -119,23 +137,24 @@ function stage(variant: "default" | "diagnostic") {
       redscript: "0.5.31",
       cet: "1.37.1",
       tweakxl: "1.11.4 (optional; only the data marker needs it)",
+      codeware: "1.20.5 (optional; only photo.enter needs it)",
     },
     files,
   };
   writeFileSync(join(stageDir, plugin, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
-  const suffix = variant === "diagnostic" ? "-diagnostic" : "";
-  const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${suffix}.zip`);
+  const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${SUFFIX[variant]}.zip`);
   rmSync(zip, { force: true });
   // Windows' own bsdtar (not Git's GNU tar) writes a zip when the name ends in .zip and -a is given.
   const tarExe = join(process.env.SystemRoot ?? "C:/Windows", "System32", "tar.exe");
   // Name the top-level folders explicitly so entries carry no "./" prefix.
   const tar = spawnSync(tarExe, ["-a", "-c", "-f", zip, "-C", stageDir, "bin", "r6", "red4ext"], { encoding: "utf8" });
   if (tar.status !== 0) throw new Error(`tar failed: ${tar.stderr}`);
-  console.log(`${zip}\n  sha256 ${sha256(zip)}  (${files.length} files, bridge ${variant === "diagnostic" ? "ON (read-only)" : "OFF"})`);
+  console.log(`${zip}\n  sha256 ${sha256(zip)}  (${files.length} files, ${DESCRIBE[variant]})`);
   for (const file of files) console.log(`  ${file.sha256.slice(0, 16)}  ${file.path}`);
 }
 
 stage("default");
 stage("diagnostic");
-console.log("\nNothing was installed. Stage these zips into a dedicated MO2 profile only when a session is prepared.");
+stage("writes");
+console.log("\nNothing was installed. Stage a zip into a dedicated MO2 profile only when a session is prepared; the -writes zip only into the XF test profile.");
