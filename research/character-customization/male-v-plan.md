@@ -264,3 +264,6 @@ One session with a masculine V made in a new game (keep the save), plus the refe
 ## Related pages
 
 [Head CC rendering](../../knowledge/head-cc-rendering.md) · [Body rendering](../../knowledge/body-rendering.md) · [CC file chain](../../knowledge/cc-file-chain.md) · [Eyebrows](../../knowledge/brows.md) · [Eye rendering](../../knowledge/eye-rendering.md) · [Facial expressions](../../knowledge/facial-expressions.md) · [Worn clothing](../../knowledge/clothing.md) · [Save import](../eye-artistry/save-import.md) · [Studio-to-mod pipeline](../authoring/studio-to-mod-pipeline.md) · [CC controls and presets](../backlog/cc-controls-and-presets.md)
+
+**Provisional decisions (coordinator, 27 September 2026, for the maintainer's review):** the three proposed defaults are taken: export both genders by default once the masculine plate passes its offline gates (feminine only until then); split the "Default V" button into feminine and masculine; show a preview-only masculine plate until Build accepts one. Phase 1 (masculine core head) is scheduled after the current preview tracks.
+
