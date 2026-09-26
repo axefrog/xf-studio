@@ -121,6 +121,22 @@ Tool names are the MCP names; the CLI takes the dotted name (`bridge_ping` is `b
 | 18 | M, C | M opens the mirror's appearance screen. C: `game_wait {phase: ["character_menu"]}`, `player_appearance {option: "XF"}` | Phase `character_menu`; the XF row lists Off plus 12 with their names. | — |
 | 19 | C | `cc_apply {option: "XF", index: 1}`, `capture_screenshot`, then `cc_apply {option: "XF", index: 0}` | Depth A appears on V in the preview and the XF row shows its name; then Off. The bridge never confirms. | Back in the appearance screen discards every change |
 
+
+**Result, 26 September 2026 (build `c31156a`, new game start after the script-call check).**
+
+| Step | Outcome |
+|---|---|
+| 9 | `photo.enter` opened photo mode through the Codeware quest node, but **a restricted photo mode**: camera type first-person only, no V tab, no field of view; camera writes were accepted by the menu and changed nothing. Photo mode opened with the player's key has the full menu (camera type Drone), and there FOV, V placement, look-at, light, HUD and expression writes all work. **Don't use the quest-node route**; the bridge needs another way to open photo mode. `photo.exit` works. |
+| 10 | 92 menu items. Every researched key matches; new: **light on/off is key 44 (STATE)**, chromatic aberration 13, film grain 25, shadow 46, light type 45 (Spot/Ambient), camera type 16, character visible 27, V pose-tab offsets 7/8/9/37 (±180°, ±5 m). 207 expressions. |
+| 11 | FOV writes apply (visible zoom); no `write_mismatch`. After a write the FOV row stops showing its number box (cosmetic). |
+| 12 | Framing depends on where the drone camera spawns relative to V, so fixed presets can't be universal: in the bathroom the camera sat in the wall; in the living room with V facing the room, face close-up = FOV 7, look-at camera, V left/right +1.57, up/down −0.80 (eyes: FOV 1–2, +1.61, −0.81). Offsets scale with FOV around the frame centre. The photo-mode **mouse cursor is drawn into captures** (the HUD hide doesn't hide it). |
+| 13 | Light 1 switched on by the player (the bridge has no on/off parameter yet); brightness 80, hue 30 applied visibly (warm key light). Photo-mode lights reset each time photo mode opens. |
+| 14–15 | HUD hide gives clean captures; expression 1 (Charm) applied visibly. |
+| 16–17 | `cc.apply` refused in photo mode in plain words; `photo.exit` back to gameplay. |
+| 18–19 | The character creator (reached by the mirror or the Character Customisation Anywhere mod's F12) detected as `character_menu`; the XF row read (Off + 12); `cc.apply` changed the preview; the named `face` crop suits it, the `eyes` crop is sized for photo mode and lands on the forehead there. |
+| Session 2 | Run semi-manually: the player opened the creator with F12 and photo mode with the key; the bridge applied presets, framed, captured and restored. Results in [experiment 020](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial). |
+| 20–22 | The kill switch was proven in the script-call check; the game quit cleanly and removed `session.json`; post-session capture `bridge-phase2-post`. |
+
 Session 2 continues from here, at the mirror. If a step fails:
 - **Redscript error pop-up:** screenshot it, quit, disable `XF Runtime Bridge` in this profile; the coordinator reads `r6/logs/redscript_rCURRENT.log`.
 - **Crash:** disable the entry; send the newest `red4ext/logs/*.log` (under MO2: `overwrite/red4ext/logs/`). The last `script.call` or `step` line names the call; `python tools/minidump_summary.py` gives the crash's fingerprint ([game crashes](../../knowledge/game-crashes.md)).

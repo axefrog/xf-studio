@@ -53,3 +53,17 @@ Use MO2 profile **XF Studio diagnostic 2026-09-25**. Load a save, make a new man
 9. **Optional: piercings and the heart eye.** While at the mirror, set XF to Off, then one close-up each under the same light: piercing style 9 in black, style 1 in silver, then gold, and eye colour 24 (the heart design). The Studio now draws these from the game's own layered materials; a gold that shows grey, or plastic without its colour, tells us which way the game reads their colour mask ([test ask 14](../../knowledge/head-cc-rendering.md)). Restore your usual piercings and eyes afterwards (or load the safety save).
 
 Send the screenshots with a short note per step.
+
+## Results (26 September 2026, run through the runtime bridge; partial)
+
+Game 2.31 on the test profile, the session 2 build above, bridge build `c31156a` (see the [bridge test card](../../research/runtime/runtime-bridge-test-card.md)). Captures are kept privately; this records what they show.
+
+| Step | Result |
+|---|---|
+| 1. Selector | The XF row lists Off plus 12 values, read by the bridge. After a bridge `cc.apply` the row keeps showing the previous name while the preview and the value change (a bridge follow-up); confirming keeps the applied value. |
+| 2. Placement | **Lines · new, old, new** at the character creator's eyes zoom: the pattern sits in the same place relative to the eyes and brows in all three (the head drifts with the idle, so absolute pixels differ). A sharpness difference between new and old isn't visible at that zoom: **not established**. |
+| 3. Depth A → D | Photo mode, eyes filling the frame (FOV 1), room light, same framing each round: A, B, C and D all look solid in these stills. At the **extreme close-up** where the eye fills most of the view (the circumstance of the original report), **A (0 mm) breaks up**: jagged skin-coloured shards through the upper band, identical across a five-frame burst (depth-precision fighting, not animation). **B (+0.1 mm) and D (+0.4 mm) stay clean** at the same closeness; C, between two clean results, wasn't repeated. The pale streak at the inner lower lash line is the same on A–D, so it isn't the lift. **Decision: keep the 0.4 mm default** (it matches vanilla decals and leaves a wide margin: the smallest tested lift already holds). |
+| 4. Depth D in motion | Not run. |
+| 5–7. Gloss, Shimmer, Metal | Rendered in the character creator's fixed light (all ten presets captured); the verdicts need a light sweep the bridge can't drive yet, so they wait for the next session. |
+| 8–9 | Not run. |
+
