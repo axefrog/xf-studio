@@ -256,8 +256,11 @@ test("a change that can't be prepared keeps the V as it was shown and says why; 
 
 test("a host of another version is reported with the version-skew code, not as silence (the app updated while it ran)", async () => {
   const { createBrowserCharacterDetailDevice } = await import("../src/browser-character-detail-device");
-  const scene = { setCharacterDetails: () => ({ limits: [] }), detailContext: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }),
-    renderer: { capabilities: { getMaxAnisotropy: () => 1 } } } as never;
+  const { loadCharacterDetails } = await import("../src/character-detail-loader");
+  // The scene host's detail loader, as the host binds it (platform/scene/character-renderer.ts).
+  const scene = { setCharacterDetails: () => ({ limits: [] }), details: { load: (record: Parameters<typeof loadCharacterDetails>[0],
+    options: Omit<Parameters<typeof loadCharacterDetails>[1], "anisotropy" | "context">) => loadCharacterDetails(record,
+    { ...options, anisotropy: 1, context: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }) }) } } as never;
   const run = async (answer: (url: string, init?: RequestInit) => Response) => {
     const details = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, async (url, init) => answer(url, init)));
     await details.setCharacter(REQUEST_A);

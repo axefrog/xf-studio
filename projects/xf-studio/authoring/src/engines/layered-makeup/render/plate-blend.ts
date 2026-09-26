@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { forwardDecal, gbufferColour, type Rgb } from "../../../face-decal-material";
 import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "../finish-export";
 import { FRESNEL_TINT_TERM } from "./fresnel-tint";
-import { patchSkinLight, skinLightMapsChunk, skinLightUniforms, type SkinParameters } from "../../../skin-material";
+import { patchSkinLight, skinLightMapsChunk, skinLightUniforms } from "../../../skin-material";
+import type { SkinLight } from "../../../platform/api/scene";
 
 /**
  * The Studio's authored makeup plate, drawn the way the game draws the exported plate (renderer adapter).
@@ -275,7 +276,7 @@ export type PlateLightHandle = {
   /** Read this composite (plate-composite.ts `createPlateComposite`) over `window`; null draws nothing. */
   setComposite(textures: PlateCompositeTextures | null, window: BlendWindow): void;
   /** Light with the skin's own light (the drawn skin's profile) or, with null, Three's standard light. Recompiles on a change. */
-  setSkinLight(parameters: Pick<SkinParameters, "lobes" | "wrap"> | null): void;
+  setSkinLight(parameters: SkinLight | null): void;
   readonly skinLight: boolean;
   /** Colour-shifting (the Fresnel route's one pigment): the shift colour (sRGB hex) and strength 0–1, or null. */
   setFresnel(shift: { color: string; strength: number } | null): void;

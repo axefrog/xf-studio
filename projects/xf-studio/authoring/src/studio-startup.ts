@@ -32,6 +32,8 @@ import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
+import { STUDIO_RENDERERS } from "./compose/renderers";
+import { eyeMakeupRenderer } from "./features/eye-makeup/render";
 import { UIPreferenceActions } from "./ui-preferences";
 
 export type StudioHost = {
@@ -114,7 +116,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
   const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
+  const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     capture: {
@@ -201,7 +203,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: scene.plateBlendEvidence() }) : null,
+      frames: scene.frameTiming(), plateBlend: eyeMakeupRenderer(scene)?.evidence() ?? null, features: scene.featureEvidence() }) : null,
     xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
@@ -246,6 +248,12 @@ async function start(host: StudioHost, root: HTMLElement) {
     try {
       attached = await attachBrowserHead({
         workspace, viewport: viewportDevice, preview: previewDevice, preferences,
+        // Eye makeup's renderer draws the layers the preview device fills and the on-head editor edits.
+        layeredMakeup: loaded => {
+          const renderer = eyeMakeupRenderer(loaded);
+          if (!renderer) throw Error("Eye makeup's renderer is not composed.");
+          return renderer;
+        },
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
         attach: services => core.app.attach(services),

@@ -1,9 +1,9 @@
 import type { MotionPort } from "./motion-actions";
 import type { PreviewPort } from "./preview-actions";
 import type { SavedAppearancePort } from "./saved-appearance-actions";
-import type { createScene } from "./scene";
+import type { SceneHost } from "./platform/scene/scene-host";
 
-type Scene = Awaited<ReturnType<typeof createScene>>;
+type Scene = SceneHost;
 
 /**
  * The Three scene stays on the trusted device side of the presentation boundary. These ports are devices only: every creator choice
