@@ -37,6 +37,8 @@ inline constexpr int32_t kExpression = 28;
 inline constexpr int32_t kAutofocus = 33;
 inline constexpr int32_t kSubjectUpDown = 37;
 inline constexpr int32_t kLightSelect = 43;
+inline constexpr int32_t kLightState = 44; // STATE: option data 0 Off, 1 On (first session's photo.state dump)
+inline constexpr int32_t kLightType = 45;  // option data 1 Spot, 2 Ambient (same dump)
 inline constexpr int32_t kLightBrightness = 47;
 inline constexpr int32_t kLightRange = 48;
 inline constexpr int32_t kLightInnerAngle = 49;
@@ -70,9 +72,11 @@ std::string CameraParamName(int32_t aKey);
 // The keys photo.camera.set may reset.
 std::vector<int32_t> CameraKeys();
 
-// photo.light.set: {light: 1-3, brightness, range, inner_angle, outer_angle, hue, saturation, luminosity,
-// select_after: 1-3}. select_after selects that light in the menu once the values are set (the undo
-// uses it to put the menu's selection back).
+// photo.light.set: {light: 1-3, on, type, brightness, range, inner_angle, outer_angle, hue, saturation,
+// luminosity, select_after: 1-3}. on switches the light on or off (key 44, data 1 or 0) and type picks
+// "spot" or "ambient" (key 45, data 1 or 2); both are applied first, in that order, then the values.
+// select_after selects that light in the menu once the values are set (the undo uses it to put the
+// menu's selection back).
 struct LightRequest
 {
     int32_t light = 1;
@@ -84,8 +88,38 @@ LightRequest ParseLight(const json& aParams);
 // photo.expression.set: {faceId}.
 int32_t ParseExpression(const json& aParams);
 
-// photo.hud.hide: {hidden} (default true).
-bool ParseHudHidden(const json& aParams);
+// photo.hud.hide: {hidden (default true), cursor (default true)}. cursor = true makes the call hide
+// or show the menu's mouse cursor together with the photo-mode interface; false leaves the cursor
+// as it is.
+struct HudRequest
+{
+    bool hidden = true;
+    bool cursor = true;
+};
+HudRequest ParseHud(const json& aParams);
+bool ParseHudHidden(const json& aParams); // hidden only (kept for callers that ignore the cursor)
+
+// photo.enter: {route}. No route (or "auto") is refused with code photo_key_needed and a plain
+// message: the only route built so far, the quest node, opens a restricted photo mode (first
+// session, 26 Sep 2026: first-person camera only, no V tab), so the player's photo-mode key is the
+// way in until a proper route exists. route = "quest" keeps that node for research only. A later
+// route is added here as a new name; "auto" will then pick the best proven one, so callers that
+// send nothing or "auto" keep working.
+enum class PhotoEnterRoute
+{
+    Quest,
+};
+PhotoEnterRoute ParsePhotoEnter(const json& aParams);
+
+// photo.subject: {up, forward, right} in metres: the point to report, relative to V's head slot, along
+// the world's up axis and V's own forward and right directions (each -2 to 2, default 0).
+struct SubjectRequest
+{
+    float up = 0.0f;
+    float forward = 0.0f;
+    float right = 0.0f;
+};
+SubjectRequest ParseSubject(const json& aParams);
 
 // photo.state: {menu, options}.
 struct PhotoStateRequest

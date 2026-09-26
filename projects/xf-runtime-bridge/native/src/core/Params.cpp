@@ -270,11 +270,21 @@ std::vector<int32_t> CameraKeys()
 LightRequest ParseLight(const json& aParams)
 {
     RequireOnly(aParams,
-                {"light", "brightness", "range", "inner_angle", "outer_angle", "hue", "saturation", "luminosity",
-                 "select_after"});
+                {"light", "on", "type", "brightness", "range", "inner_angle", "outer_angle", "hue", "saturation",
+                 "luminosity", "select_after"});
     LightRequest request;
     request.light = static_cast<int32_t>(Integer(aParams, "light", 1, 3).value_or(1));
     request.selectAfter = static_cast<int32_t>(Integer(aParams, "select_after", 1, 3).value_or(0));
+    // The switch and the type come first: photo mode may ignore values for a light that is off.
+    AddFlag(request.attributes, aParams, "on", key::kLightState);
+    if (const auto type = Text(aParams, "type", 16))
+    {
+        if (*type != "spot" && *type != "ambient")
+        {
+            Bad("'type' must be \"spot\" or \"ambient\"");
+        }
+        request.attributes.push_back({key::kLightType, *type == "spot" ? 1.0f : 2.0f, "type"});
+    }
     Add(request.attributes, aParams, "brightness", key::kLightBrightness, 0, 100);
     Add(request.attributes, aParams, "range", key::kLightRange, 0, 100);
     Add(request.attributes, aParams, "inner_angle", key::kLightInnerAngle, 0, 180);
@@ -284,8 +294,8 @@ LightRequest ParseLight(const json& aParams)
     Add(request.attributes, aParams, "luminosity", key::kLightLuminosity, 0, 100);
     if (request.attributes.empty())
     {
-        Bad("give at least one light setting: brightness, range, inner_angle, outer_angle, hue, saturation or "
-            "luminosity");
+        Bad("give at least one light setting: on, type, brightness, range, inner_angle, outer_angle, hue, saturation "
+            "or luminosity");
     }
     return request;
 }
@@ -301,10 +311,46 @@ int32_t ParseExpression(const json& aParams)
     return static_cast<int32_t>(*face);
 }
 
+HudRequest ParseHud(const json& aParams)
+{
+    RequireOnly(aParams, {"hidden", "cursor"});
+    HudRequest request;
+    request.hidden = Boolean(aParams, "hidden").value_or(true);
+    request.cursor = Boolean(aParams, "cursor").value_or(true);
+    return request;
+}
+
 bool ParseHudHidden(const json& aParams)
 {
-    RequireOnly(aParams, {"hidden"});
-    return Boolean(aParams, "hidden").value_or(true);
+    return ParseHud(aParams).hidden;
+}
+
+PhotoEnterRoute ParsePhotoEnter(const json& aParams)
+{
+    RequireOnly(aParams, {"route"});
+    const auto route = Text(aParams, "route", 16).value_or("auto");
+    if (route == "quest")
+    {
+        return PhotoEnterRoute::Quest;
+    }
+    if (route != "auto")
+    {
+        Bad("'route' must be \"auto\" or \"quest\"");
+    }
+    throw MethodError("photo_key_needed",
+                      "the bridge can't open the full photo mode by itself yet; press the photo mode key in the game "
+                      "(game.wait with phase photo_mode notices when it opens). route \"quest\" opens a restricted "
+                      "photo mode and is for research only");
+}
+
+SubjectRequest ParseSubject(const json& aParams)
+{
+    RequireOnly(aParams, {"up", "forward", "right"});
+    SubjectRequest request;
+    request.up = static_cast<float>(Number(aParams, "up", -2, 2).value_or(0.0));
+    request.forward = static_cast<float>(Number(aParams, "forward", -2, 2).value_or(0.0));
+    request.right = static_cast<float>(Number(aParams, "right", -2, 2).value_or(0.0));
+    return request;
 }
 
 PhotoStateRequest ParsePhotoState(const json& aParams)

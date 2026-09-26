@@ -70,6 +70,10 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_saveLockHeld: Bool;
   private let m_worldFrozen: Bool;
   private let m_photoUiHidden: Bool;
+  private let m_cursorHidden: Bool;
+  private let m_cursors: array<wref<CursorGameController>>;
+  private let m_cursorOpacity: array<Float>;
+  private let m_photoPuppet: wref<GameObject>;
 
   public static func Get() -> ref<XFBridgeRegistry> {
     return GameInstance.GetScriptableSystemsContainer(GetGameInstance()).Get(n"XFRuntimeBridge.XFBridgeRegistry") as XFBridgeRegistry;
@@ -86,6 +90,73 @@ public class XFBridgeRegistry extends ScriptableSystem {
       this.m_photo = null;
     }
     this.m_photoUiHidden = false;
+    this.m_photoPuppet = null;
+  }
+
+  // V's stand-in in photo mode (the entity PhotoModePlayerEntityComponent sets up), for photo.subject.
+  public func SetPhotoPuppet(puppet: wref<GameObject>) -> Void {
+    this.m_photoPuppet = puppet;
+  }
+
+  public func GetPhotoPuppet() -> wref<GameObject> {
+    return this.m_photoPuppet;
+  }
+
+  // The menu cursor, hidden with the photo-mode interface for clean captures. Two routes: the
+  // vanilla menu-layer event (inkMenuLayer_SetCursorVisibility, as the time-skip and item-preview
+  // menus use it), and, for every cursor controller that event reaches while the bridge keeps the
+  // cursor hidden, its root widget's opacity at 0 (so photo mode showing the cursor again on its own
+  // can't bring it back). Both are undone on show, when photo mode closes and by the kill switch.
+  public func SetCursorHidden(hidden: Bool) -> Void {
+    this.m_cursorHidden = hidden;
+    if !hidden {
+      this.RestoreCursorWidgets();
+    }
+  }
+
+  public func IsCursorHidden() -> Bool {
+    return this.m_cursorHidden;
+  }
+
+  public func HideCursorWidget(controller: wref<CursorGameController>) -> Void {
+    if !IsDefined(controller) {
+      return;
+    }
+    let root = controller.GetRootWidget();
+    if !IsDefined(root) {
+      return;
+    }
+    let i = 0;
+    while i < ArraySize(this.m_cursors) {
+      if this.m_cursors[i] == controller {
+        root.SetOpacity(0.0);
+        return;
+      }
+      i += 1;
+    }
+    ArrayPush(this.m_cursors, controller);
+    ArrayPush(this.m_cursorOpacity, root.GetOpacity());
+    root.SetOpacity(0.0);
+  }
+
+  public func CursorWidgetsHidden() -> Int32 {
+    return ArraySize(this.m_cursors);
+  }
+
+  public func RestoreCursorWidgets() -> Void {
+    let i = 0;
+    while i < ArraySize(this.m_cursors) {
+      let controller = this.m_cursors[i];
+      if IsDefined(controller) {
+        let root = controller.GetRootWidget();
+        if IsDefined(root) {
+          root.SetOpacity(this.m_cursorOpacity[i]);
+        }
+      }
+      i += 1;
+    }
+    ArrayClear(this.m_cursors);
+    ArrayClear(this.m_cursorOpacity);
   }
 
   public func GetPhotoController() -> wref<gameuiPhotoModeMenuController> {
@@ -176,6 +247,7 @@ protected cb func OnShow(reversedUI: Bool) -> Bool {
   if IsDefined(registry) {
     registry.SetPhotoController(this);
     registry.SetPhotoUiHidden(false);
+    registry.SetCursorHidden(false);
   }
   return result;
 }
@@ -184,6 +256,12 @@ protected cb func OnShow(reversedUI: Bool) -> Bool {
 protected cb func OnHide() -> Bool {
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
+    // Give the menu layer its cursor back before photo mode closes, so no later menu inherits a
+    // hidden cursor.
+    if registry.IsCursorHidden() {
+      this.XFBridgeSetCursorVisible(true);
+      registry.SetCursorHidden(false);
+    }
     registry.ClearPhotoController(this);
   }
   return wrappedMethod();
@@ -255,6 +333,45 @@ public func XFBridgeSetUiVisible(visible: Bool) -> Void {
     this.OnFadeVisibility(1.0);
   } else {
     this.OnFadeVisibility(0.0);
+  }
+}
+
+// Shows or hides the menu layer's mouse cursor with the vanilla event menus use for it
+// (inkMenuLayer_SetCursorVisibility: hubMenuTimeSkipController.script:87-90,
+// entityPreviewGameController.script:189-218), queued from this menu.
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeSetCursorVisible(visible: Bool) -> Void {
+  let evt = new inkMenuLayer_SetCursorVisibility();
+  evt.Init(visible);
+  this.QueueEvent(evt);
+}
+
+// V's photo-mode stand-in as the controller knows it (native-set; no script assigns it).
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeFakePlayer() -> wref<PlayerPuppet> {
+  return this.m_fakePlayer;
+}
+
+// Every cursor controller the bridge's hide event reaches (or that photo mode shows again while the
+// bridge keeps it hidden) gets its root widget's opacity set to 0; RestoreCursorWidgets undoes it.
+@wrapMethod(CursorGameController)
+protected cb func OnSetCursorVisibility(isVisible: Bool) -> Bool {
+  let result = wrappedMethod(isVisible);
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) && registry.IsCursorHidden() {
+    registry.HideCursorWidget(this);
+  }
+  return result;
+}
+
+// Remembers V's photo-mode stand-in when photo mode sets it up (photoModePlayerEntity.script:378;
+// called by the game, not by any script).
+@wrapMethod(PhotoModePlayerEntityComponent)
+private final func SetupInventory(isCurrentPlayerObjectCustomizable: Bool) -> Void {
+  wrappedMethod(isCurrentPlayerObjectCustomizable);
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.SetPhotoPuppet(this.GetEntity() as GameObject);
   }
 }
 
@@ -351,6 +468,7 @@ public abstract class XFBridgeActions {
         out += ",\"bridge_world_frozen\":" + XFJson.Flag(registry.IsWorldFrozen());
         out += ",\"photo_controller_seen\":" + XFJson.Flag(IsDefined(registry.GetPhotoController()));
         out += ",\"photo_ui_hidden\":" + XFJson.Flag(registry.IsPhotoUiHidden());
+        out += ",\"cursor_hidden\":" + XFJson.Flag(registry.IsCursorHidden());
       }
     }
     XFBridgeLog.Debug(cid, "Status phase=" + phase);
@@ -392,6 +510,13 @@ public abstract class XFBridgeActions {
       photo.XFBridgeSetUiVisible(true);
       registry.SetPhotoUiHidden(false);
       out += ",\"photo_ui_shown\":true";
+    }
+    if registry.IsCursorHidden() {
+      if IsDefined(photo) {
+        photo.XFBridgeSetCursorVisible(true);
+      }
+      registry.SetCursorHidden(false);
+      out += ",\"cursor_shown\":true";
     }
     // The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
     // still be live, and a save now would keep it. The lock is not persistent; loading a save
@@ -617,7 +742,9 @@ public abstract class XFPhoto {
     return "{\"ok\":true,\"changed\":true}";
   }
 
-  public static func SetUiVisible(cid: String, visible: Bool) -> String {
+  // Fades the photo-mode interface out or in; with cursor, also hides or shows the menu's mouse
+  // cursor (XFBridgeRegistry.SetCursorHidden has the two routes).
+  public static func SetUiVisible(cid: String, visible: Bool, cursor: Bool) -> String {
     if !XFPhoto.Active() {
       return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
     }
@@ -627,10 +754,115 @@ public abstract class XFPhoto {
       return XFJson.Fail("unavailable", "the photo-mode menu has not been seen yet");
     }
     let before = !registry.IsPhotoUiHidden();
+    let cursorBefore = registry.IsCursorHidden();
     controller.XFBridgeSetUiVisible(visible);
     registry.SetPhotoUiHidden(!visible);
-    XFBridgeLog.Info(cid, "photo UI visible " + XFJson.Flag(before) + " -> " + XFJson.Flag(visible) + "; undo: photo.hud.hide with hidden=" + XFJson.Flag(!before));
-    return "{\"ok\":true,\"hidden\":" + XFJson.Flag(!visible) + ",\"was_hidden\":" + XFJson.Flag(!before) + "}";
+    if cursor {
+      // The flag goes first: the event reaches the cursor controller later, and its wrap reads it.
+      registry.SetCursorHidden(!visible);
+      controller.XFBridgeSetCursorVisible(visible);
+    }
+    let cursorAfter = registry.IsCursorHidden();
+    XFBridgeLog.Info(cid, "photo UI visible " + XFJson.Flag(before) + " -> " + XFJson.Flag(visible) + ", cursor hidden " + XFJson.Flag(cursorBefore) + " -> " + XFJson.Flag(cursorAfter) + "; undo: photo.hud.hide with hidden=" + XFJson.Flag(!before));
+    return "{\"ok\":true,\"hidden\":" + XFJson.Flag(!visible) + ",\"was_hidden\":" + XFJson.Flag(!before) + ",\"cursor_hidden\":" + XFJson.Flag(cursorAfter) + ",\"was_cursor_hidden\":" + XFJson.Flag(cursorBefore) + ",\"cursor_widgets_hidden\":" + IntToString(registry.CursorWidgetsHidden()) + "}";
+  }
+
+  // --- Subject and camera, for framing (photo.subject) ---------------------------------------
+
+  public static func Vec(v: Vector4) -> String {
+    return "{\"x\":" + XFJson.Num(v.X) + ",\"y\":" + XFJson.Num(v.Y) + ",\"z\":" + XFJson.Num(v.Z) + "}";
+  }
+
+  public static func Screen(v: Vector4) -> String {
+    return "{\"x\":" + FloatToStringPrec(v.X, 6) + ",\"y\":" + FloatToStringPrec(v.Y, 6) + ",\"z\":" + FloatToStringPrec(v.Z, 6) + ",\"w\":" + FloatToStringPrec(v.W, 6) + "}";
+  }
+
+  public static func PoseItem(controller: wref<gameuiPhotoModeMenuController>, registry: ref<XFBridgeRegistry>, name: String, key: Uint32) -> String {
+    let item = registry.FindItem(key);
+    if !IsDefined(item) || !IsDefined(controller) || !XFPhoto.HasValue(controller, item) {
+      return "\"" + name + "\":null";
+    }
+    let out = "\"" + name + "\":{\"value\":" + XFJson.Num(XFPhoto.CurrentValue(controller, item));
+    if Equals(item.kind, "slider") {
+      out += ",\"min\":" + XFJson.Num(item.minValue) + ",\"max\":" + XFJson.Num(item.maxValue) + ",\"step\":" + XFJson.Num(item.step);
+    }
+    return out + "}";
+  }
+
+  // Read-only. Where V's head is (the photo-mode stand-in's "Head" slot, plus an offset in metres:
+  // up along the world's Z, forward and right along V's own facing) in the world and on screen, and
+  // the photo-mode camera (CameraSystem: active camera transform, field of view, aspect ratio,
+  // ProjectPoint). Screen positions are ProjectPoint's raw answer; "center" projects a point 5 m
+  // straight ahead of the camera, so the caller can tell which screen space ProjectPoint uses.
+  public static func Subject(cid: String, up: Float, forward: Float, right: Float) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let game = GetGameInstance();
+    let registry = XFBridgeRegistry.Get();
+    let controller = XFPhoto.Controller();
+    if !IsDefined(registry) {
+      return XFJson.Fail("unavailable", "no game session yet");
+    }
+    let source = "photo_puppet";
+    let puppet: wref<GameObject> = registry.GetPhotoPuppet();
+    if !IsDefined(puppet) && IsDefined(controller) {
+      puppet = controller.XFBridgeFakePlayer();
+      source = "photo_controller";
+    }
+    if !IsDefined(puppet) {
+      return XFJson.Fail("unavailable", "V's photo-mode stand-in hasn't been seen yet; close and reopen photo mode");
+    }
+    let slot = "";
+    let head: Vector4;
+    let slotTransform: WorldTransform;
+    let scripted = puppet as ScriptedPuppet;
+    if IsDefined(scripted) {
+      let slots = scripted.GetSlotComponent();
+      if IsDefined(slots) && slots.GetSlotTransform(n"Head", slotTransform) {
+        head = WorldPosition.ToVector4(WorldTransform.GetWorldPosition(slotTransform));
+        slot = "Head";
+      } else {
+        let hitSlots = scripted.GetHitRepresantationSlotComponent();
+        if IsDefined(hitSlots) && hitSlots.GetSlotTransform(n"Head", slotTransform) {
+          head = WorldPosition.ToVector4(WorldTransform.GetWorldPosition(slotTransform));
+          slot = "Head (hit representation)";
+        }
+      }
+    }
+    let approximate = false;
+    if StrLen(slot) == 0 {
+      // No head slot: V's position plus a standing head height. Good enough to centre roughly.
+      head = puppet.GetWorldPosition();
+      head.Z += 1.62;
+      approximate = true;
+    }
+    let f = puppet.GetWorldForward();
+    let r = new Vector4(f.Y, -f.X, 0.0, 0.0);
+    let target = new Vector4(head.X + f.X * forward + r.X * right, head.Y + f.Y * forward + r.Y * right, head.Z + up + f.Z * forward, 1.0);
+    let camera = GameInstance.GetCameraSystem(game);
+    let camTransform: Transform;
+    if !camera.GetActiveCameraWorldTransform(camTransform) {
+      return XFJson.Fail("unavailable", "the camera system reported no active camera");
+    }
+    let camPos = camTransform.position;
+    let cf = camera.GetActiveCameraForward();
+    let cr = camera.GetActiveCameraRight();
+    let cu = camera.GetActiveCameraUp();
+    let center = new Vector4(camPos.X + cf.X * 5.0, camPos.Y + cf.Y * 5.0, camPos.Z + cf.Z * 5.0, 1.0);
+    let upPoint = new Vector4(target.X + cu.X * 0.1, target.Y + cu.Y * 0.1, target.Z + cu.Z * 0.1, 1.0);
+    let rightPoint = new Vector4(target.X + cr.X * 0.1, target.Y + cr.Y * 0.1, target.Z + cr.Z * 0.1, 1.0);
+    let out = "{\"ok\":true,\"subject\":" + XFJson.Str(source) + ",\"slot\":" + XFJson.Str(slot) + ",\"approximate\":" + XFJson.Flag(approximate);
+    out += ",\"head\":" + XFPhoto.Vec(head) + ",\"target\":" + XFPhoto.Vec(target) + ",\"subject_forward\":" + XFPhoto.Vec(f);
+    out += ",\"offset\":{\"up\":" + XFJson.Num(up) + ",\"forward\":" + XFJson.Num(forward) + ",\"right\":" + XFJson.Num(right) + "}";
+    out += ",\"camera\":{\"position\":" + XFPhoto.Vec(camPos) + ",\"forward\":" + XFPhoto.Vec(cf) + ",\"right\":" + XFPhoto.Vec(cr) + ",\"up\":" + XFPhoto.Vec(cu);
+    out += ",\"fov\":" + XFJson.Num(camera.GetActiveCameraFOV()) + ",\"aspect\":" + XFJson.Num(camera.GetAspectRatio()) + "}";
+    out += ",\"screen\":{\"target\":" + XFPhoto.Screen(camera.ProjectPoint(target)) + ",\"head\":" + XFPhoto.Screen(camera.ProjectPoint(head));
+    out += ",\"center\":" + XFPhoto.Screen(camera.ProjectPoint(center)) + ",\"up\":" + XFPhoto.Screen(camera.ProjectPoint(upPoint)) + ",\"right\":" + XFPhoto.Screen(camera.ProjectPoint(rightPoint)) + "}";
+    out += ",\"pose\":{" + XFPhoto.PoseItem(controller, registry, "fov", 1u) + "," + XFPhoto.PoseItem(controller, registry, "yaw", 7u) + "," + XFPhoto.PoseItem(controller, registry, "left_right", 8u);
+    out += "," + XFPhoto.PoseItem(controller, registry, "near_far", 9u) + "," + XFPhoto.PoseItem(controller, registry, "up_down", 37u) + "," + XFPhoto.PoseItem(controller, registry, "look_at", 15u) + "}";
+    XFBridgeLog.Debug(cid, "photo subject " + source + " slot=" + slot);
+    return out + "}";
   }
 }
 
@@ -825,9 +1057,63 @@ public abstract class XFCharacter {
     }
     XFBridgeActions.EnsureSaveLock(cid);
     let before = Cast<Int32>(match.currIndex);
-    system.ApplyChangeToOption(match, Cast<Uint32>(index));
-    XFBridgeLog.Info(cid, "cc.apply " + NameToString(match.info.name) + " " + IntToString(before) + " -> " + IntToString(index) + "; undo: cc.apply index " + IntToString(before) + ", or Back in the mirror (discards every change)");
-    return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + "}";
+    // Through the option's own row when it is on screen: the row shows the new value's name and
+    // keeps its own index, then asks the menu to apply it (OnSliderChange / OnColorChange), exactly
+    // as its arrows do. Otherwise straight through the system, as before (the row then keeps
+    // showing the old name until the screen is reopened).
+    let route = "row";
+    if !XFCharacter.ApplyThroughRow(menu, match, index) {
+      system.ApplyChangeToOption(match, Cast<Uint32>(index));
+      route = "system";
+    }
+    XFBridgeLog.Info(cid, "cc.apply " + NameToString(match.info.name) + " " + IntToString(before) + " -> " + IntToString(index) + " via " + route + "; undo: cc.apply index " + IntToString(before) + ", or Back in the mirror (discards every change)");
+    return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + ",\"route\":" + XFJson.Str(route) + ",\"row_updated\":" + XFJson.Flag(Equals(route, "row")) + "}";
+  }
+
+  // Selects index on the menu row that shows this option (matched by UI slot, as the menu's own
+  // UpdateOption does; characterCreationBodyMorphMenu.script:436). The row's setter updates its
+  // label and index and calls the menu back, which applies the change (OnSliderChange,
+  // OnColorChange). False when no row shows the option.
+  public static func ApplyThroughRow(menu: wref<characterCreationBodyMorphMenu>, option: ref<CharacterCustomizationOption>, index: Int32) -> Bool {
+    let appearance = option.info as gameuiAppearanceInfo;
+    let morph = option.info as gameuiMorphInfo;
+    let switcher = option.info as gameuiSwitcherInfo;
+    let count = inkCompoundRef.GetNumChildren(menu.m_optionsList);
+    let i = 0;
+    while i < count {
+      let widget = inkCompoundRef.GetWidgetByIndex(menu.m_optionsList, i);
+      if IsDefined(widget) {
+        let row = widget.GetController() as characterCreationBodyMorphOption;
+        if IsDefined(row) {
+          let shown = row.GetSelectorOption();
+          if IsDefined(shown) && Equals(shown.info.uiSlot, option.info.uiSlot) {
+            if IsDefined(appearance) {
+              row.SetSelectedAppearanceDefinition(appearance, index, true);
+              return true;
+            }
+            if IsDefined(morph) {
+              row.SetSelectedMorphName(morph, index, true);
+              return true;
+            }
+            if IsDefined(switcher) {
+              row.SetSelectedSwitcherOption(switcher, index, true);
+              return true;
+            }
+            return false;
+          }
+        }
+        let colorRow = widget.GetController() as characterCreationBodyMorphColorOption;
+        if IsDefined(colorRow) {
+          let shownColor = colorRow.GetColorPickerOption();
+          if IsDefined(shownColor) && Equals(shownColor.info.uiSlot, option.info.uiSlot) && IsDefined(appearance) {
+            colorRow.SetSelectedAppearanceDefinitionColor(appearance, index, true);
+            return true;
+          }
+        }
+      }
+      i += 1;
+    }
+    return false;
   }
 }
 

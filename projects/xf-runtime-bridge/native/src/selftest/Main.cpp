@@ -10,6 +10,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -198,6 +199,7 @@ int wmain(int argc, wchar_t** argv)
         std::mutex mutex;
         std::string phase = "gameplay";
         bool hudHidden = false;
+        bool cursorHidden = false;
         bool frozen = false;
         int32_t clock = 12 * 3600;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
@@ -251,6 +253,7 @@ int wmain(int argc, wchar_t** argv)
                                          {"photo_mode_active", sim.phase == "photo_mode"},
                                          {"world_frozen", sim.frozen},
                                          {"ui_hidden", sim.hudHidden},
+                                         {"cursor_hidden", sim.cursorHidden},
                                          {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}}};
                          }});
     dispatcher.Register({"player.appearance", xfb::Access::Read, xfb::RunOn::GameThread,
@@ -280,7 +283,7 @@ int wmain(int argc, wchar_t** argv)
                          }});
     dispatcher.Register(simWrite("photo.enter", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Opens photo mode (simulated).",
                                  [](const xfb::MethodContext& aContext) {
-                                     p::RequireOnly(aContext.params, {});
+                                     p::ParsePhotoEnter(aContext.params); // refuses unless route = "quest"
                                      std::scoped_lock _(sim.mutex);
                                      if (sim.phase != "gameplay" && sim.phase != "photo_mode")
                                      {
@@ -292,7 +295,7 @@ int wmain(int argc, wchar_t** argv)
                                          sim.attributes.clear(); // photo mode opens with its defaults
                                      }
                                      sim.phase = "photo_mode";
-                                     return json{{"simulated", true}, {"changed", changed}, {"active", true},
+                                     return json{{"simulated", true}, {"changed", changed}, {"active", true}, {"route", "quest"},
                                                  {"undo", {{"method", "photo.exit"}, {"params", json::object()}}}};
                                  }));
     dispatcher.Register(simWrite("photo.exit", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Leaves photo mode (simulated).",
@@ -304,9 +307,10 @@ int wmain(int argc, wchar_t** argv)
                                      {
                                          sim.phase = "gameplay";
                                          sim.hudHidden = false; // leaving photo mode always shows its menu again
+                                         sim.cursorHidden = false;
                                      }
-                                     return json{{"simulated", true}, {"changed", changed}, {"active", false},
-                                                 {"undo", {{"method", "photo.enter"}, {"params", json::object()}}}};
+                                     return json{{"simulated", true}, {"changed", changed}, {"active", false}, {"undo", nullptr},
+                                                 {"undo_note", "press the photo mode key to open photo mode again; its settings start fresh"}};
                                  }));
     dispatcher.Register(simWrite("photo.camera.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Camera (simulated).",
                                  [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
@@ -348,14 +352,82 @@ int wmain(int argc, wchar_t** argv)
                                  }));
     dispatcher.Register(simWrite("photo.hud.hide", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Photo UI (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {
-                                     const bool hidden = p::ParseHudHidden(aContext.params);
+                                     const auto request = p::ParseHud(aContext.params);
                                      requirePhase("photo_mode", "not_in_photo_mode");
                                      std::scoped_lock _(sim.mutex);
                                      const bool was = sim.hudHidden;
-                                     sim.hudHidden = hidden;
-                                     return json{{"simulated", true}, {"hidden", hidden}, {"was_hidden", was},
-                                                 {"undo", {{"method", "photo.hud.hide"}, {"params", {{"hidden", was}}}}}};
+                                     const bool wasCursor = sim.cursorHidden;
+                                     sim.hudHidden = request.hidden;
+                                     if (request.cursor)
+                                     {
+                                         sim.cursorHidden = request.hidden;
+                                     }
+                                     return w::HudResult(json{{"simulated", true},
+                                                              {"hidden", request.hidden},
+                                                              {"was_hidden", was},
+                                                              {"cursor_hidden", sim.cursorHidden},
+                                                              {"was_cursor_hidden", wasCursor}});
                                  }));
+    // V's head and the camera, simulated like XFPhoto.Subject: a fixed camera at (0, 0, 1.6) looking
+    // along +Y, and V's head placed by the pose tab's offsets (keys 8, 9, 37) and rotation (key 7)
+    // through a slightly skewed mapping, projected with a vertical field of view (key 1, 35 until
+    // set) at aspect 2.4. Enough to drive tools/api/framing.ts end to end offline.
+    dispatcher.Register({"photo.subject", xfb::Access::Read, xfb::RunOn::GameThread, "V's head and the camera (simulated).",
+                         [requirePhase](const xfb::MethodContext& aContext) {
+                             const auto request = p::ParseSubject(aContext.params);
+                             requirePhase("photo_mode", "not_in_photo_mode");
+                             std::scoped_lock _(sim.mutex);
+                             const auto attr = [](int32_t aKey, double aDefault) {
+                                 const auto it = sim.attributes.find(aKey);
+                                 return it == sim.attributes.end() ? aDefault : static_cast<double>(it->second);
+                             };
+                             const double fovSet = attr(p::key::kFov, 35.0);
+                             const double fov = fovSet > 0.0 ? fovSet : 35.0;
+                             const double lr = attr(p::key::kSubjectLeftRight, 0.0);
+                             const double nf = attr(p::key::kSubjectNearFar, 0.0);
+                             const double ud = attr(p::key::kSubjectUpDown, 0.0);
+                             const double pi = 3.14159265358979;
+                             const double theta = (150.0 + attr(p::key::kSubjectYaw, 0.0)) * pi / 180.0;
+                             const double fx = std::sin(theta);
+                             const double fy = std::cos(theta);
+                             const double rx = fy;
+                             const double ry = -fx;
+                             const double root[3] = {0.4 + 0.95 * lr - 0.05 * ud, 6.0 + nf + 0.1 * lr, ud};
+                             const double head[3] = {root[0] + fx * 0.03, root[1] + fy * 0.03, root[2] + 1.62};
+                             const double target[3] = {head[0] + fx * request.forward + rx * request.right,
+                                                       head[1] + fy * request.forward + ry * request.right, head[2] + request.up};
+                             const double cam[3] = {0.0, 0.0, 1.6};
+                             const double aspect = 2.4;
+                             const double t = std::tan(fov * pi / 360.0);
+                             const auto project = [&](double aX, double aY, double aZ) {
+                                 const double vx = aX - cam[0];
+                                 const double vy = aY - cam[1];
+                                 const double vz = aZ - cam[2];
+                                 return json{{"x", vx / (vy * t * aspect)}, {"y", vz / (vy * t)}, {"z", vy}, {"w", 1.0}};
+                             };
+                             const auto vec = [](double aX, double aY, double aZ) { return json{{"x", aX}, {"y", aY}, {"z", aZ}}; };
+                             return json{{"simulated", true},
+                                         {"subject", "photo_puppet"},
+                                         {"slot", "Head"},
+                                         {"approximate", false},
+                                         {"head", vec(head[0], head[1], head[2])},
+                                         {"target", vec(target[0], target[1], target[2])},
+                                         {"subject_forward", vec(fx, fy, 0.0)},
+                                         {"offset", {{"up", request.up}, {"forward", request.forward}, {"right", request.right}}},
+                                         {"camera",
+                                          {{"position", vec(cam[0], cam[1], cam[2])},
+                                           {"forward", vec(0, 1, 0)},
+                                           {"right", vec(1, 0, 0)},
+                                           {"up", vec(0, 0, 1)},
+                                           {"fov", fov},
+                                           {"aspect", aspect}}},
+                                         {"screen",
+                                          {{"target", project(target[0], target[1], target[2])},
+                                           {"head", project(head[0], head[1], head[2])},
+                                           {"center", project(cam[0], cam[1] + 5.0, cam[2])},
+                                           {"up", project(target[0], target[1], target[2] + 0.1)},
+                                           {"right", project(target[0] + 0.1, target[1], target[2])}}}};
+                         }});
     dispatcher.Register(simWrite("photo.expression.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Expression (simulated).",
                                  [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
                                      const auto face = p::ParseExpression(aContext.params);
@@ -400,9 +472,10 @@ int wmain(int argc, wchar_t** argv)
     // show the photo-mode menu; the save lock would stay.
     const auto simulatedRestore = [] {
         std::scoped_lock _(sim.mutex);
-        json out{{"simulated", true}, {"world_unfrozen", sim.frozen}, {"photo_ui_shown", sim.hudHidden}};
+        json out{{"simulated", true}, {"world_unfrozen", sim.frozen}, {"photo_ui_shown", sim.hudHidden}, {"cursor_shown", sim.cursorHidden}};
         sim.frozen = false;
         sim.hudHidden = false;
+        sim.cursorHidden = false;
         xfb::log::Info("bridge.kill_restored", xfb::SerializeJson(out), "kill-restore");
     };
     const auto restoreFailed = [](const std::string& aWhat) {

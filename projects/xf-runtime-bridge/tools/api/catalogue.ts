@@ -13,9 +13,10 @@
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
 
-import { captureWindow, CaptureError, recrop, type CaptureRecord } from "../capture/capture.ts";
+import { captureBurst, captureWindow, CaptureError, grabForAnalysis, recrop, type CaptureRecord } from "../capture/capture.ts";
 import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
+import { frame, FramingError, FRAMINGS, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 
@@ -115,12 +116,99 @@ function captureResult(record: CaptureRecord): CommandResult {
   };
 }
 
+function captureFailure(error: unknown): never {
+  if (error instanceof CaptureError) throw planError(error.code === "bad_region" || error.code === "bad_file" ? "bad_input" : `capture_${error.code}`, error.message);
+  throw error;
+}
+
 function wrapCapture(run: () => CaptureRecord): CommandResult {
   try {
     return captureResult(run());
   } catch (error) {
-    if (error instanceof CaptureError) throw planError(error.code === "bad_region" || error.code === "bad_file" ? "bad_input" : `capture_${error.code}`, error.message);
+    captureFailure(error);
+  }
+}
+
+/** Sends one bridge method from inside a local command; a refusal becomes a plain error. */
+async function bridgeCall(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const response = await context.api.callBridge(method, params, context.cid);
+  if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
+  return response.result as Record<string, unknown>;
+}
+
+const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** photo.frame: builds the framing adapter over the bridge and the window capture, then runs the loop. */
+async function runFrame(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  let hudUndo: Record<string, unknown> | null = null;
+  const adapter: FramingAdapter = {
+    subject: async (offset) => (await bridgeCall(context, "photo.subject", offset)) as unknown as SubjectReading,
+    setCamera: async (values) => ((await bridgeCall(context, "photo.camera.set", values)).applied as CameraApplied[] | undefined) ?? [],
+    grab: async () => {
+      if (!hudUndo) {
+        // The capture route compares captures, so the menu and cursor are hidden first (and restored after).
+        const hidden = await bridgeCall(context, "photo.hud.hide", { hidden: true, cursor: true });
+        hudUndo = ((hidden.undo as { params?: Record<string, unknown> } | null)?.params ?? { hidden: false, cursor: true }) as Record<string, unknown>;
+        await sleepMs(500);
+      }
+      try {
+        return grabForAnalysis(context.api.captureTarget(), 960);
+      } catch (error) {
+        captureFailure(error);
+      }
+    },
+    pose: async () => {
+      const state = await bridgeCall(context, "photo.state", { menu: true });
+      const menu = (state.menu as { key: number; value?: number; min?: number; max?: number }[] | undefined) ?? [];
+      const item = (key: number) => menu.find((m) => m.key === key);
+      const fov = item(1);
+      if (!fov || typeof fov.value !== "number") return null;
+      const range = (key: number): [number, number] | undefined => {
+        const m = item(key);
+        return m && typeof m.min === "number" && typeof m.max === "number" ? [m.min, m.max] : undefined;
+      };
+      const ranges = Object.fromEntries(
+        (
+          [
+            ["fov", range(1)],
+            ["yaw", range(7)],
+            ["lr", range(8)],
+            ["ud", range(37)],
+          ] as const
+        ).filter(([, r]) => r),
+      );
+      return { fov: fov.value, yaw: item(7)?.value ?? 0, lr: item(8)?.value ?? 0, ud: item(37)?.value ?? 0, ranges };
+    },
+  };
+  let lookAtBefore: number | undefined;
+  try {
+    if (input.look_at !== undefined && input.look_at !== "keep") {
+      const set = await bridgeCall(context, "photo.camera.set", { look_at: input.look_at === "off" ? 0 : 1 });
+      const applied = ((set.applied as CameraApplied[] | undefined) ?? [])[0];
+      if (applied && applied.before_known !== false && typeof applied.before === "number" && applied.before >= 0) lookAtBefore = Math.round(applied.before);
+      await sleepMs(300);
+    }
+    const options: FrameOptions = {
+      target: (input.target as FrameOptions["target"]) ?? "face",
+      ...(input.span_m !== undefined ? { span_m: input.span_m as number } : {}),
+      ...(input.offset !== undefined ? { offset: input.offset as FrameOptions["offset"] } : {}),
+      ...(input.position !== undefined ? { position: input.position as FrameOptions["position"] } : {}),
+      ...(input.face_camera !== undefined ? { face_camera: input.face_camera as boolean } : {}),
+      ...(input.yaw_offset !== undefined ? { yaw_offset: input.yaw_offset as number } : {}),
+      ...(input.method !== undefined ? { method: input.method as FrameOptions["method"] } : {}),
+      ...(input.max_steps !== undefined ? { max_steps: input.max_steps as number } : {}),
+      ...(input.tolerance !== undefined ? { tolerance: input.tolerance as number } : {}),
+    };
+    const result = await frame(adapter, options);
+    if (lookAtBefore !== undefined) {
+      result.undo = { method: "photo.camera.set", params: { ...(result.undo?.params ?? {}), look_at: lookAtBefore } };
+    }
+    return { value: result };
+  } catch (error) {
+    if (error instanceof FramingError) throw planError(error.code, error.message);
     throw error;
+  } finally {
+    if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo).catch(() => undefined);
   }
 }
 
@@ -192,6 +280,40 @@ export const CATALOGUE: readonly CommandDef[] = [
       wrapCapture(() =>
         recrop({ path: input.path as string, region: regionOf(input), view: viewOf(input), name: input.name as string | undefined, root: captureRoot }),
       ),
+  },
+  {
+    name: "capture.burst",
+    title: "Screenshot a short burst",
+    description:
+      "Takes several screenshots of the same area in quick succession (frames, interval_ms apart) for flicker and motion checks: saves every frame like a screenshot, a contact sheet of all of them, and one manifest with the actual timings and how much each frame differs from the previous and the first. Returns the contact sheet for viewing.",
+    permission: "read",
+    input: obj({
+      ...regionInput,
+      frames: int("How many frames, 2 to 120. Default 10.", 2, 120),
+      interval_ms: int("Target time between frames in milliseconds (0 = as fast as possible). Default 100.", 0, 10000),
+      route: oneOf("How to grab the window (see capture_screenshot).", ["auto", "printwindow", "screen"]),
+    }),
+    local: async (input, { api, captureRoot, signal }) => {
+      try {
+        const record = await captureBurst({
+          target: api.captureTarget(),
+          region: regionOf(input),
+          view: viewOf(input),
+          route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
+          name: (input.name as string | undefined) ?? "burst",
+          outDir: captureRoot,
+          frames: (input.frames as number | undefined) ?? 10,
+          intervalMs: (input.interval_ms as number | undefined) ?? 100,
+          signal,
+        });
+        return {
+          value: record,
+          images: [{ path: record.contact_sheet.path, width: record.contact_sheet.width, height: record.contact_sheet.height, mimeType: "image/png", role: "view" }],
+        };
+      } catch (error) {
+        captureFailure(error);
+      }
+    },
   },
 
   // Game state (read-only)
@@ -277,9 +399,11 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.enter",
     title: "Open photo mode",
     description:
-      "Opens photo mode from normal play, the way the game's own quest scripts do (needs Codeware). If it can't, the player can press the photo mode key instead; game.wait with phase photo_mode then continues.",
+      "For now this answers that the player has to press the photo mode key: the bridge can't yet open the full photo mode by itself. Ask the player to press it, then use game.wait with phase photo_mode. route quest opens a restricted photo mode (first-person camera only, no V tab) and is kept for research only.",
     permission: "write-photo",
-    input: obj(),
+    input: obj({
+      route: oneOf("How to open photo mode: auto (the default; answers that the player must press the photo mode key until a proper route exists) or quest (research only: a restricted photo mode).", ["auto", "quest"]),
+    }),
     undo: "photo.exit.",
     bridge: { method: "photo.enter" },
   },
@@ -289,7 +413,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     description: "Leaves photo mode, discarding its settings as the game always does.",
     permission: "write-photo",
     input: obj(),
-    undo: "photo.enter (photo-mode settings start fresh).",
+    undo: "Ask the player to press the photo mode key again (photo-mode settings start fresh).",
     bridge: { method: "photo.exit" },
   },
   {
@@ -327,11 +451,13 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.light.set",
     title: "Adjust a photo-mode light",
     description:
-      "Selects photo-mode light 1, 2 or 3 and sets its brightness, range, cone angles and colour (hue 0-360, saturation, luminosity). Placing or switching lights on still needs the photo-mode menu.",
+      "Selects photo-mode light 1, 2 or 3, switches it on or off, picks spot or ambient, and sets its brightness, range, cone angles and colour (hue 0-360, saturation, luminosity). Lights start off each time photo mode opens. The light can't be moved; to light V from another side, turn V (photo_frame with yaw_offset, look-at off).",
     permission: "write-photo",
     input: obj(
       {
         light: int("Which light: 1, 2 or 3.", 1, 3),
+        on: bool("Switch the light on (true) or off (false)."),
+        type: oneOf("The kind of light: spot or ambient.", ["spot", "ambient"]),
         brightness: num("Brightness, 0 to 100.", 0, 100),
         range: num("Range, 0 to 100.", 0, 100),
         inner_angle: num("Inner cone angle in degrees.", 0, 180),
@@ -343,16 +469,17 @@ export const CATALOGUE: readonly CommandDef[] = [
       },
       ["light"],
     ),
-    undo: "the result's undo parameters restore that light's previous values and the menu's previous light selection.",
+    undo: "the result's undo parameters restore that light's previous values (including on/off and type) and the menu's previous light selection.",
     bridge: { method: "photo.light.set" },
   },
   {
     name: "photo.hud.hide",
     title: "Hide the photo-mode interface",
-    description: "Fades the photo-mode menus out for a clean screenshot (hidden: true, the default) or back in (hidden: false). Wait about half a second before capturing.",
+    description:
+      "Fades the photo-mode menus out for a clean screenshot (hidden: true, the default) or back in (hidden: false), and hides or shows the mouse cursor with them (cursor: false leaves the cursor alone). Wait about half a second before capturing.",
     permission: "write-photo",
-    input: obj({ hidden: bool("true hides, false shows. Default true.") }),
-    undo: "photo.hud.hide with hidden: false; reopening photo mode always shows it.",
+    input: obj({ hidden: bool("true hides, false shows. Default true."), cursor: bool("Also hide or show the mouse cursor. Default true.") }),
+    undo: "photo.hud.hide with hidden: false; leaving photo mode (or the kill switch) always shows the menu and cursor again.",
     bridge: { method: "photo.hud.hide" },
   },
   {
@@ -364,6 +491,49 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({ faceId: int("The expression's value.", 0, 100000) }, ["faceId"]),
     undo: "the result's undo parameters restore the previous expression.",
     bridge: { method: "photo.expression.set" },
+  },
+  {
+    name: "photo.subject",
+    title: "Where V and the camera are",
+    description:
+      "Reads where V's head is in the world and on screen (plus an optional point relative to it: up, forward and right in metres), the photo-mode camera's position, directions, field of view and aspect ratio, and V's current placement values. photo_frame uses it; it changes nothing.",
+    permission: "read",
+    input: obj({
+      up: num("Metres above V's head joint (world vertical).", -2, 2),
+      forward: num("Metres in front of V's head joint (V's facing).", -2, 2),
+      right: num("Metres to V's right of the head joint.", -2, 2),
+    }),
+    bridge: { method: "photo.subject" },
+  },
+  {
+    name: "photo.frame",
+    title: "Frame V automatically",
+    description: `Frames V in photo mode without hand-tuned values: turns V to face the camera (plus yaw_offset degrees for a light sweep), puts the target (${Object.entries(
+      FRAMINGS,
+    )
+      .map(([name, f]) => `${name}: ${f.description}`)
+      .join("; ")}) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps. The result records the chosen values and an undo.`,
+    permission: "write-photo",
+    input: obj({
+      target: oneOf("What to frame. Default face.", Object.keys(FRAMINGS)),
+      span_m: num("World height in metres that fills the window height (default: 0.2 eyes, 0.36 face, 0.8 head-and-shoulders).", 0.02, 5),
+      offset: {
+        description: "The target point relative to V's head joint, in metres (overrides the framing's own).",
+        ...obj({ up: num("Metres up.", -2, 2), forward: num("Metres forward (V's facing).", -2, 2), right: num("Metres to V's right.", -2, 2) }),
+      },
+      position: {
+        description: "Where the target should sit, as fractions of the window (default the centre).",
+        ...obj({ x: num("0 left edge, 1 right edge.", 0, 1), y: num("0 top edge, 1 bottom edge.", 0, 1) }),
+      },
+      face_camera: bool("Turn V to face the camera first. Default true."),
+      yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps.", -90, 90),
+      look_at: oneOf("V's look-at before framing: keep (default), off (V's head follows the body, for light sweeps) or camera.", ["keep", "off", "camera"]),
+      method: oneOf("auto (default: the game's camera, else window captures), project (the game's camera only) or capture (window captures only).", ["auto", "project", "capture"]),
+      max_steps: int("Most correction steps (default 6).", 1, 12),
+      tolerance: num("Allowed centring error as a fraction of the window height (default 0.01).", 0.001, 0.2),
+    }),
+    undo: "the result's undo puts the field of view, V's rotation and placement (and look-at) back as they were.",
+    local: runFrame,
   },
 
   // Character

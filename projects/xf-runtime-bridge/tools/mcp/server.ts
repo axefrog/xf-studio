@@ -47,7 +47,8 @@ export function parsePermissionFlags(args: readonly string[]): { allow?: Permiss
 export const INSTRUCTIONS = [
   "These tools drive Cyberpunk 2077 through XF Runtime Bridge, a local connection that exists only while the game runs with the bridge enabled.",
   "Start with bridge_ping or game_status. Actions that change the game only work when the bridge's config.ini allows them (the dedicated test profile); otherwise they are refused and nothing changes.",
-  "Photo-mode actions need photo mode open (photo_enter). capture_screenshot works without the bridge and returns a small preview plus the path of a full-resolution file; capture_recrop cuts a tighter area from that file.",
+  "Photo-mode actions need photo mode open: for now the player presses the photo mode key (photo_enter answers so), and game_wait with phase photo_mode notices it. photo_frame frames V automatically; photo_hud_hide hides the menu and cursor before a capture.",
+  "capture_screenshot works without the bridge and returns a small preview plus the path of a full-resolution file; capture_recrop cuts a tighter area from that file; capture_burst takes a short series for flicker checks.",
   "Nothing here saves the game.",
 ].join(" ");
 
