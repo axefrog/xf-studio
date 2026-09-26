@@ -27,7 +27,7 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 
    **Next build:** the autonomy batch and batch 2 (below), rebuilt from the `main` commit that merges `claude/bridge-batch2`; record its zip and DLL hashes here before staging (the DLL embeds the commit, so they differ from the branch build recorded below). What it adds to the staged zips: the -writes zip sets `allow_creator_leave = true`, and the -diagnostic and -writes zips carry `r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml` (XF camera presets 7-9; the default zip doesn't). Check the -writes manifest for `"allow_creator_leave": true` and `"photo_mode_presets"`.
 
-   **Branch build of batch 2** (`claude/bridge-batch2`, recorded at the end of this page under [build record](#build-record-claudebridge-batch2)): the checks there passed on that commit; restaging uses the `main` rebuild.
+   **Branch build of batch 2** (`claude/bridge-batch2`, recorded at the end of this page under [build record](#build-record-staged)): the checks there passed on that commit; restaging uses the `main` rebuild.
 
    **New in this build, watch in the next session:** the plugin log's load lines now include `evt=script.addresses_resolved … script_calls=on`; `script_calls=off` (or any answer `script_calls_unavailable`) means RED4ext's address library lacks an address the calls need: stop and send the log. The cursor hide works only in photo mode and clears itself in any other phase or after a 120 s idle disconnect. `photo_open` re-checks the game after bringing the window forward, refuses an unbound or unreadable key binding and punctuation keys, and sends only to `Cyberpunk2077.exe`. `face_rig_read` and `photo_expression_index` are new ([expression checks](#expression-checks-r1-and-r2)).
 
@@ -236,13 +236,15 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
 
-## Build record (claude/bridge-batch2)
+## Build record (staged)
 
-Built 26 September 2026 from `claude/bridge-batch2` at `ef7fce3777f9`, clean tree (`XFB_BUILD=ef7fce3777f9a043352c40be2012543ceb08923b;dirty=0`), by `bun tools/package.ts`. On that commit: `xfb_selftest --unit` OK, self-test 188 of 188, `bun test tools` 90 of 91 (the one failure is the on-screen capture route, which needs the synthetic window visible on the desktop and fails when the test runs behind other windows; unrelated to this batch), typecheck clean, redscript lint (against a copy of the 2.31 `final.redscripts`) and Lua lint passed. The -writes manifest says `"variant": "writes"`, `"allow_writes": true`, `"allow_creator_leave": true` and names the camera presets; the default manifest has `"allow_creator_leave": false`, `"photo_mode_presets": null` and no presets file. These are the branch's hashes: after the merge into `main`, rebuild and record the new ones in the build list at the top before staging.
+Built 26 September 2026 from `main` at `509f5995f681`, clean tree (`XFB_BUILD=509f5995f681c46ed0be3939185327f9f9e92040;dirty=0`), by `bun tools/package.ts`: bridge batch 2 (RB-32..41, `face.rig.read`, `photo.expression.index`) on top of the autonomy batch. On that commit: `xfb_selftest --unit` OK, self-test 188 of 188, `bun test tools` 90 of 91 (the on-screen capture test needs a visible window), typecheck, redscript and Lua lint clean. The default zip carries no camera presets and keeps `allow_creator_leave = false`, `allow_writes = false` and the bridge off.
 
 | Zip | SHA-256 |
 |---|---|
-| `xf-runtime-bridge-0.2.0-writes.zip` | `b74c05159ef142b1ce38fc726f5c4c7dff1f4af671df4744db437e66b250d18f` |
-| `xf-runtime-bridge-0.2.0-diagnostic.zip` | `8b2b3e6ba0c9cedbe63c5f4c6a9c00fb9cba27139eb841a5a9e718926bd09758` |
-| `xf-runtime-bridge-0.2.0.zip` (default) | `a6576ae6dc33fa8734fb30bf91a34c3abb0ae65b8c66f2479faa12b950ee5db2` |
-| (`XFRuntimeBridge.dll` inside each) | `1616c989fb032bf056e3c3a1662d3d2eb50e7aef1ea40e4db6423b492a5ae5ee` |
+| `xf-runtime-bridge-0.2.0-writes.zip` (**staged**) | `7a978ed5eb0238fe7a6497575291347897038b76f432ebe0f77b20c3db6305be` |
+| `xf-runtime-bridge-0.2.0-diagnostic.zip` | `4fe6952cfb2cf3d7899b96330dfa7772e2650996503c624df98b7c2683b809ba` |
+| `xf-runtime-bridge-0.2.0.zip` (default) | `d14ea085985af92a803bbf66d7012380de84562f46e2c5fe937aea9b4572b8a9` |
+| (`XFRuntimeBridge.dll` inside each) | `6f386846bcc6e3fb180f2bc091f7cb34ff79e980d7812b8e60fe7df0fcc43dca` |
+
+Staged on 26 September 2026 into the MO2 mod `XF Runtime Bridge` in the test profile (first row of its `modlist.txt`; nothing else changed), with `%LOCALAPPDATA%\XFStudio\runtime-bridge\` emptied. The plugin log must show `evt=script.addresses_resolved … script_calls=on` at start.
