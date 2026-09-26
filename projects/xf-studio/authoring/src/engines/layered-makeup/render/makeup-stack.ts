@@ -38,6 +38,8 @@ export type MakeupStackPlacement = {
   renderOrder?(slot: number): number;
 };
 
+/** The attributes the stack adds to its geometry (the skin under the plate); everything else on it is the anchor's (PREV-100). */
+export const STACK_ATTRIBUTES = ["xfsUnderlay", "xfsUnderRoughness", "xfsUnderMetalness"] as const;
 /**
  * A geometry of the stack's own over `source`'s buffers: the same index, attributes and morph targets (no copies, so no second
  * upload of them), with room for the attributes the stack adds (the skin underlay), which never land on the platform's surface.
@@ -280,7 +282,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   function applyUnderlay(next: PlateUnderlay | null) {
     underlay = next;
     if (!next) return;
-    const incoming: [string, THREE.BufferAttribute][] = [["xfsUnderlay", next.colour], ["xfsUnderRoughness", next.roughness], ["xfsUnderMetalness", next.metalness]];
+    const incoming: [string, THREE.BufferAttribute][] = [[STACK_ATTRIBUTES[0], next.colour], [STACK_ATTRIBUTES[1], next.roughness], [STACK_ATTRIBUTES[2], next.metalness]];
     const current = incoming.map(([name]) => geometry.getAttribute(name) as THREE.BufferAttribute | undefined);
     const fits = incoming.every(([, attribute], i) => current[i] && current[i]!.itemSize === attribute.itemSize && current[i]!.array.length === attribute.array.length);
     if (fits) {
@@ -352,13 +354,20 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     });
   }
   /**
-   * Release every layer slot, the lit plate and the composite. The anchor is as the stack found it; the stack's geometry shares the
-   * anchor's buffers, so its GPU state goes with the renderer rather than freeing buffers the platform's surface still owns.
+   * Release every layer slot, the lit plate, the composite and the stack's own geometry (PREV-100). The geometry shares the anchor's
+   * index, attributes and morph targets, which the platform's surface still draws, so they are taken off it first: the renderer's
+   * dispose then frees only what is the stack's (the skin underlay's attributes, the geometry's vertex-array states, its wireframe
+   * index and morph texture), and the anchor is as the stack found it.
    */
   function dispose() {
     setCanvases([]);
     composite.dispose();
     plate.removeFromParent(); plateLight.material.dispose();
+    const own = new Set(STACK_ATTRIBUTES);
+    geometry.setIndex(null);
+    for (const name of Object.keys(geometry.attributes)) if (!own.has(name)) geometry.deleteAttribute(name);
+    geometry.morphAttributes = {};
+    geometry.dispose();
   }
   return { plates, materials, textures, plate, geometry, setCanvases, reconcileLayerCanvases, dispose,
     setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored,

@@ -33,6 +33,34 @@ test("the import scan sees template-literal specifiers and records computed impo
   expect(every().filter(name => imports(source(name)).includes(COMPUTED))).toEqual([]);
 });
 
+test("the import scan resolves .js and .mjs specifiers and sees modules loaded by URL, such as workers (CORE-90)", () => {
+  expect(imports([`import { a } from "./a.js";`, `export * from "../b.mjs";`, `const w = new Worker(new URL("./w.ts", import.meta.url), { type: "module" });`,
+    `const s = new SharedWorker(new URL(` + "`./s.js`" + `, import.meta.url));`, `const t = new Worker("./t.ts");`,
+    `const served = new Worker("/build/raster-worker.js", { type: "module" });`, `const page = new URL("/x", location.href);`].join("\n")))
+    .toEqual(["./a.js", "../b.mjs", "./w.ts", "./s.js", "./t.ts"]);
+  expect(["./a.js", "./a.mjs", "./a.ts", "./a", "../x/b.js", "three/addons/loaders/GLTFLoader.js"].map(path => resolveFrom("features/eye-makeup/core", path)))
+    .toEqual(["features/eye-makeup/a", "features/eye-makeup/a", "features/eye-makeup/a", "features/eye-makeup/a", "features/x/b", "three/addons/loaders/GLTFLoader.js"]);
+  expect(importUses(`const w = new Worker(new URL("./w.ts", import.meta.url));`)).toEqual([{ specifier: "./w.ts", typeOnly: false, names: ["<url>"] }]);
+  // The one worker the source loads by URL is seen now.
+  expect(resolved("native/native-decode")).toContain("native/native-decode-worker");
+});
+
+test("the feature rules fail on a .js specifier and on a worker loaded by URL, directly and transitively (CORE-90)", () => {
+  const js = featureViolations(probed({ "features/eye-makeup/core": `import { createRasterClient as __probe } from "../../raster-client.js";` }));
+  expect(js).toContain("features/eye-makeup/core -> raster-client");
+  const worker = featureViolations(probed({ "features/eye-makeup/core": `export const __probe = () => new Worker(new URL("../../raster-worker.ts", import.meta.url));` }));
+  expect(worker).toContain("features/eye-makeup/core -> raster-worker");
+  // Behind a helper the core imports by its .js name, a worker that is a browser device: the transitive rule follows both.
+  const behind = featureViolations(probed({ "features/eye-makeup/limits": `export const __probe = () => new Worker(new URL("../../browser-file-device.mjs", import.meta.url));`,
+    "features/eye-makeup/core": `import { __probe as __limits } from "./limits.js";` }));
+  expect(behind).toContain("features/eye-makeup/limits -> browser-file-device");
+  expect(behind).toContain("features/eye-makeup/core ->* browser-file-device");
+  const view = featureViolations(probed({ "features/eye-makeup/view/layers": `import { LookHistory as __Probe } from "../../../platform/core/look-history.js";` }));
+  expect(view).toContain("features/eye-makeup/view/layers -> platform/core/look-history");
+  expect(view).toContain("features/eye-makeup/view/layers ->* platform/core/look-history");
+  expect(featureViolations(DISK)).toEqual([]);
+});
+
 test("pure-code scans read code only and see every page or host global (CORE-78)", () => {
   // Comments, strings, templates and regular expressions are blanked; the line structure stays.
   const code = codeOnly([`const a = "window.x"; // window.y`,
