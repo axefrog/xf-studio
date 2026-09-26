@@ -1,10 +1,12 @@
 /**
  * The problem report's shared shapes and wording (docs/diagnostics.md §Report): the review screen's groups and items, the readable
- * summary (the report file's README and "Copy summary"), and the pre-filled issue link. The host builds the items and the report
- * file; the page shows them for review. Nothing here sends anything, and every text passes through `redactText` last. DOM-free.
+ * summary (the report file's README and "Copy summary"), its index (`report.json`), and the pre-filled issue link. The host builds the
+ * items and the report file; the page shows them for review, the summary and index included, from these same functions, so the
+ * preview is what the file holds. Both are built from the ticked items only (DIAG-01). Nothing here sends anything, and every text
+ * passes through a redactor last. DOM-free.
  */
 import { entryLine, type DiagnosticEntry } from "./model";
-import { redactText, remainingPersonalData } from "./redact";
+import { redactValue, remainingPersonalData, textRedactor, type Redactor } from "./redact";
 import { PROJECT_LINKS } from "../project-links";
 
 export const REPORT_MANIFEST_SCHEMA = "xfs/problem-report-manifest-1" as const;
@@ -66,17 +68,26 @@ export function versionLine(app: ReportFacts["app"]) {
   return `${app.version}${app.channel ? ` (${app.channel})` : ""}, ${app.host === "desktop" ? "desktop app" : "localhost server"}${app.commit ? `, commit ${app.commit}` : ""}`;
 }
 /** A report's title: its reference and the first line of what happened. */
-export function reportTitle(ref: string | null, problem: readonly DiagnosticEntry[]) {
+export function reportTitle(ref: string | null, problem: readonly DiagnosticEntry[], redact: Redactor = PLAIN) {
   const first = problem[0];
-  return redactText(ref ? `Problem report ${ref}${first ? `: ${clip(first.message, 70)}` : ""}` : "Problem report");
+  return redact(ref ? `Problem report ${ref}${first ? `: ${clip(first.message, 70)}` : ""}` : "Problem report");
 }
+const PLAIN = textRedactor();
+
+/** What the summary and the index are built from: the report, the person's description, and the items they left ticked. */
+export type ReportFileInput = { manifest: ReportManifest; description: string; page: PageFacts | null; included: readonly ReportItemView[];
+  /** Every item the review offered (the page's own included), to count what was left out. */
+  offered: readonly Pick<ReportItemView, "id">[] };
 
 /**
- * The readable summary: the person's own description first, then the environment, what happened, and what the report file holds.
- * It is the report file's README and what "Copy summary" copies.
+ * The readable summary: the person's own description first, then only what they left ticked: the versions ("Versions"), the
+ * window's browser and graphics card ("This window"), the problem's entries ("This problem") and the last log lines ("App log"),
+ * and the list of what the report file holds. It is the report file's README and what "Copy summary" copies.
  */
-export function reportSummary(input: { manifest: ReportManifest; description: string; page: PageFacts | null; included: readonly ReportItemView[] }): string {
+export function reportSummary(input: ReportFileInput, redact: Redactor = PLAIN): string {
   const { manifest, page } = input, facts = manifest.facts;
+  const ticked = new Set(input.included.map(item => item.id));
+  const environment = ticked.has("environment"), shown = ticked.has("page") && page;
   const lines = [
     `## XF Studio problem report${manifest.ref ? ` ${manifest.ref}` : ""}`,
     "",
@@ -86,35 +97,51 @@ export function reportSummary(input: { manifest: ReportManifest; description: st
     "",
     input.description.trim() || "(No description given.)",
     "",
-    "### Environment",
-    "",
-    `- **XF Studio:** ${versionLine(facts.app)}`,
-    `- **System:** ${facts.os}; host runtime ${facts.runtime}`,
-    `- **Browser:** ${page?.browser ?? "unknown"}${facts.webView2 ? ` (WebView2 Runtime ${facts.webView2})` : ""}`,
-    `- **GPU:** ${page?.gpu ?? "unknown"}; WebGL2 ${page?.webgl2 ? "available" : "unavailable"}`,
-    `- **Game:** ${facts.game.found ? facts.game.version ?? "found (version unreadable)" : "not set up"}`,
-    `- **Launch route:** ${facts.launchRoute}`,
-    `- **WolvenKit:** ${facts.wolvenKit.version ?? "no version"} (${facts.wolvenKit.source})`,
-    `- **Frameworks:** ${facts.frameworks ? facts.frameworks.length ? facts.frameworks.map(item => `${item.name} ${item.version ?? "—"} (${item.status})`).join("; ") : "none found" : "not checked"}`,
-    "",
+    ...(environment || shown ? ["### Environment", "",
+      ...(environment ? [`- **XF Studio:** ${versionLine(facts.app)}`, `- **System:** ${facts.os}; host runtime ${facts.runtime}`] : []),
+      ...(shown ? [`- **Browser:** ${page.browser}${environment && facts.webView2 ? ` (WebView2 Runtime ${facts.webView2})` : ""}`,
+        `- **GPU:** ${page.gpu ?? "unknown"}; WebGL2 ${page.webgl2 ? "available" : "unavailable"}`] : []),
+      ...(environment ? [
+        `- **Game:** ${facts.game.found ? facts.game.version ?? "found (version unreadable)" : "not set up"}`,
+        `- **Launch route:** ${facts.launchRoute}`,
+        `- **WolvenKit:** ${facts.wolvenKit.version ?? "no version"} (${facts.wolvenKit.source})`,
+        `- **Frameworks:** ${facts.frameworks ? facts.frameworks.length ? facts.frameworks.map(item => `${item.name} ${item.version ?? "—"} (${item.status})`).join("; ") : "none found" : "not checked"}`] : []),
+      ""] : []),
     "### What happened",
     "",
-    manifest.problem.length ? fence(manifest.problem.map(entry => entryLine(entry) + (entry.details?.stack ? `\n${entry.details.stack.split("\n").slice(0, 12).map(line => `  ${line}`).join("\n")}` : "")).join("\n"))
+    !ticked.has("problem") ? manifest.ref ? `Reference ${manifest.ref}; its log entries weren't included.` : "Reported from Help, without a specific error."
+      : manifest.problem.length ? fence(manifest.problem.map(entry => entryLine(entry) + (entry.details?.stack ? `\n${entry.details.stack.split("\n").slice(0, 12).map(line => `  ${line}`).join("\n")}` : "")).join("\n"))
       : manifest.ref ? `No log entry carries ${manifest.ref} yet.` : "Reported from Help, without a specific error.",
     "",
-    ...(manifest.recent.length ? ["Most recent log lines:", "", fence(manifest.recent.slice(-15).map(entryLine).join("\n")), ""] : []),
+    ...(ticked.has("log") && manifest.recent.length ? ["Most recent log lines:", "", fence(manifest.recent.slice(-15).map(entryLine).join("\n")), ""] : []),
     "### In the report file",
     "",
     ...(input.included.length ? input.included.map(item => `- ${item.label} (${formatBytes(item.bytes)})`) : ["- Nothing else was selected."]),
     "",
   ];
-  return redactText(lines.join("\n"));
+  return redact(lines.join("\n"));
+}
+
+/**
+ * The report file's index (`report.json`): when and what, the versions and the window's facts only when ticked, the ticked items,
+ * and how many were left out, by their fixed IDs only (an unticked mod's name never appears).
+ */
+export function reportIndex(input: ReportFileInput, redact: Redactor = PLAIN): string {
+  const { manifest } = input, ticked = new Set(input.included.map(item => item.id));
+  const leftOut = input.offered.filter(item => !ticked.has(item.id)).map(item => item.id);
+  return JSON.stringify(redactValue({ schema: REPORT_FILE_SCHEMA, made: manifest.made, ref: manifest.ref,
+    app: ticked.has("environment") ? manifest.facts.app : null, description: input.description,
+    page: ticked.has("page") ? input.page : null, window: manifest.window,
+    included: input.included.map(item => ({ id: item.id, group: item.group, label: item.label, bytes: item.bytes })),
+    leftOut: { count: leftOut.length, items: leftOut },
+  }, redact), null, 1);
 }
 
 /** The short body a pre-filled issue link carries; the person attaches the saved report file for the rest. */
-export function issueSummary(manifest: ReportManifest, description: string, fileName: string | null): string {
-  const first = manifest.problem[0];
-  return redactText([
+export function issueSummary(manifest: ReportManifest, description: string, fileName: string | null,
+  included: ReadonlySet<string> = new Set(["problem"]), redact: Redactor = PLAIN): string {
+  const first = included.has("problem") ? manifest.problem[0] : undefined;
+  return redact([
     `**Reference:** ${manifest.ref ?? "none"}`,
     `**XF Studio:** ${versionLine(manifest.facts.app)}`,
     `**System:** ${manifest.facts.os}`,

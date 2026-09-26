@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { ensureWebView2, WEBVIEW2_FAILED, WEBVIEW2_INSTALLER_MISSING, WEBVIEW2_PROMPT } from "../webview2-install";
 import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { detectWebView2, parseRegVersion, WEBVIEW2_KEYS } from "../webview2";
 import { blankWindowNotice } from "../startup-watchdog";
@@ -34,6 +34,12 @@ test("a window that never loads gets plain words and one next step", () => {
   expect(other).toMatchObject({ action: "copy-diagnostics", buttons: ["Copy diagnostics", "Close"] });
   expect(other.diagnostics).toContain("WebView2: 140.0");
   for (const notice of [missing, other]) expect(USER_FACING_JARGON.test(`${notice.message} ${notice.detail}`)).toBe(false);
+  // "Copy diagnostics" names the person's own profile folder literally, a name with spaces included (DIAG-02).
+  const home = homedir();
+  const copied = blankWindowNotice({ installed: true, version: "140.0", source: "HKLM" }, `${home}\\AppData\\Roaming\\XF Studio\\log.jsonl`,
+    () => JSON.stringify({ t: "", level: "error", area: "desktop", code: "x", origin: "host", message: `Failed under ${home}\\Games` }));
+  expect(copied.diagnostics).not.toContain(home);
+  expect(copied.diagnostics).toContain(process.platform === "win32" ? "%USERPROFILE%" : "~");
 });
 
 test("the host log is bounded and never throws", () => {

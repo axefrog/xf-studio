@@ -1,8 +1,8 @@
 /**
  * The host's one structured log (docs/diagnostics.md): JSON Lines in the host's own data folder (the dev server's ignored `data/`,
- * the desktop app's user-data folder), rotated at a size bound so it never grows past two files. Every line is redacted by the
- * shared personal-data rules as it is written, so the file itself is safe to attach. Writing never throws: diagnostics must never
- * stop the app.
+ * the desktop app's user-data folder), rotated at a size bound so it never grows past two files. Every entry is redacted as it
+ * is written, string by string, with the host's known folders (`host-roots.ts`) and the shared personal-data rules, so the file
+ * itself is safe to attach. Writing never throws: diagnostics must never stop the app.
  *
  * Host services report a failure with one line, `hostFailure(area, code, message, error)`, without holding a logger: the server
  * runs each request inside its log's context (`withDiagnostics`), and work a request starts (a preparation's promise chain) keeps
@@ -13,7 +13,8 @@ import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readSync,
 import { resolve } from "node:path";
 import { diagnosticEntry, entryLine, errorCode, errorText, newErrorRef, type DiagnosticDetails, type DiagnosticEntry,
   type DiagnosticLevel, type DiagnosticTrace, NO_TRACE } from "./model";
-import { redactText } from "./redact";
+import { redactValue, type Redactor } from "./redact";
+import { RedactionRoots } from "./host-roots";
 import { TraceWindow } from "./trace-window";
 
 /** The diagnostics folder inside a host's data folder: the log, the rolling window (`trace/`) and the mode. */
@@ -30,27 +31,43 @@ export type DiagnosticLogOptions = {
   /** Mirror each entry somewhere (the dev server's console). */
   echo?: (entry: DiagnosticEntry) => void;
   now?: () => Date;
+  /** The redactor in effect (the host's roots); by default the person's own folders and the shared rules. */
+  redactor?: () => Redactor;
 };
+/** Host failures kept in memory apart from the log's own recent entries, so a flood of page entries can't push them out. */
+const FAILURES_KEPT = 50;
 
 export class DiagnosticLog {
   readonly path: string;
   readonly previous: string;
   private readonly recent: DiagnosticEntry[] = [];
+  private readonly failures: DiagnosticEntry[] = [];
   private readonly maxBytes: number;
+  private readonly redactor: () => Redactor;
   constructor(readonly directory: string, private readonly options: DiagnosticLogOptions = {}) {
     this.path = resolve(directory, DIAGNOSTIC_LOG_NAME);
     this.previous = resolve(directory, DIAGNOSTIC_LOG_PREVIOUS);
     this.maxBytes = options.maxBytes ?? DIAGNOSTIC_LOG_BYTES;
+    const fallback = new RedactionRoots();
+    this.redactor = options.redactor ?? (() => fallback.redactor());
   }
 
-  /** Append one entry (redacted); returns what was written. */
+  /** Append one entry (redacted); returns what was written. Never throws: a failure hook runs inside other code's catch blocks. */
   write(entry: DiagnosticEntry): DiagnosticEntry {
-    const clean = JSON.parse(redactText(JSON.stringify(entry))) as DiagnosticEntry;
-    this.recent.push(clean);
-    if (this.recent.length > 200) this.recent.splice(0, this.recent.length - 200);
-    try { this.options.echo?.(clean); } catch { /* A mirror must not stop the log. */ }
-    const line = JSON.stringify(clean) + "\n";
+    let clean: DiagnosticEntry;
+    try { clean = redactValue(entry, this.redactor()); }
+    catch { clean = { t: new Date().toISOString(), level: "warn", area: "diagnostics", code: "unrecordable", message: "An entry couldn't be recorded.", origin: "host" }; }
     try {
+      this.recent.push(clean);
+      if (this.recent.length > 200) this.recent.splice(0, this.recent.length - 200);
+      if (clean.origin === "host" && clean.level !== "info" && clean.ref) {
+        this.failures.push(clean);
+        if (this.failures.length > FAILURES_KEPT) this.failures.shift();
+      }
+    } catch { /* Memory only. */ }
+    try { this.options.echo?.(clean); } catch { /* A mirror must not stop the log. */ }
+    try {
+      const line = JSON.stringify(clean) + "\n";
       mkdirSync(this.directory, { recursive: true });
       let size = 0;
       try { size = statSync(this.path).size; } catch { /* No log yet. */ }
@@ -68,10 +85,13 @@ export class DiagnosticLog {
   /** A failure a person may see: logged with its stack and a new reference, which is returned. */
   failure(area: string, code: string, message: string, error?: unknown, options: { level?: DiagnosticLevel; details?: DiagnosticDetails } = {}): string {
     const ref = newErrorRef();
-    const own = errorCode(error);
-    const details: DiagnosticDetails = { ...options.details, stack: options.details?.stack ?? errorText(error),
-      codes: [...(options.details?.codes ?? []), ...(own && own !== code ? [own] : [])] };
-    this.entry(options.level ?? "error", area, code, message, details, ref);
+    let details: DiagnosticDetails = { ...options.details };
+    try {
+      const own = errorCode(error);
+      details = { ...details, stack: options.details?.stack ?? errorText(error),
+        codes: [...(options.details?.codes ?? []), ...(own && own !== code ? [own] : [])] };
+    } catch { /* An error whose stack or code can't be read: logged without them. */ }
+    try { this.entry(options.level ?? "error", area, code, message, details, ref); } catch { /* Never throws. */ }
     return ref;
   }
   /** A logger for one area, in the shape host services take as `log`. */
@@ -80,11 +100,12 @@ export class DiagnosticLog {
   forwarded(entries: readonly DiagnosticEntry[]) { for (const entry of entries) this.write(entry); }
   /** References of host failures logged in the last `withinMs` (to link a page notice to the host failure behind it). */
   recentFailures(withinMs: number, now = Date.now()): string[] {
-    return this.recent.filter(entry => entry.origin === "host" && entry.level !== "info" && entry.ref && now - Date.parse(entry.t) <= withinMs)
-      .map(entry => entry.ref!);
+    return this.failures.filter(entry => now - Date.parse(entry.t) <= withinMs).map(entry => entry.ref!);
   }
-  /** The newest `count` entries on disk, oldest first (reads at most the two files' last megabyte). */
-  tail(count: number): DiagnosticEntry[] {
+  /** The host failures this process logged (at most `FAILURES_KEPT`), oldest first, whatever came after them. */
+  hostFailures(): DiagnosticEntry[] { return [...this.failures]; }
+  /** The newest `count` entries on disk (all by default), oldest first (reads at most the two files' last megabyte). */
+  tail(count = Number.POSITIVE_INFINITY): DiagnosticEntry[] {
     const lines = [...readTail(this.previous, this.maxBytes), ...readTail(this.path, this.maxBytes)];
     const entries: DiagnosticEntry[] = [];
     for (const line of lines) {
@@ -92,7 +113,7 @@ export class DiagnosticLog {
       try { const value = JSON.parse(line); if (value && typeof value === "object" && typeof value.message === "string") entries.push(value); }
       catch { /* A torn or foreign line. */ }
     }
-    return entries.slice(-count);
+    return Number.isFinite(count) ? entries.slice(-count) : entries;
   }
   /** Size of the log files, for the report. */
   bytes(): number {
@@ -117,7 +138,9 @@ function readTail(path: string, maxBytes: number): string[] {
 }
 
 /** A host's diagnostics: its log and its rolling detail window, both in `<data>/diagnostics/`. */
-export type HostDiagnostics = { readonly log: DiagnosticLog; readonly trace: TraceWindow };
+export type HostDiagnostics = { readonly log: DiagnosticLog; readonly trace: TraceWindow;
+  /** What both redact with: the person's folders, plus the configured ones the diagnostics endpoint names. */
+  readonly roots: RedactionRoots };
 const hosts = new Map<string, HostDiagnostics>();
 /**
  * The one diagnostics pair for a data folder, shared by everything in the process that writes there (the desktop's main and its
@@ -126,7 +149,11 @@ const hosts = new Map<string, HostDiagnostics>();
 export function hostDiagnosticsAt(dataRoot: string, options: DiagnosticLogOptions = {}): HostDiagnostics {
   const directory = resolve(dataRoot, DIAGNOSTICS_FOLDER), key = directory.toLowerCase();
   let found = hosts.get(key);
-  if (!found) { found = { log: new DiagnosticLog(directory, options), trace: new TraceWindow(directory) }; hosts.set(key, found); }
+  if (!found) {
+    const roots = new RedactionRoots(), redactor = () => roots.redactor();
+    found = { log: new DiagnosticLog(directory, { redactor, ...options }), trace: new TraceWindow(directory, Date.now, redactor), roots };
+    hosts.set(key, found);
+  }
   return found;
 }
 
@@ -146,14 +173,19 @@ export const hostTrace = (): DiagnosticTrace => currentDiagnostics()?.trace ?? N
  * window records it too, beside the decisions that led to it.
  */
 export function hostFailure(area: string, code: string, message: string, error?: unknown, level: DiagnosticLevel = "error"): string | null {
-  const diagnostics = currentDiagnostics();
-  if (!diagnostics) { console.error(`${area}/${code}: ${message}`, error ?? ""); return null; }
-  const ref = diagnostics.log.failure(area, code, message, error, { level });
-  diagnostics.trace.event(area, "failure", { code, ref, message, level });
-  return ref;
+  try {
+    const diagnostics = currentDiagnostics();
+    if (!diagnostics) { console.error(`${area}/${code}: ${message}`, error ?? ""); return null; }
+    const ref = diagnostics.log.failure(area, code, message, error, { level });
+    diagnostics.trace.event(area, "failure", { code, ref, message, level });
+    return ref;
+  } catch { return null; }
 }
-/** The dev server's console mirror: routine events as their plain line, problems with their reference and stack. */
+/** Terminal control characters (escape sequences, bells, backspaces) a forwarded page text could carry; newlines and tabs stay. */
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+const printable = (text: string) => text.replace(CONTROL, "?");
+/** The dev server's console mirror: routine events as their plain line, problems with their reference and stack, control characters shown as `?`. */
 export function consoleEcho(entry: DiagnosticEntry) {
-  if (entry.level === "info") { console.log(entry.message); return; }
-  console.error(entryLine(entry) + (entry.details?.stack ? `\n${entry.details.stack}` : ""));
+  if (entry.level === "info") { console.log(printable(entry.message)); return; }
+  console.error(printable(entryLine(entry) + (entry.details?.stack ? `\n${entry.details.stack}` : "")));
 }

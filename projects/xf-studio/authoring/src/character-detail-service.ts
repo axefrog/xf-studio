@@ -47,7 +47,7 @@ import { renderTemplate, templateRequired } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
-import { resolutionTrace } from "./diagnostics/resolution-trace";
+import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
 
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
@@ -429,7 +429,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   }
   cancelled();
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
-  trace.event("character", "resolved", resolutionTrace(resolved));
+  trace.event("character", "resolved", resolutionTrace(resolved), RESOLUTION_TRACE_OPTIONS);
   cancelled();
   const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template)));

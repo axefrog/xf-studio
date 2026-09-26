@@ -12,9 +12,10 @@ const MODE_HELP = "Keeps three hours of more detailed activity instead of the la
   "It turns itself off after a day. Nothing is sent anywhere.";
 
 /**
- * "Report a problem": prepares a report, shows exactly what it holds for review (grouped, with sizes and a preview of each part),
- * and offers Save report, Copy summary and Open a GitHub issue. Nothing leaves the computer unless the person sends it. Acts only
- * through `port.diagnostics` (docs/diagnostics.md).
+ * "Report a problem": prepares a report, shows exactly what it holds for review (grouped, with sizes and a preview of each part,
+ * the whole of any part on request, and the summary and index files as they will be saved), and offers Save report, Copy summary
+ * and Open a GitHub issue. Nothing leaves the computer unless the person sends it. Acts only through `port.diagnostics`
+ * (docs/diagnostics.md).
  */
 export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   current?.close();
@@ -34,6 +35,16 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   const total = h("p", { class: "report-total" });
   const retry = button({ label: "Try again", icon: "refresh", small: true, onClick: prepare });
   retry.hidden = true;
+  const again = button({ label: "Prepare again", icon: "refresh", small: true, onClick: prepare });
+  again.hidden = true;
+  // The report file's own summary and index, always in it, built from the ticked parts only.
+  const readme = h("pre", {}), index = h("pre", {});
+  const summaryFiles = h("details", { class: "report-group report-files" },
+    h("summary", {}, h("span", { class: "report-group-title", text: "Always in the report" })),
+    h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you leave ticked. Your folders are replaced when it's saved." }),
+    h("details", { class: "report-preview" }, h("summary", { text: "Show the summary (README.md)" }), readme),
+    h("details", { class: "report-preview" }, h("summary", { text: "Show the list (report.json)" }), index));
+  summaryFiles.hidden = true;
   const mode = new Toggle({ label: "Diagnostic mode", help: MODE_HELP,
     onChange: checked => void dispatch({ kind: "diagnostics.setMode", mode: checked ? "deep" : "normal" }).then(result => setText(status, result.message)) });
   const save = button({ label: "Save report…", icon: "save", variant: "primary", onClick: () => void run({ kind: "diagnostics.saveReport" }) });
@@ -48,8 +59,8 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
         "Personal folder names and e-mail addresses are already replaced with placeholders." }),
       ref ? h("p", { class: "report-ref" }, "Reference ", h("strong", { text: ref })) : null,
       h("label", { class: "report-label", for: descriptionId, text: "What were you doing?" }), description,
-      h("div", { class: "report-state" }, status, retry),
-      groups, total, mode.element),
+      h("div", { class: "report-state" }, status, retry, again),
+      summaryFiles, groups, total, mode.element),
     h("div", { class: "report-foot" }, save, copy, issue, h("span", { class: "grow" }), closeButton));
 
   async function run(action: DiagnosticsAction) {
@@ -89,10 +100,18 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     });
     const size = h("span", { class: "report-size" }), reason = h("small", { class: "report-reason" });
     rows.set(item.id, { box, size, reason });
+    const text = h("pre", { text: item.preview });
+    // A long part shows its start; the whole of it loads on request (DIAG-13).
+    const all = item.partial ? button({ label: "Show all of it", small: true, variant: "quiet", onClick: async () => {
+      setDisabled(all!, true);
+      const full = await port.diagnostics.fullText(item.id);
+      if (full === null) { setDisabled(all!, false); setText(status, "XF Studio couldn't show all of it. Try again in a moment."); return; }
+      setText(text, full); all!.remove();
+    } }) : null;
     return h("li", { class: "report-item" },
       h("label", { class: "report-item-head", for: box.id }, box, h("span", { class: "report-item-label", text: item.label }), size),
       h("small", { class: "muted", text: item.detail }), reason,
-      item.preview ? h("details", { class: "report-preview" }, h("summary", { text: "Show what's in it" }), h("pre", { text: item.preview })) : null);
+      item.preview ? h("details", { class: "report-preview" }, h("summary", { text: "Show what's in it" }), text, all) : null);
   }
   function render() {
     if (!dialog.isConnected) return;
@@ -102,7 +121,10 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     if (!report) return;
     const key = JSON.stringify([report.phase, report.groups.map(group => group.items.map(item => item.id))]);
     if (key !== shape) { shape = key; build(report); }
-    retry.hidden = report.phase !== "failed";
+    retry.hidden = report.phase !== "failed" || report.expired;
+    again.hidden = !report.expired;
+    summaryFiles.hidden = !report.files;
+    if (report.files) { setText(readme, report.files.readme); setText(index, report.files.index); }
     // The status follows the report's own steps; a message from the mode switch stays until the report says something new.
     const said = report.phase === "preparing" ? "Preparing the report…" : report.busy === "saving" ? "Making the report file…"
       : report.busy === "copying" ? "Copying…" : report.busy === "opening" ? "Opening the issue page…" : report.message ?? "";

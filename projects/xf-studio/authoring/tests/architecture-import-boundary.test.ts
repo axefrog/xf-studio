@@ -420,3 +420,30 @@ test("no module outside the composition reaches a feature, directly or through o
   expect(reach("studio-startup")).toContain("features/eye-makeup/index");
   expect(reach("studio-application")).not.toContain("compose/studio-registry");
 });
+
+// UI architecture boundary, exception 13 (docs/diagnostics.md): diagnostics' pure half runs on the page and the host alike; its host
+// half and the page's device are constructed only by composition roots (DIAG-10).
+const DIAGNOSTICS_PURE = ["model", "redact", "report", "actions", "page-sink", "resolution-trace"].map(name => `diagnostics/${name}`);
+const DIAGNOSTICS_HOST = ["host-log", "host-endpoint", "host-report", "host-roots", "mod-identity", "trace-window", "zip", "browser-device"]
+  .map(name => `diagnostics/${name}`);
+
+test("diagnostics' pure half is DOM- and host-free, and only composition roots import its endpoint and browser device (DIAG-10)", () => {
+  expect(every().filter(name => name.startsWith("diagnostics/")).sort()).toEqual([...DIAGNOSTICS_PURE, ...DIAGNOSTICS_HOST].sort());
+  for (const name of DIAGNOSTICS_PURE) {
+    const loads = [...reachIn(DISK, name, true)].filter(path => path.startsWith("node:") || path === "bun" || DIAGNOSTICS_HOST.includes(path));
+    expect(loads, `${name} loads host code`).toEqual([]);
+    expect(pageGlobals(source(name)), `${name} reads page or host globals`).toEqual([]);
+  }
+  const importers = (target: string) => every().filter(name => resolved(name).includes(target));
+  // The servers and the desktop host (outside src/) construct the endpoint; in src/, nothing does.
+  expect(importers("diagnostics/host-endpoint")).toEqual([]);
+  expect(importers("diagnostics/browser-device")).toEqual(["studio-startup"]);
+  const outside = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  expect(imports(outside("server.ts"))).toContain("./src/diagnostics/host-endpoint");
+  expect(imports(outside("desktop/server.ts"))).toContain("../src/diagnostics/host-endpoint");
+  // The rule fails on the violations it names: a pure module loading the file system or the host log, or reading the window.
+  const leak = probed({ "diagnostics/report": `import { readFileSync as __probe } from "node:fs";`, "diagnostics/actions": `import { hostFailure as __probe } from "./host-log";` });
+  expect([...reachIn(leak, "diagnostics/report", true)]).toContain("node:fs");
+  expect([...reachIn(leak, "diagnostics/actions", true)]).toContain("diagnostics/host-log");
+  expect(pageGlobals(`${source("diagnostics/redact")}\nconst __probe = window.location;`)).toContain("window");
+});

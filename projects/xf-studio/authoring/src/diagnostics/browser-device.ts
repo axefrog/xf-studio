@@ -2,23 +2,25 @@
  * The page's diagnostics device (docs/diagnostics.md): traps uncaught errors and unhandled rejections (a lost WebGL context comes
  * from the scene host, through the composition root), notes
  * the error reference of a failed host request (`X-XFS-Error-Ref`), forwards the page's failures to the host log in small batches
- * (bounded and rate-limited; what can't be sent stays in a ring buffer), reads the page's facts (browser, GPU), and does the
- * report's clipboard, download and issue-page work. Only the composition root constructs it.
+ * (bounded and rate-limited; the waiting queue is bounded too, and what can't be sent stays in a ring buffer), reads the page's
+ * facts (browser, GPU), and does the report's clipboard, download and issue-page work. Only the composition root constructs it.
  */
 import type { DiagnosticsActions, DiagnosticsDevice, DiagnosticsMode } from "./actions";
-import { DIAGNOSTIC_FORWARD_SCHEMA, DIAGNOSTIC_LIMITS, isErrorRef, type DiagnosticEntry } from "./model";
+import { diagnosticEntry, DIAGNOSTIC_FORWARD_SCHEMA, DIAGNOSTIC_LIMITS, isErrorRef, type DiagnosticEntry } from "./model";
 import { issueUrl, type PageFacts, type ReportManifest } from "./report";
 
 const ERROR_REF_HEADER = "X-XFS-Error-Ref";
-const HOST_REF_MS = 8_000;
+/** A notice takes a failed host request's reference only this soon after the answer, so an unrelated later notice doesn't (DIAG-12). */
+const HOST_REF_MS = 3_000;
+/** Entries waiting to be forwarded; beyond this the oldest are dropped and counted in one line (DIAG-07). */
+export const PAGE_QUEUE = 2 * DIAGNOSTIC_LIMITS.ring;
+const UNREACHABLE = "XF Studio couldn't get the report ready. Try again in a moment.";
 
 export type BrowserDiagnosticsOptions = {
   window: Window & typeof globalThis;
   /** `/api/diagnostics` on both hosts. */
   endpoint?: string;
   download(blob: Blob, name: string): void;
-  /** A few view settings for the report (preview quality, lighting preset, verification workspace). */
-  state?: () => Record<string, string>;
 };
 
 /** A plain browser name and version from the user agent (the desktop's WebView2 reports its Edge version). */
@@ -34,7 +36,7 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   const win = options.window, endpoint = options.endpoint ?? "/api/diagnostics";
   const send = win.fetch.bind(win);
   let queue: DiagnosticEntry[] = [], ring: DiagnosticEntry[] = [], timer: ReturnType<typeof setTimeout> | null = null;
-  let windowStart = 0, sentInWindow = 0;
+  let windowStart = 0, sentInWindow = 0, droppedFromQueue = 0;
   const hostRefs: { ref: string; at: number; claimed: boolean }[] = [];
   let gpu: { renderer: string | null; webgl2: boolean } | null = null;
 
@@ -43,6 +45,11 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   };
   async function flush() {
     timer = null;
+    if (droppedFromQueue) {
+      queue.unshift(diagnosticEntry({ level: "warn", area: "page", code: "entries_dropped", origin: "page",
+        message: "The window noticed more problems than it could pass on; the oldest were left out.", details: { count: droppedFromQueue } }));
+      droppedFromQueue = 0;
+    }
     // What couldn't be sent earlier goes first, once the host answers again.
     const batch = [...ring, ...queue].slice(0, DIAGNOSTIC_LIMITS.batch);
     const rest = [...ring, ...queue].slice(DIAGNOSTIC_LIMITS.batch);
@@ -55,23 +62,28 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
     try {
       const response = await send(`${endpoint}/entries`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: batch }), keepalive: true });
-      if (!response.ok) throw Error(String(response.status));
+      // The host refused this batch (malformed, too large): resending it would only be refused again, so it is dropped.
+      if (!response.ok && response.status >= 500) throw Error(String(response.status));
     } catch { keep(batch); }
     queue = rest;
     if (queue.length) schedule(250);
   }
   const schedule = (ms = 250) => { if (!timer) timer = setTimeout(() => void flush(), ms); };
 
-  async function api<T>(path: string, body?: unknown, failure = "XF Studio couldn't reach its diagnostics. Try again in a moment."): Promise<T> {
+  async function api<T>(path: string, body?: unknown, failure = UNREACHABLE): Promise<T> {
     let response: Response;
     try {
       response = await send(`${endpoint}/${path}`, body === undefined ? { cache: "no-store" } :
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } catch { throw Error(failure); }
     if (!response.ok) {
-      let message = failure;
-      try { const answer = await response.json() as { error?: unknown }; if (typeof answer.error === "string") message = answer.error; } catch { /* Plain. */ }
-      throw Object.assign(Error(message), { status: response.status });
+      let message = failure, code: string | undefined;
+      try {
+        const answer = await response.json() as { error?: unknown; code?: unknown };
+        if (typeof answer.error === "string") message = answer.error;
+        if (typeof answer.code === "string") code = answer.code;
+      } catch { /* Plain. */ }
+      throw Object.assign(Error(message), { status: response.status, code });
     }
     return response.json() as Promise<T>;
   }
@@ -93,7 +105,11 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   }
 
   const device: DiagnosticsDevice = {
-    forward(entries) { queue.push(...entries); schedule(entries.some(entry => entry.level === "error") ? 0 : 250); },
+    forward(entries) {
+      queue.push(...entries);
+      if (queue.length > PAGE_QUEUE) { droppedFromQueue += queue.length - PAGE_QUEUE; queue = queue.slice(-PAGE_QUEUE); }
+      schedule(entries.some(entry => entry.level === "error") ? 0 : 250);
+    },
     pending: () => [...ring],
     claimHostRef() {
       const now = Date.now(), found = [...hostRefs].reverse().find(item => !item.claimed && now - item.at <= HOST_REF_MS);
@@ -101,26 +117,29 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       found.claimed = true;
       return found.ref;
     },
-    pageFacts(): PageFacts {
+    pageFacts(): Omit<PageFacts, "state"> {
       const { renderer, webgl2 } = probeGpu();
-      let state: Record<string, string> = {};
-      try { state = options.state?.() ?? {}; } catch { /* Facts without state. */ }
-      return { browser: browserName(win.navigator.userAgent), gpu: renderer, webgl2, state };
+      return { browser: browserName(win.navigator.userAgent), gpu: renderer, webgl2 };
     },
     async state() {
       try { return await api<{ mode: DiagnosticsMode; until: string | null; minutes: number }>("state"); } catch { return null; }
     },
     setMode: mode => api("mode", { mode }, "XF Studio couldn't change diagnostic mode. Try again."),
     prepare: ref => api<ReportManifest>("report", { ref }, "XF Studio couldn't prepare the report. Try again in a moment."),
+    item: async (id, item) => (await api<{ text: string }>("item", { id, item }, "XF Studio couldn't show all of it. Try again in a moment.")).text,
     async bundle(request) {
       let response: Response;
       try {
         response = await send(`${endpoint}/bundle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
       } catch { throw Error("XF Studio couldn't make the report file. Try again in a moment."); }
       if (!response.ok) {
-        let message = "XF Studio couldn't make the report file. Try again in a moment.";
-        try { const answer = await response.json() as { error?: unknown }; if (typeof answer.error === "string") message = answer.error; } catch { /* Plain. */ }
-        throw Error(message);
+        let message = "XF Studio couldn't make the report file. Try again in a moment.", code: string | undefined;
+        try {
+          const answer = await response.json() as { error?: unknown; code?: unknown };
+          if (typeof answer.error === "string") message = answer.error;
+          if (typeof answer.code === "string") code = answer.code;
+        } catch { /* Plain. */ }
+        throw Object.assign(Error(message), { code });
       }
       return new Uint8Array(await response.arrayBuffer());
     },

@@ -90,13 +90,9 @@ async function start(host: StudioHost, root: HTMLElement) {
     characterPreset: byId<HTMLInputElement>("device-character-picker"),
   } });
   let port: StudioPresentationPort<HTMLElement> | undefined;
-  const diagnosticsDevice = createBrowserDiagnostics({ window, download: (blob, name) => fileDevice.download(blob, name),
-    state: () => {
-      const preview = port?.authoring.previewState(), head = port?.viewport.snapshot().head;
-      return { "verification workspace": verification ? "yes" : "no", "3D head": head?.phase ?? "unknown",
-        "preview quality": String(preview?.quality?.size ?? "unknown"), "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
-    } });
-  const diagnostics = new DiagnosticsActions(diagnosticsDevice.device);
+  const diagnosticsDevice = createBrowserDiagnostics({ window, download: (blob, name) => fileDevice.download(blob, name) });
+  // The presentation names the view settings a report carries; the root adds only which workspace this is.
+  const diagnostics = new DiagnosticsActions(diagnosticsDevice.device, Date.now, { "verification workspace": verification ? "yes" : "no" });
   diagnosticsDevice.install(diagnostics);
   setPageDiagnostics((area, code, message, error, options) => diagnostics.failure(area, code, message, error, options));
   void diagnostics.refresh();

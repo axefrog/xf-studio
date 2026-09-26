@@ -14,6 +14,9 @@ const EMAIL = regex(email as PatternSpec, true);
 const ROLE_LOCAL = regex((emailExemptions as { local: PatternSpec }).local);
 const NOT_ADDRESS = (emailExemptions as { domains: PatternSpec[] }).domains.map(spec => regex(spec));
 
+/** A folder or account name that belongs to no one (a placeholder, a shared profile, a CI account). */
+export const isPlaceholderUser = (name: string) => PLACEHOLDER_USER.test(name);
+
 /** What personal data a text holds, if any: a user-profile path or an e-mail address. */
 export function personalDataIn(text: string): "user-path" | "email" | null {
   for (const pattern of USER_PATHS) for (const match of text.matchAll(pattern)) if (!PLACEHOLDER_USER.test(match[1] ?? "")) return "user-path";
