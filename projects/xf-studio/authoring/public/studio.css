@@ -430,7 +430,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .install-line.done { color: var(--success); } .install-line.warning { color: var(--warning); }
 .install-sheet .install-where { margin: 0 0 var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }
 .install-changes { margin: 0 0 var(--sp-4); }
-.install-changes li { align-items: flex-start; overflow-wrap: anywhere; }
+.result-list.install-changes li { align-items: flex-start; flex-wrap: nowrap; overflow-wrap: anywhere; }
+.result-list.install-changes li > span { min-width: 0; }
 .install-notes { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .install-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); min-height: 24px; }
 .install-status { margin: 0; flex: 1 1 240px; font-size: var(--fs-sm); }

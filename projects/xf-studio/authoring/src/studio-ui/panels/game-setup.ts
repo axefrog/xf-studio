@@ -25,6 +25,7 @@ export function gameSetupSection(rt: StudioRuntime) {
     if (outcome.ok) rt.feedback.announce(announce);
     else rt.feedback.toast("warning", "Game & tools", outcome.message, [], { code: outcome.code });
     rt.changed();
+    return outcome.ok;
   };
   const route = new Segmented<LocalSetupFields["launchRoute"]>({ label: "How you install mods", options: [
     { value: "mo2", label: "Mod Organizer 2", title: "Mods are managed in Mod Organizer 2" },
@@ -48,7 +49,8 @@ export function gameSetupSection(rt: StudioRuntime) {
       other = false;
       void save({ [field]: select.value || null });
     });
-    const commit = () => { const value = input.value.trim(); void save({ [field]: value || null }); };
+    // A typed folder, once saved, is listed as the current choice, so the list shows it rather than "Another folder…".
+    const commit = () => { const value = input.value.trim(); void save({ [field]: value || null }).then(ok => { if (ok && value) { other = false; rt.changed(); } }); };
     input.addEventListener("change", commit);
     input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); commit(); } });
     async function pick() {

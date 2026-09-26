@@ -83,12 +83,14 @@ export class ModInstallActions {
     if (!build) return refusal("missing_target", "Build this mod first.");
     if (this.state.busy) return refusal("busy", this.state.busy.kind === "modInstall.apply" ? "A mod is being added. Wait for it to finish."
       : "XF Studio is checking where the mod would go. Wait a moment.");
+    // One build is added once; Build again for a newer copy (Show in folder stays offered).
+    const outcome = this.state.outcomes[action.product];
+    if (action.kind !== "modInstall.reveal" && outcome?.ok && outcome.candidateId === build.candidateId)
+      return refusal("invalid_value", `${build.modName} is already added from this build. Build again to add a newer copy.`);
     if (action.kind === "modInstall.apply") {
       const plan = this.state.plans[action.product];
       if (!plan || plan.candidateId !== build.candidateId) return refusal("needs_input", "Review what will be added first.");
       if (plan.blocked) return refusal("unavailable", plan.blocked);
-      const outcome = this.state.outcomes[action.product];
-      if (outcome?.ok && outcome.candidateId === build.candidateId) return refusal("invalid_value", `${build.modName} is already added from this build.`);
     }
     return { available: true };
   }

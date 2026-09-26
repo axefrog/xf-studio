@@ -29,8 +29,10 @@ test("review, then consent to exactly that plan", async () => {
   expect(done).toEqual({ ok: true, message: "“XF Eye Artistry” is in Mod Organizer 2 and switched on." });
   expect(f.sent).toEqual([{ action: "plan", candidateId: "c1" }, { action: "install", candidateId: "c1", token: "t1" }]);
   expect(f.actions.snapshot().outcomes.p1).toMatchObject({ ok: true });
-  // The same build isn't added twice.
+  // The same build isn't added twice; its folder can still be shown.
   expect(f.actions.capability({ kind: "modInstall.apply", product: "p1" }).code).toBe("invalid_value");
+  expect(f.actions.capability({ kind: "modInstall.review", product: "p1" }).reason).toBe("XF Eye Artistry is already added from this build. Build again to add a newer copy.");
+  expect(f.actions.capability({ kind: "modInstall.reveal", product: "p1" })).toEqual({ available: true });
 });
 
 test("a blocked plan refuses consent with its plain reason; a stale one is dropped for a new review", async () => {
