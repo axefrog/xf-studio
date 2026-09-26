@@ -456,7 +456,15 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     cache.toolLabel = toolLabel;
     try {
       const exported = await session[kind](paths) as unknown as Map<string, T>;
-      for (const [path, value] of exported) into.set(`${group.archive.id}|${path.toLowerCase()}`, value);
+      for (const [path, value] of exported) {
+        let kept: T = value;
+        const geometry = value as unknown as { glb: string | null; complete: boolean };
+        // A partial export is never written to the exporter's cache, so its GLB lives in the session's work folder, which is
+        // removed as the session closes below: keep the GLB in the content-addressed store, which outlives the session.
+        if (kind === "geometry" && geometry.glb && !geometry.complete && existsSync(geometry.glb))
+          kept = { ...geometry, glb: join(options.storeRoot, "files", store(options.storeRoot, geometry.glb, "glb").file) } as unknown as T;
+        into.set(`${group.archive.id}|${path.toLowerCase()}`, kept);
+      }
     } catch (error) {
       if (error instanceof GameAssetExportError) {
         if (error.code === "cancelled" || signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled.");
@@ -643,7 +651,10 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   /** Write one planned component; null when it can't be served (the slot's outcome is decided by the caller). */
   const build = (component: PlannedComponent): RenderComponent | "tool" | "export" => {
     const located = geometryAt.get(component) ?? locate(graph, component.drawnFrom.ref) ?? undefined;
-    const exported = located ? cache.geometry.get(`${located.archive.id}|${located.depotPath.toLowerCase()}`) : undefined;
+    const geometryKey = located ? `${located.archive.id}|${located.depotPath.toLowerCase()}` : "";
+    const exported = located ? cache.geometry.get(geometryKey) : undefined;
+    // An export whose file has gone (cleared by hand, or a work folder removed) fails only this part, and is exported again next time.
+    if (exported?.glb && !existsSync(exported.glb)) { cache.geometry.delete(geometryKey); return "export"; }
     if (!located || !exported?.glb) return located && toolFailures.has(located.archive.id) ? "tool" : "export";
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
@@ -717,7 +728,9 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       continue;
     }
     componentNotes = []; componentTextures = new Map();
-    const built = build(component);
+    let built: ReturnType<typeof build>;
+    // One part that can't be built leaves only its slot unshown; it never costs the V's other details.
+    try { built = build(component); } catch (error) { log(`${component.component} could not be served: ${(error as Error).message}`); built = "export"; }
     notes.push(...componentNotes);
     if (typeof built === "string") { failSlot(component.slot, built); continue; }
     components.push(built);
