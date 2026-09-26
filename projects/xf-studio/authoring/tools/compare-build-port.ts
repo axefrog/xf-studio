@@ -189,7 +189,7 @@ for preset,record in zip(b['plan']['presets'],b['compiled']):
         checked+=1;same+=int(png==(out/'baked'/m['file']).read_bytes() and exported==level0)
 print(json.dumps({'textures':checked,'inputPngEqualsRawAndExportPngEqualsDdsLevel0':same}))
 `, build));
-  const { verifyBuild } = await import("../src/mod-verifier/verify-build");
+  const { verifyBuild } = await import("../src/features/eye-makeup/verify/verify-build");
   const { createWolvenKitVerifierTools } = await import("../src/verifier-wolvenkit");
   const workDir = resolve(build, "verify-ts");
   rmSync(workDir, { recursive: true, force: true });

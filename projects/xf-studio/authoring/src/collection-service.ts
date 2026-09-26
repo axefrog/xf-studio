@@ -3,14 +3,15 @@ import type { EditorSnapshot } from "./collection-session";
 import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
-import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
+import { eyeMakeupCollection, planCollection } from "./preset-collection";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
-import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
-import { describePackageExperimental, describePackageOmissions } from "./package-filter";
-import { refusal, type Capability } from "./platform/api";
+import type { PackageAction } from "./package-action";
+import { describePackageBuild, describePackageCheck } from "./package-filter";
+import { refusal, type Capability, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
+import { renameCollectionId } from "./platform/core/package-plan";
 
 /** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
 export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made with a newer version of XF Studio, so this version " +
@@ -31,8 +32,8 @@ export type CollectionResult =
   | { kind: "saved"; collection: StoredCollection }
   | { kind: "export"; name: string; json: string }
   | { kind: "imported" }
-  | { kind: "packageCheck"; result: PackageCheck }
-  | { kind: "packageBuild"; result: PackageBuild };
+  | { kind: "packageCheck"; result: PackageCheckResult }
+  | { kind: "packageBuild"; result: PackageBuildResult };
 export type CollectionProgress = { phase: "working" | "success" | "error"; code: string; message: string;
   /** The request this progress belongs to (audit A-9). */
   requestId?: number };
@@ -64,8 +65,8 @@ export type CollectionTransport = {
   get(id: string): Promise<StoredCollection>;
   /** Sends the draft's looks; the library writes each row in the oldest schema that holds it. */
   save(collection: LookCollection, revision?: number): Promise<StoredCollection>;
-  /** The eye-makeup package pipeline still takes its `xfas/collection-1` view (moves to the product planner in step 8). */
-  package(action: PackageAction, collection: PresetCollection): Promise<PackageCheck | PackageBuild>;
+  /** Sends the draft's stored form (with its package plan); the host plans every product and answers them all. */
+  package(action: PackageAction, collection: unknown): Promise<PackageCheckResult | PackageBuildResult>;
 };
 
 export class CollectionServiceError extends Error {
@@ -195,9 +196,12 @@ export class CollectionService {
     if (!live || !identity) return undefined;
     return JSON.stringify([this.content, identity.collectionId, this.actions!.summaryRevision(), identity.selected, live.revision]);
   }
-  /** The eye-makeup package pipeline's input: the draft's looks with an eye-makeup part, as `xfas/collection-1`. */
-  private packageCollection(): PresetCollection {
-    return parseCollection(eyeMakeupCollection(this.actions!.snapshot().collection));
+  /**
+   * The package request's collection: the draft (unsaved edits included) in the oldest stored schema that holds it,
+   * with its package plan. Each exporter on the host reads its own feature's part (feature-module platform §6).
+   */
+  private packageCollection(): unknown {
+    return this.model.parts.writeMinimal(this.actions!.snapshot().collection);
   }
   /**
    * Why the draft's eye-makeup view has no look to package, or undefined when it has one (CORE-34): a look
@@ -270,7 +274,12 @@ export class CollectionService {
   private async list() { this.summaries = await this.transport.list(); this.notify(); return this.summaries; }
   private async save(copy: boolean): Promise<StoredCollection> {
     const snapshot = this.actions!.snapshot(), sourceId = snapshot.collection.id;
-    if (copy) { snapshot.collection.id = crypto.randomUUID(); snapshot.revision = undefined; }
+    if (copy) {
+      snapshot.collection.id = crypto.randomUUID(); snapshot.revision = undefined;
+      // The copy's default mod is the copy's own: its archive name follows the new collection ID.
+      const plan = renameCollectionId(snapshot.collection.packagePlan, sourceId, snapshot.collection.id);
+      if (plan) snapshot.collection.packagePlan = plan; else delete snapshot.collection.packagePlan;
+    }
     const saved = await this.transport.save(snapshot.collection, snapshot.revision);
     // An in-flight request may finish after a different draft has been opened via another adapter.
     if (this.actions!.view().collection.id !== sourceId)
@@ -385,13 +394,13 @@ export class CollectionService {
           const response = await this.transport.package(request.action, snapshot);
           this.packageKey = key; this.packageSource = source;
           if (request.action === "check") {
-            const checked = response as PackageCheck;
+            const checked = response as PackageCheckResult;
             result = { kind: "packageCheck", result: checked };
-            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${(checked.notes ?? []).map(note => ` ${note}`).join("")}${describePackageOmissions(checked.omissions)}${describePackageExperimental(checked.experimental)}`;
+            message = describePackageCheck(checked);
           } else {
-            const built = response as PackageBuild;
+            const built = response as PackageBuildResult;
             result = { kind: "packageBuild", result: built };
-            message = `Verified local ${built.modName ? `${built.modName} ` : ""}mod files for ${built.presetCount} of ${built.originalPresetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.${describePackageOmissions(built.omissions)}${describePackageExperimental(built.experimental)}`;
+            message = describePackageBuild(built);
           }
           break;
         }

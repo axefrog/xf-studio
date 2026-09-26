@@ -1,21 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, resolve, sep } from "node:path";
-import { parseCollection } from "../src/preset-collection";
-import { preparePackageCollection } from "../src/package-filter";
-import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
-import { verifyPackageBuildResult } from "../src/package-result-verifier";
-import { packageErrorCode, type PackageBuild } from "../src/package-action";
+import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import type { LocalSettings } from "../src/local-settings";
-import { discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateHeadOverride, eyePlateRouteKey, type EyePlateResult } from "../src/eye-plate-service";
-import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
-import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
-import { readManifestPlateReach } from "../src/plate-uv-footprint-io";
+import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
+import { eyePlatePrerequisite } from "../src/eye-plate-prerequisite";
 import { runProcessTree } from "../src/process-tree";
+import { hostFailure } from "../src/diagnostics/host-log";
+import type { FeatureExporterEntry } from "../src/platform/api";
+import type { HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
 
-export const buildDeadlineMs = 40 * 60_000;
 /** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
 export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
 export const builderEntry = "app/tools/build.js";
@@ -183,124 +178,46 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   return null;
 }
 
-type BuildOutcome = { kind: "success"; result: PackageBuild } |
-  { kind: "failure"; code: string; message: string };
+/** Eye makeup's plate prerequisite for these desktop settings: cut from the head the saved launch route loads (PIPE-36). */
+export const desktopEyePlate = (settings: LocalSettings, dataRoot: string, tools?: (wolvenKitCli: string) => EyePlateTools): HostPrerequisite =>
+  eyePlatePrerequisite({ route: { gameRoot: settings.gameRoot ?? "", launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot },
+  cacheRoot: desktopPlateCache(dataRoot), wolvenKitCli: settings.wolvenKitCli ?? "",
+  headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead), ...(tools ? { tools } : {}) });
 
-/** Prepares the verified built-in eye plate for one Build; injectable for host tests. */
-export type DesktopPlatePreparer = (settings: LocalSettings, cacheRoot: string, signal: AbortSignal) => Promise<EyePlateResult>;
 /**
- * The plate is cut from the head the saved launch route loads (base game, or a mod's head when its topology
- * matches). The Local setup choice `eyePlateHead: "base-game"` (or XFS_EYE_PLATE_HEAD=base-game for developers)
- * cuts it from the unmodified game head instead.
+ * The desktop's package host adapter: its readiness gate (packaged builder bundle, WolvenKit, game, private
+ * storage), its private roots under Electrobun user data (one snapshot, work and stage folder per Build; verified
+ * candidates in `package-candidates/`), the bundled builder run by XF Studio's own Bun, and its host log.
  */
-export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, signal) => ensureEyePlate({
-  gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal,
-  headSource: createInstalledHeadSource({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
-    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli! },
-  resolve(cacheRoot, "resolver")),
-  headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead), routeKey: desktopPlateRouteKey(settings) ?? undefined });
-
-/** The route and head choice a desktop plate is recorded under, which Check must match to plan on it (PIPE-36). */
-export const desktopPlateRouteKey = (settings: LocalSettings) => settings.gameRoot ? eyePlateRouteKey({ gameRoot: settings.gameRoot,
-  launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot },
-  eyePlateHeadOverride(process.env, settings.eyePlateHead)) : null;
-
-/** The builder found the cached plate's recorded UV footprint stale (`package_plate_stale`). */
-class StalePlate extends Error {}
-
-/** Prepare the built-in eye plate, then run the packaged builder as one bounded process tree; publish only the shared verified result. */
-export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,
-  timeoutMs = buildDeadlineMs, signal?: AbortSignal, wolvenKitProbe: WolvenKitProbe = probeWolvenKit,
-  preparePlate: DesktopPlatePreparer = prepareDesktopPlate, log: (message: string) => void = message => console.error(message),
-  retried = false): Promise<BuildOutcome> {
-  // Build itself waits for definitive tool checks (async, shared with readiness requests).
-  if (wolvenKitProbe === probeWolvenKit) await warmBuildProbes(settings);
-  const issue = desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe);
-  if (issue) return { kind: "failure", code: "package_build_unavailable", message: issue };
-  const started = Date.now();
-  let collection: ReturnType<typeof parseCollection>;
-  let prepared: ReturnType<typeof preparePackageCollection>;
-  try { collection = parseCollection(value); prepared = preparePackageCollection(collection, EYE_MAKEUP_REGION); }
-  catch (error) { return { kind: "failure", code: "invalid_collection", message: (error as Error).message }; }
-  const source = JSON.stringify(collection);
-  const work = resolve(dataRoot, "package-snapshots", randomUUID());
-  const buildRoot = resolve(dataRoot, "package-work", randomUUID());
-  const stageRoot = resolve(dataRoot, "package-staging", randomUUID());
-  const candidateRoot = resolve(dataRoot, "package-candidates");
-  try { for (const path of [work, buildRoot, stageRoot, candidateRoot]) privatePath(dataRoot, path); }
-  catch { return { kind: "failure", code: "package_build_unavailable", message: "Private package storage is unsafe." }; }
-  let plate: EyePlateResult;
-  const plateDeadline = new AbortController();
-  const plateTimer = setTimeout(() => plateDeadline.abort(), timeoutMs);
-  const plateAbort = () => plateDeadline.abort();
-  signal?.addEventListener("abort", plateAbort, { once: true });
-  try {
-    privatePath(dataRoot, desktopPlateCache(dataRoot));
-    plate = await preparePlate(settings, desktopPlateCache(dataRoot), plateDeadline.signal);
-  } catch (error) {
-    if (error instanceof EyePlateError) {
-      if (error.detail) log(`Build: eye plate preparation failed (${error.code}): ${error.detail.slice(-3000)}`);
-      if (error.code === "plate_cancelled") return signal?.aborted
-        ? { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." }
-        : { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
-      return { kind: "failure", code: error.code, message: error.message };
-    }
-    return { kind: "failure", code: "package_build_failed", message: "The built-in eye plate could not be prepared. No candidate was published." };
-  } finally { clearTimeout(plateTimer); signal?.removeEventListener("abort", plateAbort); }
-  // Plan on the prepared plate: presets whose makeup never reaches it are omitted, as the builder omits them.
-  try {
-    const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
-    if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
-    prepared = preparePackageCollection(collection, EYE_MAKEUP_REGION, reach);
-  } catch (error) {
-    const message = (error as Error).message;
-    if (message.startsWith("No mod files can be made")) return { kind: "failure", code: "no_exportable_content", message };
-    log(`Build: the eye plate's UV footprint could not be read: ${message}`);
-    return { kind: "failure", code: "package_build_failed", message: "The built-in eye plate could not be prepared. No candidate was published." };
-  }
-  const remainingMs = Math.max(1, timeoutMs - (Date.now() - started));
-  mkdirSync(work, { recursive: true, mode: 0o700 });
-  const snapshot = resolve(work, "collection.json");
-  writeFileSync(snapshot, source, { mode: 0o600, flag: "wx" });
-  const args = [resolve(toolsRoot, builderEntry), "--collection", snapshot,
-    "--plate", plate.directory, "--plate-manifest", plate.manifestFile,
-    "--wolvenkit", settings.wolvenKitCli!, "--gamepath", settings.gameRoot!,
-    "--app-root", toolsRoot, "--build-root", buildRoot, "--dist-root", stageRoot, "--machine-result"];
-  try {
-    const run = await runProcessTree(builderBun(), args, { cwd: work, signal, timeoutMs: remainingMs });
-    if (run.stopped === "timeout")
-      return { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
-    if (run.stopped === "cancelled") return { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." };
-    if (run.exitCode !== 0) {
-      if (!retried && packageErrorCode(run.stderr) === "package_plate_stale") throw new StalePlate();
-      log(`Build: the package tool failed (exit ${run.exitCode}): ${(run.error?.message ?? run.stderr).slice(-3000)}`);
-      return { kind: "failure", code: "package_build_failed", message: "Package Build failed. No candidate was published." };
-    }
-    const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
-    if (!line) throw Error("Package tool completed without a result.");
-    const built = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageBuild;
-    verifyPackageBuildResult(built, collection, prepared, source, stageRoot, plate.manifest);
-    privatePath(dataRoot, candidateRoot);
-    mkdirSync(candidateRoot, { recursive: true, mode: 0o700 });
-    privatePath(dataRoot, candidateRoot);
-    const promoted = resolve(candidateRoot, basename(built.package));
-    renameSync(built.package, promoted);
-    const result = { ...built, package: promoted, manifest: resolve(promoted, "manifest.json") };
-    verifyPackageBuildResult(result, collection, prepared, source, candidateRoot, plate.manifest);
-    return { kind: "success", result };
-  } catch (error) {
-    if (!(error instanceof StalePlate)) {
-      log(`Build: the package result failed verification: ${(error as Error).message}`);
-      return { kind: "failure", code: "package_build_failed", message: "Package Build could not verify its result. No candidate was published." };
-    }
-  } finally {
-    rmSync(work, { recursive: true, force: true });
-    rmSync(stageRoot, { recursive: true, force: true });
-    rmSync(buildRoot, { recursive: true, force: true });
-  }
-  // The cached plate's recorded footprint was stale: discard it and build once more on a freshly prepared plate (PIPE-37).
-  log("Build: the cached eye plate's UV footprint was stale; preparing the plate again.");
-  try { discardCachedPlate(desktopPlateCache(dataRoot), plate.manifestFile); }
-  catch { return { kind: "failure", code: "package_build_failed", message: "Package Build failed. No candidate was published." }; }
-  return runDesktopBuild(value, settings, dataRoot, toolsRoot, Math.max(1, timeoutMs - (Date.now() - started)), signal, wolvenKitProbe, preparePlate, log, true);
+export function desktopPackageAdapter(options: { exporters: readonly FeatureExporterEntry[]; settings: LocalSettings; dataRoot: string;
+  toolsRoot: string; checkWorker: string; prerequisites: (settings: LocalSettings) => Readonly<Record<string, HostPrerequisite>>;
+  wolvenKitProbe?: WolvenKitProbe; log?: (message: string) => void }): PackageHostAdapter {
+  const { settings, dataRoot, toolsRoot } = options, probe = options.wolvenKitProbe ?? probeWolvenKit;
+  const log = options.log ?? (message => console.error(message));
+  return {
+    exporters: options.exporters,
+    prerequisites: options.prerequisites(settings),
+    checkWorker: options.checkWorker,
+    buildIssue: async () => {
+      // Build itself waits for definitive tool checks (async, shared with readiness requests).
+      if (probe === probeWolvenKit) await warmBuildProbes(settings);
+      return desktopBuildIssue(settings, dataRoot, toolsRoot, probe);
+    },
+    buildSetup: () => {
+      const id = randomUUID();
+      return { snapshot: resolve(dataRoot, "package-snapshots", id), work: resolve(dataRoot, "package-work", id),
+        stage: resolve(dataRoot, "package-staging", id), candidates: resolve(dataRoot, "package-candidates"),
+        wolvenkit: settings.wolvenKitCli!, gamepath: settings.gameRoot!, ensurePrivate: path => privatePath(dataRoot, path) };
+    },
+    runBuilder: (args, run) => runProcessTree(builderBun(), [resolve(toolsRoot, builderEntry), ...args, "--app-root", toolsRoot],
+      { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs }),
+    log: (scope, code, message, detail) => {
+      const text = detail && typeof detail === "object" && "message" in detail ? `${message} ${String((detail as { message: unknown }).message).slice(-3000)}` : message;
+      log(`${scope === "build" ? "Build" : "Check"}: ${text}`);
+      if (code !== "package_build_cancelled" && code !== "package_check_cancelled")
+        hostFailure("package", code, `${scope === "build" ? "Build" : "Check"}: ${message}`, detail instanceof Error ? detail : undefined,
+          code === "invalid_collection" || code === "no_exportable_content" ? "warn" : "error");
+    },
+  };
 }

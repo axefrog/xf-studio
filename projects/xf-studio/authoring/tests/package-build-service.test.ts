@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { PackageBuildError, type PackageCommandOptions } from "../src/package-build-service";
 import type { PackageResourceTools } from "../src/package-build-wolvenkit";
-import { VERIFICATION_LIMITS, type VerificationReport, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
+import { VERIFICATION_LIMITS, type VerificationReport, type VerifyBuildOptions } from "../src/features/eye-makeup/verify/verify-build";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import type { PackageBuild, PackageCheck } from "../src/package-action";
 import type { EyePlateManifest } from "../src/eye-plate-service";

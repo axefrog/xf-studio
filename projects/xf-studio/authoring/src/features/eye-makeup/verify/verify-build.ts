@@ -36,31 +36,39 @@
 // Dynamic expansion checks model inspected ArchiveXL rules; they do not run the game.
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { chainDimensions, readDdsChain, type DdsKind } from "./dds-reader";
-import { resourceRecords, type ResourceFile } from "./resource-inventory";
+import { plannedResources, resourceRecords, type ResourceFile } from "./resource-inventory";
 import { checkPlateGeometry, VERIFIER_PLATE_LIFT_MM, type PlateGeometryReport } from "./plate-geometry";
 import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, glitterOf, GRADIENT_SIDE, routeOf, sameJson, textureDims, uvSpaceOf,
   VerificationError, type Node, type VerifierPlan, type VerifierRoute, type VerifierUvSpace } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, normalInputOf, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
 import { checkAccentChain, checkGlitterChains, splitChain, type AccentReport, type GlitterChainReport } from "./glitter-checks";
+import type { GeneratedFile, ToolResult, UnpackedView, VerifierTools } from "../../../platform/api";
 import { DENSE_INSIDE, expectedUvConstants, expectedWindow, headMaskPlacement, mappingOffset, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
   type MappingStats, type PlateUvSamples, type ReferenceCrop, type VerifierWindow } from "./uv-window";
 
 export { VerificationError } from "./resource-checks";
 
-export interface ToolResult { readonly exitCode: number | null; readonly stdout: string; readonly stderr: string }
+/** The three WolvenKit operations the verifier runs itself (the platform's `VerifierTools`). Each writes only into `output`. */
+export type { ToolResult, VerifierTools } from "../../../platform/api";
 
-/** The three WolvenKit operations the verifier runs itself. Each writes only into `output`. */
-export interface VerifierTools {
-  unbundle(archive: string, output: string): ToolResult;
-  serialize(input: string, output: string): ToolResult;
-  exportTextures(input: string, output: string): ToolResult;
+/**
+ * What the eye-makeup checks read, whichever way the archive was unbundled: this feature's build work folder,
+ * the staging tree its resources were generated in, and the unpacked archive.
+ */
+export interface FeatureVerifyOptions extends Omit<VerifyBuildOptions, "build"> {
+  /** The feature's work directory (build.json, baked maps, DDS inputs). */
+  readonly work: string;
+  /** The product's staging tree, where this feature's resources were generated before packing. */
+  readonly staging: string;
+  /** The product's archive, unbundled and hash-checked (by the product verifier, or by `verifyBuild` itself). */
+  readonly unpacked: UnpackedView;
 }
 
 export interface VerifyBuildOptions {
-  /** Intermediate build directory containing build.json. */
+  /** Intermediate build directory containing build.json (a product holding only eye makeup, in the standalone layout). */
   readonly build: string;
   /** The verifier's WolvenKit operations (src/verifier-wolvenkit.ts, or a test fake). */
   readonly tools: VerifierTools;
@@ -486,7 +494,7 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
 }
 
 /** Plate input files and their hashes: the caller's, else the build record's; both must agree. */
-function plateInputs(build: Node, options: VerifyBuildOptions) {
+function plateInputs(build: Node, options: Pick<VerifyBuildOptions, "plate">) {
   const recorded: Node[] = Array.isArray(build.plateInputs) ? build.plateInputs : [];
   const byExtension = (extension: string) => recorded.filter(entry => typeof entry?.path === "string" &&
     entry.path.toLowerCase().endsWith(extension));
@@ -505,7 +513,7 @@ function plateInputs(build: Node, options: VerifyBuildOptions) {
   return { files, start };
 }
 
-/** Verify one intermediate build; throws VerificationError on the first failed check. */
+/** Verify one intermediate build in the standalone layout; throws VerificationError on the first failed check. */
 export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   const out = resolve(options.build), tools = options.tools;
   ensure(tools && typeof tools.unbundle === "function" && typeof tools.serialize === "function" && typeof tools.exportTextures === "function",
@@ -514,15 +522,51 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   const build = readJson(join(out, "build.json")), plan: VerifierPlan = build.plan;
   const work = resolve(options.workDir ?? join(out, "verify"));
   ensure(!existsSync(work) || readdirSync(work).length === 0, `Verifier work directory is not empty: ${work}`);
-  const dirs = Object.fromEntries(["archive", "unpacked", "json", "plate", "plate-json", "dds", "logs"]
-    .map(name => [name, join(work, name)])) as Record<"archive" | "unpacked" | "json" | "plate" | "plate-json" | "dds" | "logs", string>;
+  const archiveDir = join(work, "archive"), unpacked = join(work, "unpacked"), logs = join(work, "logs");
+  for (const dir of [archiveDir, unpacked, logs]) mkdirSync(dir, { recursive: true });
+  // Archive and declaration: hash exactly the bytes that are unbundled and parsed.
+  const packageDir = join(out, "package", "archive", "pc", "mod");
+  const archiveCopy = join(archiveDir, plan.namespace + ".archive");
+  copyFileSync(join(packageDir, plan.namespace + ".archive"), archiveCopy);
+  const archiveData = bytes(archiveCopy), archiveSha256 = sha256(archiveData);
+  ensure(archiveSha256 === build.archiveSha256, "Packed archive differs from the build record");
+  const xlBytes = readFileSync(join(packageDir, plan.namespace + ".archive.xl"));
+  // Unbundle the verified archive copy; every member must match the build record byte for byte.
+  runTool(logs, "unbundle", () => tools.unbundle(archiveCopy, unpacked));
+  const files = listFiles(unpacked);
+  ensure(files.length === build.artifacts.length, `Unpacked ${files.length} files; expected ${build.artifacts.length}`);
+  return verifyEyeMakeupBuild({ ...options, work: out, staging: join(out, "archive"), workDir: work,
+    unpacked: { root: unpacked, files, archiveSha256, archiveBytes: archiveData.length, xl: xlBytes.toString("utf8"),
+      xlSha256: sha256(xlBytes), features: 1 } });
+}
+
+/** Run one verifier WolvenKit step, keep its log, and require it to have succeeded. */
+function runTool(logs: string, label: string, call: () => ToolResult) {
+  const result = call();
+  writeFileSync(join(logs, `${label}.log`), result.stdout + result.stderr, "utf8");
+  ensure(result.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(result.stdout + result.stderr),
+    `WolvenKit ${label} failed: ${(result.stdout + result.stderr).slice(-2000)}`);
+}
+
+/**
+ * Eye makeup's independent checks of its resources in an unpacked product archive: plate provenance, the
+ * generated tree, routes re-derived from the recipes, the `.archive.xl` entries, then its own conversions of its
+ * hash-checked members (resources, plate geometry, decoded pixels and mips). Throws VerificationError on the
+ * first failed check.
+ */
+export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): VerificationReport {
+  const out = resolve(options.work), tools = options.tools, view = options.unpacked;
+  ensure(tools && typeof tools.serialize === "function" && typeof tools.exportTextures === "function", "The verifier needs its WolvenKit tools");
+  ensure(existsSync(join(out, "build.json")), `Build manifest is missing: ${out}`);
+  const build = readJson(join(out, "build.json")), plan: VerifierPlan = build.plan;
+  const work = resolve(options.workDir ?? join(out, "verify"));
+  // The standalone entry keeps its archive copy, unbundled tree and log beside the conversions.
+  ensure(!existsSync(work) || readdirSync(work).filter(name => !["archive", "unpacked", "logs"].includes(name)).length === 0,
+    `Verifier work directory is not empty: ${work}`);
+  const dirs = Object.fromEntries(["json", "plate", "plate-json", "dds", "logs"]
+    .map(name => [name, join(work, name)])) as Record<"json" | "plate" | "plate-json" | "dds" | "logs", string>;
   for (const dir of Object.values(dirs)) mkdirSync(dir, { recursive: true });
-  const runTool = (label: string, call: () => ToolResult) => {
-    const result = call();
-    writeFileSync(join(dirs.logs, `${label}.log`), result.stdout + result.stderr, "utf8");
-    ensure(result.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(result.stdout + result.stderr),
-      `WolvenKit ${label} failed: ${(result.stdout + result.stderr).slice(-2000)}`);
-  };
+  const runStep = (label: string, call: () => ToolResult) => runTool(dirs.logs, label, call);
 
   // Plate provenance at the start: the host's plate files, hashed and copied before anything else.
   const plate = plateInputs(build, options);
@@ -532,8 +576,10 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     ensure(sha256(readFileSync(plateCopy[role])) === plate.start[role], `Plate ${role} input changed while it was copied`);
   }
 
-  // The generated tree before packing must still equal the recorded inventory.
-  ensure(sameJson(resourceRecords(listFiles(join(out, "archive")), plan), build.artifacts), "Generated resource inventory changed after pack");
+  // This feature's files in the generated tree before packing must still equal its recorded inventory.
+  const planned = new Set(plannedResources(plan));
+  ensure(sameJson(resourceRecords(listFiles(options.staging).filter(file => planned.has(file.path)), plan), build.artifacts),
+    "Generated resource inventory changed after pack");
   const records: Node[] = build.compiled;
   ensure(Array.isArray(records) && records.length === plan.presets.length, "Build record does not list one compiled record per preset");
   records.forEach((record, i) => ensure(record.id === plan.presets[i].id, `Compiled record ${i} does not match preset ${plan.presets[i].id}`));
@@ -560,31 +606,36 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     return { id: preset.id, route };
   });
 
-  // Archive and declaration: hash exactly the bytes that are unbundled and parsed.
-  const packageDir = join(out, "package", "archive", "pc", "mod");
-  const archiveCopy = join(dirs.archive, plan.namespace + ".archive");
-  copyFileSync(join(packageDir, plan.namespace + ".archive"), archiveCopy);
-  const archiveData = bytes(archiveCopy), archiveSha256 = sha256(archiveData);
-  ensure(archiveSha256 === build.archiveSha256, "Packed archive differs from the build record");
-  const xlBytes = readFileSync(join(packageDir, plan.namespace + ".archive.xl"));
+  // The declaration, parsed from the bytes the unpacked view hashed: alone in its product it must be exactly
+  // this feature's; beside other features (whose merged text the product verifier compared) each entry once.
   let declaration: Node;
-  try { declaration = Bun.YAML.parse(xlBytes.toString("utf8").replace(/^﻿/, "")); }
+  try { declaration = Bun.YAML.parse(view.xl.replace(/^\uFEFF/, "")); }
   catch (error) { throw new VerificationError(`ArchiveXL declaration is not valid YAML: ${(error as Error).message}`); }
-  checkArchiveXl(plan, declaration);
+  checkArchiveXl(plan, declaration, view.features === 1);
 
-  // Unbundle the verified archive copy; every member must match the build record byte for byte.
-  runTool("unbundle", () => tools.unbundle(archiveCopy, dirs.unpacked));
-  const files = listFiles(dirs.unpacked);
-  ensure(files.length === build.artifacts.length, `Unpacked ${files.length} files; expected ${build.artifacts.length}`);
+  // Its members of the unpacked archive must match the build record byte for byte.
+  ensure(view.features > 1 || view.files.length === build.artifacts.length, `Unpacked ${view.files.length} files; expected ${build.artifacts.length}`);
+  const files: GeneratedFile[] = view.files.filter(file => planned.has(file.path));
   ensure(sameJson(files.map(f => f.path).sort(), build.artifacts.map((a: Node) => a.path).sort()), "Unpacked member paths differ from the generated resources");
   const unpackedHashes = new Map(files.map(f => [f.path, f.sha256]));
   for (const artifact of build.artifacts) ensure(unpackedHashes.get(artifact.path) === artifact.sha256, `Unpacked ${artifact.path} differs from its generated payload`);
   const names = files.map(f => fileName(f.path));
   ensure(new Set(names).size === names.length, "Unpacked members must have distinct file names for conversion");
+  // Convert only its own members: the unpacked tree itself when it holds nothing else, else a copy of its subset.
+  let memberRoot = view.root;
+  if (view.files.length !== files.length) {
+    memberRoot = join(work, "members");
+    for (const file of files) {
+      const target = join(memberRoot, ...file.path.split("/"));
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(join(view.root, ...file.path.split("/")), target);
+      ensure(sha256(readFileSync(target)) === file.sha256, `Unpacked ${file.path} changed while it was copied`);
+    }
+  }
 
   // The verifier's own conversions of the hash-checked members and plate inputs.
-  runTool("serialize-members", () => tools.serialize(dirs.unpacked, dirs.json));
-  runTool("serialize-plate", () => tools.serialize(dirs.plate, dirs["plate-json"]));
+  runStep("serialize-members", () => tools.serialize(memberRoot, dirs.json));
+  runStep("serialize-plate", () => tools.serialize(dirs.plate, dirs["plate-json"]));
   const converted = (dir: string, name: string) => {
     const path = join(dir, name + ".json");
     ensure(isFile(path), `WolvenKit did not serialize ${name}`);
@@ -596,7 +647,7 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   textureDirs.forEach((dir, i) => {
     const target = join(dirs.dds, String(i));
     mkdirSync(target);
-    runTool(`export-textures-${i}`, () => tools.exportTextures(join(dirs.unpacked, ...dir.split("/")), target));
+    runStep(`export-textures-${i}`, () => tools.exportTextures(join(memberRoot, ...dir.split("/")), target));
     exportDirs.set(dir, target);
   });
   const exported = (depotPath: string) => {
@@ -639,10 +690,10 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     build: out, presetCount: plan.presets.length, selectorCount: 1, selectorOptionCount: summary.selectorOptionCount,
     appDefinitions: 2, compiledComponentTemplates: 1, meshAppearances: summary.meshAppearances,
     materialTemplates: summary.materialTemplates, textureCount: plan.presets.reduce((n, p) => n + Object.keys(p.textures).length, 0),
-    archiveBytes: archiveData.length, archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: summary.morphTargets,
+    archiveBytes: view.archiveBytes, archiveSha256: view.archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: summary.morphTargets,
     plateGeometry, plateUvWindow: { bounds: samples.bounds, window, constants: uv, samples: samples.uv.length / 2 },
     resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
-    decodedMipChecks: mipResults, presetRoutes, archiveXlSha256: sha256(xlBytes), plateInputs: { ...plate.start },
+    decodedMipChecks: mipResults, presetRoutes, archiveXlSha256: view.xlSha256, plateInputs: { ...plate.start },
     installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
   };
 }

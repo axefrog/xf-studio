@@ -8,8 +8,8 @@
 //   bun tools/uv-window-probe.ts <build-dir>
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readDdsChain } from "../src/mod-verifier/dds-reader";
-import { mappingOffset, mappingStats, plateUvSamples } from "../src/mod-verifier/uv-window";
+import { readDdsChain } from "../src/features/eye-makeup/verify/dds-reader";
+import { mappingOffset, mappingStats, plateUvSamples } from "../src/features/eye-makeup/verify/uv-window";
 
 const build = process.argv[2];
 if (!build) throw Error("Usage: bun tools/uv-window-probe.ts <build-dir>");

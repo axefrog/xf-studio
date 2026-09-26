@@ -6,6 +6,7 @@ import type { ActionDescriptor, ActionTable, FeatureActionTable, PayloadSchema, 
 import type { Capability, ReasonCode } from "./capability";
 import type { EditorCodec, MemoryCodec, PartCodec } from "./document";
 import type { HistoryLabel } from "./history";
+import type { ExportInfo } from "./export";
 
 export type FeatureId = string & { readonly __feature: unique symbol };
 export type FamilyId = string & { readonly __family: unique symbol };
@@ -54,7 +55,7 @@ export interface GestureProvider<P = unknown, G = unknown, R = unknown> {
 /**
  * A feature module's pure core registration: its part codec, its editor-memory codecs, its
  * action table with pure capability and apply (migration steps 1–2) and its gestures. Targets,
- * context, the character contribution and the exporter join it in later steps
+ * context and the character contribution join it in later steps; `exports` names its exporter (step 8)
  * (feature-module platform §8).
  *
  * `E` is the editor state the actions read: the per-look editor memory (`editor`) plus
@@ -72,12 +73,18 @@ export interface FeatureModule<A extends { kind: string } = { kind: string }, Sc
   readonly memory?: MemoryCodec<unknown>;
   readonly actions: FeatureActionTable<P, E, A, Scope, X>;
   readonly gestures?: GestureProvider<P, G, R>;
+  /**
+   * The feature's mod exporter, when it has one (feature-module platform §6): the host composition must
+   * register an exporter and a verifier with this ID; its brand and selector are the defaults the
+   * package plan shows before any Check.
+   */
+  readonly exports?: ExportInfo;
 }
 
 export type ActionOwner<A extends { kind: string } = { kind: string }, Scope extends string = string> =
   SystemFamily<A, Scope, FamilyId> | FeatureModule<A, Scope, FeatureId>;
 /** A feature module seen by the platform, whatever its part and editor types. */
-export type AnyFeatureModule = Pick<FeatureModule, "id" | "label"> & {
+export type AnyFeatureModule = Pick<FeatureModule, "id" | "label" | "exports"> & {
   readonly part: PartCodec<unknown>; readonly editor: EditorCodec<unknown, unknown>; readonly memory?: MemoryCodec<unknown> };
 
 /**

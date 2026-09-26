@@ -1,4 +1,4 @@
-// CLI for the independent TypeScript package verifier (src/mod-verifier).
+// CLI for the independent TypeScript package verifier (src/features/eye-makeup/verify).
 // Verifies one intermediate build and writes <build>/verification.json (or --report).
 // The verifier unbundles, serializes and exports with its own WolvenKit calls in an empty
 // work directory (default <build>/verify); the game folder is only passed to WolvenKit's
@@ -9,7 +9,7 @@
 //     [--work-dir <dir>] [--morph-targets <n>] [--report <file>]
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { verifyBuild, VerificationError } from "../src/mod-verifier/verify-build";
+import { verifyBuild, VerificationError } from "../src/features/eye-makeup/verify/verify-build";
 import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
 
 const args = process.argv.slice(2);

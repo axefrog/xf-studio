@@ -10,9 +10,9 @@ import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../s
 import { planCollection } from "../src/preset-collection";
 import { FINISH_EXPORT } from "../src/engines/layered-makeup/finish-export";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
-import { archiveKey } from "../src/mod-verifier/resource-inventory";
-import { componentId, VERIFIER_FINISHES } from "../src/mod-verifier/resource-checks";
-import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
+import { archiveKey } from "../src/features/eye-makeup/verify/resource-inventory";
+import { componentId, VERIFIER_FINISHES } from "../src/features/eye-makeup/verify/resource-checks";
+import { verifyBuild, type ToolResult, type VerifierTools } from "../src/features/eye-makeup/verify/verify-build";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { liftPlate } from "../src/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";

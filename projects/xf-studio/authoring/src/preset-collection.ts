@@ -6,7 +6,7 @@ import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { EYE_MAKEUP_FEATURE, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readRecipeFile, recipeFile, type RecipeFile } from "./recipe-schema";
-import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
+import { COLLECTION_2, isNewerData, NO_EXPORTER_REASON, type Look, type LookCollection } from "./platform/api";
 
 /**
  * A look, or one part of a look, that the eye-makeup mod does not package, as its view of a
@@ -17,7 +17,7 @@ export type LookOmission = { presetId: string; presetName: string; reason: strin
   /** The omitted part's feature; absent when the whole look is omitted. */
   feature?: string };
 export const NO_EYE_MAKEUP_REASON = "It has no eye makeup.";
-export const NO_EXPORTER_REASON = "XF Studio can't make mod files for this part yet.";
+export { NO_EXPORTER_REASON } from "./platform/api";
 export const NEWER_LOOK_REASON = "It was made with a newer version of XF Studio.";
 
 export type PresetCollection = {
@@ -82,7 +82,14 @@ function eyeMakeupView(collection: LookCollection, parsed: boolean): PresetColle
       omitted.push({ presetId: look.id, presetName: look.name, feature, reason: NO_EXPORTER_REASON });
     const envelope = look.parts[EYE_MAKEUP_FEATURE];
     if (!envelope) { omitted.push({ presetId: look.id, presetName: look.name, reason: NO_EYE_MAKEUP_REASON }); return []; }
-    const recipe = parsed && envelope.schema === EYE_MAKEUP_PART_2 ? envelope.body as Recipe : parseEyeMakeupPart(envelope);
+    let recipe: Recipe;
+    try { recipe = parsed && envelope.schema === EYE_MAKEUP_PART_2 ? envelope.body as Recipe : parseEyeMakeupPart(envelope); }
+    catch (error) {
+      // A stored look whose eye makeup needs a newer build (a newer part schema or layer model) is left out, never guessed at.
+      if (!isNewerData(error)) throw error;
+      omitted.push({ presetId: look.id, presetName: look.name, reason: NEWER_LOOK_REASON });
+      return [];
+    }
     // Every layer model this build registers has a recipe schema; one without needs its own exporter first.
     const file = recipeFile(recipe);
     if (!file) throw Error(`${look.name} uses a layer model the eye-makeup export cannot build yet.`);

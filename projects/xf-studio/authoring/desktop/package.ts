@@ -1,15 +1,15 @@
 import { resolve } from "node:path";
-import { runDesktopCheck } from "./check-runner";
-import { desktopPlateCache, desktopPlateRouteKey, runDesktopBuild, type WolvenKitProbe } from "./build";
-import { cachedPlateReach } from "../src/eye-plate-service";
+import { desktopEyePlate, desktopPackageAdapter, type WolvenKitProbe } from "./build";
 import { LocalSettingsStore } from "../src/local-settings-store";
+import { defaultLocalSettings } from "../src/local-settings";
 import { DesktopWorkActivity } from "./work-activity";
-import { hostFailure } from "../src/diagnostics/host-log";
+import { STUDIO_EXPORTERS } from "../src/compose/exporters";
+import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
+import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction } from "../src/platform/export/product-host";
 
-const maxBytes = 16_000_000;
-let checking = false;
-let building = false;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+/** One Check and one Build at a time for this desktop host (the shared package host service, PIPE-03). */
+const service = new PackageHostService();
 
 export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: LocalSettingsStore;
   deadlineMs?: number; shutdownSignal?: AbortSignal; wolvenKitProbe?: WolvenKitProbe;
@@ -23,62 +23,40 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
     return json({ error: "Expected a JSON package request." }, 415);
-  if (Number(request.headers.get("Content-Length")) > maxBytes)
+  if (Number(request.headers.get("Content-Length")) > MAX_PACKAGE_REQUEST_BYTES)
     return json({ error: "Collection exceeds 16 MB." }, 413);
   let body: string;
   try { body = await request.text(); }
   catch { return json({ error: "Could not read collection snapshot." }, 400); }
-  if (Buffer.byteLength(body) > maxBytes) return json({ error: "Collection exceeds 16 MB." }, 413);
-  let input: any;
+  if (Buffer.byteLength(body) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
+  let input: { action?: unknown; collection?: unknown };
   try { input = JSON.parse(body); }
   catch { return json({ error: "Expected a package action and collection only." }, 400); }
   if (!input || typeof input !== "object" || Array.isArray(input) ||
       (input.action !== "check" && input.action !== "build") ||
       Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
     return json({ error: "Expected a package action and collection only." }, 400);
+  const action = input.action as PackageAction;
+  if (action === "build" && !buildHost) return json({ code: "package_build_host_unavailable", error: "Desktop package tools are unavailable." }, 503);
+  if (service.busy(action)) return json({ code: `package_${action}_busy`, error: action === "build"
+    ? "A package Build is already running." : "A package Check is already running. Wait for its result before starting another." }, 409);
   const end = activity?.begin("package");
   if (activity && !end) return json({ code: "package_restart_pending",
     error: "An update restart is being prepared. Finish it before starting package work." }, 409);
   try {
-  if (input.action === "build") {
-    if (!buildHost) return json({ code: "package_build_host_unavailable",
-      error: "Desktop package tools are unavailable." }, 503);
-    if (building) return json({ code: "package_build_busy", error: "A package Build is already running." }, 409);
-    building = true;
+    let settings = defaultLocalSettings();
     try {
-      const signal = buildHost.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
-      const saved = buildHost.settings.load().settings;
-      const settings = { ...saved, wolvenKitCli: saved.wolvenKitCli ?? buildHost.managedWolvenKit?.() ?? null };
-      const result = await runDesktopBuild(input.collection, settings,
-        buildHost.dataRoot, buildHost.toolsRoot, buildHost.deadlineMs, signal, buildHost.wolvenKitProbe, undefined, buildHost.log);
-      if (result.kind === "success") return json(result.result);
-      if (result.code !== "package_build_cancelled") hostFailure("package", result.code, `Build: ${result.message}`, undefined, result.code === "invalid_collection" ? "warn" : "error");
-      return json({ code: result.code, error: result.message }, result.code === "package_build_unavailable" ? 503 :
-        result.code === "invalid_collection" ? 422 : result.code === "package_build_timeout" ? 504 :
-        result.code === "package_build_cancelled" ? 499 : 422);
-    } catch (error) {
-      hostFailure("package", "package_build_failed", "Package Build could not start.", error);
-      return json({ code: "package_build_failed", error: "Package Build could not start." }, 422);
-    }
-    finally { building = false; }
-  }
-  if (checking) return json({ code: "package_check_busy", error: "A package Check is already running. Wait for its result before starting another." }, 409);
-  checking = true;
-  let result;
-  // Check plans on the plate the last Build prepared for this game, route and head choice, when there is one (which presets reach it).
-  let plate = null;
-  try {
-    const saved = buildHost?.settings.load().settings;
-    plate = buildHost && saved ? cachedPlateReach(desktopPlateCache(buildHost.dataRoot), saved.gameRoot, desktopPlateRouteKey(saved))?.plate ?? null : null;
-  }
-  catch { plate = null; }
-  try { result = await runDesktopCheck(input.collection, workerPath, timeoutMs, request.signal, plate); }
-  finally { checking = false; }
-  if (result.kind === "success") return json(result.result);
-  if (result.kind === "invalid") return json({ error: result.message }, 400);
-  if (result.code !== "package_check_cancelled") hostFailure("package", result.code ?? "package_check_failed", `Check: ${result.message}`);
-  const status = result.code === "package_check_timeout" ? 504 : result.code === "package_check_cancelled" ? 499 :
-    result.code?.startsWith("package_check_worker") ? 503 : 422;
-  return json({ error: result.message, ...(result.code ? { code: result.code } : {}) }, status);
+      const saved = buildHost?.settings.load().settings;
+      if (saved) settings = { ...saved, wolvenKitCli: saved.wolvenKitCli ?? buildHost?.managedWolvenKit?.() ?? null };
+    } catch { /* Check still works without saved settings; Build's readiness explains what is missing. */ }
+    const dataRoot = buildHost?.dataRoot ?? "";
+    // Each exporting feature's host prerequisites, bound by ID (eye makeup: the built-in eye plate). Without a build
+    // host (Check only) there is no plate cache, so Check plans on none.
+    const adapter = desktopPackageAdapter({ exporters: STUDIO_EXPORTERS, settings, dataRoot, toolsRoot: buildHost?.toolsRoot ?? "",
+      checkWorker: workerPath, wolvenKitProbe: buildHost?.wolvenKitProbe, log: buildHost?.log,
+      prerequisites: (current): Record<string, HostPrerequisite> => buildHost ? { [EYE_PLATE_PREREQUISITE]: desktopEyePlate(current, dataRoot) } : {} });
+    const signal = buildHost?.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
+    const outcome = await service.run(adapter, action, input.collection, signal, action === "check" ? timeoutMs : buildHost?.deadlineMs);
+    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);
   } finally { end?.(); }
 }

@@ -4,6 +4,8 @@
  * feature versions its data without a whole-look schema bump. Types and small pure helpers only.
  */
 
+import type { ModPackagePlan } from "./export";
+
 /** One feature's stored data in a look: the part schema it was written in and its body. */
 export type PartEnvelope = { readonly schema: string; readonly body: unknown };
 
@@ -76,7 +78,11 @@ export type Look = { id: string; name: string; revision: number; parts: Record<s
 export type StoredPreset = Look;
 export const COLLECTION_1 = "xfas/collection-1";
 export const COLLECTION_2 = "xfs/collection-2";
-export type LookCollection = { schema: typeof COLLECTION_2; id: string; name: string; presets: Look[] };
+/**
+ * A collection of looks. `packagePlan` groups its exportable features into mods (feature-module platform §6);
+ * absent means the default, one mod holding them all. Only a plan that differs from the default is stored.
+ */
+export type LookCollection = { schema: typeof COLLECTION_2; id: string; name: string; presets: Look[]; packagePlan?: ModPackagePlan };
 export type StoredLookCollection = LookCollection;
 
 /**

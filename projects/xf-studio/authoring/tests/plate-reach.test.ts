@@ -10,10 +10,10 @@ import { parsePlateUvFootprint, plateSamplePoints, plateUvBounds, plateUvFootpri
   type PlateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { VerificationError } from "../src/mod-verifier/resource-checks";
-import { errorStats } from "../src/mod-verifier/texture-checks";
-import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plateUvSamples, type PlateUvSamples } from "../src/mod-verifier/uv-window";
-import { checkMapping, MAPPING_LIMITS } from "../src/mod-verifier/verify-build";
+import { VerificationError } from "../src/features/eye-makeup/verify/resource-checks";
+import { errorStats } from "../src/features/eye-makeup/verify/texture-checks";
+import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plateUvSamples, type PlateUvSamples } from "../src/features/eye-makeup/verify/uv-window";
+import { checkMapping, MAPPING_LIMITS } from "../src/features/eye-makeup/verify/verify-build";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { initialRecipe } from "./fixtures/eye-region";
 import { bakeCollection, preparePackageCollection, preflightPackageCollection, presetReachesPlate } from "./fixtures/eye-exporter";

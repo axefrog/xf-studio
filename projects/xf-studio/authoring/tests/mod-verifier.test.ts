@@ -6,11 +6,11 @@ import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the compiler: it writes the fixture's supplied chains, which the
 // independent verifier must then reproduce from its own arithmetic.
 import { encodeFlatDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
-import { readDdsChain } from "../src/mod-verifier/dds-reader";
-import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/mod-verifier/resource-inventory";
-import { componentId, sameJson } from "../src/mod-verifier/resource-checks";
-import { errorStats, expectedChain } from "../src/mod-verifier/texture-checks";
-import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
+import { readDdsChain } from "../src/features/eye-makeup/verify/dds-reader";
+import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/features/eye-makeup/verify/resource-inventory";
+import { componentId, sameJson } from "../src/features/eye-makeup/verify/resource-checks";
+import { errorStats, expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
+import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/features/eye-makeup/verify/verify-build";
 import { oracleTest } from "./optional-oracles";
 // Test-only use of the plate cut and lift: they make a real single-chunk plate and its packaged form,
 // which the verifier's own decoder must accept (and reject when tampered).

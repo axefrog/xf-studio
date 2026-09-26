@@ -1,4 +1,4 @@
-import type { PackageBuild, PackageCheck } from "../../package-action";
+import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
 import type { LocalSetupFields } from "../../local-settings-server";
 import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
@@ -398,40 +398,44 @@ function technicalDetails(rows: [string, string][], footnote?: string) {
     footnote ? h("p", { class: "muted small", text: footnote }) : null, copy);
 }
 
-type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheck; freshness: "current" | "stale" } |
-  { kind: "packageBuild"; result: PackageBuild; freshness: "current" | "stale" }>;
+type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheckResult; freshness: "current" | "stale" } |
+  { kind: "packageBuild"; result: PackageBuildResult; freshness: "current" | "stale" }>;
 function renderResult(pkg: PackageResultView, presets: readonly { id: string; name: string }[]) {
   const name = (id: string) => presets.find(preset => preset.id === id)?.name ?? "Preset no longer in draft";
   const isBuild = pkg.kind === "packageBuild";
   const r = pkg.result;
-  const build = r as ReadonlyDeep<PackageBuild>, check = r as ReadonlyDeep<PackageCheck>;
-  const retained = isBuild ? build.presetCount : check.presets.length;
+  const retained = new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.presets.map(look => look.id)))).size;
   const card = h("div", { class: `result-card ${pkg.freshness === "stale" ? "stale" : "ok"}` },
     h("div", { class: "result-head" }, h("strong", { text: isBuild ? "Build result" : "Check result" }),
       pkg.freshness === "current" ? badge("Current", "success") : badge("Stale — draft changed since", "warning")),
     h("p", { class: "result-summary", text: `${retained} of ${r.originalPresetCount} preset${r.originalPresetCount === 1 ? "" : "s"} can become mod files.${isBuild ? "" : " This check created no files."}` }));
-  // Results restored from before mod branding lack these fields; show them only when present.
-  if (r.modName) card.append(h("p", { class: "muted small" }, "Mod ", h("strong", { text: r.modName }),
-    r.selectorLabel ? ` · in-game selector “${r.selectorLabel}”` : ""));
-  if (!isBuild) card.append(h("ul", { class: "result-list" }, check.presets.map(preset =>
-    h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
+  // One block per mod the collection builds (one by default); each feature in it has its own selector.
+  for (const product of r.products) {
+    const block = h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: product.modName }),
+      product.features.map(feature => ` · ${feature.label} in the “${feature.selectorLabel}” selector`).join("")));
+    if (!isBuild) block.append(h("ul", { class: "result-list" }, product.features.flatMap(feature => feature.presets.map(preset =>
+      h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: String(preset.appearance ?? "") }))))));
+    if (isBuild && "package" in product) block.append(h("dl", { class: "facts" },
+      h("dt", { text: "Mod files" }), h("dd", {}, h("code", { text: product.package }))));
+    card.append(block);
+  }
   // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
-  if (!isBuild) for (const text of check.notes ?? []) card.append(note(text, "info"));
-  if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
-    h("ul", { class: "result-list" }, r.omissions.map(item => h("li", {}, icon("warning"),
+  if (!isBuild) for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
+  const omissions = [...r.omissions, ...r.products.flatMap(product => product.features.flatMap(feature => feature.omissions))];
+  if (omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
+    h("ul", { class: "result-list" }, omissions.map(item => h("li", {}, icon("warning"),
       h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` :
         item.kind === "part" ? `The ${item.feature} part of “${item.presetName}” — ${item.reason}` :
+        item.kind === "feature" ? `${item.label} — ${item.reason}` :
         `Whole preset “${item.presetName}” — ${item.reason}` }))))));
-  if (isBuild) {
-    const b = build;
-    card.append(h("dl", { class: "facts" },
-      h("dt", { text: "Mod files" }), h("dd", {}, h("code", { text: b.package }))),
-    note("Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed.", "info"));
-  }
+  if (isBuild) card.append(note(r.products.length === 1 ? "Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed."
+    : "Your mods were built and checked. They haven't been tested in game yet, and nothing was installed.", "info"));
   // Technical facts stay available for bug reports without crowding the result.
   card.append(technicalDetails([
-    ...(isBuild ? [["Manifest", build.manifest], ["Archive SHA-256", build.archiveSha256]] as [string, string][] : []),
-    ["Collection fingerprint (SHA-256)", r.packagedCollectionSha256]]));
+    ...(isBuild ? (r as ReadonlyDeep<PackageBuildResult>).products.flatMap(product => [[`${product.modName} manifest`, product.manifest],
+      [`${product.modName} archive SHA-256`, product.archiveSha256]] as [string, string][]) : []),
+    ["Collection fingerprint (SHA-256)", r.collectionSha256],
+    ...r.products.flatMap(product => product.features.map(feature => [`${feature.label} fingerprint (SHA-256)`, feature.packagedSha256] as [string, string]))]));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;
