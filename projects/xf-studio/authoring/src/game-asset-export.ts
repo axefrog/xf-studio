@@ -198,7 +198,9 @@ type EntryMeta = { schema: "xfs/game-asset-export-1"; version: number; depotPath
    */
   partialRuns?: number;
   /** The exporter identity (tool and repair route) that counted `partialRuns`; another identity's count is void (`lastingIdentity`). */
-  partialIdentity?: string };
+  partialIdentity?: string;
+  /** A repaired export (its files include `repair.txt`): the identity that made it. Another identity's repair is exported again (PIPE-85). */
+  repairIdentity?: string };
 /** Clean runs that exported a mesh without its materials file before the partial export is served from the cache. */
 export const PARTIAL_RUNS = 2;
 /** Paths this process already marked as used (the disk budget evicts the least recently used by their modification time). */
@@ -225,6 +227,10 @@ export class GameAssetExportCache extends DerivedCache {
     this.lastingIdentity = `${tool.key}|repair:${repairKey}`;
   }
   /** A meta's partial run count under the current identity: a complete entry counts as settled, another identity's partial count as 0. */
+  /** Whether an entry is usable under the current identity: a repaired export only under the repair route that made it. */
+  private current(meta: EntryMeta): boolean {
+    return !meta.files[REPAIR_NOTE] || meta.repairIdentity === this.lastingIdentity;
+  }
   private runsOf(meta: EntryMeta): number {
     if (meta.partialRuns === undefined) return PARTIAL_RUNS;
     return meta.partialIdentity === this.lastingIdentity ? meta.partialRuns : 0;
@@ -248,7 +254,7 @@ export class GameAssetExportCache extends DerivedCache {
     const directory = this.entryDirectory(depotPath, source);
     try {
       const meta = this.meta(depotPath, source);
-      if (!meta || this.runsOf(meta) < PARTIAL_RUNS) return null;
+      if (!meta || !this.current(meta) || this.runsOf(meta) < PARTIAL_RUNS) return null;
       const out: Record<string, string> = {};
       for (const [name, file] of Object.entries(meta.files)) {
         const path = join(directory, name);
@@ -263,7 +269,7 @@ export class GameAssetExportCache extends DerivedCache {
   present(depotPath: string, source: ExportSource, required: readonly string[] = []): boolean {
     if (this.settledNone(depotPath, source)) return true;
     const meta = this.meta(depotPath, source);
-    if (!meta || this.runsOf(meta) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
+    if (!meta || !this.current(meta) || this.runsOf(meta) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
     const directory = this.entryDirectory(depotPath, source);
     return Object.entries(meta.files).every(([name, file]) => { try { return statSync(join(directory, name)).size === file.bytes; } catch { return false; } });
   }
@@ -303,7 +309,8 @@ export class GameAssetExportCache extends DerivedCache {
     const staging = `${directory}.${process.pid}.${Date.now()}.tmp`;
     mkdirSync(staging, { recursive: true, mode: 0o700 });
     const meta: EntryMeta = { schema: "xfs/game-asset-export-1", version: GAME_ASSET_EXPORT_VERSION, depotPath, hash: depotHash(depotPath),
-      source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns, partialIdentity: this.lastingIdentity } : {}) };
+      source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns, partialIdentity: this.lastingIdentity } : {}),
+      ...(files[REPAIR_NOTE] ? { repairIdentity: this.lastingIdentity } : {}) };
     for (const [name, from] of Object.entries(files)) {
       copyFileSync(from, join(staging, name));
       meta.files[name] = { sha256: fileSha256(from), bytes: statSync(from).size };

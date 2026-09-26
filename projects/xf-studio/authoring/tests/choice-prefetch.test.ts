@@ -384,6 +384,20 @@ describe("lasting outcomes and the mesh export repair", () => {
     expect(repaired.has!("geometry", PONY, source)).toBe(true);
   });
 
+  test("a repaired export is reused only under the repair version that made it (PIPE-85)", async () => {
+    const root = temporary(), cacheRoot = join(root, "exports"), source = archiveExportSource(join(root, "hair.archive"), root);
+    const ask = (exporter: ReturnType<typeof createGameAssetExporter>) => exporter.exportAll!([{ source, geometry: [PONY], textures: [], masks: [] }]);
+    const first: { path: string }[] = [], second: { path: string }[] = [];
+    const v1 = createGameAssetExporter(cacheRoot, readOnly(), { tool, repairGeometry: repairing("glb", first), repairKey: "r1" });
+    await ask(v1);
+    expect((await ask(v1))[0]!.geometry.get(PONY)).toMatchObject({ cached: true });
+    expect(first).toHaveLength(1);
+    const v2 = createGameAssetExporter(cacheRoot, readOnly(), { tool, repairGeometry: repairing("glb", second), repairKey: "r2" });
+    expect(v2.has!("geometry", PONY, source)).toBe(false);
+    expect((await ask(v2))[0]!.geometry.get(PONY)).toMatchObject({ cached: false, complete: true });
+    expect(second).toHaveLength(1);
+  });
+
   test("a lasting partial export counts only for the exporter identity that recorded it", async () => {
     const root = temporary(), cacheRoot = join(root, "exports"), source = archiveExportSource(join(root, "a.archive"), root);
     let launches = 0;
