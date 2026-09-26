@@ -33,6 +33,9 @@ The piece counts, regions and bone lists are [resource]; the sites are our readi
 - **Skinning:** each bank mesh is skinned to the face joints under its pieces, so pieces ride facial animation with the skin [resource: bone lists; behaviour hypothesis].
 - **Morph targets:** each mesh carries the creator's `(target, region)` pairs, but only for the regions its pieces sit in (ear pieces: `ear` only). A slider applies its pair to every morph-skinned component that has it; a component without it does not follow that slider [resource + hypothesis on the manager].
 - **Colour:** the definition's one `meshAppearance` applies to every component, so a vanilla style has one colour for all pieces [resource].
+- **Pieces bend with their region, they don't just ride it.** Within one piece the morph deltas differ per vertex: under the `ear` target `h055` the vertices of a left lobe hoop (`earring_01` piece 1) move by amounts up to 2.2 mm apart along one axis, and those of the long right-ear piece (piece 0) up to 8.4 mm apart. The deltas look transferred from the skin around each vertex rather than applied rigidly [resource: `earring_01`/`_03` diff rows decoded, 26 September].
+- **The banks' morph targets carry no rig.** Their target entries have empty `boneNames` and `boneRigMatrices`, while the head's (and PRC's linked pieces', and the eye plate's) carry all 254 joints per target [resource]. What the per-target rig does at run time is unread.
+- **Format details a generator must match** [resource]: a bank mixes vertex factory 3 (four influences, 16-byte position stream) and 4 (eight influences, 24 bytes, the head's layout minus its extra-data and light-blocker streams) chunk by chunk; normals are Dec4 with top bits `01`, tangents `00` or `11`; vertex colour is zero; UV0 runs along a ring (0–1) and around its wire (0–0.16); a morph row whose normal or tangent does not change stores `0x5ff7fdff`; each bank mesh has local material instances whose base is a shared `…\earrings\i1_000_base_0N__<colour>.mi`.
 
 ## 4. How mods add jewellery
 
@@ -58,7 +61,7 @@ Referencing vanilla resources by path (for example a vanilla earring `.mi` for a
 
 ## 6. What the Studio does today
 
-The generic resolver renders the shown V's piercings, vanilla or from any installed framework, through the layered (`multilayered.mt`) adapter; PRC's option 12 resolves as its bank with no PRC-specific code ([file chain §8](cc-file-chain.md#retiring-the-prc-specific-code)). An installed CCXL jewellery option would resolve the same way. There is no jewellery authoring or export yet: the [construction set](../research/jewellery/construction-set-design.md) is a design proposal, and the [feasibility study](../research/jewellery/ccxl-piercing-feasibility.md#5-proposed-design) proposes the export shape (one additive XF row of complete looks, owned pieces skinned at their anchor and carrying the head's morph deltas).
+The generic resolver renders the shown V's piercings, vanilla or from any installed framework, through the layered (`multilayered.mt`) adapter; PRC's option 12 resolves as its bank with no PRC-specific code ([file chain §8](cc-file-chain.md#retiring-the-prc-specific-code)). An installed CCXL jewellery option would resolve the same way. There is no jewellery authoring or export yet. A scripted probe mod built with the proposed fitting ([experiment 024](../experiments/024-ccxl-piercings/README.md)) waits for its in-game session. It has three procedural pieces, each carrying the skin bytes and morph rows of one anchor head vertex, on two own rows per area. The [construction set](../research/jewellery/construction-set-design.md) is a design proposal, and the [feasibility study](../research/jewellery/ccxl-piercing-feasibility.md#5-proposed-design) proposes the export shape (one additive XF row of complete looks, owned pieces skinned at their anchor and carrying the head's morph deltas).
 
 ## Open questions
 
@@ -71,7 +74,7 @@ The generic resolver renders the shown V's piercings, vanilla or from any instal
 
 ## In-game test asks
 
-The batched probe is the [feasibility study's test plan](../research/jewellery/ccxl-piercing-feasibility.md#6-in-game-test-plan): registration beside the untouched vanilla row, layering with vanilla and PRC, slider and animation following, per-piece materials, gameplay and photo mode, persistence and Off, headgear, and missing-mod behaviour.
+The batched probe is the [feasibility study's test plan](../research/jewellery/ccxl-piercing-feasibility.md#6-in-game-test-plan), built as [experiment 024's test card](../experiments/024-ccxl-piercings/README.md#test-card-the-12-checks): registration beside the untouched vanilla row, layering with vanilla and PRC, slider and animation following, per-piece materials, gameplay and photo mode, persistence and Off, headgear, and missing-mod behaviour.
 
 ## Related pages
 
