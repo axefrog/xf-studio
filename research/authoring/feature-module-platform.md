@@ -421,7 +421,7 @@ Add these to `tests/architecture-import-boundary.test.ts`, with a recursive walk
 - The view rules: views receive a `FeatureViewContext` over their facade, never the shell's runtime or the port, by type (UI-73); the import scan sees every import form (UI-74).
 - The registry golden of rule 7.
 
-The engine and feature rules run over a source tree, and a test runs them on the tree with the review's injected violations appended (a pure engine module importing its renderer, the page globals of CORE-78, a feature core importing a browser device, a trusted service, the DOM and Three, and a legacy module reaching the look history), each of which must fail. Rules 3, 6 and 7's exporter checks wait for `export/` and `verify/` (step 8). See [file moves](#file-moves). Since step 7, rule 2 lets a feature's `render/` (only) import Three, and a renderer imports only `platform/api`, engines, Three and its own feature's core, never `platform/scene` ([step 7 status](#step-7-status)); `platform/api` and `platform/core` never import `platform/scene`, and `platform/scene` imports the platform, Three and a listed set of the scene's device modules (a [recorded exception](ui-architecture-boundary.md#open-work)).
+The engine and feature rules run over a source tree, and a test runs them on the tree with the review's injected violations appended (a pure engine module importing its renderer, the page globals of CORE-78, a feature core importing a browser device, a trusted service, the DOM and Three, and a legacy module reaching the look history), each of which must fail. Rules 3, 6 and 7's exporter checks wait for `export/` and `verify/` (step 8). See [file moves](#file-moves). Since step 7, rule 2 lets a feature's `render/` (only) import Three, and a renderer imports only `platform/api`, engines, Three and its own feature's core, never `platform/scene` ([step 7 status](#step-7-status)); `platform/api` and `platform/core` never import `platform/scene`, and `platform/scene` imports the platform, Three and a listed set of the scene's device modules (a [recorded exception](ui-architecture-boundary.md#open-work)). Since the step 7 cleanup these two rules are transitive, types included (CORE-86): everything the scene host reaches is a listed device or support module, never a feature, engine, `compose/`, studio-ui or application service, and a renderer reaches, beyond its feature's core, only `platform/api`, engines, Three and the scene's materials. `platform/api` names Three by type only (CORE-88), and the import scan reads template-literal specifiers and refuses any computed `import()` or `require()` (CORE-87).
 
 ## 8. Migration plan
 
@@ -726,37 +726,40 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 
 - **The scene port** (`platform/api/scene.ts`, types and one helper; not re-exported from the api index, so a feature's core never sees Three). `SceneHostPort` gives a renderer:
   - `renderer`, for its offscreen passes and capabilities (the host alone draws the scene);
-  - `anchors()`: the head and the core record's surfaces by node key (`plate` is the expanded eye plate);
-  - `attach(object, { beside, morphs })`: onto the head rig; with `morphs` its meshes follow the V's facial shapes; the detach also runs on disposal;
-  - `skin`: the drawn skin's `light()`, `underlay(surface)` read on the drawn head, and a change subscription;
+  - `anchors()`: the head and the core record's surfaces by node key (`plate` is the expanded eye plate), read-only to a feature: the surfaces are anchors the platform never draws, which a feature copies for its own meshes;
+  - `attach(object, { beside, morphs, rig })`: onto the head rig; with `morphs` its meshes (meshes added later included) follow the V's facial shapes; with `rig` its bones join the idle and blink; the detach also runs on disposal;
+  - `renderBand`: the feature's own draw-order slots (its factory's `renderSlots`, allocated in composition order from 10);
+  - `supersede(parts)`: the resolved parts the feature replaces from now on, whole slots or only named creator options' components;
+  - `skin`: the drawn skin's `light()`, `underlay(surface)` read on the drawn head, and a change subscription (once per change);
   - `character()`/`subscribeCharacter` (the V drawn: record identity and drawn slots), `lighting()`/`subscribeLighting`;
   - `requestFrame`, `onFrame` and `onContextRestored`.
 
-  `FeatureRenderer` has `beforeDraw`, `setNormals`, `setWireframe`, `pick`, `supersedes`, `evidence` and `dispose`, all optional but `dispose`. `RENDER_ORDER` names the draw-order bands (feature plates from 10), and `invalidating` wraps a renderer's mutators so each call requests a frame.
+  `FeatureRenderer` has `beforeDraw`, `setNormals`, `setWireframe`, `evidence` and `dispose`, all optional but `dispose`; one that throws is reported and skipped. `RENDER_ORDER` names the draw-order bands (feature plates from 10 up to the eye shell at 99), and `invalidating` wraps a renderer's mutators so each call requests a frame.
 - **The scene host** (`platform/scene/`, 1,022 lines in four modules; `scene.ts` was 758 lines and is gone).
   - `scene-host.ts` (340 lines) owns the WebGL renderer and its context, camera, controls and camera input, the studio rig and lighting presets with their display, the stage, render on demand, resize, the device pixel ratio, context restores and disposal. It hands its devices the same flat API as before, less the makeup calls.
   - `head-rig.ts` (255) is the head: the core head, the record's surfaces, the default skin and fallback eye, the facial shapes every deforming mesh follows, and the rig motion (the game idle with the eye gaze joints, and the blink) behind an injectable `MotionLoader`.
   - `character-renderer.ts` (307) is the platform's character renderer (below).
-  - `feature-renderers.ts` (120) is the registry. It makes each feature's port and creates the composed renderers in order. It fans out `beforeDraw` (on drawn frames only, where the makeup composite used to be prepared), the display toggles and context restores. It owns what each renderer attached, computes `supersedes`, and releases the renderers made so far when one fails to create.
+  - `feature-renderers.ts` is the registry. It makes each feature's port, allocates its draw-order band and creates the composed renderers in order. It fans out `beforeDraw` (on drawn frames only, where the makeup composite used to be prepared), the display toggles and context restores, each guarded so one renderer's throw is reported once and skipped. It owns what each renderer attached, joined to the rig, subscribed to and supersedes, and releases all of it (and the renderers made so far) when one fails to create.
   - The core head, motion and LUT loaders are injectable (`loadCore`, `loadMotion`, `loadLut`), which is how the GPU probe runs the real host on a synthetic head.
 - **Eye makeup's renderer** (`features/eye-makeup/render/index.ts`, `EYE_MAKEUP_RENDERER`, listed in `compose/renderers.ts`) is `makeup-stack` on the record's `plate` surface:
   - its layers and lit plate are attached beside the plate through the port;
   - the skin light and underlay are read through `skin`, again on each skin change;
   - the composite is prepared in `beforeDraw` and redrawn after a context restore;
-  - normals and wireframe apply to its own materials; it has its plate pick and its `evidence()` (the page's `plateBlend` evidence).
+  - normals and wireframe apply to its own materials; it has its `evidence()` (the page's `plateBlend` evidence);
+  - it asks for 32 draw-order slots (one per layer) and draws them in its band, 10 to 41.
 
-  Its `layers` (the stack's mutators, each requesting a frame, and its two readers) and `surface` form a `LayeredMakeupSurface` (an engine type). The composition root hands it to the preview device (`connectScene`) and the on-head editor (`mountSurface(surface, hooks)`), so neither device nor `browser-head-attachment` names the feature. Nothing eye-specific is left in the host: no stack, plate underlay, layer API or plate pick. `makeup-stack` gained an `attach` callback and `dispose()`.
+  Its `layers` (the stack's mutators, each requesting a frame, and its two readers) and `surface` form a `LayeredMakeupSurface` (an engine type). The composition lists it as eye makeup's layered surface (`STUDIO_LAYERED_SURFACES`), and the root hands it to the preview device (`connectScene`) and the on-head editor (`mountSurface(surface, hooks)`), so neither device nor `browser-head-attachment` names the feature; the root finds it with the typed `scene.feature(EYE_MAKEUP_RENDERER)`. Nothing eye-specific is left in the host: no stack, plate underlay, layer API or plate pick. `makeup-stack` takes a placement (`attach` and the band's draw order) and has `dispose()`.
 - **Character details** render through the platform's character renderer. The host's `DetailLoader` (`scene.details.load(record, …)`, binding the host's anisotropy and skin placement) loads each resolved component with the material adapter for its chunk's template (`character-material-adapters.ts`). `setCharacterDetails` places the V: skin placement, draw order, facial shapes, the idle rig, bakes, eye optics and limits. The character-detail device loads through `scene.details` instead of reaching into the scene's adapter context and renderer.
   - **What is the platform's:** which V and which creator choices (the character context, `character-context.ts`), and drawing whatever it resolves, slot by slot.
-  - **What a feature would own later:** a part it authors (a brow feature's own brows, a lips feature's lips) is drawn by that feature's `FeatureRenderer`, which names the resolved slot it replaces in `supersedes`. The character renderer then hides that slot, and does not bake it, while the renderer is active. No feature supersedes a slot yet.
-- **More than one plate.** A second feature adds its own surface through `attach`, in its own render-order band beside eye makeup's plate: with `morphs`, or sharing an anchor's influences as eye makeup's layers do. The host has no per-surface code. `tests/scene-feature-renderers.test.ts` composes a synthetic cheek-plate renderer beside eye makeup's, and the GPU probe draws both.
+  - **What a feature would own later:** a part it authors (a brow feature's own brows, a lips feature's lips) is drawn by that feature's `FeatureRenderer`, which tells the port what it replaces (`supersede`: a whole slot, or only the components of named creator options) whenever that changes. The character renderer then draws those parts as if the V had none there: hidden and not baked, the core head's default skin for a skin, the core eye for eyes. No feature supersedes anything yet.
+- **More than one plate.** A second feature adds its own surface through `attach`, in its own render-order band (`renderBand`) beside eye makeup's plate: with `morphs`, or sharing an anchor's influences as eye makeup's layers do. The host has no per-surface code. `tests/scene-feature-renderers.test.ts` composes a synthetic cheek-plate renderer beside eye makeup's, and the GPU probe draws both.
 
 **How the built port differs from the §5 sketch, and why.**
 
 - **`attach` instead of `group(feature)`.** Eye makeup's layers must share the plate's parent and facial influences exactly, and the host must know which meshes follow facial shapes.
 - **No `details`, `jobs` or `textures` on the port yet.** No renderer loads resolved components or schedules jobs of its own. They join when a feature first needs them (the first feature that contributes a resolved part).
 - **No `sync` or `readiness` on `FeatureRenderer` yet.** Eye makeup's layers still arrive from its preview device (raster worker, coordinator, complete-bundle publication), and its readiness from the coordinator, unchanged. They move behind the renderer when the preview job policy becomes the feature's (§1); until then the device drives `layers` directly.
-- **Picking.** `pick` returns the plate UV, but the on-head editor (`surface-editor.ts`, an eye-makeup device still in `src/`) picks on the renderer's `surface` itself.
+- **Picking.** The on-head editor (`surface-editor.ts`, an eye-makeup device still in `src/`) picks on the renderer's `surface` itself; `FeatureRenderer.pick` was dropped in the step 7 cleanup (UI-77) and joins the port with its dispatch.
 
 **Decisions.**
 
@@ -790,7 +793,7 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 
 - **Step 8:** exporters and verifiers; eye makeup's package pipeline and `mod-verifier/` move into `features/eye-makeup/export/` and `verify/`.
 - **Eye makeup's devices:** its preview device (`browser-preview-device.ts`), raster client and on-head editor are still at the top of `src/`, driven through the renderer's `layers` and `surface`.
-- **Port additions on demand:** `sync`/`readiness` and the port's `details`, `jobs` and `textures` wait for a feature that needs them; picking dispatch through `FeatureRenderer.pick` waits for a second pickable feature.
+- **Port additions on demand:** `sync`/`readiness` and the port's `details`, `jobs` and `textures` wait for a feature that needs them; picking through the port (`pick` and its dispatch) waits for a second pickable feature.
 - **Step 9** moves the scene host's listed device modules under `platform/scene/`.
 
 **Parallelism.** Steps 1–4 are the format-changing core. Steps 5–6 and 7 can run in parallel after step 4. Step 8 needs only steps 1–2.
@@ -803,6 +806,19 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 - **Performance:** no whole-look cloning; measure snapshot and capability cost against the current ~27 ms.
 - **Presentation churn:** grandfathered IDs, and keeping the eye-makeup facade until the view moves.
 - **Downgrade:** protected storage and the desktop `.bak`.
+
+### Cleanup after step 7
+
+Done 26 September in `claude/cleanup-step7`, before module #2: every finding of the step 7 review (PREV-89..98, CORE-86..89, UI-76..77) and CORE-82; see the [code-health ledger](code-health.md#fixed-in-claudecleanup-step7). Makeup screenshot parity and every golden are unchanged.
+
+- **Supersedes** are the port's `supersede(parts)`, per component (a slot, or named creator options) and changeable at any time; a superseded part draws as if the V had none.
+- **Rig motion:** `attach(…, { rig: true })` joins a feature's own bones to the idle and blink.
+- **Draw order:** each renderer asks for `renderSlots` and gets its own band; eye makeup keeps 10 to 41.
+- **Surfaces** are the platform's read-only anchors from every record node; the makeup stack draws a geometry of its own over the plate's buffers.
+- **Registry:** failed creations and forgotten subscriptions leave nothing behind; a throwing renderer is reported and skipped; renderers are looked up by factory, typed.
+- **Boundaries** for the scene host and renderers are transitive, types included; computed imports are refused.
+- **Layered wiring:** the composition lists layered surfaces by feature (`STUDIO_LAYERED_SURFACES`), the head attachment connects a list of them, and the startup names no feature. The remaining limit for a second layered feature is the core: the authoring core edits one live feature, so only that feature's surface has a layer source (the preview devices take any `PreviewLayerSource`). Giving each layered feature its own live document is core work for module #2, not wiring.
+- **Editors** mirror across the region's mirror line (CORE-82).
 
 ## 9. How module #2 plugs in
 
@@ -821,7 +837,7 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 
 - a `LayeredMakeupRegion` (its layer models, starter and new-layer contours, mirror axis and centre, fine-Glitter scope, texture grids and wording), as eye makeup's `features/eye-makeup/region.ts` does;
 - its own part schema;
-- a renderer on the lips decal surface from the resolver;
+- a renderer on the lips decal surface from the resolver, asking for its draw-order slots (`renderSlots`), listed in `STUDIO_LAYERED_SURFACES`, and superseding the V's own lips decal only (`supersede([{ slot: "face", options: [<the lips option>] }])`);
 - an exporter with the lips selector, default brand "XF Lip Artistry".
 
 With the default plan, a collection containing both features builds one "XF Looks" mod with two selectors. Splitting lips out is a plan edit and a rebuild.

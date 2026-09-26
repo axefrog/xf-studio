@@ -324,7 +324,7 @@ export function createCharacterRenderer(input: {
     },
     profileEncoding,
     /** How the V's details landed (developer evidence). */
-    evidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
+    evidence: () => characterDetailsEvidence({ details: characterDetails, skin: shownSkin(), head, browUnderlay,
       eyes: { core: eyes, appearance: eyeAppearance() } }),
     /** Developer evidence: each baked layered part's packed maps read back at their centre texel (colour + roughness, normal + metalness). */
     layeredSamples: () => (characterDetails?.components ?? []).flatMap(item => (item.layered ?? []).map(({ mesh, handle }) => {
