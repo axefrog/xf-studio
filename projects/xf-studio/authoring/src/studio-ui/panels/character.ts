@@ -401,7 +401,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // Preview-only controls.
       const shapes = state.eyeShapeOptions?.choices ?? [];
       // Plain names; the head's own shape IDs show only with research tools (UI-85).
-      const research = !!frame.preferences.researchTools;
+      const research = !!frame.preferences?.researchTools;
       const shapeLabel = (index: number) => {
         const choice = shapes.find(entry => entry.index === index);
         return choice ? `Eye shape ${Number(choice.number)}${research ? choice.target ? ` (${choice.target})` : " (base)" : ""}` : "";

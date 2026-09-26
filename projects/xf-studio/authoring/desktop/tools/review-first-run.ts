@@ -22,7 +22,8 @@ let browser: Awaited<ReturnType<typeof launch>> | undefined;
 try {
   browser = await launch(server.url + "&verify=1", { width: 900, height: 650, debugPort: 9438, scheme: "dark" });
   await browser.waitFor("document.querySelector('#desktop-welcome')?.open");
-  const firstRun = await browser.evaluate(`({ setupOpen: document.querySelector('#desktop-setup').open,
+  // Settings have one form, the Studio's Game & tools (UI-03): no desktop setup dialog opens over the welcome.
+  const firstRun = await browser.evaluate(`({ setupOpen: !!document.querySelector('#desktop-setup'),
     welcome: document.querySelector('#desktop-welcome').textContent })`);
   if (firstRun.setupOpen || !firstRun.welcome.includes("3D head preview is built from your own Cyberpunk 2077 files"))
     throw Error(`Desktop first run did not lead with the community welcome: ${JSON.stringify(firstRun)}`);
@@ -37,7 +38,7 @@ try {
   if (deferred.source !== "primary" || deferred.gameRoot !== null || !deferred.check)
     throw Error(`Deferring setup changed an unexpected setting or disabled Check: ${JSON.stringify(deferred)}`);
   await browser.evaluate("document.documentElement.dataset.testReload = 'before'; location.reload()");
-  await browser.waitFor("!document.documentElement.dataset.testReload && document.querySelector('#studio.studio-ready') && !document.querySelector('#desktop-setup').open && !document.querySelector('#desktop-welcome').open");
+  await browser.waitFor("!document.documentElement.dataset.testReload && document.querySelector('#studio.studio-ready') && !document.querySelector('#desktop-welcome').open");
   await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'unavailable'");
   const uvOnly = await browser.evaluate(`(() => {
     const port = window.xfStudioPresentation, layer = port.feature("eye-makeup").view().layer();
@@ -79,7 +80,7 @@ try {
     !workflows.check.ok || workflows.check.kind !== "packageCheck" || !maskDownloaded)
     throw Error(`UV-only workflows failed: ${JSON.stringify(workflows)}`);
   await browser.screenshot(resolve(screenshots, "desktop-uv-only-editor.png"));
-  await browser.evaluate("document.querySelector('#desktop-about-open').click()");
+  await browser.evaluate("window.xfDesktopOpenAbout()");
   const aboutText = await browser.evaluate("document.querySelector('#desktop-about').textContent");
   if (!aboutText.includes("built from your own Cyberpunk 2077 files") || /Private|Local setup|canary/.test(aboutText))
     throw Error(`About wording regressed: ${aboutText}`);
@@ -90,23 +91,22 @@ try {
   await browser.waitFor("document.querySelector('#desktop-licence-text').textContent.includes('JavaScriptCore')");
   await browser.screenshot(resolve(screenshots, "desktop-licences.png"));
   await browser.evaluate("document.querySelector('#desktop-licences').close()");
-  // The preview card names the missing game folder: it offers a detected install, or Build setup.
+  // The preview card names the missing game folder: it offers a detected install, or Game & tools.
   await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['previewSetup.openSetup', 'previewSetup.useDetectedGame'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
-  await browser.evaluate("document.querySelector('#desktop-about-open').click(); document.querySelector('#desktop-setup-open').click()");
-  await browser.waitFor("document.querySelector('#desktop-setup').open && document.querySelector('#desktop-setup-status').textContent.includes('Check works')");
+  // About's Game & tools opens the Studio's one setup form (UI-03); a typed folder saves as it is entered.
+  await browser.evaluate("window.xfDesktopOpenAbout(); document.querySelector('#desktop-setup-open').click()");
+  await browser.waitFor("document.querySelector('.setup-section')?.open && document.querySelector('.setup-status')?.textContent.includes('Cyberpunk 2077 folder')");
   await browser.screenshot(resolve(screenshots, "desktop-build-setup.png"));
-  await browser.evaluate(`document.querySelector('input[name="gameRoot"]').value = ${JSON.stringify(game)};
-    document.querySelector('#desktop-setup-save').click()`);
-  await browser.waitFor("document.querySelector('#desktop-setup-status').textContent.includes('game folder was found')");
+  await browser.evaluate(`(() => { const input = [...document.querySelectorAll('.setup-section input')].find(item => item.placeholder?.includes('Cyberpunk 2077'));
+    input.value = ${JSON.stringify(game)}; input.dispatchEvent(new Event('change')); })()`);
+  await browser.waitFor(`fetch('/api/local-settings').then(r => r.json()).then(v => v.fields.gameRoot === ${JSON.stringify(game)})`);
   const state = await browser.evaluate(`({
     intro: document.querySelector('.boot')?.textContent,
-    setup: document.querySelector('#desktop-setup-status')?.textContent,
-    game: document.querySelector('input[name="gameRoot"]')?.value,
+    setup: document.querySelector('.setup-status')?.textContent,
     errors: document.querySelectorAll('.boot-error').length
   })`);
-  if (state.game !== game || state.errors || !state.setup.includes("Check works"))
-    throw Error(`Desktop first-run setup did not render and persist accurately: ${JSON.stringify(state)}`);
+  if (state.errors || !state.setup) throw Error(`Desktop first-run setup did not render and persist accurately: ${JSON.stringify(state)}`);
   await browser.screenshot(resolve(screenshots, "desktop-build-setup-saved.png"));
   await browser.viewport(390, 700);
   await browser.screenshot(resolve(screenshots, "desktop-build-setup-narrow.png"));

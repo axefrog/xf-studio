@@ -148,6 +148,36 @@ describe("the Character panel's DOM", () => {
   });
 });
 
+describe("one Undo rule in the Character panel (UI-81)", () => {
+  test("Ctrl+Z and Ctrl+Y step the panel's own changes whatever has focus there, except a text box", async () => {
+    const h = await harness();
+    h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
+    h.paint(); await settle(); h.paint();
+    const key = (target: LightElement, extra: Record<string, unknown>) => {
+      const event = lightEvent("keydown", { key: "z", ctrlKey: true, target, ...extra });
+      target.dispatchEvent(event);
+      return event;
+    };
+    // A switch (a checkbox) and a list (a select) follow the panel's rule, not the makeup's.
+    const eyebrows = h.root.querySelectorAll("input").find(input => input.getAttribute("role") === "switch")!;
+    const undone = key(eyebrows, {});
+    expect(undone.defaultPrevented).toBe(true);
+    expect(h.dispatched.at(-1)).toEqual({ kind: "character.undo" });
+    const select = h.root.querySelector("select")!;
+    key(select, { key: "y" });
+    expect(h.dispatched.at(-1)).toEqual({ kind: "character.redo" });
+    // The search box keeps its own text Undo.
+    const search = h.root.querySelector(".cc-search")!;
+    const count = h.dispatched.length;
+    expect(key(search, {}).defaultPrevented).toBeFalsy();
+    expect(h.dispatched.length).toBe(count);
+    // The panel's Undo button names what it covers; Clothing has no Undo of its own.
+    const undo = h.root.querySelectorAll("button").find(button => (button.getAttribute("aria-label") ?? "").startsWith("Undo in the Character panel"))!;
+    expect(undo.title).toContain("Covers creator options and Clothing");
+    expect(h.root.querySelectorAll("button").some(button => button.getAttribute("aria-label") === "Undo clothing change")).toBe(false);
+  });
+});
+
 describe("the choice list", () => {
   const choice = (position: number, key: string, extra: Partial<CcPanelChoice> = {}): CcPanelChoice =>
     ({ key, position, label: key, off: false, color: null, mod: -1, ...extra });

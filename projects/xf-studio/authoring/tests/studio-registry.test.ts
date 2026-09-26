@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { STUDIO_OWNERS, STUDIO_REGISTRY, STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
-import { MotionActions } from "../src/motion-actions";
+import { IDLE_UNAVAILABLE, MotionActions } from "../src/motion-actions";
 import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
@@ -104,8 +104,9 @@ test("reason codes are structured where refusals are decided, not read from mess
   const motion = new MotionActions(freshWorkspace().preview, { available: false, error: "Idle clip failed to decode.", blink: { available: false },
     setIdle() {}, setIdlePaused() {}, setIdleContributions() {}, setBlink() {}, animateBlink() {} });
   app.attach({ motion });
+  // The rig's own error goes to the diagnostics log; the refusal is plain (UI-88).
   expect(app.capability({ kind: "motion.setIdle", enabled: true }))
-    .toEqual({ available: false, code: "asset_unavailable", reason: "Idle clip failed to decode." });
+    .toEqual({ available: false, code: "asset_unavailable", reason: IDLE_UNAVAILABLE });
 });
 
 test("every exporting feature has an exporter and an independent verifier in the host composition, and nothing else does (§7 rule 7)", async () => {

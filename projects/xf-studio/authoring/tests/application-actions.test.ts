@@ -107,7 +107,7 @@ test("recipe actions validate point, field, pigment, softness and material edits
   expect(reached.state.recipe.layers[0].fields[1].radius).toBe(.08);
   const removed = applyRecipeAction(reached.state, { kind: "field.remove", layerId, fieldId });
   expect(removed.state.recipe.layers[0].fields).toHaveLength(1);
-  expect(recipeActionCapability(removed.state, { kind: "field.clear", layerId, fieldId }).reason).toBe("That warp control no longer exists.");
+  expect(recipeActionCapability(removed.state, { kind: "field.clear", layerId, fieldId }).reason).toBe("That warp no longer exists.");
   expect(() => applyRecipeAction(removed.state, { kind: "layer.setColor", layerId, color: "bad" })).toThrow("Invalid layer settings");
   expect(removed.state.recipe.layers[0].color).toBe(recipe.layers[0].color);
   const pigment = applyRecipeAction(removed.state, { kind: "pigment.edit", layerId,

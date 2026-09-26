@@ -29,8 +29,11 @@ export function section(id: string, number: string, title: string, intro: string
 </section>`;
 }
 export const code = (text: string) => `<code>${esc(text)}</code>`;
-export const btn = (label: string, options: { icon?: IconName; variant?: string; small?: boolean; disabled?: boolean; iconOnly?: boolean; pressed?: boolean; title?: string } = {}) =>
-  `<button type="button" class="btn${options.variant ? ` ${options.variant}` : ""}${options.small ? " small" : ""}${options.iconOnly ? " icon-only" : ""}"${options.disabled ? " disabled" : ""}${options.pressed !== undefined ? ` aria-pressed="${options.pressed}"` : ""}${options.title ? ` title="${esc(options.title)}"` : ""}${options.iconOnly ? ` aria-label="${esc(label)}"` : ""}>${options.icon ? i(options.icon) : ""}${options.iconOnly ? "" : `<span>${label}</span>`}</button>`;
+/** A button; `unavailable` is the main-action pattern (UI-84): focusable, `aria-disabled`, its reason as its description. */
+export const btn = (label: string, options: { icon?: IconName; variant?: string; small?: boolean; disabled?: boolean; unavailable?: string; iconOnly?: boolean; pressed?: boolean; title?: string } = {}) =>
+  `<button type="button" class="btn${options.variant ? ` ${options.variant}` : ""}${options.small ? " small" : ""}${options.iconOnly ? " icon-only" : ""}"${options.disabled ? " disabled" : ""}${options.unavailable ? ` aria-disabled="true" data-reason="${esc(options.unavailable)}" aria-description="${esc(options.unavailable)}"` : ""}${options.pressed !== undefined ? ` aria-pressed="${options.pressed}"` : ""}${options.title ?? options.unavailable ? ` title="${esc((options.title ?? options.unavailable)!)}"` : ""}${options.iconOnly ? ` aria-label="${esc(label)}"` : ""}>${options.icon ? i(options.icon) : ""}${options.iconOnly ? "" : `<span>${label}</span>`}</button>`;
+/** The visible reason of an unavailable main action, as the page's reason tip shows it (reason-tip.ts). */
+export const reasonTip = (reason: string) => `<div class="reason-tip static-tip" role="tooltip" style="position:static">${esc(reason)}</div>`;
 export const badge = (label: string, tone = "neutral") => `<span class="badge ${tone}">${label}</span>`;
 export const chip = (label: string, tone = "") => `<span class="chip ${tone}">${label}</span>`;
 export const eyebrow = (label: string) => `<h3 class="section-title">${label}</h3>`;

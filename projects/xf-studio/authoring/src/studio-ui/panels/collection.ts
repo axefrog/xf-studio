@@ -245,7 +245,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         }));
       }
       savedEmpty.hidden = library.summaries.length > 0;
-      const research = !!frame.preferences.researchTools;
+      const research = !!frame.preferences?.researchTools;
       fileButtons.exportPlan.hidden = !research; researchNote.hidden = !research;
       for (const [key, action] of [["importCollection", "collection.import"], ["exportCollection", "collection.export"], ["exportPlan", "collection.plan"],
         ["importRecipe", "recipe.import"], ["exportRecipe", "recipe.export"], ["exportMask", "mask.export"]] as const)
@@ -353,6 +353,14 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? `${library.progress!.message} A started build can't be cancelled, and closing XF Studio doesn't stop it.` : "");
+      const lastError = files.last && !files.last.ok && (files.last.kind === "package.check" || files.last.kind === "package.build") ? files.last : undefined;
+      const signature = JSON.stringify([files.package, lastError, library.draft?.presets.map(p => [p.id, p.name])]);
+      if (signature !== resultSignature) {
+        resultSignature = signature;
+        const pkg = files.package;
+        result.replaceChildren(pkg ? renderResult(pkg, library.draft?.presets ?? [], installRow) : lastError ? failureCard(rt, lastError)
+          : emptyState("No check yet", "Run Check to see which presets and layers can become mod files. Check creates no files."));
+      }
       // The install rows follow every paint: availability, and what happened last.
       const installs = frame.modInstall, route = frame.localSetup.view?.fields.launchRoute;
       for (const [product, row] of installRows) {
@@ -363,14 +371,6 @@ export function packagePanel(rt: StudioRuntime): PanelController {
         setText(row.line, outcome?.message ?? "");
         row.line.className = `install-line small${outcome ? outcome.ok ? " done" : " warning" : ""}`;
       }
-      const lastError = files.last && !files.last.ok && (files.last.kind === "package.check" || files.last.kind === "package.build") ? files.last : undefined;
-      const signature = JSON.stringify([files.package, lastError, library.draft?.presets.map(p => [p.id, p.name])]);
-      if (signature === resultSignature) return;
-      resultSignature = signature;
-      const pkg = files.package;
-      if (!pkg && !lastError) { result.replaceChildren(emptyState("No check yet", "Run Check to see which presets and layers can become mod files. Check creates no files.")); return; }
-      if (lastError && !pkg) { result.replaceChildren(failureCard(rt, lastError)); return; }
-      result.replaceChildren(renderResult(pkg!, library.draft?.presets ?? [], installRow));
     },
   };
 }

@@ -190,7 +190,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       // The layer's Glitter model, by the catalogue's stored names (UI-10).
       const glitterModel = catalogues(ctx).glitterModelOf(flakes), modelId: GlitterModel = glitterModel.id;
       glitterSection.hidden = !glitter;
-      modelChoice.hidden = !frame.preferences.researchTools;
+      modelChoice.hidden = !frame.preferences?.researchTools;
       classicSection.hidden = !(shimmer || (glitter && modelId === "classic"));
       irregularSection.hidden = !(glitter && modelId === "irregular");
       directSection.hidden = !(glitter && ["direct", "clustered", "fine"].includes(modelId));

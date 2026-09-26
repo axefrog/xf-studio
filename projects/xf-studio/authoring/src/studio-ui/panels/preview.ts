@@ -199,7 +199,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       if (!ready) setText(fovNote, loading.reason);
       else if (!fovNote.textContent || fovNote.textContent === loading.reason) setText(fovNote, FOV_NOTE);
       // Research tools (UI-85): the calibration and the display studies show only when asked for.
-      const research = !!frame.preferences.researchTools;
+      const research = !!frame.preferences?.researchTools;
       diagnostics.hidden = !research;
       for (const node of element.querySelectorAll<HTMLElement>(".research-only")) node.hidden = !research;
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));

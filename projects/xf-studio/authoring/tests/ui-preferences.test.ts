@@ -52,6 +52,18 @@ test("viewport input hints are on by default, persist when turned off and ignore
   expect(reloaded.snapshot()).toMatchObject({ theme: "system", inputHints: false });
 });
 
+test("research tools are off by default, stored only once turned on, and ignore malformed values (UI-85)", () => {
+  expect(defaultUIPreferences().researchTools).toBeUndefined();
+  expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "dark", researchTools: "yes" }).researchTools).toBeUndefined();
+  const actions = new UIPreferenceActions();
+  expect(actions.capability({ kind: "researchTools.set", enabled: 1 as unknown as boolean }).available).toBe(false);
+  actions.dispatch({ kind: "researchTools.set", enabled: true });
+  const reloaded = new UIPreferenceActions(JSON.parse(JSON.stringify(actions.snapshot())));
+  expect(reloaded.snapshot().researchTools).toBe(true);
+  reloaded.dispatch({ kind: "researchTools.set", enabled: false });
+  expect("researchTools" in reloaded.snapshot()).toBe(false);
+});
+
 test("opaque layout accepts only bounded, lossless JSON without choosing dock geometry", () => {
   const valid = parseDockLayout(layout)!;
   expect(valid).toEqual(layout);
