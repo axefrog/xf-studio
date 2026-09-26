@@ -11,6 +11,11 @@
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
  * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72). The
  * preview-only controls (eye shape, visibility toggles) follow below.
+ *
+ * An open row's choices are prepared ahead in the background (character-context-actions.ts `prefetch`), the ones in view first; each
+ * choice not prepared yet carries a corner mark, one line under the search explains the marks once, and a first-time change says why
+ * it takes a moment. Closing the row stops it. The prepared game files' size and "Clear prepared game files" sit with the 3D view's
+ * own controls.
  */
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
@@ -24,6 +29,27 @@ import { characterDetailLine } from "./preview";
 import { ChoiceList } from "./character-choices";
 
 const NOT_SHOWN = "Not shown in the 3D view yet.";
+/** The status line while a choice that wasn't prepared ahead is prepared. */
+const FIRST_TIME = "Updating… A first-time choice is read from your game files, so it takes a few seconds; after that it's instant.";
+const LEGEND = "Not prepared yet: the first time, XF Studio reads it from your game files, which takes a few seconds.";
+const LEGEND_FETCHING = "Being prepared in the background.";
+const STOPPED: Record<"time" | "disk", string> = {
+  time: "Preparing ahead has paused for this row. Every choice still works; the first time takes a few seconds.",
+  disk: "Preparing ahead has paused: it used its disk space for this session. Every choice still works; the first time takes a few seconds.",
+};
+const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
+/** The part of the page a list scrolls in (its nearest scrolling ancestor, clipped to the window), or null without layout. */
+function scrollView(from: HTMLElement): { top: number; bottom: number } | null {
+  if (typeof getComputedStyle !== "function" || typeof from.getBoundingClientRect !== "function") return null;
+  let top = 0, bottom = typeof innerHeight === "number" ? innerHeight : 0;
+  for (let node = from.parentElement; node; node = node.parentElement) {
+    if (!/(auto|scroll)/.test(getComputedStyle(node).overflowY)) continue;
+    const rect = node.getBoundingClientRect();
+    top = Math.max(top, rect.top); bottom = Math.min(bottom, rect.bottom);
+    break;
+  }
+  return bottom > top ? { top, bottom } : null;
+}
 const PAGE = 240;
 
 type RowView = { row: CcPanelRow; section: string; options: CcPanelOption[] };
@@ -63,6 +89,12 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   detailsToggle.addEventListener("click", () => { showMessages = !showMessages; rt.changed(); });
   const search = h("input", { class: "field cc-search", type: "search", placeholder: "Find an option or choice", "aria-label": "Find a creator option or choice",
     autocomplete: "off", spellcheck: "false" });
+  // One line explains the marks on choices not prepared yet (fixed height: it never moves the rows).
+  const legendText = h("span", { class: "cc-legend-text" },
+    h("span", { class: "cc-fetch-mark", "data-fetch": "pending", "aria-hidden": "true" }), ` ${LEGEND} `,
+    h("span", { class: "cc-fetch-mark", "data-fetch": "fetching", "aria-hidden": "true" }), ` ${LEGEND_FETCHING}`);
+  const legendStopped = h("span", { class: "cc-legend-text", hidden: true });
+  const legend = h("p", { class: "note cc-legend" }, legendText, legendStopped);
   const sections = h("div", { class: "cc-sections" });
   const noMatch = note("No option or choice matches.");
   noMatch.hidden = true;
@@ -76,14 +108,20 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const piercings = new Toggle({ label: "Piercings", onChange: enabled => dispatch({ kind: "preview.setPiercings", enabled }) });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const detailNote = note("");
+  // The game files prepared for the 3D view on this computer, and clearing them.
+  const preparedText = h("span", { class: "cc-prepared-text" });
+  const clearPrepared = button({ label: "Clear prepared game files", icon: "trash", small: true, variant: "quiet",
+    title: "Removes the files XF Studio prepared from your game for the 3D view. They are read from your game again when needed; your makeup, presets and settings stay.",
+    onClick: () => dispatch({ kind: "character.clearPreparedFiles" }) });
 
   const element = h("div", { class: "panel-content cc-panel" },
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
       h("span", { class: "cc-history" }, undo, redo)), status, messages),
     h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
-    h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, sections, noMatch),
+    h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, legend, sections, noMatch),
     section("3D view only", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, detailNote,
       h("div", { class: "row wrap gap-s" }, exportV),
+      h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared),
       note("These change what the 3D view shows, never your V or your makeup. A save is read locally and never changed or uploaded.")));
 
   // Creator changes have their own Undo: inside this panel the Undo keys step through them, not the makeup's history.
@@ -98,9 +136,13 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   // ---- Rows ----
   type RowControls = { view: RowView; element: HTMLElement; main: HTMLButtonElement; label: HTMLElement; value: HTMLElement; swatch: HTMLElement;
     notShown: HTMLElement; off: HTMLButtonElement; reset: HTMLButtonElement; detail: HTMLElement | null; list: ChoiceList; more: HTMLButtonElement;
-    open: boolean; query: string };
+    open: boolean; query: string;
+    /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
+    prefetching: string | null; positions: number[]; loaded: number };
   let built: { identity: string; rows: RowControls[] } | null = null;
   const openRows = new Set<string>();
+  /** The one open row whose choices are prepared ahead: the one opened or pointed at last. */
+  let aheadRow: string | null = null;
   const rowKey = (view: RowView) => `${view.row.part}/${view.row.slot}`;
   const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption) => [option.coverage[0] === "not-rendered" ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
     option.dependsOn.length ? `Turned on by ${option.dependsOn.join(" or ")}.` : ""].filter(Boolean).join(" ");
@@ -126,8 +168,13 @@ export function characterPanel(rt: StudioRuntime): PanelController {
           list: new ChoiceList(id, choice => {
             const option = current(controls);
             if (option) dispatch({ kind: "character.setOption", part: option.part, option: option.name, choice: choice.key, ...(choice.activates ? { activates: [...choice.activates] } : {}) });
+          }, choice => {
+            // A hovered or focused choice is prepared next (its row becomes the one prepared ahead).
+            if (aheadRow !== rowKey(controls.view)) { aheadRow = rowKey(controls.view); rt.changed(); return; }
+            if (controls.prefetching && controls.positions.length) port.authoring.characterPrefetch(controls.prefetching, controls.positions, choice.position);
           }),
-          more: h("button", { class: "btn small quiet cc-more", type: "button", hidden: true }), open: openRows.has(rowKey(view)), query: "" };
+          more: h("button", { class: "btn small quiet cc-more", type: "button", hidden: true }), open: openRows.has(rowKey(view)), query: "",
+          prefetching: null, positions: [], loaded: -1 };
         main.addEventListener("click", () => toggle(controls));
         controls.off.addEventListener("click", () => {
           const option = current(controls);
@@ -158,15 +205,39 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   function toggle(controls: RowControls) {
     controls.open = !controls.open;
     const key = rowKey(controls.view);
-    if (controls.open) openRows.add(key); else openRows.delete(key);
+    if (controls.open) { openRows.add(key); aheadRow = key; }
+    else { openRows.delete(key); stopPrefetch(controls); if (aheadRow === key) aheadRow = [...openRows].at(-1) ?? null; }
     rt.changed();
   }
+  /** Stop preparing a row's choices ahead (it closed, or shows another option or a search). */
+  function stopPrefetch(controls: RowControls) {
+    if (controls.prefetching) port.authoring.characterStopPrefetch(controls.prefetching);
+    controls.prefetching = null; controls.positions = []; controls.loaded = -1;
+  }
+  /** Prepare an open row's choices ahead, the ones in view first, and return their states. */
+  function prefetchRow(controls: RowControls, option: CcPanelOption) {
+    if (controls.prefetching !== option.id) { stopPrefetch(controls); controls.prefetching = option.id; }
+    return port.authoring.characterPrefetch(option.id, controls.positions);
+  }
+  // Scrolling brings other choices into view: they are prepared first.
+  let scrollFrame = 0;
+  element.addEventListener("scroll", () => {
+    if (scrollFrame || typeof requestAnimationFrame !== "function") return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = 0;
+      for (const controls of built?.rows ?? []) if (controls.open && controls.prefetching) {
+        controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
+        port.authoring.characterPrefetch(controls.prefetching, controls.positions);
+      }
+    });
+  }, { capture: true, passive: true });
 
   function updateRows(frame: Frame, panel: Readonly<CcPanel>, view: Readonly<CreatorView> | null) {
     if (built?.identity !== panel.identity) buildRows(panel);
     const query = search.value.trim().toLowerCase();
     // The host searches every choice, not only those loaded (UI-72); rows matching by name show while it answers.
     const found = query ? port.authoring.characterSearch(query) : null;
+    let stopped: "time" | "disk" | null = null;
     const details = frame.status.assets.characterDetails, drawn = new Set(details?.drawn ?? []);
     let visibleRows = 0;
     for (const controls of built!.rows) {
@@ -211,8 +282,18 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // An open row lists every choice, or with a search that only its choices match, the matching ones.
       controls.query = rowMatches ? "" : query;
       const loaded = port.authoring.characterChoices(option.id, undefined, controls.query);
+      // Its choices are prepared ahead while it shows them all, when the 3D view draws the option.
+      const ahead = !controls.query && option.coverage[0] !== "not-rendered" && aheadRow === rowKey(controls.view);
+      if (!ahead) stopPrefetch(controls);
+      const fetch = ahead ? prefetchRow(controls, option) : null;
+      if (fetch?.stopped) stopped = fetch.stopped;
       controls.list.update({ option: option.id, query: controls.query, label: option.label, grid: option.grid, choices: loaded?.choices ?? [],
-        selected: value?.position ?? null, mods: panel.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null });
+        selected: value?.position ?? null, mods: panel.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null });
+      if (ahead && (loaded?.choices.length ?? 0) !== controls.loaded) {
+        controls.loaded = loaded?.choices.length ?? 0;
+        controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
+        prefetchRow(controls, option);
+      }
       const remaining = (loaded?.total ?? 0) - (loaded?.choices.length ?? 0);
       controls.more.hidden = remaining <= 0;
       setText(controls.more, `Show ${Math.min(PAGE, remaining)} more of ${remaining}`);
@@ -220,6 +301,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     for (const node of sections.querySelectorAll<HTMLElement>(".cc-section"))
       node.hidden = ![...node.querySelectorAll<HTMLElement>(".cc-row")].some(row => !row.hidden);
     noMatch.hidden = !query || visibleRows > 0 || !!found?.loading;
+    legendText.hidden = !!stopped; legendStopped.hidden = !stopped;
+    if (stopped) { setText(legendStopped, STOPPED[stopped]); legendStopped.title = STOPPED[stopped]; }
     return visibleRows;
   }
   search.addEventListener("input", () => rt.changed());
@@ -253,12 +336,12 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines.
       const line = !context ? "" : context.phase === "preparing" ? context.message || "Reading your game's character-creator options…"
         : context.phase === "failed" ? context.message
-          : details?.updating || context.viewing ? "Updating…"
+          : details?.updating || context.viewing ? (details?.updating && context.firstTime ? FIRST_TIME : "Updating…")
             : details?.updateError ?? (lines.length ? lines[0]! : "");
       setText(statusText, line);
       statusText.title = line;
       status.classList.toggle("warning", !!line && (line === details?.updateError || context?.phase === "failed" || lines.includes(line)));
-      status.classList.toggle("busy", line === "Updating…" || context?.phase === "preparing");
+      status.classList.toggle("busy", line === "Updating…" || line === FIRST_TIME || context?.phase === "preparing");
       retry.classList.toggle("cc-unoffered", !context?.retry);
       applyCapability(retry, port.authoring.capability({ kind: "character.retry" }));
       keep.classList.toggle("cc-unoffered", !context?.keepable);
@@ -273,8 +356,9 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       applyCapability(hide, port.authoring.capability({ kind: "character.hideOwnMakeup" }));
       applyCapability(resetAll, port.authoring.capability({ kind: "character.resetAll" }));
       search.disabled = !panel;
+      legend.hidden = !panel;
       if (panel) updateRows(frame, panel, view);
-      else if (built) { sections.replaceChildren(); built = null; }
+      else if (built) { for (const controls of built.rows) stopPrefetch(controls); sections.replaceChildren(); built = null; }
 
       // Preview-only controls.
       const shapes = state.eyeShapeOptions?.choices ?? [];
@@ -297,6 +381,11 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const piercingAllowed = port.authoring.capability({ kind: "preview.setPiercings", enabled: true });
       piercings.update(!!preview?.piercings, { disabled: !preview || (!preview.piercings && !piercingAllowed.available), reason: piercingAllowed.reason ?? loading });
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
+      const prepared = context?.prepared;
+      setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"
+        : prepared.bytes === null ? "Prepared game files: checking their size…"
+          : `Prepared game files on this computer: ${prepared.bytes ? size(prepared.bytes) : "none"}.${prepared.freed ? ` Cleared ${size(prepared.freed)}.` : ""}`);
+      applyCapability(clearPrepared, port.authoring.capability({ kind: "character.clearPreparedFiles" }));
       const detailLine = characterDetailLine(details);
       setText(detailNote, detailLine.text);
       detailNote.hidden = !detailNote.textContent;

@@ -1,7 +1,8 @@
 /**
  * Browser device for the character context's host side (cc-catalogue-server.ts): the installed creator options for the Character
  * panel, their choices page by page, searches over every choice, the view of a context, a portable preset of it, Try again after a
- * failed catalogue, and the choices an earlier build's tried piercing style stands for. Same endpoint on both hosts. Answers are read
+ * failed catalogue, the choices an earlier build's tried piercing style stands for, a row's choices prepared ahead and the prepared game
+ * files' size and clearing. Same endpoint on both hosts. Answers are read
  * with the panel's own readers (cc-panel.ts); every refusal becomes one plain line by its code, never the host's own words (UI-69).
  */
 import type { BodyGender } from "./cc-catalogue";
@@ -24,6 +25,8 @@ const PLAIN: Record<string, string> = {
   forbidden: "The creator options can only be changed from XF Studio itself.",
 };
 const UNREACHABLE = "XF Studio couldn't reach its preview host. Restart XF Studio if this keeps happening.";
+/** The host's answer about choices prepared ahead (choice-prefetch.ts). */
+const PREFETCH_SCHEMA = "xfs/choice-prefetch-1";
 
 async function answer<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => null) as { code?: unknown } | null;
@@ -70,6 +73,22 @@ export function createBrowserCreatorDevice(transport: Fetch = (url, init) => fet
     async legacy(gender, style, definition) {
       const value = await answer<{ choices?: unknown }>(await post({ kind: "legacy", bodyGender: gender, style, definition }));
       return Array.isArray(value?.choices) ? value.choices.flatMap((item): CharacterChoice[] => { const choice = characterChoiceOf(item); return choice ? [choice] : []; }) : [];
+    },
+    async prefetch(request, option, positions, focus, signal) {
+      const value = await answer<{ schema?: unknown; states?: unknown; stopped?: unknown; busy?: unknown }>(await post({ kind: "prefetch", request, option,
+        positions: [...positions], ...(focus !== null ? { focus } : {}) }, signal));
+      if (value?.schema !== PREFETCH_SCHEMA || typeof value.states !== "string" || !/^[?nqfrx]*$/.test(value.states)) throw Error(SKEW);
+      return { states: value.states, stopped: value.stopped === "time" || value.stopped === "disk" ? value.stopped : null, busy: value.busy === true };
+    },
+    async stopPrefetch() { await answer(await post({ kind: "prefetchStop" })); },
+    async preparedFiles(signal) {
+      const value = await answer<{ bytes?: unknown }>(await post({ kind: "prepared" }, signal));
+      if (typeof value?.bytes !== "number" || !Number.isFinite(value.bytes)) throw Error(SKEW);
+      return { bytes: value.bytes };
+    },
+    async clearPrepared() {
+      const value = await answer<{ freed?: unknown }>(await post({ kind: "clearPrepared" }));
+      return { freed: typeof value?.freed === "number" && Number.isFinite(value.freed) ? value.freed : 0 };
     },
     wait: (ms, signal) => new Promise(resolve => {
       const timer = setTimeout(resolve, ms);

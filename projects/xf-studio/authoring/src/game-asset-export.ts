@@ -296,7 +296,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
   };
   /** What the cache already answers for a request; the rest is returned as needed. Only a complete (or lasting partial) entry is a hit. */
   const fromCache = (request: ExportRequest, answer: ExportAnswer, decoded: string | null = null): Needed => {
-    const needed: Needed = { geometry: [], textures: [], masks: [] }, materials = request.materials ?? true;
+    const needed: Needed = { geometry: [], textures: [], masks: [] }, materials = request.materials ?? false;
     for (const depotPath of new Set(request.geometry)) {
       checkDepotPath(depotPath);
       const cached = cache.read(depotPath, request.source);
@@ -447,8 +447,9 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
       const decoded = () => work ? join(work, "geometry") : null;
       const one = async (kind: ExportKind, depotPaths: readonly string[]): Promise<ExportAnswer> => {
         const answer = emptyAnswer();
+        // A session's geometry comes with WolvenKit's materials file (the core preview reads it).
         const request: ExportRequest = { source, geometry: kind === "geometry" ? depotPaths : [], textures: kind === "textures" ? depotPaths : [],
-          masks: kind === "masks" ? depotPaths : [] };
+          masks: kind === "masks" ? depotPaths : [], materials: true };
         const needed = fromCache(request, answer, kind === "textures" ? decoded() : null);
         if (!anyNeeded(needed)) return answer;
         const outDir = join(workDir(), kind);

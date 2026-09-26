@@ -119,7 +119,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: message => report(message) });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
-  const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh() });
+  const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
   const gradingLut = new GradingLutHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     settings: () => {

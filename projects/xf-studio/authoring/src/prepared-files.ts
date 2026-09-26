@@ -31,7 +31,8 @@ async function folderBytes(root: string, skip: (name: string) => boolean = () =>
       const path = join(folder, entry.name);
       if (entry.isSymbolicLink()) return;
       if (entry.isDirectory()) return walk(path);
-      try { total += (await lstat(path)).size; } catch { /* Gone meanwhile. */ }
+      // Read first, then add: `total += await …` would add to the total as it was before the await.
+      try { const bytes = (await lstat(path)).size; total += bytes; } catch { /* Gone meanwhile. */ }
     }));
   };
   await walk(root);
@@ -41,7 +42,7 @@ const exportsSkip = (name: string) => name.startsWith(".work-") || name.endsWith
 
 /** The prepared files' size on disk, by kind. */
 export async function preparedSize(roots: PreparedRoots): Promise<PreparedSize> {
-  const [exports, resolver, store, manifests] = await Promise.all([folderBytes(roots.exports, exportsSkip), folderBytes(join(roots.resolver, "json")),
+  const [exports, resolver, store, manifests] = await Promise.all([folderBytes(roots.exports, exportsSkip), folderBytes(join(roots.resolver, "json"), name => !name.endsWith(".json")),
     folderBytes(roots.store), folderBytes(roots.manifests)]);
   return { bytes: exports + resolver + store + manifests, exports, resolver, store, manifests };
 }

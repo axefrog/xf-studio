@@ -251,6 +251,8 @@ export class CharacterDetailHost {
 
   /** Start or update preparing a row's choices ahead, and answer their states. */
   prefetchRow(input: PrefetchInput): PrefetchAnswer { return this.prefetch.update(input); }
+  /** The row closed: stop preparing its choices ahead. */
+  stopPrefetch(): void { this.prefetch.cancel(); }
 
   /** The V with one choice of an option set: the V's choices without that option's, then the choice (as the panel sets one). */
   private async requestFor(base: CharacterRequest, option: string, position: number): Promise<CharacterRequest | null> {
