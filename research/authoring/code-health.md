@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `e09391e` | 2026-09-27 | Native reader in production (resolver integration, shared decoder, markers, notes) | 0 High, 1 Medium, 9 Low (NATIVE-26..34, PIPE-102). Cache identity, fallback kinds, the arrays-to-record-end rule against hostile files, worker bundling and the boundary are sound; no render changes beyond the intended fixes. Fixes in claude/native-catalogue |
 | `1a575a1`–`363373a` | 2026-09-27 | In-depth UI/UX review (backlog track 7): every panel and flow against the "it just works" policy, accessibility and UI boundaries; code, style guide, acceptance screenshots and one running check | 0 High, 8 Medium, 10 Low (UI-80..97). UI-03, UI-10, UI-14, UI-15, UI-04 and UI-57 still open. Docking, menus and palette reasons, the WolvenKit consent, 3D preview setup, Character panel status and problem reports are sound. Fixes in claude/ui-polish |
 | `47f581c` | 2026-09-27 | Body and clothing render (claude/body-render, claude/clothing-render): the body plan and censorship policy, the clothing resolver and host, save packages, the loader's body shape, the Clothing control | Body and clothing render: 1 High, 7 Medium, 4 Low (PIPE-97..101, PREV-106..108, CORE-92, NATIVE-25, UI-78..79). PIPE-97: the underwear floor failed open wherever the cover could be lost after the plan. All fixed in claude/cleanup-body-clothing |
 | `d144704` | 2026-09-26 | Bridge autonomy batch 1, focused safety review (key sending, cc.confirm/back, cursor wrap, camera presets, photo.subject) | 0 High, 2 Medium, 6 Low (RB-34..41). Safe for the next session: only the bound photo-mode key can be sent, only to the game's foreground window, only with writes and the photo class on; confirm/back gated natively; presets only in test zips. All fixed in claude/bridge-batch2 |
@@ -66,6 +67,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| NATIVE-26 | Med | Native reader | A decoder open that failed transiently (Authenticode check timeout after a patch, the DLL briefly locked) is cached under the Oodle stamp for the whole process, so WolvenKit reads everything (~90 s cold) until restart (`installation-registry.ts:151`, `resolver-host.ts:664`) | Open (claude/native-catalogue) |
 | UI-80 | Med | Presentation | Ordinary refusals (nothing to undo) show as red error toasts that never fade (`runtime.ts:100`, `feedback.ts:62`) | Open (claude/ui-polish) |
 | UI-81 | Med | Presentation | Ctrl+Z in the Character panel undoes creator options, clothing or makeup depending on focus; the header Undo and History never cover character changes (`character.ts:142-148`) | Open (claude/ui-polish) |
 | UI-82 | Med | Presentation | Build ends in a dead end: a path in `<code>` under a random-token folder; no "Show in folder", no install steps or consented "Add to my mod manager" (the transport exists) (`collection.ts:367,457-458`) | Open (claude/ui-polish) |
@@ -354,6 +356,17 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **UI-95:** the layer's "won't be packaged" flag is `aria-hidden`; screen readers aren't told.
   - **UI-96:** the compact layout shows the Character and Camera & light tabs as unlabelled icons; the 3D-view switches sit ~2,500 px down the Character panel.
   - **UI-97:** raw update status text and a browser `confirm()` in About.
+
+- **NATIVE-27..34, PIPE-102** (native reader in production, review at `e09391e`), Open (claude/native-catalogue):
+  - **NATIVE-27:** after Clear, `NativeAnswerFiles.add` skips files still in its in-memory set, so markers aren't rewritten this session; stale markers are never pruned.
+  - **NATIVE-28:** an Oodle stamp change closes the shared decoder while routes still hold it; it then answers `internal`, logged as reader bugs.
+  - **NATIVE-29:** a decoder off for the session still counts as transient, so graphs are replaced on every preparation when WolvenKit also can't read a resource.
+  - **NATIVE-30:** the marker identity doesn't cover `NATIVE_ROOTS` or `DEFAULT_LIMITS`.
+  - **NATIVE-31:** the 13 MB clothing preset decode (120 s budget) shares the one decode queue and isn't failure-cached.
+  - **NATIVE-32:** fallback log lines carry the host's stack, not the worker's, and claim WolvenKit read it before it has.
+  - **NATIVE-33:** decoders for game folders no longer in use are never closed.
+  - **NATIVE-34:** `resource-document.ts` lacks a version 3 comment entry.
+  - **PIPE-102:** the character-detail service reaches the decoder by casting the graph's port; use `Installation.native?.decoder`.
 
 ## New subsystems since last review
 
