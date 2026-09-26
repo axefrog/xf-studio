@@ -18,11 +18,12 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compo
 import { LookLibrary } from "../src/library-store";
 import { COLLECTION_2, isNewerData, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { eyeMakeupCollection, NEWER_LOOK_REASON, planCollection } from "../src/preset-collection";
-import { initialRecipe, parseRecipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createStudioPresentation } from "../src/studio-presentation";
 import { fitWorkspace } from "../src/workspace-budget";
-import { freshWorkspace, loadWorkspace, serializeWorkspace, workspaceKeys } from "../src/workspace-state";
+import { loadWorkspace, serializeWorkspace, workspaceKeys } from "../src/workspace-state";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 const EYE = "eye-makeup";
 const ID = { collection: "00000000-0000-4000-8000-00000000c011", a: "00000000-0000-4000-8000-00000000000a",

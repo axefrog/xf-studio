@@ -60,7 +60,7 @@ By Frans Bouma (Otis Photomode Mods). [GitHub](https://github.com/FransBouma/Igc
 
 ### Mod Organizer 2
 
-By the ModOrganizer2 contributors; the Cyberpunk game plugin credits 6788 and Zash. [GitHub](https://github.com/ModOrganizer2/modorganizer), [Cyberpunk plugin](https://github.com/ModOrganizer2/modorganizer-basic_games). The plugin and its load-order guide taught us to separate MO2's virtual file priority from the game's own archive load order, which shaped how XF Studio discovers installed mods. MO2's own source and its download handler showed us how profiles order mods, how instances configure their folders, and how installs register, which XF Studio follows when it finds and reads an existing MO2 setup.
+By the ModOrganizer2 contributors; the Cyberpunk game plugin credits 6788 and Zash. [GitHub](https://github.com/ModOrganizer2/modorganizer), [Cyberpunk plugin](https://github.com/ModOrganizer2/modorganizer-basic_games). The plugin and its load-order guide taught us to separate MO2's virtual file priority from the game's own archive load order, which shaped how XF Studio discovers installed mods. MO2's own source and its download handler showed us how profiles order mods, how instances configure their folders, and how installs register, which XF Studio follows when it finds and reads an existing MO2 setup. The download details MO2 keeps in each mod's `meta.ini` (mod and file IDs, installation file, repository) are how a problem report names a mod's source without copying it.
 
 ### ReShade
 
@@ -68,7 +68,7 @@ By Patrick Mours (crosire) and contributors. [GitHub](https://github.com/crosire
 
 ### Vortex
 
-By Black Tree Gaming Ltd. (Nexus Mods) and contributors. [GitHub](https://github.com/Nexus-Mods/Vortex). Vortex's source showed us how it stages mods, deploys the winning files into the game folder, records each deployment in a manifest and keeps its state, which is how XF Studio tells which Vortex mod put a file in the game folder. Studied only, and run only in a disposable Windows Sandbox; XF Studio reads Vortex's files but includes no Vortex code.
+By Black Tree Gaming Ltd. (Nexus Mods) and contributors. [GitHub](https://github.com/Nexus-Mods/Vortex). Vortex's source showed us how it stages mods, deploys the winning files into the game folder, records each deployment in a manifest and keeps each mod's Nexus Mods ids in its state, which is how XF Studio tells which Vortex mod put a file in the game folder and how a problem report says where a Vortex-installed mod came from. Studied only; XF Studio reads Vortex's files but includes no Vortex code, and our Vortex tests run in a disposable Windows Sandbox.
 
 ### WolvenKit
 
@@ -120,6 +120,10 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 
 By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images.
 
+### PKWARE ZIP specification
+
+By PKWARE. [APPNOTE.TXT](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT). The ZIP file format specification that XF Studio's small report-file writer follows.
+
 ### red4ext-rs
 
 By jekky and contributors. [GitHub](https://github.com/jac3km4/red4ext-rs). Its bindings showed what a Rust RED4ext plugin can do, which we weighed as an alternative native layer for the runtime bridge before choosing C++ with the SDK the loader itself uses.
@@ -161,6 +165,10 @@ These mods were studied from local installations. Where the private preview disp
 ### Alliekat
 
 [Natural Hair Tones](https://www.nexusmods.com/cyberpunk2077/mods/15787) and [Eyeshadow Remix Pt. 1](https://www.nexusmods.com/cyberpunk2077/mods/15451). Natural Hair Tones supplies the saved character's brow colour gradient; comparing it with the base game's version taught us that an installed override need not change the visible colour. Its replacements of the shared hair colour profiles showed how one profile colours both V and every NPC wearing that colour, and how a replacement that keeps the base game's stop positions changes where the light and dark parts of a strand fall. Eyeshadow Remix is another in-place replacement of the base game's eye-makeup masks. Private local reference only.
+
+### anruimurasaki
+
+[High Ponytail Hair - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/25085). Its ponytail mesh showed that a working CCXL hairstyle can list fewer chunk materials than it has render chunks, keeping stub chunks for its lower levels of detail, and that a mesh whose render data lists fewer bone positions than it has bones can ship in a working mod although WolvenKit won't export it; the preview now exports such meshes from a repaired copy. Private local reference only.
 
 ### Appearance Menu Mod
 

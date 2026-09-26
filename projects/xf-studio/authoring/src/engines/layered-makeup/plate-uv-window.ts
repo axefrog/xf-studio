@@ -97,7 +97,7 @@ export interface PlateUvFootprint {
 
 /** The plate's UV footprint from a mesh's render blob (WolvenKit JSON RootChunk). */
 export function plateUvFootprint(meshRoot: Json): PlateUvFootprint {
-  const bounds = plateUvBounds(meshRoot), window = plateUvWindow(bounds);
+  const bounds = plateUvBounds(meshRoot), uvWindow = plateUvWindow(bounds);
   const blob = meshRoot.renderResourceBlob.Data, raw = Buffer.from(String(blob.renderBuffer?.Bytes ?? ""), "base64");
   const uv: number[] = [], triangles: number[] = [];
   for (const chunk of blob.header.renderChunkInfos) {
@@ -123,7 +123,7 @@ export function plateUvFootprint(meshRoot: Json): PlateUvFootprint {
       triangles.push(first + index);
     }
   }
-  return { schema: PLATE_UV_FOOTPRINT_SCHEMA, bounds, window, uv, triangles };
+  return { schema: PLATE_UV_FOOTPRINT_SCHEMA, bounds, window: uvWindow, uv, triangles };
 }
 
 /** A recorded footprint, checked for shape (the cache stores it as JSON). */
@@ -164,17 +164,17 @@ export function plateUvWindow(bounds: StoredUvBounds): UvWindow {
   return { u0, u1, v0, v1 };
 }
 
-/** `mesh_decal` UV constants that make the stored UVs of `window` sample the whole texture (see header). */
-export function uvTransformConstants(window: UvWindow) {
-  const scaleX = 1 / (window.u1 - window.u0), scaleY = 1 / (window.v1 - window.v0);
+/** `mesh_decal` UV constants that make the stored UVs of `uvWindow` sample the whole texture (see header). */
+export function uvTransformConstants(uvWindow: UvWindow) {
+  const scaleX = 1 / (uvWindow.u1 - uvWindow.u0), scaleY = 1 / (uvWindow.v1 - uvWindow.v0);
   return {
-    UVScaleX: scaleX, UVOffsetX: -scaleX * ((window.u0 + window.u1) / 2 - 0.5),
+    UVScaleX: scaleX, UVOffsetX: -scaleX * ((uvWindow.u0 + uvWindow.u1) / 2 - 0.5),
     // Stored V = 1 − v, and the import flip reverses rows: the window's stored V centre goes to 0.5.
-    UVScaleY: scaleY, UVOffsetY: scaleY * ((window.v0 + window.v1) / 2 - 0.5),
+    UVScaleY: scaleY, UVOffsetY: scaleY * ((uvWindow.v0 + uvWindow.v1) / 2 - 0.5),
   };
 }
 export type UvTransformConstants = ReturnType<typeof uvTransformConstants>;
 
-/** Authored UV units per texel of a width × height map over `window` (smaller is denser). */
-export const texelSpan = (window: UvWindow, width: number, height: number) =>
-  ({ u: (window.u1 - window.u0) / width, v: (window.v1 - window.v0) / height });
+/** Authored UV units per texel of a width × height map over `uvWindow` (smaller is denser). */
+export const texelSpan = (uvWindow: UvWindow, width: number, height: number) =>
+  ({ u: (uvWindow.u1 - uvWindow.u0) / width, v: (uvWindow.v1 - uvWindow.v0) / height });

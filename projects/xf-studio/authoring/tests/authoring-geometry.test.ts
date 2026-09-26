@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringGeometry } from "../src/authoring-geometry";
-import { freshWorkspace } from "../src/workspace-state";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 function fixture() {
   const document = new AuthoringDocument(freshWorkspace());

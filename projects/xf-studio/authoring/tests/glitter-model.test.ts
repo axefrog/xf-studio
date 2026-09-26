@@ -1,7 +1,8 @@
 import {expect, test} from "bun:test";
-import {initialRecipe, parseRecipe} from "../src/engines/layered-makeup/recipe";
 import {glitterModel, parseGlitterChoices, selectGlitterModel, type GlitterChoices, type GlitterModel} from "../src/engines/layered-makeup/glitter-model";
 import {recipeFile} from "../src/recipe-schema";
+import { initialRecipe } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 test("all Glitter studies are selectable without changing other layers or old recipes", () => {
   let recipe = initialRecipe(); recipe.layers[0].finish = "glitter";

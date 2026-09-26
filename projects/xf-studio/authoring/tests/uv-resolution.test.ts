@@ -3,7 +3,7 @@ import { canvasResolution } from "../src/canvas-resolution";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, pixelToUV, uvToPixel } from "../src/uv-view";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("fractional CSS dimensions and DPR cover exactly the drawing rectangle", () => {
   for (const width of [288.3,720,1400.25]) for (const dpr of [1,1.25,2,3]) {
@@ -39,7 +39,7 @@ test("UV resize sharpens backing buffer without resetting view or changing CSS-s
     let selected=0,begins=0,persists=0;
     const element=()=>({setAttribute(){},disabled:false,textContent:""}) as any;
     const editor=createUVEditor(canvas,{both:element(),single:element(),other:element(),fit:element(),note:element()},
-      {recipe:()=>recipe,layer:()=>layer,selected:()=>selected,select:i=>{selected=i;},selectedField:()=>undefined,selectField(){},
+      { region: EYE_REGION,recipe:()=>recipe,layer:()=>layer,selected:()=>selected,select:i=>{selected=i;},selectedField:()=>undefined,selectField(){},
         canvases:()=>[],albedo:()=>undefined,begin:()=>begins++,apply:action=>applyAdapterProposal(layer,action),cancel(){},persist(){persists++;},message(){}},defaultUVView());
     editor.draw();
     expect(bufferWidth).toBe(1440);

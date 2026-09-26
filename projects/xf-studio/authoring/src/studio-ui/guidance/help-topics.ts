@@ -32,6 +32,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   { id: "character", title: "Your V in the preview", keywords: "save v character brows lashes hair eye shape load",
     body: "Load a save from the **Character** panel and the preview shows that V's own skin, makeup and face details, eyes, brows, lashes, hair and piercings, read from your game and mods. Your looks and library are never changed by loading a save.",
     tours: ["whats-new-0.1.0-alpha.1"] },
+  { id: "report", title: "Reporting a problem", keywords: "bug error problem report issue github log diagnostics crash reference mod files privacy",
+    body: "When something goes wrong, the notice shows a reference such as **XF-7K3Q** and a **Report this problem** button. You can also report from here, or from the command palette.\n\n- The report is prepared for you to review first. Nothing leaves your computer unless you send it.\n- Tick or untick each part. Personal folder names and e-mail addresses are already replaced.\n- **Save report** makes one file to attach to a GitHub issue; **Open a GitHub issue** starts one for you.\n- XF Studio keeps the last half hour of what it worked out (which mod supplied what), so you don't have to make the problem happen again. **Diagnostic mode** keeps more, for a day.\n\nYour mods are identified by name, version and download source, never copied. Reports on GitHub are **public**: only include a mod's own files if you made it, or its permissions allow sharing it." },
   { id: "layout", title: "Panels and layout", keywords: "panel dock float tab layout reset move window",
     body: "Drag a panel's tab to dock it beside another, or onto a floating spot. The **Panels** button in the header opens or closes any panel and resets the layout. [[key:shell.regions]] moves the keyboard focus between regions." },
 ];
@@ -44,7 +46,7 @@ export function helpTopicsFor(finishes: readonly FinishSummary[]): readonly Help
 /** Public pages the Help view links to; the host opens them in the person's browser. */
 export const HELP_LINKS = [
   { link: "project-knowledge", label: "How the game works: knowledge pages", detail: "Research notes on the game's files, shaders and character creator." },
-  { link: "project-issues", label: "Report a problem or ask a question", detail: "XF Studio's issue tracker on GitHub." },
+  { link: "project-issues", label: "Ask a question or see known problems", detail: "XF Studio's issue tracker on GitHub." },
 ] as const;
 
 const terms = (query: string) => query.toLowerCase().split(/\s+/).filter(Boolean);

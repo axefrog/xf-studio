@@ -44,7 +44,7 @@ The mesh's local `@brows` material declares dynamic gradient path `*base\charact
 
 It is RGBA, 2048×1024. RGB channels are identical to one another, but differ from alpha. Over the whole texture, green ranges 0–247 with mean 19.100; alpha ranges 0–237 with mean 10.535 (all in 0–255 units). These averages are diagnostic channel statistics, not a prediction of perceived brow thickness.
 
-`authoring/src/scene.ts` assigns this texture to `MeshStandardMaterial.alphaMap`, with no diffuse map, `alphaTest=0.01`, transparent blending and `NoColorSpace`. The installed Three.js 0.186.0 `alphamap_fragment.glsl.js` explicitly multiplies opacity by the sampled green channel. This explains why the filename `brows-alpha` is misleading: it is the exported diffuse image being repurposed as a coverage mask, not a separately verified engine coverage texture. Secondary and normal inputs are entirely absent from that material.
+`authoring/src/scene.ts` (since split into `src/platform/scene/`) assigns this texture to `MeshStandardMaterial.alphaMap`, with no diffuse map, `alphaTest=0.01`, transparent blending and `NoColorSpace`. The installed Three.js 0.186.0 `alphamap_fragment.glsl.js` explicitly multiplies opacity by the sampled green channel. This explains why the filename `brows-alpha` is misleading: it is the exported diffuse image being repurposed as a coverage mask, not a separately verified engine coverage texture. Secondary and normal inputs are entirely absent from that material. <!-- historical-paths --><!-- /historical-paths -->
 
 ## Installed providers, variants and limits
 

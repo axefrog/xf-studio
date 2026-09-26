@@ -4,6 +4,7 @@ import { desktopPlateCache, desktopPlateRouteKey, runDesktopBuild, type WolvenKi
 import { cachedPlateReach } from "../src/eye-plate-service";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { DesktopWorkActivity } from "./work-activity";
+import { hostFailure } from "../src/diagnostics/host-log";
 
 const maxBytes = 16_000_000;
 let checking = false;
@@ -51,10 +52,14 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
       const result = await runDesktopBuild(input.collection, settings,
         buildHost.dataRoot, buildHost.toolsRoot, buildHost.deadlineMs, signal, buildHost.wolvenKitProbe, undefined, buildHost.log);
       if (result.kind === "success") return json(result.result);
+      if (result.code !== "package_build_cancelled") hostFailure("package", result.code, `Build: ${result.message}`, undefined, result.code === "invalid_collection" ? "warn" : "error");
       return json({ code: result.code, error: result.message }, result.code === "package_build_unavailable" ? 503 :
         result.code === "invalid_collection" ? 422 : result.code === "package_build_timeout" ? 504 :
         result.code === "package_build_cancelled" ? 499 : 422);
-    } catch { return json({ code: "package_build_failed", error: "Package Build could not start." }, 422); }
+    } catch (error) {
+      hostFailure("package", "package_build_failed", "Package Build could not start.", error);
+      return json({ code: "package_build_failed", error: "Package Build could not start." }, 422);
+    }
     finally { building = false; }
   }
   if (checking) return json({ code: "package_check_busy", error: "A package Check is already running. Wait for its result before starting another." }, 409);
@@ -71,6 +76,7 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
   finally { checking = false; }
   if (result.kind === "success") return json(result.result);
   if (result.kind === "invalid") return json({ error: result.message }, 400);
+  if (result.code !== "package_check_cancelled") hostFailure("package", result.code ?? "package_check_failed", `Check: ${result.message}`);
   const status = result.code === "package_check_timeout" ? 504 : result.code === "package_check_cancelled" ? 499 :
     result.code?.startsWith("package_check_worker") ? 503 : 422;
   return json({ error: result.message, ...(result.code ? { code: result.code } : {}) }, status);

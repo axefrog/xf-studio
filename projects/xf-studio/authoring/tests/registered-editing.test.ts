@@ -12,11 +12,12 @@ import { STUDIO_COMPOSITION, STUDIO_OWNERS, STUDIO_REGISTRY } from "../src/compo
 import { EYE_MAKEUP, assignEyeMakeupIds } from "../src/features/eye-makeup";
 import { undoPolicyOf, type ActionSpec, type FeatureActionSpec } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
-import { parseRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { EyeMakeupAction, EyeMakeupState } from "../src/eye-makeup-model";
 import { createTrustedAuthoringCore, type StudioComposition } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { glitterRecipe, opticsRecipe } from "./fixtures/workspace-v1-fixtures";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 type Spec = FeatureActionSpec<Recipe, EyeMakeupState["editor"], EyeMakeupAction>;
 const deepFreeze = <T>(value: T): T => { if (value && typeof value === "object") { Object.values(value).forEach(deepFreeze); Object.freeze(value); } return value; };
@@ -35,7 +36,7 @@ function counted(overrides: Record<string, Partial<ActionSpec>> = {}) {
     apply: (state: never, action: never) => { calls.apply++; return (spec as Spec).apply(state, action); } }]));
   const module = { ...EYE_MAKEUP, actions, gestures: { apply: (part: never, edit: never) => { calls.gestures++; return EYE_MAKEUP.gestures!.apply(part, edit); } } };
   const registry = new Registry(STUDIO_OWNERS.map(owner => owner.id === EYE_MAKEUP.id ? module : owner) as never);
-  const composition: StudioComposition = { registry, documents: STUDIO_COMPOSITION.documents };
+  const composition: StudioComposition = { registry, documents: STUDIO_COMPOSITION.documents, region: STUDIO_COMPOSITION.region };
   let ids = 0;
   const core = createTrustedAuthoringCore(freshWorkspace(mixedRecipe()), { resetStack: () => {}, selectedCollection: () => "draft",
     newId: () => `host-${++ids}` }, composition);

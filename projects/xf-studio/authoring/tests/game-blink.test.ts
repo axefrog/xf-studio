@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { activeEyeShape, GAME_BLINK_SCHEMA, GameBlink, parseGameBlink, type GameBlinkDescription } from "../src/game-blink";
 import { MotionActions, type MotionPort } from "../src/motion-actions";
-import { freshWorkspace } from "../src/workspace-state";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 /**
  * A miniature facial rig shaped like the game's: the upper lid row hangs under a lid root at the eye centre and the lash

@@ -11,7 +11,9 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, HEAD_TEXTURE_SIZE, ROUTE_CHANNELS, WINDOW_TEXTURE, type ExportRoute, type TextureChannel } from "./engines/layered-makeup/finish-export";
+import { ROUTE_CHANNELS, type ExportRoute, type TextureChannel } from "./engines/layered-makeup/finish-export";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
+import { readRecipe } from "./recipe-schema";
 import { compileGlitterPreset } from "./glitter-route";
 import type { UvWindow } from "./engines/layered-makeup/plate-uv-window";
 import { compilePreset, presetCoverage, type TextureSpace } from "./engines/layered-makeup/preset-compiler";
@@ -42,7 +44,8 @@ export interface BakedRecord {
   metadata: unknown; recipeSha256: string;
 }
 /** Side of head-UV maps (the Fresnel route, head-UV diagnostics and the oracle layout). */
-export const PACKAGE_MAP_SIZE = HEAD_TEXTURE_SIZE;
+/** The head-UV map side of presets a build keeps on head UV (the region's `textures.head`; eye makeup's is 1024). */
+export const packageMapSize = (region: Pick<LayeredMakeupRegion, "textures">) => region.textures.head;
 /**
  * Head-atlas grid of the coverage reference written beside each window preset: 4096, so its texels
  * (about 0.14 × 0.10 mm on the lids) are at least as fine as the window's and sharp edges compare fairly.
@@ -58,6 +61,8 @@ export function referenceCrop(window: UvWindow, grid = REFERENCE_GRID) {
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 
 export interface BakeOptions {
+  /** Eye makeup's layered-makeup region: the models the recipes are read with, its mirror and its texture grids. */
+  readonly region: LayeredMakeupRegion;
   /** The packaged plate's UV window; absent keeps every preset on head UV (the oracle's historical layout). */
   readonly window?: UvWindow;
 }
@@ -67,28 +72,29 @@ export interface BakeOptions {
  * chain when it has one, and the head-UV coverage reference of its pigment layers for the verifier's mapping gate (and of
  * the accent's layer alone, for its placement at the plate's UVs).
  */
-function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, window: UvWindow): BakedRecord {
+function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, window: UvWindow, region: LayeredMakeupRegion): BakedRecord {
   const knob = preset.diagnostics?.glitter;
   if (!knob) throw Error(`Glitter preset ${preset.id} has no glitter knob.`);
-  const chains = compileGlitterPreset(preset.recipe, knob, window), maps: BakedMap[] = [];
+  const recipe = readRecipe(preset.recipe, region.models), glitterWindow = region.textures.glitterWindow, accentSize = region.textures.accent;
+  const chains = compileGlitterPreset(recipe, knob, window, region), maps: BakedMap[] = [];
   const channels: TextureChannel[] = [...ROUTE_CHANNELS.glitter, ...(chains.accent ? ["accent" as const] : [])];
   for (const channel of channels) {
     const levels = channel === "accent" ? chains.accent! : chains[channel as "diffuse" | "roughness" | "metalness" | "normal" | "flakes"];
     const data = Buffer.concat(levels), file = `${preset.appearance}_${channel}.raw`;
-    const size = channel === "accent" ? { width: ACCENT_TEXTURE_SIZE, height: ACCENT_TEXTURE_SIZE, side: ACCENT_TEXTURE_SIZE } : { ...GLITTER_WINDOW_TEXTURE };
+    const size = channel === "accent" ? { width: accentSize, height: accentSize, side: accentSize } : { width: glitterWindow.width, height: glitterWindow.height };
     writeFileSync(resolve(out, file), data);
     maps.push({ channel, file, bytes: data.byteLength, sha256: sha256(data), ...size, levels: levels.length });
   }
-  const crop = referenceCrop(window), reference = presetCoverage(preset.recipe, crop), referenceFile = `${preset.appearance}_reference.raw`;
+  const crop = referenceCrop(window), reference = presetCoverage(recipe, region, crop), referenceFile = `${preset.appearance}_reference.raw`;
   writeFileSync(resolve(out, referenceFile), reference);
   let accentReference: BakedReference | undefined;
   if (knob.accent) {
-    const layers = preset.recipe.layers.filter(layer => layer.id === knob.accent!.layer);
-    const data = presetCoverage({ ...preset.recipe, layers }, crop), file = `${preset.appearance}_accent_reference.raw`;
+    const layers = recipe.layers.filter(layer => layer.id === knob.accent!.layer);
+    const data = presetCoverage({ ...recipe, layers }, region, crop), file = `${preset.appearance}_accent_reference.raw`;
     writeFileSync(resolve(out, file), data);
     accentReference = { file, bytes: data.byteLength, sha256: sha256(data), ...crop };
   }
-  return { id: preset.id, revision: preset.revision, route: "glitter", uvSpace: "plate-window", ...GLITTER_WINDOW_TEXTURE, window, maps,
+  return { id: preset.id, revision: preset.revision, route: "glitter", uvSpace: "plate-window", width: glitterWindow.width, height: glitterWindow.height, window, maps,
     reference: { file: referenceFile, bytes: reference.byteLength, sha256: sha256(reference), ...crop }, ...(accentReference ? { accentReference } : {}),
     metadata: { adapter: "mesh-decal-glitter-diagnostic-v1", diagnostic: true, levels: chains.stats, ...(chains.accentStats ? { accent: chains.accentStats } : {}),
       limitations: ["Diagnostic only: flakes come from the preset's glitter knob; the Glitter finish itself has no export route.",
@@ -100,8 +106,9 @@ function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, win
  * Write `<appearance>_<channel>.raw` (and `<appearance>_reference.raw` for window presets), `plan.json`
  * and `compiled.json` into `outDir`. `beforePreset` runs before each compile so a caller can yield or stop.
  */
-export async function bakeCollection(value: unknown, outDir: string,
-  beforePreset: (index: number) => void | Promise<void> = () => {}, options: BakeOptions = {}): Promise<{ plan: CollectionPlan; records: BakedRecord[] }> {
+export async function bakeCollection(value: unknown, outDir: string, options: BakeOptions,
+  beforePreset: (index: number) => void | Promise<void> = () => {}): Promise<{ plan: CollectionPlan; records: BakedRecord[] }> {
+  const region = options.region;
   const planned = planCollection(value), out = resolve(outDir);
   // The oracle layout: every map on head UV, so the plan may not claim the plate window for any preset.
   const plan: CollectionPlan = options.window ? planned
@@ -113,11 +120,13 @@ export async function bakeCollection(value: unknown, outDir: string,
     const windowed = !!options.window && preset.uvSpace === "plate-window";
     if (preset.route === "glitter") {
       if (!windowed) throw Error(`Diagnostic glitter preset ${preset.id} needs the plate's UV window.`);
-      records.push(bakeGlitter(preset, out, options.window!));
+      records.push(bakeGlitter(preset, out, options.window!, region));
       continue;
     }
-    const space: TextureSpace = windowed ? { kind: "window", ...WINDOW_TEXTURE, window: options.window! } : { kind: "head", size: PACKAGE_MAP_SIZE };
-    const compiled = compilePreset(preset.recipe, space);
+    const space: TextureSpace = windowed ? { kind: "window", width: region.textures.window.width, height: region.textures.window.height,
+      window: options.window! } : { kind: "head", size: packageMapSize(region) };
+    const recipe = readRecipe(preset.recipe, region.models);
+    const compiled = compilePreset(recipe, region, space);
     if (compiled.route !== preset.route) throw Error(`Preset ${preset.id} compiled as ${compiled.route}, planned as ${preset.route}`);
     const maps: BakedMap[] = [];
     for (const channel of ROUTE_CHANNELS[compiled.route]) {
@@ -128,7 +137,7 @@ export async function bakeCollection(value: unknown, outDir: string,
     }
     let reference: BakedReference | undefined;
     if (windowed) {
-      const crop = referenceCrop(options.window!), data = presetCoverage(preset.recipe, crop), file = `${preset.appearance}_reference.raw`;
+      const crop = referenceCrop(options.window!), data = presetCoverage(recipe, region, crop), file = `${preset.appearance}_reference.raw`;
       writeFileSync(resolve(out, file), data);
       reference = { file, bytes: data.byteLength, sha256: sha256(data), ...crop };
     }

@@ -76,7 +76,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
     else rt.dispatch({ kind: "motion.setPaused", paused: !motion.idlePaused });
   });
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
-  const hints = new ViewportInputHints(rt, "head", slot, element);
+  const hints = new ViewportInputHints(port.viewport, "head", slot, element);
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair and piercings: progress while they prepare, one plain line
   // when something can't be shown. Absolutely placed, so it never moves the viewport's other overlays.
   const detailStatus = h("p", { class: "viewport-detail-status", role: "status", hidden: true });

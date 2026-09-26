@@ -7,7 +7,7 @@ import { MotionActions, type MotionPort } from "../src/motion-actions";
 import { composePreviewMotion } from "../src/preview-motion";
 import { createRenderScheduler } from "../src/render-scheduler";
 import { blinkNoteLine } from "../src/studio-ui/panels/preview";
-import { freshWorkspace } from "../src/workspace-state";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 /**
  * The idle and the blink composed as the scene composes them (preview-motion.ts), on a miniature rig shaped like the

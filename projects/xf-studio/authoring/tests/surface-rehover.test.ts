@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 const HOVER = new THREE.Color(0xffffb5);
 
@@ -37,7 +37,7 @@ test("releasing a drag asks for a frame that shows the hover resolved under the 
     const viewer = { renderer: { domElement: canvas }, scene, camera, plate, head, eyes, controls: { enabled: true },
       onFrame: (fn: () => void) => { frame = fn; return () => {}; }, requestRender: () => { renders++; frame(); } };
     let selected = 0;
-    createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+    createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
       layer: () => layer, selected: () => selected, select: i => { selected = i; }, selectedField: () => undefined, selectField: () => {},
       begin: () => {}, apply: action => applyAdapterProposal(layer, action), cancel: () => {}, message: () => {},
     });

@@ -4,6 +4,7 @@ import { PREVIEW_CORE_FILES } from "./preview-core-recipe";
 import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "./preview-core-service";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
+import { hostFailure } from "./diagnostics/host-log";
 
 /**
  * Host application service that owns one derivation of the 3D preview at a time: it reads
@@ -108,6 +109,7 @@ export class PreviewCoreHost {
         const message = code === "preview_cancelled" ? MESSAGES.cancelled : (error as Error).message;
         this.lastFailure = { code, message, gameRoot: settings.gameRoot };
         this.options.log?.(`3D preview preparation stopped: ${code}. ${(error as PreviewCoreError).detail ?? ""}`.trim());
+        if (code !== "preview_cancelled") hostFailure("preview", code, message, error);
       })
       .finally(() => { this.running = null; this.progress = null; this.forget(); });
     this.running = { controller, promise };

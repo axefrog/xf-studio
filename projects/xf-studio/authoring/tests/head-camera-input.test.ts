@@ -8,11 +8,12 @@ import { attachHeadCameraInput, CAMERA_EFFECTS, headCameraEffect, orbitMouseActi
 import { ADAPTER_INPUTS, ALL_TARGETS, MAKEUP_TARGETS, MODIFIER_KEYS, POINTER_BINDINGS, PRESS_INPUTS, pointerBinding,
   pointerBindingById, pointerInputOf, targetTip, viewportHints, type HeldModifiers, type ModifierKey, type PointerInput,
   type PointerTarget, type ViewportScope } from "../src/input-bindings";
-import { initialRecipe, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { createUVEditor } from "../src/uv-editor";
 import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
 import { applyAdapterProposal } from "./gesture-test-adapter";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /**
  * The binding catalogue is authoritative for every head camera input: whatever modifiers are held,
@@ -128,7 +129,7 @@ function headFixture() {
   const reports: { target?: PointerTarget; gesture?: string }[] = [];
   const viewer = { renderer: { domElement: canvas }, scene, camera, plate, head, eyes, controls, cameraInput,
     onFrame: (fn: () => void) => { frame = fn; } };
-  const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+  const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
     layer: () => layer, selected: () => 0, select: () => {}, selectedField: () => undefined, selectField: () => {},
     begin: () => {}, apply: action => applyAdapterProposal(layer, action), cancel: () => {}, message: () => {},
     input: state => reports.push(state),
@@ -380,7 +381,7 @@ test("UV: every press, modifier set and target pans the view exactly when the ta
       handles: { in: { u: 0, v: 0 }, out: { u: 0, v: 0 }, mode: "corner" as const } }));
     recipe.layers[0].fields = []; recipe.layers[0].symmetry = false;
     const original = structuredClone(recipe.layers[0]);
-    const editor = createUVEditor(canvas, undefined, {
+    const editor = createUVEditor(canvas, undefined, { region: EYE_REGION,
       recipe: () => recipe, layer: () => recipe.layers[0], selected: () => 0, canvases: () => [], albedo: () => undefined,
       select() {}, selectedField: () => undefined, selectField() {}, begin: () => {},
       apply: action => applyAdapterProposal(recipe.layers[0], action), cancel() {}, persist() {}, message() {},

@@ -4,7 +4,7 @@ import { createFeatureRenderers, type FeatureRendererContext } from "../src/plat
 import { featureId } from "../src/platform/api";
 import type { FeatureRenderer, FeatureRendererFactory, SceneHostPort, SurfaceUnderlay } from "../src/platform/api/scene";
 import { EYE_MAKEUP_RENDERER, EYE_PLATE_SURFACE, eyeMakeupRenderer } from "../src/features/eye-makeup/render";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe } from "./fixtures/eye-region";
 
 // Feature-module platform step 7: the scene host's feature renderers, through their scene ports only. Eye makeup's renderer is
 // driven here exactly as the host drives it (frames, skin changes, context restores, display toggles), and a synthetic second

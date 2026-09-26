@@ -30,7 +30,7 @@ Define a typed local action `setPreviewTextureSize(size)` and a state snapshot i
 
 ## Exact source integration points
 
-Paths below are relative to `projects/xf-studio/authoring/`, inspected before implementation:
+Paths below are relative to `projects/xf-studio/authoring/`, inspected before implementation. The table records that code: the legacy `src/main.ts` shell has since been retired, and the recipe, raster, finish and makeup-stack modules now live under `src/engines/layered-makeup/`. <!-- historical-paths -->
 
 | File | Current assumption | Required behaviour |
 |---|---|---|
@@ -48,6 +48,8 @@ Paths below are relative to `projects/xf-studio/authoring/`, inspected before im
 | `src/main.ts` Export mask handler | Dedicated worker, explicitly 2048². | Leave export at its existing documented 2K setting for this feature. Preview selection must not silently alter exported PNG dimensions. A later independent export setting can change that contract. |
 
 `tools/bake_finish_study.ts` and historical experiments also contain deliberate fixed sizes. Leave those fixtures/reproduction inputs intact; add new size cases without rewriting historical evidence. `preset-compiler.ts` currently validates 32..2048 power-of-two output separately. Do not broaden game export merely because the local preview gains 4K.
+
+<!-- /historical-paths -->
 
 ## Size-switch transaction
 

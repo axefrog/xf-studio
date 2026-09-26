@@ -1,7 +1,8 @@
 import {normalProbes} from "./normal-probes";
 import {widthField, prepareCoverage, subdivide, strip, fixtures, type WidthMode, type SoftPoint} from "./fields";
-import {coverage, curve, initialRecipe} from "../../src/engines/layered-makeup/recipe";
+import { coverage, curve } from "../../src/engines/layered-makeup/recipe";
 import {preparePigmentStrength} from "../../src/engines/layered-makeup/pigment-strength";
+import { EYE_MAKEUP_REGION, initialRecipe } from "../../src/features/eye-makeup/region";
 
 const blendValues = [.0000078125,.000015625,.00003125,.0000625,.000125,.00025,.0005,.001];
 const modes: WidthMode[] = ["linear","log"];
@@ -35,7 +36,7 @@ for(const gap of[.001,.004,.04])for(const mode of modes)for(const blend of [.000
 }
 // Direct parity with current coverage() for uniform widths and uniform pigment,
 // using identical polygon/nearest-strength arithmetic as the current fast path.
-for(const width of[.0005,.001,.012,.06])for(const mode of modes){const l=initialRecipe().layers[0];l.symmetry=false;l.fields=[];l.feather=width;const p=curve(l.points).map(p=>({...p,width}));const f=widthField(p,.000125,mode),a=prepareCoverage(p,f,l.opacity);let max=0,bytes=0;for(let y=180;y<290;y++)for(let x=280;x<460;x++){const u=(x+.5)/1024,v=(y+.5)/1024,r=coverage(u,v,l,p),s=a(u,v);max=Math.max(max,Math.abs(r-s));if(Math.round(r*255)!==Math.round(s*255))bytes++;}results.uniform.push({width,mode,max,byteDifferences:bytes});}
+for(const width of[.0005,.001,.012,.06])for(const mode of modes){const l=initialRecipe().layers[0];l.symmetry=false;l.fields=[];l.feather=width;const p=curve(l.points).map(p=>({...p,width}));const f=widthField(p,.000125,mode),a=prepareCoverage(p,f,l.opacity);let max=0,bytes=0;for(let y=180;y<290;y++)for(let x=280;x<460;x++){const u=(x+.5)/1024,v=(y+.5)/1024,r=coverage(u, v, l, EYE_MAKEUP_REGION.mirror, p),s=a(u,v);max=Math.max(max,Math.abs(r-s));if(Math.round(r*255)!==Math.round(s*255))bytes++;}results.uniform.push({width,mode,max,byteDifferences:bytes});}
 // Petal & 24-knot ellipse: smooth pigment plus width need two boundary integrals.
 for(const count of[6,24])for(const mode of modes){let l=initialRecipe().layers[0];if(count===24){l.pathMode="catmull-rom";l.points=Array.from({length:24},(_,i)=>({u:.37+.068*Math.cos(i*Math.PI/12),v:.235+.025*Math.sin(i*Math.PI/12),weight:i/23}));}else l.points.forEach((p,i)=>p.weight=i/5);const p=curve(l.points).map(p=>({...p,width:.001+(.04-.001)*p.weight}));const alpha=prepareCoverage(p,widthField(p,.000125,mode));for(const size of[1024,2048]){let checksum=0;const run=()=>{for(let y=Math.floor(.16*size);y<Math.ceil(.31*size);y++)for(let x=Math.floor(.25*size);x<Math.ceil(.5*size);x++)checksum+=alpha((x+.5)/size,(y+.5)/size);};run();const times=[];for(let n=0;n<3;n++){const start=performance.now();run();times.push(performance.now()-start);}results.timings.push({count,mode,size,polygonPoints:p.length,medianMs:times.sort((a,b)=>a-b)[1],checksum});}}
 results.edgeNormals=normalProbes();

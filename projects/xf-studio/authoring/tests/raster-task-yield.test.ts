@@ -1,7 +1,7 @@
 import {expect,test} from "bun:test";
 import {createRasterTaskYield} from "../src/raster-task-yield";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
+import { initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
 
 test("raster MessageChannel pause crosses a task boundary and preserves FIFO pulses",async()=>{
   const channel=new MessageChannel(),pause=createRasterTaskYield(channel),events:number[]=[];
@@ -25,12 +25,12 @@ test("raster task pauses admit incoming cancellation and a complete replacement"
   const processor=createRasterProcessor(value=>responses.push(value),createRasterTaskYield(channel),()=>++clock*10);
   incoming.port1.onmessage=event=>processor.cancel(event.data);
   try{
-    const layer=initialRecipe().layers[0]!,pending=processor.start({i:0,version:1,layer,size:512});
+    const layer=initialRecipe().layers[0]!,pending=processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:512});
     expect(responses).toEqual([]);
     incoming.port2.postMessage(1);
     await pending;
     expect(responses.map(r=>({i:r.i,version:r.version,cancelled:r.cancelled}))).toEqual([{i:0,version:1,cancelled:true}]);
-    await processor.start({i:0,version:2,layer,size:32});
+    await processor.start({ region: EYE_RASTER_REGION,i:0,version:2,layer,size:32});
     const replacement=responses[1]!;expect(replacement.cancelled).not.toBe(true);
     if(!replacement.cancelled)expect(replacement.data).toEqual(raster(layer,32));
   }finally{channel.port1.close();channel.port2.close();incoming.port1.close();incoming.port2.close();}

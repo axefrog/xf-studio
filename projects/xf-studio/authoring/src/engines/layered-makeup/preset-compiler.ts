@@ -9,6 +9,10 @@ import {
 } from "./finish-export";
 import { HEAD_UV_WINDOW, type UvWindow } from "./plate-uv-window";
 import { parseRecipe, raster, rasterWindow, type Layer, type Recipe } from "./recipe";
+import type { LayeredMakeupRegion, Mirror } from "./region";
+
+/** What the compiler needs of a feature's region: the layer models it validates with and its mirror. */
+export type CompileRegion = Pick<LayeredMakeupRegion, "models" | "mirror">;
 
 export const DECAL_ADAPTER = ROUTE_ADAPTER.flat;
 export const srgbToLinear = (v: number) =>
@@ -62,18 +66,18 @@ function checkSize(size: number) {
 export type TextureSpace =
   | { readonly kind: "head"; readonly size: number }
   | { readonly kind: "window"; readonly width: number; readonly height: number; readonly window: UvWindow };
-type Target = { width: number; height: number; window: UvWindow; head: boolean };
-function target(space: number | TextureSpace): Target {
-  const value: TextureSpace = typeof space === "number" ? { kind: "head", size: space } : space;
-  if (value.kind === "head") { checkSize(value.size); return { width: value.size, height: value.size, window: HEAD_UV_WINDOW, head: true }; }
+type Target = { width: number; height: number; window: UvWindow; head: boolean; mirror: Mirror };
+function target(space: number | TextureSpace, region: CompileRegion): Target {
+  const value: TextureSpace = typeof space === "number" ? { kind: "head", size: space } : space, mirror = region.mirror;
+  if (value.kind === "head") { checkSize(value.size); return { width: value.size, height: value.size, window: HEAD_UV_WINDOW, head: true, mirror }; }
   const pow2 = (n: number) => Number.isInteger(n) && n >= 32 && n <= 4096 && !(n & (n - 1));
   const w = value.window;
   if (!pow2(value.width) || !pow2(value.height)) throw Error("Window texture sides must be powers of two from 32 to 4096.");
   if (!(w.u0 >= 0 && w.u1 <= 1 && w.v0 >= 0 && w.v1 <= 1 && w.u1 > w.u0 && w.v1 > w.v0)) throw Error("Invalid texture window.");
-  return { width: value.width, height: value.height, window: w, head: false };
+  return { width: value.width, height: value.height, window: w, head: false, mirror };
 }
 /** Coverage mask of one layer in the target's texel grid (alpha of white RGBA). */
-const layerMask = (layer: Layer, t: Target) => t.head ? raster(layer, t.width) : rasterWindow(layer, t.width, t.height, t.window);
+const layerMask = (layer: Layer, t: Target) => t.head ? raster(layer, t.width, t.mirror) : rasterWindow(layer, t.width, t.height, t.window, t.mirror);
 const hexBytes = (color: string) => [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
 const sqrtLinear = (color: string) => hexBytes(color).map(b => Math.sqrt(srgbToLinear(b / 255)));
 
@@ -155,9 +159,9 @@ const grid = (t: Target) => ({ width: t.width, height: t.height, ...(t.head ? { 
 const spaceNote = (t: Target) => t.head ? [] : [
   "Plate-local UV window: the texture covers only the plate's UV rectangle; the material's UVScale/UVOffset map the plate's stored UVs onto it."];
 
-export function compileFlatPreset(value: unknown, space: number | TextureSpace = 1024) {
-  const recipe: Recipe = parseRecipe(value);
-  const t = target(space);
+export function compileFlatPreset(value: unknown, region: CompileRegion, space: number | TextureSpace = 1024) {
+  const recipe: Recipe = parseRecipe(value, region.models);
+  const t = target(space, region);
   const plan = strictPlan(recipe);
   if (plan.route !== "flat") throw new UnsupportedMaterialError(plan.included.filter(l => canonicalFinish(l.finish) === "shimmer" || canonicalFinish(l.finish) === "iridescent")
     .map(l => ({ id: l.id, finish: canonicalFinish(l.finish), reason: "Needs the faceted or Fresnel adapter." })));
@@ -183,9 +187,9 @@ export function compileFlatPreset(value: unknown, space: number | TextureSpace =
 }
 
 /** Flat channels plus a two-channel tangent normal (X, Y as UNORM bytes) for NormalsBlendingMode 1. */
-export function compileFacetedPreset(value: unknown, space: number | TextureSpace = 1024) {
-  const recipe: Recipe = parseRecipe(value);
-  const t = target(space);
+export function compileFacetedPreset(value: unknown, region: CompileRegion, space: number | TextureSpace = 1024) {
+  const recipe: Recipe = parseRecipe(value, region.models);
+  const t = target(space, region);
   const plan = strictPlan(recipe);
   if (plan.route !== "faceted") throw Error("This preset has no Shimmer layer; use the flat adapter.");
   const { diffuse, roughness, metalness, normal, coveredTexels } = encodeSurface(accumulate(plan.included, t), t.width * t.height, true);
@@ -209,14 +213,14 @@ export function compileFacetedPreset(value: unknown, space: number | TextureSpac
 
 /** Linear coverage mask plus a uniform base-colour texture; the shift is per-preset constants. Head UV only:
  * the gradient-recolour template has no UV transform (finish-export.ts ROUTE_TEXTURE_SPACE). */
-export function compileFresnelPreset(value: unknown, size = 1024) {
-  const recipe: Recipe = parseRecipe(value);
+export function compileFresnelPreset(value: unknown, region: CompileRegion, size = 1024) {
+  const recipe: Recipe = parseRecipe(value, region.models);
   checkSize(size);
   const plan = strictPlan(recipe);
   if (plan.route !== "fresnel") throw Error("This preset is not a single colour-shift pigment.");
   const count = size * size, coverage = new Float64Array(count);
   for (const layer of plan.included) {
-    const mask = raster(layer, size);
+    const mask = raster(layer, size, region.mirror);
     for (let p = 0; p < count; p++) { const a = mask[p * 4 + 3] / 255; if (a) coverage[p] = a + coverage[p] * (1 - a); }
   }
   const mask = new Uint8Array(count);
@@ -260,22 +264,22 @@ export type CompiledPreset = {
  * Compile one filtered preset through the route its layers require, in `space` (a head-UV size or a UV
  * window). A Fresnel preset cannot use a window, so with one it compiles in head UV at `headSize`.
  */
-export function compilePreset(value: unknown, space: number | TextureSpace = 1024, headSize = 1024): CompiledPreset {
-  const recipe = parseRecipe(value), route = strictPlan(recipe).route;
+export function compilePreset(value: unknown, region: CompileRegion, space: number | TextureSpace = 1024, headSize = 1024): CompiledPreset {
+  const recipe = parseRecipe(value, region.models), route = strictPlan(recipe).route;
   if (route === "fresnel") {
     const size = typeof space === "number" ? space : space.kind === "head" ? space.size : headSize;
-    const c = compileFresnelPreset(recipe, size);
+    const c = compileFresnelPreset(recipe, region, size);
     return { route, space: { kind: "head", size }, maps: { mask: c.mask, gradient: c.gradient },
       dims: { mask: { width: size, height: size }, gradient: { width: GRADIENT_SIZE, height: GRADIENT_SIZE } }, metadata: c.metadata };
   }
-  const t = target(space), dims = { width: t.width, height: t.height };
+  const t = target(space, region), dims = { width: t.width, height: t.height };
   const resolved: TextureSpace = t.head ? { kind: "head", size: t.width } : { kind: "window", width: t.width, height: t.height, window: t.window };
   if (route === "faceted") {
-    const c = compileFacetedPreset(recipe, resolved);
+    const c = compileFacetedPreset(recipe, region, resolved);
     return { route, space: resolved, maps: { diffuse: c.diffuse, roughness: c.roughness, metalness: c.metalness, normal: c.normal },
       dims: { diffuse: dims, roughness: dims, metalness: dims, normal: dims }, metadata: c.metadata };
   }
-  const c = compileFlatPreset(recipe, resolved);
+  const c = compileFlatPreset(recipe, region, resolved);
   return { route, space: resolved, maps: { diffuse: c.diffuse, roughness: c.roughness, metalness: c.metalness },
     dims: { diffuse: dims, roughness: dims, metalness: dims }, metadata: c.metadata };
 }
@@ -290,13 +294,14 @@ export function compilePreset(value: unknown, space: number | TextureSpace = 102
  * the window maps come from: a fault in the window code (a mirror, offset or scale) then moves the maps but not
  * their reference, and the verifier's mapping gate fails (PIPE-32).
  */
-export function presetCoverage(value: unknown, crop: { grid: number; x0: number; y0: number; width: number; height: number }): Uint8Array {
-  const recipe = parseRecipe(value), plan = strictPlan(recipe), { grid, x0, y0, width, height } = crop;
+export function presetCoverage(value: unknown, region: CompileRegion,
+  crop: { grid: number; x0: number; y0: number; width: number; height: number }): Uint8Array {
+  const recipe = parseRecipe(value, region.models), plan = strictPlan(recipe), { grid, x0, y0, width, height } = crop;
   if (![grid, x0, y0, width, height].every(Number.isInteger) || x0 < 0 || y0 < 0 || width < 1 || height < 1 || x0 + width > grid || y0 + height > grid)
     throw Error("Invalid coverage crop.");
   const coverage = new Float64Array(width * height);
   for (const layer of plan.included) {
-    const mask = raster(layer, grid);
+    const mask = raster(layer, grid, region.mirror);
     for (let y = 0; y < height; y++) for (let x = 0, row = ((y0 + y) * grid + x0) * 4 + 3, p = y * width; x < width; x++, p++) {
       const a = mask[row + x * 4] / 255;
       if (a) coverage[p] = a + coverage[p] * (1 - a);

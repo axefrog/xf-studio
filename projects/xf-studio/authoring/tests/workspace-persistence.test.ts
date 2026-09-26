@@ -3,15 +3,15 @@ import { createBrowserWorkspaceSession } from "../src/browser-workspace-device";
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, REMOVED_PRESET_LIMIT, withLiveMemory, type CollectionDraft,
   type CollectionWorkspace } from "../src/collection-workspace";
 import { RECIPE_HISTORY_LIMIT } from "../src/editor-actions";
-import { editLayers } from "../src/engines/layered-makeup/layer-stack";
 import { PresentationStatusSource, emptyPresentationStatus } from "../src/presentation-status";
-import { initialRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceForStorage, fitWorkspace, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/workspace-persistence";
-import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
 import { historyRecipes, looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { editLayers, initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
 afterEach(() => { jest.useRealTimers(); });
 

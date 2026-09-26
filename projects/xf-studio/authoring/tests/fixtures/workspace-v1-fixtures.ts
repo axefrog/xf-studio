@@ -7,7 +7,9 @@
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../../src/engines/layered-makeup/direct-glint-settings";
 import { defaultFlakes } from "../../src/engines/layered-makeup/finish";
 import { defaultStudioIrregularFlakes } from "../../src/engines/layered-makeup/flake-field";
-import { initialRecipe, newLayerTemplate, type Layer, type RecipeFile } from "../../src/engines/layered-makeup/recipe";
+import { type Layer } from "../../src/engines/layered-makeup/recipe";
+import { initialRecipe, newLayerTemplate } from "./eye-region";
+import { type RecipeFile } from "../../src/recipe-schema";
 
 /** The startup recipe as earlier builds stored it (recipe-7, schema first). */
 export const storedInitialRecipe = (): RecipeFile => ({ schema: "xfs/recipe-7", ...initialRecipe() });

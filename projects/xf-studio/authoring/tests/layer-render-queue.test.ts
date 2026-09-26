@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { layerRenderQueue } from "../src/layer-render-queue";
+import { initialRecipe } from "./fixtures/eye-region";
 
 test("deferred masks follow edited layers through selection/reordering and discard replaced objects", () => {
   let layers = initialRecipe().layers;

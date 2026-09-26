@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { SurfaceMap } from "../src/surface-map";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /** Real geometry/ray tests: the eye blocks painted-surface gestures, not an
  * existing anchored control. Head occlusion and plate/UV guards still apply. */
@@ -48,7 +48,7 @@ test("projected tangents cross eye holes while actual surface controls keep head
     const messages: string[] = [];
     const viewer = { renderer:{domElement:canvas}, scene,camera,plate,head,eyes,controls,
       onFrame:(fn:()=>void)=>{frame=fn;} };
-    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
       layer:()=>layer,selected:()=>0,select:()=>{},selectedField:()=>undefined,selectField:()=>{},
       begin:()=>{checkpoints++;snapshot=structuredClone(layer);},
       apply:action=>{const changed=applyAdapterProposal(layer,action);if(changed)changes++;return changed;},

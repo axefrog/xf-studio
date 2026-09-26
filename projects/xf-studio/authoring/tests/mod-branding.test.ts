@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "../src/mod-branding";
 import { planCollection } from "../src/preset-collection";
-import { preflightPackageCollection } from "../src/package-preflight";
 import { createModInstallTransport } from "../src/mod-install-transport";
 import { defaultLocalSettings } from "../src/local-settings";
+import { preflightPackageCollection } from "./fixtures/eye-exporter";
 
 const authoring = resolve(import.meta.dir, "..");
 const hq = resolve(authoring, "../../..");

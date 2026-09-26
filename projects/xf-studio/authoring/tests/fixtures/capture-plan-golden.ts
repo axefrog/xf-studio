@@ -5,9 +5,9 @@
  *   bun tests/fixtures/capture-plan-golden.ts
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { preparePackageCollection } from "../../src/package-filter";
 import { parseCollection, planCollection } from "../../src/preset-collection";
 import { digest } from "./workspace-observable";
+import { preparePackageCollection } from "./eye-exporter";
 
 export const COLLECTION_FIXTURES = ["005-preset-collection/collection.json", "005-preset-collection/editor-collection.json",
   "016-finish-board/finish-board.collection.json", "017-plate-depth/depth-candidate.collection.json",

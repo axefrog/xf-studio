@@ -1,5 +1,7 @@
 # XF Studio UI/UX overhaul — delivery record, 24 September 2026
 
+<!-- historical-paths -->
+
 **Status (25 September 2026): merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). Core defects B-1..B-3 were fixed on 25 September (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`). The new UI is the production entry; `legacy.html` remains until the new interface is accepted after in-depth review (so far reviewed only cursorily). The audit's API gaps and adapter notes were largely closed on 25 September; see the [boundary assessment](ui-architecture-boundary.md#application-api-additions-25-september). Open follow-ups are tracked in [the backlog](../backlog/claude-ui-overhaul.md#open) and [Remaining work](#remaining-work) below; the current boundary state is in [the boundary assessment](ui-architecture-boundary.md).
 
 Built on branch `codex/opus-ui-overhaul` in `D:/Dev/worktrees/opus-ui-overhaul` (both removed on 25 September after integration was verified). This record was written for the primary agent's review against the [handoff brief](../backlog/claude-ui-overhaul.md) and the [architecture contract](architecture-contract.md).

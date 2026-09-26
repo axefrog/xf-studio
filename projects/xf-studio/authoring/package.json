@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun server.ts",
     "test": "bun test",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc -p tools && tsc -p tsconfig.experiments.json",
     "build": "bun browser-build.ts"
   },
   "dependencies": {

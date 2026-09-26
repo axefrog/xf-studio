@@ -1,4 +1,4 @@
-import type { LayerAction } from "./editor-actions";
+import type { LayerAction } from "./engines/layered-makeup/layer-stack";
 import type { GestureEdit, RecipeAction } from "./engines/layered-makeup/recipe-actions";
 
 import type { HistoryLabel } from "./platform/api";
