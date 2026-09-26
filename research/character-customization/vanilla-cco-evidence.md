@@ -47,9 +47,9 @@ Clone commit `be2f44ee`; paths relative to the clone. All images are editor or g
 
 | Page (author as evidenced) | Images inspected | Used for |
 |---|---|---|
-| `for-mod-creators-theory/files-and-what-they-do/file-formats/character-creator/.inkcharactercustomization-cc-options.md` (manavortex, IslandDancer, Jan 2025) | `.gitbook/assets/inkcc_gameuiAppearanceInfo.png` (hair option fields, `link "hairstyle color"`, icons) | Link semantics, field meanings |
+| `for-mod-creators-theory/files-and-what-they-do/file-formats/character-creator/.inkcharactercustomization-cc-options.md` (manavortex, redacted-c01, Jan 2025) | `.gitbook/assets/inkcc_gameuiAppearanceInfo.png` (hair option fields, `link "hairstyle color"`, icons) | Link semantics, field meanings |
 | `…/archivexl-character-creator-additions/ccxl-theory-switchers.md` (icxrus, Sep 2025) | `switcherInfo options.png`, `chest size switcher.png`, `morph names for switcher.png`, `eye color switcher.png`, `Hairstyle switcher with hair color appInfos.png`, `hairstyle uiSlot(s).png`, `hair color ui slot.png` | Switcher/slot structure, breast morph, eye-colour list |
-| `…/archivexl-character-creator-additions/README.md` (manavortex, island_dancer; edited icxrus) | – | Vanilla `uiSlot` table; community tattoo switcher indices 3300–3309 |
+| `…/archivexl-character-creator-additions/README.md` (manavortex, redacted-c01; edited icxrus) | – | Vanilla `uiSlot` table; community tattoo switcher indices 3300–3309 |
 | `…/ccxl-theory-scopes-and-extensions.md` (manavortex) | `ccxl_material_colour_extensions.png`, `ccxl_makeup_mesh_example.png` | `@context`/`@makeup`/`{material}` makeup pattern |
 | `…/ccxl-body-tattoos.md` (no author metadata) | `image (261).png`, `ccxl_tattoo_mesh_file.png` | Nameless switcher overlay by `link body_tattoo` |
 | `for-mod-creators-theory/references-lists-and-overviews/cheat-sheet-character-creator.md` (manavortex; updated by nutboy, Jan 2025) | `done.png`, `character_creator_eye_makeup.png`, `character_creator_lip_makeup_color.png`, `character_creator_cheek_makeup_options.png`, `cyberware.png` | Choice counts shown in the UI at that date; skin-tone order |

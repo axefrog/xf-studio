@@ -6,7 +6,7 @@ Grades as in the [knowledge rules](../../knowledge/README.md): [source] compiled
 
 ## Result in brief
 
-- **No data or interpretation bug in the colour chain.** The save selects `38_ash_brown`, which resolves to island_dancer's `ash_brown.hp`; the game logged that expansion for both saved hair meshes. Its stops are light-to-mid warm browns with a near-black root band, not dark or cool. The root-to-tip direction, the ID channel, the texture colour spaces and the shader arithmetic all check out.
+- **No data or interpretation bug in the colour chain.** The save selects `38_ash_brown`, which resolves to redacted-c01's `ash_brown.hp`; the game logged that expansion for both saved hair meshes. Its stops are light-to-mid warm browns with a near-black root band, not dark or cool. The root-to-tip direction, the ID channel, the texture colour spaces and the shader arithmetic all check out.
 - **The lighting constants were the main error.** The preview used Karis's published defaults for the hair light. The game's own option values, listed for game 2.31 by a CET tool, differ a lot: multiple-scatter (diffuse) intensity 0.47 instead of 1, R 0.3 instead of 1, and a much tighter diffuse wrap. The preview also left out two gate terms that are in the compiled program. With both fixed, the preview hair's brightness relative to skin falls from 0.20 to 0.093. The portrait gives 0.060, under uncontrolled lighting.
 - **The bake colour space stays sRGB-decoded.** Two designer colour sets agree with it on hue and show a roughly uniform brightness factor, not a steeper curve.
 - **What remains is a calibration question.** The portrait's cool hue and its extra darkness need a controlled capture. The capture request is [below](#refined-capture-request).
@@ -26,9 +26,9 @@ Grades as in the [knowledge rules](../../knowledge/README.md): [source] compiled
 | Step | Evidence | Grade |
 |---|---|---|
 | Saved choice | `lm097_hair` = `38_ash_brown`, tag `ash_brown`, in all twelve saves | [resource] |
-| Definition provider | island_dancer's `id_pwa__hair_profiles_ccxl.inkcharcustomization` (the only provider of that definition); option from MELUMINARY's `lm097_hair.inkcharcustomization` | [resource] via resolver |
-| Expansion | Resolver: `38_ash_brown` → mesh appearance `ash_brown`, expanded from the MEL `black_carbon` chunks; `ash_brown@long` instantiates `template__long.mi` → `HairProfile = island_dancer\id_hair_profiles_ccxl\hair_profiles\ash_brown.hp` | [source] ArchiveXL rules |
-| Runtime | 13 September session log: *Appearance "ash_brown" from island_dancer patch.mesh added to* `lm127_hair_pt1.mesh` and `lm097_hair_pt2.mesh`, then *has been expanded using "black_carbon"* for both. No errors mention these meshes, the templates or the profile. | [runtime-log] |
+| Definition provider | redacted-c01's `id_pwa__hair_profiles_ccxl.inkcharcustomization` (the only provider of that definition); option from MELUMINARY's `lm097_hair.inkcharcustomization` | [resource] via resolver |
+| Expansion | Resolver: `38_ash_brown` → mesh appearance `ash_brown`, expanded from the MEL `black_carbon` chunks; `ash_brown@long` instantiates `template__long.mi` → `HairProfile = redacted-c01\id_hair_profiles_ccxl\hair_profiles\ash_brown.hp` | [source] ArchiveXL rules |
+| Runtime | 13 September session log: *Appearance "ash_brown" from redacted-c01 patch.mesh added to* `lm127_hair_pt1.mesh` and `lm097_hair_pt2.mesh`, then *has been expanded using "black_carbon"* for both. No errors mention these meshes, the templates or the profile. | [runtime-log] |
 | Provider of `ash_brown.hp` | Single provider (`id_hair_profiles_ccxl.archive`), so no mod-over-base or mod-versus-mod rule is involved | [resource] |
 
 Stops of `ash_brown.hp` (sampleCount 127), as stored:
@@ -56,7 +56,7 @@ These are warm light-to-mid browns with a black root band. Under any monotone co
 
 Designer-reference fits (uniform ID × gradient grid; exposure is reference luminance / model luminance):
 
-| Hypothesis | Vanilla creator swatches (24): median angle, median exposure, log-exposure spread | island_dancer selector icons (45) |
+| Hypothesis | Vanilla creator swatches (24): median angle, median exposure, log-exposure spread | redacted-c01 selector icons (45) |
 |---|---|---|
 | Overlay, stops sRGB-decoded (preview) | 5.2°, 0.93, 0.64 | 7.5°, 0.61, **0.32** |
 | Overlay, stops raw | 19.1°, 0.40, 0.92 | 16.3°, 0.30, 0.41 |
@@ -152,7 +152,7 @@ One session, current stable ArchiveXL/TweakXL/CET, the usual MO2 profile. Steps 
 
    Run it twice. The first run uses the Character Rendering Editor's active preset, as normally played. For the second, select its "Vanilla" preset (or disable the mod and restart). This records the values in play and checks the mod's vanilla list.
 2. **Photo mode under a known neutral light.** V's apartment or another interior with no sky in view. Clear weather: no rain or wet hair, since wetness darkens hair up to 4×. Fixed time of day. Use one CharLi or photo-mode light in plain white. Turn off depth of field, vignette, grain and camera effects; HDR off. Save PNGs straight from the game with no editing. Take three frames without moving the camera between them: face front (about 30° vertical FOV), left-eye close-up, and hair three-quarter.
-3. **Character-editor colour ladder (removes lighting).** Keep the `lm097_hair` style and the same framing, and take one frame for each of these island_dancer colours, all single-provider: `38_ash_brown`, `39_ash_grey`, `74_steel_smoke` and `66_platinum_blonde`. Expected luminance ratio of the lengths to `ash_brown` (scene-linear; the game's tone curve compresses displayed ratios):
+3. **Character-editor colour ladder (removes lighting).** Keep the `lm097_hair` style and the same framing, and take one frame for each of these redacted-c01 colours, all single-provider: `38_ash_brown`, `39_ash_grey`, `74_steel_smoke` and `66_platinum_blonde`. Expected luminance ratio of the lengths to `ash_brown` (scene-linear; the game's tone curve compresses displayed ratios):
 
    | Bake | ash_grey | steel_smoke | platinum_blonde |
    |---|---:|---:|---:|
@@ -178,4 +178,6 @@ python tools/hair-colour-stats.py evidence/screenshots/hair-calibration/before e
 
 The portrait crops, card-direction test and white-balance arithmetic were run as one-off scripts on private inputs. The measured numbers above are what they produced.
 
-`bun test`, `bun run check` and `bun run build` passed on this checkpoint. Community sources used: island_dancer's Hair Profiles CCXL (profiles and selector icons), Arkhe's Character Rendering Editor (option list and vanilla values), MELUMINARY's hair, the Cyberpunk Blender add-on (comparison formula) and WolvenKit; see the [community credits](../../docs/community-credits.md).
+`bun test`, `bun run check` and `bun run build` passed on this checkpoint. Community sources used: redacted-c01's Hair Profiles CCXL (profiles and selector icons), Arkhe's Character Rendering Editor (option list and vanilla values), MELUMINARY's hair, the Cyberpunk Blender add-on (comparison formula) and WolvenKit; see the [community credits](../../docs/community-credits.md).
+
+*Redaction: `redacted-c01` stands for a creator who asked not to be named. Resource paths written `redacted-c01\...` are that mod's real folder with its name redacted, so they won't match the files as written.*

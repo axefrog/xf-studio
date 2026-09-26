@@ -149,4 +149,4 @@ No game, mod or extracted bytes are tracked here; only the generator, this page 
 - **Game resources.** CD PROJEKT RED's installed game resources and caches, read-only.
 - **Tools.** WolvenKit CLI 9.0.1, used for unbundling, serialization and export; dxil-spirv and SPIRV-Cross, used as decompilers.
 - **Community mod.** *Winterkissed* by Limerence with AllieKat, studied from the local MO2 installation. None of its files, maps or values are reused; it informed the comparison and is credited in the [community credits](../../docs/community-credits.md).
-- **Flake model.** Independently written. island_dancer's lesson that facets need visibly varied tilts (already credited) shaped the tilt distribution.
+- **Flake model.** Independently written. redacted-c01's lesson that facets need visibly varied tilts (already credited) shaped the tilt distribution.

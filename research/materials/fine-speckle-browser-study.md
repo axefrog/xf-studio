@@ -1,6 +1,6 @@
 # Denser fine-speckle browser Glitter candidate
 
-24 September 2026, isolated `codex/glitter-fine-scale` worktree. This is an explicitly selected **browser preview**, not a verified cosmetic material or REDengine export. The shape, colour and light in the check differ from the supplied [reference photographs](../backlog/glitter-visual-references.json), whose original photographers/makeup artists are not established. The photographs remain outside Git. The relayed explanation from island_dancer of `glitter_flakes_5.sbs`—triangle/square primitives with individually rotated axial gradients, seeded tiling, height-to-normal conversion and histogram-mapped light/dark colours—continues to inform the facet normal; no Substance graph or asset is copied.
+24 September 2026, isolated `codex/glitter-fine-scale` worktree. This is an explicitly selected **browser preview**, not a verified cosmetic material or REDengine export. The shape, colour and light in the check differ from the supplied [reference photographs](../backlog/glitter-visual-references.json), whose original photographers/makeup artists are not established. The photographs remain outside Git. The relayed explanation from redacted-c01 of `glitter_flakes_5.sbs`—triangle/square primitives with individually rotated axial gradients, seeded tiling, height-to-normal conversion and histogram-mapped light/dark colours—continues to inform the facet normal; no Substance graph or asset is copied.
 
 ## Version and method
 
