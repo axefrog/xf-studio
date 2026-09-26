@@ -68,16 +68,18 @@ const toExportError = (error: unknown) => {
 
 /**
  * The repair route for a mesh WolvenKit read but could not write as a GLB (game-asset-export.ts `GeometryRepair`): serialize the raw
- * mesh, apply the known repair (mesh-export-repair.ts), turn it back into a resource, pack it alone into a private archive at its own
- * depot path and uncook it from there exactly as before. Four launches, only for a mesh that failed; the result is cached like any
- * complete export. Nothing outside the session's work folder is written.
+ * mesh, apply the known repairs (mesh-export-repair.ts), turn it back into a resource, pack it alone into a private archive at its own
+ * depot path and uncook it from there: with the game folder only when materials are asked for, since with it WolvenKit may export the
+ * base game's copy of the path instead (PIPE-106); a copy that writes no GLB without it is tried once with it, and any uncooked raw that
+ * isn't the packed copy fails. Four or five launches, only for a mesh that failed; the result is cached like any complete export.
+ * Nothing outside the session's work folder is written.
  *
  * Each outcome is typed (PIPE-86): a step WolvenKit fails at or writes nothing for is `failed` with that step; a mesh the repair doesn't
  * fit is `not-applicable`. Cancellation, a missing tool, and anything that isn't WolvenKit's failure (the disk, a bug) are thrown.
  * `run` is the process runner (tests pass a fake).
  */
 export function createWolvenKitMeshRepair(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS, run: typeof runWolvenKit = runWolvenKit): GeometryRepair {
-  return async ({ source, depotPath, raw, workDir, signal, lowPriority }): Promise<GeometryRepairOutcome> => {
+  return async ({ source, depotPath, raw, workDir, signal, lowPriority, withMaterials = true }): Promise<GeometryRepairOutcome> => {
     const failed = (step: GeometryRepairStep, detail: string): GeometryRepairOutcome => ({ outcome: "failed", step, detail });
     /** One launch: null when it ran, a `failed` outcome when WolvenKit failed at it; cancellation and a missing tool are thrown. */
     const launch = async (step: GeometryRepairStep, args: string[]): Promise<GeometryRepairOutcome | null> => {
@@ -117,11 +119,24 @@ export function createWolvenKitMeshRepair(cli: string | null, timeoutMs = DEFAUL
     if (packing) return packing;
     const archive = join(dirs.archive, "pack.archive");
     if (!existsSync(archive)) return failed("pack", "WolvenKit wrote no archive");
-    const uncooking = await launch("uncook", uncookArguments(archive, [depotPath], dirs.out, source.gameRoot));
-    if (uncooking) return uncooking;
-    const stem = join(dirs.out, ...depotPath.replace(/\.mesh$/i, "").split("\\"));
-    if (!existsSync(`${stem}.glb`)) return failed("uncook", "WolvenKit wrote no GLB for the repaired copy");
-    return { outcome: "repaired", glb: `${stem}.glb`, materials: existsSync(`${stem}.Material.json`) ? `${stem}.Material.json` : null, detail: repair.detail };
+    // The copy is exported with the game folder only when materials are asked for: with it, WolvenKit may export the base game's copy
+    // of a path the game has too instead of the packed one (PIPE-106). Without materials, the game folder is a second try only, for a
+    // copy that needs it, and its raw must be the packed copy's.
+    const attempt = async (gameRoot: string | null, out: string): Promise<GeometryRepairOutcome | { glb: string; materials: string | null }> => {
+      mkdirSync(out, { recursive: true });
+      const uncooking = await launch("uncook", uncookArguments(archive, [depotPath], out, gameRoot));
+      if (uncooking) return uncooking;
+      const stem = join(out, ...depotPath.replace(/\.mesh$/i, "").split("\\"));
+      if (!existsSync(`${stem}.glb`)) return failed("uncook", "WolvenKit wrote no GLB for the repaired copy");
+      if (existsSync(`${stem}.mesh`) && !readFileSync(`${stem}.mesh`).equals(readFileSync(packed)))
+        return failed("uncook", "WolvenKit exported another copy of this resource (the base game's) instead of the repaired one");
+      return { glb: `${stem}.glb`, materials: existsSync(`${stem}.Material.json`) ? `${stem}.Material.json` : null };
+    };
+    let exported = await attempt(withMaterials ? source.gameRoot : null, dirs.out);
+    if (!withMaterials && "outcome" in exported && exported.outcome === "failed" && exported.detail.startsWith("WolvenKit wrote no GLB"))
+      exported = await attempt(source.gameRoot, join(workDir, "out-game"));
+    if ("outcome" in exported) return exported;
+    return { outcome: "repaired", glb: exported.glb, materials: exported.materials, detail: repair.detail };
   };
 }
 

@@ -138,7 +138,12 @@ export type GeometryRepairOutcome =
  * disk, a bug) are thrown, never reported as the tool's (PIPE-86).
  */
 export type GeometryRepair = (input: { source: ExportSource; depotPath: string; raw: string; workDir: string; signal?: AbortSignal;
-  /** Background work (a prefetch): the tool runs at a lower process priority. */ lowPriority?: LowPriority }) =>
+  /** Background work (a prefetch): the tool runs at a lower process priority. */ lowPriority?: LowPriority;
+  /**
+   * The request needs the tool's materials file, so the repaired copy is exported with the game folder. Without it (the character
+   * details) the copy is exported without the game folder first, where the tool can't read another copy of the resource (PIPE-106).
+   */
+  withMaterials?: boolean }) =>
   Promise<GeometryRepairOutcome>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
@@ -215,7 +220,13 @@ type EntryMeta = { schema: "xfs/game-asset-export-1"; version: number; depotPath
   /** The exporter identity (tool and repair route) that counted `partialRuns`; another identity's count is void (`lastingIdentity`). */
   partialIdentity?: string;
   /** A repaired export (its files include `repair.txt`): the identity that made it. Another identity's repair is exported again (PIPE-85). */
-  repairIdentity?: string };
+  repairIdentity?: string;
+  /**
+   * A geometry entry whose raw is known to be the source's own copy (exported without the game folder, or checked against such an
+   * export; PIPE-106). An entry without it that holds a materials file came from a launch with the game folder, where WolvenKit may have
+   * exported the base game's copy of an overridden resource: it answers only a request for materials (the core preview's own content).
+   */
+  rawChecked?: boolean };
 /** Clean runs that exported a mesh without its materials file before the partial export is served from the cache. */
 export const PARTIAL_RUNS = 2;
 /** Paths this process already marked as used (the disk budget evicts the least recently used by their modification time). */
@@ -280,6 +291,14 @@ export class GameAssetExportCache extends DerivedCache {
       return out;
     } catch { return null; }
   }
+  /** Whether a geometry entry's raw is known to be the source's own copy (`EntryMeta.rawChecked`). */
+  rawChecked(depotPath: string, source: ExportSource): boolean { return this.meta(depotPath, source)?.rawChecked === true; }
+  /** Whether an entry can answer a geometry request without materials: settled as none, exported without them, or its raw checked. */
+  answersWithoutMaterials(depotPath: string, source: ExportSource): boolean {
+    if (this.settledNone(depotPath, source)) return true;
+    const meta = this.meta(depotPath, source);
+    return !!meta && (!meta.files["materials.json"] || meta.rawChecked === true);
+  }
   /** Whether `read` would find the entry with `required` files (present at their recorded sizes, not re-hashed): a cheap readiness check. */
   present(depotPath: string, source: ExportSource, required: readonly string[] = []): boolean {
     if (this.settledNone(depotPath, source)) return true;
@@ -319,13 +338,13 @@ export class GameAssetExportCache extends DerivedCache {
     return meta?.partialRuns !== undefined ? this.runsOf(meta) : 0;
   }
   /** Copy `files` (name → source path) into a new entry, replacing any older one atomically. `partialRuns` marks a partial geometry export. */
-  write(depotPath: string, source: ExportSource, files: Record<string, string>, partialRuns?: number): Record<string, string> {
+  write(depotPath: string, source: ExportSource, files: Record<string, string>, partialRuns?: number, rawChecked = true): Record<string, string> {
     const directory = this.entryDirectory(depotPath, source);
     const staging = `${directory}.${process.pid}.${Date.now()}.tmp`;
     mkdirSync(staging, { recursive: true, mode: 0o700 });
     const meta: EntryMeta = { schema: "xfs/game-asset-export-1", version: GAME_ASSET_EXPORT_VERSION, depotPath, hash: depotHash(depotPath),
       source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns, partialIdentity: this.lastingIdentity } : {}),
-      ...(files[REPAIR_NOTE] ? { repairIdentity: this.lastingIdentity } : {}) };
+      ...(files[REPAIR_NOTE] ? { repairIdentity: this.lastingIdentity } : {}), ...(files.raw && rawChecked ? { rawChecked: true } : {}) };
     for (const [name, from] of Object.entries(files)) {
       copyFileSync(from, join(staging, name));
       meta.files[name] = { sha256: fileSha256(from), bytes: statSync(from).size };
@@ -373,12 +392,12 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
    * (`GameAssetExporterOptions.repairGeometry`) under `repairRoot`. Adds the GLB, the materials file when missing and the repair's note.
    */
   const repair = async (source: ExportSource, depotPath: string, files: Record<string, string>, repairRoot: string, signal?: AbortSignal,
-    lowPriority?: LowPriority) => {
+    lowPriority?: LowPriority, withMaterials = true) => {
     if (files["export.glb"] || !/\.mesh$/i.test(depotPath) || !options.repairGeometry) return;
     const repairDir = join(repairRoot, depotHash(depotPath));
     mkdirSync(repairDir, { recursive: true });
     let outcome: GeometryRepairOutcome;
-    try { outcome = await options.repairGeometry({ source, depotPath, raw: files.raw!, workDir: repairDir, signal, lowPriority }); }
+    try { outcome = await options.repairGeometry({ source, depotPath, raw: files.raw!, workDir: repairDir, signal, lowPriority, withMaterials }); }
     catch (error) {
       // Only the tool's own failure leaves the original outcome standing; anything else is not WolvenKit's fault and is thrown (PIPE-86).
       if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
@@ -426,7 +445,9 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
     for (const depotPath of new Set(request.geometry)) {
       checkDepotPath(depotPath);
       if (settled(depotPath)) continue;
-      const cached = cache.read(depotPath, request.source);
+      const found = cache.read(depotPath, request.source);
+      // An unchecked entry exported with the game folder may hold the base game's copy (PIPE-106): exported again unless materials were asked.
+      const cached = found && (materials || !found["materials.json"] || cache.rawChecked(depotPath, request.source)) ? found : null;
       // A lasting partial entry answers too (its GLB is served; `complete` says what is missing).
       const lasting = !!cached && cache.partialRuns(depotPath, request.source) >= PARTIAL_RUNS;
       if (cached && (required(depotPath, materials).every(name => cached[name]) || (lasting && cached.raw && cached["export.glb"])))
@@ -459,19 +480,33 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
    * Returns the textures and masks not found by name.
    */
   const collect = async (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer, needMaterials = true,
-    { repairing = true, signal, lowPriority }: { repairing?: boolean; signal?: AbortSignal; lowPriority?: LowPriority } = {}): Promise<{ textures: string[]; masks: string[] }> => {
+    { repairing = true, signal, lowPriority, expected, withGame = true }: { repairing?: boolean; signal?: AbortSignal; lowPriority?: LowPriority;
+      /** The source's own raw copy of each resource, read by a launch without the game folder (PIPE-106). */
+      expected?: ReadonlyMap<string, string>;
+      /** The launch read the game folder too. */
+      withGame?: boolean } = {}): Promise<{ textures: string[]; masks: string[] }> => {
     for (const depotPath of needed.geometry) {
       const raw = depotFile(outDir, depotPath);
       if (!existsSync(raw)) continue;
-      const files: Record<string, string> = { raw };
+      let files: Record<string, string> = { raw };
       const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
       if (existsSync(glb)) files["export.glb"] = glb;
       if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
-      if (repairing) await repair(source, depotPath, files, join(outDir, "repair"), signal, lowPriority);
+      // With the game folder, WolvenKit exports the base game's copy of a resource the source archive overrides when it can't export the
+      // source's own [observed: WolvenKit 9.0.1, the KS UV framework's left arm], and writes that copy's raw too. Such an export is
+      // discarded, and the source's own copy goes to the repair route (PIPE-106).
+      const own = expected?.get(depotPath);
+      if (own && existsSync(own) && fileSha256(own) !== fileSha256(raw)) {
+        hostTrace().event("wolvenkit", "substituted", { depotPath, detail: "exported with the game folder, WolvenKit read another copy of this resource" });
+        files = { raw: own };
+      }
+      if (repairing) await repair(source, depotPath, files, join(outDir, "repair"), signal, lowPriority, needMaterials);
       const complete = required(depotPath, needMaterials).every(name => files[name]);
+      // The raw is the source's own: exported without the game folder, checked against such an export, or repaired from that copy.
+      const checked = !withGame || !!own || !!files[REPAIR_NOTE];
       // Without a GLB there is nothing to serve; a GLB without the materials file it was asked for is kept as a partial entry.
-      const written = complete ? cache.write(depotPath, source, files)
-        : files["export.glb"] ? cache.write(depotPath, source, files, cache.partialRuns(depotPath, source) + 1) : files;
+      const written = complete ? cache.write(depotPath, source, files, undefined, checked)
+        : files["export.glb"] ? cache.write(depotPath, source, files, cache.partialRuns(depotPath, source) + 1, checked) : files;
       answer.geometry.set(depotPath, geometryFiles(depotPath, written, false, needMaterials));
     }
     const unnamed = { textures: [] as string[], masks: [] as string[] };
@@ -514,13 +549,14 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
   return {
     tool,
     has(kind, depotPath, source) {
-      if (kind === "geometry") return cache.present(depotPath, source, ["raw", "export.glb"]);
+      // The character details ask for geometry without materials: an unchecked entry is exported again (PIPE-106).
+      if (kind === "geometry") return cache.present(depotPath, source, ["raw", "export.glb"]) && cache.answersWithoutMaterials(depotPath, source);
       if (kind === "textures") return cache.present(depotPath, source, ["texture.png"]);
       return cache.present(depotPath, source, ["layer-0.png"]);
     },
     async exportAll(requests, signal, exportOptions = {}) {
       const answers = requests.map(emptyAnswer);
-      const pending: { index: number; request: ExportRequest; needed: Needed; hashes: string[] }[] = [];
+      const pending: { index: number; request: ExportRequest; needed: Needed; hashes: string[]; expected?: ReadonlyMap<string, string> }[] = [];
       requests.forEach((request, index) => {
         const needed = fromCache(request, answers[index]!);
         if (anyNeeded(needed)) pending.push({ index, request, needed, hashes: neededPaths(needed).map(depotHash) });
@@ -556,13 +592,16 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
           answers[group[0]!.index]!.failed = error;
           return;
         }
-        // Geometry exported without the game folder that came out without a GLB: once more with it.
+        // Geometry exported without the game folder that came out without a GLB: once more with it, checked against the raw copy this
+        // launch read from the source itself (PIPE-106).
         const again: typeof pending = [];
         for (const item of group) {
           const final = withGame || !!item.request.materials;
-          const unnamed = await collect(item.request.source, item.needed, outDir, answers[item.index]!, item.request.materials ?? false, { repairing: final, signal, lowPriority });
+          const unnamed = await collect(item.request.source, item.needed, outDir, answers[item.index]!, item.request.materials ?? false,
+            { repairing: final, signal, lowPriority, expected: item.expected, withGame: withGame || !!item.request.materials });
           const missing = final ? [] : item.needed.geometry.filter(path => !answers[item.index]!.geometry.get(path)?.glb);
-          if (missing.length) again.push({ ...item, needed: { geometry: missing, textures: [], masks: [] }, hashes: missing.map(depotHash) });
+          const expected = new Map(missing.flatMap(path => { const raw = answers[item.index]!.geometry.get(path)?.raw; return raw ? [[path, raw] as const] : []; }));
+          if (missing.length) again.push({ ...item, needed: { geometry: missing, textures: [], masks: [] }, hashes: missing.map(depotHash), expected });
           // Background by-hash exports run at the batch's priority too (PIPE-96).
           try { await byHash(item.request.source, unnamed, join(outDir, `source-${item.index}`), answers[item.index]!, signal, lowPriority); }
           catch (error) {
