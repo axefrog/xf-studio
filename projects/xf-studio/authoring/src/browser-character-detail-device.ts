@@ -23,6 +23,8 @@ type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<S
  * service through `onLimits` (PREV-74), worded like the ones `show` returns.
  */
 export const CHARACTER_ENDPOINT = "/api/preview-character";
+/** This page's name for the host (character-detail-server.ts `X-XFS-Page`): a page supersedes only its own earlier V (PIPE-103). */
+const pageName = () => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, "0")).join("");
 
 function hostState(value: unknown): HostCharacterState {
   const state = value as HostCharacterState & { recordSchema?: unknown };
@@ -37,6 +39,8 @@ function hostState(value: unknown): HostCharacterState {
 }
 
 export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init)): CharacterDetailPort {
+  /** This page's name, sent with each request. */
+  const page = pageName();
   /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
   let shown: LoadedCharacterDetails | null = null;
   /** The slots the last `show` answered with (their limits follow the scene's, plus the host's own codes, `hostLimits`). */
@@ -67,7 +71,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
   };
   return {
     request: async (request, signal) => answer(await fetcher(CHARACTER_ENDPOINT, { method: "POST", signal,
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) }), request),
+      headers: { "Content-Type": "application/json", "X-XFS-Page": page }, body: JSON.stringify(request) }), request),
     poll: async (key, signal) => answer(await fetcher(`${CHARACTER_ENDPOINT}?key=${encodeURIComponent(key)}`, { signal })),
     async show(file, signal) {
       let record;

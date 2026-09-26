@@ -555,7 +555,11 @@ type GatherContext = {
 };
 /** Where each fresh part's geometry, textures and masks come from, and the archives WolvenKit failed on. */
 type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<string, Located>; maskAt: Map<string, Located>;
-  toolFailures: Set<string>; toolLabel: string | undefined };
+  toolFailures: Set<string>; toolLabel: string | undefined;
+  /** Where the time went, for the preparation's log line (PIPE-103): the first exports, the reads beside them, the layer maps after. */
+  stages: string[] };
+/** Exports asked of the exporter, and how many of them its own disk cache answered (the rest ran WolvenKit). */
+type ExportTally = { asked: number; cached: number };
 
 const cancelledError = () => new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled.");
 
@@ -565,7 +569,7 @@ const cancelledError = () => new CharacterDetailError("character_cancelled", "Pr
  * per archive and kind for an exporter without it. What is kept never points into an exporter's work folder: a partial geometry export
  * the exporter did not cache is kept in the content-addressed store.
  */
-async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located }[], toolFailures: Set<string>): Promise<string | undefined> {
+async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
   const { cache, exporter, signal, log } = ctx;
   const into = (kind: ExportKind) => (kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks) as Map<string, unknown>;
   const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string> }>();
@@ -576,7 +580,9 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
     groups.set(at.archive.id, group);
   }
   if (!groups.size) return undefined;
+  if (tally) for (const group of groups.values()) tally.asked += group.geometry.size + group.textures.size + group.masks.size;
   const keep = (kind: ExportKind, archive: string, path: string, value: unknown) => {
+    if (tally && (value as { cached?: unknown }).cached === true) tally.cached++;
     let kept = value;
     const geometry = value as { glb: string | null; complete: boolean };
     // A partial export an exporter did not cache may live in its session's work folder, which is removed: keep the GLB in the
@@ -644,8 +650,11 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const firstTextures = new Set(textureAt.keys());
   // A failure is held until the reads it runs beside have settled, so nothing is left running unobserved.
   const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
+  const began = performance.now(), seconds = (from: number) => `${((performance.now() - from) / 1000).toFixed(2)} s`;
+  const tally: ExportTally = { asked: 0, cached: 0 }, stages: string[] = [];
   const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
-    ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures));
+    ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures, tally)
+    .finally(() => { stages.push(`exports ${seconds(began)}`); }));
 
   const readOnce = async <T>(into: Map<string, T | null>, provenance: Provenance, kind: string, read: (root: JsonObject, loaded: NonNullable<Awaited<ReturnType<ResourceGraph["load"]>>>) => T | null) => {
     const key = refLabel(provenance.ref).toLowerCase();
@@ -694,6 +703,7 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
     reads.push(readLayered(material));
   }
   const readsDone = await settle(Promise.all(reads));
+  stages.push(`reads ${seconds(began)}`);
   if (signal?.aborted) { await exportedFirst; throw cancelledError(); }
   // A layered chunk's maps and microblends, known once its setup and templates are read.
   const layered: Located[] = [];
@@ -713,12 +723,15 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
     }
   }
   const later = [...textureAt.keys()].filter(key => !firstTextures.has(key));
+  const laterBegan = performance.now();
   const [exportedLater, laterReads] = await Promise.all([
-    settle(exportLocated(ctx, layered.map(at => ({ kind: "textures" as const, at })), toolFailures)), settle(Promise.all(gamma(later)))]);
+    settle(exportLocated(ctx, layered.map(at => ({ kind: "textures" as const, at })), toolFailures, tally)), settle(Promise.all(gamma(later)))]);
+  if (layered.length || later.length) stages.push(`layer maps ${seconds(laterBegan)}`);
   const first = await exportedFirst;
+  stages.push(`${tally.asked} export(s), ${tally.cached} from the export cache`);
   for (const outcome of [first, exportedLater, readsDone, laterReads]) if ("error" in outcome) throw outcome.error;
   const toolLabel = ("value" in first ? first.value : undefined) ?? ("value" in exportedLater ? exportedLater.value : undefined);
-  return { geometryAt, textureAt, maskAt, toolFailures, toolLabel };
+  return { geometryAt, textureAt, maskAt, toolFailures, toolLabel, stages };
 }
 
 /** Every export a plan's parts are served from, as the preparation cache holds them now: [kind, depot path, archive]. */
@@ -755,6 +768,13 @@ const readersOf = (installation: Installation): PlanReaders =>
 /** WolvenKit's identity as the installation's fetcher caches by it (`WolvenKitFetcher.tool`). */
 const fetcherTool = (installation: Installation) => (installation.fetcher as { tool?: string } | undefined)?.tool ?? "unknown";
 
+/** The installation's reads so far: native answers, WolvenKit fallbacks and WolvenKit launches (where a preparation's time went). */
+const readerCounts = (installation: Installation) => {
+  const fetcher = installation.fetcher as { stats?: { cliCalls?: unknown }; nativeStats?: { native?: unknown; fallback?: unknown } | null } | undefined;
+  const count = (value: unknown) => typeof value === "number" ? value : 0;
+  return { native: count(fetcher?.nativeStats?.native), fallback: count(fetcher?.nativeStats?.fallback), launches: count(fetcher?.stats?.cliCalls) };
+};
+
 export async function prepareCharacterDetails(options: PrepareCharacterOptions): Promise<CharacterDetailResult> {
   // What the preparation reads is recorded until it ends, however it ends; the cache attributes what it adds and uses to this run.
   const recordings: { end(): void }[] = [];
@@ -767,8 +787,16 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const log = options.log ?? (() => {});
   const cache = options.cache ?? new CharacterPreparationCache();
   const started = performance.now(), timings: string[] = [];
-  let lap = started;
-  const time = (label: string) => { const now = performance.now(); timings.push(`${label} ${((now - lap) / 1000).toFixed(2)} s`); lap = now; };
+  let lap = started, readers: ReturnType<typeof readerCounts> | null = null;
+  // Each stage's time and the reads it made (native, through WolvenKit, WolvenKit launches), once the installation is open (PIPE-103).
+  const time = (label: string) => {
+    const now = performance.now(), counts = cache.installation ? readerCounts(cache.installation) : null;
+    const reads = counts && readers ? [counts.native - readers.native && `${counts.native - readers.native} native`,
+      counts.fallback - readers.fallback && `${counts.fallback - readers.fallback} WolvenKit`,
+      counts.launches - readers.launches && `${counts.launches - readers.launches} WolvenKit launch(es)`].filter(Boolean) : [];
+    timings.push(`${label} ${((now - lap) / 1000).toFixed(2)} s${reads.length ? ` (${reads.join(", ")})` : ""}`);
+    lap = now; readers = counts;
+  };
   const total = CHARACTER_DETAIL_STEPS.length;
   const progress = (step: CharacterDetailStep) => {
     const index = CHARACTER_DETAIL_STEPS.findIndex(item => item.step === step);
@@ -827,24 +855,27 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     if (request.choices?.length) log("Creator choices were sent without the creator catalogue; showing the V without them.");
     input = plainV();
   }
+  time("creator resource");
   cancelled();
   // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off (or a male one, which the
   // preview doesn't draw yet) is neither dressed nor resolved (PREV-108, PIPE-98).
   const scope = bodyScopeOf(request);
   const dressed = scope === "drawn" ? await dress(graph, request, options, log) : null;
   const clothing = dressed && !("failed" in dressed) ? dressed : null;
+  if (request.clothing && scope === "drawn") time("clothing");
   cancelled();
   const bodyState = { feet: clothing?.feet ?? "flat" } as const;
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
   input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
   trace.event("character", "resolved", resolutionTrace(resolved), RESOLUTION_TRACE_OPTIONS);
+  time("resolve");
   cancelled();
   const templates = [...resolved.appearances.flatMap(entry => entry.components), ...clothingComponents(clothing)].flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template));
   await loadTemplates(graph, templates, cache);
   const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope, readersOf(installation));
-  time("resolve and plan");
+  time("templates and plan");
   cancelled();
 
   progress("exporting");
@@ -867,10 +898,11 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const { geometryAt, textureAt, maskAt, toolFailures } = gathered;
   const toolLabel = cache.toolLabel ?? gathered.toolLabel;
   if (toolLabel) cache.toolLabel = toolLabel;
-  time(`read and export ${fresh.length} of ${plan.components.length} part(s)`);
+  time(`read and export ${fresh.length} of ${plan.components.length} part(s) [${gathered.stages.join("; ")}]`);
   cancelled();
   // Textures larger than the preview is served are scaled now, off the event loop (PREV-107), so writing the record only looks them up.
   const scaled = await scaleTextures(cache, options.storeRoot, [...textureAt.values()], cancelled);
+  if (scaled.size) time(`scale ${scaled.size} large texture(s)`);
 
   progress("writing");
   const notes: string[] = [];
