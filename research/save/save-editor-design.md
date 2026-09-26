@@ -269,16 +269,14 @@ Run by the maintainer on the XF test profile with a **throwaway manual save**; r
 
 Offline afterwards: in each game re-save, the edited objects must decode to what we wrote, and every node we didn't touch must equal the game's own re-save of the unedited throwaway (showing which nodes the game rewrites on every save anyway).
 
-## 12. Questions for the maintainer
+## 12. Decisions (27 September 2026)
 
-Each has a proposed default that the work follows until answered.
-
-1. **Scope and order.** *Default:* a read-only Save Explorer (phases 1–2) queued as R&D, after the current rendering tracks; writes only after session X2, starting with the creator node and scalar values.
-2. **Showing mod data.** The explorer decodes every mod's script data generically (EquipmentEx's outfits included) from the save's own type information, with no per-mod code. Is showing it acceptable, while domain views such as the clothing render still don't interpret one mod's data? *Default:* yes: the explorer shows it as the mod's own classes and fields; the clothing decision stays as it is.
-3. **Quest facts.** *Default:* read-only with names where known; writing facts only as a developer tool, never offered to users, with the CyberCAT warning in plain words.
-4. **Structural edits** (adding items, cyberware, vehicles). *Default:* through the bridge in a running game, not by rewriting the save; offline insertion only if a clear need appears.
-5. **Where it lives.** *Default:* inside XF Studio as a feature module with its own panel, since it shares the reader, the resolver (item and resource names), the character context and the bridge. It is not a separate app.
-6. **Using installed script definitions for names.** *Default:* yes, read-only from the user's own `final.redscripts` and game files, for labels only; nothing from them is stored or shipped.
+1. **Scope and order:** a read-only Save Explorer first (phases 1–2), after the current rendering tracks. Writing to a new or existing save is a later phase.
+2. **Mod data:** shown generically from the save's own type information (EquipmentEx outfits included). The clothing preview's decision not to interpret one mod's data stays.
+3. **Quest facts:** read-only for now. Players like to change their saves, so editing facts is a planned later capability, offered once its consequences are understood (with the CyberCAT warning in mind).
+4. **Structural edits** (adding or removing items, cyberware, vehicles): agreed default. Where the game is running, they go through the bridge, so the game makes the change and writes a consistent save itself; offline insertion into the file is later and only if proven safe.
+5. **Where it lives:** inside XF Studio as a feature module; the Studio is one unified experience.
+6. **Names from installed scripts:** agreed default. The Studio reads the user's own `final.redscripts` and game files, read-only, to turn hashed names into readable labels; nothing is written.
 
 ## Related
 
