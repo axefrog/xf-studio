@@ -205,5 +205,5 @@ test("PIPE-33: a plate without a recorded footprint is read from its mesh; a foo
   const damagedError = await runProductCommand(damaged.options).catch(e => e);
   expect(damagedError.code).toBe("package_plate_mismatch");
   expect(damagedError.message).toContain("recorded UV footprint is damaged");
-  expect(readdirSync(join(damaged.dir, "build"))).toEqual([]);
+  expect(existsSync(join(damaged.dir, "build"))).toBe(false); // nothing is written before the inputs are known good
 }, 60_000);
