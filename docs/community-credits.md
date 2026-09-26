@@ -154,6 +154,10 @@ These mods were studied from local installations. Where the private preview disp
 
 [Natural Hair Tones](https://www.nexusmods.com/cyberpunk2077/mods/15787) and [Eyeshadow Remix Pt. 1](https://www.nexusmods.com/cyberpunk2077/mods/15451). Natural Hair Tones supplies the saved character's brow colour gradient; comparing it with the base game's version taught us that an installed override need not change the visible colour. Its replacements of the shared hair colour profiles showed how one profile colours both V and every NPC wearing that colour, and how a replacement that keeps the base game's stop positions changes where the light and dark parts of a strand fall. Eyeshadow Remix is another in-place replacement of the base game's eye-makeup masks. Private local reference only.
 
+### anruimurasaki
+
+[High Ponytail Hair - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/25085). Its ponytail mesh showed that a working CCXL hairstyle can list fewer chunk materials than it has render chunks, keeping stub chunks for its lower levels of detail, and that a mesh whose render data lists fewer bone positions than it has bones can ship in a working mod although WolvenKit won't export it; the preview now exports such meshes from a repaired copy. Private local reference only.
+
 ### Appearance Menu Mod
 
 By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Its observer on the photo-mode setup is how we learned to catch the photo-mode puppet from Lua. Studied only.
