@@ -22,6 +22,30 @@ function fakeWindow(status: () => number) {
   return { win: win as unknown as Window & typeof globalThis, batches };
 }
 
+describe("the issue link (DIAG-19)", () => {
+  test("the page opens the link the host built and redacted, never one of its own", async () => {
+    const opened: string[] = [], sent: unknown[] = [];
+    let answer: () => Response = () => Response.json({ code: "open_in_page", url: "https://github.com/axefrog/xf-studio/issues/new?title=%3Cgame%3E" });
+    const win = { fetch: async (_url: string, init: { body: string }) => { sent.push(JSON.parse(init.body)); return answer(); },
+      navigator: { userAgent: "Chrome/140.0" }, addEventListener() {}, removeEventListener() {},
+      open: (url: string) => { opened.push(url); return {}; } } as unknown as Window & typeof globalThis;
+    const { device } = createBrowserDiagnostics({ window: win, download() {} });
+    await device.openIssue("Problem in D:\\Games\\secret", "Folder D:\\Games\\secret");
+    expect(sent).toEqual([{ title: "Problem in D:\\Games\\secret", body: "Folder D:\\Games\\secret" }]);
+    expect(opened).toEqual(["https://github.com/axefrog/xf-studio/issues/new?title=%3Cgame%3E"]);
+    // The desktop opened it in the person's browser itself.
+    answer = () => new Response(null, { status: 204 });
+    await device.openIssue("t", "b");
+    expect(opened).toHaveLength(1);
+    // A host that answers anything else (an old host's refusal, another site's link) opens nothing.
+    for (const response of [() => Response.json({ code: "open_in_page" }, { status: 501 }), () => Response.json({ url: "https://example.com/issues/new?x" })]) {
+      answer = response;
+      await expect(device.openIssue("t", "b")).rejects.toThrow("couldn't open the issue page");
+    }
+    expect(opened).toHaveLength(1);
+  });
+});
+
 describe("the browser device (DIAG-07)", () => {
   test("the waiting queue is bounded, and what it dropped is said first", async () => {
     const { win, batches } = fakeWindow(() => 204);

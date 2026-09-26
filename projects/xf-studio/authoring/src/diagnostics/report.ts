@@ -57,7 +57,8 @@ export const PREVIEW_CHARS = 4_000;
 export const DESCRIPTION_LIMIT = 4_000;
 /** A pre-filled issue link stays well inside what browsers and GitHub accept for one URL. */
 export const ISSUE_URL_LIMIT = 6_000;
-const ISSUE_BASE = `${PROJECT_LINKS["project-issues"]}/new`;
+/** The new-issue page every issue link starts with. */
+export const ISSUE_BASE = `${PROJECT_LINKS["project-issues"]}/new`;
 
 export const formatBytes = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 102.4) / 10} KB`
   : `${Math.round(bytes / (1024 * 102.4)) / 10} MB`;

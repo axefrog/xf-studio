@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -242,9 +242,14 @@ describe("mods involved, for reproduction without their files", () => {
   test("Vortex mods: Nexus IDs from Vortex's state, else the staging name's mod ID only when it follows Nexus's naming", async () => {
     const game = join(root, "vortex-game"), appData = join(root, "vortex-appdata"), mod = join(game, "archive", "pc", "mod");
     mkdirSync(mod, { recursive: true });
-    for (const name of ["hair.archive", "tweak.archive", "odd.archive", "hand.archive"]) writeFileSync(join(mod, name), name);
+    // Vortex's files carry the time the manifest records (VORTEX-03); the hand-placed one doesn't.
+    const deployedMs = 1727000000000;
+    for (const name of ["hair.archive", "tweak.archive", "odd.archive", "hand.archive"]) {
+      writeFileSync(join(mod, name), name);
+      if (name !== "hand.archive") utimesSync(join(mod, name), deployedMs / 1000, deployedMs / 1000);
+    }
     const files = [["hair.archive", "Hair Pack-12345-1-2-1727000000"], ["tweak.archive", "My Tweaks-54321-1-0-1727000001"], ["odd.archive", "Cool Hair-1-2-3"]]
-      .map(([file, source]) => ({ relPath: `archive\\pc\\mod\\${file}`, source, time: 1 }));
+      .map(([file, source]) => ({ relPath: `archive\\pc\\mod\\${file}`, source, time: deployedMs }));
     writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ version: 1, instance: "i1", gameId: "cyberpunk2077", files }));
     const state = { app: { instanceId: "i1" }, settings: { profiles: { activeProfileId: "p" } },
       persistent: { profiles: { p: { gameId: "cyberpunk2077", modState: { "Hair Pack-12345-1-2-1727000000": { enabled: true } } } },

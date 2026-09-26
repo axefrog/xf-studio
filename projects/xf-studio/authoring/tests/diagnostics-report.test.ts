@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { personalDataIn } from "../src/private-data";
-import { redactText, textRedactor } from "../src/diagnostics/redact";
+import { redactText, redactValue, textRedactor } from "../src/diagnostics/redact";
 import { personalRoots, RedactionRoots } from "../src/diagnostics/host-roots";
 import { DIAGNOSTIC_FORWARD_SCHEMA, type DiagnosticEntry } from "../src/diagnostics/model";
 import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host-log";
 import { TraceWindow } from "../src/diagnostics/trace-window";
-import { createDiagnosticsHandler, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
-import { resolutionResources } from "../src/diagnostics/host-report";
+import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
+import { hideProfileName, resolutionResources } from "../src/diagnostics/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
 import { hashingSettled, involvedMods } from "../src/diagnostics/mod-identity";
 import type { ReportManifest } from "../src/diagnostics/report";
@@ -137,6 +137,55 @@ function syntheticV(parts: number, materials: number, alternatives: number): Res
     morphs: [], ambiguities: [], gaps: [], rules: [] } as unknown as ResolvedCharacter;
 }
 
+describe("profile names of any shape, encoded folders and identifier keys (DIAG-20, DIAG-21)", () => {
+  const profile = (name: string) => `C:\\${"Users"}\\${name}`;
+  test("a profile folder's whole name goes, however many words, trailing, parenthesised or percent-encoded", () => {
+    const five = "Jane Quentin Public Doe Smith", odd = "Jane Doe (Work)";
+    for (const [text, expected] of [
+      [`${profile(five)}\\AppData\\x`, "C:\\Users\\<user>\\AppData\\x"],
+      [`opened ${profile(five)}`, "opened C:\\Users\\<user>"],
+      [`${profile(odd)}\\Documents`, "C:\\Users\\<user>\\Documents"],
+      [`"${profile("Jane Doe").replaceAll("\\", "\\\\")}"`, "\"C:\\\\Users\\\\<user>\""],
+      [encodeURIComponent(`${profile(five)}\\AppData`), "C%3A%5CUsers%5C<user>%5CAppData"],
+      [`file:///C:/${"Users"}/${five.replaceAll(" ", "%20")}/x`, "file:///C:/Users/<user>/x"],
+      [`/${"home"}/${five}/x`, "/home/<user>/x"],
+      [`/mnt/c/${"Users"}/${odd}/x`, "/mnt/c/Users/<user>/x"],
+    ] as const) {
+      const out = redactText(text);
+      expect(out, text).toBe(expected);
+      for (const word of ["Quentin", "Smith", "Work", "Jane"]) expect(out).not.toContain(word);
+      expect(redactText(out)).toBe(out);
+    }
+    // Shared profiles and placeholders are left as they are.
+    for (const text of [profile("Public") + "\\x", profile("All Users") + "\\x", profile("Default User") + "\\x", profile("<name>") + "\\x", profile("%USERNAME%") + "\\x"])
+      expect(redactText(text)).toBe(text);
+  });
+  test("a known folder is redacted in its percent-encoded and URL forms too", () => {
+    const folder = `D:\\Games\\${FULL}'s game`;
+    const roots = [{ label: "<game>", path: folder }];
+    for (const form of [encodeURIComponent(`${folder}\\archive`), encodeURIComponent(`${folder}\\archive`).toLowerCase(),
+      `D:/Games/${FULL.replace(" ", "+")}'s+game/archive`, `D:\\u005cGames\\u005c${FULL}'s game`])
+      expect(redactText(form, roots), form).not.toContain("Doe");
+  });
+  test("an account named like a common word leaves identifier keys alone, and keys that redact alike are both kept", () => {
+    const redact = textRedactor([{ label: "<user>", word: "game" }]);
+    expect(redactValue({ game: "the game folder", route: "game" }, redact)).toEqual({ game: "the <user> folder", route: "<user>" });
+    // Two paths that redact to the same text: both kept, the later numbered.
+    const both = redactValue({ [`${profile("Jane Doe")}\\a`]: 1, [`${profile("John Roe")}\\a`]: 2 }, redact);
+    expect(both).toEqual({ "C:\\Users\\<user>\\a": 1, "C:\\Users\\<user>\\a (2)": 2 });
+    // A key "__proto__" is data, not the output's prototype.
+    const hostile = redactValue(JSON.parse('{"__proto__": {"x": 1}}'), redact) as Record<string, unknown>;
+    expect(Object.getPrototypeOf(hostile)).toBe(Object.prototype);
+    expect(Object.keys(hostile)).toEqual(["__proto__"]);
+  });
+  test("the MO2 profile's name is hidden where the wording carries it, never inside other words", () => {
+    expect(hideProfileName(`Mod Organizer 2 profile "Default"`, "Default")).toBe(`Mod Organizer 2 profile "<profile>"`);
+    expect(hideProfileName(`MO2\\profiles\\Default\\modlist.txt`, "Default")).toBe(`MO2\\profiles\\<profile>\\modlist.txt`);
+    expect(hideProfileName("Defaults are loaded by default.", "Default")).toBe("Defaults are loaded by default.");
+    expect(hideProfileName("A modlist of mods", "mod")).toBe("A modlist of mods");
+  });
+});
+
 describe("a V's resolution survives its size (DIAG-04)", () => {
   test("a realistically sized resolution is kept, one table of resources, and the report's resource parts fill in", async () => {
     const resolved = syntheticV(6, 10, 6);
@@ -250,6 +299,30 @@ describe("a saved report holds only what was ticked (DIAG-01, DIAG-06, DIAG-08, 
     expect(disk).not.toContain(`game-${WHO}`);
   });
 
+  test("without a desktop to open it, the host answers the issue link redacted with the configured folders (DIAG-19)", async () => {
+    const page = endpoint("ticks-page", settings);
+    const response = await page.post("open-issue", { title: `Problem in ${game}`, body: `Folder ${game}\\archive` });
+    const answer = await response.json() as { code: string; url: string };
+    expect([response.status, answer.code]).toEqual([200, "open_in_page"]);
+    expect(answer.url).toStartWith("https://github.com/axefrog/xf-studio/issues/new?");
+    expect(decodeURIComponent(answer.url)).not.toContain(`game-${WHO}`);
+    expect(decodeURIComponent(answer.url.replace(/\+/g, " "))).toContain("Problem in <game>");
+  });
+
+  test("mod-file entry names in the ZIP are redacted like the rest (DIAG-23)", async () => {
+    // The names come from the rolling window, redacted with the folders known when it was written; the ZIP redacts them again
+    // with the report's, like every other part.
+    const mail = ["jane.doe", "gmail.com"].join("@");
+    const redact = textRedactor([{ label: "<game>", path: game }, { label: "<user>", word: WHO }]);
+    expect(modFileEntryName(`Mod from ${mail}`, `${WHO}-hair.archive`, redact)).toBe("optional/mod-files/Mod from _email_/_user_-hair.archive");
+    expect(modFileEntryName(`Mod in ${game}`, "a.archive", redact)).toBe("optional/mod-files/Mod in _game_/a.archive");
+    // The existing flow still names an ordinary mod's files as they are.
+    const { manifest } = await prepare();
+    const offer = manifest.items.find(item => item.modFiles)!;
+    const names = [...unzip(new Uint8Array(await (await post("bundle", { id: manifest.id, include: [offer.id], sharingConfirmed: true })).arrayBuffer())).keys()];
+    expect(names).toContain("optional/mod-files/Private Mod Name/private.archive");
+  });
+
   test("files of a game-folder mod are never offered (DIAG-09)", async () => {
     const plain: LocalSettings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" };
     mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });
@@ -274,6 +347,16 @@ describe("the page's forwards (DIAG-07, DIAG-12)", () => {
     for (let i = 0; i < 300; i++) diagnostics.log.info("test", "event", `later ${i}`);
     const manifest = await (await post("report", { ref })).json() as ReportManifest;
     expect(manifest.problem.map(entry => entry.ref)).toContain(ref);
+  });
+  test("the same failure under another reference is kept: the page showed that reference to someone (DIAG-22)", async () => {
+    const { diagnostics, post } = endpoint("repeat-refs", defaultLocalSettings());
+    const failure = { level: "error", area: "page", code: "loop", message: "the same thing, recorded again later" };
+    await post("entries", { schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: [{ ...failure, ref: "XF-AAAAAA" }, { ...failure, ref: "XF-AAAAAA" }] });
+    await post("entries", { schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: [{ ...failure, ref: "XF-BBBBBB" }] });
+    const kept = diagnostics.log.tail().filter(entry => entry.message === failure.message);
+    expect(kept.map(entry => entry.ref)).toEqual(["XF-AAAAAA", "XF-BBBBBB"]);
+    const manifest = await (await post("report", { ref: "XF-BBBBBB" })).json() as ReportManifest;
+    expect(manifest.problem.map(entry => entry.ref)).toContain("XF-BBBBBB");
   });
   test("a page failure links to at most three host failures of the last seconds, and none when it carries a host reference", async () => {
     const { diagnostics, post } = endpoint("links", defaultLocalSettings());

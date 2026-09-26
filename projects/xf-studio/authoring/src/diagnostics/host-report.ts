@@ -250,10 +250,20 @@ function fullResources(resources: Record<string, unknown>[] | null, cacheDir: st
 
 const jsonText = (value: unknown) => JSON.stringify(value, null, 1);
 
+/**
+ * The MO2 profile's name where the framework check's wording carries it: quoted (`profile "Default"`) or as a folder in a path
+ * (`profiles\Default\modlist.txt`). Never a plain substring replace, which would rewrite every word containing it (DIAG-21).
+ */
+export function hideProfileName(text: string, profile: string | null | undefined): string {
+  if (!profile) return text;
+  const name = profile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(String.raw`(?<=["“'‘])${name}(?=["”'’])|(?<=[\\/])${name}(?=[\\/]|$)`, "gi"), "<profile>");
+}
+
 /** The framework check as a report shows it: the MO2 profile's name left out wherever the check's wording carries it (DIAG-08). */
 function frameworkRoutes(check: ReturnType<typeof hostFrameworkCheck> | undefined, profile: string | null | undefined) {
   if (!check) return null;
-  const hide = (text: string) => profile ? text.split(profile).join("<profile>") : text;
+  const hide = (text: string) => hideProfileName(text, profile);
   return check.routes.map(item => ({ ...redactValue({ ...item, label: "" }, hide),
     label: item.route === "mo2" ? "Mod Organizer 2" : item.label, profileId: item.profileId ? "chosen" : null }));
 }
