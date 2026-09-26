@@ -1,6 +1,9 @@
 /** Read-only, bounded CSAV appearance reader. Format references: README.md.
  * No save writer, filesystem access, compression or game deployment exists here.
+ * The same pass reads what V wears (the vanilla equipment system's loadout, save-loadout.ts); a save whose script data can't be read
+ * still loads its appearance, with `loadout: null`.
  */
+import { parseSavedLoadout, readSavedLoadout, type SavedLoadout } from "./save-loadout";
 export class Reader {
   pos = 0;
   view: DataView;
@@ -132,6 +135,11 @@ export type SavedV = {
   };
   perspectives: { name: string; fpp: string; tpp: string }[];
   tags: string[];
+  /**
+   * What V wears, as the save's vanilla equipment data records it; null when this save's script data couldn't be read, absent for a V
+   * stored by an earlier XF Studio (which didn't read clothes).
+   */
+  loadout?: SavedLoadout | null;
   evidence: {
     nodeName: string;
     nodeBytes: number;
@@ -160,7 +168,10 @@ export function parseSavedV(value: unknown): SavedV {
     !text(v.evidence.nodeName) || ![v.evidence.nodeBytes, v.evidence.bytesRead, v.evidence.trailingBytes,
       v.evidence.chunks, v.evidence.decompressedBytes].every(uint))
     throw Error("Invalid stored V appearance");
-  return structuredClone(v);
+  const loadout = v.loadout === undefined ? undefined : v.loadout === null ? null : parseSavedLoadout(v.loadout);
+  const copy = structuredClone(v);
+  if (loadout === undefined) delete copy.loadout; else copy.loadout = loadout;
+  return copy;
 }
 export function readSavedV(bytes: Uint8Array): SavedV {
   if (bytes.length < 40 || bytes.length > 128 * 1024 * 1024)
@@ -236,6 +247,7 @@ export function readSavedV(bytes: Uint8Array): SavedV {
   const count = directory.vlq();
   if (count < 1 || count > 200000) throw Error("Invalid node count");
   let target: { name: string; offset: number; size: number } | undefined;
+  const others = new Map<string, { offset: number; size: number } | null>();
   for (let i = 0; i < count; i++) {
     const name = directory.text();
     directory.i32();
@@ -246,6 +258,9 @@ export function readSavedV(bytes: Uint8Array): SavedV {
       if (target) throw Error("Ambiguous appearance nodes");
       target = { name, offset, size };
     }
+    // A node listed twice is ambiguous: its loadout isn't read.
+    if (name === "ScriptableSystemsContainer" || name === "WardrobeSystem_ClothingSets")
+      others.set(name, others.has(name) ? null : { offset, size });
   }
   if (
     !target ||
@@ -297,6 +312,17 @@ export function readSavedV(bytes: Uint8Array): SavedV {
     throw Error(
       `Appearance node has ${trailingBytes} unparsed bytes; refusing an incomplete preset`,
     );
+  // What V wears: optional, so a save whose script data this reader can't follow still loads the V. Each node starts with its u32 id.
+  const node = (name: string) => {
+    const found = others.get(name);
+    return found && found.offset >= dataStart && found.size >= 4 && found.offset + found.size <= expanded.length
+      ? expanded.subarray(found.offset + 4, found.offset + found.size) : null;
+  };
+  let loadout: SavedLoadout | null = null;
+  try {
+    const systems = node("ScriptableSystemsContainer");
+    if (systems) loadout = readSavedLoadout(systems, node("WardrobeSystem_ClothingSets"));
+  } catch { loadout = null; }
   return {
     schema: "eye-artistry/saved-v-1",
     saveVersion,
@@ -307,6 +333,7 @@ export function readSavedV(bytes: Uint8Array): SavedV {
     groups: { head, arms, body },
     perspectives,
     tags,
+    loadout,
     evidence: {
       nodeName: target.name,
       nodeBytes: target.size,

@@ -81,6 +81,8 @@ export interface AppDefinitionModel {
   readonly components: ComponentModel[];
   readonly componentsSource: "compiledData" | "components" | "none";
   readonly patchedBy: string[];
+  /** The definition's own `visualTags` (ArchiveXL reads its tag overrides from these; absent in `.app`s read before they were kept). */
+  readonly visualTags?: string[];
 }
 export interface AppModel { readonly loaded: LoadedResource; readonly appearances: AppDefinitionModel[]; readonly patchNotes: RuleNote[] }
 
@@ -164,8 +166,18 @@ function readDefinition(data: JsonObject, scope: HandleScope): AppDefinitionMode
         chunkMask: typeof override.chunkMask === "string" ? override.chunkMask : String(override.chunkMask ?? "18446744073709551615"),
         partResource: depotRef(entry.partResource) })),
     })),
-    components, componentsSource: source, patchedBy: [],
+    components, componentsSource: source, patchedBy: [], visualTags: tagList(data.visualTags),
   };
+}
+
+/** A `redTagList` value's tag names (`{tags: [CName]}`), in stored order. */
+export function tagList(value: unknown): string[] {
+  return isObject(value) ? asArray(value.tags).map(cname).filter(Boolean) : [];
+}
+/** An entity template's `visualTagsSchema` tags (a handle to `entVisualTagsSchema {visualTags}`). */
+export function entityVisualTags(root: JsonObject): string[] {
+  const schema = new HandleScope(root).data(root.visualTagsSchema);
+  return schema ? tagList(schema.visualTags) : [];
 }
 
 const renderChunkCount = (blob: unknown, scope: HandleScope): number | null => {
@@ -618,11 +630,11 @@ export class ResourceGraph {
     return { loaded, appearances, patchNotes };
   }
 
-  /** Components of a part `.ent` (compiled package first). */
-  async entityComponents(ref: DepotRef): Promise<{ loaded: LoadedResource; components: ComponentModel[] } | null> {
+  /** Components of a part `.ent` (compiled package first), and the entity's own visual tags (`visualTagsSchema`). */
+  async entityComponents(ref: DepotRef): Promise<{ loaded: LoadedResource; components: ComponentModel[]; tags: string[] } | null> {
     const loaded = await this.load(ref, "ent");
     if (!loaded) return null;
-    return { loaded, components: readComponents(loaded.root, new HandleScope(loaded.root)).components };
+    return { loaded, components: readComponents(loaded.root, new HandleScope(loaded.root)).components, tags: entityVisualTags(loaded.root) };
   }
 
   mesh(ref: DepotRef): Promise<MeshModel | null> {

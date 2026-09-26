@@ -44,6 +44,9 @@
  * - **Body** (the `body` slot) is the third-person body the body's consumers read (`BODY_GROUPS`, the feet state's group), less what the
  *   creator's own censorship rules leave under the game's underwear cover (`bodyOptionDraws`); each body component carries the shapes the
  *   resolver applied to it (breast size, nail length), and never follows the face (knowledge/body-rendering.md).
+ * - **Clothing** (the `clothing` slot) is what the worn items draw (clothing-resolver.ts): each drawn item's components with their chunk masks,
+ *   lower layers first (the layer score: component prefix and size tag), each carrying its clothing area, item record and score. The
+ *   body resolves with the items' overrides already applied (its chunk masks), and in the feet group the footwear sets.
  * - **Choices** a viewer makes are the character context's (character-context.ts): the host derives the whole V from them with the
  *   shared R5 rules before planning, so the record lists no choices to try and no override (CORE-58, PIPE-82). An option a slot's
  *   switcher activates belongs to that slot even when its own `uiSlot` is another (`detailSlotOf`).
@@ -55,6 +58,7 @@ import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from
 import { clampedList, decalFamilySlot, DETAIL_SLOTS, isChoiceLabel, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
+import type { ResolvedClothing } from "./clothing-resolver";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
@@ -100,6 +104,8 @@ export type PlannedComponent = {
   morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
   /** Body components: the morph targets the resolver applied (`<target>_<region>`); absent on head parts, which follow the facial shapes. */
   morphs?: string[];
+  /** Garment components: the clothing area and item record that brought it, and its layer score. */
+  garment?: { area: string; item: string; layer: number | null };
 };
 export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
@@ -396,18 +402,50 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
 }
 
 /**
+ * The clothes V wears (clothing-resolver.ts): every drawn item's drawable components, lower layers first (a stable sort, so one item's
+ * components keep their order), and one outcome: shown (with the items' words), none (nothing worn, or everything hidden), or unavailable.
+ * An item that can't be followed to its meshes, or whose meshes can't be drawn, is named in the slot's line.
+ */
+export function planClothing(clothing: ResolvedClothing | null | undefined, defaults: TemplateDefaults, identities: TemplateIdentities):
+  { components: PlannedComponent[]; state: DetailSlotState } {
+  const { noun, not, pronoun } = SLOT_WORDS.clothing;
+  if (!clothing || !clothing.garments.length) return { components: [], state: { slot: "clothing", state: "none", label: "None" } };
+  const planned: PlannedComponent[] = [], shown: string[] = [], unshown: string[] = [], reasons: string[] = [];
+  for (const garment of clothing.garments) {
+    if (garment.status === "hidden") continue;
+    if (garment.status === "unresolved") { unshown.push(garment.label); if (garment.gap) reasons.push(garment.gap.code); continue; }
+    const entry = { option: garment.area, definition: garment.definition ?? garment.label } as ResolvedAppearance;
+    const items = garment.components.map(component => planComponent("clothing", entry, component, defaults, identities))
+      .filter((item): item is PlannedComponent => !!item)
+      .map(item => ({ ...item, garment: { area: garment.area, item: garment.item, layer: garment.layers[item.component] ?? null } }));
+    if (items.length) { planned.push(...items); shown.push(garment.label); } else unshown.push(garment.label);
+  }
+  planned.sort((a, b) => (a.garment!.layer ?? 0) - (b.garment!.layer ?? 0));
+  const missing = clampedList([...new Set(unshown)], 160);
+  const hiddenBySave = clothing.garments.length > 0 && clothing.garments.every(garment => garment.hiddenBy?.kind === "saved");
+  if (!planned.length && !unshown.length) return { components: [], state: { slot: "clothing", state: "none", label: "None",
+    ...(hiddenBySave ? { message: "Your save hides every clothing area (a mod, such as an outfit manager, may dress V instead), so no clothes are shown from it." } : {}) } };
+  const why = reasons.includes("item-unknown") ? " (items a mod adds aren't read yet)" : reasons.includes("item-dynamic") ? " (ArchiveXL dynamic items aren't read yet)" : "";
+  if (!planned.length) return { components: [], state: { slot: "clothing", state: "unavailable", label: clampedList([...new Set(unshown)]),
+    message: `XF Studio can't draw your V's ${noun} (${missing})${why} yet, so ${pronoun} ${not} shown.` } };
+  return { components: planned, state: { slot: "clothing", state: "shown", label: clampedList([...new Set(shown)]),
+    ...(unshown.length ? { message: `Some of your V's ${noun} (${missing})${why} ${not} shown yet.` } : {}) } };
+}
+
+/**
  * Select the head skin, face details, brows, lashes, hair, eyes, piercings and body of a resolved character. Each slot reports one outcome:
  * shown, none (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map(),
-  identities: TemplateIdentities = new Map(), body: BodyState = DEFAULT_BODY_STATE): CharacterPlan {
+  identities: TemplateIdentities = new Map(), body: BodyState = DEFAULT_BODY_STATE, clothing: ResolvedClothing | null = null): CharacterPlan {
   const slotOf = detailSlotOf(cco);
   const components: PlannedComponent[] = [];
   const slots: DetailSlotState[] = [];
   const skinDecals: { entry: ResolvedAppearance; component: ResolvedComponent }[] = [];
   for (const slot of DETAIL_SLOTS) {
-    if (slot === "face" || slot === "body") {
-      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals) : planBody(resolved, cco, defaults, identities, body);
+    if (slot === "face" || slot === "body" || slot === "clothing") {
+      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals) : slot === "body" ? planBody(resolved, cco, defaults, identities, body)
+        : planClothing(clothing, defaults, identities);
       components.push(...planned.components);
       slots.push(planned.state);
       continue;

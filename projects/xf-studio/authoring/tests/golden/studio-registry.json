@@ -89,7 +89,11 @@
   "character.retry",
   "character.clearPreparedFiles",
   "character.undo",
-  "character.redo"
+  "character.redo",
+  "character.setClothing",
+  "character.setClothingArea",
+  "character.undoClothing",
+  "character.redoClothing"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -2284,6 +2288,72 @@
    "effect": "workspace",
    "undo": "none",
    "payload": {}
+  },
+  "character.setClothing": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "state": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "saved",
+      "no-headwear",
+      "underwear",
+      "custom"
+     ]
+    }
+   }
+  },
+  "character.setClothingArea": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "area": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "Outfit",
+      "OuterChest",
+      "InnerChest",
+      "Legs",
+      "Feet",
+      "Head",
+      "Face",
+      "UnderwearTop",
+      "UnderwearBottom"
+     ]
+    },
+    "shown": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "character.undoClothing": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "character.redoClothing": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
   }
  },
  "registry": [
@@ -3095,6 +3165,42 @@
   },
   {
    "id": "character.redo",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.setClothing",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.setClothingArea",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.undoClothing",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.redoClothing",
    "family": "action",
    "scope": [
     "viewport"

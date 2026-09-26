@@ -339,7 +339,8 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
 
   test("the action family has a descriptor per kind, records nothing in a look's history and is registered in the Studio", () => {
     expect(Object.keys(CHARACTER_CONTEXT_FAMILY.actions)).toEqual(["character.setOption", "character.setOptions", "character.hideOwnMakeup", "character.reset",
-      "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.retry", "character.clearPreparedFiles", "character.undo", "character.redo"]);
+      "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.retry", "character.clearPreparedFiles", "character.undo", "character.redo",
+      "character.setClothing", "character.setClothingArea", "character.undoClothing", "character.redoClothing"]);
     for (const spec of Object.values(CHARACTER_CONTEXT_FAMILY.actions)) expect(spec.descriptor.undo).toBe("none");
     expect(STUDIO_OWNERS).toContain(CHARACTER_CONTEXT_FAMILY);
     expect(() => new Registry([...STUDIO_OWNERS])).not.toThrow();

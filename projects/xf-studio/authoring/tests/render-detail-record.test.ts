@@ -66,17 +66,17 @@ const character = (): CharacterDetail => ({
       gradients: {} })) }],
   slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "face", state: "shown", label: "lipstick (red)" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
     { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" },
-    { slot: "body", state: "shown", label: "body, arms, underwear" }],
+    { slot: "body", state: "shown", label: "body, arms, underwear" }, { slot: "clothing", state: "none", label: "None" }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
   geometry: { ...resource("head.glb"), nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" }, morphs: [] },
   textures: Object.fromEntries(["head.albedo", "head.normal", "head.roughness", "eyes.albedo"].map(slot => [slot, resource("head-color.png")])) });
 
 describe("render record versions", () => {
-  test("v8 carries the character record with its piercings, layered stacks and body (with its own shapes), and no choices to try; parsing is lossless and idempotent", () => {
+  test("v9 carries the character record with its piercings, layered stacks and body (with its own shapes), and no choices to try; parsing is lossless and idempotent", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-8");
-    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body"]);
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-9");
+    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"]);
     expect(parseCharacterDetail(record).components.find(item => item.slot === "body")?.morphs).toEqual(["breast_big_breast"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(parseRenderDetail(record)).toEqual(record);
@@ -97,9 +97,9 @@ describe("render record versions", () => {
     expect(cname.slots.find(slot => slot.slot === "piercings")).toMatchObject({ state: "unavailable" });
     expect(shown(cname)).toEqual(["skin", "face", "hair", "eyes", "body"]);
     // More parts than a record carries: the first ones are kept, and the note says the rest were left out.
-    const many = parse(r => { const part = r.components[4]!; r.components.push(...Array.from({ length: 100 }, (_, i) => ({ ...part, id: `${part.id}:${i}` }))); });
+    const many = parse(r => { const part = r.components[4]!; r.components.push(...Array.from({ length: 130 }, (_, i) => ({ ...part, id: `${part.id}:${i}` }))); });
     expect(many.components.length).toBe(RECORD_LIMITS.components);
-    expect(many.provenance.notes.at(-1)).toMatch(/beyond the first 96 \(10\)/);
+    expect(many.provenance.notes.at(-1)).toMatch(/beyond the first 128 \(8\)/);
   });
 
   test("a layered stack is checked; what breaks a rule is left out alone", () => {
@@ -122,7 +122,7 @@ describe("render record versions", () => {
     expect(() => parse(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
   });
 
-  test("v1 stays the core head, and a v8 reader accepts it under every version; v2 to v7 characters are refused plainly, as a version error", () => {
+  test("v1 stays the core head, and a v9 reader accepts it under every version; v2 to v8 characters are refused plainly, as a version error", () => {
     expect(parseRenderDetail(core())).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: CHARACTER_DETAIL_SCHEMA })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-2" })).toMatchObject({ detail: "core-head" });
@@ -130,8 +130,10 @@ describe("render record versions", () => {
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-5" })).toMatchObject({ detail: "core-head" });
     // A newer record (a host updated while the page ran) is a version error the page words, not a silent failure.
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-9" })).toThrow(RenderDetailVersionError);
-    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-9" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-10" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-10" })).toThrow(RenderDetailVersionError);
+    // A v8 character record (no clothing slot) is prepared again, never read.
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-8" })).toThrow(RenderDetailVersionError);
     // A v7 character record (no body slot) is prepared again, never read.
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
     expect(() => parseRenderDetail({ ...core(), schema: "xfs/elsewhere" })).toThrow("unsupported record version");

@@ -68,7 +68,8 @@ export type CharacterDetailLoadOptions = {
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
 const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
-  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], piercings: ["piercings", "they aren't"], body: ["body", "it isn't"] };
+  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], piercings: ["piercings", "they aren't"], body: ["body", "it isn't"],
+  clothing: ["clothes", "they aren't"] };
 /** Every served texture a chunk names: its parameters' textures and, for a layered chunk, each layer's maps and mask. */
 export const chunkTextureFiles = (material: RenderComponent["materials"][number]): RenderTexture[] =>
   [...Object.values(material.textures), ...(material.layered?.layers.flatMap(layer => Object.values(layer.textures)) ?? [])];
@@ -231,9 +232,12 @@ const contentKey = (component: RenderComponent) => JSON.stringify(component);
 const READS_SKIN: ReadonlySet<DetailSlot> = new Set(["face", "brows"]);
 /** Whether a component draws with the skin adapter (the head's skin, or the body's: its skin, arms, feet, nails). */
 const drawsSkin = (component: RenderComponent) => component.materials.some(material => renderTemplate(material.template, material.templateName)?.adapter === "skin");
-/** Whether a body component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover), and its shape. */
-const readsBodySkin = (component: RenderComponent) => component.slot === "body" &&
-  component.materials.some(material => !!renderTemplate(material.template, material.templateName)?.decal);
+/**
+ * Whether a component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover), or follows the body's applied shape
+ * (a body decal, a garment), so it is reused only while the body's skin parts are unchanged.
+ */
+const readsBodySkin = (component: RenderComponent) => component.slot === "clothing" || (component.slot === "body" &&
+  component.materials.some(material => !!renderTemplate(material.template, material.templateName)?.decal));
 
 /**
  * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
@@ -396,7 +400,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         // it does not follow the head (limit `rigid-part`).
         const rigid: THREE.Mesh[] = [];
         root.traverse(object => { if (object instanceof THREE.Mesh && !(object instanceof THREE.SkinnedMesh) && chunkOfMesh(object.name) !== null) rigid.push(object); });
-        for (const mesh of rigid) bindRigid(mesh, root, { follow: component.slot === "body" });
+        for (const mesh of rigid) bindRigid(mesh, root, { follow: component.slot === "body" || component.slot === "clothing" });
         const rigidNames = new Set(rigid.map(mesh => mesh.name));
         root.traverse(object => {
           if (object instanceof THREE.Bone) { bones.push(object); return; }
@@ -408,7 +412,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const raw = source.weights.get(object.name);
           if (!raw && !rigidNames.has(object.name)) throw Error(`missing skin weights for ${object.name}`);
           if (raw) object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
-          const rigidLimit = component.slot === "body" ? "rigid-body-part" : "rigid-part";
+          const rigidLimit = component.slot === "body" || component.slot === "clothing" ? "rigid-body-part" : "rigid-part";
           if (rigidNames.has(object.name) && !partLimits.includes(rigidLimit)) partLimits.push(rigidLimit);
           object.frustumCulled = false;
           const chunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
@@ -453,10 +457,12 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         for (const object of unwanted) object.removeFromParent();
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
-        // A body decal with no shapes of its own (the underwear cover) follows the body's applied shape, so it stays over the skin.
-        if (component.slot === "body" && decals.length && !component.morphs?.length) {
+        // A body decal with no shapes of its own (the underwear cover) follows the body's applied shape, so it stays over the skin; so does a
+        // garment, a first stand-in for the game's garment support (knowledge/clothing.md §4.5).
+        if (((component.slot === "body" && decals.length) || component.slot === "clothing") && !component.morphs?.length) {
           const field = bodyShapeField(bodyShapes);
-          if (field) for (const mesh of meshes) followBodyShape(mesh, field);
+          // A geometry another component draws too (a file used twice) is this component's own copy first: the shape key it gains is its own.
+          if (field) for (const mesh of meshes) { if (shared) mesh.geometry = mesh.geometry.clone(); followBodyShape(mesh, field); }
         }
         const item: LoadedCharacterComponent = { component, root, meshes, bones, ...(skin ? { skin } : {}),
           ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}),

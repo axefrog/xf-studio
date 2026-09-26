@@ -157,7 +157,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(scene.skin).toBe(skinA);
     expect(scene.eyes).toBe(eyesA);
     expect(scene.face).toEqual(faceA);
-    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "lipstick (red), cheeks (red)", "brown", "brown", "brown", "gradient blue", "style 01, silver", "None"]);
+    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "lipstick (red), cheeks (red)", "brown", "brown", "brown", "gradient blue", "style 01, silver", "None", "None"]);
 
     // A reload restores the last-loaded V: the workspace keeps it, and the shown character follows it.
     expect(characterRequestFor(saved.snapshot().savedV)).toEqual(characterRequestFromSave(A));
