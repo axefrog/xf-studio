@@ -115,7 +115,7 @@ The body track's inventory ([body rendering](../../knowledge/body-rendering.md))
 
 - every body skin part (torso `t0_000_pwa_base__full`, feet, arms and hands, genitals, plain nail colours) is `skin.mt` with a local material per tone over **the same four-level tone chain**, so a tone is again only `TintColor`, `TintScale` and the tint mask;
 - the tone reaches the body through the creator's `skin color` link, which the body, arms, feet, nipples and genitals follow;
-- the body has **no skin type**: every tone shares `base\4k\common\body\wa\textures\d02_naked.xbm`, `n02_naked.xbm` and `wa_base_rm02.xbm`, and a full-body `SecondaryAlbedo` overlay (`…\overlays\fullbody_overlay_d01.xbm`) that body tattoo frameworks replace.
+- the body has **no skin type**: every tone shares `base\characters\common\base_bodies\woman_average\textures\t0_000_wa__c_base_d02.xbm`, `…_n02.xbm` and `…_rm02.xbm`, with no `SecondaryAlbedo` in the vanilla chain. The `base\4k\common\body\wa\textures\d02_naked.xbm`, `n02_naked.xbm`, `wa_base_rm02.xbm` maps and the full-body `SecondaryAlbedo` overlay (`…\overlays\fullbody_overlay_d01.xbm`) seen on the reference profile belong to the KS UV framework's player-only chain ([tattoos §8](../../knowledge/tattoos.md#8-how-mods-add-tattoos)).
 
 **What the shader adds to that** [observed unless marked]:
 
