@@ -111,6 +111,38 @@ export interface ResolvedCharacter {
   readonly rules: readonly RuleNote[];
 }
 
+/**
+ * Chunk-mask and mesh-appearance overrides worn items apply to every component of the player, as ArchiveXL registers them
+ * (Garment/Extension.cpp `RegisterComponentOverrides`: an item `.app` definition's `partsOverrides` without a part resource, and the
+ * `overrides.tags` rules of its definition's `visualTags`) and applies them (States.cpp `ApplyChunkMaskOverride`: the component's own mask,
+ * ORed with every showing mask for its name and for its prefix, then ANDed with every hiding mask) [source]. Keys are component names or
+ * prefixes (`h0_`: Prefix.cpp, the name up to its first `_` when that `_` is at index 2 to 5).
+ */
+export interface ComponentOverrides {
+  readonly masks: ReadonlyMap<string, { readonly show: bigint; readonly hide: bigint; readonly by: readonly string[] }>;
+  /** A mesh appearance per component name (an entity-wide `partsOverrides` entry that names one). */
+  readonly appearances: ReadonlyMap<string, { readonly appearance: string; readonly by: string }>;
+}
+export const NO_OVERRIDES: ComponentOverrides = Object.freeze({ masks: new Map(), appearances: new Map() });
+/** ArchiveXL's component prefix (Prefix.cpp `GetPrefix`), with its `_`, or null. */
+export function componentPrefix(name: string): string | null {
+  let end = 2;
+  while (end < 6 && end < name.length && name[end] !== "_") end++;
+  return end < 6 && name[end] === "_" ? name.slice(0, end + 1) : null;
+}
+/** A component's chunk mask after the overrides for its name and prefix, and which overrides changed it. */
+export function overriddenMask(name: string, chunkMask: string, overrides: ComponentOverrides): { mask: string; by: string[] } | null {
+  const byName = overrides.masks.get(name), prefix = componentPrefix(name), byPrefix = prefix ? overrides.masks.get(prefix) : undefined;
+  if (!byName && !byPrefix) return null;
+  let mask: bigint; try { mask = BigInt(chunkMask); } catch { mask = ALL; }
+  mask = ((mask | (byName?.show ?? 0n) | (byPrefix?.show ?? 0n)) & (byName?.hide ?? ALL) & (byPrefix?.hide ?? ALL)) & ALL;
+  return { mask: mask.toString(), by: [...byName?.by ?? [], ...byPrefix?.by ?? []] };
+}
+/** A stable key of a set of overrides (for caches keyed by what was resolved). */
+export const overridesKey = (overrides: ComponentOverrides) => !overrides.masks.size && !overrides.appearances.size ? ""
+  : JSON.stringify([[...overrides.masks].map(([key, value]) => [key, value.show.toString(), value.hide.toString()]).sort(),
+    [...overrides.appearances].map(([key, value]) => [key, value.appearance]).sort()]);
+
 const ALL = 18446744073709551615n;
 export function visibleChunks(mask: string, count: number): number[] {
   let bits: bigint; try { bits = BigInt(mask); } catch { bits = ALL; }
@@ -194,7 +226,7 @@ async function mergeCco(graph: ResourceGraph, bodyGender: BodyGender, read: CcoR
     customs: present.map(({ custom, resource }) => ({ path: custom.path, declaredBy: custom.declaredBy, provenance: resource!.provenance })) };
 }
 
-interface Context { graph: ResourceGraph; ambiguities: Ambiguity[]; gaps: { code: string; subject: string; detail: string }[] }
+interface Context { graph: ResourceGraph; ambiguities: Ambiguity[]; gaps: { code: string; subject: string; detail: string }[]; overrides: ComponentOverrides }
 
 /** ArchiveXL `FixCustomizationAppearance` (Customization/Extension.cpp 779–883) [source]. */
 function dynamicAppearance(appearances: readonly AppDefinitionModel[], requested: string): { definition: AppDefinitionModel; source: string } | null {
@@ -474,12 +506,38 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
   const choiceDef = option?.type === "appearance" ? option.definitions.find(d => d.name === descriptor.definition) : undefined;
   if (!choiceDef) ctx.ambiguities.push({ code: "choice-not-in-cco", subject: `${descriptor.option}:${descriptor.definition}`, grade: "resource",
     detail: "The effective character-creator resource has no such option/definition; the saved descriptor is resolved as stored." });
-  const empty = (status: "missing" | "unreadable", detail: string): ResolvedAppearance => {
-    ctx.gaps.push({ code: `appearance-${status}`, subject: `${refLabel(appRef)}:${descriptor.definition}`, detail });
-    return { option: descriptor.option, part: descriptor.part, groups, definition: descriptor.definition, requestedApp: requested,
-      app: graph.provenance(appRef), appOverride: override ? { to: appRef, registeredBy: override.registeredBy } : null,
-      choice: choiceDef && option ? { providedBy: choiceDef.providedBy, optionDefinedBy: option.definedBy } : null,
-      appearance: { status, source: null, patchedBy: [] }, components: [], notes };
+  // Worn items' overrides reach the body and arms; the head keeps its parts (the preview's head is the makeup's canvas), and what an
+  // item would hide there is reported as a gap instead.
+  const found = await resolveDefinition(ctx, appRef, descriptor.definition, inScope(graph.xl, CUSTOMIZATION_SCOPE, appRef.hash), morphs,
+    descriptor.part === "head" ? "report" : "apply");
+  return { option: descriptor.option, part: descriptor.part, groups, definition: descriptor.definition, requestedApp: requested,
+    app: found.app, appOverride: override ? { to: appRef, registeredBy: override.registeredBy } : null,
+    choice: choiceDef && option ? { providedBy: choiceDef.providedBy, optionDefinedBy: option.definedBy } : null,
+    appearance: found.appearance, components: [...found.components], notes: [...notes, ...found.notes] };
+}
+
+/** An `.app` definition resolved to its drawing components (rules R6–R10), whatever asked for it: a creator choice or a worn item. */
+export type ResolvedDefinition = {
+  readonly app: Provenance | null;
+  readonly appearance: ResolvedAppearance["appearance"];
+  /** The definition's own `visualTags`. */
+  readonly visualTags: readonly string[];
+  /** The visual tags of the part entities it draws (`visualTagsSchema`), by part depot path. */
+  readonly partTags: ReadonlyMap<string, readonly string[]>;
+  /** Entity-wide `partsOverrides` entries (no part resource): ArchiveXL applies them to every component of the player. */
+  readonly entityOverrides: readonly { readonly componentName: string; readonly meshAppearance: string; readonly chunkMask: string }[];
+  readonly components: readonly ResolvedComponent[];
+  readonly notes: readonly RuleNote[];
+};
+
+async function resolveDefinition(ctx: Context, appRef: DepotRef, definitionName: string, customizationScope: boolean,
+  morphs: readonly { region: string; target: string }[], overrideMode: "apply" | "report" = "apply"): Promise<ResolvedDefinition> {
+  const notes: RuleNote[] = [];
+  const graph = ctx.graph;
+  const empty = (status: "missing" | "unreadable", detail: string): ResolvedDefinition => {
+    ctx.gaps.push({ code: `appearance-${status}`, subject: `${refLabel(appRef)}:${definitionName}`, detail });
+    return { app: graph.provenance(appRef), appearance: { status, source: null, patchedBy: [] }, visualTags: [], partTags: new Map(), entityOverrides: [],
+      components: [], notes };
   };
   const app = await graph.app(appRef);
   if (!app) {
@@ -487,13 +545,12 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
     return unread ? empty("unreadable", unread) : empty("missing", "No mounted archive provides the appearance resource.");
   }
   notes.push(...app.patchNotes);
-  let definition = app.appearances.find(a => a.name === descriptor.definition);
+  let definition = app.appearances.find(a => a.name === definitionName);
   let status: ResolvedAppearance["appearance"]["status"] = "defined", sourceName: string | null = definition?.name ?? null;
-  const customizationScope = inScope(graph.xl, CUSTOMIZATION_SCOPE, appRef.hash);
   if (!definition && customizationScope) {
-    const dynamic = dynamicAppearance(app.appearances, descriptor.definition);
+    const dynamic = dynamicAppearance(app.appearances, definitionName);
     if (dynamic) { definition = dynamic.definition; status = "dynamic"; sourceName = dynamic.source;
-      notes.push(note("R6-dynamic-appearance", "source", `ArchiveXL FixCustomizationAppearance builds ${descriptor.definition} from ${dynamic.source} (app is in the ${CUSTOMIZATION_SCOPE} scope).`)); }
+      notes.push(note("R6-dynamic-appearance", "source", `ArchiveXL FixCustomizationAppearance builds ${definitionName} from ${dynamic.source} (app is in the ${CUSTOMIZATION_SCOPE} scope).`)); }
   }
   if (!definition) return empty("missing", customizationScope ? "Appearance absent and no template could be derived." : "Appearance absent and the app is outside ArchiveXL's customization scope.");
   // Garment OnResolveDefinition: parts whose resource does not exist are dropped [source].
@@ -507,9 +564,11 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
   for (const model of inline) components.push({ model, origin: { kind: "inline", source: `${refLabel(appRef)}:${definition.name} (${definition.componentsSource})` } });
   // The appearance's parts are read together (one extraction batch), and only this appearance's (PIPE-64).
   const entities = await Promise.all(parts.map(part => graph.entityComponents(part)));
+  const partTags = new Map<string, readonly string[]>();
   for (const [index, part] of parts.entries()) {
     const entity = entities[index];
     if (!entity) continue;
+    if (entity.tags.length) partTags.set(refLabel(entity.loaded.ref), entity.tags);
     for (const model of entity.components) {
       const existing = components.find(c => c.model.name === model.name);
       if (existing) { (existing.origin as { alsoIn?: string }).alsoIn = refLabel(entity.loaded.ref); continue; }
@@ -545,16 +604,46 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
         }
       }
   }
+  // Worn items' overrides of every component of the player (ArchiveXL ApplyAppearanceOverride, ApplyChunkMaskOverride) [source].
+  for (const { model } of components) {
+    if (!isRenderable(model.type)) continue;
+    if (overrideMode === "report") {
+      const masked = overriddenMask(model.name, model.chunkMask, ctx.overrides);
+      if (masked && masked.mask !== model.chunkMask) ctx.gaps.push({ code: "worn-item-hides-head", subject: model.name,
+        detail: `A worn item hides this head part in game (${masked.by.join(", ")}); the preview keeps it shown.` });
+      continue;
+    }
+    const appearance = ctx.overrides.appearances.get(model.name);
+    if (appearance) { model.meshAppearance = appearance.appearance; overriddenBy.set(model.name, [...(overriddenBy.get(model.name) ?? []), `worn item (${appearance.by})`]); }
+    const masked = overriddenMask(model.name, model.chunkMask, ctx.overrides);
+    if (masked && masked.mask !== model.chunkMask) {
+      model.chunkMask = masked.mask;
+      overriddenBy.set(model.name, [...(overriddenBy.get(model.name) ?? []), ...masked.by.map(by => `worn item (${by})`)]);
+    }
+  }
   const resolved = await Promise.all(components.map(({ model, origin }) => resolveComponent(ctx, model, origin, overriddenBy.get(model.name) ?? [], morphs)));
-  return { option: descriptor.option, part: descriptor.part, groups, definition: descriptor.definition, requestedApp: requested,
-    app: app.loaded.provenance, appOverride: override ? { to: appRef, registeredBy: override.registeredBy } : null,
-    choice: choiceDef && option ? { providedBy: choiceDef.providedBy, optionDefinedBy: option.definedBy } : null,
-    appearance: { status, source: sourceName, patchedBy: definition.patchedBy }, components: resolved, notes };
+  const entityOverrides = definition.partsOverrides.filter(entry => !entry.partResource).flatMap(entry => entry.componentsOverrides)
+    .filter(override => !!override.componentName).map(({ componentName, meshAppearance, chunkMask }) => ({ componentName, meshAppearance, chunkMask }));
+  return { app: app.loaded.provenance, appearance: { status, source: sourceName, patchedBy: definition.patchedBy },
+    visualTags: definition.visualTags ?? [], partTags, entityOverrides, components: resolved, notes };
 }
 
+/**
+ * Resolve one `.app` definition outside the creator (a worn item's appearance): the same rules as a creator choice's (R6–R10), with the
+ * worn items' component overrides. Its gaps and ambiguities are returned with it.
+ */
+export async function resolveAppDefinition(graph: ResourceGraph, appRef: DepotRef, definition: string,
+  options: { overrides?: ComponentOverrides; morphs?: readonly { region: string; target: string }[] } = {}):
+  Promise<ResolvedDefinition & { gaps: ResolvedCharacter["gaps"]; ambiguities: readonly Ambiguity[] }> {
+  const ctx: Context = { graph, ambiguities: [], gaps: [], overrides: options.overrides ?? NO_OVERRIDES };
+  const { value, ambiguities } = await graph.collect(() => resolveDefinition(ctx, graph.named(appRef), definition, false, options.morphs ?? []));
+  return { ...value, gaps: ctx.gaps, ambiguities: [...ctx.ambiguities, ...ambiguities] };
+}
+
+/** `overrides`: what worn items change on every component of the player (their chunk masks and mesh appearances). */
 export async function resolveCharacter(graph: ResourceGraph, input: CharacterInput,
-  preloaded?: Awaited<ReturnType<typeof loadMergedCco>>): Promise<ResolvedCharacter> {
-  const ctx: Context = { graph, ambiguities: [...graph.depot.plan.ambiguities], gaps: [] };
+  preloaded?: Awaited<ReturnType<typeof loadMergedCco>>, overrides: ComponentOverrides = NO_OVERRIDES): Promise<ResolvedCharacter> {
+  const ctx: Context = { graph, ambiguities: [...graph.depot.plan.ambiguities], gaps: [], overrides };
   const cco = preloaded ?? await loadMergedCco(graph, input.bodyGender);
   ctx.gaps.push(...cco.gaps);
   ctx.ambiguities.push(...cco.merged.ambiguities);

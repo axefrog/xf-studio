@@ -96,11 +96,12 @@ export function createCharacterRenderer(input: {
   let browUnderlay: BrowUnderlayEvidence | undefined;
   // Resolved character details (skin, face details, brows, lashes, hair, eyes, piercings): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, piercings: true, body: true };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, piercings: true, body: true,
+    clothing: true };
   // Keep context details above the entire editable makeup stack (orders 10–41); skin, hair and the eyeballs keep their own order.
   // Face decals sit below the stack (faceDecalRenderOrder).
   const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: RENDER_ORDER.skin, face: FACE_DECAL_RENDER_ORDER, brows: RENDER_ORDER.brows,
-    lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, piercings: 0, body: RENDER_ORDER.skin };
+    lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, piercings: 0, body: RENDER_ORDER.skin, clothing: RENDER_ORDER.skin };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
   let characterDetails: LoadedCharacterDetails | null = null;
@@ -257,14 +258,15 @@ export function createCharacterRenderer(input: {
         // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
         if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the
-        // resolver applied to that component, each at full weight.
-        const applied = item.component.slot === "body" ? new Set(item.component.morphs ?? []) : null;
+        // resolver applied to that component, each at full weight; a garment carries the body's applied shape (`BODY_SHAPE_KEY`).
+        const applied = item.component.slot === "body" || item.component.slot === "clothing" ? new Set(item.component.morphs ?? []) : null;
         for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
           mesh.morphTargetInfluences![index] = applied ? (applied.has(key) || key === BODY_SHAPE_KEY ? 1 : 0)
             : head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
       }
       scene.add(item.root);
     }
+    applyGarmentLayers(next);
     // Layered chunks (piercings, eye designs): each stack is baked once into surface maps with this renderer, then lit per frame.
     const bakeLimits = bakeLayered();
     releasePrevious();
@@ -278,6 +280,23 @@ export function createCharacterRenderer(input: {
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };
+  }
+  /**
+   * Garments draw over the body and over each other by their layer score (the record's `garment.layer`: component prefix and size tag), a
+   * first stand-in for the game's garment assembler: coincident surfaces of a higher layer win the depth test through a polygon offset of
+   * its rank among the V's layers. Garment support (pushing lower layers in) is a later step (knowledge/clothing.md §4.5).
+   */
+  function applyGarmentLayers(details: LoadedCharacterDetails) {
+    const garments = details.components.filter(item => item.component.slot === "clothing");
+    const layers = [...new Set(garments.map(item => item.component.garment?.layer ?? 0))].sort((a, b) => a - b);
+    for (const item of garments) {
+      const rank = layers.indexOf(item.component.garment?.layer ?? 0);
+      for (const mesh of item.meshes) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        material.polygonOffset = rank > 0;
+        material.polygonOffsetFactor = -rank;
+        material.polygonOffsetUnits = -4 * rank;
+      }
+    }
   }
   /**
    * Bake every layered stack of the shown V that is not baked yet (layered-material.ts). A failed bake leaves that chunk hidden and is
@@ -313,7 +332,7 @@ export function createCharacterRenderer(input: {
     subscribe(listener: () => void) { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },
     /** The resolved parts the feature renderers supersede changed: show and hide again (PREV-89). */
     /** Meshes of the drawn V that follow the facial shapes with the head (the body has its own shapes: `RenderComponent.morphs`). */
-    drawnMeshes: () => drawnDetails().filter(item => item.component.slot !== "body").flatMap(item => item.meshes),
+    drawnMeshes: () => drawnDetails().filter(item => item.component.slot !== "body" && item.component.slot !== "clothing").flatMap(item => item.meshes),
     /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
