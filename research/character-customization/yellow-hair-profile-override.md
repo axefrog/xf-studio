@@ -88,7 +88,7 @@ The swatches were rendered into the ignored `research/consumers/yellow-hair/raw/
 ## Consequences for the Studio
 
 - The preview is correct to show the yellow-to-brown hair under this profile. The resolver binds the installed winner, as the game is expected to. No preview change is needed.
-- Disabling the mod changes more than NPC hair. Every hair, beard, lash and brow colour that uses these 36 profile names reverts to vanilla. The icxrus lashes of the reference save use `brown_liquorice.hp`, so their predicted albedo would change from dark red-brown to the golden tan of the vanilla tip stop ([collision audit](../eye-artistry/brown-liquorice-profile-overlap.md)). The saved V's hair (island_dancer `ash_brown.hp`) is unaffected.
+- Disabling the mod changes more than NPC hair. Every hair, beard, lash and brow colour that uses these 36 profile names reverts to vanilla. The icxrus lashes of the reference save use `brown_liquorice.hp`, so their predicted albedo would change from dark red-brown to the golden tan of the vanilla tip stop ([collision audit](../eye-artistry/brown-liquorice-profile-overlap.md)). The saved V's hair (redacted-c01 `ash_brown.hp`) is unaffected.
 - The runtime check is already on the list: [head CC rendering, test ask 7](../../knowledge/head-cc-rendering.md) (brown liquorice with and without this mod).
 
 ## Reproduction

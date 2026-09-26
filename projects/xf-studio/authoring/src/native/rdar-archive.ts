@@ -13,7 +13,12 @@
  * - Segment: u64 offset in the archive, u32 stored size, u32 size. Stored size equal to size means stored raw; otherwise the
  *   stored bytes start with a `KARK` header (u32 magic, u32 size) followed by an Oodle stream (kark.ts).
  * - A resource's file is its segments in order: the first holds the CR2W body, the rest its buffers.
+ *
+ * Every offset and count is checked before use: segments must lie inside the file as it is on disk (not only as its header
+ * claims), and the name block's sizes are capped before anything is allocated. Refusals are `NativeMalformedError` or
+ * `NativeBudgetError` (native-errors.ts).
  */
+import { NativeBudgetError, NativeMalformedError } from "./native-errors";
 
 export const RDAR_MAGIC = 0x52414452; // "RDAR" little-endian
 export const RDAR_HEADER_SIZE = 40;
@@ -50,14 +55,14 @@ export interface RdarFileEntry {
 
 const u64 = (view: DataView, offset: number, what: string): number => {
   const value = view.getBigUint64(offset, true);
-  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw Error(`RDAR ${what} is out of range.`);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new NativeMalformedError(`RDAR ${what} is out of range.`);
   return Number(value);
 };
 
 export function parseRdarHeader(bytes: Uint8Array): RdarHeader {
-  if (bytes.length < RDAR_HEADER_SIZE) throw Error("Truncated RDAR header.");
+  if (bytes.length < RDAR_HEADER_SIZE) throw new NativeMalformedError("Truncated RDAR header.");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(0, true) !== RDAR_MAGIC) throw Error("Not an RDAR archive.");
+  if (view.getUint32(0, true) !== RDAR_MAGIC) throw new NativeMalformedError("Not an RDAR archive.");
   return { version: view.getUint32(4, true), indexOffset: u64(view, 8, "index offset"), indexSize: view.getUint32(16, true),
     debugOffset: u64(view, 20, "debug offset"), debugSize: view.getUint32(28, true), fileSize: u64(view, 32, "file size"),
     customDataLength: bytes.length >= RDAR_HEADER_SIZE + 4 ? view.getUint32(RDAR_HEADER_SIZE, true) : 0 };
@@ -82,14 +87,18 @@ export class RdarIndex {
   private readonly dependenciesAt: number;
   private readonly unsorted: Map<bigint, number> | null;
 
-  constructor(readonly header: RdarHeader, private readonly block: Uint8Array) {
-    if (block.length < INDEX_HEAD) throw Error("Truncated RDAR index.");
+  /** Where segments must end: the smaller of the header's file size and the real file's size (when the caller knows it). */
+  readonly dataEnd: number;
+
+  constructor(readonly header: RdarHeader, private readonly block: Uint8Array, actualSize = Number.MAX_SAFE_INTEGER) {
+    this.dataEnd = Math.min(header.fileSize, actualSize);
+    if (block.length < INDEX_HEAD) throw new NativeMalformedError("Truncated RDAR index.");
     this.view = new DataView(block.buffer, block.byteOffset, block.byteLength);
     this.crc = this.view.getBigUint64(8, true);
     this.fileCount = this.view.getUint32(16, true); this.segmentCount = this.view.getUint32(20, true); this.dependencyCount = this.view.getUint32(24, true);
     this.segmentsAt = INDEX_HEAD + this.fileCount * ENTRY_SIZE;
     this.dependenciesAt = this.segmentsAt + this.segmentCount * SEGMENT_SIZE;
-    if (this.dependenciesAt + this.dependencyCount * 8 > block.length) throw Error("RDAR index tables exceed the index block.");
+    if (this.dependenciesAt + this.dependencyCount * 8 > block.length) throw new NativeMalformedError("RDAR index tables exceed the index block.");
     this.hashes = new BigUint64Array(this.fileCount);
     let sorted = true;
     for (let i = 0; i < this.fileCount; i++) {
@@ -113,13 +122,13 @@ export class RdarIndex {
   }
 
   entryAt(i: number): RdarFileEntry {
-    if (i < 0 || i >= this.fileCount) throw RangeError(`RDAR entry ${i} does not exist.`);
+    if (i < 0 || i >= this.fileCount) throw new NativeMalformedError(`RDAR entry ${i} does not exist.`);
     const view = this.view, at = INDEX_HEAD + i * ENTRY_SIZE;
     const entry: RdarFileEntry = { hash: view.getBigUint64(at, true).toString(), timestamp: view.getBigInt64(at + 8, true),
       inlineBuffers: view.getUint32(at + 16, true), segmentStart: view.getUint32(at + 20, true), segmentEnd: view.getUint32(at + 24, true),
       dependencyStart: view.getUint32(at + 28, true), dependencyEnd: view.getUint32(at + 32, true), sha1: hex(this.block.subarray(at + 36, at + 56)) };
-    if (entry.segmentStart >= entry.segmentEnd || entry.segmentEnd > this.segmentCount) throw Error(`RDAR entry ${entry.hash} has an invalid segment range.`);
-    if (entry.dependencyStart > entry.dependencyEnd || entry.dependencyEnd > this.dependencyCount) throw Error(`RDAR entry ${entry.hash} has an invalid dependency range.`);
+    if (entry.segmentStart >= entry.segmentEnd || entry.segmentEnd > this.segmentCount) throw new NativeMalformedError(`RDAR entry ${entry.hash} has an invalid segment range.`);
+    if (entry.dependencyStart > entry.dependencyEnd || entry.dependencyEnd > this.dependencyCount) throw new NativeMalformedError(`RDAR entry ${entry.hash} has an invalid dependency range.`);
     return entry;
   }
 
@@ -132,9 +141,10 @@ export class RdarIndex {
   *entries(): IterableIterator<RdarFileEntry> { for (let i = 0; i < this.fileCount; i++) yield this.entryAt(i); }
 
   segmentAt(i: number): RdarSegment {
+    if (!Number.isInteger(i) || i < 0 || i >= this.segmentCount) throw new NativeMalformedError(`RDAR segment ${i} does not exist.`);
     const at = this.segmentsAt + i * SEGMENT_SIZE;
     const segment = { offset: u64(this.view, at, "segment offset"), storedSize: this.view.getUint32(at + 8, true), size: this.view.getUint32(at + 12, true) };
-    if (segment.offset + segment.storedSize > this.header.fileSize) throw Error("An RDAR segment lies outside the archive.");
+    if (segment.offset + segment.storedSize > this.dataEnd) throw new NativeMalformedError("An RDAR segment lies outside the archive.");
     return segment;
   }
 
@@ -160,13 +170,16 @@ export class RdarIndex {
  * The `LXRS` custom-data block: u32 magic, u32 version (1), u32 uncompressed size, u32 stored size, u32 name count, then the
  * stored bytes (an Oodle stream without a `KARK` header when stored size < size, else raw), which hold `count` NUL-terminated
  * depot paths. Some mod packers write it so tools can show names; the game does not need it. Returns [] for anything else.
+ * `maxBytes` caps the decompressed size before it is allocated.
  */
-export function parseLxrsNames(block: Uint8Array, decompress: (stored: Uint8Array, size: number) => Uint8Array): string[] {
+export function parseLxrsNames(block: Uint8Array, decompress: (stored: Uint8Array, size: number) => Uint8Array, maxBytes = Number.MAX_SAFE_INTEGER): string[] {
   if (block.length < 20) return [];
   const view = new DataView(block.buffer, block.byteOffset, block.byteLength);
   if (view.getUint32(0, true) !== LXRS_MAGIC) return [];
   const size = view.getUint32(8, true), stored = view.getUint32(12, true), count = view.getUint32(16, true);
-  if (20 + stored > block.length) throw Error("Truncated LXRS name block.");
+  if (20 + stored > block.length) throw new NativeMalformedError("Truncated LXRS name block.");
+  if (size > maxBytes) throw new NativeBudgetError(`An LXRS name list of ${size} bytes passes the ${maxBytes}-byte cap.`);
+  if (count > size) throw new NativeMalformedError(`An LXRS name list claims ${count} names in ${size} bytes.`);
   const payload = block.subarray(20, 20 + stored);
   const text = stored < size ? decompress(payload, size) : payload;
   const names: string[] = [];

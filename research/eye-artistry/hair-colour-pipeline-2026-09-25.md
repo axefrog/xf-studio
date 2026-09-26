@@ -120,4 +120,4 @@ python tools/hair-profile-swatch-fit.py <vanilla .hp.json dir> <female_cco.inkch
 
 Container hashes and provider details are in the [overlap audit](brown-liquorice-profile-overlap.md). `bun test`, `bun run check` and `bun run build` passed on this checkpoint.
 
-Community sources used are recorded in the knowledge page's sources: Modding Docs pages by manavortex, based on island_dancer's notes; the Cyberpunk Blender add-on; WolvenKit; and the MELUMINARY, island_dancer, Alliekat, icxrus and Arkhe mods as private reference inputs.
+Community sources used are recorded in the knowledge page's sources: Modding Docs pages by manavortex, based on redacted-c01's notes; the Cyberpunk Blender add-on; WolvenKit; and the MELUMINARY, redacted-c01, Alliekat, icxrus and Arkhe mods as private reference inputs.

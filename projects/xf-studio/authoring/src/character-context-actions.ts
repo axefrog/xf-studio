@@ -24,6 +24,12 @@
  *   tried piercing style (the retired preview fields) becomes the matching Piercings choices once the catalogue is ready, if the context
  *   is untouched and the installation offers that pair (CORE-74).
  *
+ * - **Preparing choices ahead** (choice-prefetch.ts): an open row asks the host to prepare its choices in the background, visible ones
+ *   first, and reads back each choice's state (not prepared yet, being prepared, ready, failed) per row, polled while the host has work
+ *   (`prefetch`); a hover or focus hint moves one choice to the front, and closing the row stops it (`stopPrefetch`). A change to a
+ *   choice that wasn't ready is marked first-time (`snapshot().firstTime`), so the status line can say why it takes a moment.
+ * - **Prepared game files**: their size on this computer, and `character.clearPreparedFiles` removes them (prepared-files.ts).
+ *
  * Presentation reads it through `snapshot()` (small, cloned) and the frozen `panel()`, `view()`, `choices(option)` and `search(query)`
  * (large, shared read-only objects, never cloned per paint).
  */
@@ -52,7 +58,23 @@ export type CreatorPort = {
   retry?(gender: BodyGender, signal: AbortSignal): Promise<CreatorState>;
   /** The choices an earlier build's tried piercing style stands for on this installation (CORE-74). */
   legacy?(gender: BodyGender, style: string, definition: string): Promise<CharacterChoice[]>;
+  /** Prepare a row's choices ahead (visible ones first; `focus` first of all) and answer their states, one character per position. */
+  prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal): Promise<PrefetchReply>;
+  /** Stop preparing ahead (the row closed). */
+  stopPrefetch?(): Promise<void>;
+  /** The prepared game files' size on this computer, and clearing them. */
+  preparedFiles?(signal?: AbortSignal): Promise<{ bytes: number }>;
+  clearPrepared?(): Promise<{ freed: number }>;
 };
+/** The host's answer about a row's choices prepared ahead (choice-prefetch.ts `PrefetchAnswer`). */
+export type PrefetchReply = { states: string; stopped: "time" | "disk" | null; busy: boolean };
+/**
+ * One choice prepared ahead: `?` not known yet, `n` not prepared (the host stopped preparing ahead), `q` waiting to be prepared,
+ * `f` being prepared, `r` ready, `x` couldn't be prepared ahead this time.
+ */
+export type ChoiceFetch = "?" | "n" | "q" | "f" | "r" | "x";
+export type CharacterFetchState = { readonly option: string; readonly states: ReadonlyMap<number, ChoiceFetch>; readonly stopped: "time" | "disk" | null;
+  readonly busy: boolean };
 export type CharacterContextPorts = {
   creator: CreatorPort;
   /** Show a save's V on the head (its facial shape and body), or none for the default V: used when Undo returns to another V. */
@@ -97,11 +119,17 @@ export type CharacterContextSnapshot = {
   notes: string[];
   /** `character.retry` would try something again (the catalogue, or the shown V). */
   retry: boolean;
+  /** The change being prepared now is a choice that wasn't prepared ahead: it reads the game files, so it takes a moment. */
+  firstTime: boolean;
+  /** The prepared game files' size in bytes (null until known), and whether they are being cleared. */
+  prepared: { bytes: number | null; clearing: boolean; freed: number | null };
   /** Bumps on every change of state, panel, view or pages. */
   revision: number;
 };
 
 const HISTORY_LIMIT = 100;
+/** Most positions one question about a row's choices names. */
+const CHOICE_PREFETCH_POSITIONS = 512;
 /** Polling the catalogue's build: while the panel is being looked at, and otherwise (PIPE-78). */
 const POLL_MS = 800, POLL_IDLE_MS = 4000, WATCHED_MS = 3000;
 const LOADING = "The creator options are still loading.";
@@ -166,6 +194,11 @@ export class CharacterContextActions {
   private watchedAt = 0;
   /** An earlier build's tried piercing style, migrated once the catalogue is ready (CORE-74). */
   private legacy: { style: string; definition: string } | null;
+  /** The row being prepared ahead: its V and option, the positions asked about, and their states (`prefetch`). */
+  private fetch: { key: string; option: string; positions: number[]; focus: number | null; sent: string; states: Map<number, ChoiceFetch>;
+    stopped: "time" | "disk" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
+  private firstTime = false;
+  private prepared: { bytes: number | null; clearing: boolean; freed: number | null; asking: boolean } = { bytes: null, clearing: false, freed: null, asking: false };
 
   constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
     const stored = storedCharacterOf(initial.stored);
@@ -193,7 +226,8 @@ export class CharacterContextActions {
     return structuredClone({ phase: this.catalogue.phase, message: this.catalogue.message, origin: this.state.origin, bodyGender: this.state.bodyGender,
       set: this.state.choices.length, undo: this.past.at(-1)?.label ?? null, redo: this.future.at(-1)?.label ?? null,
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
-      retry: this.capability({ kind: "character.retry" }).available, revision: this.revision });
+      retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
+      prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, revision: this.revision });
   }
   /** The panel's options for the shown V's body (frozen; shared, never copied). Reading it marks the panel as looked at. */
   panel(): Readonly<CcPanel> | null {
@@ -219,6 +253,77 @@ export class CharacterContextActions {
     const found = this.searching!;
     return { query: found.query, options: found.options, more: found.more, loading: found.loading, error: found.error };
   }
+  /**
+   * A row's choices prepared ahead: asks the host to prepare `positions` (visible ones first) in the background and returns their
+   * states so far (frozen; a new object when they change). `focus` (a hovered or focused choice) goes to the front. Null when the host
+   * can't prepare ahead, the catalogue isn't ready, or the shown V is one the preview doesn't draw (a masculine V shows the default V).
+   */
+  prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null {
+    if (!this.ports.creator.prefetch || !this.ready() || this.state.bodyGender !== "female" || !positions.length) return null;
+    // Keyed by the V without the row's own choice, so choosing in the row keeps the states it has.
+    const request = this.detailRequest();
+    const key = JSON.stringify([{ ...request, choices: (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option) }, option]);
+    if (this.fetch?.key !== key) {
+      this.fetch?.asking?.abort();
+      this.fetch = { key, option, positions: [], focus: null, sent: "", states: new Map(), stopped: null, busy: true, asking: null, again: false,
+        view: Object.freeze({ option, states: new Map(), stopped: null, busy: true }) };
+    }
+    // A hint stays until the next one (the next paint asks without one).
+    const fetch = this.fetch, wanted = positions.slice(0, CHOICE_PREFETCH_POSITIONS), hint = focus ?? fetch.focus;
+    const sent = JSON.stringify([wanted, hint]);
+    if (sent !== fetch.sent) { fetch.sent = sent; fetch.positions = wanted; fetch.focus = hint; this.askPrefetch(fetch); }
+    return fetch.view;
+  }
+  /** The row closed: stop preparing its choices ahead. */
+  stopPrefetch(option: string): void {
+    if (this.fetch?.option !== option) return;
+    this.fetch.asking?.abort();
+    this.fetch = null;
+    void this.ports.creator.stopPrefetch?.().catch(() => {});
+  }
+  private askPrefetch(fetch: NonNullable<CharacterContextActions["fetch"]>) {
+    if (fetch.asking) { fetch.again = true; return; }
+    const controller = new AbortController();
+    fetch.asking = controller;
+    const current = () => this.fetch === fetch && !this.disposed;
+    this.ports.creator.prefetch!(this.detailRequest(), fetch.option, fetch.positions, fetch.focus, controller.signal).then(reply => {
+      if (!current()) return;
+      let changed = reply.stopped !== fetch.stopped || reply.busy !== fetch.busy;
+      fetch.positions.forEach((position, index) => {
+        const state = (reply.states[index] ?? "?") as ChoiceFetch;
+        if (fetch.states.get(position) !== state) { fetch.states.set(position, state); changed = true; }
+      });
+      const wasBusy = fetch.busy;
+      fetch.stopped = reply.stopped; fetch.busy = reply.busy;
+      if (changed) {
+        fetch.view = Object.freeze({ option: fetch.option, states: new Map(fetch.states), stopped: fetch.stopped, busy: fetch.busy });
+        this.publish();
+      }
+      // The prepared files grew: their size is read again once the row settles.
+      if (wasBusy && !reply.busy) this.refreshPrepared();
+    }, () => { /* The host is unreachable or the page is older: the states stay as they were. */ }).finally(() => {
+      if (fetch.asking === controller) fetch.asking = null;
+      if (!current()) return;
+      if (fetch.again) { fetch.again = false; this.askPrefetch(fetch); return; }
+      // While the host has work, ask again: quickly while the panel is looked at, slowly otherwise.
+      if (fetch.busy) void this.ports.creator.wait(Date.now() - this.watchedAt < WATCHED_MS ? POLL_MS : POLL_IDLE_MS, controller.signal)
+        .then(() => { if (current() && !fetch.asking) this.askPrefetch(fetch); });
+    });
+  }
+  /** Read the prepared game files' size again (once at a time). */
+  refreshPrepared(): void {
+    if (!this.ports.creator.preparedFiles || this.prepared.asking || this.prepared.clearing) return;
+    this.prepared.asking = true;
+    this.ports.creator.preparedFiles().then(size => { this.prepared.bytes = size.bytes; this.publish(); }, () => {})
+      .finally(() => { this.prepared.asking = false; });
+  }
+  /** Where a choice sits among its option's loaded choices (null when it isn't loaded). */
+  private positionOf(change: CharacterChoice): number | null {
+    const option = this.option(change.part, change.option);
+    const page = option ? this.pages.get(pageKey(option.id, "")) : undefined;
+    return page?.choices.find(item => item.key === change.choice && (!change.activates || sameSet(item.activates, change.activates)))?.position ?? null;
+  }
+
   /** The request the preview prepares: the head of the shown V with the choices set on it (a masculine V shows the default V). */
   detailRequest(): CharacterRequest {
     if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
@@ -284,6 +389,7 @@ export class CharacterContextActions {
         this.catalogue = { phase: "ready", message: "", panel, gender };
         this.publish();
         this.refreshView();
+        this.refreshPrepared();
         this.migrateLegacy();
       } catch (error) {
         if (!live()) return;
@@ -478,6 +584,10 @@ export class CharacterContextActions {
       case "character.retry":
         return this.catalogue.phase === "failed" || this.ports.details?.failed() ? { available: true }
           : refusal("invalid_value", "Nothing failed, so there is nothing to try again.");
+      case "character.clearPreparedFiles":
+        if (!this.ports.creator.clearPrepared) return refusal("unavailable", "This version of XF Studio can't clear its prepared game files.");
+        if (this.prepared.clearing) return refusal("busy", "The prepared game files are being cleared.");
+        return this.prepared.bytes === 0 ? refusal("invalid_value", "There are no prepared game files to clear.") : { available: true };
       case "character.undo":
         return this.past.length ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
       case "character.redo":
@@ -489,9 +599,13 @@ export class CharacterContextActions {
   dispatch(action: CharacterContextAction): Record<string, never> {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
+    if (action.kind !== "character.setOption" && action.kind !== "character.clearPreparedFiles") this.firstTime = false;
     switch (action.kind) {
       case "character.setOption": {
         const { choices } = this.changesCheck([{ part: action.part, option: action.option, choice: action.choice, ...(action.activates ? { activates: action.activates } : {}) }]);
+        // A choice not prepared ahead reads the game files now (the status line says so); one prepared ahead is instant.
+        const position = choices[0] ? this.positionOf(choices[0]) : null, option = this.option(action.part, action.option);
+        this.firstTime = !(this.fetch && option && this.fetch.option === option.id && position !== null && this.fetch.states.get(position) === "r");
         this.step(plainStep(this.option(action.part, action.option), action.choice), this.withChoices(choices));
         break;
       }
@@ -545,6 +659,16 @@ export class CharacterContextActions {
         if (this.ports.details?.failed()) this.ports.details.retry();
         this.publish();
         break;
+      case "character.clearPreparedFiles": {
+        this.prepared = { ...this.prepared, clearing: true, freed: null };
+        this.fetch?.asking?.abort();
+        this.fetch = null;
+        this.publish();
+        this.ports.creator.clearPrepared!().then(result => { this.prepared = { ...this.prepared, clearing: false, freed: result.freed }; },
+          () => { this.prepared = { ...this.prepared, clearing: false }; })
+          .finally(() => { this.publish(); this.refreshPrepared(); });
+        break;
+      }
       case "character.undo": this.travel(this.past, this.future); break;
       case "character.redo": this.travel(this.future, this.past); break;
     }
@@ -618,6 +742,7 @@ export class CharacterContextActions {
 
   dispose() {
     this.disposed = true;
+    this.fetch?.asking?.abort();
     this.session?.abort();
     this.viewing?.controller.abort();
     this.searching?.controller?.abort();

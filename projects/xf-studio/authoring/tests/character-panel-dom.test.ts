@@ -21,6 +21,8 @@ async function harness() {
   // The fixture has no makeup category: its scars section stands in for it.
   const marked = { ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) };
   let failView = false;
+  const prefetches: { option: string; positions: number[]; focus: number | null }[] = [], stops: true[] = [];
+  const fetchStates = new Map<number, string>();
   const port: CreatorPort = {
     panel: async () => ({ phase: "ready", message: "", panel: structuredClone(marked) }),
     page: async (_gender, option, offset, _signal, query) => choicePage(index, mods, option, offset, { identity: "fixture", query })!,
@@ -32,6 +34,14 @@ async function harness() {
       return { ...view, identity: "fixture", values, faceMorphs: [] } as CreatorView;
     },
     preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }), wait: async () => {},
+    // Preparing choices ahead: each position's state is what the test sets (queued by default).
+    prefetch: async (_request, option, positions, focus) => {
+      prefetches.push({ option, positions: [...positions], focus });
+      return { states: positions.map(position => fetchStates.get(position) ?? "q").join(""), stopped: null, busy: false };
+    },
+    stopPrefetch: async () => { stops.push(true); },
+    preparedFiles: async () => ({ bytes: 3 * 1024 ** 3 / 2 }),
+    clearPrepared: async () => ({ freed: 3 * 1024 ** 3 / 2 }),
   };
   const context = new CharacterContextActions({ creator: port, showSave: () => {} });
   const dispatched: { kind: string }[] = [];
@@ -39,6 +49,8 @@ async function harness() {
     port: {
       authoring: { characterPanel: () => context.panel(), characterView: () => context.view(),
         characterChoices: (option: string, want?: number, query?: string) => context.choices(option, want, query), characterSearch: (query: string) => context.search(query),
+        characterPrefetch: (option: string, positions: number[], focus?: number | null) => context.prefetch(option, positions, focus ?? null),
+        characterStopPrefetch: (option: string) => context.stopPrefetch(option),
         capability: (action: { kind: string }) => action.kind.startsWith("character.") ? context.capability(action as never) : { available: true } },
       files: { capability: () => ({ available: true }) },
     },
@@ -54,7 +66,7 @@ async function harness() {
   const paint = () => controller.update(frame());
   context.start(); await settle();
   paint(); await settle(); paint();
-  return { context, root, paint, dispatched, setFailView: (value: boolean) => { failView = value; } };
+  return { context, root, paint, dispatched, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates };
 }
 const row = (root: LightElement, label: string) => root.querySelectorAll(".cc-row").find(element => element.querySelector(".cc-row-label")?.textContent === label)!;
 const items = (element: LightElement) => element.querySelectorAll(".cc-choice");
@@ -165,5 +177,53 @@ describe("the choice list", () => {
     expect(items(element)[1]!.getAttribute("aria-description")).toBe("From A mod");
     list.update(input([choice(0, "Long", { activates: ["hair_a"] }), choice(1, "Long", { activates: ["hair_b"], mod: 0 })], 0));
     expect(items(element).map(item => item.getAttribute("aria-selected"))).toEqual(["true", "false"]);
+  });
+
+  test("an open row's choices are prepared ahead: marks and descriptions per state, a hint moves one first, closing stops it", async () => {
+    const h = await harness();
+    h.fetchStates.set(0, "r").set(1, "f").set(3, "x");
+    const eyes = row(h.root, "Eye Color");
+    eyes.querySelector(".cc-row-main")!.click();
+    for (let i = 0; i < 4; i++) { h.paint(); await settle(); }
+    // The row's loaded choices were asked about (list order without layout), no hint yet.
+    expect(h.prefetches.at(-1)).toMatchObject({ option: "head/eyes_color", positions: [0, 1, 2, 3], focus: null });
+    const marks = items(eyes).map(item => [item.getAttribute("data-position"), item.getAttribute("data-fetch")]);
+    expect(marks).toEqual([["0", null], ["1", "fetching"], ["2", "pending"], ["3", "failed"]]);
+    expect(items(eyes)[2]!.getAttribute("aria-description")).toMatch(/not prepared yet$/);
+    expect(items(eyes)[1]!.getAttribute("aria-description")).toMatch(/being prepared$/);
+    expect(items(eyes)[0]!.getAttribute("aria-description")).not.toMatch(/prepared/);
+    // One line explains the marks, once, whatever row is open.
+    expect(h.root.querySelector(".cc-legend")!.textContent).toContain("Not prepared yet");
+    // A state that changes updates the item in place (no rebuild).
+    const node = items(eyes)[2]!;
+    h.fetchStates.set(2, "r");
+    items(eyes)[3]!.dispatchEvent(lightEvent("pointerenter"));
+    for (let i = 0; i < 3; i++) { h.paint(); await settle(); }
+    expect(h.prefetches.at(-1)).toMatchObject({ positions: [0, 1, 2, 3], focus: 3 });
+    expect(items(eyes)[2]).toBe(node);
+    expect(node.getAttribute("data-fetch")).toBeNull();
+    // A choice that wasn't ready is a first-time change; one that was isn't.
+    items(eyes)[3]!.click();
+    expect(h.context.snapshot().firstTime).toBe(true);
+    items(eyes)[2]!.click();
+    expect(h.context.snapshot().firstTime).toBe(false);
+    // Closing the row stops preparing ahead.
+    eyes.querySelector(".cc-row-main")!.click();
+    h.paint();
+    expect(h.stops.length).toBe(1);
+  });
+
+  test("the prepared game files' size and Clear prepared game files", async () => {
+    const h = await harness();
+    for (let i = 0; i < 3; i++) { h.paint(); await settle(); }
+    const text = () => h.root.querySelector(".cc-prepared-text")!.textContent;
+    expect(text()).toBe("Prepared game files on this computer: 1.5 GB.");
+    const clear = h.root.querySelectorAll("button").find(button => button.textContent?.includes("Clear prepared game files"))!;
+    clear.click();
+    expect(h.dispatched.at(-1)).toEqual({ kind: "character.clearPreparedFiles" });
+    h.paint();
+    expect(text()).toBe("Clearing the prepared game files…");
+    for (let i = 0; i < 3; i++) { await settle(); h.paint(); }
+    expect(text()).toBe("Prepared game files on this computer: 1.5 GB. Cleared 1.5 GB.");
   });
 });

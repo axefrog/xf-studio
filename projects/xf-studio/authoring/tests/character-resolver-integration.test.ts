@@ -46,7 +46,7 @@ oracleDescribe(missing.length === 0, `the resolver integration test needs ${miss
       const param = eyeParams.find(p => p.name === name && p.resource?.ref.hash === hash)!;
       expect(param.resource!.archive).toBe("basegame_Kala Standalone Eyes V2.archive");
     }
-    // Hair: MELUMINARY style + island_dancer colour, dynamic ash_brown (saved-hair-profile-resolution.md).
+    // Hair: MELUMINARY style + redacted-c01 colour, dynamic ash_brown (saved-hair-profile-resolution.md).
     const hair = find(result, "lm097_hair");
     expect(hair.app!.extractedSha256).toBe("e80ab06ea470d60aa87996ab2d8e122d32d72f49cbfb1b23508bc5996d4fe250");
     expect(hair.appearance.status).toBe("dynamic");

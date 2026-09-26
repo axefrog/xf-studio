@@ -112,5 +112,5 @@ bun experiments/021-glitter-board/summarize.ts projects/xf-studio/build/<build> 
 
 - **Game resources.** CD PROJEKT RED's installed game 2.31, read-only: the plate derived from the player head, and the template parameters of `mesh_decal.mt` and `mesh_decal_emissive_subsurface.mt` (default `SecondaryMask` white, `EmissiveMaskChannel` a Vector4) from their serialized templates.
 - **Tools.** WolvenKit CLI 9.0.1 for import, serialization, export and packing.
-- **Design.** Experiment 018's measured recipe and nesting rules, independently reimplemented; island_dancer's lesson that facets need visibly varied tilts shaped the tilt distribution; *Winterkissed* (Limerence with AllieKat) remains the in-game reference only. Both are credited in the [community credits](../../docs/community-credits.md).
+- **Design.** Experiment 018's measured recipe and nesting rules, independently reimplemented; redacted-c01's lesson that facets need visibly varied tilts shaped the tilt distribution; *Winterkissed* (Limerence with AllieKat) remains the in-game reference only. Both are credited in the [community credits](../../docs/community-credits.md).
 - Everything tracked here (generator, summary script, numbers) is asset-free.

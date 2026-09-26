@@ -64,13 +64,19 @@ struct CameraRequest
 };
 CameraRequest ParseCamera(const json& aParams);
 
+// The photo.camera.set parameter for a camera key ("fov", "subject.yaw"); empty if it isn't one.
+std::string CameraParamName(int32_t aKey);
+
 // The keys photo.camera.set may reset.
 std::vector<int32_t> CameraKeys();
 
-// photo.light.set: {light: 1-3, brightness, range, inner_angle, outer_angle, hue, saturation, luminosity}.
+// photo.light.set: {light: 1-3, brightness, range, inner_angle, outer_angle, hue, saturation, luminosity,
+// select_after: 1-3}. select_after selects that light in the menu once the values are set (the undo
+// uses it to put the menu's selection back).
 struct LightRequest
 {
     int32_t light = 1;
+    int32_t selectAfter = 0; // 0 = leave the light selected
     std::vector<Attribute> attributes;
 };
 LightRequest ParseLight(const json& aParams);

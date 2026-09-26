@@ -25,7 +25,9 @@ export function learnedDefault(type: string, property: string): unknown {
   return undefined;
 }
 
+/** Learned keys by type. Type names come from files, so the memo is bounded (cleared when full). */
 const keysMemo = new Map<string, string[]>();
+const MAX_KEYS_MEMO = 4096;
 /**
  * Properties the reference JSON writes for `type` beyond its RTTI ones (derived or newer properties, learned with their defaults),
  * along its base classes.
@@ -34,10 +36,14 @@ export function learnedKeys(type: string): string[] {
   let keys = keysMemo.get(type);
   if (!keys) {
     keys = [...new Set(baseClasses(type).flatMap(name => Object.keys(table[name] ?? {})))];
+    if (keysMemo.size >= MAX_KEYS_MEMO) keysMemo.clear();
     keysMemo.set(type, keys);
   }
   return keys;
 }
+
+/** Test hook: how many types the learned-keys memo holds. */
+export const learnedKeysMemoSize = () => keysMemo.size;
 
 /** The zero value of a type string. */
 export function defaultValue(type: string): unknown {

@@ -1,11 +1,12 @@
 /**
  * Leaf-by-leaf comparison of a native document with a reference (WolvenKit) document, for the differential harness and the
  * oracle test. Pure. Two known, harmless differences are classified rather than counted as errors:
- * - a hash-only `ResourcePath` where the reference shows path text (package references store hashes; the reference tool names
+ * - a hash-only `ResourcePath` where the reference shows path text that hashes to it (package references store hashes; the reference tool names
  *   them from its own path list), and
  * - a hash-only `TweakDBID` where the reference shows the record name, when the name hashes to the same id.
  * Buffer `Type` strings (the reference tool's .NET type names) are not compared; a reference `Bytes` string compares by its length.
  */
+import { depotHash } from "../depot-path";
 import { tweakDbId } from "../tweakdb-flats";
 
 export interface DocumentMismatch { readonly path: string; readonly kind: string; readonly mine: string; readonly reference: string }
@@ -31,7 +32,9 @@ export function compareDocuments(mine: unknown, reference: unknown, path = "", o
       return out;
     }
     if (reference.$type === "ResourcePath" && mine.$type === "ResourcePath" && mine.$storage === "uint64" && reference.$storage === "string") {
-      out.push({ path, kind: HASH_ONLY_PATH, mine: text(mine.$value), reference: text(reference.$value) });
+      // Name-only only when the reference's path hashes to the same depot hash; otherwise it is a different resource.
+      const same = String(mine.$value) === depotHash(String(reference.$value));
+      out.push({ path, kind: same ? HASH_ONLY_PATH : "ResourcePath: different hash", mine: text(mine.$value), reference: text(reference.$value) });
       return out;
     }
     const normalised = typeof reference.Bytes === "string" ? { ...reference, Bytes: { $trimmedBase64Length: reference.Bytes.length } } : reference;

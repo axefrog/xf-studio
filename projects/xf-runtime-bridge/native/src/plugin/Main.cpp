@@ -125,11 +125,10 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             log::Debug("game.drained", "tasks=" + std::to_string(ran));
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
-        // write can run after this undo; it runs here directly, once.
-        if (state.bridge && state.bridge->RestoreReady() && state.writesUsed.load() && !state.restoreDone.load())
-        {
-            RestoreAfterKill();
-        }
+        // write can run after this undo; RestoreOnce runs it here directly, once, after a write.
+        state.restore.Tick(state.bridge && state.bridge->RestoreReady(), &RestoreAfterKill, [](const std::string& aWhat) {
+            log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
+        });
         return false;
     });
 }

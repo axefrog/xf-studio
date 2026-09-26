@@ -12,6 +12,10 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   killed: "The game bridge was switched off with its kill switch. Restart the game to use it again.",
   rate_limited: "Too many requests in a short time. Wait a second and try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
+  write_class_disabled:
+    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character). Nothing was changed.",
+  write_mismatch:
+    "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
   writes_disabled:
     "Changing the game is switched off in this setup. It is allowed only in the dedicated test profile, where the bridge's config.ini has allow_writes = true.",
   game_not_running: "The game hasn't finished starting. Wait for the main menu, then try again.",

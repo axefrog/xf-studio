@@ -36,7 +36,7 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
 };
 
 export type CommandResult = { value: unknown; images?: ImageRef[] };
-export type CommandContext = { api: CommandApi; cid: string; captureRoot: string };
+export type CommandContext = { api: CommandApi; cid: string; captureRoot: string; signal?: AbortSignal };
 
 export type CommandDef = {
   /** Canonical dotted name, e.g. "photo.camera.set". */
@@ -223,7 +223,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       },
       ["phase"],
     ),
-    local: async (input, { api, cid }) => {
+    local: async (input, { api, cid, signal }) => {
       const wanted = input.phase as string[];
       const timeout = (input.timeout_ms as number | undefined) ?? 60000;
       const started = performance.now();
@@ -236,7 +236,9 @@ export const CATALOGUE: readonly CommandDef[] = [
         if (performance.now() - started >= timeout) {
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);
         }
+        if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
         await new Promise((r) => setTimeout(r, 500));
+        if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
       }
     },
   },
@@ -337,10 +339,11 @@ export const CATALOGUE: readonly CommandDef[] = [
         hue: num("Colour hue, 0 to 360.", 0, 360),
         saturation: num("Colour saturation, 0 to 100.", 0, 100),
         luminosity: num("Colour luminosity, 0 to 100.", 0, 100),
+        select_after: int("Select this light (1, 2 or 3) in the menu once the values are set; the undo uses it to put the menu's selection back.", 1, 3),
       },
       ["light"],
     ),
-    undo: "the result's undo parameters restore that light's previous values.",
+    undo: "the result's undo parameters restore that light's previous values and the menu's previous light selection.",
     bridge: { method: "photo.light.set" },
   },
   {

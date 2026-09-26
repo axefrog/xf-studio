@@ -56,7 +56,8 @@ bool Bridge::Start(std::string& aError)
                          {"token", m_session.token},
                          {"started_at", m_session.startedAt},
                          {"plugin_version", XFB_VERSION_STRING},
-                         {"allow_writes", m_config.allowWrites}};
+                         {"allow_writes", m_config.allowWrites},
+                         {"write_classes", WriteClassList(m_config)}};
     std::string writeError;
     if (!win32::WriteFileAtomic(m_session.SessionFile(),
                                 discovery.dump(2, ' ', false, json::error_handler_t::replace), writeError))
@@ -153,6 +154,7 @@ json Bridge::Status() const
                 {"connections", m_server.ConnectionsAccepted()},
                 {"requests", m_dispatcher.RequestCount()},
                 {"allow_writes", m_config.allowWrites},
+                {"write_classes", WriteClassList(m_config)},
                 {"game_thread_pumping", m_queue.IsPumping()},
                 {"late_game_tasks", m_queue.LateCompletions()}};
 }

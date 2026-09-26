@@ -14,6 +14,9 @@
 //   gamePhotoModeSystem.IsPhotoModeActive/CanPhotoModeBeEnabled/IsExitLocked() -> Bool
 // The GetPlayer call pattern is RED4ext.SDK examples/native_globals_redscript/Main.cpp:19-23 (tag 1.0.0).
 
+#include <map>
+#include <set>
+#include <mutex>
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Scripting/Natives/ScriptGameInstance.hpp>
 #include <RED4ext/Scripting/Natives/Vector4.hpp>
@@ -23,6 +26,7 @@
 #include <vector>
 
 #include "core/Params.hpp"
+#include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
 
@@ -108,6 +112,156 @@ void RequireSignature(const RED4ext::CBaseFunction* aFn, const std::string& aWha
     }
 }
 
+// A function's bare name: script functions compiled by redscript can be registered under a
+// decorated name ("Status;String", possibly "Class::Status;String") rather than the bare short name
+// CClass::GetFunction compares, so both the short and full names are reduced before comparing.
+std::string BareName(const RED4ext::CName& aName)
+{
+    std::string name = aName.ToString() ? aName.ToString() : "";
+    if (const auto colons = name.rfind("::"); colons != std::string::npos)
+    {
+        name = name.substr(colons + 2);
+    }
+    if (const auto semicolon = name.find(';'); semicolon != std::string::npos)
+    {
+        name = name.substr(0, semicolon);
+    }
+    return name;
+}
+
+// First in-game run (26 Sep 2026): our redscript class was in RTTI with no functions on it at
+// all (staticFuncs and funcs both empty), so script static functions are looked for among the
+// global functions too, registered as "<Class>::<Name>;<Params>" with or without the module
+// prefix. A hit is cached per class and name, since game.wait polls game.status every 500 ms.
+std::string ShortClassName(const std::string& aClassName)
+{
+    const auto dot = aClassName.rfind('.');
+    return dot == std::string::npos ? aClassName : aClassName.substr(dot + 1);
+}
+
+bool GlobalMatches(const std::string& aFullName, const std::string& aClassName, const char* aFunction)
+{
+    const auto head = aFullName.substr(0, aFullName.find(';'));
+    const auto colons = head.rfind("::");
+    if (colons == std::string::npos || head.substr(colons + 2) != aFunction)
+    {
+        return false;
+    }
+    const auto owner = head.substr(0, colons);
+    return owner == aClassName || owner == ShortClassName(aClassName) || ShortClassName(owner) == ShortClassName(aClassName);
+}
+
+RED4ext::CBaseFunction* FindGlobalStatic(const std::string& aClassName, const char* aFunction)
+{
+    static std::mutex cacheMutex;
+    static std::map<std::string, RED4ext::CBaseFunction*> cache;
+    const auto key = aClassName + "::" + aFunction;
+    {
+        std::lock_guard lock(cacheMutex);
+        if (const auto it = cache.find(key); it != cache.end())
+        {
+            return it->second;
+        }
+    }
+    RED4ext::DynArray<RED4ext::CBaseFunction*> globals;
+    RED4ext::CRTTISystem::Get()->GetGlobalFunctions(globals);
+    RED4ext::CBaseFunction* found = nullptr;
+    for (auto* fn : globals)
+    {
+        const auto* full = fn ? fn->fullName.ToString() : nullptr;
+        if (full && GlobalMatches(full, aClassName, aFunction))
+        {
+            found = fn;
+            break;
+        }
+    }
+    if (found)
+    {
+        std::lock_guard lock(cacheMutex);
+        cache[key] = found;
+    }
+    return found;
+}
+
+RED4ext::CBaseFunction* FindByName(RED4ext::CClass* aClass, const std::string& aClassName, const char* aFunction)
+{
+    if (auto* fn = aClass->GetFunction(aFunction))
+    {
+        return fn;
+    }
+    const auto matches = [&](RED4ext::CClassFunction* aFn)
+    { return BareName(aFn->shortName) == aFunction || BareName(aFn->fullName) == aFunction; };
+    for (auto* fn : aClass->staticFuncs)
+    {
+        if (matches(fn))
+        {
+            return fn;
+        }
+    }
+    for (auto* fn : aClass->funcs)
+    {
+        if (matches(fn))
+        {
+            return fn;
+        }
+    }
+    return FindGlobalStatic(aClassName, aFunction);
+}
+
+void LogFunctionNames(RED4ext::CClass* aClass, const std::string& aClassName, const std::string& aCid)
+{
+    // Once per class per session: game.wait polls every 500 ms and would repeat the whole list.
+    static std::mutex loggedMutex;
+    static std::set<std::string> logged;
+    {
+        std::lock_guard lock(loggedMutex);
+        if (!logged.insert(aClassName).second)
+        {
+            return;
+        }
+    }
+    std::string names;
+    const auto add = [&](RED4ext::CClassFunction* aFn)
+    {
+        if (names.size() > 3000)
+        {
+            return;
+        }
+        if (!names.empty())
+        {
+            names += ",";
+        }
+        names += std::string(aFn->shortName.ToString() ? aFn->shortName.ToString() : "?") + "|" +
+                 (aFn->fullName.ToString() ? aFn->fullName.ToString() : "?");
+    };
+    for (auto* fn : aClass->staticFuncs)
+    {
+        add(fn);
+    }
+    for (auto* fn : aClass->funcs)
+    {
+        add(fn);
+    }
+    RED4ext::DynArray<RED4ext::CBaseFunction*> globals;
+    RED4ext::CRTTISystem::Get()->GetGlobalFunctions(globals);
+    std::string related;
+    const auto shortName = ShortClassName(aClassName);
+    for (auto* fn : globals)
+    {
+        const auto* full = fn ? fn->fullName.ToString() : nullptr;
+        if (full && std::string(full).find(shortName) != std::string::npos && related.size() < 3000)
+        {
+            related += (related.empty() ? "" : ",") + std::string(full);
+        }
+    }
+    log::Warn("rtti.script_globals", "class=" + aClassName + " globals=" + std::to_string(globals.size) +
+                                         " related=" + related,
+              aCid);
+    log::Warn("rtti.script_functions", "class=" + aClassName + " static=" + std::to_string(aClass->staticFuncs.size) +
+                                           " member=" + std::to_string(aClass->funcs.size) + " names=" + names,
+              aCid);
+}
+
 RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunction, const Signature& aSignature,
                                           const std::string& aCid)
 {
@@ -118,9 +272,10 @@ RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunct
         log::Warn("rtti.missing_class", std::string("class=") + aClass, aCid);
         throw MethodError("rtti_missing", std::string("class not found: ") + aClass);
     }
-    auto* fn = cls->GetFunction(aFunction);
+    auto* fn = FindByName(cls, aClass, aFunction);
     if (!fn)
     {
+        LogFunctionNames(cls, aClass, aCid);
         log::Warn("rtti.missing_function", std::string("class=") + aClass + " function=" + aFunction, aCid);
         throw MethodError("rtti_missing", std::string("function not found: ") + aClass + "." + aFunction);
     }
@@ -211,9 +366,10 @@ json ScriptDescribe(const MethodContext& aContext)
         throw MethodError("script_layer_missing",
                           "redscript class XFRuntimeBridge.XFBridgeQuery not found (scripts not compiled?)");
     }
-    auto* fn = cls->GetFunction("DescribeJson");
+    auto* fn = FindByName(cls, "XFRuntimeBridge.XFBridgeQuery", "DescribeJson");
     if (!fn)
     {
+        LogFunctionNames(cls, "XFRuntimeBridge.XFBridgeQuery", aContext.cid);
         throw MethodError("script_layer_missing", "XFBridgeQuery.DescribeJson not found");
     }
     RequireSignature(fn, "XFRuntimeBridge.XFBridgeQuery.DescribeJson", {true, "String", {"String"}}, aContext.cid);
@@ -260,9 +416,10 @@ RED4ext::CBaseFunction* FindScriptFunction(const std::string& aClass, const char
     {
         throw MethodError("script_layer_missing", "redscript class " + className + " not found (scripts not compiled?)");
     }
-    auto* fn = cls->GetFunction(aFunction);
+    auto* fn = FindByName(cls, className, aFunction);
     if (!fn)
     {
+        LogFunctionNames(cls, className, aCid);
         throw MethodError("script_layer_missing", className + "." + aFunction + " not found (stale Scripts folder?)");
     }
     RequireSignature(fn, className + "." + aFunction, aSignature, aCid);
@@ -363,41 +520,14 @@ json SetPhotoAttributes(const std::vector<params::Attribute>& aAttributes, const
     return applied;
 }
 
-// {"fov": before, "subject": {"yaw": before}} from applied attributes: the parameters that undo them.
-json UndoParams(const json& aApplied)
-{
-    json undo = json::object();
-    for (const auto& item : aApplied)
-    {
-        const auto name = item.value("name", std::string());
-        const auto before = item.value("before", 0.0);
-        if (name.rfind("subject.", 0) == 0)
-        {
-            undo["subject"][name.substr(8)] = before;
-        }
-        else if (name == "dof" || name == "autofocus")
-        {
-            undo[name] = before != 0.0;
-        }
-        else if (name == "look_at" || name == "look_at_part" || name == "faceId")
-        {
-            undo[name] = static_cast<int64_t>(before);
-        }
-        else
-        {
-            undo[name] = before;
-        }
-    }
-    return undo;
-}
-
 json GameStatus(const MethodContext& aContext)
 {
     params::RequireOnly(aContext.params, {});
     auto& state = Get();
     json out{{"plugin_game_state", GameStateName(state.gameState.load())},
              {"game_version", {{"product", state.gameProductVersion}, {"file", state.gameFileVersion}}},
-             {"allow_writes", state.config.allowWrites}};
+             {"allow_writes", state.config.allowWrites},
+             {"write_classes", WriteClassList(state.config)}};
     if (!state.queue.IsPumping())
     {
         out["phase"] = state.gameState.load() == 3 ? "shutting_down" : "starting";
@@ -599,34 +729,38 @@ json PhotoCameraSet(const MethodContext& aContext)
                 }
             }
         }
-        return json{{"reset", reset}};
+        return writes::CameraResetResult(reset);
     }
     const auto applied = SetPhotoAttributes(request.attributes, aContext.cid);
-    return json{{"applied", applied}, {"undo", {{"method", "photo.camera.set"}, {"params", UndoParams(applied)}}}};
+    std::vector<std::string> unknown;
+    json out{{"applied", applied}};
+    writes::AttachUndo(out, "photo.camera.set", writes::UndoParams(applied, &unknown), unknown);
+    return out;
 }
 
 // Selecting a light and changing its values happen a few frames apart: photo mode loads the
 // newly selected light's values into the sliders after the switch (Photo Mode Preferences waits
-// two frames for the same reason, init.lua:767-790).
+// two frames for the same reason, init.lua:767-790). The wait counts game ticks, not time, so it
+// holds at any frame rate; the sequence and its undo are core/Writes.cpp (unit-tested).
+constexpr uint64_t kLightSettleTicks = 3;
+
 json PhotoLightSet(const MethodContext& aContext)
 {
     const auto request = params::ParseLight(aContext.params);
     const auto cid = aContext.cid;
     auto& queue = Get().queue;
-    const auto select = RunGameTask(
-        queue, Timeout(),
-        [cid, light = request.light] { return SetPhotoAttribute(params::key::kLightSelect, static_cast<float>(light - 1), cid); },
-        "photo.light.select");
-    if (select.value("before", 0.0) != select.value("after", 0.0))
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    }
-    const auto attributes = request.attributes;
-    const auto applied = RunGameTask(
-        queue, Timeout(), [cid, attributes] { return SetPhotoAttributes(attributes, cid); }, "photo.light.set");
-    auto undo = UndoParams(applied);
-    undo["light"] = request.light;
-    return json{{"light", request.light}, {"applied", applied}, {"undo", {{"method", "photo.light.set"}, {"params", undo}}}};
+    writes::LightOps ops;
+    ops.set = [&queue, cid](int32_t aKey, float aValue) {
+        return RunGameTask(queue, Timeout(), [cid, aKey, aValue] { return SetPhotoAttribute(aKey, aValue, cid); },
+                           aKey == params::key::kLightSelect ? "photo.light.select" : "photo.light.set");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, kLightSettleTicks, Timeout()))
+        {
+            throw MethodError("timeout", "photo mode didn't load the selected light's values in time");
+        }
+    };
+    return writes::LightSet(request, ops);
 }
 
 json PhotoHudHide(const MethodContext& aContext)
@@ -640,9 +774,7 @@ json PhotoHudHide(const MethodContext& aContext)
 json PhotoExpressionSet(const MethodContext& aContext)
 {
     const auto face = params::ParseExpression(aContext.params);
-    auto result = SetPhotoAttribute(params::key::kExpression, static_cast<float>(face), aContext.cid);
-    result["undo"] = {{"method", "photo.expression.set"}, {"params", {{"faceId", static_cast<int64_t>(result.value("before", 0.0))}}}};
-    return result;
+    return writes::ExpressionResult(SetPhotoAttribute(params::key::kExpression, static_cast<float>(face), aContext.cid));
 }
 
 json CharacterApply(const MethodContext& aContext)
@@ -673,17 +805,16 @@ json WorldTimeSet(const MethodContext& aContext)
 json WorldPause(const MethodContext& aContext)
 {
     bool paused = params::ParsePause(aContext.params);
-    auto result = CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid);
-    result["undo"] = {{"method", "world.pause"}, {"params", {{"paused", !paused}}}};
-    return result;
+    return writes::PauseResult(CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid));
 }
 
 // Wraps a write method: marks that the bridge changed something (so the kill switch restores it)
 // and logs the change with its reversal.
-MethodSpec WriteMethod(std::string aName, RunOn aRunOn, std::string aSummary, json (*aFn)(const MethodContext&))
+MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::string aSummary,
+                       json (*aFn)(const MethodContext&))
 {
-    return {aName, Access::Write, aRunOn, std::move(aSummary), [aName, aFn](const MethodContext& aContext) {
-                Get().writesUsed.store(true);
+    return {aName, aAccess, aRunOn, std::move(aSummary), [aName, aFn](const MethodContext& aContext) {
+                Get().restore.MarkWrite();
                 auto result = aFn(aContext);
                 log::Info("write.done",
                           "method=" + aName + " undo=" + SerializeJson(result.contains("undo") ? result["undo"] : json("none")),
@@ -695,20 +826,8 @@ MethodSpec WriteMethod(std::string aName, RunOn aRunOn, std::string aSummary, js
 
 void RestoreAfterKill()
 {
-    auto& state = Get();
-    if (!state.writesUsed.load() || state.restoreDone.exchange(true))
-    {
-        return;
-    }
-    try
-    {
-        const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
-        log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
-    }
-    catch (const std::exception& e)
-    {
-        log::Warn("bridge.kill_restore_failed", std::string("what=") + e.what(), "kill-restore");
-    }
+    const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
+    log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
 }
 
 void RegisterMethods(Dispatcher& aDispatcher)
@@ -759,21 +878,21 @@ void RegisterMethods(Dispatcher& aDispatcher)
                           &PhotoState});
 
     // Phase 2. Writes (refused unless allow_writes = true); each logs its reversal.
-    aDispatcher.Register(WriteMethod("photo.enter", RunOn::BridgeThread, "Opens photo mode (needs Codeware).", &PhotoEnter));
-    aDispatcher.Register(WriteMethod("photo.exit", RunOn::BridgeThread, "Leaves photo mode.", &PhotoExit));
-    aDispatcher.Register(WriteMethod("photo.camera.set", RunOn::GameThread,
+    aDispatcher.Register(WriteMethod("photo.enter", Access::WritePhoto, RunOn::BridgeThread, "Opens photo mode (needs Codeware).", &PhotoEnter));
+    aDispatcher.Register(WriteMethod("photo.exit", Access::WritePhoto, RunOn::BridgeThread, "Leaves photo mode.", &PhotoExit));
+    aDispatcher.Register(WriteMethod("photo.camera.set", Access::WritePhoto, RunOn::GameThread,
                                      "Photo-mode camera and subject settings (FOV, roll, focus, DOF, V's placement), or reset.",
                                      &PhotoCameraSet));
-    aDispatcher.Register(WriteMethod("photo.light.set", RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
+    aDispatcher.Register(WriteMethod("photo.light.set", Access::WritePhoto, RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
                                      &PhotoLightSet));
-    aDispatcher.Register(WriteMethod("photo.hud.hide", RunOn::GameThread, "Hides or shows the photo-mode interface.", &PhotoHudHide));
-    aDispatcher.Register(WriteMethod("photo.expression.set", RunOn::GameThread, "Sets V's photo-mode expression by its value.",
+    aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface.", &PhotoHudHide));
+    aDispatcher.Register(WriteMethod("photo.expression.set", Access::WritePhoto, RunOn::GameThread, "Sets V's photo-mode expression by its value.",
                                      &PhotoExpressionSet));
-    aDispatcher.Register(WriteMethod("cc.apply", RunOn::GameThread,
+    aDispatcher.Register(WriteMethod("cc.apply", Access::WriteCharacter, RunOn::GameThread,
                                      "Sets one character-creator option on the open appearance screen (never confirms).",
                                      &CharacterApply));
-    aDispatcher.Register(WriteMethod("world.time.set", RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
-    aDispatcher.Register(WriteMethod("world.pause", RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
+    aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
+    aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
 
     // A write-class probe with no game effect: proves the write gate and audit log in game.
     aDispatcher.Register({"diag.write_probe", Access::Write, RunOn::GameThread,

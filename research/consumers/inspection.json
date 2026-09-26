@@ -52,16 +52,16 @@
     "appearances": 45,
     "material_entries": 11,
     "dynamic_samples": [
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__beard.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__braid.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__cap.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__cap_mask.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__curls.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__dread.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__long.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__short.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__brows.mi",
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__lashes.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__beard.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__braid.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__cap.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__cap_mask.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__curls.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__dread.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__long.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__short.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__brows.mi",
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__lashes.mi",
       "@beard",
       "@braid",
       "@cap",
@@ -83,7 +83,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{beard_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -99,7 +99,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{braid_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -117,7 +117,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{brows_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\cap_gradients\\hh_cap_grad__{material}.xbm"
+      "*redacted-c01\\id_hair_profiles_ccxl\\cap_gradients\\hh_cap_grad__{material}.xbm"
     ]
   },
   {
@@ -134,7 +134,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{cap_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\cap_gradients\\hh_cap_grad__{material}.xbm"
+      "*redacted-c01\\id_hair_profiles_ccxl\\cap_gradients\\hh_cap_grad__{material}.xbm"
     ]
   },
   {
@@ -149,7 +149,7 @@
     "appearances": 0,
     "material_entries": 0,
     "dynamic_samples": [
-      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__cap.mi"
+      "redacted-c01\\id_hair_profiles_ccxl\\materials\\template__cap.mi"
     ]
   },
   {
@@ -165,7 +165,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{curls_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -181,7 +181,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{dread_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -197,7 +197,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{lashes_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -213,7 +213,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{long_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -229,7 +229,7 @@
     "material_entries": 0,
     "dynamic_samples": [
       "*{short_base_material}",
-      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+      "*redacted-c01\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
     ]
   },
   {
@@ -608,7 +608,7 @@
     "appearances": 32,
     "material_entries": 1,
     "dynamic_samples": [
-      "island_dancer\\id_photoreal_eyes_ccxl\\materials\\template__eyes.mi",
+      "redacted-c01\\id_photoreal_eyes_ccxl\\materials\\template__eyes.mi",
       "@eyes"
     ]
   },
@@ -624,8 +624,8 @@
     "appearances": 0,
     "material_entries": 0,
     "dynamic_samples": [
-      "*island_dancer\\id_photoreal_eyes_ccxl\\materials\\textures\\{material}_d.xbm",
-      "*island_dancer\\id_photoreal_eyes_ccxl\\materials\\textures\\{material}_n.xbm"
+      "*redacted-c01\\id_photoreal_eyes_ccxl\\materials\\textures\\{material}_d.xbm",
+      "*redacted-c01\\id_photoreal_eyes_ccxl\\materials\\textures\\{material}_n.xbm"
     ]
   }
 ]

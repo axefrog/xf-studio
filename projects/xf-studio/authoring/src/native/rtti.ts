@@ -4,6 +4,7 @@
  * first, and gives enum and bitfield members. Classes outside the subset are still read (a CR2W file names every property's
  * type); only their unwritten defaults are unknown.
  */
+import classHashes from "./rtti-class-hashes.json";
 import subset from "./rtti-subset.json";
 
 type ClassRow = [parent: string, props: [name: string, type: string][]];
@@ -11,13 +12,25 @@ const classes = subset.classes as unknown as Record<string, ClassRow>;
 const enums = subset.enums as unknown as Record<string, [string, number][] | 0>;
 const bitfields = subset.bitfields as unknown as Record<string, [string, number][]>;
 
-export type TypeKind = "enum" | "bitfield" | "class" | "other";
+/** FNV-1a 32 of a type name (ASCII), as `rtti-class-hashes.json` stores every class name of the RTTI dump. */
+export function classNameHash(name: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < name.length; i++) { hash ^= name.charCodeAt(i) & 0xff; hash = Math.imul(hash, 0x01000193) >>> 0; }
+  return hash >>> 0;
+}
+const allClasses = new Set(classHashes.hashes.split(",").map(text => parseInt(text, 36)));
 
-/** What a bare type name (no `array:`/`handle:` prefix) is, as far as the RTTI slice knows. */
+/**
+ * What a bare type name (no `array:`/`handle:` prefix) is: an enum, a bitfield, a class in the slice (properties known), a class
+ * the RTTI dump names but the slice leaves out (`unsliced-class`: readable, defaults unknown), or a name the RTTI does not know.
+ */
+export type TypeKind = "enum" | "bitfield" | "class" | "unsliced-class" | "other";
+
 export function kindOf(type: string): TypeKind {
   if (Object.hasOwn(enums, type)) return "enum";
   if (Object.hasOwn(bitfields, type)) return "bitfield";
   if (Object.hasOwn(classes, type)) return "class";
+  if (allClasses.has(classNameHash(type))) return "unsliced-class";
   return "other";
 }
 
@@ -37,10 +50,39 @@ export function classProperties(type: string): readonly (readonly [string, strin
   return props;
 }
 
+const propertyTypesMemo = new Map<string, ReadonlyMap<string, string>>();
+/**
+ * A class's properties by name with their RTTI types, or null when the slice does not know the class. Memoised for classes in the
+ * slice only, so the cache is bounded by the slice, not by the files read.
+ */
+export function propertyTypes(type: string): ReadonlyMap<string, string> | null {
+  let types = propertyTypesMemo.get(type);
+  if (!types) {
+    const props = classProperties(type);
+    if (!props) return null;
+    types = new Map(props.map(([name, t]) => [name, t]));
+    propertyTypesMemo.set(type, types);
+  }
+  return types;
+}
+
+/** The RTTI type of `type.property`, or null when the slice does not know the class or the property. */
+export const propertyType = (type: string, property: string): string | null => propertyTypes(type)?.get(property) ?? null;
+
+/** `static:N,T` and `[N]T` name the same type; everything else compares as text. */
+const canonicalType = (type: string) => type.replace(/static:(\d+),/g, "[$1]");
+/** Whether a stored type string names the RTTI's type. */
+export const sameType = (stored: string, rtti: string) => stored === rtti || canonicalType(stored) === canonicalType(rtti);
+
 /** `type` and its base classes, nearest first (as far as the slice knows them). */
-export function baseClasses(type: string): string[] {
+const baseMemo = new Map<string, readonly string[]>();
+export function baseClasses(type: string): readonly string[] {
+  const known = baseMemo.get(type);
+  if (known) return known;
   const out: string[] = [];
   for (let name = type; name && !out.includes(name); name = Object.hasOwn(classes, name) ? classes[name]![0] : "") out.push(name);
+  // Memoised for classes in the slice only (bounded by the slice); any other name is its own one-element chain.
+  if (Object.hasOwn(classes, type)) baseMemo.set(type, out);
   return out;
 }
 

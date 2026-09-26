@@ -2,7 +2,9 @@ import type { BodyGender } from "./cc-catalogue";
 import { type CreatorCatalogueHost, CreatorFailedError, CreatorSetupError } from "./cc-catalogue-service";
 import { parseCcPreset } from "./cc-preset";
 import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest } from "./character-detail-request";
+import type { PrefetchAnswer, PrefetchInput } from "./choice-prefetch";
 import { CREATOR_LIMITS, isCreatorName, isOptionId, isPresetName } from "./creator-names";
+import { hostFailure } from "./diagnostics/host-log";
 import { BodyTooLargeError, readBodyText } from "./request-body";
 
 /**
@@ -14,7 +16,10 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
  * - `POST {kind:"view", request}` → the character context's view of a request (`xfs/character-request-4`);
  * - `POST {kind:"preset", request, name?, kept?}` → a portable `xfs/cc-preset-1` of the request's choices;
  * - `POST {kind:"retry", bodyGender}` → Try again after a failed build, answered as the state;
- * - `POST {kind:"legacy", bodyGender, style, definition}` → the creator choices an earlier build's tried piercing style stands for.
+ * - `POST {kind:"legacy", bodyGender, style, definition}` → the creator choices an earlier build's tried piercing style stands for;
+ * - `POST {kind:"prefetch", request, option, positions, focus?}` → prepare an open row's choices ahead and answer their states
+ *   (`xfs/choice-prefetch-1`: one character per position; choice-prefetch.ts); `{kind:"prefetchStop"}` stops it (the row closed);
+ * - `POST {kind:"prepared"}` → the prepared game files' size; `{kind:"clearPrepared"}` removes them (prepared-files.ts).
  * The launch route comes from the host's own settings, never the page. A request of a version this host doesn't read is refused with
  * `unsupported_version`, as on the character endpoint. A body is read within the shared byte limit, its declared length checked first
  * (PIPE-83). Every refusal has a code the page words for itself (UI-69).
@@ -23,7 +28,19 @@ export const CREATOR_ENDPOINT = "/api/preview-character/creator";
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const gender = (value: unknown): BodyGender | null => value === "female" || value === "male" ? value : null;
 
-export function createCreatorHandler(host: CreatorCatalogueHost, options: { trustedOrigin?: (request: Request) => boolean; refresh?: () => Promise<void> } = {}) {
+/** The host side of preparing choices ahead and of the prepared game files (character-detail-host.ts). */
+export type PreparedHost = {
+  prefetchRow(input: PrefetchInput): PrefetchAnswer;
+  stopPrefetch(): void;
+  preparedFiles(): Promise<{ bytes: number }>;
+  clearPreparedFiles(): Promise<{ freed: number }>;
+};
+/** Most positions one prefetch question names (a page of choices). */
+const MAX_PREFETCH_POSITIONS = 512;
+const position = (value: unknown) => Number.isInteger(value) && (value as number) >= 0 && (value as number) < 100_000;
+
+export function createCreatorHandler(host: CreatorCatalogueHost, options: { trustedOrigin?: (request: Request) => boolean; refresh?: () => Promise<void>;
+  prepared?: PreparedHost } = {}) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin");
@@ -50,7 +67,26 @@ export function createCreatorHandler(host: CreatorCatalogueHost, options: { trus
       if (!trusted || request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
         return json({ code: "forbidden", error: "Use the local studio to read the creator options." }, 403);
       const body = JSON.parse(await readBodyText(request, CREATOR_LIMITS.requestBytes)) as
-        { kind?: unknown; request?: unknown; name?: unknown; kept?: unknown; bodyGender?: unknown; style?: unknown; definition?: unknown };
+        { kind?: unknown; request?: unknown; name?: unknown; kept?: unknown; bodyGender?: unknown; style?: unknown; definition?: unknown;
+          option?: unknown; positions?: unknown; focus?: unknown };
+      const prepared = options.prepared;
+      if (body?.kind === "prefetchStop" || body?.kind === "prepared" || body?.kind === "clearPrepared") {
+        if (!prepared) return json({ code: "invalid", error: "Unknown request." }, 400);
+        if (body.kind === "prefetchStop") { prepared.stopPrefetch(); return json({ stopped: true }); }
+        if (body.kind === "prepared") return json({ bytes: (await prepared.preparedFiles()).bytes });
+        try { return json(await prepared.clearPreparedFiles()); }
+        catch (error) {
+          hostFailure("character", "clear_prepared_failed", "The prepared game files couldn't be cleared.", error);
+          return json({ code: "failed", error: "XF Studio couldn't clear its prepared game files. Close anything using them and try again." }, 500);
+        }
+      }
+      if (body?.kind === "prefetch") {
+        if (!prepared || !isOptionId(body.option) || !Array.isArray(body.positions) || body.positions.length > MAX_PREFETCH_POSITIONS ||
+          !body.positions.every(position) || (body.focus !== undefined && body.focus !== null && !position(body.focus)))
+          return json({ code: "invalid", error: "Unknown request." }, 400);
+        return json(prepared.prefetchRow({ base: parseCharacterRequest(body.request), option: body.option, positions: body.positions as number[],
+          focus: (body.focus as number | null | undefined) ?? null }));
+      }
       if (body?.kind === "retry") {
         const which = gender(body.bodyGender);
         return which ? json(host.retry(which)) : json({ code: "invalid", error: "Unknown body type." }, 400);

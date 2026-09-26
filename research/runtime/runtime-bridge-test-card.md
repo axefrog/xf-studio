@@ -23,13 +23,15 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Build record** (26 September 2026, `main` at `e22363aa3a3e`, clean tree, with the review fixes RB-12, RB-13, RB-15 and RB-24; `xfb_selftest --unit` OK, self-test 100 of 100 and `bun test tools` 50 of 50 passed on that build). The staged zip is the `-writes` one:
+   **Build record** (26 September 2026, `main` at `a39a461526dc`, clean tree, with every review fix RB-12..26; `xfb_selftest --unit` OK, self-test 145 of 145 and `bun test tools` 63 of 63 passed on that build). The staged zip is the `-writes` one:
 
    | Zip | SHA-256 |
    |---|---|
-   | `-writes` | `06bdfd2b07c2891736f352838f12afde67108b3e949fe61d8515ad7c114df18b` |
-   | `-diagnostic` | `00c1dda951ab2371f119c2698a9c029b9c4980abde38e31b60a0687613abd9f1` |
-   | default | `b3967923ecfcc0e20dd8cad1025e5f1614f2002a0faea09241eaaf746631225b` |
+   | `-writes` | `ace187bd5a20a3bf7beb6079128b9f7239574152372f3dc235361aa2e0686ca3` |
+   | `-diagnostic` | `b0e5093b70bde7de1b94a52600038f253ca93f9da6586244b7ac0b0b6351d0ed` |
+   | default | `bf6e32ac62610352098a3c7e64b440b9a772c551611ba116913e94b9d4738ef8` |
+
+   **New in this build, watch in the first session:** a photo-mode write whose value the menu then reports differently fails with `write_mismatch` and is put back (RB-19). If camera writes fail that way at step 11, note the requested and reported values; the comparison tolerance is one slider step. A light change waits three game ticks between selecting and setting (RB-20).
 
    **Staged** on 26 September 2026: the `-writes` zip unpacked into the MO2 mod `XF Runtime Bridge`, enabled as the first row of the test profile's `modlist.txt`; nothing else changed. Baseline capture `bridge-phase2-pre` taken before the restage (only the bridge's own files differ).
 
@@ -134,7 +136,7 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `red4ext/logs/red4ext-<ts>.log` | `XF Runtime Bridge (version: 0.2.0 …) has been loaded`; no "incompatible" warning | RED4ext accepted the plugin |
 | `red4ext/logs/xfruntimebridge-<ts>.log` | `evt=plugin.build XFB_BUILD=<manifest commit>;dirty=0`, `evt=plugin.config … bridge.enabled=true bridge.allow_writes=true`, `evt=plugin.scripts … added_to_redscript=true`, `evt=bridge.listen …`, `evt=game.state state=Running event=enter` | Load order, config, script registration |
 | same | `layer=redscript … XFBridgeSystem.OnAttach`, `evt=layer.announce layer=redscript`, `layer=tweakxl … protocolVersion=1`, `layer=cet … onInit` | Every layer runs |
-| same | `evt=bridge.request method=… access=write`, `evt=write.done method=… undo=…` per change, `save lock requested (reason XFRuntimeBridge)`, `evt=photo.enter_requested route=quest_node`, `photo attribute <key> (<label>) <before> -> <after>` | Each write with its reversal |
+| same | `evt=bridge.request method=… access=write-photo` (or `write-world`, `write-character`), `evt=write.done method=… undo=…` per change, `save lock requested (reason XFRuntimeBridge)`, `evt=photo.enter_requested route=quest_node`, `photo attribute <key> (<label>) <before> -> <after>` | Each write with its reversal |
 | same | `evt=bridge.killed`, `evt=bridge.kill_restored …`, `RestoreAfterKill …`, `evt=bridge.server_stopped stop_ms=<under 1000>`, `evt=plugin.unload` | Kill switch and clean shutdown |
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 

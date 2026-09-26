@@ -36,10 +36,11 @@ export function validate(schema: JsonSchema, value: unknown, path = "input"): st
       }
       const record = value as Record<string, unknown>;
       for (const key of schema.required ?? []) {
-        if (record[key] === undefined) problems.push(`"${key}" is required.`);
+        if (!Object.hasOwn(record, key) || record[key] === undefined) problems.push(`"${key}" is required.`);
       }
       for (const [key, child] of Object.entries(record)) {
-        const childSchema = schema.properties?.[key];
+        // Own properties only: "constructor", "toString" or "__proto__" must not match Object.prototype.
+        const childSchema = schema.properties && Object.hasOwn(schema.properties, key) ? schema.properties[key] : undefined;
         if (!childSchema) {
           if (schema.additionalProperties === false) problems.push(`"${key}" is not a known option.`);
           continue;

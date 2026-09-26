@@ -19,8 +19,8 @@ export type CommandOutcome =
   | { ok: true; command: string; cid: string; result: unknown; images?: ImageRef[]; undo?: string }
   | { ok: false; command: string; cid: string; error: PlainError };
 
-/** Per-call options: a correlation id, the calling frontend (for logs), and where captures go. */
-export type RunOptions = { cid?: string; source?: string; captureRoot?: string };
+/** Per-call options: a correlation id, the calling frontend (for logs), where captures go, and a signal that ends a long local wait (game.wait). */
+export type RunOptions = { cid?: string; source?: string; captureRoot?: string; signal?: AbortSignal };
 
 export type ImageRef = { path: string; width: number; height: number; mimeType: "image/png"; role: "view" | "full" };
 
@@ -116,7 +116,7 @@ export class CommandApi {
     try {
       let result: CommandResult;
       if (command.local) {
-        result = await command.local(params, { api: this, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot) });
+        result = await command.local(params, { api: this, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot), signal: options.signal });
       } else {
         const bridgeParams = command.bridge!.params ? command.bridge!.params(params) : params;
         const response = await this.callBridge(command.bridge!.method, bridgeParams, cid);

@@ -2,13 +2,17 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
-import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, STORE_FILE,
-  type CharacterRoute, type PrepareCharacterOptions } from "./character-detail-service";
+import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, STORE_FILE, warmCharacters,
+  type CharacterRoute, type PrepareCharacterOptions, type WarmOptions } from "./character-detail-service";
+import { choiceKey, manifestHolds, readChoiceManifest, xlIdentity } from "./choice-manifest";
+import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
+import { clearPrepared, evictPrepared, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
+import { backgroundExtraction, foregroundExtraction, type Installation, type InstallationOptions } from "./resolver-host";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
-import { installations, type InstallationRegistry } from "./installation-registry";
+import { acquireInstallation, installationRouteKey, installations, type InstallationRegistry } from "./installation-registry";
 import { CreatorCatalogueHost, structuralInput } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
 import { routeIdentity, routeStamps } from "./route-fingerprint";
@@ -71,10 +75,18 @@ export type CharacterDetailHostOptions = {
   prepare?: (options: PrepareCharacterOptions) => ReturnType<typeof prepareCharacterDetails>;
   /** Test seam over the creator catalogue. */
   creator?: CreatorCatalogueHost;
+  /** Test seam over preparing choices ahead (`warmCharacters`). */
+  warm?: (options: WarmOptions) => ReturnType<typeof warmCharacters>;
+  /** Limits of preparing choices ahead (choice-prefetch.ts `PREFETCH_LIMITS`). */
+  prefetchLimits?: PrefetchLimits;
+  /** Bytes of exports and extracted JSON kept on disk (prepared-files.ts `PREPARED_BUDGET_BYTES`). */
+  preparedBudget?: number;
   log?: (message: string) => void;
   /** The rolling diagnostics window: what each preparation resolved and prepared (docs/diagnostics.md). */
   trace?: DiagnosticTrace;
 };
+/** How often, at most, the prepared files are checked against their budget. */
+const EVICT_INTERVAL_MS = 60_000;
 
 const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair and piercings appear once your game folder and WolvenKit are set up.";
 const PREPARING = "Preparing your V's skin, face details, eyes, brows, lashes, hair and piercings…";
@@ -109,9 +121,37 @@ export class CharacterDetailHost {
   private readonly degraded = new Set<string>();
   /** The installation's creator catalogue: the Character panel's options, and the interpreter of a request's creator choices. */
   readonly creator: CreatorCatalogueHost;
+  /** Prepares an open Character panel row's choices ahead of a click (choice-prefetch.ts). */
+  readonly prefetch: ChoicePrefetcher;
+  private evictedAt = 0;
+  private evicting: Promise<void> | null = null;
   constructor(private readonly options: CharacterDetailHostOptions) {
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
       resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
+    this.prefetch = new ChoicePrefetcher({
+      requestFor: (base, option, position) => this.requestFor(base, option, position),
+      readiness: () => this.readiness(),
+      warm: (requests, signal) => this.warm(requests, signal),
+      foregroundIdle: () => this.foregroundIdle(),
+      preparedBytes: async () => (await preparedSize(this.preparedRoots)).bytes,
+      afterBatch: () => this.keepWithinBudget(),
+      log: options.log,
+      failed: error => hostFailure("character", "prefetch_failed", "Some character choices couldn't be prepared ahead; they are read when picked.", error, "warn"),
+    }, options.prefetchLimits);
+  }
+
+  private get resolverCache() { return this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"); }
+  /** Where the prepared game files live (prepared-files.ts). */
+  get preparedRoots(): PreparedRoots {
+    return { exports: join(this.options.cacheRoot, "exports"), resolver: this.resolverCache, store: this.storeRoot, manifests: join(this.options.cacheRoot, "choices") };
+  }
+  /** The route's name for manifests: its settings, WolvenKit and WolvenKit's identity (never the process-local generation). */
+  private manifests(route: CharacterRoute) {
+    const key = installationRouteKey(route);
+    return { dir: this.preparedRoots.manifests, key: (request: CharacterRequest) => choiceKey(key, request) };
+  }
+  private exporterFor(cli: string | null): GameAssetExporter {
+    return this.options.exporter?.(cli) ?? createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), cli);
   }
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }
@@ -152,8 +192,9 @@ export class CharacterDetailHost {
     const controller = new AbortController();
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
     const cache = this.shared.cache;
-    const exporter = this.options.exporter?.(settings.wolvenKitCli) ??
-      createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), settings.wolvenKitCli);
+    const exporter = this.exporterFor(settings.wolvenKitCli);
+    // A person's own change comes first: a choice being prepared ahead steps aside (choice-prefetch.ts).
+    this.prefetch.foreground(request);
     const first = CHARACTER_DETAIL_STEPS[0]!;
     this.set({ key, phase: "preparing", message: PREPARING, progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: first.label }, record: null });
     // Whether this run still owns its key's state (a newer run for the same key takes it over).
@@ -162,12 +203,12 @@ export class CharacterDetailHost {
     const run = () => {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
       started = Date.now();
-      return (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
-        derive: request.choices?.length ? structuralInput : undefined,
-        resolverCache: this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"), exporter, signal: controller.signal,
+      return foregroundExtraction(this.resolverCache, () => (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
+        derive: request.choices?.length ? structuralInput : undefined, manifests: this.manifests(route),
+        resolverCache: this.resolverCache, exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
-        }, log: this.options.log, trace: this.options.trace });
+        }, log: this.options.log, trace: this.options.trace }));
     };
     // Start now, or once the cancelled run (still settling on the shared cache) has stopped.
     const begun = this.running ? this.running.promise.then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
@@ -175,10 +216,13 @@ export class CharacterDetailHost {
       .then(result => {
         this.set({ key, phase: "ready", message: result.note ?? "", progress: null, record: result.recordFile });
         if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
+        this.prefetch.prepared(request, !result.degraded);
+        void this.keepWithinBudget();
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
       })
       .catch(error => {
         const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || controller.signal.aborted;
+        this.prefetch.prepared(request, false);
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
@@ -207,7 +251,93 @@ export class CharacterDetailHost {
     return this.states.get(key) ?? { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, key, phase: "unknown", message: "", progress: null, record: null };
   }
 
-  cancel(): void { this.running?.controller.abort(); }
+  cancel(): void { this.running?.controller.abort(); this.prefetch.cancel(); }
+
+  // ---- Preparing choices ahead (choice-prefetch.ts) ----
+
+  /** Start or update preparing a row's choices ahead, and answer their states. */
+  prefetchRow(input: PrefetchInput): PrefetchAnswer { return this.prefetch.update(input); }
+  /** The row closed: stop preparing its choices ahead. */
+  stopPrefetch(): void { this.prefetch.cancel(); }
+
+  /** The V with one choice of an option set: the V's choices without that option's, then the choice (as the panel sets one). */
+  private async requestFor(base: CharacterRequest, option: string, position: number): Promise<CharacterRequest | null> {
+    let loaded;
+    try { loaded = await this.creator.ensure(base.bodyGender); } catch { return null; }
+    const entry = loaded.source.index.byOptionId(option), choice = entry?.choices[position];
+    if (!entry || !choice) return null;
+    const choices = (base.choices ?? []).filter(item => !(item.part === entry.part && item.option === entry.name));
+    choices.push({ part: entry.part, option: entry.name, choice: choice.key, ...(choice.activates?.length ? { activates: [...choice.activates] } : {}) });
+    return { ...base, choices };
+  }
+  /** A check of whether requests are ready on the installation as it is now (their manifests hold). */
+  private async readiness(): Promise<(request: CharacterRequest) => boolean> {
+    const route = this.route();
+    if (!route) return () => false;
+    const installation = await this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
+    const exporter = this.exporterFor(route.wolvenKitCli), manifests = this.manifests(route);
+    const check = { graph: installation.graph, fetcher: installation.fetcher, exporter, gameRoot: route.gameRoot, tool: installation.fetcher.tool,
+      xl: xlIdentity(installation) };
+    return request => {
+      const manifest = readChoiceManifest(manifests.dir, manifests.key(request));
+      return !!manifest && manifestHolds(manifest, check);
+    };
+  }
+  /** Prepare requests ahead, in the background, sharing the preparations' cache. */
+  private async warm(requests: readonly CharacterRequest[], signal: AbortSignal) {
+    const route = this.route();
+    if (!route || !requests.length) return requests.map(() => ({ ready: false }));
+    const settings = this.options.settings();
+    const fingerprint = installationFingerprint(settings);
+    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
+    const cache = this.shared.cache;
+    return backgroundExtraction(this.resolverCache, () => (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
+      open: options => this.backgroundInstallation(options),
+      derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal, lowPriority: true,
+      manifests: this.manifests(route), log: this.options.log }));
+  }
+  /** The opened installation for background work, without the check a person's request makes (opened when it isn't yet). */
+  private async backgroundInstallation(options: InstallationOptions): Promise<Installation> {
+    return installations.peek(options) ?? acquireInstallation(options);
+  }
+  /** Resolves once no person's own change is being prepared. */
+  private async foregroundIdle(): Promise<void> {
+    while (this.running) { try { await this.running.promise; } catch { /* Settled. */ } }
+  }
+
+  // ---- Prepared game files (prepared-files.ts) ----
+
+  /** The prepared files' size on disk. */
+  preparedFiles(): Promise<PreparedSize> { return preparedSize(this.preparedRoots); }
+  /** Keep exports and extracted JSON within their budget (at most once a minute; never what this session used). */
+  keepWithinBudget(): Promise<void> {
+    if (this.evicting || Date.now() - this.evictedAt < EVICT_INTERVAL_MS) return this.evicting ?? Promise.resolve();
+    this.evictedAt = Date.now();
+    this.evicting = evictPrepared(this.preparedRoots, this.options.preparedBudget ?? PREPARED_BUDGET_BYTES)
+      .then(result => { if (result.removed) this.options.log?.(`Prepared game files: removed ${result.removed} least recently used (${(result.freed / 1024 ** 2).toFixed(0)} MB).`); })
+      .catch(error => {
+        this.options.log?.(`Prepared game files could not be checked against their budget: ${(error as Error)?.message ?? error}`);
+        hostFailure("character", "prepared_budget_failed", "The prepared game files couldn't be checked against their space limit.", error, "warn");
+      })
+      .finally(() => { this.evicting = null; });
+    return this.evicting;
+  }
+  /**
+   * "Clear prepared game files": stop preparing ahead, wait for a running preparation to stop, remove every prepared file, and forget
+   * what was derived from them, so the next preparation reads the game files again. The V on screen stays as it is until it is prepared
+   * again.
+   */
+  async clearPreparedFiles(): Promise<{ freed: number }> {
+    this.prefetch.cancel();
+    this.running?.controller.abort();
+    await this.settled().catch(() => {});
+    await this.evicting;
+    const result = await clearPrepared(this.preparedRoots);
+    this.shared = null;
+    this.states.clear();
+    this.degraded.clear();
+    return result;
+  }
   async settled(): Promise<void> { await this.running?.promise; }
 
   /** Absolute path of a served record or file, or null. Names are content-addressed, never paths. */

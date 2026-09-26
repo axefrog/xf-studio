@@ -35,4 +35,4 @@ export interface RedDocument {
 }
 
 /** A resource or value the native reader does not decode (the caller falls back to another reader). */
-export class NativeUnsupportedError extends Error {}
+export { NativeUnsupportedError } from "./native-errors";

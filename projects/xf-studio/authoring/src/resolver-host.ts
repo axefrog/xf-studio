@@ -19,12 +19,13 @@ import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./ar
 import { depotHash, type DepotRef } from "./depot-path";
 import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { writeFileAtomic } from "./derived-cache";
+import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
 import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
-import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
+import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 import { hostFailure } from "./diagnostics/host-log";
 
 export interface InstallationOptions {
@@ -201,15 +202,41 @@ export const NOT_WRITTEN_RUNS = 2;
  * time, and a resource one fetcher is extracting is awaited by the others instead of extracted again.
  * Batch folders are unique (`mkdtemp`), so another process on the same cache cannot collide either.
  */
-interface CacheLane { tail: Promise<void>; inflight: Map<string, Promise<FetchedResource | null>>;
+interface CacheLane {
+  /** Batches, one at a time: below normal priority while only background work (a prefetch) runs. */
+  tail: Promise<void>;
+  /** Batches flushed while foreground work runs (`foregroundExtraction`): one at a time, never waiting behind a background batch. */
+  foregroundTail: Promise<void>;
+  /** Foreground work (a person's own change being prepared) and background work (a prefetch) running now. */
+  foreground: number;
+  background: number;
+  inflight: Map<string, Promise<FetchedResource | null>>;
   /** Cache files whose last answer was a null that may not repeat (`WolvenKitFetcher.transient`), whichever fetcher gave it. */
   transient: Set<string> }
 const lanes = new Map<string, CacheLane>();
 function laneFor(cacheDir: string): CacheLane {
   const key = process.platform === "win32" ? resolve(cacheDir).toLowerCase() : resolve(cacheDir);
   let lane = lanes.get(key);
-  if (!lane) { lane = { tail: Promise.resolve(), inflight: new Map(), transient: new Set() }; lanes.set(key, lane); }
+  if (!lane) { lane = { tail: Promise.resolve(), foregroundTail: Promise.resolve(), foreground: 0, background: 0, inflight: new Map(), transient: new Set() }; lanes.set(key, lane); }
   return lane;
+}
+/**
+ * Run `work` as foreground work on a cache folder: while it runs, extraction batches go on the foreground chain, so a person's own
+ * change never waits behind a background batch (a prefetch) already in WolvenKit, and they run at normal priority. Both chains are safe
+ * together: batch folders are unique and a resource one chain is extracting is awaited by the other, never extracted twice.
+ */
+export async function foregroundExtraction<T>(cacheDir: string, work: () => Promise<T>): Promise<T> {
+  const lane = laneFor(cacheDir);
+  lane.foreground++;
+  // A resource this work needs may be in a background batch already: that batch must not run at background priority now.
+  raiseBackgroundWolvenKit();
+  try { return await work(); } finally { lane.foreground--; }
+}
+/** Run `work` as background work on a cache folder: its batches run below normal priority, unless foreground work runs too. */
+export async function backgroundExtraction<T>(cacheDir: string, work: () => Promise<T>): Promise<T> {
+  const lane = laneFor(cacheDir);
+  lane.background++;
+  try { return await work(); } finally { lane.background--; }
 }
 
 /** A depot path WolvenKit can select by pattern: plain path text, no ArchiveXL markers. */
@@ -301,6 +328,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     if (!existsSync(path)) return undefined;
     try {
       const text = readFileSync(path, "utf8"), entry = JSON.parse(text);
+      touchUsed(path);
       return { document: withoutArchiveFileName(entry.document), extractedSha256: entry.meta.extractedSha256, path: entry.meta.path, bytes: text.length };
     } catch { rmSync(path, { force: true }); return undefined; }
   }
@@ -318,16 +346,27 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       const queue = this.pending.get(archive.id) ?? { archive, items: new Map<string, Pending>() };
       queue.items.set(ref.hash, { archive, ref, extension, resolve });
       this.pending.set(archive.id, queue);
-      if (!this.timer) this.timer = setTimeout(() => { this.timer = null; this.lane.tail = this.lane.tail.then(() => this.flush()); }, 30);
+      if (!this.timer) this.timer = setTimeout(() => {
+        this.timer = null;
+        if (this.lane.foreground > 0) this.lane.foregroundTail = this.lane.foregroundTail.then(() => this.flush(false));
+        else { const background = this.lane.background > 0; this.lane.tail = this.lane.tail.then(() => this.flush(background)); }
+      }, 30);
     });
     this.lane.inflight.set(path, promise);
     void promise.finally(() => { if (this.lane.inflight.get(path) === promise) this.lane.inflight.delete(path); });
     return promise;
   }
 
-  private run(args: string[], options: Pick<WolvenKitRunOptions, "accept" | "failure"> = {}): Promise<WolvenKitRun> {
+  private run(args: string[], options: Pick<WolvenKitRunOptions, "accept" | "failure" | "lowPriority"> = {}): Promise<WolvenKitRun> {
     this.stats.cliCalls++;
     return runWolvenKit(this.cli, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
+  }
+  /** Whether this resource is in the cache now, answered from it without WolvenKit (a file, or a lasting marker); nothing is parsed. */
+  isCached(archive: MountedArchive, hash: string): boolean {
+    const path = this.cachePath(archive, hash);
+    if (existsSync(path)) return true;
+    const known = this.marker(path);
+    return !!known && (known.kind !== "not-written" || (known.runs ?? 0) >= NOT_WRITTEN_RUNS);
   }
 
   /**
@@ -342,7 +381,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
   }
 
   /** Extract everything queued. Never rejects, so the shared lane is never poisoned; every waiter is answered. */
-  private async flush(): Promise<void> {
+  private async flush(background = false): Promise<void> {
     const queues = [...this.pending.values()];
     this.pending.clear();
     if (!queues.length) return;
@@ -358,16 +397,16 @@ export class WolvenKitFetcher implements ResourceFetchPort {
             ![...other.items.keys()].some(hash => this.contains(queue.archive.id, hash))));
         if (fits) fits.push(queue); else batches.push([queue]);
       }
-      for (const batch of batches) await this.extract(batch);
+      for (const batch of batches) await this.extract(batch, background);
     } catch (error) {
       hostFailure("resolver", "extract_failed", "WolvenKit couldn't read some resources for your V.", error, "warn");
       this.stats.failures.push(String(error));
       for (const queue of queues) for (const item of queue.items.values()) this.answerNull(queue.archive, item, false);
     }
-    if (this.pending.size) await this.flush();
+    if (this.pending.size) await this.flush(background);
   }
 
-  private async extract(queues: Queue[]): Promise<void> {
+  private async extract(queues: Queue[], background = false): Promise<void> {
     // Another process may have cached some of these since they were queued.
     for (const queue of queues) for (const [hash, item] of [...queue.items]) {
       const cached = this.cached(this.cachePath(queue.archive, hash));
@@ -389,7 +428,12 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     try {
       const hashes = [...new Set(batch.flatMap(queue => [...queue.items.keys()]))];
       const archives = batch.map(queue => queue.archive.id);
-      this.log(`WolvenKit: extracting ${hashes.length} resource(s) from ${batch.length} archive(s)`);
+      const kinds = new Map<string, number>();
+      for (const queue of batch) for (const item of queue.items.values()) {
+        const kind = (item.ref.path ? /\.([a-z0-9]+)$/i.exec(item.ref.path)?.[1]?.toLowerCase() : null) ?? item.extension ?? "?";
+        kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+      }
+      this.log(`WolvenKit: extracting ${hashes.length} resource(s) (${[...kinds].map(([kind, count]) => `${count} ${kind}`).join(", ")}) from ${batch.length} archive(s)`);
       // Each output file by depot hash, with the folder it was written to and whether that step finished cleanly.
       const found = new Map<string, { file: string; path: string | null; bytes: number; clean: boolean }>();
       const walk = (root: string, folder: string, clean: boolean) => {
@@ -421,7 +465,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       for (const pattern of uncookPatterns(this.cli, archives, serialized, named)) {
         mkdirSync(serialized, { recursive: true });
         const run = await this.run(["uncook", ...archives, "-o", serialized, "-r", pattern, "-u", "-s", "-v", "Minimal"],
-          { accept: () => true, failure: /(?!)/ });
+          { accept: () => true, failure: /(?!)/, lowPriority: background });
         walk(serialized, serialized, finished(run, "uncook"));
       }
       // Step 2, only for what step 1 did not serialize (a reference without a path, an archive that lists hashes only, or
@@ -429,9 +473,11 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       for (const [hash, hit] of found) if (!existsSync(`${hit.file}.json`)) found.delete(hash);
       const rest = hashes.filter(hash => !found.has(hash));
       if (rest.length) {
+        const label = (hash: string) => batch.map(queue => queue.items.get(hash)?.ref.path).find(Boolean) ?? hash;
+        this.log(`WolvenKit: ${rest.length} resource(s) not serialized by name, extracting by hash: ${rest.slice(0, 4).map(label).join(", ")}${rest.length > 4 ? ", …" : ""}`);
         mkdirSync(raw, { recursive: true });
         writeFileSync(join(dir, "hashes.txt"), rest.join("\n") + "\n");
-        finished(await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true, failure: /(?!)/ }), "unbundle");
+        finished(await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true, failure: /(?!)/, lowPriority: background }), "unbundle");
         const before = new Set(found.keys());
         walk(raw, raw, true);
         // Unnamed outputs get the expected extension so WolvenKit's converter recognises them.
@@ -444,11 +490,11 @@ export class WolvenKitFetcher implements ResourceFetchPort {
         }
         // The converter's own exit and log decide only whether a missing JSON may be recorded as a lasting failure.
         if (found.size > before.size) {
-          const clean = finished(await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/ }), "convert");
+          const clean = finished(await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/, lowPriority: background }), "convert");
           for (const [hash, hit] of found) if (!before.has(hash)) hit.clean = clean;
         }
       }
-      const store = (path: string, text: string) => { mkdirSync(join(this.cacheDir, "json"), { recursive: true }); writeFileAtomic(path, text); };
+      const store = (path: string, text: string) => { mkdirSync(join(this.cacheDir, "json"), { recursive: true }); writeFileAtomic(path, text); touchUsed(path); };
       for (const queue of batch) for (const [hash, item] of queue.items) {
         const hit = found.get(hash);
         let document: unknown = null;

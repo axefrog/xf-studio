@@ -16,6 +16,7 @@
 #include "core/Layers.hpp"
 #include "core/Log.hpp"
 #include "core/Session.hpp"
+#include "core/Writes.hpp"
 
 namespace xfb::plugin
 {
@@ -53,10 +54,9 @@ struct State
     std::atomic<int> gameState{-1}; // RED4ext::EGameStateType, -1 before BaseInitialization
     std::atomic<uint64_t> runningTicks{0};
 
-    // Set by the first successful write; the kill switch then undoes what the bridge left on
-    // (world freeze, hidden photo UI; not the save lock) once, from the next game-thread tick.
-    std::atomic<bool> writesUsed{false};
-    std::atomic<bool> restoreDone{false};
+    // Marked by every write; after the kill switch it undoes what the bridge left on (world
+    // freeze, hidden photo UI; not the save lock) once, from a game-thread tick (core/Writes.hpp).
+    writes::RestoreOnce restore;
 };
 
 State& Get();

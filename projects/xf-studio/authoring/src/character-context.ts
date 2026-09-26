@@ -476,6 +476,8 @@ export type CharacterContextAction =
   | { kind: "character.keepChanges" }
   /** Try again after the creator options or the shown V couldn't be prepared (never automatic; PIPE-78, PREV-86). */
   | { kind: "character.retry" }
+  /** Remove the game files prepared for the 3D view on this computer; they are read from the game again when needed. */
+  | { kind: "character.clearPreparedFiles" }
   | { kind: "character.undo" }
   | { kind: "character.redo" };
 
@@ -497,6 +499,7 @@ export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.loadPreset": desc("file", "workspace", { value: input("object") }),
   "character.keepChanges": desc("viewport", "workspace", {}),
   "character.retry": desc("viewport", "workspace", {}),
+  "character.clearPreparedFiles": desc("viewport", "file", {}),
   "character.undo": desc("viewport", "workspace", {}),
   "character.redo": desc("viewport", "workspace", {}),
 } satisfies Record<CharacterContextAction["kind"], ActionDescriptor<Scope>>;
@@ -506,6 +509,6 @@ export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scop
   owner: "system", id: CHARACTER_ID, label: "Character",
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
     "character.setOption": true, "character.setOptions": true, "character.hideOwnMakeup": true, "character.reset": true, "character.resetAll": true,
-    "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true,
+    "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
     "character.undo": true, "character.redo": true }),
 });

@@ -23,12 +23,18 @@
 // text and waits for Enter. Run by a harness (no terminal), it stops cleanly at the ask, without
 // running "restore", and prints the --from label that continues after it; the report folder
 // (--out) collects every part's run in one manifest.json.
+//
+// Ctrl+C stops the run after the command in flight (a wait, an ask or a game.wait ends at once),
+// runs "restore" once and records the run as "interrupted"; a second Ctrl+C exits immediately.
+// While it runs, the runner holds an advisory lock (tools/session-lock.ts) beside session.json,
+// and the MCP server refuses bridge commands in plain words until it is released.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { findCommand } from "./api/catalogue.ts";
 import { CommandApi, type CommandOutcome } from "./api/command-api.ts";
 import { validate } from "./api/schema.ts";
+import { acquireSessionLock, sessionRunningMessage } from "./session-lock.ts";
 
 export const SCRIPT_SCHEMA = "xfb/session-script-1";
 
@@ -54,7 +60,7 @@ export type SessionScript = {
 
 export type PlannedStep = { index: number; phase: "steps" | "restore"; label: string; kind: string; command?: string; input?: Record<string, unknown>; ms?: number; text?: string; step: Step };
 
-export type RunOutcome = "complete" | "failed" | "paused";
+export type RunOutcome = "complete" | "failed" | "paused" | "interrupted";
 
 /** Resolves every step to a command and input, and checks each input against the catalogue schema. */
 export function planScript(script: SessionScript): { plan: PlannedStep[]; problems: string[] } {
@@ -132,9 +138,45 @@ export type SessionRunOptions = {
   ask?: (text: string, label: string) => Promise<void>;
   log?: (line: string) => void;
   scriptPath?: string;
+  /**
+   * Stops the run (Ctrl+C): the current wait, ask or game.wait ends, the remaining steps are
+   * skipped, and "restore" runs once. A command already sent to the game finishes first.
+   */
+  signal?: AbortSignal;
 };
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Resolves after ms, or at once when the signal aborts. */
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolveSleep) => {
+    if (signal?.aborted) return resolveSleep();
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolveSleep();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
+
+/** Settles with the promise, or with "aborted" when the signal aborts first. */
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T | "aborted"> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.resolve("aborted");
+  return new Promise((resolveRace, rejectRace) => {
+    const onAbort = () => resolveRace("aborted");
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolveRace(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        rejectRace(error);
+      },
+    );
+  });
+}
 
 export async function runScript(
   script: SessionScript,
@@ -160,30 +202,21 @@ export async function runScript(
   const before = { bridge: await snapshot("bridge.info"), game: await snapshot("game.status") };
 
   let failed = false;
+  let interrupted = false;
+  let crash: string | null = null;
   let paused: { at: string; next?: string } | null = null;
   let skipping = options.from !== undefined;
+  const signal = options.signal;
   const steps = plan.filter((p) => p.phase === "steps");
   const nextLabel = (planned: PlannedStep) => steps[steps.indexOf(planned) + 1]?.label;
   const skip = (planned: PlannedStep, ok: boolean) =>
     records.push({ index: planned.index, phase: planned.phase, label: planned.label, kind: planned.kind, started_at: new Date().toISOString(), ms: 0, ok, skipped: true });
 
-  for (const planned of plan) {
-    if (planned.phase === "restore" && paused) break;
-    if (planned.phase === "steps") {
-      if (skipping && planned.label !== options.from) {
-        skip(planned, true);
-        continue;
-      }
-      skipping = false;
-      if (failed || paused) {
-        skip(planned, !failed);
-        continue;
-      }
-    }
+  const runStep = async (planned: PlannedStep, stepSignal?: AbortSignal) => {
     const started = performance.now();
     const record: StepRecord = { index: planned.index, phase: planned.phase, label: planned.label, kind: planned.kind, started_at: new Date().toISOString(), ms: 0, ok: true };
     if (planned.kind === "wait") {
-      await sleep(planned.ms!);
+      await sleep(planned.ms!, stepSignal);
     } else if (planned.kind === "note") {
       record.result = planned.text;
       log(`     note: ${planned.text}`);
@@ -191,14 +224,14 @@ export async function runScript(
       record.result = planned.text;
       log(`     ASK: ${planned.text}`);
       if (options.ask) {
-        await options.ask(planned.text!, planned.label);
+        await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
       } else {
         paused = { at: planned.label, next: nextLabel(planned) };
         record.skipped = true;
       }
     } else {
       const input = planned.input!;
-      const outcome: CommandOutcome = await api.run(planned.command!, input, { source: "session", captureRoot: options.outDir });
+      const outcome: CommandOutcome = await api.run(planned.command!, input, { source: "session", captureRoot: options.outDir, signal: stepSignal });
       record.command = planned.command;
       record.input = input;
       record.ok = outcome.ok;
@@ -218,24 +251,72 @@ export async function runScript(
         if (planned.step.expect_error && outcome.error.code === planned.step.expect_error) record.ok = true;
       }
     }
+    if (stepSignal?.aborted && planned.phase === "steps") {
+      record.ok = false;
+      record.error = { code: "interrupted", message: "Stopped by the user (Ctrl+C)." };
+    }
     record.ms = Math.round(performance.now() - started);
     records.push(record);
     const status = record.skipped ? "WAIT" : record.ok ? "OK  " : "FAIL";
     const detail = record.ok ? "" : ` ${(record.error as { message?: string })?.message ?? ""}`;
     log(`${status} ${String(planned.index).padStart(3)} ${planned.label} (${planned.kind}${record.command ? ` ${record.command}` : ""}) ${record.ms}ms${detail}`);
-    if (!record.ok && !planned.step.continue_on_error && planned.phase === "steps") failed = true;
-    if (planned.phase === "steps" && planned.label === options.until && !failed && !paused) paused = { at: planned.label, next: nextLabel(planned) };
+    return record;
+  };
+
+  try {
+    for (const planned of steps) {
+      if (skipping && planned.label !== options.from) {
+        skip(planned, true);
+        continue;
+      }
+      skipping = false;
+      if (!failed && !paused && signal?.aborted) {
+        interrupted = true;
+        failed = true;
+        log("Stopped by the user; the remaining steps are skipped.");
+      }
+      if (failed || paused) {
+        skip(planned, !failed);
+        continue;
+      }
+      const record = await runStep(planned, signal);
+      if (signal?.aborted) {
+        interrupted = true;
+        failed = true;
+        continue;
+      }
+      if (!record.ok && !planned.step.continue_on_error) failed = true;
+      if (planned.label === options.until && !failed && !paused) paused = { at: planned.label, next: nextLabel(planned) };
+    }
+  } catch (error) {
+    crash = (error as Error)?.message ?? String(error);
+    failed = true;
+    log(`The session stopped on an unexpected error: ${crash}`);
+  } finally {
+    // Restore runs exactly once, after a finished, failed, interrupted or crashed run, and never
+    // when the run only paused at an ask (the session continues later). It isn't interrupted by
+    // the same Ctrl+C; the command line exits at once on a second one.
+    if (!paused) {
+      for (const planned of plan.filter((p) => p.phase === "restore")) {
+        try {
+          await runStep(planned);
+        } catch (error) {
+          log(`restore step ${planned.label} failed: ${(error as Error)?.message ?? error}`);
+        }
+      }
+    }
   }
 
   const after = { bridge: await snapshot("bridge.info"), game: await snapshot("game.status") };
   api.close();
-  const outcome: RunOutcome = failed ? "failed" : paused ? "paused" : "complete";
+  const outcome: RunOutcome = interrupted ? "interrupted" : failed ? "failed" : paused ? "paused" : "complete";
   const run = {
     started_at: startedAt,
     finished_at: new Date().toISOString(),
     ...(options.from ? { from: options.from } : {}),
     ...(options.until ? { until: options.until } : {}),
     outcome,
+    ...(crash ? { error: crash } : {}),
     ...(paused ? { paused_at: paused.at, continue_from: paused.next ?? null } : {}),
     ok: !failed && records.every((r) => r.ok || r.skipped),
     before,
@@ -313,7 +394,25 @@ if (import.meta.main) {
   const outDir = resolve(option("--out") ?? join(import.meta.dir, "..", "captures", "sessions", `${script.name}-${stampText}`));
   const interactive = Boolean(process.stdin.isTTY) && !args.includes("--no-ask");
   const api = new CommandApi({ runtimeDir: option("--runtime-dir") });
+  // The advisory lock keeps the MCP server off the bridge while this session drives the game.
+  const lock = acquireSessionLock(api.runtimeDir, script.name);
+  if ("heldBy" in lock) {
+    console.error("\n" + sessionRunningMessage(lock.heldBy).replace(/ Screenshots still work.*$/, "") + " Only one session can run at a time.");
+    process.exit(2);
+  }
+  // Ctrl+C: stop after the current command and run "restore" once (leave photo mode, which also
+  // shows its menu again); a second Ctrl+C exits at once.
+  const stop = new AbortController();
+  process.on("SIGINT", () => {
+    if (stop.signal.aborted) {
+      console.error("\nStopped without finishing restore. Check the game: leave photo mode and load the safety save if needed.");
+      process.exit(130);
+    }
+    console.error("\nStopping: finishing the current command, then running the restore steps (Ctrl+C again to quit at once).");
+    stop.abort();
+  });
   const result = await runScript(script, {
+    signal: stop.signal,
     api,
     outDir,
     from: option("--from"),
@@ -321,11 +420,13 @@ if (import.meta.main) {
     ask: interactive ? askOnTerminal : undefined,
     scriptPath: basename(scriptPath),
   });
+  lock.release();
   if (result.outcome === "paused") {
     console.log(result.next ? `\nPaused. Continue with:\n  bun tools/session.ts ${scriptPath} --out "${outDir}" --from ${result.next}` : "\nPaused after the last step.");
     console.log(`Report so far: ${result.manifestPath}`);
     process.exit(0);
   }
-  console.log(`\n${result.outcome === "complete" ? "Session complete" : "Session stopped early"}: ${result.manifestPath}`);
+  console.log(`\n${result.outcome === "complete" ? "Session complete" : result.outcome === "interrupted" ? "Session stopped by Ctrl+C (restore ran)" : "Session stopped early"}: ${result.manifestPath}`);
+  if (result.outcome === "interrupted") process.exit(130);
   process.exit(result.ok ? 0 : 1);
 }
