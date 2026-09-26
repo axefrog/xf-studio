@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { sourceText } from "./fixtures/source-files";
 import { COMPUTED, imports, importUses, resolveFrom } from "./fixtures/import-scan";
 import { codeOnly, pageGlobals, PAGE_GLOBALS } from "./fixtures/code-scan";
 
-const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
+/** A module's text, read once per test process (tests/fixtures/source-files.ts). */
+const source = (name: string) => sourceText(fileURLToPath(new URL(`../src/${name}.ts`, import.meta.url)));
 /**
  * Browser globals that DOM-free code must not read: the window and its storage, the navigator,
  * network access, `globalThis` (a way around the others) and the document. Comments and strings

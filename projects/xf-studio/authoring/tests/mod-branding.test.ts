@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "../src/mod-branding";
@@ -8,6 +8,7 @@ import { planCollection } from "../src/preset-collection";
 import { createModInstallTransport } from "../src/mod-install-transport";
 import { defaultLocalSettings } from "../src/local-settings";
 import { preflightPackageCollection } from "./fixtures/eye-exporter";
+import { sourceFiles, sourceText } from "./fixtures/source-files";
 
 const authoring = resolve(import.meta.dir, "..");
 const hq = resolve(authoring, "../../..");
@@ -78,14 +79,12 @@ test("the builders, service and verifiers read branding from the plan instead of
 });
 
 test("no TypeScript module outside mod-branding spells the mod name", () => {
-  const files = (dir: string): string[] => readdirSync(dir).flatMap(name => {
-    const path = join(dir, name);
-    return statSync(path).isDirectory() ? files(path) : /\.(ts|js)$/.test(name) ? [path] : [];
-  });
-  const offenders = [...files(join(authoring, "src")), ...files(join(authoring, "tools")),
-    ...files(join(authoring, "desktop")).filter(file => !/node_modules|build-tools|[\\/]\.hutch[\\/]|[\\/]build[\\/]|[\\/]static[\\/]/.test(file))]
+  // Build output, dependencies and tool downloads are pruned before the walk descends (tests/fixtures/source-files.ts).
+  const DESKTOP_OUTPUT = ["node_modules", "build-tools", ".hutch", "build", "static", "artifacts", "webview2", ".cottontail-tmp"];
+  const offenders = [...sourceFiles(join(authoring, "src"), /\.(ts|js)$/), ...sourceFiles(join(authoring, "tools"), /\.(ts|js)$/),
+    ...sourceFiles(join(authoring, "desktop"), /\.(ts|js)$/, DESKTOP_OUTPUT)]
     .filter(file => !file.endsWith("mod-branding.ts"))
-    .filter(file => /XF Eye Artistry(?! CCXL - Dev)/.test(readFileSync(file, "utf8")))
+    .filter(file => /XF Eye Artistry(?! CCXL - Dev)/.test(sourceText(file)))
     .map(file => relative(authoring, file));
   expect(offenders).toEqual([]);
 });

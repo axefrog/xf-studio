@@ -55,11 +55,15 @@ function checkSkinnedGlb(buffer: ArrayBuffer, morphCounts: readonly number[] | n
       const a = json.accessors[p.attributes[`WEIGHTS_${k}`]], b = json.bufferViews[a.bufferView];
       arrays.push({ count: a.count, offset: start + (b.byteOffset ?? 0) + (a.byteOffset ?? 0), stride: b.byteStride ?? 16 });
     }
+    // One assertion per mesh (the worst vertex), not one per vertex: millions of expect() calls made this scan slow under load.
+    let worst = 0, at = -1;
     for (let i = 0; i < arrays[0]!.count; i++) {
       let sum = 0;
       for (const a of arrays) for (let k = 0; k < 4; k++) sum += view.getFloat32(a.offset + i * a.stride + k * 4, true);
-      expect(sum).toBeCloseTo(1, 5);
+      if (Math.abs(sum - 1) > worst) { worst = Math.abs(sum - 1); at = i; }
     }
+    // toBeCloseTo(1, 5): within half of 1e-5.
+    expect(worst, `${mesh.name} vertex ${at} weights sum to 1 ± ${worst}`).toBeLessThan(5e-6);
     expect(first.get(mesh.name)!.length).toBe(arrays[0]!.count * 4);
   }
 }
@@ -73,12 +77,17 @@ derivedPreviewTest("head GLB retains customization morphs, all skin sets and nor
 derivedCharacterTest("resolved brow, lash and hair GLBs retain their facial targets, all skin sets and normalized totals", async () => {
   const records = derivedCharacterRecords();
   const slots = new Set<string>();
+  // Many V's share a component's GLB: each distinct file (and morph expectation) is checked once.
+  const checks = new Map<string, boolean>();
   for (const { record, file } of records) for (const component of record.components) {
     slots.add(component.slot);
+    const path = file(component.geometry.file), morphs = !!component.geometry.morphTargets;
+    checks.set(`${morphs}|${path}`, morphs);
+  }
+  for (const [key, morphs] of checks)
     // Head decals and lashes carry the head's 105 face targets or the eye component's 21.
     // Some chunks (the eyeball beside the lashes) have four influences only; the export keeps what the game has.
     // Plain skinned meshes (hair) may carry a garment-support shape, which is not a facial target.
-    checkSkinnedGlb(await Bun.file(file(component.geometry.file)).arrayBuffer(), component.geometry.morphTargets ? [105, 21] : null, undefined, false);
-  }
+    checkSkinnedGlb(await Bun.file(key.slice(key.indexOf("|") + 1)).arrayBuffer(), morphs ? [105, 21] : null, undefined, false);
   expect(slots.size).toBeGreaterThan(0);
 });
