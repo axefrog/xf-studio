@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";

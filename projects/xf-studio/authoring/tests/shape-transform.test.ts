@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { coverage, initialRecipe, parseRecipe, warpFields, type Layer } from "../src/recipe";
-import { bezierAt, splitBezierSegment } from "../src/bezier-path";
-import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor, type ShapeTransform } from "../src/shape-transform";
+import { coverage, initialRecipe, parseRecipe, warpFields, type Layer } from "../src/engines/layered-makeup/recipe";
+import { bezierAt, splitBezierSegment } from "../src/engines/layered-makeup/bezier-path";
+import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor, type ShapeTransform } from "../src/engines/layered-makeup/shape-transform";
 
 const sample = (): Layer => {
   const layer = initialRecipe().layers[0];

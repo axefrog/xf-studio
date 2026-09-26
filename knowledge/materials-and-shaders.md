@@ -491,7 +491,7 @@ Transparency needs `enableMask` [wiki] (`textured-material-properties.md` L25).
 
 "Plate" means the owned morph-skinned eye-makeup mesh drawn over the head. Every decal route keeps the underlying Subsurface class (§2.4).
 
-The Studio exports each preset as **one decal draw**, so per-texel inputs can vary within a preset but material constants cannot. The implemented routes are in [`finish-export.ts`](../projects/xf-studio/authoring/src/finish-export.ts); each finish has a [design page](../research/materials/finish-designs/README.md). None has been seen in game; the [finish board](../experiments/016-finish-board/README.md) is the prepared test.
+The Studio exports each preset as **one decal draw**, so per-texel inputs can vary within a preset but material constants cannot. The implemented routes are in [`finish-export.ts`](../projects/xf-studio/authoring/src/engines/layered-makeup/finish-export.ts); each finish has a [design page](../research/materials/finish-designs/README.md). None has been seen in game; the [finish board](../experiments/016-finish-board/README.md) is the prepared test.
 
 | Finish | Export route (current) | Why / limits | Grade | Single confirming in-game test |
 |---|---|---|---|---|

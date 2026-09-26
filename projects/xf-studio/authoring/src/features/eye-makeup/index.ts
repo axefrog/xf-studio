@@ -7,8 +7,8 @@
  * them from `src/` (recorded in the design's step 1 status).
  */
 import { featureActionTable, featureId, type FeatureModule } from "../../platform/api";
-import type { Recipe } from "../../recipe";
-import { applyRecipeGesture, type GestureEdit } from "../../recipe-actions";
+import type { Recipe } from "../../engines/layered-makeup/recipe";
+import { applyRecipeGesture, type GestureEdit } from "../../engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_FEATURE } from "../../recipe-schema";
 import { gestureHistoryLabel, historyLabel } from "../../history-labels";
 import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, type ActionScope } from "../../studio-action-descriptors";

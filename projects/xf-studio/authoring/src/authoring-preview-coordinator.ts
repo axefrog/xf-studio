@@ -3,8 +3,8 @@ import { planLayerPreview } from "./authoring-preview-policy";
 import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { PreviewQualityActions } from "./preview-quality-actions";
 import { samePreviewInputs } from "./preview-layer-change";
-import type { Layer, Recipe } from "./recipe";
-import type { RasterResponse } from "./raster-processor";
+import type { Layer, Recipe } from "./engines/layered-makeup/recipe";
+import type { RasterResponse } from "./engines/layered-makeup/raster-processor";
 
 export type CompleteRaster = Extract<RasterResponse, { data: unknown }>;
 /**

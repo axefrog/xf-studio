@@ -1,9 +1,9 @@
 import {describe,test,expect} from "bun:test";
-import {coverage,curve,raster,initialRecipe,parseRecipe,parseRecipeFile,warpFields,DEFAULT_SOFTNESS_BLEND, type Layer, type Point} from "../src/recipe";
-import {editSoftness} from "../src/softness-edit";
-import {bezierAt,splitBezierSegment} from "../src/bezier-path";
-import {insertPathPoint} from "../src/path-edit";
-import {transformLayer} from "../src/shape-transform";
+import {coverage,curve,raster,initialRecipe,parseRecipe,parseRecipeFile,warpFields,DEFAULT_SOFTNESS_BLEND, type Layer, type Point} from "../src/engines/layered-makeup/recipe";
+import {editSoftness} from "../src/engines/layered-makeup/softness-edit";
+import {bezierAt,splitBezierSegment} from "../src/engines/layered-makeup/bezier-path";
+import {insertPathPoint} from "../src/engines/layered-makeup/path-edit";
+import {transformLayer} from "../src/engines/layered-makeup/shape-transform";
 
 function strip(): Layer {
   const l=editSoftness(initialRecipe().layers[0],{kind:"variable-softness",enabled:true});

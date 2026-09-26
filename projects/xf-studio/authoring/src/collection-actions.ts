@@ -3,7 +3,7 @@ import { COLLECTION_RECOVERY_LIMIT, holdsLocked } from "./collection-workspace";
 import type { CollectionWorkspace, DocumentModel, PresetCommand } from "./collection-workspace";
 import type { StoredCollection } from "./collection-store";
 import type { Look, LookCollection } from "./platform/api";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./validation-issues";
 import { refusal, type ReasonCode } from "./platform/api";
 

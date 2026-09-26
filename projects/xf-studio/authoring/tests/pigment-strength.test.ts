@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { preparePigmentStrength } from "../src/pigment-strength";
+import { preparePigmentStrength } from "../src/engines/layered-makeup/pigment-strength";
 import { coverage, curve, initialRecipe, parseRecipe, raster, warpFields,
   DEFAULT_STRENGTH_BLEND, MIN_STRENGTH_BLEND, MAX_STRENGTH_BLEND,
-  type Layer, type Point } from "../src/recipe";
+  type Layer, type Point } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 
 const points = (values: number[][]): Point[] => values.map(([u, v, weight]) => ({ u, v, weight }));

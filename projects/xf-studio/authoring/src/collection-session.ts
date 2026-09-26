@@ -1,7 +1,7 @@
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, copyWorkspace, editPresets, emptyRecipe, liveFeatureStates, liveMemory, livePart,
   withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace, type DocumentModel, type EditorMemory,
   type PresetCommand } from "./collection-workspace";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 import type { LiveFeatureState } from "./platform/core/live-features";
 import type { LookCollection } from "./platform/api";
 import type { StoredCollection } from "./collection-store";

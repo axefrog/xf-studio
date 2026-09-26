@@ -18,7 +18,7 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compo
 import { LookLibrary } from "../src/library-store";
 import { COLLECTION_2, isNewerData, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { eyeMakeupCollection, NEWER_LOOK_REASON, planCollection } from "../src/preset-collection";
-import { initialRecipe, parseRecipe } from "../src/recipe";
+import { initialRecipe, parseRecipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createStudioPresentation } from "../src/studio-presentation";
 import { fitWorkspace } from "../src/workspace-budget";

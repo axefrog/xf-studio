@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { compileFlatPreset, mergeFlatSample, srgbToLinear, UnsupportedMaterialError } from "../src/preset-compiler";
-import { initialRecipe, raster } from "../src/recipe";
+import { compileFlatPreset, mergeFlatSample, srgbToLinear, UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
+import { initialRecipe, raster } from "../src/engines/layered-makeup/recipe";
 
 test("merged channels reproduce ordered game-target blending over arbitrary backgrounds", () => {
   let seed = 2077;

@@ -20,7 +20,7 @@ import { verifyBuild, type VerificationReport, type VerifyBuildOptions } from ".
 import { createWolvenKitVerifierTools } from "./verifier-wolvenkit";
 import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "./eye-plate-service";
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
-import { plateUvFootprint } from "./plate-uv-window";
+import { plateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import type { PlateReachInput } from "./plate-reach";
 
 export const MAX_COLLECTION_BYTES = 16_000_000;

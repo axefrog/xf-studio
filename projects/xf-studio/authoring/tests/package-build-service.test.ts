@@ -12,7 +12,7 @@ import type { PackageBuild, PackageCheck } from "../src/package-action";
 import type { EyePlateManifest } from "../src/eye-plate-service";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
-import { plateUvFootprint } from "../src/plate-uv-window";
+import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { OFF_PLATE_REASON } from "../src/package-filter";
 

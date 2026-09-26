@@ -1,9 +1,9 @@
 import {expect,test} from "bun:test";
-import {initialRecipe,raster,type Layer} from "../src/recipe";
-import {defaultFlakes} from "../src/finish";
-import {createFlakeCatalogue,defaultIrregularFlakes,FLAKE_MATERIAL,FLAKE_SUBSAMPLES,FLAKE_SUBSAMPLES_16,type FlakeNormalStudyMode,type IrregularFlakes} from "../src/flake-field";
+import {initialRecipe,raster,type Layer} from "../src/engines/layered-makeup/recipe";
+import {defaultFlakes} from "../src/engines/layered-makeup/finish";
+import {createFlakeCatalogue,defaultIrregularFlakes,FLAKE_MATERIAL,FLAKE_SUBSAMPLES,FLAKE_SUBSAMPLES_16,type FlakeNormalStudyMode,type IrregularFlakes} from "../src/engines/layered-makeup/flake-field";
 import {maskAlphaKey,irregularCatalogueKey,irregularOpticalKey,irregularAlbedoKey,legacyOpticalKey,
-  IRREGULAR_SAMPLING_VERSION,type CatalogueKey} from "../src/makeup-dependencies";
+  IRREGULAR_SAMPLING_VERSION,type CatalogueKey} from "../src/engines/layered-makeup/makeup-dependencies";
 
 function reordered<T>(value:T):T {
   if(Array.isArray(value))return value.map(reordered) as T;

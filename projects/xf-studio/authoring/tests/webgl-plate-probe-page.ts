@@ -13,12 +13,12 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { LightProbeGenerator } from "three/addons/lights/LightProbeGenerator.js";
-import { flatSurface } from "../src/finish-export";
-import { createMakeupStack, type PlateUnderlay } from "../src/makeup-stack";
-import { FULL_WINDOW } from "../src/plate-blend";
-import { createPlateComposite, type CompositeTextures } from "../src/plate-composite";
-import { initialRecipe, type Layer } from "../src/recipe";
-import { facetedMipChain } from "../src/route-mip-chains";
+import { flatSurface } from "../src/engines/layered-makeup/finish-export";
+import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { FULL_WINDOW } from "../src/engines/layered-makeup/render/plate-blend";
+import { createPlateComposite, type CompositeTextures } from "../src/engines/layered-makeup/render/plate-composite";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { facetedMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { createStudioEnvironment, ROOM_ENVIRONMENT_SH } from "../src/studio-environment";
 import { createLayeredMaterial, layerBakeParameters, layeredContextRestored } from "../src/layered-material";
 import type { RenderLayer } from "../src/render-detail";

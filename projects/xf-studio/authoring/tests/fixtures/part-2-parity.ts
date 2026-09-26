@@ -9,16 +9,16 @@
  *   bun tests/fixtures/capture-part-2-golden.ts <label>
  */
 import { createHash } from "node:crypto";
-import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../../src/direct-glint-settings";
-import { defaultFlakes } from "../../src/finish";
-import { planPresetExport } from "../../src/finish-export";
-import { maskAlphaKey, previewOpticalKey } from "../../src/makeup-dependencies";
+import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../../src/engines/layered-makeup/direct-glint-settings";
+import { defaultFlakes } from "../../src/engines/layered-makeup/finish";
+import { planPresetExport } from "../../src/engines/layered-makeup/finish-export";
+import { maskAlphaKey, previewOpticalKey } from "../../src/engines/layered-makeup/makeup-dependencies";
 import { preparePackageCollection } from "../../src/package-filter";
-import { compilePreset } from "../../src/preset-compiler";
+import { compilePreset } from "../../src/engines/layered-makeup/preset-compiler";
 import { parseCollection, planCollection } from "../../src/preset-collection";
-import { initialRecipe, newLayerTemplate, parseRecipe, raster, type Layer } from "../../src/recipe";
-import { applyRecipeAction, type RecipeAction } from "../../src/recipe-actions";
-import type { GlitterChoices } from "../../src/glitter-model";
+import { initialRecipe, newLayerTemplate, parseRecipe, raster, type Layer } from "../../src/engines/layered-makeup/recipe";
+import { applyRecipeAction, type RecipeAction } from "../../src/engines/layered-makeup/recipe-actions";
+import type { GlitterChoices } from "../../src/engines/layered-makeup/glitter-model";
 import { STUDIO_PARTS } from "../../src/compose/studio-registry";
 import { COLLECTION_FIXTURES, readFixture } from "./capture-plan-golden";
 import { canonical, digest, observeRoundTrips } from "./workspace-observable";

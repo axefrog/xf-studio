@@ -1,8 +1,8 @@
 import {expect,test} from "bun:test";
 import {createHash} from "node:crypto";
-import {bakeFlakes,createFlakeJob,defaultFlakes,type Flakes} from "../src/finish";
-import {createRasterProcessor,type RasterResponse} from "../src/raster-processor";
-import {initialRecipe,raster} from "../src/recipe";
+import {bakeFlakes,createFlakeJob,defaultFlakes,type Flakes} from "../src/engines/layered-makeup/finish";
+import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
+import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
 
 // Captured from the unmodified synchronous baker before this scheduling change.
 const frozen: {size:number;finish:"shimmer"|"glitter";p:Flakes;sha256:string}[] = [

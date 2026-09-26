@@ -1,10 +1,9 @@
 import { bindingReference } from "../../input-bindings";
-import { PANEL_IDS } from "../layout-defaults";
 import { code, esc, pattern, section } from "./kit";
 
 export type PanelInfo = { id: string; title: string; description: string };
 
-export function reference(panels: PanelInfo[]) {
+export function reference(panels: readonly PanelInfo[]) {
   const actionMap: [string, string, string][] = [
     ["Presets rows", "preset.select, preset.edit {add, copy, rename, move, remove, restore}, collection.rename", "library.summary()"],
     ["Layers rows", "layer.select, layer.edit {add, duplicate, rename, move, reset, remove}, layer.setEnabled", "editor.recipe(), editor.layer()"],
@@ -38,7 +37,7 @@ export function reference(panels: PanelInfo[]) {
     `Mappings from patterns to the public presentation port, the keyboard model, terminology and the rules that keep future UI work inside the architecture contract.`, [
     pattern({ id: "r-panels", title: "Panel registry", status: "implemented", wide: true,
       specimen: `<table class="ref-table"><thead><tr><th>ID</th><th>Title</th><th>Purpose</th></tr></thead><tbody>${panels.map(panel => `<tr><td><code>${panel.id}</code></td><td>${esc(panel.title)}</td><td>${esc(panel.description)}</td></tr>`).join("")}</tbody></table>`,
-      what: `${PANEL_IDS.length} panels with stable IDs, each from a view contribution (the shell's or a feature's). A new panel gets a &lt;feature&gt;.&lt;panel&gt; ID, a slot and an order in its view.`,
+      what: `${panels.length} panels with stable IDs, each from a view contribution (the shell's or a feature's). A new panel gets a &lt;feature&gt;.&lt;panel&gt; ID, a slot and an order in its view.`,
       when: "Adding or renaming panels. IDs are persisted in layouts; never reuse an ID for a different purpose." }),
     pattern({ id: "r-actions", title: "Pattern → action and state map", status: "implemented", wide: true,
       specimen: `<table class="ref-table"><thead><tr><th>Surface</th><th>Actions / requests</th><th>Read-only state</th></tr></thead><tbody>${actionMap.map(([a, b, c]) => `<tr><td>${a}</td><td><code>${b}</code></td><td><code>${c}</code></td></tr>`).join("")}</tbody></table>`,

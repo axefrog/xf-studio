@@ -4,7 +4,7 @@ import { LIVE_FEATURE, STUDIO_PARTS, STUDIO_DOCUMENTS } from "../../src/compose/
 import { LOOK_HISTORY_1, type Look, type LookHistoryData } from "../../src/platform/api";
 import { lookHistoryBodies } from "../../src/platform/core/look-history";
 import type { DocumentHistory } from "../../src/authoring-document";
-import type { Recipe } from "../../src/recipe";
+import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { serializeWorkspace, type WorkspaceState } from "../../src/workspace-state";
 
 /** A stored collection of either schema, as the in-memory look collection the library returns. */

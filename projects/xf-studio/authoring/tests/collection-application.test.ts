@@ -8,7 +8,7 @@ import { collectionDraft } from "../src/collection-workspace";
 import { eyeMakeupPort } from "../src/authoring-eye-makeup";
 import { looks } from "./fixtures/looks";
 import type { PresetCollection } from "../src/preset-collection";
-import { RecipeActions } from "../src/recipe-actions";
+import { RecipeActions } from "../src/engines/layered-makeup/recipe-actions";
 import { StudioApplication } from "../src/studio-application";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { freshWorkspace } from "../src/workspace-state";

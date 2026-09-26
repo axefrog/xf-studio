@@ -1,5 +1,5 @@
 import {describe, expect, test} from "bun:test";
-import {composeFlakeColour, createFlakeBakeJob, createFlakeCatalogue, createRegionFlakeCatalogueJob, createFlakeColourJob, defaultIrregularFlakes, FLAKE_LIMITS, FLAKE_MATERIAL, type Flake, type IrregularFlakes} from "../src/flake-field";
+import {composeFlakeColour, createFlakeBakeJob, createFlakeCatalogue, createRegionFlakeCatalogueJob, createFlakeColourJob, defaultIrregularFlakes, FLAKE_LIMITS, FLAKE_MATERIAL, type Flake, type IrregularFlakes} from "../src/engines/layered-makeup/flake-field";
 
 function inside(f: Flake, u: number, v: number) {
   // Independent enclosing-radius rejection; no reuse of raster bounds or tile index.

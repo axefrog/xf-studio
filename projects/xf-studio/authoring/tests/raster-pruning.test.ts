@@ -1,6 +1,6 @@
 import {expect,test} from "bun:test";
-import {coverage,curve,initialRecipe,raster,createRasterJob,type Layer} from "../src/recipe";
-import {convertToBezier} from "../src/bezier-path";
+import {coverage,curve,initialRecipe,raster,createRasterJob,type Layer} from "../src/engines/layered-makeup/recipe";
+import {convertToBezier} from "../src/engines/layered-makeup/bezier-path";
 
 function compareScalar(layer:Layer,size:number){
   const pixels=raster(layer,size),polygon=curve(layer.points);

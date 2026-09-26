@@ -17,8 +17,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { planCollection } from "../src/preset-collection";
-import { compileFlatPreset } from "../src/preset-compiler";
-import { encodeFlatDds, flatMipChain, type FlatMapChannel } from "../src/flat-mip-chain";
+import { compileFlatPreset } from "../src/engines/layered-makeup/preset-compiler";
+import { encodeFlatDds, flatMipChain, type FlatMapChannel } from "../src/engines/layered-makeup/flat-mip-chain";
 
 const app = resolve(import.meta.dir, "..");
 const hq = resolve(app, "../../..");

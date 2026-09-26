@@ -11,7 +11,7 @@ import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { describePackageOmissions, originalPresetCount, preparePackageCollection } from "../src/package-filter";
 import { preflightPackageCollection } from "../src/package-preflight";
 import { COLLECTION_2 } from "../src/platform/api";
-import { emptyRecipe, initialRecipe, parseRecipe } from "../src/recipe";
+import { emptyRecipe, initialRecipe, parseRecipe } from "../src/engines/layered-makeup/recipe";
 import { NO_EXPORTER_REASON, NO_EYE_MAKEUP_REASON, parseCollection, type PresetCollection } from "../src/preset-collection";
 import { EYE_MAKEUP_PART_2 } from "../src/recipe-schema";
 import { fixedId } from "./fixtures/workspace-v1-fixtures";

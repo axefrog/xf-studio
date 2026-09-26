@@ -13,7 +13,7 @@ if (!collectionFile || !outDir || !windowJson || (mode !== "mirror" && mode !== 
 if (mode === "mirror") plugin({
   name: "mirror rasterWindow",
   setup(build) {
-    build.onLoad({ filter: /[\\/]src[\\/]recipe\.ts$/ }, async ({ path }) => {
+    build.onLoad({ filter: /[\\/]engines[\\/]layered-makeup[\\/]recipe\.ts$/ }, async ({ path }) => {
       const source = await Bun.file(path).text();
       if (!source.includes("export function rasterWindow(")) throw Error("rasterWindow not found");
       return { loader: "ts", contents: source.replace("export function rasterWindow(", "function realRasterWindow(") + `

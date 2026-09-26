@@ -12,12 +12,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync,
 import { dirname, join, resolve } from "node:path";
 import { archiveInventory } from "./archive-inventory-fs";
 import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
-import { encodeDds, flatMipChain } from "./flat-mip-chain";
-import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./route-mip-chains";
+import { encodeDds, flatMipChain } from "./engines/layered-makeup/flat-mip-chain";
+import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./engines/layered-makeup/route-mip-chains";
 import { liftPlate, type PlateLiftReport } from "./plate-lift";
 import { plateUvFootprint, uvTransformConstants, type PlateUvFootprint, type StoredUvBounds, type UvTransformConstants,
-  type UvWindow } from "./plate-uv-window";
-import type { TextureChannel } from "./finish-export";
+  type UvWindow } from "./engines/layered-makeup/plate-uv-window";
+import type { TextureChannel } from "./engines/layered-makeup/finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
   appearanceResource, archiveXlDeclaration, assertBrandedPlan, customizationResource, HandleCounter,

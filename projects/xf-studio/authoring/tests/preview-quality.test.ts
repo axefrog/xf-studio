@@ -1,5 +1,5 @@
 import {expect,test} from "bun:test";
-import {initialRecipe} from "../src/recipe";
+import {initialRecipe} from "../src/engines/layered-makeup/recipe";
 import {assessPreviewQuality,DEFAULT_PREVIEW_BUDGET_BYTES,DEFAULT_PREVIEW_TEXTURE_SIZE,isPreviewTextureSize,
   parsePreviewTextureSize,PREVIEW_TEXTURE_SIZES} from "../src/preview-quality";
 

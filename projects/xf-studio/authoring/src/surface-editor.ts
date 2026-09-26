@@ -3,9 +3,9 @@ import { cancelsGesture } from "./gesture-cancel";
 import { modifierKey, modifiersOf, pointerBinding, pointerInputOf, type EditorInputState,
   type GestureKind, type PointerTarget } from "./input-bindings";
 import { isCameraEffect } from "./head-camera-input";
-import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
-import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
-import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer } from "./shape-transform";
+import { clamp, curve, MAX_FIELDS, type Layer } from "./engines/layered-makeup/recipe";
+import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./engines/layered-makeup/bezier-path";
+import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer } from "./engines/layered-makeup/shape-transform";
 import {
   SurfaceMap,
   anchorPosition,

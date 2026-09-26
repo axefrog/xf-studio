@@ -1,16 +1,16 @@
 import * as THREE from "three";
-import { extendSkin } from "./skin";
-import { canonicalFinish, defaultFlakes, isIrregular } from "./finish";
-import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
-import type { Layer } from "./recipe";
+import { extendSkin } from "../../../skin";
+import { canonicalFinish, defaultFlakes, isIrregular } from "../finish";
+import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "../makeup-dependencies";
+import type { Layer } from "../recipe";
 import {installProceduralGlintStudy} from "./direct-glint";
-import {isDirectGlint} from "./direct-glint-settings";
-import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "./finish-export";
+import {isDirectGlint} from "../direct-glint-settings";
+import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "../finish-export";
 import {installFresnelTint} from "./fresnel-tint";
-import {previewFacetChains} from "./route-mip-chains";
+import {previewFacetChains} from "../route-mip-chains";
 import {createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
 import {createPlateComposite} from "./plate-composite";
-import type {SkinParameters} from "./skin-material";
+import type {SkinParameters} from "../../../skin-material";
 /** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
 const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
 

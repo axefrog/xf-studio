@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { finishCatalogue } from "../src/finish-catalogue";
+import { finishCatalogue } from "../src/engines/layered-makeup/finish-catalogue";
 import { preparePackageCollection } from "../src/package-filter";
 import type { PresetCollection } from "../src/preset-collection";
 import { emptyPresentationStatus, PresentationStatusSource } from "../src/presentation-status";

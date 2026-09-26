@@ -15,7 +15,7 @@ A still photograph does not establish facet normals, physical dimensions, metaln
 
 ## Concrete causes in the current code
 
-Sources: [`finish.ts`](../../projects/xf-studio/authoring/src/finish.ts), [`makeup-stack.ts`](../../projects/xf-studio/authoring/src/makeup-stack.ts), and the installed Three.js shader chunks named below.
+Sources: [`finish.ts`](../../projects/xf-studio/authoring/src/engines/layered-makeup/finish.ts), [`makeup-stack.ts`](../../projects/xf-studio/authoring/src/engines/layered-makeup/render/makeup-stack.ts), and the installed Three.js shader chunks named below.
 
 1. **The placement retains a lattice.** Each occupied cell contains exactly one circular facet. Its centre moves only ±0.15 cell from the centre, so neighbouring cells retain large structured empty corridors. At the default 1024 bake and 128 cells per axis, the spacing is eight texels and jitter only ±1.2 texels. Randomly omitting cells does not remove the grid in occupied neighbours.
 2. **The radius distribution is narrow and the silhouette is always circular.** Glitter radii are 0.21–0.30 cell: 1.68–2.4 texels at that default bake. Diameter varies only by a factor of 1.43. The nominal occupied disk area is about 13.4% of the atlas at default density 0.65, before raster edge filtering (computed as `0.65 * pi * E[radiusInCells²]`). This explains why a high-sounding 65% density is not 65% flake coverage. The density control is currently cell occupancy probability.

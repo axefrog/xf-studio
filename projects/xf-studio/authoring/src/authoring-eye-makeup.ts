@@ -8,8 +8,8 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./eye-makeup-model";
 import type { FeatureActionSpec, GestureProvider } from "./platform/api";
-import type { Recipe } from "./recipe";
-import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
+import type { Recipe } from "./engines/layered-makeup/recipe";
+import type { GestureEdit, RecipeAction, RecipeActions } from "./engines/layered-makeup/recipe-actions";
 
 /** Eye makeup's registered spec for one action kind (from the injected registry). */
 export type EyeMakeupSpec = FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction, string, EyeMakeupEffect>;

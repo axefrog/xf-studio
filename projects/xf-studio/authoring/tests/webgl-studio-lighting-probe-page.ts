@@ -9,8 +9,8 @@
  * light probe (PREV-59). Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
-import { createMakeupStack, type PlateUnderlay } from "../src/makeup-stack";
-import { initialRecipe, type Layer } from "../src/recipe";
+import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
 import { skinParameters } from "../src/skin-material";
 import { createStudioLightRig } from "../src/studio-light-rig";
 import { DEFAULT_STUDIO_LIGHTS, STUDIO_LIGHT_TARGET, type StudioLights } from "../src/studio-lighting";

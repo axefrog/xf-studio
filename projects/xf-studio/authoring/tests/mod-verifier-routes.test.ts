@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the builder side: it writes the supplied chains and resources that the
 // independent verifier must reproduce from its own restated specification.
-import { encodeDds, flatMipChain } from "../src/flat-mip-chain";
-import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../src/route-mip-chains";
+import { encodeDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
+import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { planCollection } from "../src/preset-collection";
 import { preparePackageCollection } from "../src/package-filter";
-import { FINISH_EXPORT } from "../src/finish-export";
+import { FINISH_EXPORT } from "../src/engines/layered-makeup/finish-export";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
 import { archiveKey } from "../src/mod-verifier/resource-inventory";
 import { componentId, VERIFIER_FINISHES } from "../src/mod-verifier/resource-checks";

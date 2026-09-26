@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { parsePlateUvFootprint, type PlateUvFootprint } from "./plate-uv-window";
+import { parsePlateUvFootprint, type PlateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import type { PlateReachInput } from "./plate-reach";
 
 /** The footprint's file name inside a plate cache entry, beside `plate-manifest.json`. */

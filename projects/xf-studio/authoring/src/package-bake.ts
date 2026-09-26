@@ -11,10 +11,10 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, HEAD_TEXTURE_SIZE, ROUTE_CHANNELS, WINDOW_TEXTURE, type ExportRoute, type TextureChannel } from "./finish-export";
+import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, HEAD_TEXTURE_SIZE, ROUTE_CHANNELS, WINDOW_TEXTURE, type ExportRoute, type TextureChannel } from "./engines/layered-makeup/finish-export";
 import { compileGlitterPreset } from "./glitter-route";
-import type { UvWindow } from "./plate-uv-window";
-import { compilePreset, presetCoverage, type TextureSpace } from "./preset-compiler";
+import type { UvWindow } from "./engines/layered-makeup/plate-uv-window";
+import { compilePreset, presetCoverage, type TextureSpace } from "./engines/layered-makeup/preset-compiler";
 import { planCollection } from "./preset-collection";
 
 export type CollectionPlan = ReturnType<typeof planCollection>;

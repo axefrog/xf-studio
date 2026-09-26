@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 import { planCollection, type PresetCollection } from "../src/preset-collection";
 const source = (): PresetCollection => ({schema:"xfas/collection-1",id:"11ea932b-7ce9-4d40-a284-47c307009137",name:"Collection",

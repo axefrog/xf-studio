@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { initialRecipe, raster } from "../src/recipe";
+import { initialRecipe, raster } from "../src/engines/layered-makeup/recipe";
 const out = resolve(import.meta.dir, "../../../../experiments/003-decal-material-import/generated");
 mkdirSync(out, { recursive: true });
 const layer = initialRecipe().layers[0];

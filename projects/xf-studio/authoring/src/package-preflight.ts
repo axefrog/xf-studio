@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { originalPresetCount, packagePresetIdentities, PLATE_REACH_UNCHECKED_NOTE, preparePackageCollection } from "./package-filter";
-import { compilePreset } from "./preset-compiler";
+import { compilePreset } from "./engines/layered-makeup/preset-compiler";
 import type { PackageCheck } from "./package-action";
 import type { PlateReachInput } from "./plate-reach";
 

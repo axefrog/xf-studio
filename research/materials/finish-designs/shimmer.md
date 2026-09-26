@@ -23,7 +23,7 @@ A fine reflective sheen: many tiny reflective particles that sparkle individuall
 
 ## What the preview does
 
-The game-matched model uses the same flake bake but uploads route-filtered mip chains: every level fades facet tilts by the mode-1 alpha and lower levels widen roughness exactly as the export does ([`previewFacetChains`](../../../projects/xf-studio/authoring/src/route-mip-chains.ts)). Earlier layers keep Three's automatic mipmaps.
+The game-matched model uses the same flake bake but uploads route-filtered mip chains: every level fades facet tilts by the mode-1 alpha and lower levels widen roughness exactly as the export does ([`previewFacetChains`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/route-mip-chains.ts)). Earlier layers keep Three's automatic mipmaps.
 
 ## Risks
 

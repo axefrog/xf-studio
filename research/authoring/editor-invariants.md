@@ -4,7 +4,7 @@ Consolidated 25 September 2026 from the dated checkpoint paragraphs that previou
 
 ## Recipe schema versions
 
-The in-memory recipe (`projects/xf-studio/authoring/src/recipe.ts`) is eye makeup's part `xfs/eye-makeup-part-2`: it has **no recipe-level schema**. Each layer's optical models (`flakes.model`, `optics.model`; classic flakes store none) are validated by the [per-layer model registry](../../projects/xf-studio/authoring/src/layer-models.ts). Recipe files accept `eye-artistry/recipe-1` and `xfs/recipe-2`…`xfs/recipe-11`; older schemas migrate **on read** to the in-memory form, and each file's schema still gates which layer models it may hold. Writers use the oldest schema that holds every layer's models, never below `xfs/recipe-7` (what new recipes have always been written as).
+The in-memory recipe (`projects/xf-studio/authoring/src/engines/layered-makeup/recipe.ts`) is eye makeup's part `xfs/eye-makeup-part-2`: it has **no recipe-level schema**. Each layer's optical models (`flakes.model`, `optics.model`; classic flakes store none) are validated by the [per-layer model registry](../../projects/xf-studio/authoring/src/engines/layered-makeup/layer-models.ts). Recipe files accept `eye-artistry/recipe-1` and `xfs/recipe-2`…`xfs/recipe-11`; older schemas migrate **on read** to the in-memory form, and each file's schema still gates which layer models it may hold. Writers use the oldest schema that holds every layer's models, never below `xfs/recipe-7` (what new recipes have always been written as).
 
 | Schema | Introduced | Migration rule for older input |
 |---|---|---|

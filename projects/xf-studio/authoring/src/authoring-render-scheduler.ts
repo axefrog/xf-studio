@@ -1,6 +1,6 @@
 import type { AuthoringDocument, DocumentEffect } from "./authoring-document";
 import { layerRenderQueue } from "./layer-render-queue";
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 
 export type AuthoringRenderPort = {
   frame(run: () => void): void;

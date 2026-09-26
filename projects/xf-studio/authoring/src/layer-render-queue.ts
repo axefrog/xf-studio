@@ -1,4 +1,4 @@
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 
 /** Keep the edited identity through a deferred frame, even if selection changes. */
 export function layerRenderQueue(layers: () => readonly Layer[], frame: (run: () => void) => void, render: (index: number) => void) {

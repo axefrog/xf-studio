@@ -9,13 +9,14 @@ import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorI
 import { keyTokens, parseHelp, plainText } from "../src/studio-ui/guidance/content";
 import { conditionHolds, eventHappened, GUIDANCE_DESCRIPTORS, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
 import { exportableFinishClause, finishExportHelp } from "../src/studio-ui/guidance/finish-text";
-import { finishCatalogue } from "../src/finish-catalogue";
+import { finishCatalogue } from "../src/engines/layered-makeup/finish-catalogue";
 import { HELP_LINKS, HELP_TOPICS, helpReference, helpTopicsFor, searchTopics, searchTours } from "../src/studio-ui/guidance/help-topics";
 import { tourKey } from "../src/studio-ui/guidance/overlay";
 import { NARROW_WIDTH, placeCallout } from "../src/studio-ui/guidance/placement";
 import { ONBOARDING_TOUR_ID, TOURS, toursFor } from "../src/studio-ui/guidance/tours";
 import type { GuidanceFacts, Tour, TourCommand } from "../src/studio-ui/guidance/types";
-import { PANEL_IDS, type StudioPanelId } from "../src/studio-ui/layout-defaults";
+import type { StudioPanelId } from "../src/studio-ui/layout-defaults";
+import { PANEL_IDS, PANEL_META } from "../src/compose/views";
 import { studioShortcut } from "../src/studio-ui/shortcuts";
 
 const root = resolve(import.meta.dir, "..", "src");
@@ -49,6 +50,8 @@ test("tour data names only registered anchors, catalogued actions and real key b
     tour.steps.forEach((step, index) => {
       const where = `${tour.id}#${index + 1}`;
       if (step.anchor && !isAnchorId(step.anchor)) problems.push(`${where}: unknown anchor ${step.anchor}`);
+      const panel = step.anchor && isAnchorId(step.anchor) ? anchorInfo(step.anchor)?.panel : undefined;
+      if (panel && !(PANEL_IDS as readonly string[]).includes(panel)) problems.push(`${where}: unknown panel ${panel}`);
       for (const button of step.buttons ?? []) if (typeof button.action !== "string") problems.push(...commandProblems(button.action, where));
       for (const id of keyTokens(`${step.content.title} ${step.content.body}`))
         if (!KEY_BINDINGS.some(binding => binding.id === id)) problems.push(`${where}: unknown key binding ${id}`);
@@ -77,7 +80,8 @@ test("tour data names only registered anchors, catalogued actions and real key b
 });
 
 test("every control anchor is registered by a panel or the shell, and every panel is an anchor", () => {
-  const sources = files(join(root, "studio-ui")).map(file => readFileSync(file, "utf8")).join("\n");
+  // The shell's panels and every feature's view register anchors.
+  const sources = [...files(join(root, "studio-ui")), ...files(join(root, "features"))].map(file => readFileSync(file, "utf8")).join("\n");
   const registered = new Set([...sources.matchAll(/anchors\.register\("([a-z.]+)"/g)].map(match => match[1]));
   for (const match of sources.matchAll(/\["(header\.[a-z]+)", [a-zA-Z]+\]/g)) registered.add(match[1]);
   expect(Object.keys(CONTROL_ANCHORS).filter(id => !registered.has(id))).toEqual([]);
@@ -86,7 +90,11 @@ test("every control anchor is registered by a panel or the shell, and every pane
   expect(readFileSync(join(root, "studio-ui", "app.ts"), "utf8")).toContain("rt.anchors.register(panelAnchor(panel.spec.id");
   for (const panel of PANEL_IDS) expect(anchorInfo(`panel.${panel}`)?.panel).toBe(panel);
   // Every control anchor inside a panel names a real panel.
-  for (const info of anchorCatalogue()) if (info.panel) expect(PANEL_IDS).toContain(info.panel);
+  for (const info of anchorCatalogue(PANEL_IDS)) if (info.panel) expect(PANEL_IDS as readonly string[]).toContain(info.panel);
+  // A panel anchor is known by its form; which panels exist is the catalogue's to say.
+  expect(anchorInfo("panel.hair.strands")?.panel).toBe("hair.strands");
+  expect(isAnchorId("panel.")).toBe(false);
+  expect(isAnchorId("layers.bogus")).toBe(false);
 });
 
 test("the registry reports visible, hidden and missing anchors from layout boxes only", () => {
@@ -115,6 +123,7 @@ function environment(overrides: Partial<{ anchors: Partial<Record<AnchorId, Anch
     facts: () => facts,
     anchor: id => overrides.anchors?.[id] ?? "visible",
     panelVisible: panel => (overrides.panels ?? ["layers", "uv", "head", "finish", "presets"]).includes(panel),
+    panelTitle: panel => (PANEL_META as Record<string, { title: string }>)[panel]?.title ?? panel,
     capability: command => command.kind === "studio" && overrides.unavailable?.includes(command.action.kind)
       ? { available: false, reason: "Not now." } : { available: true },
     record: (tourId, outcome) => { recorded.push([tourId, outcome]); },

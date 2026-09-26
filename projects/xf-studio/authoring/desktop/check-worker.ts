@@ -1,6 +1,6 @@
 import { parseCollection } from "../src/preset-collection";
 import { preflightPackageCollection } from "../src/package-preflight";
-import { parsePlateUvFootprint } from "../src/plate-uv-window";
+import { parsePlateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import type { CheckRequest } from "./check-runner";
 
 // One request per worker. The host terminates this worker after a complete

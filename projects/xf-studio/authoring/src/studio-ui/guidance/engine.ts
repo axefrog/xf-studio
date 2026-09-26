@@ -1,5 +1,4 @@
 import type { PayloadSchema } from "../../studio-action-descriptors";
-import { PANEL_META } from "../panel-meta";
 import type { StudioPanelId } from "../layout-defaults";
 import { anchorInfo, type AnchorId, type AnchorState } from "./anchors";
 import type { AppCondition, GuidanceEvent, GuidanceFacts, HelpContent, Side, Tour, TourButton, TourCommand, TourNavigation } from "./types";
@@ -32,6 +31,8 @@ export interface GuidanceEnvironment {
   facts(): GuidanceFacts;
   anchor(id: AnchorId): AnchorState;
   panelVisible(panel: StudioPanelId): boolean;
+  /** A contributed panel's title (from the catalogue), for "Show …" offers. */
+  panelTitle(panel: StudioPanelId): string;
   capability(command: TourCommand): GuidanceCapability;
   /** Remember how a tour ended (UI preferences); optional for tests. */
   record?(tourId: string, outcome: TourOutcome): void;
@@ -177,7 +178,7 @@ export class GuidanceService {
     const state = this.env.anchor(anchor), panel = anchorInfo(anchor)?.panel;
     if (state === "visible") return spotlight === "none" ? { kind: "none" } : { kind: "anchor", anchor };
     if (panel && this.env.panelVisible(panel)) return spotlight === "none" ? { kind: "none" } : { kind: "panel", anchor, panel };
-    if (panel) return { kind: "offer", anchor, panel, panelTitle: PANEL_META[panel].title };
+    if (panel) return { kind: "offer", anchor, panel, panelTitle: this.env.panelTitle(panel) };
     return { kind: "none" };
   }
 

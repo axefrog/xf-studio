@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe, type Layer } from "../src/recipe";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 

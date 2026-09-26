@@ -2,8 +2,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { defaultFineSpeckleFlakes } from "../../projects/xf-studio/authoring/src/direct-glint-settings";
-import { initialRecipe, parseRecipe, raster } from "../../projects/xf-studio/authoring/src/recipe";
+import { defaultFineSpeckleFlakes } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/direct-glint-settings";
+import { initialRecipe, parseRecipe, raster } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/recipe";
 
 const [source, layerId, sizeArg, output] = process.argv.slice(2);
 if (!output) throw Error("Usage: bun recipe-mask.ts <recipe.json|--sample> <layer-id> <power-of-two-size> <output-dir>");

@@ -1,5 +1,5 @@
-import { clamp, curve, type Layer } from "./recipe";
-import { tangentEndpoint } from "./bezier-path";
+import { clamp, curve, type Layer } from "./engines/layered-makeup/recipe";
+import { tangentEndpoint } from "./engines/layered-makeup/bezier-path";
 
 export type UV = { u: number; v: number };
 /**

@@ -6,10 +6,12 @@ import { shortcutLabel } from "../src/input-bindings";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { historyCommandLabel, historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable,
   jumpAnnouncement } from "../src/studio-ui/history-model";
-import { defaultCompact, defaultWide, PANEL_IDS } from "../src/studio-ui/layout-defaults";
+import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
+import { PANEL_IDS, STUDIO_CATALOGUE } from "../src/compose/views";
 import { locate } from "../src/studio-ui/dock/layout";
 import { PANEL_META } from "../src/studio-ui/panel-meta";
-import { sourceLabel } from "../src/studio-ui/runtime";
+import { activitySource } from "../src/studio-ui/views/contribution";
+const sourceLabel = (kind: string) => activitySource(kind, STUDIO_CATALOGUE);
 
 const root = resolve(import.meta.dir, "..");
 const timeline = (patch: Partial<HistorySnapshot> = {}): HistorySnapshot => ({ startId: HISTORY_START_ID, steps: [
@@ -56,7 +58,7 @@ test("history.jumpTo is a catalogued workspace action and the History panel is r
   expect(PANEL_IDS).toContain("history");
   expect(PANEL_META.history).toMatchObject({ title: "History", icon: "history" });
   // A tab beside Layers in both size classes, behind Layers.
-  for (const tree of [defaultWide(), defaultCompact()]) {
+  for (const tree of [defaultWide(STUDIO_CATALOGUE), defaultCompact(STUDIO_CATALOGUE)]) {
     const at = locate(tree, "history")!;
     expect(at.group.panels).toContain("layers");
     expect(at.group.active).toBe("layers");

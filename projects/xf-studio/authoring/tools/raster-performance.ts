@@ -1,5 +1,5 @@
 /** Fixed authored fixtures for byte-preserving mask performance comparisons. */
-import { initialRecipe, parseRecipe, raster, curve, type Layer } from "../src/recipe";
+import { initialRecipe, parseRecipe, raster, curve, type Layer } from "../src/engines/layered-makeup/recipe";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 const base = initialRecipe().layers[0];

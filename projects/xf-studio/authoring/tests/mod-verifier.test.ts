@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the compiler: it writes the fixture's supplied chains, which the
 // independent verifier must then reproduce from its own arithmetic.
-import { encodeFlatDds, flatMipChain } from "../src/flat-mip-chain";
+import { encodeFlatDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
 import { readDdsChain } from "../src/mod-verifier/dds-reader";
 import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/mod-verifier/resource-inventory";
 import { componentId, sameJson } from "../src/mod-verifier/resource-checks";

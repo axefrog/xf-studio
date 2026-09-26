@@ -1,9 +1,9 @@
 /** Deterministic generated-versus-resolved count audit for the browser eye shape.
  * Run: bun experiments/007-irregular-glitter/measure-studio-visibility.ts
  * It reads no private asset and makes no game-rendering claim. */
-import {initialRecipe,coverage,raster} from "../../projects/xf-studio/authoring/src/recipe";
+import {initialRecipe,coverage,raster} from "../../projects/xf-studio/authoring/src/engines/layered-makeup/recipe";
 import {createRegionFlakeCatalogueJob,createFlakeBakeJob,defaultStudioIrregularFlakes,
-  STUDIO_FINE_REGIONS} from "../../projects/xf-studio/authoring/src/flake-field";
+  STUDIO_FINE_REGIONS} from "../../projects/xf-studio/authoring/src/engines/layered-makeup/flake-field";
 
 const layer=initialRecipe().layers[0];
 const base=defaultStudioIrregularFlakes();

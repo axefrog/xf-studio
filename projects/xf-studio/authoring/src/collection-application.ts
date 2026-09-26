@@ -5,7 +5,7 @@ import { CollectionService, type CollectionOutcome, type CollectionRequest,
   type DraftPersistence } from "./collection-service";
 import type { CollectionWorkspace, DocumentModel } from "./collection-workspace";
 import type { ReadonlyDeep } from "./read-only";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 import type { StudioApplication } from "./studio-application";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import type { LibraryState } from "./workspace-state";

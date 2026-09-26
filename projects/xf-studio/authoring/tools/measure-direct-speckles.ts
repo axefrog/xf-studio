@@ -2,7 +2,7 @@
  * These are field candidates whose centres land in the painted mask, not
  * screen-visible sparks. The constants mirror the browser shader's three
  * explicitly versioned profiles and should be updated with that shader. */
-import {initialRecipe,raster} from "../src/recipe";
+import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
 
 const size=1024,seed=2077,density=.88,fineShare=.88;
 const layer=initialRecipe().layers[0]!;

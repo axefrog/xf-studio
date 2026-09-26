@@ -1,18 +1,19 @@
-import type { DirectGlintFlakes } from "../../direct-glint-settings";
-import { editingReference } from "../../input-bindings";
+import type { DirectGlintFlakes } from "../../../engines/layered-makeup/direct-glint-settings";
+import { editingReference } from "../../../input-bindings";
 // Conditional flake-size limits are not expressible in the static action descriptor yet (audit A-7).
-import type { IrregularFlakes } from "../../flake-field";
-import type { LegacyFlakes } from "../../finish";
-import type { GlitterModel } from "../../glitter-model";
-import type { Layer } from "../../recipe";
-import type { RecipeAction } from "../../recipe-actions";
-import type { ReadonlyDeep } from "../../read-only";
-import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../controls";
-import { h, pct, setAttr, setText } from "../dom";
-import { icon } from "../icons";
-import type { Frame, StudioRuntime } from "../runtime";
-import type { PanelController } from "./collection";
-import { PANEL_META } from "../panel-meta";
+import type { IrregularFlakes } from "../../../engines/layered-makeup/flake-field";
+import type { LegacyFlakes } from "../../../engines/layered-makeup/finish";
+import type { GlitterModel } from "../../../engines/layered-makeup/glitter-model";
+import type { Layer } from "../../../engines/layered-makeup/recipe";
+import type { RecipeAction } from "../../../engines/layered-makeup/recipe-actions";
+import type { ReadonlyDeep } from "../../../read-only";
+import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../../../studio-ui/controls";
+import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
+import { icon } from "../../../studio-ui/icons";
+import type { Frame, StudioRuntime } from "../../../studio-ui/runtime";
+import type { PanelController } from "../../../studio-ui/panels/collection";
+import { eyeMakeupActions } from "./actions";
+import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 type RLayer = ReadonlyDeep<Layer>;
 const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
@@ -46,13 +47,13 @@ function layerStrip(rt: StudioRuntime) {
   } };
 }
 function noLayer(rt: StudioRuntime) {
-  const add = button({ label: "Add layer", icon: "plus", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) });
+  const add = button({ label: "Add layer", icon: "plus", onClick: () => eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "add" } }) });
   const element = emptyState("No layer selected", "Select a layer in the Layers panel, or add one to this preset.", add);
-  return { element, update(hasLayer: boolean) { element.hidden = hasLayer; if (!hasLayer) applyCapability(add, rt.addLayerCapability()); } };
+  return { element, update(hasLayer: boolean) { element.hidden = hasLayer; if (!hasLayer) applyCapability(add, eyeMakeupActions(rt).addLayerCapability()); } };
 }
 
 export function finishPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
+  const strip = layerStrip(rt), empty = noLayer(rt);
   const color = new ColorField({ label: "Colour", transaction: recipeTransaction<string>(rt, "color", (layer, value) => ({ kind: "layer.setColor", layerId: layer.id, color: value })) });
   const opacityRange = rt.range("layer.setOpacity", "opacity");
   const opacity = new Slider({ label: "Opacity", ...opacityRange, step: .01, format: pct,
@@ -66,7 +67,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       "aria-label": `${finish.shortLabel}, ${statusText[finish.exportAdapter].toLowerCase()}` },
       h("span", { class: "finish-chip", "aria-hidden": "true" }), h("span", { class: "finish-name", text: finish.shortLabel }));
     element.addEventListener("click", () => {
-      const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setFinish", layerId: layer.id, finish: finish.id });
+      const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "layer.setFinish", layerId: layer.id, finish: finish.id });
     });
     return { finish, element };
   });
@@ -85,7 +86,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   const exportLine = h("div", { class: "export-line" });
   const openPackage = button({ label: "Open mod package", icon: "package", small: true, variant: "quiet", onClick: () => rt.dock.reveal("package") });
   const useGame = button({ label: "Use game-matched model", icon: "finish", small: true, onClick: () => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.useGameOptics", layerId: layer.id });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "layer.useGameOptics", layerId: layer.id });
   } });
   // Colour-shifting (game-matched): one shift colour added toward grazing view angles.
   const shift = {
@@ -98,7 +99,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
 
   // Glitter preview suite and flake studies.
   const model = new SelectField<GlitterModel>({ label: "Glitter preview model", onChange: value => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
   } });
   const modelSummary = note("");
   const classic = {
@@ -148,7 +149,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   rt.anchors.register("finish.picker", finishGroup);
   rt.anchors.register("finish.color", color.element);
   return {
-    spec: { id: "finish", ...PANEL_META["finish"], element },
+    spec: { id: "finish", ...EYE_MAKEUP_PANEL_META.finish, element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer;
@@ -156,7 +157,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       if (!layer) return;
       color.update(layer.color); opacity.update(layer.opacity);
       const current = rt.finishOf(layer.finish)?.id ?? layer.finish, target = { kind: "layer" as const, id: layer.id };
-      const choices = port.authoring.choicesFor(target, "layer.setFinish", "finish");
+      const choices = rt.eyeMakeup.choicesFor(target, "layer.setFinish", "finish");
       for (const { finish, element } of finishButtons) {
         setAttr(element, "aria-pressed", String(finish.id === current));
         const choice = choices.find(item => item.value === finish.id);
@@ -188,7 +189,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       irregularSection.hidden = !(glitter && modelId === "irregular");
       directSection.hidden = !(glitter && ["direct", "clustered", "fine"].includes(modelId));
       if (glitter) {
-        const modelChoices = port.authoring.choicesFor(target, "glitter.selectModel", "model");
+        const modelChoices = rt.eyeMakeup.choicesFor(target, "glitter.selectModel", "model");
         model.update(rt.glitterModels.map(item => ({ value: item.id, label: item.label,
           disabled: modelChoices.find(choice => choice.value === item.id)?.capability.available === false && item.id !== modelId })), modelId);
         setText(modelSummary, rt.glitterModels.find(item => item.id === modelId)?.summary ?? "");
@@ -201,8 +202,8 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       if (!irregularSection.hidden && flakes && "model" in flakes && flakes.model === "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<IrregularFlakes>, target = { kind: "layer" as const, id: layer.id };
         // Flake size and density bound each other; the application publishes the current limits.
-        const count = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "count").value;
-        const radius = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "radius").value;
+        const count = rt.eyeMakeup.limitsFor(target, "glitter.setIrregular", "count").value;
+        const radius = rt.eyeMakeup.limitsFor(target, "glitter.setIrregular", "radius").value;
         irregular.count.update(Math.round(f.count / flakesPerPercent), { note: count?.note });
         irregular.radius.update(f.radius, { min: radius?.min, max: radius?.max, note: radius?.note });
         irregular.spread.update(f.spread); irregular.tilt.update(f.tilt); irregular.color.update(f.color);
@@ -221,29 +222,29 @@ export function finishPanel(rt: StudioRuntime): PanelController {
 }
 
 export function shapePanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
+  const strip = layerStrip(rt), empty = noLayer(rt);
   const pointLabel = h("strong", { class: "point-label" });
   const selectPoint = (delta: number) => {
     const layer = rt.editor.layer(); if (!layer) return;
     const index = (rt.editor.selected() + delta + layer.points.length) % layer.points.length;
-    rt.dispatch({ kind: "point.select", layerId: layer.id, index });
+    eyeMakeupActions(rt).dispatch({ kind: "point.select", layerId: layer.id, index });
   };
   const prev = button({ label: "Previous point", icon: "chevronLeft", iconOnly: true, small: true, onClick: () => selectPoint(-1) });
   const next = button({ label: "Next point", icon: "chevronRight", iconOnly: true, small: true, onClick: () => selectPoint(1) });
   const remove = button({ label: "Remove point", icon: "trash", small: true, variant: "quiet", onClick: () => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "point.remove", layerId: layer.id, index: rt.editor.selected() });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "point.remove", layerId: layer.id, index: rt.editor.selected() });
   } });
   const enable = button({ label: "Enable Bézier handles", icon: "shape", small: true, onClick: () => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } });
   } });
   const modes = new Segmented<"aligned" | "symmetric" | "corner">({ label: "Selected point handles", options: [
     { value: "aligned", label: "Smooth", title: "Aligned arms with independent lengths" },
     { value: "symmetric", label: "Symmetric", title: "Opposite arms with equal lengths" },
     { value: "corner", label: "Corner", title: "Independent arms" }],
-  onSelect: mode => { const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "point-mode", index: rt.editor.selected(), mode } }); } });
+  onSelect: mode => { const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "point-mode", index: rt.editor.selected(), mode } }); } });
   const pathNote = note("");
   const mirror = new Toggle({ label: "Mirror across the face", onChange: checked => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: checked });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: checked });
   } });
   // Generated from the input binding catalogue; the full list is in the ? Keyboard & mouse dialog.
   const gestures = h("details", { class: "help-block" }, h("summary", { text: "Editing gestures" }),
@@ -257,7 +258,7 @@ export function shapePanel(rt: StudioRuntime): PanelController {
     gestures);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
-    spec: { id: "shape", ...PANEL_META["shape"], element },
+    spec: { id: "shape", ...EYE_MAKEUP_PANEL_META.shape, element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
@@ -265,7 +266,7 @@ export function shapePanel(rt: StudioRuntime): PanelController {
       const index = frame.selected, point = layer.points[index];
       setText(pointLabel, `Point ${index + 1} / ${layer.points.length}`);
       const target = { kind: "point" as const, layerId: layer.id, index };
-      applyCapability(remove, port.authoring.contextCapability(target, { kind: "point.remove", layerId: layer.id, index }));
+      applyCapability(remove, eyeMakeupActions(rt).contextCapability(target, { kind: "point.remove", layerId: layer.id, index }));
       const bezier = layer.pathMode === "bezier";
       enable.hidden = bezier; modes.element.hidden = !bezier;
       modes.update(point?.handles?.mode);
@@ -278,7 +279,7 @@ export function shapePanel(rt: StudioRuntime): PanelController {
 }
 
 export function edgePanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
+  const strip = layerStrip(rt), empty = noLayer(rt);
   const weight = new Slider({ label: "Selected point pigment", ...rt.range("pigment.edit", "value", "point-strength"), step: .01, format: pct,
     transaction: recipeTransaction<number>(rt, "weight", (layer, value) => ({ kind: "pigment.edit", layerId: layer.id, command: { kind: "point-strength", index: rt.editor.selected(), value } })) });
   const smooth = new Toggle({ label: "Smooth point gradients", onChange: enabled => {
@@ -309,7 +310,7 @@ export function edgePanel(rt: StudioRuntime): PanelController {
     section("Edge softness", variable.element, width.element, softnessNote));
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
-    spec: { id: "edge", ...PANEL_META["edge"], element },
+    spec: { id: "edge", ...EYE_MAKEUP_PANEL_META.edge, element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
@@ -336,9 +337,9 @@ export function edgePanel(rt: StudioRuntime): PanelController {
 }
 
 export function warpPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
+  const strip = layerStrip(rt), empty = noLayer(rt);
   const add = button({ label: "Add warp", icon: "plus", small: true, onClick: () => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "field.add", layerId: layer.id });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "field.add", layerId: layer.id });
   } });
   const chips = h("div", { class: "chip-row", role: "group", "aria-label": "Warp controls" });
   const reach = new Slider({ label: "Reach", ...rt.range("field.setReach", "radius"), step: .001, format: uvPct,
@@ -350,10 +351,10 @@ export function warpPanel(rt: StudioRuntime): PanelController {
       commit: () => rt.eyeMakeup.controlCommit("radius"), cancel: () => rt.eyeMakeup.controlCancel("radius"),
     } });
   const clear = button({ label: "Reset pull", icon: "reset", small: true, variant: "quiet", onClick: () => {
-    const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.clear", layerId: layer.id, fieldId: field.id });
+    const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (layer && field) eyeMakeupActions(rt).dispatch({ kind: "field.clear", layerId: layer.id, fieldId: field.id });
   } });
   const remove = button({ label: "Remove warp", icon: "trash", small: true, variant: "quiet", onClick: () => {
-    const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.remove", layerId: layer.id, fieldId: field.id });
+    const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (layer && field) eyeMakeupActions(rt).dispatch({ kind: "field.remove", layerId: layer.id, fieldId: field.id });
   } });
   const fieldNote = note("");
   let signature = "";
@@ -363,7 +364,7 @@ export function warpPanel(rt: StudioRuntime): PanelController {
     note("A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together."));
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
-    spec: { id: "warp", ...PANEL_META["warp"], element },
+    spec: { id: "warp", ...EYE_MAKEUP_PANEL_META.warp, element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
@@ -374,19 +375,19 @@ export function warpPanel(rt: StudioRuntime): PanelController {
         signature = key;
         chips.replaceChildren(...layer.fields.map((item, index) => {
           const chip = h("button", { class: "chip-button", type: "button", "aria-pressed": "false", "data-field": item.id }, icon("warp"), h("span", { text: `Warp ${index + 1}` }));
-          chip.addEventListener("click", () => { const current = rt.editor.layer(); if (current) rt.dispatch({ kind: "field.select", layerId: current.id, fieldId: item.id }); });
+          chip.addEventListener("click", () => { const current = rt.editor.layer(); if (current) eyeMakeupActions(rt).dispatch({ kind: "field.select", layerId: current.id, fieldId: item.id }); });
           return chip;
         }));
       }
       for (const chip of chips.querySelectorAll<HTMLElement>("[data-field]")) setAttr(chip, "aria-pressed", String(chip.dataset.field === field?.id));
-      applyCapability(add, port.authoring.contextCapability({ kind: "layer", id: layer.id }, { kind: "field.add", layerId: layer.id }));
+      applyCapability(add, eyeMakeupActions(rt).contextCapability({ kind: "layer", id: layer.id }, { kind: "field.add", layerId: layer.id }));
       selected.hidden = !field;
       if (field) {
         reach.update(field.radius);
         const target = { kind: "field" as const, layerId: layer.id, id: field.id };
         applyCapability(clear, !field.du && !field.dv ? { available: false, reason: "This warp has no pull to reset." } :
-          port.authoring.contextCapability(target, { kind: "field.clear", layerId: layer.id, fieldId: field.id }));
-        applyCapability(remove, port.authoring.contextCapability(target, { kind: "field.remove", layerId: layer.id, fieldId: field.id }));
+          eyeMakeupActions(rt).contextCapability(target, { kind: "field.clear", layerId: layer.id, fieldId: field.id }));
+        applyCapability(remove, eyeMakeupActions(rt).contextCapability(target, { kind: "field.remove", layerId: layer.id, fieldId: field.id }));
       }
       setText(fieldNote, field
         ? `Circle: position · square: pull · dashed ring: reach. ${layer.fields.length} warp control${layer.fields.length === 1 ? "" : "s"} on this layer.`

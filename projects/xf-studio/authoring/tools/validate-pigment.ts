@@ -6,8 +6,8 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { initialRecipe, raster, curve, type Layer, type Recipe } from "../src/recipe";
-import { compileFlatPreset } from "../src/preset-compiler";
+import { initialRecipe, raster, curve, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { compileFlatPreset } from "../src/engines/layered-makeup/preset-compiler";
 
 const directory = resolve(import.meta.dir, "../data/pigment-validation");
 await mkdir(directory, { recursive: true });
@@ -57,7 +57,7 @@ const downsample = (hi: Uint8Array, size: number) => {
 const results:any={
   createdAt:new Date().toISOString(), runtime:Bun.version,
   sources:Object.fromEntries(await Promise.all(["recipe.ts","pigment-strength.ts","preset-compiler.ts"].map(async name=>
-    [name,hash(new Uint8Array(await Bun.file(resolve(import.meta.dir,"../src",name)).arrayBuffer()))]))),
+    [name,hash(new Uint8Array(await Bun.file(resolve(import.meta.dir,"../src/engines/layered-makeup",name)).arrayBuffer()))]))),
   notes:[
     "Production raster, not a research substitute. Legacy and smooth share geometry, opacity, feather and warp.",
     "Smooth footprint is .0005 control UV. At 1024 it spans .512 texels; it is mathematically continuous but not supersampled.",

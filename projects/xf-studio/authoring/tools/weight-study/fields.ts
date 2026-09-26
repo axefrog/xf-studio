@@ -1,5 +1,5 @@
 // Research prototypes only. Production recipe-2 evaluation remains unchanged.
-import { clamp, type Point } from '../../src/recipe';
+import { clamp, type Point } from '../../src/engines/layered-makeup/recipe';
 export type Sample = { inside: boolean; distance: number; boundaryWeight: number };
 export type Field = (u: number, v: number) => number;
 

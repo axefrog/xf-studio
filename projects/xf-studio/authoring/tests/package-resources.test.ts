@@ -6,7 +6,7 @@ import {
   appearanceResource, archiveXlDeclaration, componentId, customizationResource, HandleCounter, resourceJson,
   rewritePlateMesh, rewritePlateMorph,
 } from "../src/package-resources";
-import { plateUvWindow, uvTransformConstants } from "../src/plate-uv-window";
+import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
 
 const plan = planCollection(JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8")));

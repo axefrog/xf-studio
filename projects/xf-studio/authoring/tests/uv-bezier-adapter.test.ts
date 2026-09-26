@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/recipe";
-import { convertToBezier, tangentEndpoint } from "../src/bezier-path";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { convertToBezier, tangentEndpoint } from "../src/engines/layered-makeup/bezier-path";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, fitUVView, parseUVView, reflectUV, uvRegion, uvToPixel } from "../src/uv-view";

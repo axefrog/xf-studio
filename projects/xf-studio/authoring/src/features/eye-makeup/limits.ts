@@ -4,9 +4,9 @@
  * `action-consequences.ts`. Pure; reads the part it is given.
  */
 import type { ConsequenceOverride, FeatureActionSpec, FeatureTarget, FieldLimit, SpecUnits } from "../../platform/api";
-import { isIrregular } from "../../finish";
-import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS } from "../../flake-field";
-import type { Recipe } from "../../recipe";
+import { isIrregular } from "../../engines/layered-makeup/finish";
+import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS } from "../../engines/layered-makeup/flake-field";
+import type { Recipe } from "../../engines/layered-makeup/recipe";
 import type { EyeMakeupAction, EyeMakeupEditorState } from "../../eye-makeup-model";
 
 type Limits = NonNullable<FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction>["limits"]>;

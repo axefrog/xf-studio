@@ -1,15 +1,15 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {initialRecipe,parseRecipe,raster} from "../src/recipe";
-import {defaultFlakes} from "../src/finish";
-import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/flake-field";
-import {createRasterProcessor,type RasterResponse} from "../src/raster-processor";
-import {createMakeupStack} from "../src/makeup-stack";
+import {initialRecipe,parseRecipe,raster} from "../src/engines/layered-makeup/recipe";
+import {defaultFlakes} from "../src/engines/layered-makeup/finish";
+import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/engines/layered-makeup/flake-field";
+import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
+import {createMakeupStack} from "../src/engines/layered-makeup/render/makeup-stack";
 import {assessPreviewQuality} from "../src/preview-quality";
 import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";
-import {UnsupportedMaterialError,compileFlatPreset} from "../src/preset-compiler";
+import {UnsupportedMaterialError,compileFlatPreset} from "../src/engines/layered-makeup/preset-compiler";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 

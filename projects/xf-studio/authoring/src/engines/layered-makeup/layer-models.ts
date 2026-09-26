@@ -18,7 +18,7 @@
 import { isDirectGlint } from "./direct-glint-settings";
 import type { Finish } from "./finish";
 import { hasGameOptics } from "./finish-export";
-import { NewerDataError } from "./platform/api";
+import { NewerDataError } from "../../platform/api";
 import { validStudioIrregularSettings } from "./flake-field";
 
 /** Every recipe file schema, oldest first. */

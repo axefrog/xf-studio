@@ -19,30 +19,35 @@ import { historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
 import { panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
-import { CLOSED_PANEL_HOMES, PANEL_IDS, type StudioPanelId } from "./layout-defaults";
-import { STUDIO_CATALOGUE } from "./views";
-import { PANEL_FACTORIES, type ViewContext } from "./views/panels";
+import type { ViewComposition, ViewContext } from "./views/panels";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
  * port: every edit, save, package and preview change is an application action.
+ * `views` is the composition root's view list (the shell's and each feature's
+ * panels, `compose/views.ts`); the shell names no feature's panels.
  */
-export function mountStudio(port: Port, root: HTMLElement) {
+export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition) {
   const feedback = new Feedback();
-  const rt = new StudioRuntime(port, feedback);
+  const catalogue = views.catalogue;
+  const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
   const view = viewPreferences(port, feedback);
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
   let guidance!: GuidanceController;
   const context: ViewContext = { guidance: { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) } };
   // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order.
-  const panels: PanelController[] = PANEL_IDS.map(id => PANEL_FACTORIES[id](rt, context));
+  const panels: PanelController[] = catalogue.ids.map(id => {
+    const factory = views.factories[id];
+    if (!factory) throw Error(`Panel ${id} has no factory.`);
+    return factory(rt, context);
+  });
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
   const help = byId.get("help") as PanelController & { focusSearch?(): void };
-  for (const panel of panels) rt.anchors.register(panelAnchor(panel.spec.id as StudioPanelId), panel.spec.element);
+  for (const panel of panels) rt.anchors.register(panelAnchor(panel.spec.id), panel.spec.element);
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
-    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) });
+    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue);
   const dock = new DockView({
     panels: panels.map(panel => ({ ...panel.spec, visibility: visible => {
       panel.spec.visibility?.(visible);
@@ -50,7 +55,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     } })),
     state: restored.state,
     sizeClass: () => sizeClassFor(window.innerWidth),
-    defaults: size => size === "wide" ? defaultWide() : defaultCompact(),
+    defaults: size => size === "wide" ? defaultWide(catalogue) : defaultCompact(catalogue),
     save: state => {
       const layout = serializeDockState(state), allowed = port.preferences.capability({ kind: "layout.set", layout });
       if (allowed.available) port.preferences.dispatch({ kind: "layout.set", layout });
@@ -59,7 +64,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
     afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
-    homes: CLOSED_PANEL_HOMES,
+    homes: catalogue.homes,
   });
   rt.dock = dock;
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
@@ -106,7 +111,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
   // Library and Mod package read file-operation capabilities that re-validate the whole
   // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
   // at most every 400 ms unless the library's busy/progress state changes.
-  const heavy = new Set<PanelId>(STUDIO_CATALOGUE.heavy);
+  const heavy = new Set<PanelId>(catalogue.heavy);
   let heavyAt = 0, heavyKey = "", heavyTimer: ReturnType<typeof setTimeout> | undefined;
   const heavyDue = (frame: Frame) => {
     const library = frame.library, key = JSON.stringify([library.busy, library.progress, library.summaries.length, library.draft?.revision, library.draft?.previous?.id]);

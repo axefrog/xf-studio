@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import {
   CONTRIBUTION_CHANNELS, DDS_HEADER_BYTES, destinationContributions, encodeContributions, encodeFlatDds,
   flatMipChain, mipLevelCount, reduceContributions,
-} from "../src/flat-mip-chain";
+} from "../src/engines/layered-makeup/flat-mip-chain";
 import { oracleTest } from "./optional-oracles";
 
 const study = resolve(import.meta.dir, "../../../../experiments/005-preset-collection");

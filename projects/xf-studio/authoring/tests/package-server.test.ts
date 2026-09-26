@@ -15,7 +15,7 @@ import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/package-filter";
 import { preflightPackageCollection } from "../src/package-preflight";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
-import { plateUvFootprint } from "../src/plate-uv-window";
+import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { tmpdir } from "node:os";
 import { withGlitterKnob } from "./glitter-knob-fixture";

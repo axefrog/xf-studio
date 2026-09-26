@@ -2,9 +2,9 @@
  * Eye makeup's view contribution (feature module #1): its layer stack, the UV map and its inspectors,
  * and the activity sources of its actions. Its panel IDs are grandfathered (they predate feature views),
  * so saved dock layouts restore unchanged; a new feature's panels use `<feature>.<panel>` IDs.
- * Moves to `features/eye-makeup/view/` with the step-5 file moves.
+ * Data only: the composition list (`compose/views.ts`) reads it without loading any panel.
  */
-import type { ViewContribution } from "./contribution";
+import { panelMeta, type ViewContribution } from "../../../studio-ui/views/contribution";
 
 export const EYE_MAKEUP_VIEW = {
   owner: "eye-makeup",
@@ -32,3 +32,6 @@ export const EYE_MAKEUP_VIEW = {
 
 /** Eye makeup's panel IDs, kept from before view contributions so saved layouts restore. */
 export const EYE_MAKEUP_GRANDFATHERED_PANELS: readonly string[] = EYE_MAKEUP_VIEW.panels.map(panel => panel.id);
+
+/** Eye makeup's panel titles, icons and purposes, for its panel modules' specs. */
+export const EYE_MAKEUP_PANEL_META = panelMeta(EYE_MAKEUP_VIEW);

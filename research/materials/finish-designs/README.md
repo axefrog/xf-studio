@@ -1,6 +1,6 @@
 # Finish designs: how each makeup finish reaches the game
 
-One page per finish that goes beyond a flat colour. Each records the intended look, the candidate engine routes ranked by evidence, what the browser preview does to match, the risks, and the single most informative in-game test. The engine facts are consolidated in [materials and shaders](../../../knowledge/materials-and-shaders.md); the export policy lives in [`finish-export.ts`](../../../projects/xf-studio/authoring/src/finish-export.ts).
+One page per finish that goes beyond a flat colour. Each records the intended look, the candidate engine routes ranked by evidence, what the browser preview does to match, the risks, and the single most informative in-game test. The engine facts are consolidated in [materials and shaders](../../../knowledge/materials-and-shaders.md); the export policy lives in [`finish-export.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/finish-export.ts).
 
 | Finish | Export status | Route | Evidence grade |
 |---|---|---|---|

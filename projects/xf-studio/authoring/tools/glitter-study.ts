@@ -2,9 +2,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { createFlakeJob, defaultFlakes } from "../src/finish";
-import { createFlakeCatalogue, createRegionFlakeCatalogueJob, createFlakeBakeJob, composeFlakeColour, defaultIrregularFlakes, type IrregularFlakes, type FlakeRegion,type FlakeNormalStudyMode } from "../src/flake-field";
-import {initialRecipe,raster} from "../src/recipe";
+import { createFlakeJob, defaultFlakes } from "../src/engines/layered-makeup/finish";
+import { createFlakeCatalogue, createRegionFlakeCatalogueJob, createFlakeBakeJob, composeFlakeColour, defaultIrregularFlakes, type IrregularFlakes, type FlakeRegion,type FlakeNormalStudyMode } from "../src/engines/layered-makeup/flake-field";
+import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
 
 const output = resolve(import.meta.dir, "../../../../experiments/007-irregular-glitter/generated");
 mkdirSync(output, { recursive: true });

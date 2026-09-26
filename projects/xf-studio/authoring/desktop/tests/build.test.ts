@@ -11,7 +11,7 @@ import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, probeBun, runDeskt
 import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
 import { createDesktopServer } from "../server";
 import { derivePlateDocuments } from "../../src/eye-plate-cut";
-import { plateUvFootprint } from "../../src/plate-uv-window";
+import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";

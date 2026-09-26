@@ -5,7 +5,7 @@ import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
 // Layer-stack edits dispatch through the registered eye-makeup apply and its port (CORE-31); the
 // former AuthoringLayerActions service is gone.
-function core(resetStack: (previous: import("../src/recipe").Recipe) => void = () => {}) {
+function core(resetStack: (previous: import("../src/engines/layered-makeup/recipe").Recipe) => void = () => {}) {
   return createTrustedAuthoringCore(freshWorkspace(), { resetStack, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
 }
 

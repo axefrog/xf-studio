@@ -1,12 +1,12 @@
 import type { AuthoringDocument } from "./authoring-document";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
-import { canonicalFinish, isIrregular } from "./finish";
-import { isDirectGlint } from "./direct-glint-settings";
-import { maskAlphaKey, previewOpticalKey } from "./makeup-dependencies";
+import { canonicalFinish, isIrregular } from "./engines/layered-makeup/finish";
+import { isDirectGlint } from "./engines/layered-makeup/direct-glint-settings";
+import { maskAlphaKey, previewOpticalKey } from "./engines/layered-makeup/makeup-dependencies";
 import { createRasterClient, type RasterPort } from "./raster-client";
-import type { RasterResponse, GlitterStats } from "./raster-processor";
-import type { Layer } from "./recipe";
+import type { RasterResponse, GlitterStats } from "./engines/layered-makeup/raster-processor";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import type { PreviewTextureSize } from "./preview-quality";
 import type { ReadonlyDeep } from "./read-only";
 import type { createScene } from "./scene";

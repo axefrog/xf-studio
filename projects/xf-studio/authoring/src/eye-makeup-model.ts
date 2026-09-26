@@ -5,11 +5,11 @@
  * feature or the composition. Types only; step 5 moves this file into `features/eye-makeup`.
  */
 import type { FeatureResult, FeatureState } from "./platform/api";
-import type { FieldSelection } from "./field-selection";
-import type { LayerChoices } from "./glitter-model";
+import type { FieldSelection } from "./engines/layered-makeup/field-selection";
+import type { LayerChoices } from "./engines/layered-makeup/glitter-model";
 import type { LayerAction } from "./editor-actions";
-import type { RecipeAction, RecipeActionEffect } from "./recipe-actions";
-import type { Recipe } from "./recipe";
+import type { RecipeAction, RecipeActionEffect } from "./engines/layered-makeup/recipe-actions";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 
 export type EyeMakeupAction = RecipeAction | LayerAction;
 /**

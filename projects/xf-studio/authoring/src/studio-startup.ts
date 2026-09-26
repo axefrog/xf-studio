@@ -21,7 +21,7 @@ import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
 import { mountStudio } from "./studio-ui/app";
@@ -31,6 +31,7 @@ import type { PreviewActions } from "./preview-actions";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./compose/studio-registry";
+import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { UIPreferenceActions } from "./ui-preferences";
 
 export type StudioHost = {
@@ -196,7 +197,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     } }),
   });
   // The only object handed to the presentation.
-  bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); });
+  bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, STUDIO_VIEW_COMPOSITION); });
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),

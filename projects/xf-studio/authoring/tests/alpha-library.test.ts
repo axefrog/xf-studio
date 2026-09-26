@@ -15,7 +15,7 @@ import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { LookLibrary } from "../src/library-store";
 import { COLLECTION_2, type LookCollection } from "../src/platform/api";
-import { parseRecipeFile } from "../src/recipe";
+import { parseRecipeFile } from "../src/engines/layered-makeup/recipe";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { recipeOf } from "./fixtures/looks";

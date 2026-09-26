@@ -4,7 +4,7 @@
 import {createHash} from "node:crypto";
 import {writeFileSync} from "node:fs";
 import {resolve} from "node:path";
-import {createFlakeBakeJob,createRegionFlakeCatalogueJob,defaultIrregularFlakes,type Flake,type FlakeRegion,type FlakeNormalStudyMode} from "../src/flake-field";
+import {createFlakeBakeJob,createRegionFlakeCatalogueJob,defaultIrregularFlakes,type Flake,type FlakeRegion,type FlakeNormalStudyMode} from "../src/engines/layered-makeup/flake-field";
 
 export type Vec3=readonly [number,number,number];
 export type Crop=Readonly<{x:number;y:number;width:number;height:number}>;

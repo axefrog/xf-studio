@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/recipe";
-import { parseFieldSelection, selectedWarp } from "../src/field-selection";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { parseFieldSelection, selectedWarp } from "../src/engines/layered-makeup/field-selection";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";

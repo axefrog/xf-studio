@@ -1,9 +1,11 @@
 import { group, split, type DockNode, type DockState, type DockTree, type SizeClass } from "./dock/layout";
-import type { ShellSlot } from "./views/contribution";
-import { PANEL_IDS, STUDIO_CATALOGUE, type StudioPanelId, type ViewCatalogue } from "./views";
+import type { ShellSlot, ViewCatalogue } from "./views/contribution";
 
-/** Stable panel IDs and their union, from the view contributions (`views/`). */
-export { PANEL_IDS, type StudioPanelId };
+/**
+ * A contributed panel's stable ID. The shell knows only its own panels by name; the catalogue the
+ * composition root hands it (`rt.views`) lists every contributed one.
+ */
+export type StudioPanelId = string;
 
 /** The panels of one slot, in catalogue order. */
 const slot = (catalogue: ViewCatalogue, name: ShellSlot | "closed") => catalogue.panels.filter(panel => panel.slot === name).map(panel => panel.id);
@@ -24,7 +26,7 @@ function columns(axis: "row" | "column", children: (DockNode | undefined)[], siz
  *
  * Wide workspaces: stack on the left, the head in a full-height centre column, the UV map over the inspectors on the right.
  */
-export function defaultWide(catalogue: ViewCatalogue = STUDIO_CATALOGUE): DockTree {
+export function defaultWide(catalogue: ViewCatalogue): DockTree {
   return { floating: [], root: columns("row", [
     columns("column", [tabs(slot(catalogue, "collection"), "g-collection"), tabs(slot(catalogue, "stack"), "g-layers")], [.4, .6], "s-left"),
     tabs(slot(catalogue, "stage"), "g-head"),
@@ -32,16 +34,14 @@ export function defaultWide(catalogue: ViewCatalogue = STUDIO_CATALOGUE): DockTr
   ], [.21, .37, .42], "s-root") ?? null, closed: slot(catalogue, "closed") };
 }
 /** Compact workspaces: head and UV map side by side on top; two tab groups share the lower part. */
-export function defaultCompact(catalogue: ViewCatalogue = STUDIO_CATALOGUE): DockTree {
+export function defaultCompact(catalogue: ViewCatalogue): DockTree {
   return { floating: [], root: columns("column", [
     columns("row", [tabs(slot(catalogue, "stage"), "g-head"), tabs(slot(catalogue, "canvas"), "g-uv")], [.38, .62], "s-stage"),
     columns("row", [tabs([...slot(catalogue, "stack"), ...slot(catalogue, "collection")], "g-stack"),
       tabs(slot(catalogue, "inspect"), "g-inspect")], [.42, .58], "s-lower"),
   ], [.56, .44], "s-root") ?? null, closed: slot(catalogue, "closed") };
 }
-/** Where a panel that is closed by default opens (beside the first of these that is open), from the contributions. */
-export const CLOSED_PANEL_HOMES = STUDIO_CATALOGUE.homes as Readonly<Partial<Record<StudioPanelId, readonly StudioPanelId[]>>>;
-export function defaultDockState(catalogue: ViewCatalogue = STUDIO_CATALOGUE): DockState {
+export function defaultDockState(catalogue: ViewCatalogue): DockState {
   return { wide: defaultWide(catalogue), compact: defaultCompact(catalogue) };
 }
 export const COMPACT_BREAKPOINT = 1100;

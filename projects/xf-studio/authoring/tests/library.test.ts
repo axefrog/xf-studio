@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LookLibrary, libraryRequest } from "../src/library-store";
-import { initialRecipe, parseRecipe, parseRecipeFile } from "../src/recipe";
+import { initialRecipe, parseRecipe, parseRecipeFile } from "../src/engines/layered-makeup/recipe";
 import { Database } from "bun:sqlite";
 
 test("legacy SQLite revisions stay byte-identical while empty and expanded recipes survive reopening", () => {

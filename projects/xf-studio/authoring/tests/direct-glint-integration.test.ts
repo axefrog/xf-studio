@@ -1,12 +1,12 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {initialRecipe,parseRecipe,raster} from "../src/recipe";
+import {initialRecipe,parseRecipe,raster} from "../src/engines/layered-makeup/recipe";
 import {recipeFile} from "../src/recipe-schema";
-import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes} from "../src/direct-glint-settings";
-import {createRasterProcessor,type RasterResponse} from "../src/raster-processor";
-import {createMakeupStack} from "../src/makeup-stack";
+import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes} from "../src/engines/layered-makeup/direct-glint-settings";
+import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
+import {createMakeupStack} from "../src/engines/layered-makeup/render/makeup-stack";
 import {assessPreviewQuality} from "../src/preview-quality";
-import {UnsupportedMaterialError,compileFlatPreset} from "../src/preset-compiler";
+import {UnsupportedMaterialError,compileFlatPreset} from "../src/engines/layered-makeup/preset-compiler";
 import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";

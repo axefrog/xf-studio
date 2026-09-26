@@ -1,6 +1,6 @@
 import type { AuthoringDocument } from "./authoring-document";
-import type { GestureEdit } from "./recipe-actions";
-import type { Layer } from "./recipe";
+import type { GestureEdit } from "./engines/layered-makeup/recipe-actions";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import { gestureHistoryLabel, type HistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
 import { GESTURE_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";

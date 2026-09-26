@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringGestures } from "../src/authoring-gestures";
 import { AuthoringRenderScheduler } from "../src/authoring-render-scheduler";
-import { RecipeActions } from "../src/recipe-actions";
+import { RecipeActions } from "../src/engines/layered-makeup/recipe-actions";
 import { eyeMakeupPort } from "../src/authoring-eye-makeup";
 import { registeredEditing } from "./gesture-test-adapter";
 import { freshWorkspace } from "../src/workspace-state";

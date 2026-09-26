@@ -6,7 +6,7 @@ import { CharacterContextActions } from "../src/character-context-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
-import { RECIPE_ACTION_KINDS } from "../src/recipe-actions";
+import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
 import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/studio-action-descriptors";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 

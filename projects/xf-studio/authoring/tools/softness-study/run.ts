@@ -1,7 +1,7 @@
 import {normalProbes} from "./normal-probes";
 import {widthField, prepareCoverage, subdivide, strip, fixtures, type WidthMode, type SoftPoint} from "./fields";
-import {coverage, curve, initialRecipe} from "../../src/recipe";
-import {preparePigmentStrength} from "../../src/pigment-strength";
+import {coverage, curve, initialRecipe} from "../../src/engines/layered-makeup/recipe";
+import {preparePigmentStrength} from "../../src/engines/layered-makeup/pigment-strength";
 
 const blendValues = [.0000078125,.000015625,.00003125,.0000625,.000125,.00025,.0005,.001];
 const modes: WidthMode[] = ["linear","log"];

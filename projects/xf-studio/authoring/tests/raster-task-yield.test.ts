@@ -1,7 +1,7 @@
 import {expect,test} from "bun:test";
 import {createRasterTaskYield} from "../src/raster-task-yield";
-import {createRasterProcessor,type RasterResponse} from "../src/raster-processor";
-import {initialRecipe,raster} from "../src/recipe";
+import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
+import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
 
 test("raster MessageChannel pause crosses a task boundary and preserves FIFO pulses",async()=>{
   const channel=new MessageChannel(),pause=createRasterTaskYield(channel),events:number[]=[];

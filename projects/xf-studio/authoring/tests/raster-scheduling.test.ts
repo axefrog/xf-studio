@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { createRasterJob, coverage, initialRecipe, raster } from "../src/recipe";
-import { createRasterProcessor, type RasterRequest, type RasterResponse } from "../src/raster-processor";
+import { createRasterJob, coverage, initialRecipe, raster } from "../src/engines/layered-makeup/recipe";
+import { createRasterProcessor, type RasterRequest, type RasterResponse } from "../src/engines/layered-makeup/raster-processor";
 import { createRasterClient, type RasterPort } from "../src/raster-client";
 
 test("sliced raster preserves scalar pixels and is isolated from source mutation", () => {

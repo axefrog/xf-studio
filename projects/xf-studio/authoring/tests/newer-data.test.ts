@@ -13,10 +13,10 @@ import { resolve } from "node:path";
 import { DesktopWorkspaceStore, desktopWorkspaceStartFresh } from "../desktop/workspace-store";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP, eyeMakeupPartCodec } from "../src/features/eye-makeup";
-import { EYE_MAKEUP_LAYER_MODELS, LayerModelRegistry } from "../src/layer-models";
+import { EYE_MAKEUP_LAYER_MODELS, LayerModelRegistry } from "../src/engines/layered-makeup/layer-models";
 import { isNewerData, NEWER_LOOK_MESSAGE, type PartCodec } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
-import { initialRecipe, parseRecipe, type Recipe } from "../src/recipe";
+import { initialRecipe, parseRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { EYE_MAKEUP_PART_1, parseEyeMakeupPart, recipeFile } from "../src/recipe-schema";
 import { WorkspacePersistence } from "../src/workspace-persistence";
 import { loadWorkspace, NEWER_WORKSPACE_MESSAGE, parseWorkspace, serializeWorkspace, workspaceKeys,

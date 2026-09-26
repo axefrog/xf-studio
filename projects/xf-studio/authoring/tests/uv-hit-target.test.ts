@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createUVEditor } from "../src/uv-editor";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
 
 test("UV hit discovery uses drag handle priority and canonical mirrored identities without editing", () => {

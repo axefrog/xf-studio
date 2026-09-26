@@ -50,3 +50,40 @@ export type ViewContribution = {
   readonly panels: readonly PanelContribution[];
   readonly activity: readonly ActivitySource[];
 };
+
+export type PanelMeta = { title: string; icon: IconName; description: string };
+
+/**
+ * A composition's panel catalogue: panels in catalogue order, their meta, where closed panels open, the
+ * heavy panels and the activity sources. Refuses a panel ID contributed twice. The composition roots build
+ * the Studio's catalogue from their view list (`compose/views.ts`) and hand it to the shell.
+ */
+export function viewCatalogue(views: readonly ViewContribution[]) {
+  const panels: (PanelContribution & { owner: string })[] = [];
+  const seen = new Set<string>();
+  for (const view of views) for (const panel of view.panels) {
+    if (seen.has(panel.id)) throw Error(`Panel ${panel.id} is contributed twice.`);
+    seen.add(panel.id); panels.push({ ...panel, owner: view.owner });
+  }
+  panels.sort((a, b) => a.order - b.order);
+  return {
+    panels,
+    ids: panels.map(panel => panel.id),
+    meta: Object.fromEntries(panels.map(({ id, title, icon, description }) => [id, { title, icon, description }])) as Record<string, PanelMeta>,
+    homes: Object.fromEntries(panels.filter(panel => panel.opensBeside).map(panel => [panel.id, panel.opensBeside!])) as
+      Readonly<Record<string, readonly string[]>>,
+    heavy: panels.filter(panel => panel.heavy).map(panel => panel.id),
+    activity: views.flatMap(view => view.activity),
+  };
+}
+export type ViewCatalogue = ReturnType<typeof viewCatalogue>;
+
+/** One view's own panel meta, keyed by exactly its panel IDs: what its panel modules put in their specs. */
+export function panelMeta<V extends ViewContribution>(view: V): { readonly [K in V["panels"][number]["id"]]: PanelMeta } {
+  return Object.fromEntries(view.panels.map(({ id, title, icon, description }) => [id, { title, icon, description }])) as
+    { [K in V["panels"][number]["id"]]: PanelMeta };
+}
+/** The activity-log source of an action kind in a catalogue ("Studio" when no contribution claims it). */
+export function activitySource(kind: string, catalogue: ViewCatalogue): string {
+  return catalogue.activity.find(source => source.pattern.test(kind))?.label ?? "Studio";
+}

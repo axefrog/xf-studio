@@ -10,9 +10,9 @@ import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
 import type { AnyOwner, Registry } from "./platform/core/registry";
 import { LiveFeatures } from "./platform/core/live-features";
-import { RecipeActions } from "./recipe-actions";
+import { RecipeActions } from "./engines/layered-makeup/recipe-actions";
 import { StudioApplication } from "./studio-application";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 import type { WorkspaceState } from "./workspace-state";
 
 /**

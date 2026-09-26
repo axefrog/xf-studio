@@ -1,4 +1,4 @@
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 
 /** Layer identity and its label do not affect the mask or preview material. */
 export function samePreviewInputs(a: Layer, b: Layer): boolean {

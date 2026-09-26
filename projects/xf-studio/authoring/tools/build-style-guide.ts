@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { guideDocument } from "../src/studio-ui/style-guide/guide";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
 
 const root = resolve(import.meta.dir, "..");
 export async function buildGuide(generated = new Date().toISOString().slice(0, 10)) {
@@ -10,7 +11,8 @@ export async function buildGuide(generated = new Date().toISOString().slice(0, 1
   if (!bundle.success) throw Error(bundle.logs.map(String).join("\n"));
   // An inline module must never contain a literal closing script tag.
   const script = (await bundle.outputs[0].text()).replace(/<\/script/gi, "<\\/script");
-  return guideDocument({ css, script, generated }).replace(/[ \t]+$/gm, "");
+  const panels = STUDIO_CATALOGUE.panels.map(({ id, title, description }) => ({ id, title, description }));
+  return guideDocument({ css, script, generated, panels }).replace(/[ \t]+$/gm, "");
 }
 if (import.meta.main) {
   const html = await buildGuide(process.argv[2]);

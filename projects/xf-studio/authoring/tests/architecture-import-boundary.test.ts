@@ -33,7 +33,7 @@ test("the browser-globals check catches every global it names (CORE-37)", () => 
 test("trusted application and presentation services keep browser devices outside their import boundary", () => {
   const trusted = ["studio-application", "studio-presentation", "trusted-authoring-core",
     "trusted-studio-bootstrap", "trusted-preview-services", "collection-application",
-    "studio-file-operations", "authoring-preview-coordinator", "glitter-measurements", "makeup-dependencies"];
+    "studio-file-operations", "authoring-preview-coordinator", "glitter-measurements", "engines/layered-makeup/makeup-dependencies"];
   for (const name of trusted) {
     const code = source(name);
     for (const dependency of imports(code))
@@ -67,7 +67,7 @@ test("core modules never import presentation modules or browser entry points", (
     .filter(file => file.endsWith(".ts") && !file.endsWith(".d.ts"))
     .map(file => file.slice(0, -3));
   const core = modules.filter(name => !presentation(`./${name}`) && !entries.has(name));
-  expect(core).toContain("recipe-actions");
+  expect(core).toContain("recipe-schema");
   expect(core).toContain("studio-application");
   const violations = core.flatMap(name => imports(source(name))
     .filter(path => presentation(path) || entries.has(path.replace(/^\.\//, "")))
@@ -77,9 +77,9 @@ test("core modules never import presentation modules or browser entry points", (
 
 test("the package builder keeps resource definitions pure and external processes in its adapters", () => {
   // Pure definitions: no file, process or compiler access.
-  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./plate-uv-window"]);
+  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./engines/layered-makeup/plate-uv-window"]);
   // The plate-local UV window is pure arithmetic over WolvenKit JSON.
-  expect(imports(source("plate-uv-window"))).toEqual([]);
+  expect(imports(source("engines/layered-makeup/plate-uv-window"))).toEqual([]);
   // Orchestration reaches WolvenKit only through the PackageResourceTools port.
   for (const name of ["package-resource-builder", "package-build-service", "package-bake"])
     for (const dependency of imports(source(name)))
@@ -147,8 +147,8 @@ test("the eye plate reaches the launch route only through its head-source port",
   expect(imports(source("eye-plate-head-resolver"))).toContain("./resolver-host");
 });
 
-// Feature-module platform §7, as far as migration step 1 has built it: `platform/`, `features/`
-// and `compose/` exist; the eye-makeup files stay in `src/` until step 5 moves them.
+// Feature-module platform §7: `platform/`, `engines/`, `features/` and `compose/` (the step-5 moves put
+// the layered-makeup engine in `engines/layered-makeup/` and eye makeup's view in `features/eye-makeup/view/`).
 const walk = (dir: string): string[] => {
   const { readdirSync } = require("node:fs") as typeof import("node:fs");
   return readdirSync(new URL(`../src/${dir}/`, import.meta.url), { withFileTypes: true }).flatMap(entry =>
@@ -181,15 +181,58 @@ test("platform code imports only the platform: nothing from features, engines, c
 test("feature modules import the platform only through platform/api and never another feature, the UI or compose", () => {
   const features = walk("features");
   expect(features).toContain("features/eye-makeup/index");
-  const presentationOrEntry = (path: string) => /^(?:studio-ui\/|context-menu$|[\w-]+-ui$|studio-(?:main|startup)$|browser-|scene$|three(?:\/|$))/.test(path);
+  expect(features).toContain("features/eye-makeup/view/index");
+  /** A feature's view (`features/<id>/view/`) is presentation: it may use the shell's presentation toolkit and runtime. */
+  const isView = (name: string) => /^features\/[\w-]+\/view\//.test(name);
+  const presentation = (path: string) => /^(?:studio-ui\/|context-menu$|[\w-]+-ui$)/.test(path);
+  const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$|three(?:\/|$))/.test(path);
   const violations = features.flatMap(name => {
     const own = name.split("/").slice(0, 2).join("/");
     return resolved(name).filter(path =>
       path.startsWith("platform/") && !path.startsWith("platform/api") ||
       path.startsWith("features/") && !path.startsWith(`${own}/`) && path !== own ||
-      path.startsWith("compose/") || presentationOrEntry(path) || /^node:/.test(path)).map(path => `${name} -> ${path}`);
+      // The feature's core never reaches its own view; only the composition joins them.
+      !isView(name) && path.startsWith(`${own}/view`) ||
+      path.startsWith("compose/") || !isView(name) && presentation(path) || entryOrDevice(path) || /^node:/.test(path))
+      .map(path => `${name} -> ${path}`);
   });
   expect(violations).toEqual([]);
+});
+
+/** The scene's shared material modules an engine renderer may build on (they move to `platform/scene` with step 7). */
+const SCENE_MATERIALS = new Set(["skin", "skin-material", "face-decal-material", "linear-display"]);
+/** Pure shared helpers any engine may use. */
+const PURE_HELPERS = new Set(["read-only", "validation-issues"]);
+
+test("engines import no feature, UI, composition or platform internals; only their render/ uses Three", () => {
+  const engines = walk("engines");
+  expect(engines).toContain("engines/layered-makeup/recipe");
+  expect(engines).toContain("engines/layered-makeup/render/plate-composite");
+  const violations = engines.flatMap(name => {
+    const render = /^engines\/[\w-]+\/render\//.test(name);
+    return resolved(name).filter(path => !(
+      path.startsWith("engines/") || path.startsWith("platform/api") || PURE_HELPERS.has(path) ||
+      render && (path === "three" || SCENE_MATERIALS.has(path)))).map(path => `${name} -> ${path}`);
+  });
+  expect(violations).toEqual([]);
+  // The pure engine reads no browser globals; renderers may (a canvas, the GPU). "window" is the engine's own word
+  // for a UV rectangle (plate-uv-window.ts), so the page's window is caught through its members instead.
+  const PAGE_MEMBERS = String.raw`\.(?:location|document|addEventListener|localStorage|requestAnimationFrame|open)\b`, PAGE_WINDOW = new RegExp(String.raw`\bwindow` + PAGE_MEMBERS);
+  for (const name of engines.filter(name => !name.includes("/render/"))) {
+    const code = source(name).replace(new RegExp(String.raw`\bwindow\b(?!` + PAGE_MEMBERS + ")", "g"), "");
+    expect(code, `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+    expect(code, `${name} reads the page window`).not.toMatch(PAGE_WINDOW);
+  }
+});
+
+test("studio-ui imports no engine: feature data reaches the shell only through the presentation port", () => {
+  const violations = walk("studio-ui").flatMap(name => resolved(name).filter(path => path.startsWith("engines/"))
+    .map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
+});
+
+test("the platform imports no engine", () => {
+  expect(walk("platform").flatMap(name => resolved(name).filter(path => path.startsWith("engines/")))).toEqual([]);
 });
 
 /** Composition roots: the browser entry points. Hosts outside `src/` (servers, desktop, tools, tests) are roots too. */

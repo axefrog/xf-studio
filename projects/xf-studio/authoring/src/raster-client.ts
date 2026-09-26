@@ -1,8 +1,8 @@
-import type { Layer } from "./recipe";
-import type { RasterRequest, RasterResponse } from "./raster-processor";
-import {isIrregular} from "./finish";
-import {isDirectGlint} from "./direct-glint-settings";
-import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
+import type { Layer } from "./engines/layered-makeup/recipe";
+import type { RasterRequest, RasterResponse } from "./engines/layered-makeup/raster-processor";
+import {isIrregular} from "./engines/layered-makeup/finish";
+import {isDirectGlint} from "./engines/layered-makeup/direct-glint-settings";
+import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./engines/layered-makeup/makeup-dependencies";
 
 export type RasterPort = {
   onmessage: ((event: MessageEvent<RasterResponse>) => void) | null;
@@ -26,7 +26,7 @@ function validResult(data: Completed, request: RasterRequest): boolean {
     !(data.optics.normal instanceof Uint8Array) || data.optics.normal.length !== length ||
     !(data.optics.surface instanceof Uint8Array) || data.optics.surface.length !== length)) return false;
   if (irregular) {
-    const candidate=settings as import("./flake-field").IrregularFlakes;
+    const candidate=settings as import("./engines/layered-makeup/flake-field").IrregularFlakes;
     const optical=studioIrregularOpticalKey(candidate,request.size);
     const expected=irregularAlbedoKey(optical,maskAlphaKey(request.layer,request.size),request.layer.color,candidate.color);
     if (!data.albedo || data.albedo.key!==expected || !(data.albedo.data instanceof Uint8Array) || data.albedo.data.length!==length) return false;

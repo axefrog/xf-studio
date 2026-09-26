@@ -1,5 +1,4 @@
-import { PANEL_META } from "../panel-meta";
-import { PANEL_IDS } from "../layout-defaults";
+import type { PanelInfo } from "./reference";
 import { compositions, futures, states } from "./compositions";
 import { components } from "./components";
 import { foundations, shell } from "./foundations";
@@ -149,10 +148,11 @@ body.guide { overflow: auto; height: auto; }
 @media (max-width: 600px) { .guide-top { position: static; flex-wrap: wrap; } .guide-top .meta { flex: 1 1 100%; } .guide-controls { width: 100%; margin-left: 0; } .guidance { grid-template-columns: minmax(0, 1fr); } }
 `;
 
-export type GuideInput = { css: string; script: string; generated: string };
+/** `panels`: every contributed panel in catalogue order, from the composition's catalogue (the build tool reads `compose/views.ts`). */
+export type GuideInput = { css: string; script: string; generated: string; panels: readonly PanelInfo[] };
 
 export function guideDocument(input: GuideInput) {
-  const panels = PANEL_IDS.map(id => ({ id, ...PANEL_META[id] }));
+  const panels = input.panels;
   const sections = [foundations(input.css), shell(), panelSystem(), components(), states(), compositions(), futures(), reference(panels)];
   const toc = sections.map(html => {
     const id = /<section class="guide-section" id="([^"]+)"/.exec(html)![1], title = /<h2 id="[^"]+">([^<]+)<\/h2>/.exec(html)![1];
