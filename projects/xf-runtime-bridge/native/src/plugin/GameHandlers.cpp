@@ -251,6 +251,77 @@ std::chrono::milliseconds Timeout()
     return std::chrono::milliseconds(Get().config.requestTimeoutMs);
 }
 
+// A function's bare name: script functions compiled by redscript can be registered under a
+// decorated name ("Status;String", possibly "Class::Status;String") rather than the bare short name
+// CClass::GetFunction compares, so both the short and full names are reduced before comparing.
+std::string BareName(const RED4ext::CName& aName)
+{
+    std::string name = aName.ToString() ? aName.ToString() : "";
+    if (const auto colons = name.rfind("::"); colons != std::string::npos)
+    {
+        name = name.substr(colons + 2);
+    }
+    if (const auto semicolon = name.find(';'); semicolon != std::string::npos)
+    {
+        name = name.substr(0, semicolon);
+    }
+    return name;
+}
+
+RED4ext::CClassFunction* FindByName(RED4ext::CClass* aClass, const char* aFunction)
+{
+    if (auto* fn = aClass->GetFunction(aFunction))
+    {
+        return fn;
+    }
+    const auto matches = [&](RED4ext::CClassFunction* aFn)
+    { return BareName(aFn->shortName) == aFunction || BareName(aFn->fullName) == aFunction; };
+    for (auto* fn : aClass->staticFuncs)
+    {
+        if (matches(fn))
+        {
+            return fn;
+        }
+    }
+    for (auto* fn : aClass->funcs)
+    {
+        if (matches(fn))
+        {
+            return fn;
+        }
+    }
+    return nullptr;
+}
+
+void LogFunctionNames(RED4ext::CClass* aClass, const std::string& aClassName, const std::string& aCid)
+{
+    std::string names;
+    const auto add = [&](RED4ext::CClassFunction* aFn)
+    {
+        if (names.size() > 3000)
+        {
+            return;
+        }
+        if (!names.empty())
+        {
+            names += ",";
+        }
+        names += std::string(aFn->shortName.ToString() ? aFn->shortName.ToString() : "?") + "|" +
+                 (aFn->fullName.ToString() ? aFn->fullName.ToString() : "?");
+    };
+    for (auto* fn : aClass->staticFuncs)
+    {
+        add(fn);
+    }
+    for (auto* fn : aClass->funcs)
+    {
+        add(fn);
+    }
+    log::Warn("rtti.script_functions", "class=" + aClassName + " static=" + std::to_string(aClass->staticFuncs.size) +
+                                           " member=" + std::to_string(aClass->funcs.size) + " names=" + names,
+              aCid);
+}
+
 RED4ext::CBaseFunction* FindScriptFunction(const std::string& aClass, const char* aFunction,
                                            const Signature& aSignature, const std::string& aCid)
 {
@@ -261,9 +332,10 @@ RED4ext::CBaseFunction* FindScriptFunction(const std::string& aClass, const char
     {
         throw MethodError("script_layer_missing", "redscript class " + className + " not found (scripts not compiled?)");
     }
-    auto* fn = cls->GetFunction(aFunction);
+    auto* fn = FindByName(cls, aFunction);
     if (!fn)
     {
+        LogFunctionNames(cls, className, aCid);
         throw MethodError("script_layer_missing", className + "." + aFunction + " not found (stale Scripts folder?)");
     }
     RequireSignature(fn, className + "." + aFunction, aSignature, aCid);
