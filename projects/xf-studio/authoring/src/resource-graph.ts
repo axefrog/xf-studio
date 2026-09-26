@@ -42,7 +42,7 @@ export interface FetchedResource {
   readonly bytes?: number;
   /** What the reader noticed that the document can't say (a native answer's; resolver-host.ts). */
   readonly notes?: readonly ReaderNote[];
-  /** Watched properties the file left out, which the document shows as a default value: where (JSON paths from the document root). */
+  /** Watched properties the file left out, which the document shows as their class default: where (JSON paths from the document root). */
   readonly defaulted?: readonly DefaultedPaths[];
 }
 /**
@@ -215,9 +215,10 @@ const chunkLodMasks = (blob: unknown, scope: HandleScope): number[] | null => {
 };
 /**
  * Whether each render chunk draws in the scene: its `renderMask` (`EMeshChunkFlags`) has `MCF_RenderInScene`. A chunk with only
- * `MCF_RenderInShadows` (the vanilla hair `*_shadow` meshes, a body's seam-fix proxy) only casts shadows [resource]. Only a missing
- * field counts as drawn (the engine's default flags; PIPE-67): an empty flag list is a mask with no flags set, so the chunk is not
- * drawn, and a value of another type is not a mask the engine would read as drawing either.
+ * `MCF_RenderInShadows` (the vanilla hair `*_shadow` meshes, a body's seam-fix proxy) only casts shadows [resource]. An empty flag list
+ * is a mask with no flags set, so the chunk is not drawn, and a value of another type is not a mask the engine would read as drawing
+ * either (PIPE-67). A mask the file leaves out is its class default, no flags, and both readers write it so (NATIVE-41); only a document
+ * without the field at all (hand-written, or older than either reader's shape) counts as drawn.
  */
 export function chunkInScene(mask: unknown): boolean {
   if (mask === undefined || mask === null) return true;
@@ -233,45 +234,14 @@ const chunkSceneFlags = (blob: unknown, scope: HandleScope): boolean[] | null =>
 };
 
 /**
- * Watched properties whose default the graph must not read as a stored value: `rendChunk.renderMask` written as "0" for a chunk that
- * stores no mask would read as "not drawn", while a missing mask is the engine's default flags (`chunkInScene`, PIPE-67).
+ * Watched properties a file may leave out, which the reader reports (`FetchedResource.defaulted`). A CR2W file omits a property equal to
+ * its class default, and `rendChunk`'s default `renderMask` is no flags [source: WolvenKit's rendChunk class, generated from the game's
+ * RTTI defaults, sets non-zero defaults for its other fields and none for the mask], so the reader's "0" is the value the file means: the
+ * chunk is not drawn (`chunkInScene`), as WolvenKit's answer reads (NATIVE-41). The note says so on the part's model.
  */
-const ABSENT_WHEN_DEFAULTED = new Set(["rendChunk.renderMask"]);
-const PATH_STEP = /\.([^.[\]]+)|\[(\d+)\]/y;
-/** Parse a reader's JSON path (`.Data.RootChunk.list[1].name`) into keys and indexes, or null when it isn't one. */
-export function jsonPathSteps(path: string): (string | number)[] | null {
-  const steps: (string | number)[] = [];
-  PATH_STEP.lastIndex = 0;
-  while (PATH_STEP.lastIndex < path.length) {
-    const at = PATH_STEP.lastIndex, match = PATH_STEP.exec(path);
-    if (!match || PATH_STEP.lastIndex === at) return null;
-    steps.push(match[1] !== undefined ? match[1] : Number(match[2]));
-  }
-  return steps.length ? steps : null;
-}
-/**
- * Remove from a reader's document the watched properties the file left out, where the reader wrote a default for them
- * (`ABSENT_WHEN_DEFAULTED`), so consumers see them as absent, as the engine does. Changes the document in place (a reader's answer is
- * its own copy). Returns how many it could not remove (past the reader's list of paths, or a path that doesn't lead to the property).
- */
-export function forgetDefaulted(document: unknown, defaulted: readonly DefaultedPaths[]): number {
-  let unresolved = 0;
-  for (const row of defaulted) {
-    if (!ABSENT_WHEN_DEFAULTED.has(row.property)) continue;
-    unresolved += Math.max(0, row.count - row.paths.length);
-    for (const path of row.paths) {
-      const steps = jsonPathSteps(path);
-      const last = steps?.[steps.length - 1];
-      let owner: unknown = document;
-      for (const step of steps?.slice(0, -1) ?? []) owner = owner && typeof owner === "object" ? (owner as Record<string | number, unknown>)[step] : undefined;
-      if (typeof last === "string" && isObject(owner) && Object.hasOwn(owner, last)) delete owner[last];
-      else unresolved++;
-    }
-  }
-  return unresolved;
-}
+const NOTED_WHEN_DEFAULTED = new Set(["rendChunk.renderMask"]);
 /** The rule notes a reader's answer brings: stored types the RTTI disagrees with, and watched properties the file left out. */
-export function readerRuleNotes(fetched: Pick<FetchedResource, "notes" | "defaulted">, unresolved = 0): RuleNote[] {
+export function readerRuleNotes(fetched: Pick<FetchedResource, "notes" | "defaulted">): RuleNote[] {
   const notes: RuleNote[] = [];
   for (const item of fetched.notes ?? []) {
     const times = item.count > 1 ? ` (${item.count} times)` : "";
@@ -282,9 +252,9 @@ export function readerRuleNotes(fetched: Pick<FetchedResource, "notes" | "defaul
       notes.push(note("R13-array-past-count", "hypothesis", `${item.property} says it holds ${item.declared} element(s) but its record holds ${item.stored}${times}; ` +
         "all were read, as WolvenKit shows them. Whether the game reads past the count is unread."));
   }
-  for (const row of fetched.defaulted ?? []) if (ABSENT_WHEN_DEFAULTED.has(row.property))
-    notes.push(note("R12-property-absent", "hypothesis", `The file leaves out ${row.property} ${row.count} time(s); read as absent ` +
-      `(a render chunk without a mask is drawn: the engine's default flags)${unresolved ? `, except ${unresolved} the reader could not place` : ""}.`));
+  for (const row of fetched.defaulted ?? []) if (NOTED_WHEN_DEFAULTED.has(row.property))
+    notes.push(note("R12-property-absent", "source", `The file leaves out ${row.property} ${row.count} time(s); read as its class default, no flags, ` +
+      "as WolvenKit shows it, so those render chunks are not drawn."));
   return notes;
 }
 
@@ -580,8 +550,7 @@ export class ResourceGraph {
         }
         if (fetched.path && !entry.path) this.paths.set(entry.hash, fetched.path);
         if (fetched.path && !named.path && entry.hash === named.hash) this.paths.set(named.hash, fetched.path);
-        const unresolved = fetched.defaulted?.length ? forgetDefaulted(fetched.document, fetched.defaulted) : 0;
-        const readerNotes = readerRuleNotes(fetched, unresolved);
+        const readerNotes = readerRuleNotes(fetched);
         if (readerNotes.length) this.trace.event("resolver", "reader_notes", { path: this.named(named).path ?? null, hash: named.hash,
           archive: lookup.winner.name, notes: readerNotes.map(item => item.basis) });
         const { root } = cr2wRoot(fetched.document);

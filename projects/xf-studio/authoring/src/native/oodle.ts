@@ -60,13 +60,20 @@ export interface OodleLibrary {
   close(): void;
 }
 
-export class OodleUnavailableError extends Error { override name = "OodleUnavailableError"; }
+/**
+ * The game's Oodle library can't be used. `permanent` when trying again can't help until the library file or the platform changes (not
+ * Windows x64, no library, a library not signed by the publisher); a check that failed or timed out, or a library in use, may pass later.
+ */
+export class OodleUnavailableError extends Error {
+  override name = "OodleUnavailableError";
+  constructor(message: string, readonly permanent = false) { super(message); }
+}
 
 /** An Authenticode verdict: the signature status and the signer certificate's subject, for the file whose SHA-256 is `sha256`. */
 export interface AuthenticodeResult { readonly status: string; readonly subject: string; readonly sha256: string }
 
 /** How library bytes are trusted, or the reason to refuse them. */
-export type OodleVerdict = { readonly trustedBy: string } | { readonly refused: string };
+export type OodleVerdict = { readonly trustedBy: string } | { readonly refused: string; readonly permanent?: boolean };
 /** Decides whether library bytes may be loaded; `path` is the held file's final path, `sha256` the hash of the bytes read through it. */
 export type OodleVerifier = (path: string, sha256: string) => OodleVerdict | Promise<OodleVerdict>;
 /** A verifier that answers at once (for `loadGameOodle`). */
@@ -132,8 +139,8 @@ export function authenticodeSignatureSync(path: string): AuthenticodeResult {
 function signatureVerdict(verdict: AuthenticodeResult, sha256: string): OodleVerdict {
   if (isPublisherSignature(verdict, sha256)) return { trustedBy: "authenticode" };
   if (!verdict.sha256 || !verdict.status) return { refused: "The Oodle library's signature could not be checked." };
-  return { refused: verdict.sha256.toLowerCase() !== sha256 ? "The Oodle library changed while it was checked."
-    : `The Oodle library is not signed by ${OODLE_SIGNER} (signature ${verdict.status || "missing"}).` };
+  if (verdict.sha256.toLowerCase() !== sha256) return { refused: "The Oodle library changed while it was checked." };
+  return { refused: `The Oodle library is not signed by ${OODLE_SIGNER} (signature ${verdict.status || "missing"}).`, permanent: true };
 }
 
 /** Known hash first; otherwise a valid Authenticode signature by CD PROJEKT S.A. on the same bytes (checked asynchronously). */
@@ -214,8 +221,8 @@ interface Prepared { readonly ffi: Ffi; readonly held: HeldFile; readonly sha256
 
 function prepare(gameRoot: string): Prepared {
   const path = join(gameRoot, ...GAME_OODLE_LIBRARY);
-  if (process.platform !== "win32" || process.arch !== "x64") throw new OodleUnavailableError("The game's Oodle library runs on 64-bit Windows only.");
-  if (!existsSync(path)) throw new OodleUnavailableError("The game folder has no Oodle library (bin/x64/oo2ext_7_win64.dll).");
+  if (process.platform !== "win32" || process.arch !== "x64") throw new OodleUnavailableError("The game's Oodle library runs on 64-bit Windows only.", true);
+  if (!existsSync(path)) throw new OodleUnavailableError("The game folder has no Oodle library (bin/x64/oo2ext_7_win64.dll).", true);
   let ffi: Ffi;
   try { ffi = import.meta.require("bun:ffi") as Ffi; }
   catch (error) { throw new OodleUnavailableError(`Native libraries cannot be loaded here: ${(error as Error).message}`); }
@@ -226,7 +233,7 @@ function prepare(gameRoot: string): Prepared {
 
 /** Load the held library by its final path if the verdict trusts it (the caller releases the hold afterwards). */
 function load({ ffi, held, sha256 }: Prepared, verdict: OodleVerdict): OodleLibrary {
-  if ("refused" in verdict) throw new OodleUnavailableError(verdict.refused);
+  if ("refused" in verdict) throw new OodleUnavailableError(verdict.refused, verdict.permanent === true);
   const { FFIType } = ffi;
   let library: { symbols: { OodleLZ_Decompress: (...args: unknown[]) => number | bigint }; close(): void };
   try {
@@ -235,15 +242,37 @@ function load({ ffi, held, sha256 }: Prepared, verdict: OodleVerdict): OodleLibr
         FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.i64, FFIType.i32], returns: FFIType.i64 },
     }) as unknown as typeof library;
   } catch (error) { throw new OodleUnavailableError(`The game's Oodle library could not be loaded: ${(error as Error).message}`); }
+  const unload = moduleUnloader(ffi, held.finalPath);
+  let closed = false;
   const pointer = (view: Uint8Array) => ffi.ptr(view);
   const decompress: Decompress = (stored, size) => {
+    // Never call into a library that was unloaded.
+    if (closed) throw new NativeDecompressError("The Oodle library was closed.");
     if (!stored.length || !size) throw new NativeDecompressError("Empty Oodle stream.");
     const out = new Uint8Array(size + OUTPUT_MARGIN);
     const written = Number(library.symbols.OodleLZ_Decompress(pointer(stored), stored.length, pointer(out), size, 1, 0, 0, null, 0, null, null, null, 0, 3));
     if (written !== size) throw new NativeDecompressError(`Oodle decompressed ${written} of ${size} bytes.`);
     return out.subarray(0, size);
   };
-  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress, close: () => library.close() };
+  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress,
+    close: () => { if (!closed) { closed = true; unload(); } } };
+}
+
+/**
+ * How to unload the library `dlopen` just loaded from `path`. Bun's own `close` doesn't unload a library on Windows (Bun 1.4.2: the module
+ * stays mapped, so its file can't be overwritten), which kept the game's Oodle library locked until the Studio exited and a game update
+ * or repair couldn't replace it (NATIVE-42). So `close` releases it here instead of through Bun: `FreeLibrary` once, for the one
+ * `LoadLibrary` the `dlopen` made (Windows counts loads, so another holder in this process keeps it loaded). Bun's `close` is not also
+ * called, so a Bun that does unload can't free it twice.
+ */
+function moduleUnloader(ffi: Ffi, path: string): () => void {
+  const { FFIType } = ffi;
+  const kernel32 = ffi.dlopen("kernel32.dll", {
+    GetModuleHandleW: { args: [FFIType.ptr], returns: FFIType.ptr },
+    FreeLibrary: { args: [FFIType.ptr], returns: FFIType.i32 },
+  });
+  const module = kernel32.symbols.GetModuleHandleW(ffi.ptr(Buffer.from(`${path}\0`, "utf16le")));
+  return () => { if (module) kernel32.symbols.FreeLibrary(module); };
 }
 
 /**

@@ -17,7 +17,7 @@ const SKEW = "XF Studio was updated while it was running. Restart it to change y
 /** The host's refusal codes in plain words. */
 const PLAIN: Record<string, string> = {
   unsupported_version: SKEW,
-  not_ready: "Your game's character-creator options appear once your game folder and WolvenKit are set up.",
+  not_ready: "Your game's character-creator options appear once your game folder is set up.",
   failed: "XF Studio couldn't read your game's character-creator options. Try again, or restart XF Studio if it keeps happening.",
   missing_target: "That creator option isn't offered by your installed game and mods any more.",
   too_large: "That's more than XF Studio can send to its preview in one go. Reset some changes and try again.",

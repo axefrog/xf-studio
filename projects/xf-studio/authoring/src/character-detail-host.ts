@@ -100,7 +100,7 @@ function untilStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body appear once your game folder and WolvenKit are set up.";
+const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body appear once your game folder is set up.";
 const PREPARING = "Preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body…";
 const FAILED = "Something went wrong while preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body, so they aren't shown. The head still works.";
 /** Request key: the character and the installation fingerprint it is prepared from (`installationFingerprint`). */
@@ -115,13 +115,25 @@ export const characterRequestKey = (request: CharacterRequest, installation = ""
  * before a request is answered from an earlier preparation.
  */
 export function installationFingerprint(settings: CharacterDetailSettings, registry: InstallationRegistry = installations): string {
-  const route = settings.gameRoot ? { ...settings, gameRoot: settings.gameRoot } : null;
+  const route = characterRoute(settings);
   return canonicalJson({
-    route: route ? [...routeIdentity(route), settings.wolvenKitCli] : [null, settings.launchRoute, settings.mo2Root, settings.mo2ProfileId, settings.manualModRoot, settings.wolvenKitCli],
-    wolvenKit: settings.wolvenKitCli ? wolvenKitIdentityKey(wolvenKitIdentity(settings.wolvenKitCli)) : null,
+    route: route ? [...routeIdentity(route), route.wolvenKitCli] : [null, settings.launchRoute, settings.mo2Root, settings.mo2ProfileId, settings.manualModRoot, settings.wolvenKitCli],
+    wolvenKit: route?.wolvenKitCli ? wolvenKitIdentityKey(wolvenKitIdentity(route.wolvenKitCli)) : null,
     stamps: route ? routeStamps(route) : [],
-    generation: route && settings.wolvenKitCli ? registry.generation({ ...route, wolvenKitCli: settings.wolvenKitCli }) : 0,
+    // With or without WolvenKit: a route read by XF Studio's own reader alone still moves on when the mod setup changes.
+    generation: route ? registry.generation(route) : 0,
   });
+}
+
+/**
+ * The launch route, once the game folder is set up. WolvenKit is optional: XF Studio reads the game files itself, so resolving the V and
+ * the creator's options need no WolvenKit; without it (or when its path no longer exists) the route has none, and only exports (and the
+ * rare resource only WolvenKit reads) ask for it, in plain words.
+ */
+export function characterRoute(settings: CharacterDetailSettings): CharacterRoute | null {
+  if (!settings.gameRoot) return null;
+  return { gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
+    manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null };
 }
 
 export class CharacterDetailHost {
@@ -174,12 +186,8 @@ export class CharacterDetailHost {
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }
 
-  private route(): CharacterRoute | null {
-    const settings = this.options.settings();
-    if (!settings.gameRoot || !settings.wolvenKitCli || !existsSync(settings.wolvenKitCli)) return null;
-    return { gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
-      manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli };
-  }
+  /** The launch route (`characterRoute`: WolvenKit optional). */
+  private route(): CharacterRoute | null { return characterRoute(this.options.settings()); }
 
   private set(state: Omit<CharacterDetailState, "schema" | "recordSchema">): CharacterDetailState {
     const full = { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, ...state };
@@ -210,7 +218,7 @@ export class CharacterDetailHost {
     const controller = new AbortController();
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
     const cache = this.shared.cache;
-    const exporter = this.exporterFor(settings.wolvenKitCli);
+    const exporter = this.exporterFor(route.wolvenKitCli);
     // A person's own change comes first: a choice being prepared ahead steps aside (choice-prefetch.ts).
     this.prefetch.foreground(request);
     const first = CHARACTER_DETAIL_STEPS[0]!;
@@ -261,9 +269,9 @@ export class CharacterDetailHost {
    * prepared again from the new setup instead of reusing an answer for the old one. Cheap: one `lstat` per watched path.
    */
   async refresh(): Promise<void> {
-    const settings = this.options.settings();
-    if (!settings.gameRoot || !settings.wolvenKitCli) return;
-    try { await installations.revalidate({ ...settings, gameRoot: settings.gameRoot, wolvenKitCli: settings.wolvenKitCli }); }
+    const route = this.route();
+    if (!route) return;
+    try { await installations.revalidate(route); }
     catch { /* The preparation checks again, and reports what it cannot read. */ }
   }
 

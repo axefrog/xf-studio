@@ -489,7 +489,7 @@ describe("host preparation", () => {
   test("without a game folder or WolvenKit the host says what's needed", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
       mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
-    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body appear once your game folder and WolvenKit are set up." });
+    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body appear once your game folder is set up." });
   });
 });
 
