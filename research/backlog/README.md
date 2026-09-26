@@ -60,7 +60,7 @@ In order:
 2. Eyebrows
 3. Cheek makeup
 
-   Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md).
+   Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md). Brow editor proposal (field-driven groom rasterised into the brow texture set, phased plan): [brow editor design](../brows/brow-editor-design.md).
 4. Hair design
 5. Facial expressions and idles (static/animated; varied idle animations)
 
