@@ -38,7 +38,7 @@ test("limits found after the details were placed update the shown slots; slots n
 
 test("the device passes the scene's placement limits on only while it shows details", () => {
   let placed: ((limits: { slot: DetailSlot; limit: DetailLimit }[]) => void) | null = null;
-  const scene = { setCharacterDetails: () => ({ limits: [] }), detailContext: () => ({}), renderer: { capabilities: { getMaxAnisotropy: () => 1 } },
+  const scene = { setCharacterDetails: () => ({ limits: [] }), details: { load: () => { throw Error("No load expected."); } },
     onBakeLimits: (listener: typeof placed) => { placed = listener; return () => {}; } } as never;
   const device = createBrowserCharacterDetailDevice(scene, async () => new Response(null, { status: 404 }));
   const seen: SlotLimits[] = [];

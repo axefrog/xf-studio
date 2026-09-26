@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices } from "../src/browser-head-attachment";
 import { createBrowserViewportDevice } from "../src/browser-viewport-device";
-import type { createScene } from "../src/scene";
+import type { createSceneHost } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/surface-editor";
 import { freshWorkspace } from "../src/workspace-state";
 
@@ -32,7 +32,7 @@ function fakeScene(host: { canvases: number }, log: string[]) {
   };
   // Every other scene method is a no-op; `then` stays undefined so the scene isn't mistaken for a promise.
   const scene = new Proxy(known, { get: (target, key) => key in target ? target[key as string] : key === "then" ? undefined : noop });
-  return { scene: scene as unknown as Awaited<ReturnType<typeof createScene>>, controls };
+  return { scene: scene as unknown as Awaited<ReturnType<typeof createSceneHost>>, controls };
 }
 
 function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
@@ -50,7 +50,7 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
       const made = fakeScene(host, log);
       scenes.push(made);
       return made.scene;
-    }) as unknown as typeof createScene,
+    }) as unknown as typeof createSceneHost,
     surfaceFactory: (() => ({ resize: noop, cancelInput: noop, inputCapture: () => false, hitAt: () => undefined,
       setEnabled: noop, dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor,
     window: { addEventListener: noop },

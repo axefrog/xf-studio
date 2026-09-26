@@ -1,7 +1,7 @@
 /** Isolated lit-head study. Deliberately imports no workspace, library or editor
  * controller; never edits production recipes or the material's skinning hooks. */
 import * as THREE from "three";
-import {createScene} from "../src/scene";
+import {createSceneHost as createScene} from "../src/platform/scene/scene-host";
 import {STUDIO_RENDERERS} from "../src/compose/renderers";
 import {eyeMakeupRenderer,type EyeMakeupRenderer} from "../src/features/eye-makeup/render";
 import {createRasterJob,initialRecipe} from "../src/engines/layered-makeup/recipe";

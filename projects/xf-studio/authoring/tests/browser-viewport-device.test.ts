@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type * as THREE from "three";
 import { createBrowserViewportDevice } from "../src/browser-viewport-device";
-import type { createScene } from "../src/scene";
+import type { createSceneHost } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/surface-editor";
 import type { createUVEditor } from "../src/uv-editor";
 
@@ -28,7 +28,7 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   const device = createBrowserViewportDevice({
     headHost: head as unknown as HTMLElement, uvHost: uv as unknown as HTMLElement,
     queryContext: () => { throw Error("No hit expected"); },
-    sceneFactory: (async () => { sceneLoads++; return viewer; }) as unknown as typeof createScene,
+    sceneFactory: (async () => { sceneLoads++; return viewer; }) as unknown as typeof createSceneHost,
     uvFactory: ((_canvas, controls) => { uvControls = controls; return uvEditor; }) as typeof createUVEditor,
     surfaceFactory: (() => surfaceEditor) as typeof createSurfaceEditor,
   });
@@ -57,7 +57,7 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   attachment.rehost("head", slot as unknown as HTMLElement);
   attachment.rehost("uv", slot as unknown as HTMLElement);
   expect(sceneLoads).toBe(1);
-  expect(device.scene()).toBe(viewer as unknown as Awaited<ReturnType<typeof createScene>>);
+  expect(device.scene()).toBe(viewer as unknown as Awaited<ReturnType<typeof createSceneHost>>);
   expect(events).toEqual(["uv:resize", "head:resize", "head:cancel", "head:move",
     "scene:resize", "head:resize", "uv:cancel", "uv:move", "uv:resize"]);
 });

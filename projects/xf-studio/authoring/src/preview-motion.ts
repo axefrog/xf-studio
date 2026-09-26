@@ -7,7 +7,7 @@ export type ComposedIdle = Pick<IdleAnimation, "enabled" | "paused" | "onChange"
 export type ComposedBlink = Pick<GameBlink, "animating" | "onChange" | "update" | "reset" | "attach" | "detach" | "dispose">;
 
 /**
- * The game idle and the game's blink on one preview rig (scene.ts). Both write the same bones, so exactly one owns them
+ * The game idle and the game's blink on one preview rig (platform/scene/head-rig.ts). Both write the same bones, so exactly one owns them
  * at a time: the idle while it is enabled (paused included), otherwise the blink. The rules:
  *
  * - The render loop runs only while something moves by itself: a playing idle, or Play blink inside its clip.

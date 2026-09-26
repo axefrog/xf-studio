@@ -38,7 +38,7 @@ test("trusted application and presentation services keep browser devices outside
     const code = source(name);
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(three(?:\/|$)|\.\/(?:studio-main|studio-startup|browser-|scene|uv-editor|surface-editor|raster-client|collection-transport))/);
+        /^(three(?:\/|$)|\.\/(?:studio-main|studio-startup|browser-|scene|platform\/scene\/|uv-editor|surface-editor|raster-client|collection-transport))/);
     expect(code, `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
   }
 });
@@ -48,7 +48,7 @@ test("install detection keeps parsing pure and host access in its adapter", () =
     "mo2-placement", "pe-version"]) {
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|studio-(?:main|startup)$|scene|studio-ui))/);
+        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|studio-(?:main|startup)$|scene|platform\/scene\/|studio-ui))/);
   }
   // The action layer and browser device reach the host only through a typed transport.
   expect(imports(source("install-detection-actions")).filter(path => !path.startsWith("./"))).toEqual([]);
@@ -106,13 +106,13 @@ test("the character resolver keeps its rules pure and all host access in resolve
     const code = source(name);
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|studio-(?:main|startup)$|scene|studio-ui))/);
+        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|studio-(?:main|startup)$|scene|platform\/scene\/|studio-ui))/);
     expect(code, `${name} reaches the host`).not.toMatch(/\bBun\.(?:spawn|file|write)|\bprocess\.env\b/);
   }
 });
 
 test("the 3D preview derivation keeps definitions pure and WolvenKit in its one adapter", () => {
-  const io = /^(node:(?:fs|child_process|os)|\.\/(?:process-tree|game-asset-export-wolvenkit|browser-|scene|studio-ui))/;
+  const io = /^(node:(?:fs|child_process|os)|\.\/(?:process-tree|game-asset-export-wolvenkit|browser-|scene|platform\/scene\/|studio-ui))/;
   for (const name of ["preview-core-recipe", "preview-core-maps", "preview-core-materials", "preview-core-assemble", "glb", "render-detail", "preview-preparation",
     "wolvenkit-setup", "wolvenkit-release"])
     for (const dependency of imports(source(name))) expect(dependency, `${name} imports ${dependency}`).not.toMatch(io);
@@ -121,8 +121,8 @@ test("the 3D preview derivation keeps definitions pure and WolvenKit in its one 
     expect(dependency, `preview-core-service imports ${dependency}`).not.toMatch(/^(node:child_process|\.\/process-tree|\.\/game-asset-export-wolvenkit)$/);
   expect(imports(source("game-asset-export-wolvenkit"))).toContain("./wolvenkit-cli");
   // The renderer loads the core head only through the typed record loader.
-  expect(source("scene")).not.toContain('fetch("/assets/head.glb")');
-  expect(imports(source("scene"))).toContain("./core-detail-loader");
+  expect(source("platform/scene/scene-host")).not.toContain('fetch("/assets/head.glb")');
+  expect(imports(source("platform/scene/scene-host"))).toContain("../../core-detail-loader");
 });
 
 test("WolvenKit setup keeps its policy in the service and the network, archive and process work in adapters", () => {
@@ -189,7 +189,18 @@ test("platform code imports only the platform: nothing from features, engines, c
  * The legacy `src/` modules the scene host (platform/scene) still builds on: the renderer and device modules that stay at the top of
  * `src/` until they move under platform/scene (a recorded exception, ui-architecture-boundary.md "scene host"). Nothing else in src.
  */
-const SCENE_DEVICE_MODULES = new Set<string>([]);
+const SCENE_DEVICE_MODULES = new Set<string>([
+  // Renderer and GPU devices: the stage, lights, display, camera input, skinning and the head's materials.
+  "browser-grading-lut-device", "lighting-preset-stage", "linear-display", "studio-light-rig", "viewport-backdrop", "head-camera-input",
+  "device-pixel-ratio", "skin", "eye-material", "layered-material", "render-scheduler",
+  // The character context's loaders, adapters and placement, and their record types and codes.
+  "core-detail-loader", "character-detail-loader", "character-material-adapters", "head-skin-placement", "render-detail", "render-templates",
+  "detail-limits", "head-load-error", "scene-evidence",
+  // The rig's motion and facial shapes.
+  "idle-animation", "game-blink", "preview-motion", "face-morphs",
+  // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the save's V.
+  "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "save-reader",
+]);
 
 test("the scene host imports the platform, Three and its listed device modules only; never a feature, engine, compose or the UI", () => {
   const scene = walk("platform/scene");

@@ -1,6 +1,6 @@
 // Run on the isolated /build/depth-study.html page; never reads/writes workspace or library data.
 import * as THREE from "three";
-import { createScene } from "../src/scene";
+import { createSceneHost as createScene } from "../src/platform/scene/scene-host";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { eyeMakeupRenderer } from "../src/features/eye-makeup/render";
 import { initialRecipe } from "../src/engines/layered-makeup/recipe";

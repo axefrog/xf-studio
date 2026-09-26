@@ -1,5 +1,5 @@
 import type * as THREE from "three";
-import { createScene } from "./scene";
+import { createSceneHost, type SceneHost } from "./platform/scene/scene-host";
 import type { FeatureRendererFactory } from "./platform/api/scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
@@ -7,7 +7,7 @@ import { modifiersOf, NO_MODIFIERS } from "./input-bindings";
 import { ViewportAdapter } from "./viewport-adapter";
 import { ViewportAttachment, type ViewportAttachmentPort } from "./viewport-attachment";
 
-type Scene = Awaited<ReturnType<typeof createScene>>;
+type Scene = SceneHost;
 type UVEditor = ReturnType<typeof createUVEditor>;
 type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
 
@@ -18,7 +18,7 @@ export function createBrowserViewportDevice(options: {
   queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
   /** The feature renderers each loaded head creates (the composition's list, handed down by the composition root). */
   renderers?: readonly FeatureRendererFactory[];
-  sceneFactory?: typeof createScene;
+  sceneFactory?: typeof createSceneHost;
   uvFactory?: typeof createUVEditor;
   surfaceFactory?: typeof createSurfaceEditor;
   /** Source of key, pointer, focus and visibility events for modifier tracking. */
@@ -81,7 +81,7 @@ export function createBrowserViewportDevice(options: {
     },
     async loadHead() {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createScene)(options.headHost, { renderers: options.renderers });
+      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { renderers: options.renderers });
       return viewer;
     },
     /**
