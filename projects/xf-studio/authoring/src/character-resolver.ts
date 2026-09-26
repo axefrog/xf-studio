@@ -91,7 +91,11 @@ export interface ResolvedAppearance {
   readonly app: Provenance | null;
   readonly appOverride: { readonly to: DepotRef; readonly registeredBy: string } | null;
   readonly choice: { readonly providedBy: string; readonly optionDefinedBy: string } | null;
-  readonly appearance: { readonly status: "defined" | "dynamic" | "missing"; readonly source: string | null; readonly patchedBy: readonly string[] };
+  /**
+   * `missing`: no mounted archive provides the appearance (or its definition); `unreadable`: an archive provides the app, but the export
+   * tool couldn't read it (e.g. WolvenKit refusing a mod's `.app` written with an older property type).
+   */
+  readonly appearance: { readonly status: "defined" | "dynamic" | "missing" | "unreadable"; readonly source: string | null; readonly patchedBy: readonly string[] };
   readonly components: readonly ResolvedComponent[];
   readonly notes: readonly RuleNote[];
 }
@@ -408,6 +412,8 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
   let morphTexture: { texture: Provenance | null; parameter: string } | null = null;
   const morphRegions: Record<string, number> = {};
   if (component.morphResource) {
+    // A morph component names its base mesh too (usually the morph target's own): read it with the morph target, not after it.
+    if (component.mesh) ctx.graph.prefetchRef(component.mesh, "mesh");
     morph = await ctx.graph.morph(component.morphResource);
     morphProvenance = ctx.graph.provenance(component.morphResource, morph?.loaded.provenance.extractedSha256 ?? null);
     if (morph) {
@@ -468,7 +474,7 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
   const choiceDef = option?.type === "appearance" ? option.definitions.find(d => d.name === descriptor.definition) : undefined;
   if (!choiceDef) ctx.ambiguities.push({ code: "choice-not-in-cco", subject: `${descriptor.option}:${descriptor.definition}`, grade: "resource",
     detail: "The effective character-creator resource has no such option/definition; the saved descriptor is resolved as stored." });
-  const empty = (status: "missing", detail: string): ResolvedAppearance => {
+  const empty = (status: "missing" | "unreadable", detail: string): ResolvedAppearance => {
     ctx.gaps.push({ code: `appearance-${status}`, subject: `${refLabel(appRef)}:${descriptor.definition}`, detail });
     return { option: descriptor.option, part: descriptor.part, groups, definition: descriptor.definition, requestedApp: requested,
       app: graph.provenance(appRef), appOverride: override ? { to: appRef, registeredBy: override.registeredBy } : null,
@@ -476,7 +482,10 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
       appearance: { status, source: null, patchedBy: [] }, components: [], notes };
   };
   const app = await graph.app(appRef);
-  if (!app) return empty("missing", graph.loadErrors.get(appRef.hash) ?? "No mounted archive provides the appearance resource.");
+  if (!app) {
+    const unread = graph.loadErrors.get(appRef.hash);
+    return unread ? empty("unreadable", unread) : empty("missing", "No mounted archive provides the appearance resource.");
+  }
   notes.push(...app.patchNotes);
   let definition = app.appearances.find(a => a.name === descriptor.definition);
   let status: ResolvedAppearance["appearance"]["status"] = "defined", sourceName: string | null = definition?.name ?? null;

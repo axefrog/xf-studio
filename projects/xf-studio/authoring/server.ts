@@ -68,7 +68,7 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
   },
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
-const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh() });
+const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
 const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),

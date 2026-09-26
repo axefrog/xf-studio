@@ -316,6 +316,8 @@ export class ResourceGraph {
   private retainedTotal = 0;
   /** Ambiguity collectors of the resolutions running now (`collect`). */
   private readonly collectors = new Set<Map<string, Ambiguity>>();
+  /** Read recorders of the work running now (`recordReads`). */
+  private readonly recorders = new Set<Set<string>>();
   /**
    * The rolling diagnostics window (docs/diagnostics.md), set by the preparation service each time it resolves through this graph.
    * A process keeps one window per data folder, so this is always the host's own window, not a per-resolution choice (UI boundary
@@ -418,10 +420,28 @@ export class ResourceGraph {
     return count;
   }
 
+  /**
+   * Run `work` and return the hashes of every resource a consumer read meanwhile (each `load`, and each memoised model's resource and
+   * patch sources on every ask), cached or not: what a preparation depends on. Reads of work running at the same time are included, so
+   * a batch of preparations gets the union of theirs.
+   */
+  async recordReads<T>(work: () => Promise<T>): Promise<{ value: T; reads: Set<string> }> {
+    const recording = this.beginReads();
+    try { return { value: await work(), reads: recording.reads }; } finally { recording.end(); }
+  }
+  /** `recordReads` for work that isn't one function: the reads from now until `end`. */
+  beginReads(): { reads: Set<string>; end(): void } {
+    const reads = new Set<string>();
+    this.recorders.add(reads);
+    return { reads, end: () => { this.recorders.delete(reads); } };
+  }
+  private record(hash: string): void { for (const recorder of this.recorders) recorder.add(hash); }
+
   /** A consumer's read of a resource (its ambiguities are recorded; see `observe`). */
   load(ref: DepotRef, extension: string | null = null): Promise<LoadedResource | null> {
     const named = this.named(ref);
     this.observe(named);
+    this.record(named.hash);
     const pending = this.read(named, extension);
     if (!this.requested.has(named.hash)) {
       this.requested.add(named.hash);
@@ -433,6 +453,18 @@ export class ResourceGraph {
       }
     }
     return pending;
+  }
+
+  /**
+   * Start reading a resource a consumer is about to need, so it joins the extraction batch of what is being read now instead of
+   * waiting for the read before it (a morph component's mesh while its morph target is read). Like `PREFETCH`, it changes when a
+   * resource is read, never what is read: the consumer's later `load` gets the same promise, and its ambiguities are recorded then.
+   */
+  prefetchRef(ref: DepotRef, extension: string | null): void {
+    if (!this.prefetch) return;
+    const named = this.named(ref);
+    if (this.loads.has(named.hash) || !this.exists(named.hash)) return;
+    this.read(named, extension).catch(() => {});
   }
 
   /** Request the prefetchable resources a loaded resource names (see `PREFETCH`), once. */
@@ -528,7 +560,13 @@ export class ResourceGraph {
    */
   private observeModel(ref: DepotRef, applies: (patch: XlPatch) => boolean = () => true): void {
     this.observe(ref);
-    for (const patch of this.patchesFor(ref.hash)) if (applies(patch)) this.observe(refFromHash(patch.source, patch.sourcePath));
+    this.record(this.named(ref).hash);
+    // Patch sources are read only for a resource an archive provides (`readPatchSources`).
+    const provided = this.recorders.size > 0 && !!this.locate(ref).lookup.winner;
+    for (const patch of this.patchesFor(ref.hash)) if (applies(patch)) {
+      this.observe(refFromHash(patch.source, patch.sourcePath));
+      if (provided) this.record(patch.source);
+    }
   }
 
   app(ref: DepotRef): Promise<AppModel | null> {

@@ -404,6 +404,9 @@ export class StudioApplication {
   characterChoices(option: string, want?: number, query?: string) { return this.services.characterContext?.choices(option, want, query) ?? null; }
   /** The creator options with a choice matching a search (the host searches every choice; UI-72); null before the 3D preview is ready. */
   characterSearch(query: string) { return this.services.characterContext?.search(query) ?? null; }
+  /** A row's choices prepared ahead (visible ones first, `focus` first of all), and their states; `characterStopPrefetch` when it closes. */
+  characterPrefetch(option: string, positions: readonly number[], focus?: number | null) { return this.services.characterContext?.prefetch(option, positions, focus ?? null) ?? null; }
+  characterStopPrefetch(option: string) { this.services.characterContext?.stopPrefetch(option); }
   /** Why a character preset can't be loaded (`import`) or saved (`export`) now, or undefined (the files family's check). */
   characterPresetUnavailable(kind: "import" | "export"): string | undefined {
     const context = this.services.characterContext;

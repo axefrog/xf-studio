@@ -156,6 +156,16 @@ export class InstallationRegistry {
   }
 
   /**
+   * The route's opened installation as it is, without checking it, or null when it isn't open. For background readers (choices
+   * prepared ahead): a check reads every watched stamp, and an acquire would spend the vouch a person's request relies on (PIPE-62).
+   * What they derive is checked again before it is used (choice-manifest.ts), and a person's request still checks.
+   */
+  peek(options: InstallationOptions): Installation | null {
+    const entry = this.entries.get(installationRouteKey(options));
+    return entry?.core && !entry.opening ? this.view(entry, entry.core, options) : null;
+  }
+
+  /**
    * Check a route's opened installation now (for a host about to reuse an answer): when it is out of date it is dropped
    * and the route's generation moves on. A route dropped to make room is checked against its kept watch list.
    */

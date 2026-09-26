@@ -332,3 +332,17 @@ test("a batch extracts resources with a depot path in one launch, and falls back
   await fetcher.fetch(archive, refFromPath(named), "mesh");
   expect(launches).toHaveLength(3);
 });
+
+test("peek hands background readers the opened installation without a check and without spending a person's vouch", async () => {
+  const setup = installation(), { registry } = counting();
+  expect(registry.peek(setup.options)).toBeNull();
+  const opened = await registry.acquire(setup.options);
+  const checks = registry.stats.checks;
+  await registry.revalidate(setup.options);
+  expect(registry.stats.checks).toBe(checks + 1);
+  // A prefetch reads meanwhile: no check, and the person's acquire right after still stands on the vouch.
+  expect(registry.peek(setup.options)?.depot).toBe(opened.depot);
+  expect(registry.stats.checks).toBe(checks + 1);
+  await registry.acquire(setup.options);
+  expect(registry.stats.checks).toBe(checks + 1);
+});

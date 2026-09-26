@@ -304,9 +304,12 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     const label = clampedList(names), inMessage = clampedList(names, 160);
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");
+      // Installed but unreadable is not "not installed": name the archive WolvenKit couldn't read.
+      const unreadable = entries.find(entry => entry.appearance.status === "unreadable");
       const { noun, not, pronoun } = SLOT_WORDS[slot];
-      slots.push({ slot, state: "unavailable", label, message: missing
-        ? `Your V's ${noun} (${inMessage}) ${not} in your installed game files, so ${pronoun} ${not} shown.`
+      slots.push({ slot, state: "unavailable", label, message: unreadable
+        ? `WolvenKit couldn't read your V's ${noun} (${inMessage})${unreadable.app?.archive ? ` from ${unreadable.app.archive}` : ""}, so ${pronoun} ${not} shown.`
+        : missing ? `Your V's ${noun} (${inMessage}) ${not} in your installed game files, so ${pronoun} ${not} shown.`
         : `XF Studio can't draw your V's ${noun} (${inMessage}) yet, so ${pronoun} ${not} shown.` });
       continue;
     }

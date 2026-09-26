@@ -14,6 +14,11 @@
 import { asArray, isObject, type JsonObject } from "./red-json";
 
 export type MeshExportRepair = { document: JsonObject; detail: string };
+/**
+ * Identity of the repairs this module makes. Change it whenever a repair is added or changes: the exporter's lasting outcomes (a mesh
+ * settled as exporting nothing, a lasting partial export) are recorded under it, so a changed repair tries those meshes again.
+ */
+export const MESH_EXPORT_REPAIR_VERSION = "mesh-export-repair-1";
 
 type Row = [number, number, number, number];
 const row = (value: unknown): Row => {

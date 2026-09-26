@@ -81,6 +81,7 @@
   "character.loadPreset",
   "character.keepChanges",
   "character.retry",
+  "character.clearPreparedFiles",
   "character.undo",
   "character.redo"
  ],
@@ -2154,6 +2155,14 @@
    "undo": "none",
    "payload": {}
   },
+  "character.clearPreparedFiles": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "file",
+   "undo": "none",
+   "payload": {}
+  },
   "character.undo": {
    "scope": [
     "viewport"
@@ -2899,6 +2908,15 @@
   },
   {
    "id": "character.retry",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.clearPreparedFiles",
    "family": "action",
    "scope": [
     "viewport"

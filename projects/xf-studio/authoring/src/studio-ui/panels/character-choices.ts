@@ -8,8 +8,13 @@
  *   prepares the V anew; Enter or Space (or a click) chooses. The chosen choice is marked by identity (its position among the option's
  *   choices), so two same-named choices are never both marked (CORE-70).
  * - **Provenance** (the game, or the mod a choice comes from) is each item's accessible description and its tooltip.
+ * - **Prepared ahead** (character-context-actions.ts `prefetch`): a choice not prepared yet carries a small corner mark, one being prepared
+ *   a moving one, and one that couldn't be prepared ahead a warning mark; a ready choice has none. The mark sits in the item's corner, so
+ *   it never moves the layout, and its state joins the accessible description and the tooltip. Hovering or focusing a choice hints the
+ *   host to prepare it next (`onHint`).
  */
 import type { CcPanelChoice } from "../../cc-panel";
+import type { ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 
 export type ChoiceListInput = {
@@ -22,6 +27,14 @@ export type ChoiceListInput = {
   selected: number | null;
   mods: readonly string[];
   loading: boolean; error: string | null;
+  /** Each choice's state of being prepared ahead, by position (none: the host doesn't prepare ahead). */
+  fetch?: ReadonlyMap<number, ChoiceFetch> | null;
+};
+
+/** A choice's prepared-ahead state as the item shows it: `data-fetch` and the words its description adds. */
+const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>> = {
+  n: { mark: "pending", words: "not prepared yet" }, q: { mark: "pending", words: "not prepared yet" },
+  f: { mark: "fetching", words: "being prepared" }, x: { mark: "failed", words: "couldn't be prepared ahead; choosing it tries again" },
 };
 
 export class ChoiceList {
@@ -29,14 +42,14 @@ export class ChoiceList {
   readonly element: HTMLElement;
   readonly list: HTMLElement;
   private readonly status: HTMLElement;
-  private items: { choice: CcPanelChoice; element: HTMLButtonElement }[] = [];
+  private items: { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string }[] = [];
   private byPosition = new Map<number, HTMLButtonElement>();
   private shown: { option: string; query: string } | null = null;
   private selected: number | null = null;
   /** The item that takes Tab focus (roving tabindex). */
   private active: HTMLButtonElement | null = null;
 
-  constructor(id: string, private readonly onChoose: (choice: CcPanelChoice) => void) {
+  constructor(id: string, private readonly onChoose: (choice: CcPanelChoice) => void, private readonly onHint: (choice: CcPanelChoice) => void = () => {}) {
     this.list = h("div", { class: "cc-choices", id, role: "listbox" });
     this.status = h("p", { class: "note cc-choices-status", hidden: true });
     this.element = h("div", { class: "cc-choice-list" }, this.list, this.status);
@@ -58,6 +71,7 @@ export class ChoiceList {
       if (item) setAttr(item, "aria-selected", "true");
       if (!this.focused()) this.rove(item ?? this.active);
     } else if (!this.active && this.items.length) this.rove(this.selected !== null ? this.byPosition.get(this.selected) : undefined);
+    for (const entry of this.items) this.showFetch(entry, input.fetch?.get(entry.choice.position));
     const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
     setText(this.status, line);
     this.status.hidden = !line;
@@ -79,6 +93,28 @@ export class ChoiceList {
     restore?.focus();
   }
 
+  /** Mark an item with its prepared-ahead state (only when it changes). */
+  private showFetch(entry: ChoiceList["items"][number], state: ChoiceFetch | undefined) {
+    const shown = state ? FETCH_SHOWN[state] : undefined, mark = shown?.mark ?? "";
+    if (entry.fetch === mark) return;
+    entry.fetch = mark;
+    if (mark) setAttr(entry.element, "data-fetch", mark); else entry.element.removeAttribute("data-fetch");
+    const description = shown ? `${entry.from}; ${shown.words}` : entry.from;
+    setAttr(entry.element, "aria-description", description);
+    entry.element.title = `${entry.choice.off ? "Off" : entry.choice.label} · ${description}`;
+  }
+
+  /**
+   * The loaded choices' positions, the ones in view first (in list order), then the others nearest the view first: the order the host
+   * prepares them ahead. Without layout (no view), list order.
+   */
+  visiblePositions(view: { top: number; bottom: number } | null): number[] {
+    if (!view || typeof this.list.getBoundingClientRect !== "function") return this.items.map(entry => entry.choice.position);
+    const placed = this.items.map(entry => ({ position: entry.choice.position, rect: entry.element.getBoundingClientRect() }));
+    const distance = (rect: DOMRect) => rect.bottom < view.top ? view.top - rect.bottom : rect.top > view.bottom ? rect.top - view.bottom : 0;
+    return placed.map((item, order) => ({ ...item, order, far: distance(item.rect) })).sort((a, b) => a.far - b.far || a.order - b.order).map(item => item.position);
+  }
+
   private add(choice: CcPanelChoice, input: ChoiceListInput) {
     const from = choice.mod >= 0 ? `From ${input.mods[choice.mod] ?? "a mod"}` : "From the game";
     const item = h("button", { class: `cc-choice${input.grid ? " swatch-choice" : ""}${choice.off ? " off" : ""}`, type: "button", role: "option",
@@ -87,11 +123,12 @@ export class ChoiceList {
       input.grid ? h("span", { class: "swatch", style: choice.color ? `--swatch:${choice.color}` : undefined, "data-empty": choice.color ? undefined : "true" }) : null,
       input.grid && !choice.off && choice.color ? null : h("span", { class: "cc-choice-label", text: choice.off ? "Off" : choice.label }));
     item.addEventListener("click", () => { this.rove(item); this.onChoose(choice); });
-    item.addEventListener("focus", () => this.rove(item));
+    item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
+    item.addEventListener("pointerenter", () => this.onHint(choice));
     const firstPlain = choice.off ? this.items.find(entry => !entry.choice.off)?.element : undefined;
     if (firstPlain) this.list.insertBefore(item, firstPlain); else this.list.appendChild(item);
     const at = firstPlain ? this.items.findIndex(entry => entry.element === firstPlain) : this.items.length;
-    this.items.splice(at, 0, { choice, element: item });
+    this.items.splice(at, 0, { choice, element: item, from, fetch: "" });
     this.byPosition.set(choice.position, item);
   }
 

@@ -3,7 +3,7 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } fro
 import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { readPeFileVersion } from "./pe-version";
-import { runProcessTree, type ProcessTreeResult } from "./process-tree";
+import { raiseLowPriority, runProcessTree, type ProcessTreeResult } from "./process-tree";
 
 /**
  * Process adapter: the one place XF Studio starts WolvenKit CLI. It owns the success policy
@@ -28,6 +28,8 @@ export type WolvenKitRunOptions = {
   accept?: (run: WolvenKitRun) => boolean;
   /** A log line that means failure despite exit 0; default `Unhandled exception`. */
   failure?: RegExp;
+  /** Background work: run below normal process priority, so the machine (and a foreground launch) stays responsive. */
+  lowPriority?: boolean;
 };
 
 /** WolvenKit versions whose command lines and outputs XF Studio's pipeline has been verified against. */
@@ -65,13 +67,27 @@ export function classifyWolvenKitRun(label: string, result: ProcessTreeResult, o
 
 const runLabel = (cli: string, args: readonly string[]) => `${basename(cli)} ${args.slice(0, args[0] === "convert" ? 2 : 1).join(" ")}`.trim();
 
+/**
+ * Every WolvenKit launch this process made, by command (`uncook`, `unbundle`, `convert s`, …), with the wall time each took. Read by
+ * measurements and the prepare log: most of a first-time choice's time is launches, and each costs seconds before doing any work.
+ */
+export const wolvenKitRunStats = { launches: 0, ms: 0, byCommand: new Map<string, { launches: number; ms: number }>() };
+
+/** Raise every WolvenKit run started with `lowPriority` that is still running to normal priority (foreground work may wait on it). */
+export const raiseBackgroundWolvenKit = (): void => raiseLowPriority();
+
 /** Run one WolvenKit command; abort or timeout stops the whole process tree. */
 export async function runWolvenKit(cli: string | null, args: readonly string[], options: WolvenKitRunOptions): Promise<WolvenKitRun> {
   if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit CLI isn't available.");
   const label = runLabel(cli, args);
   if (options.signal?.aborted) throw new WolvenKitRunError("cancelled", `${label} was cancelled.`);
+  const started = performance.now();
   const result = await runProcessTree(cli, args, { signal: options.signal, timeoutMs: options.timeoutMs, cwd: options.cwd,
-    env: options.env ? { ...process.env, ...options.env } : undefined, keep: options.keep ?? 64_000 });
+    env: options.env ? { ...process.env, ...options.env } : undefined, keep: options.keep ?? 64_000, lowPriority: options.lowPriority });
+  const ms = performance.now() - started, command = args.slice(0, args[0] === "convert" ? 2 : 1).join(" ");
+  const entry = wolvenKitRunStats.byCommand.get(command) ?? { launches: 0, ms: 0 };
+  entry.launches++; entry.ms += ms; wolvenKitRunStats.launches++; wolvenKitRunStats.ms += ms;
+  wolvenKitRunStats.byCommand.set(command, entry);
   return classifyWolvenKitRun(label, result, options);
 }
 
