@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `d144704` | 2026-09-26 | Bridge autonomy batch 1, focused safety review (key sending, cc.confirm/back, cursor wrap, camera presets, photo.subject) | 0 High, 2 Medium, 6 Low (RB-34..41). Safe for the next session: only the bound photo-mode key can be sent, only to the game's foreground window, only with writes and the photo class on; confirm/back gated natively; presets only in test zips |
 | `fa74f98` | 2026-09-26 | Bridge script-call fix (c31156a), faster first-time choices (8971165), native reader hardening (091054d) | 0 High, 4 Medium, 11 Low (PREV-101..105, PIPE-96, RB-32..33, NATIVE-18..24). Nothing in the script-call path likely to crash the game; prefetch Clear only deletes inside the prepared folders; NATIVE-01..17 hold (NATIVE-02/05 with the NATIVE-18/23 gaps). NATIVE-24: the native-hardening "Fixed in" section lost in the 091054d merge, restored |
 | `fa74f98` | 2026-09-26 | Platform step 8: export host, product planner, `runProductBuild`, `local-package-2`, package-plan actions and panel | 0 High, 3 Medium, 6 Low (CORE-91, PIPE-88..95). Holds as a single-exporter product; most findings bite once a second exporting feature or a user-facing install exists. Check/Build agreement, partial export, namespace refusal, merged `.archive.xl` determinism, manifest v1/v2 and boundaries sound; the 15 s Check worker has more than 10x headroom at 900 looks |
 | `8857137` | 2026-09-26 | Vortex subsystem (9ee2fad) and the diagnostics cleanup (94bc1ff, 609731d) | 0 High, 3 Medium, 11 Low (VORTEX-01..08, DIAG-19..24). Vortex attribution only relabels (never changes the winner); read-only holds; fixtures hold no personal data. DIAG-01..18: 16 hold, DIAG-06 and DIAG-11 partly (DIAG-19, DIAG-24, VORTEX-05) |
@@ -63,6 +64,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| RB-34 | Med | Runtime bridge | The cursor-hide flag is global: if photo mode closes without `OnHide`, the cursor stays hidden in every menu until the kill switch or a reload; not cleared on idle disconnect either. Substitute Hide only while photo mode is active (`XFRuntimeBridgeActions.reds:137,342-353`) | Open |
+| RB-35 | Med | Runtime bridge | `keyTarget()` honours the test-only `--capture-hwnd` override and reads the PID from that same window, so an MCP server started with it could press the key in any window; also check the target image is `Cyberpunk2077.exe` (`command-api.ts:99-104`, `mcp-server.ts:33-37`) | Open |
 | PREV-101 | Med | Resolver | A background prefetch failure can end the host process: `choice-prefetch.ts` starts `run()` with `void` and `run()` has no `catch`; `readiness()` and manifest `refFromHash`/`refFromPath` can throw, and Bun exits on an unhandled rejection (reproduced in a scratch script) | Open |
 | PREV-102 | Med | Resolver | An aborted prefetch batch keeps running beside the person's own change and shares the cache: `prepare` doesn't await the aborted warm, `warmCharacters` doesn't check abort after `gatherParts`, and its `cache.forget(mark)` can delete entries the foreground just added (a V record missing parts); Clear has the same gap (`character-detail-host.ts:197,214,330`, `character-detail-service.ts:544-550,988-993`) | Open |
 | NATIVE-18 | Med | Native reader | The string-pool terminator index isn't budgeted: an all-zero pool (compresses to KB) costs ~16 bytes per zero byte (32 MiB pool: 530 MB RSS; at the 128 MiB body cap ~2 GB) in the host process (`cr2w-file.ts:63-65`) | Open |
@@ -354,6 +357,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **NATIVE-21:** the Oodle check holds the file but hashes and loads by path again (junction swap window); hash through the handle and load its final path.
   - **NATIVE-22:** the Authenticode check blocks the host's event loop (`spawnSync` PowerShell, up to 30 s) for an unknown DLL hash.
   - **NATIVE-23:** the archive index size has no cap in `NativeLimits` (up to 4 GiB, kept per pooled archive).
+
+- **RB-36..41** (bridge autonomy review at `d144704`), Open:
+  - **RB-36:** `photo_mode_can_open === false` lets a missing field through; use `!== true` (`catalogue.ts:157`).
+  - **RB-37:** no game-state re-check between focusing the window and sending the key (250 ms).
+  - **RB-38:** an existing but unbound or malformed `photoMode` binding silently falls back to `IK_N`; refuse instead.
+  - **RB-39:** navigation-cluster keys are sent without `KEYEVENTF_EXTENDEDKEY` (the game gets the numpad key); layout-dependent keys.
+  - **RB-40:** stale config and `Params.hpp` wording about `allow_creator_leave` defaults.
+  - **RB-41:** `XFB_NO_INPUT` relies on each test importing `helpers.ts` (use a test preload); no test that the default zip lacks the presets and keeps `allow_creator_leave` off.
 
 ## New subsystems since last review
 
