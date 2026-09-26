@@ -6,6 +6,21 @@
 
 **Licensing, non-negotiable.** XF Studio stays MIT. WolvenKit is GPL-3.0: we study its source as format documentation and run its CLI as an oracle, and we never copy or port its code. RED4ext.SDK is MIT. The game's Oodle DLL is loaded where the game installed it and never copied or redistributed. Credits are in [community credits](../../docs/community-credits.md) (WolvenKit, RED4ext SDK, Cyber Engine Tweaks, red4ext-rs, the modding wiki, psiberx's RTTI dump).
 
+## Direction: no WolvenKit dependency (27 September 2026)
+
+The goal is to drop XF Studio's dependency on WolvenKit entirely, both for reading (preview) and writing (Build). WolvenKit stays the oracle the native code is checked against until then. What still needs WolvenKit today, and the phase that removes it:
+
+| Still WolvenKit | Removed by |
+|---|---|
+| Mesh and morph-target export to GLB (the largest cold cost) | phase 4 |
+| `.mlmask` layer images | phase 3 follow-up |
+| `C2dArray` factory `.csv` files (clothing, first use) | a phase 2 root class (PIPE-105) |
+| Animation clips (`anim-export` for the idle; pose clips) | a clip decoder (the pose library P0) |
+| Head and eyes read from the whole content folder | phase 4 integration |
+| Build: writing CR2W resources and packing the `.archive` | a phase 6 writer (to be planned; byte-level verification against WolvenKit-packed output) |
+
+Until the list is empty, WolvenKit stays optional where it can be (the resolver and catalogue already run without it) and the app asks for it only when a remaining step needs it.
+
 ## Phases
 
 | Phase | Scope | State | Effort |
