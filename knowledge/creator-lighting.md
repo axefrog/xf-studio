@@ -147,7 +147,7 @@ The vanilla grade warms neutrals noticeably and lifts mid-tones. Both mod LUTs a
 
 Every creator light is a local light. The local-light hair path is the decoded hair model of [hair shading §5](hair-shading.md#5-deferred-hair-light) evaluated per light, with the `LocalLight` intensities R 0.35, TRT 0.8 and MultiScatter 0.47, the executable's defaults [source]. With no ambient in the box, the hair environment path (the same section) adds nothing here, so the mirror isolates direct light on hair [hypothesis, as long as no global ambient reaches the box]. The brow decal and skin use the standard local-light model above. Because the magenta and cyan rims fall mostly on the crown, the back and the silhouette, hair on the creator screen can look cooler or more magenta at its edges than its albedo suggests. Measure hair patches on the front-lit lengths ([§8](#8-capture-protocol)).
 
-**Qualitative runtime check (25 September 2026, maintainer).** Brightening the Studio's preview makes the hair colour look quite similar to the game, and the game is still a little darker [runtime, qualitative; not a measurement]. Hue and saturation therefore look close, and the remaining gap is mostly overall light level. This supports putting the rig, exposure and display transform ahead of further hair-shader changes. It is also consistent with the Nova LUT's darker, neutral mid-tones.
+**Qualitative runtime check (25 September 2026, maintainer).** Brightening the Studio's preview makes the hair colour look quite similar to the game, and the game is still a little darker [runtime, qualitative; not a measurement, and no capture on file]. Hue and saturation therefore look close, and the remaining gap is mostly overall light level. This supports putting the rig, exposure and display transform ahead of further hair-shader changes. It is also consistent with the Nova LUT's darker, neutral mid-tones.
 
 ## 7. What the preview needs
 
@@ -219,7 +219,7 @@ Also collect the CET hair-option dump from that request and the session's logs.
 | Hue of hair, brow and lash patches (OKLab hue angle) | within 5° | LUT, profile bake and rim colour |
 | ΔE OKLab of skin patches after the `k` fit | at most 0.02 | display transform |
 | The two hair-page frames | pixel difference under 1/255 on patches | fixed exposure |
-| Ladder luminance ratios against `ash_brown` | compare with the [bake table](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request), after inverting the LUT | profile bake curve, now independent of lighting |
+| Ladder luminance ratios against `ash_brown` | compare with the [bake table](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request), after inverting the LUT | the whole colour chain (the profile bake is now decoded from the executable, [hair shading §3](hair-shading.md#3-base-colour)) |
 
 Each pass mark is a first target for iteration, not evidence of parity. Record every run with the screenshot hashes, settings, profile and preset version, as the hair calibration note does.
 

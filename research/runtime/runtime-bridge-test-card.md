@@ -25,9 +25,9 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Next build:** the autonomy batch and batch 2 (below), rebuilt from the `main` commit that merges `claude/bridge-batch2`; record its zip and DLL hashes here before staging (the DLL embeds the commit, so they differ from the branch build recorded below). What it adds to the staged zips: the -writes zip sets `allow_creator_leave = true`, and the -diagnostic and -writes zips carry `r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml` (XF camera presets 7-9; the default zip doesn't). Check the -writes manifest for `"allow_creator_leave": true` and `"photo_mode_presets"`.
+   **Staged build:** the autonomy batch and batch 2 (below), rebuilt from `main` at `509f599`; its zip and DLL hashes are in the [build record](#build-record-staged). What it adds to the staged zips: the -writes zip sets `allow_creator_leave = true`, and the -diagnostic and -writes zips carry `r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml` (XF camera presets 7-9; the default zip doesn't). Check the -writes manifest for `"allow_creator_leave": true` and `"photo_mode_presets"`.
 
-   **Branch build of batch 2** (`claude/bridge-batch2`, recorded at the end of this page under [build record](#build-record-staged)): the checks there passed on that commit; restaging uses the `main` rebuild.
+   The earlier branch build of batch 2 (`claude/bridge-batch2`) passed the same checks; the staged build is the `main` rebuild.
 
    **New in this build, watch in the next session:** the plugin log's load lines now include `evt=script.addresses_resolved … script_calls=on`; `script_calls=off` (or any answer `script_calls_unavailable`) means RED4ext's address library lacks an address the calls need: stop and send the log. The cursor hide works only in photo mode and clears itself in any other phase or after a 120 s idle disconnect. `photo_open` re-checks the game after bringing the window forward, refuses an unbound or unreadable key binding and punctuation keys, and sends only to `Cyberpunk2077.exe`. `face_rig_read` and `photo_expression_index` are new ([expression checks](#expression-checks-r1-and-r2)).
 

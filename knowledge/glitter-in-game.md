@@ -51,7 +51,7 @@ Each row is one stage a sparkle has to survive, in draw order.
 | Mechanism | What the compiled programs say | Light- and view-dependent? | Verdict |
 |---|---|---|---|
 | **Resolved flakes in `mesh_decal`**: flake normals plus a flake mask, and per-flake roughness, metalness and colour | Covered in §1. Per-texel normal, roughness, metalness and colour; separate normal mask; mode 1 composes with skin; one sampler, implicit LOD. | Yes, where flakes cover at least 2 pixels | **Primary** (§3) |
-| **The faceted Shimmer route pushed further** (fewer cells, more tilt) | The same program. The facets are UV-cell discs in the head-UV atlas: 1.4 mm wide at the default 128 cells, 2.8 mm for 017's *Shimmer · strong*, and about 5.6 mm for Board 2's coarse "glitter proxy". Tilts are at most 15° or 23°, partly gated below 11.5°. | Yes, but as millimetre-scale patches | Sequins or hammered metal, not glitter; it cannot get finer without the UV window |
+| **The faceted Shimmer route pushed further** (fewer cells, more tilt) | The same program. The facets are UV-cell discs in the head-UV atlas: 1.4 mm wide at the default 128 cells, 2.8 mm for 017's *Shimmer · strong*, and about 5.6 mm for Board 2's coarse "glitter proxy". Tilts are at most 15° or 23°, partly gated below 11.5°. | Yes, but as millimetre-scale patches | Sequins or hammered metal, not glitter. The UV window removed the texture limit, so finer facets are now a recipe decision ([Shimmer design](../research/materials/finish-designs/shimmer.md)) |
 | **`mesh_decal_particles`**, and the flipbook built into plain `mesh_decal` | Samples ordinary maps at flipbook UVs driven by `GlobalShaderConsts[0].x` (time). The `highlights` pass writes constants. | Only through normal maps; animation is time-driven | Rejected: time flicker is not glitter ([audit](../experiments/009-glitter-game-fixture/particle-decal-audit.md)) |
 | **`mesh_decal_emissive_subsurface`** | Masks and constants only; no normal, light or view input. There is no UV transform either, so its mask uses the head-UV atlas. | No | **Fallback accent** (§4), labelled stylised |
 | **`mesh_decal_emissive`** | Its target 2 is additive into GBuffer2 B/A. Over skin that would add into the skin-profile and emissive bits. | No | Avoid on skin |
@@ -71,7 +71,7 @@ One draw per preset on the lifted plate, as today, with a new material entry (th
 |---|---|---|
 | Template | `base\materials\mesh_decal.mt`, MeshSkinned `post_gbuffer` | [source] |
 | UV window | The production window Build derives from the plate: its stored UV0 bounds widened by 1/64 of the span per side (stored U 0.2659–0.7339, V 0.6739–0.8236 for the built-in plate). `UVScaleX` 2.136780, `UVOffsetX` 0.000261, `UVScaleY` 6.680135, `UVOffsetY` −1.661879. The negative V offset follows from WolvenKit's bottom-to-top row storage and is checked on every build ([experiment 019](../experiments/019-uv-window/README.md)). The diagnostic Glitter route uses the same constants at 4096×1024, and its decoded maps land in place with the same sign ([experiment 021](../experiments/021-glitter-board/README.md)). | [source] formula; sign [offline]; placement in game [hypothesis] |
-| Texture size | 4096×1024 (0.064 × 0.060 mm per texel), about 8 times the linear density of today's 1024 atlas. The budget option is 2048×512 (0.13 × 0.12 mm). | [resource] measured |
+| Texture size | 4096×1024 (0.064 × 0.060 mm per texel), about 8 times the linear density of the 1024 head-UV atlas the routes used before the window. The budget option is 2048×512 (0.13 × 0.12 mm), the size the flat and faceted routes now export. | [resource] measured |
 | Constants | `DiffuseAlpha` 1, `NormalAlpha` 1, `UseNormalAlphaTex` 1, `NormalsBlendingMode` 1, `RoughnessMetalnessAlpha` 1, scales 1, biases 0, `AlphaMaskContrast` 0 | [source] |
 | `DiffuseTexture` | sRGB RGBA (`isGamma` 1). RGB is the pigment, or the flake colour on flake texels (linear mix by flake coverage). A is √(pigment coverage), with the flat route's coverage-space mip chain. | [source] |
 | `NormalTexture` | Linear RG (`TCM_Normalmap`): each flake's tangent x, y, **dilated** 2 texels beyond its edge so bilinear and trilinear taps never average a flake with flat. Flat (0.5, 0.5) elsewhere. | [source] sampling; dilation [offline] |
@@ -92,7 +92,7 @@ One draw per preset on the lifted plate, as today, with a new material entry (th
 | 2 (0.25 mm), about face framing | 0.41 % | 0.13 % | 0.13 % |
 | 3 (0.50 mm) | 0.28 % | 0.009 % | 0.008 % |
 
-Today's 1024 atlas has level-3-sized texels at its *base*. That is why the Shimmer bake's facets are millimetres wide.
+The 1024 head-UV atlas that the flat and faceted routes used before the window has level-3-sized texels at its *base*. Shimmer's facets, by contrast, are millimetres wide because of their authored cell size, not the texture (Summary).
 
 **Screen scale (test setup, assumed DLSS render scale ≈ 0.58):**
 
@@ -130,7 +130,7 @@ The recipe fields should be physical, and each maps one-to-one onto the catalogu
 
 ## 6. What the next sessions should show
 
-- **Session 2 (pending), *Shimmer · strong*.** Its facets are about 2.8 mm discs tilted at most 23°. Prediction: coarse, hammered-metal highlight patches close up and a broader gloss at face framing, not point sparkle. If it does show points, the facet contrast is doing more than this analysis expects.
+- **Session 2 (partly run 26 September), *Shimmer · strong*.** It was captured only in the creator's fixed light; its verdict needs the light sweep of the next session ([experiment 020](../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial)). Its facets are about 2.8 mm discs tilted at most 23°. Prediction: coarse, hammered-metal highlight patches close up and a broader gloss at face framing, not point sparkle. If it does show points, the facet contrast is doing more than this analysis expects.
 - **The glitter board** (designed in [experiment 018](../experiments/018-glitter-route/README.md#diagnostic-board), built and verified offline in [experiment 021](../experiments/021-glitter-board/README.md), not yet staged): six presets that separate the base recipe, nested against BOX mips, flake width, flake surface, tilt spread and the emissive accent, with a DLSS-against-DLAA check.
 
 ## Open questions

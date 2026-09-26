@@ -1,6 +1,6 @@
 # Worn clothing in the Studio
 
-**Status (26 September 2026): phases 1–4 built on `claude/clothing-render`** (the save's loadout, the item resolver, hiding and body context, drawing and the Clothing control); phases 5–8 open. Step 5 of the [standing direction](README.md#standing-direction-set-25-september-2026): show V's full in-game appearance, including the clothes the save says she wears, over the body `body-render` draws. How the built part works, and what it doesn't do yet, is [knowledge/clothing.md §6](../../knowledge/clothing.md#6-how-the-studio-draws-worn-clothing); the mechanics, with evidence grades, are the rest of that page; this page holds the design, the phases and the questions for the maintainer. Nothing is compared with the game yet: the in-game checks below are the next step.
+**Status (27 September 2026): phases 1–4 built and merged into `main`** (the save's loadout, the item resolver, hiding and body context, drawing and the Clothing control); phases 5–8 open. Step 5 of the [standing direction](README.md#standing-direction-set-25-september-2026): show V's full in-game appearance, including the clothes the save says she wears, over the body `body-render` draws. How the built part works, and what it doesn't do yet, is [knowledge/clothing.md §6](../../knowledge/clothing.md#6-how-the-studio-draws-worn-clothing); the mechanics, with evidence grades, are the rest of that page; this page holds the design, the phases and the questions for the maintainer. Nothing is compared with the game yet: the in-game checks below are the next step.
 
 Effort is rough agent effort: **S** under half a day, **M** one to two days, **L** longer or research-heavy.
 
@@ -8,11 +8,13 @@ Effort is rough agent effort: **S** under half a day, **M** one to two days, **L
 
 Load a save (or connect to the running game) and see V dressed as in game, in the same viewport as the head and body, with a control to take the clothes off while editing. Everything resolves through the generic resolver: vanilla and mod items follow the same rules the game and its core frameworks apply, with no per-mod intake ([AGENTS: interpret game files the way the game does](../../AGENTS.md#architecture-contract)).
 
-## What exists
+## What existed before phase 1
 
-- The save reader decodes only the creator appearance node ([save import](../eye-artistry/save-import.md)).
+This list records the starting point; phases 1–4 have since added the loadout reader and the item resolver ([worn clothing §6](../../knowledge/clothing.md#6-how-the-studio-draws-worn-clothing)).
+
+- The save reader decoded only the creator appearance node ([save import](../eye-artistry/save-import.md)).
 - The resolver already handles `.app` definitions, part entities, `partsOverrides` and chunk masks, ArchiveXL scopes, patches, links and dynamic material paths ([CC file chain §8](../../knowledge/cc-file-chain.md#8-generic-resolver-specification), [mod loading](../../knowledge/mod-loading.md)).
-- The TweakDB reader addresses a record's fields from its ID alone, for six value types (`tweakdb-flats.ts`).
+- The TweakDB reader addressed a record's fields from its ID alone, for six value types (`tweakdb-flats.ts`).
 - The native reader decodes object packages, the format of the save's script-system node, but only for classes in the RTTI dump ([archive format §5.3](../../knowledge/archive-format.md)).
 - The layered adapter draws `multilayered.mt` materials, which most garments use ([clothing §5](../../knowledge/clothing.md#5-clothing-materials)).
 - The runtime bridge can run read-only commands in the game ([runtime access](../../knowledge/runtime-access.md)).
@@ -67,7 +69,7 @@ That track (`D:/Dev/worktrees/body-render`) is building V's body now. This work 
 3. The feet variants (`l0_000_pwa_base__cs_flat` and the heel meshes) resolved from a feet state the resolver can set.
 4. Room for a per-vertex offset on body meshes later, for garment support (the female body mesh carries GarmentSupport data).
 
-How the body track met them (26 September; [body rendering §5](../../knowledge/body-rendering.md#5-for-clothing-later-the-four-requirements)): component names and depot paths are in the record; the resolver applies each chunk mask and the served geometry is a chunk copy of the cached export, so a changed mask re-plans without exporting again (drawing every chunk and masking at draw time would need the masked chunks' materials resolved too); `BodyState.feet` picks the feet group; the garment-support attributes and shape key are in the exports and kept by the loader. The body's underwear cover already follows the body's shape through a carried-over shape key, a first stand-in for garment support. Nudity follows point 3 of the decisions below: the body is drawn with the game's own underwear cover over it.
+How the body track met them (26 September; [body rendering §5](../../knowledge/body-rendering.md#5-what-clothing-uses-from-the-body-the-four-requirements)): component names and depot paths are in the record; the resolver applies each chunk mask and the served geometry is a chunk copy of the cached export, so a changed mask re-plans without exporting again (drawing every chunk and masking at draw time would need the masked chunks' materials resolved too); `BodyState.feet` picks the feet group; the garment-support attributes and shape key are in the exports and kept by the loader. The body's underwear cover already follows the body's shape through a carried-over shape key, a first stand-in for garment support. Nudity follows point 3 of the decisions below: the body is drawn with the game's own underwear cover over it.
 
 ### Export
 

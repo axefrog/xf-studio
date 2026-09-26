@@ -23,7 +23,7 @@ This page answers how V's face is animated, and in particular how a blink closes
 | Lashes | The `eye_lid_lashes_*` joints hang under the lid rows and have no pose of their own: they follow the lid through the hierarchy | [resource] |
 | Correctives | 38 face correctives name a blink. `eye_[lr]_blink__Corr` fires with every blink but carries no transforms in the female setup; the rest combine the blink with gaze, squints or brows and act only when those move too | [resource] |
 | Timing, gameplay | `generic_facial_additives.anims` holds `additive__blink_fast/half/normal/slow/tiny__01` (0.33 to 0.57 s) and eyes-closed clips. The normal blink reaches 1.0 at 0.10 s and is open again by about 0.33 s, adding a little outer squint, brow lower, widen, gaze down and pupil dilation | [resource] |
-| When they play | The creator and photo-mode face graphs have no periodic blink; the additive blink clips play when the gaze moves (a parallel study of expressions) | [resource] |
+| When they play | The creator and photo-mode face graphs have no periodic blink; the additive blink clips play when the gaze moves ([facial expressions §2](facial-expressions.md#2-which-graph-drives-vs-face-where)) | [resource] |
 | Creator idle | The close-up idle's face clip has nine blinks of its own (peaks 0.51 to 0.97, about 0.4 s each, both eyes identical), on average 2.45 s apart | [resource] |
 
 ## 3. Which facial setup V uses
@@ -55,10 +55,10 @@ The female face-rig entity names the **male** player setup (`h0_001_ma_c__player
 
 ## Open questions
 
-1. Which facial setup does the engine solve V's face with: the female head's own or the male player setup the face-rig entity names?
+1. Which facial setup does the engine solve V's face with: the female head's own or the male player setup the face-rig entity names? A probe is prepared (the bridge's `face.rig.read`, check R1 on the [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2); a CET fallback in [experiment 022](../experiments/022-session-3/README.md#part-d-expression-console-checks-optional)).
 2. How does the engine combine the joint binds of V's five region targets, and what happens to joints no target lists (the lid roots)?
 3. Does the game's blink close every eye shape completely, or does it leave the slit the preview shows on `h091` and `h011` (measured offline) and `h111` (seen in the browser)? Does `h011` close fully in game, as it does about the base centre?
-4. Which blink clip plays when, and at what rate, during gameplay and in the creator?
+4. What counts as a gaze change for the look-at controller's blinks, and what drives blinks in gameplay outside the creator and photo-mode graphs? (Those graphs play the additive blink clips on gaze changes, with minimum intervals, and have no periodic blink: [facial expressions §2](facial-expressions.md#2-which-graph-drives-vs-face-where).)
 5. Does the closed lid on deep-set shapes uncover skin outside the eye plate in game?
 
 ## In-game test asks
@@ -71,4 +71,4 @@ Batch into one prepared session; record the game version and the face-rig and mo
 
 ## Related pages
 
-[Character-creator idle](../research/animation/cc-idle.md) · [The game's blink](../research/animation/game-blink.md) · [Brow idle gap](../research/animation/brow-idle-gap.md) · [CC file chain](cc-file-chain.md) · [Eye rendering](eye-rendering.md) · [Brows](brows.md) · [Tooling](tooling.md)
+[Facial expressions and idles](facial-expressions.md) · [Character-creator idle](../research/animation/cc-idle.md) · [The game's blink](../research/animation/game-blink.md) · [Brow idle gap](../research/animation/brow-idle-gap.md) · [CC file chain](cc-file-chain.md) · [Eye rendering](eye-rendering.md) · [Brows](brows.md) · [Tooling](tooling.md)

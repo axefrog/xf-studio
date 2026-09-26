@@ -211,7 +211,7 @@ GBuffer0.rgb = sqrt(base);
 
 **Gradient interpolation.** The program holds no stops and no interpolation loop: one hardware sample of a runtime atlas (`t55`, 512 rows) at the mask's R, on the row centre the engine binds for `IrisColorGradient` [observed]. Unlike the hair profile row, there is no sample-count texel or sample-index arithmetic: R addresses the row directly across its width [observed]. No static program builds gradients (the static index has no gradient technique besides RTXDI's), so the atlas is filled on the CPU [source-supported by absence]. Its width, texel format, colour space, stop interpolation and the `s10` filter are not in any shader [hypothesis]. The row is sampled at its centre, so a bilinear filter mixes along the row only.
 
-`CGradient` stops are `{value, RGBA bytes}` [observed]. The Studio bakes the 8-bit stops interpolated linearly, clamped beyond the end stops, then decoded from sRGB by the sampler (the hair-profile model) [hypothesis; test ask 9].
+`CGradient` stops are `{value, RGBA bytes}` [observed]. The Studio bakes the 8-bit stops interpolated linearly, clamped beyond the end stops, then decoded from sRGB by the sampler, without rescaling the stops [hypothesis; test ask 9]. The `.hp` bake read from the executable sorts the stops and rescales them to span 0–1 ([hair reference §7](shader-hair.md#7-hp-profiles-and-their-resolution)); whether the `CGradient` bake does too is open (question 3).
 
 ### 5.7 Roughness and metalness
 
@@ -355,7 +355,7 @@ The earlier rendering order (upside-down albedo, no shell) is fixed; the shell r
 
 1. `IrisMask` R and gamma-flagged normals: raw or sRGB-decoded (§4)? More generally, does `isGamma` on a `TCM_QualityColor` texture always produce sRGB sampling?
 2. What exactly are the per-eye modifier vectors (the eye joints' forward and lateral axes, a look-at frame, something else), and which way does the ±5° turn? Which engine input makes the iris plane follow the mesh's orientation where the exported frame mirrors it (§5.3)?
-3. How is the gradient atlas built (row width, stop interpolation space, format, `s10` filtering)? Is its row index shared with any other gradient consumer?
+3. How is the gradient atlas built (row width, stop interpolation space, format, `s10` filtering)? Does it sort and rescale the stops to 0–1 as the `.hp` bake does (that would change the `eye_red` predictions)? Is its row index shared with any other gradient consumer?
 4. Is `cb6[9].w` the `DiffuseBoost` option and `cb6[9].z` `UseAOOnEyes` (§6.3)? What is `cb13[4]`?
 5. Does the morph `baseTexture` really replace `Normal` at run time ([eye rendering §1.3](../../knowledge/eye-rendering.md#13-the-morph-resource-can-replace-the-eyes-normal-map))?
 6. `eye_blendable`'s fade `w` and `eye_morph`'s wipe driver: which engine systems set them (not needed for V).
