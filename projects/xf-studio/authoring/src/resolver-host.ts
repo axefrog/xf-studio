@@ -21,6 +21,7 @@ import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { writeFileAtomic } from "./derived-cache";
 import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
+import { raiseLowPriority } from "./process-tree";
 import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
 import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
@@ -227,6 +228,8 @@ function laneFor(cacheDir: string): CacheLane {
 export async function foregroundExtraction<T>(cacheDir: string, work: () => Promise<T>): Promise<T> {
   const lane = laneFor(cacheDir);
   lane.foreground++;
+  // A resource this work needs may be in a background batch already: that batch must not run at background priority now.
+  raiseLowPriority();
   try { return await work(); } finally { lane.foreground--; }
 }
 /** Run `work` as background work on a cache folder: its batches run below normal priority, unless foreground work runs too. */
