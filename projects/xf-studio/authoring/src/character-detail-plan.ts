@@ -1,6 +1,6 @@
 /**
  * Pure selection step between the generic resolver and the character render record: which resolved
- * drawing components are the V's head skin, face details, brows, lashes, hair, eyes, piercings and body, which of their chunks the preview can
+ * drawing components are the V's head skin, face details, brows, lashes, hair, eyes, teeth, piercings and body, which of their chunks the preview can
  * draw, and each chunk's effective material inputs (instance chain first, then the template's defaults, then the
  * morph target's `baseTexture` rule).
  *
@@ -32,10 +32,16 @@
  *   consumed by the third-person head's face (`TPP`, `face` or `beards` groups) whose option no other detail claims, drawn
  *   by its components' post-G-buffer decal chunks (the `mesh_decal` family). Vanilla makeup, lipstick, cheeks, blemishes,
  *   scars, tattoos, face cyberware and stubble, and any CCXL option that adds such a decal, qualify the same way;
- *   piercings (layered earrings), teeth (skin) and the face rig do not. The skin type's own decal parts (the personal-link
+ *   piercings (layered earrings), the teeth (their own slot) and the face rig do not. The skin type's own decal parts (the personal-link
  *   port) join the face details. Components are ordered by the creator resource's option order (merged CCO, so CCXL
  *   options follow vanilla), the documented fallback for the unknown order between same-priority decals
  *   (knowledge/head-cc-rendering.md §3).
+ * - **Teeth** (the `teeth` slot) are the choice on the creator's `teeth` slot, consumed by the third-person head (`TPP`): the mouth interior,
+ *   a morph-target mesh that follows the `mouth` shapes. Its chunk draws by its own template like any other: the default choice's mesh
+ *   appearance is `skin.mt` with the teeth's own skin profile, the metal and pink ones are `multilayered.mt` [resource]; a chunk with no
+ *   adapter (the unreached `default` appearance's `metal_base.remt`) is left out and said plainly. An appearance that lists one component
+ *   name several times (a morph-additions mod lists the teeth 16 times) draws it once: the first drawable one, as the body draws a repeated
+ *   part once [hypothesis: one component per name in an entity].
  * - **Piercings** (the `piercings` slot) are the choices on the creator's piercing slot (`piercings_color`), consumed by the face
  *   groups like the face details. Each drawing component of the resolved appearance is planned with its own chunk mask, so a vanilla
  *   style, a framework that replaces the style's `.app` (inline components, one per filled slot; zero-chunk placeholders draw
@@ -62,7 +68,7 @@ import type { ClothingFailure, ResolvedClothing } from "./clothing-resolver";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
-  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes", piercings_color: "piercings" });
+  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes", teeth: "teeth", piercings_color: "piercings" });
 /** Groups consumed by the third-person head and hair controllers. */
 export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
 /**
@@ -257,6 +263,30 @@ export const recordMorphTexture = (rule: PlannedComponent["morphTexture"]): Rend
 const decalOnly = (component: PlannedComponent) => component.materials.every(material => isDecal(renderTemplate(material.template, material.templateName)));
 
 /**
+ * A plain teeth label from the choice's definition: its finish (`female_ht_000__basehead__silver` → `silver`), or `natural` for the
+ * definition without one (the default choice, `female_ht_000__basehead`). Labels only; selection never uses them.
+ */
+export function teethLabel(definition: string): string {
+  return definition.split("__").length > 2 ? choiceLabel(definition) : "natural";
+}
+
+/**
+ * One drawn part per component name in an appearance, and one per identical part across the slot's choices (the body's rule, `planBody`):
+ * an appearance that lists one name several times draws its first drawable component of that name [hypothesis: one component per name in
+ * an entity; the engine's handling is unread].
+ */
+function oncePerPart(items: readonly { entry: ResolvedAppearance; item: PlannedComponent }[]): PlannedComponent[] {
+  const names = new Set<string>(), parts = new Set<string>(), out: PlannedComponent[] = [];
+  for (const { entry, item } of items) {
+    const name = `${entry.part}|${entry.option}|${entry.definition}|${item.component}`;
+    const part = `${item.component}|${item.drawnFrom.ref.hash}|${item.chunks.join(",")}|${item.materials.map(material => material.name).join(",")}`;
+    if (names.has(name) || parts.has(part)) continue;
+    names.add(name); parts.add(part); out.push(item);
+  }
+  return out;
+}
+
+/**
  * The face details: the V's own decals over the head, in the draw-order fallback (creator option order), and one outcome.
  * `skinDecals` are the decal parts the skin type's appearance brings.
  */
@@ -285,8 +315,8 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
       .filter((item): item is PlannedComponent => !!item);
     const order = options.get(entry.option)?.index ?? Number.MAX_SAFE_INTEGER;
     if (items.length) { for (const item of items) planned.push({ component: item, order, label: label(entry) }); continue; }
-    // A face decal that resolved but can't be drawn (its geometry is missing) is reported. Layered earrings, the teeth and
-    // the face rig are not decals and stay out silently.
+    // A face decal that resolved but can't be drawn (its geometry is missing) is reported. Layered earrings and the face rig are
+    // not decals and stay out silently (the teeth have a slot of their own).
     if (entry.components.some(component => component.materials.some(material => isDecal(chunkTemplate(material, identities)))))
       unshown.push(label(entry));
   }
@@ -514,7 +544,7 @@ export function planClothing(clothing: ResolvedClothing | ClothingFailure | null
 }
 
 /**
- * Select the head skin, face details, brows, lashes, hair, eyes, piercings and body of a resolved character. Each slot reports one outcome:
+ * Select the head skin, face details, brows, lashes, hair, eyes, teeth, piercings and body of a resolved character. Each slot reports one outcome:
  * shown, none (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
 /**
@@ -551,14 +581,16 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     const entries = resolved.appearances.filter(entry => entry.part === "head" && slotOf.get(entry.option) === slot &&
       entry.groups.some(group => slotGroups(slot).includes(group)));
     if (!entries.length) { slots.push({ slot, state: "none", label: "None" }); continue; }
-    const planned = entries.flatMap(entry => entry.components.map(component => {
+    const found = entries.flatMap(entry => entry.components.map(component => {
       const item = planComponent(slot, entry, component, defaults, identities);
       // The skin type's decal parts (the personal-link port) are face details, not the skin.
       if (item && slot === "skin" && decalOnly(item)) { skinDecals.push({ entry, component }); return null; }
-      return item;
-    }).filter((item): item is PlannedComponent => !!item));
+      return item ? { entry, item } : null;
+    }).filter((item): item is { entry: ResolvedAppearance; item: PlannedComponent } => !!item));
+    const planned = slot === "teeth" ? oncePerPart(found) : found.map(entry => entry.item);
     const names = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition)
-      : slot === "piercings" ? piercingLabel(cco, entry.option, entry.definition) : choiceLabel(entry.definition)))];
+      : slot === "piercings" ? piercingLabel(cco, entry.option, entry.definition) : slot === "teeth" ? teethLabel(entry.definition)
+      : choiceLabel(entry.definition)))];
     const label = clampedList(names), inMessage = clampedList(names, 160);
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");

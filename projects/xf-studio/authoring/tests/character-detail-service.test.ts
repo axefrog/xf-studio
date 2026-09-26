@@ -72,7 +72,7 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-10");
+    expect(record.schema).toBe("xfs/render-detail-11");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
@@ -98,7 +98,8 @@ describe("character record from the resolver", () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
     // Every head slot is unavailable; V "A" as saved here lists no body part.
-    expect(record.slots.map(s => s.state)).toEqual([...Array(7).fill("unavailable"), "none", "none"]);
+    // The fixture's V "A" has no teeth choice.
+    expect(record.slots.map(s => s.state)).toEqual([...Array(6).fill("unavailable"), "none", "unavailable", "none", "none"]);
     expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
     expect(record.slots[1]!.message).toBe("WolvenKit couldn't read your V's face details from your game files, so they aren't shown.");
     expect(record.slots[4]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");

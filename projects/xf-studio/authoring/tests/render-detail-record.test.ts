@@ -65,7 +65,7 @@ const character = (): CharacterDetail => ({
       templateName: "skin", materialPriority: "EMP_Normal", scalars: { TintScale: 0.7 }, colours: {}, textures: { Albedo: texture() }, profiles: {}, skinProfiles: {},
       gradients: {} })) }],
   slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "face", state: "shown", label: "lipstick (red)" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
-    { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" },
+    { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "teeth", state: "none", label: "None" }, { slot: "piercings", state: "shown", label: "style 09, black" },
     { slot: "body", state: "shown", label: "body, arms, underwear" }, { slot: "clothing", state: "none", label: "None" }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
@@ -75,8 +75,8 @@ const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identit
 describe("render record versions", () => {
   test("v9 carries the character record with its piercings, layered stacks and body (with its own shapes), and no choices to try; parsing is lossless and idempotent", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-10");
-    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"]);
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-11");
+    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "teeth", "piercings", "body", "clothing"]);
     expect(parseCharacterDetail(record).components.find(item => item.slot === "body")?.morphs).toEqual(["breast_big_breast"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(parseRenderDetail(record)).toEqual(record);
@@ -130,8 +130,10 @@ describe("render record versions", () => {
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-5" })).toMatchObject({ detail: "core-head" });
     // A newer record (a host updated while the page ran) is a version error the page words, not a silent failure.
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-11" })).toThrow(RenderDetailVersionError);
-    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-11" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-12" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-12" })).toThrow(RenderDetailVersionError);
+    // A v10 character record (no teeth slot) is prepared again, never read.
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-10" })).toThrow(RenderDetailVersionError);
     // A v9 character record (a body without censorship parts) is prepared again, never read.
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-9" })).toThrow(RenderDetailVersionError);
     // A v7 character record (no body slot) is prepared again, never read.

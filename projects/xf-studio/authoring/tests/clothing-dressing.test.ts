@@ -7,7 +7,7 @@ import { CHARACTER_REQUEST_SCHEMA, parseCharacterRequest, sameCharacter } from "
 import { NO_OVERRIDES, type ResolvedComponent } from "../src/character-resolver";
 import { BASIC_UNDERWEAR, clothingSettingOf, DEFAULT_CLOTHING, dressingFor, hairTypeOf } from "../src/clothing-dressing";
 import type { ResolvedClothing, ResolvedGarment } from "../src/clothing-resolver";
-import { parseCharacterDetail } from "../src/render-detail";
+import { DETAIL_SLOTS, parseCharacterDetail } from "../src/render-detail";
 import type { SavedLoadout } from "../src/save-loadout";
 import type { SavedV } from "../src/save-reader";
 import { tweakDbId } from "../src/tweakdb-flats";
@@ -173,9 +173,9 @@ describe("Clothing setting", () => {
       geometry: { ...resource("g.glb"), depotPath: "x.mesh", depotHash: "1", morphTargets: false }, renderChunks: 1, chunks: [0],
       materials: [{ chunk: 0, name: "m", template: null, templateName: null, materialPriority: null, scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} }],
       ...(garment ? { garment } : {}) });
-    const record = (components: object[]) => ({ schema: "xfs/render-detail-10", detail: "character", identity: "i", origin: "game-files",
+    const record = (components: object[]) => ({ schema: "xfs/render-detail-11", detail: "character", identity: "i", origin: "game-files",
       character: { source: "save", bodyGender: "female" }, provenance: { label: "l", notes: [] }, components,
-      slots: ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"].map(slot => ({ slot, state: "none", label: "None" })) });
+      slots: DETAIL_SLOTS.map(slot => ({ slot, state: "none", label: "None" })) });
     const parsed = parseCharacterDetail(record([component("clothing", { area: "Legs", item: "102", layer: 60 })]));
     expect(parsed.components[0]!.garment).toEqual({ area: "Legs", item: "102", layer: 60 });
     expect(parseCharacterDetail(record([component("body", { area: "Legs", item: "102", layer: 60 })])).components).toEqual([]);

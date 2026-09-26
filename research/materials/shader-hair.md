@@ -236,17 +236,20 @@ Ranked by how much each can move the colour a player sees:
 
 | Game step | Preview | Status |
 |---|---|---|
-| Profile bake | `bakeHairProfile`: raw positions, `t = k/(N−1)`, float interpolation, then the sRGB decode | **Differs from §7**: no rescaling to 0–1, different sample positions, no truncation |
+| Profile bake | `bakeHairProfile` (`bakeHairProfileBytes`, then the sRGB decode): sorted and rescaled stops, `t = k/N`, 8-bit interpolation truncated | Faithful (27 September). It reproduces §9's lash colours exactly: (172, 130, 15) base, (59, 28, 0) Alliekat |
 | Truncated lookup, overlay, shadow term, `\|c\|` | Float profile texture, `texelFetch` | Faithful |
 | Coverage: remap, dither range, nesting | Alpha-to-coverage with `hairResolvedCoverage` | Coverage faithful; colour within a pixel approximate (no k-buffer, no 0.98 eviction) |
 | Sun hair light | `xfsHairDirect` with `GlobalLight` intensities | Faithful; constants now [observed] defaults |
-| Local hair light | The same function per spot light with `HAIR_LOCAL_LIGHT` (0.35, 0.8, 0.47) | Faithful; values and pairing [observed]. The adapter's comment that the path is not decoded and that TRT and MultiScatter are hypotheses is stale |
+| Local hair light | The same function per spot light with the `LocalLight` triple of `HairLighting` (0.35, 0.8, 0.47; `HAIR_LOCAL_LIGHT`) | Faithful; values and pairing [observed] |
 | Per-light factor (`cb0[15].w`) | Not modelled | Correct for vanilla (`DebugSwitch1` off) |
-| Environment | Three's ambient diffuse × `EnvProbe/MultiScatter`; no environment R/TRT | **Differs from §6.5**: missing the `2·C·w²` factor and the irradiance-lit R and TRT lobes |
+| Environment | The model once for `L_e` with the `EnvProbe` triple and `AdditionalAreaRoughness`, × 2 × Three's irradiance taken along `L_e` (ambient, hemisphere, light probe, image-based); replaces Three's indirect diffuse (× albedo again) and indirect specular | Faithful to §6.5 in form (27 September); the irradiance is the scene's, not the game's cube, and is zero under the creator preset |
 | Sway animation | Not drawn | Static by default in the game too |
 | Cap | Mask-blended gradient decal, linear "over" | Lighter at partial coverage than the game's square-root blend |
 
 ### 11.1 Recommended preview changes (for a code track)
+
+**Items 1–4 are done (27 September 2026)**: `src/hair-colour-model.ts` (`rescaledStops`, `bakeHairProfileBytes`, `bakeHairProfile`, `sampleStopsEncoded`, `HAIR_LIGHTING_VANILLA` with the local and environment triples, `hairEnvironmentLight`) and `src/hair-shading.ts` (`HAIR_LIGHT_GLSL`), with their tests; the swatch-fit tool carries the bake as a hypothesis (rerun over 24 vanilla swatches: median 4.3° against 4.8° for the earlier model). One refinement over item 4: the irradiance is taken along `L_e`, as the game reads its ambient cube there, rather than Three's value at the normal. The list is kept as the specification.
+
 
 1. **Bake** (`src/hair-colour-model.ts`, `bakeHairProfile` and `sampleStopsEncoded`): sort the stops, rescale positions to `(v − v_first)/(v_last − v_first)` (even spacing below a 0.001 range), sample `t = k/N`, interpolate the 8-bit values and truncate each channel, then decode with `srgbToLinear`. `profileIndex` stays `floor((N−1)·s)`. The `"stored-linear"` `ProfileEncoding` is no longer a live hypothesis. `sampleHairGradient` in `src/hair-shading.ts` (raw colours for display) should use the same rescaled positions. Add the bake as a hypothesis in `tools/hair-profile-swatch-fit.py`, and update the model's tests.
 2. **Option values** (`src/hair-colour-model.ts`, `HAIR_LIGHTING_VANILLA`): the values are unchanged, but their grade becomes the executable defaults [observed]. Add `envR` 0.3, `envTRT` 0.8 and `additionalAreaRoughness` 0.1 for item 4.

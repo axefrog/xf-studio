@@ -32,7 +32,7 @@ export type RenderBand = {
 };
 
 /** A drawn character slot (render-detail.ts `DetailSlot`); the host checks the two lists agree. */
-export type CharacterSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings" | "body" | "clothing";
+export type CharacterSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "teeth" | "piercings" | "body" | "clothing";
 
 /**
  * A resolved part a feature replaces while it says so (PREV-89): a whole slot, or only the slot's components that came from the
