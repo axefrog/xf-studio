@@ -1,20 +1,22 @@
 import type { CharacterDetailHost } from "./character-detail-host";
 import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest } from "./character-detail-request";
+import { CREATOR_LIMITS } from "./creator-names";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
+import { BodyTooLargeError, readBodyText } from "./request-body";
 
 /**
  * Host endpoint for the preview's resolved character details, shared by localhost and the desktop.
- * POST takes one character request (`xfs/character-request-3`, or an earlier one without a tried choice) and returns the preparation state;
+ * POST takes one character request (`xfs/character-request-4`, or an earlier one without a tried choice) and returns the preparation state;
  * a request of a version this host doesn't read is refused with `unsupported_version` and the versions it does read, so a page built
  * apart from the host (the app updated while it ran) can say so instead of failing silently;
  * GET `?key=` polls it. The launch route and tools come from the host's own settings, never the
- * browser. Callers mount it behind their own session checks (the desktop adds a token cookie).
+ * browser. Callers mount it behind their own session checks (the desktop adds a token cookie). The body is read within the shared
+ * request limit (creator-names.ts), its declared length checked first (PIPE-79, PIPE-83).
  * `serveCharacterAsset` answers `/assets/character/<content-addressed name>`.
  */
 export const CHARACTER_DETAIL_ENDPOINT = "/api/preview-character";
 export const CHARACTER_ASSET_PREFIX = "/assets/character/";
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
-const MAX_BODY = 512 * 1024;
 
 export function createCharacterDetailHandler(host: CharacterDetailHost, options: { trustedOrigin?: (request: Request) => boolean } = {}) {
   return async (request: Request): Promise<Response> => {
@@ -33,10 +35,9 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
       return json({ code: "forbidden", error: "Use the local studio to prepare the preview." }, 403);
     let body: unknown;
     try {
-      const text = await request.text();
-      if (text.length > MAX_BODY) return json({ code: "too_large", error: "Request is too large." }, 413);
-      body = parseCharacterRequest(JSON.parse(text));
+      body = parseCharacterRequest(JSON.parse(await readBodyText(request, CREATOR_LIMITS.requestBytes)));
     } catch (error) {
+      if (error instanceof BodyTooLargeError) return json({ code: "too_large", error: "Request is too large." }, 413);
       if (error instanceof CharacterRequestVersionError) return json({ code: "unsupported_version", error: "This page and the preview host are different versions.",
         request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA }, 409);
       return json({ code: "invalid", error: "Invalid character request." }, 400);

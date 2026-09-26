@@ -39,16 +39,15 @@
  *   style, a framework that replaces the style's `.app` (inline components, one per filled slot; zero-chunk placeholders draw
  *   nothing) and a CCXL option on the slot all resolve through the same rules (knowledge/cc-file-chain.md §6). Their chunks are layered
  *   (`multilayered.mt`): each carries its `.mlsetup` and `.mlmask` references for the host to read into the chunk's layer stack.
- * - **Slot choices**: the record still lists each `CHOICE_SLOTS` slot's creator switcher choices (`slotChoices`) for readers of the
- *   record. Choices a viewer makes are the character context's (character-context.ts): the host derives the whole V from them with the
- *   shared R5 rules before planning, so there is no per-slot override here any more (CORE-58). An option a slot's switcher activates
- *   belongs to that slot even when its own `uiSlot` is another (`detailSlotOf`).
+ * - **Choices** a viewer makes are the character context's (character-context.ts): the host derives the whole V from them with the
+ *   shared R5 rules before planning, so the record lists no choices to try and no override (CORE-58, PIPE-82). An option a slot's
+ *   switcher activates belongs to that slot even when its own `uiSlot` is another (`detailSlotOf`).
  */
 import { switcherReach, type CcoOption, type CcoResource } from "./cco-model";
 import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
-import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoiceOption, RenderChoices, RenderMorphTexture, RenderRgba } from "./render-detail";
-import { CHOICE_SLOTS, clampedList, DETAIL_SLOTS, isChoiceLabel, isChoiceName, RECORD_LIMITS, SLOT_WORDS } from "./render-detail";
+import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
+import { clampedList, DETAIL_SLOTS, isChoiceLabel, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
@@ -95,9 +94,7 @@ export type PlannedComponent = {
   /** Morph components: the effective `baseTexture` rule (already applied to `materials`). */
   morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
 };
-export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[]; choices: RenderChoices[];
-  /** Creator choices left out because a name breaks the record's rule (`isChoiceName`), one plain line each. */
-  choiceNotes: string[] };
+export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
@@ -312,13 +309,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     components.push(...planned);
     slots.push({ slot, state: "shown", label });
   }
-  const choiceNotes: string[] = [];
-  const choices = CHOICE_SLOTS.map(slot => {
-    const listed = slotChoices(cco, slot);
-    choiceNotes.push(...listed.notes);
-    return { slot, options: listed.options };
-  });
-  return { components, slots, choices, choiceNotes };
+  return { components, slots };
 }
 
 /** Creator slot names (`uiSlot`) that feed one detail slot. */
@@ -358,7 +349,6 @@ function choiceController(cco: CcoResource, names: readonly string[]): Appearanc
   return targets.find(option => option.linkController) ?? targets[0] ?? null;
 }
 
-const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 /**
  * The one plain label of a switcher choice (UI-49), lower case: `style 09` for the creator's numbered styles; a readable name the
  * creator gives (not a localisation key), with underscores as spaces; otherwise the words of the option it drives.
@@ -378,37 +368,7 @@ function switcherChoiceOf(cco: CcoResource, slot: DetailSlot, option: string) {
 }
 
 /**
- * The choices a viewer may try on a choice slot, as the creator offers them: every choice of the slot's switchers (in switcher and choice
- * order) that drives an option with named colours, identified by the choice's `localizedName` (ArchiveXL merges switcher choices by it,
- * so it is unique within a switcher; the first switcher offering a name keeps it), with its plain label and the colours of the option it
- * drives. "Off" (no named colour) is not a choice to try; the V's own is. Vanilla and CCXL choices alike; never a mod name. A name that
- * breaks the record's rule (`isChoiceName`) is left out with a note, so the record the browser reads always parses.
- */
-export function slotChoices(cco: CcoResource, slot: ChoiceSlot): { options: RenderChoiceOption[]; notes: string[] } {
-  const options: RenderChoiceOption[] = [], notes: string[] = [], seen = new Set<string>();
-  let unnamed = 0, unreadable = 0, colours = 0;
-  for (const switcher of slotSwitchers(cco, slot)) for (const choice of switcher.options) {
-    const controller = choiceController(cco, choice.names);
-    if (!controller) continue;
-    if (!isChoiceName(choice.localizedName)) { if (choice.localizedName) unreadable++; else unnamed++; continue; }
-    if (seen.has(choice.localizedName)) continue;
-    seen.add(choice.localizedName);
-    if (options.length >= RECORD_LIMITS.options) { notes.push(`Only the first ${RECORD_LIMITS.options} ${slot} styles can be tried.`); break; }
-    const named = controller.definitions.filter(definition => definition.name);
-    const valid = named.filter(definition => isChoiceName(definition.name)).slice(0, RECORD_LIMITS.definitions);
-    colours += named.length - valid.length;
-    if (!valid.length) { unreadable++; continue; }
-    options.push({ choice: choice.localizedName, label: capitalise(styleLabel(choice.localizedName, controller.name)),
-      definitions: valid.map(definition => ({ name: definition.name, label: capitalise(choiceLabel(definition.name)) })) });
-  }
-  if (unreadable) notes.push(`${unreadable} ${slot} style(s) have names XF Studio can't offer to try, so they're left out of the list.`);
-  if (unnamed) notes.push(`${unnamed} ${slot} style(s) have no creator name, so they're left out of the list.`);
-  if (colours) notes.push(`${colours} ${slot} colour(s) have names XF Studio can't offer to try, or come after the first ${RECORD_LIMITS.definitions}, so they're left out of the list.`);
-  return { options, notes: [...new Set(notes)] };
-}
-
-/**
- * A plain piercing label from the same rule as the choices on offer (`styleLabel`): the style as the creator's switcher names it, and the
+ * A plain piercing label (`styleLabel`): the style as the creator's switcher names it, and the
  * colour (`piercings_09`, `i0_000_pwa__earring__03_black` → `style 09, black`). An option no switcher offers reads as its colour only.
  */
 export function piercingLabel(cco: CcoResource, option: string, definition: string): string {

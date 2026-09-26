@@ -116,7 +116,7 @@ describe("the loader parses each geometry file once", () => {
       materialPriority: "EMP_Normal", scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} })) });
   const record = (components: RenderComponent[]): CharacterDetail => ({ schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: "a".repeat(64),
     origin: "game-files", character: { source: "save", bodyGender: "female" }, provenance: { label: "fixture", notes: [] }, components,
-    slots: [{ slot: "face", state: "shown", label: "fixture" }], choices: [] });
+    slots: [{ slot: "face", state: "shown", label: "fixture" }] });
 
   test("two components drawing one file share one parse and its geometry, each with its own objects and skeleton", async () => {
     const bytes = morphMesh(3), file = `${sha(bytes)}.glb`;
@@ -156,7 +156,7 @@ describe("a tried choice loads only what changed (PREV-68)", () => {
       materialPriority: "EMP_Normal", scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} })) });
   const record = (components: RenderComponent[]): CharacterDetail => ({ schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: "a".repeat(64),
     origin: "game-files", character: { source: "save", bodyGender: "female" }, provenance: { label: "fixture", notes: [] }, components,
-    slots: [{ slot: "face", state: "shown", label: "fixture" }, { slot: "piercings", state: "shown", label: "fixture" }], choices: [] });
+    slots: [{ slot: "face", state: "shown", label: "fixture" }, { slot: "piercings", state: "shown", label: "fixture" }] });
 
   test("components whose content is unchanged are taken over, not fetched or built again; ownership moves only when the scene adopts them", async () => {
     const face = morphMesh(3), faceFile = `${sha(face)}.glb`, before = morphMesh(2), beforeFile = `${sha(before)}.glb`, after = morphMesh(1), afterFile = `${sha(after)}.glb`;

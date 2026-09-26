@@ -14,7 +14,7 @@ import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewText
 import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 import {parseGlitterChoices, type GlitterChoices} from "./engines/layered-makeup/glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
-import { isChoiceName } from "./render-detail";
+import { isCreatorName } from "./creator-names";
 import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
@@ -28,8 +28,9 @@ export type PreviewState = {
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
   /**
-   * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`). Kept so stored bytes stay the same; always
-   * written empty once the character context owns every creator choice (CORE-58), and never read back.
+   * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`): a switcher choice and a definition of the option
+   * it activates. Read so an untouched workspace writes it back unchanged, and so the character context can turn it into the matching
+   * Piercings choices once the catalogue is ready (CORE-74); nothing writes new values here.
    */
   piercingStyle: string; piercingDefinition: string;
   /**
@@ -154,8 +155,8 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
     for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
-    // The retired tried piercing style is read (with the record's name rule) only so an untouched workspace writes it back unchanged.
-    if (isChoiceName(p.piercingStyle) && isChoiceName(p.piercingDefinition)) {
+    // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
+    if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;
     }
     // The character context: the V's source and the choices set on it, validated; anything unreadable is dropped.
