@@ -134,11 +134,8 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
       if (existsSync(target)) exactFilenameConflicts.push(`Enabled MO2 mod ${name} has ${file}`);
     }
   }
-  const manifest = paths.candidate.manifest as typeof paths.candidate.manifest & {
-    verifiedPresetCount?: number; omissions?: unknown[];
-  };
-  requireValue(Number.isSafeInteger(manifest.verifiedPresetCount) && manifest.verifiedPresetCount! > 0,
-    "Diagnostic candidate has no recorded presets.");
+  // Either manifest version: the looks its verifiers checked (PIPE-09).
+  requireValue(paths.candidate.manifest.presetCount > 0, "Diagnostic candidate has no recorded presets.");
   const legacy = EYE_MAKEUP_MOD.predecessorMods.some(name => names.includes(name));
   const dedicatedModExists = existsSync(join(paths.mo2, "mods", EYE_MAKEUP_MOD.modName));
   const legacyFolder = legacyModFolder(join(paths.mo2, "mods"));
@@ -158,9 +155,9 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   if (exactFilenameConflicts.length) cautions.push("Exact archive filename conflicts require resolution before a diagnostic launch.");
   return {
     schema: "xfs/runtime-diagnostic-plan-2", candidateId: options.candidateId,
-    namespace: manifest.namespace, candidateFiles: manifest.files,
-    verifiedUnpackedFiles: manifest.verifiedUnpackedFiles,
-    presetCount: manifest.verifiedPresetCount!, omissions: Array.isArray(manifest.omissions) ? manifest.omissions.length : 0,
+    namespace: paths.candidate.manifest.namespace, candidateFiles: paths.candidate.manifest.files,
+    verifiedUnpackedFiles: paths.candidate.manifest.verifiedUnpackedFiles,
+    presetCount: paths.candidate.manifest.presetCount, omissions: paths.candidate.manifest.omissionCount,
     sourceProfileModlistSha256: sha(paths.modlist), sourceProfileEnabledMods: names.length,
     sourceProfileLegacyEnabled: legacy, sourceProfileModEntryPresent: listed(EYE_MAKEUP_MOD.modName),
     sourceProfileLegacyModEntryPresent: EYE_MAKEUP_MOD.legacyModFolders.some(listed),

@@ -10,7 +10,9 @@ import { collectionDraft } from "../../src/collection-workspace";
 import { loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
 import { freshWorkspace } from "../../tests/fixtures/eye-region";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
-import { createPackageHandler } from "../../tests/fixtures/eye-exporter";
+import { createPackageHandler, localPackageAdapter, localPackageTools } from "../../src/package-server";
+import { STUDIO_EXPORTERS } from "../../src/compose/exporters";
+import { defaultLocalSettings } from "../../src/local-settings";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -317,13 +319,14 @@ test("desktop Check matches localhost preflight for a partial export and rejects
   const body = JSON.stringify({ action: "check", collection });
   const desktop = await fetch(base + "/api/package", { method: "POST", headers, body });
   expect(desktop.status).toBe(200);
-  const local = await createPackageHandler()(new Request(base + "/api/package", { method: "POST",
+  const local = await createPackageHandler(() => localPackageAdapter({ exporters: STUDIO_EXPORTERS,
+    tools: localPackageTools(defaultLocalSettings(), {}), prerequisites: () => ({}) }))(new Request(base + "/api/package", { method: "POST",
     headers: { Origin: base, "Content-Type": "application/json" }, body }));
   expect(local.status).toBe(200);
   const checked = await desktop.json();
   expect(checked).toEqual(await local.json());
-  expect(checked.omissions.map((item: { kind: string }) => item.kind)).toEqual(["layer", "preset", "layer", "preset"]);
-  expect(checked.presets).toHaveLength(2);
+  expect(checked.products[0].features[0].omissions.map((item: { kind: string }) => item.kind)).toEqual(["layer", "preset", "layer", "preset"]);
+  expect(checked.products[0].features[0].presets).toHaveLength(2);
   expect((await fetch(base + "/api/package", { method: "POST", headers: { ...headers,
     Origin: "https://attacker.example" }, body })).status).toBe(403);
   expect((await fetch(base + "/api/package", { method: "POST", headers: { Cookie: cookie,

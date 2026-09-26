@@ -3,9 +3,9 @@ import { expect, test } from "bun:test";
 // restatements: the verifier must accept the builder's chains and refuse every tampered copy (PIPE-68..73, PIPE-76).
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { clipRect, flakeCount, layerOutlineBounds, MAX_REGION_FLAKES } from "../src/glitter-region";
-import { checkGlitterChains, levelDims, restatedCatalogue } from "../src/mod-verifier/glitter-checks";
-import { glitterOf, restatedOutline } from "../src/mod-verifier/resource-checks";
-import { expectedChain } from "../src/mod-verifier/texture-checks";
+import { checkGlitterChains, levelDims, restatedCatalogue } from "../src/features/eye-makeup/verify/glitter-checks";
+import { glitterOf, restatedOutline } from "../src/features/eye-makeup/verify/resource-checks";
+import { expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { plateWindow } from "./window-fixture";
 import { readRecipe as parseRecipe } from "../src/recipe-schema";

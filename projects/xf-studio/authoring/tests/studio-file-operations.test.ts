@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { eyeCheck } from "./fixtures/package-results";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
@@ -23,11 +24,11 @@ function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "d
     list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
     get: async () => ({ collection: looks(collection), revision: 1, updatedAt: "now" }),
     save: async value => { saved++; return { collection: structuredClone(value), revision: 2, updatedAt: "now" }; },
-    package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
-      namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 2, omissions: [
+    package: async (_action, input) => { const value = input as PresetCollection; packageInput = value; return eyeCheck(value, {
+      originalPresetCount: 2, omissions: [
         { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
           finish: "glitter", reason: "Active finish has no supported game-export adapter." },
-      ], packagedCollectionSha256: "hash", presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
+      ], presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }); },
   };
   const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), { selected: "", name: "" },
     () => editor, value => editor = value, transport);
@@ -154,10 +155,10 @@ test("package check exposes progress, partial result and unsaved snapshot withou
   const state = f.files.snapshot();
   expect(state.progress).toMatchObject({ phase: "success", code: "packageCheck" });
   expect(state.package).toMatchObject({ kind: "packageCheck", result: { originalPresetCount: 2,
-    omissions: [{ kind: "layer", finish: "glitter" }] }, freshness: "current" });
+    products: [{ features: [{ omissions: [{ kind: "layer", finish: "glitter" }] }] }] }, freshness: "current" });
   expect(state.last?.kind).toBe("package.check");
-  (state.package as any).result.omissions[0].layerName = "outside";
-  expect((f.files.snapshot().package as any).result.omissions[0].layerName).toBe("Sparkle");
+  (state.package as any).result.products[0].features[0].omissions[0].layerName = "outside";
+  expect((f.files.snapshot().package as any).result.products[0].features[0].omissions[0].layerName).toBe("Sparkle");
 });
 
 test("package freshness follows exact authored content across edits, refresh and draft switches", async () => {

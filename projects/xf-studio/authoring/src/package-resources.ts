@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import type { CollectionPlan } from "./package-bake";
 import type { UvTransformConstants } from "./engines/layered-makeup/plate-uv-window";
+import { archiveXlText, type XlFragment } from "./platform/api";
 
 // WolvenKit JSON is untyped here; only the fields the rewrite touches are named.
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -211,12 +212,19 @@ export function customizationResource(plan: CollectionPlan, handles: HandleCount
 }
 
 /**
- * The `.archive.xl` text placed beside the archive. CRLF line endings: the Python builder wrote
- * this file in Windows text mode, so every candidate built so far has them, and YAML accepts them.
+ * Eye makeup's part of its product's `.archive.xl`: its character-customization resource for the female body
+ * and its `.app` in the player customization scope. A product holding only eye makeup declares exactly this.
  */
-export function archiveXlDeclaration(plan: CollectionPlan): string {
-  return ["customizations:", "  female: " + plan.customization.replaceAll("/", "\\"), "resource:", "  scope:",
-    "    player_customization.app:", "      - " + plan.app.replaceAll("/", "\\"), ""].join("\r\n");
+export function eyeMakeupXl(plan: Pick<CollectionPlan, "customization" | "app">): XlFragment {
+  return { customizations: { female: [plan.customization] }, scope: { "player_customization.app": [plan.app] } };
+}
+
+/**
+ * The `.archive.xl` text of a product holding only eye makeup (`archiveXlText` of its fragment). CRLF line
+ * endings: the Python builder wrote this file in Windows text mode, so every candidate built so far has them.
+ */
+export function archiveXlDeclaration(plan: Pick<CollectionPlan, "customization" | "app">): string {
+  return archiveXlText(eyeMakeupXl(plan));
 }
 
 /** Compact JSON with non-ASCII escaped, as the Python builder wrote it, plus a trailing newline. */

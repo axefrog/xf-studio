@@ -33,7 +33,7 @@ test("the selector label, Check result and MO2 install folder all come from the 
   for (const value of [plan.namespace, plan.selector, plan.component, plan.app, plan.customization])
     expect(value).not.toContain(EYE_MAKEUP_MOD.modName);
   const check = preflightPackageCollection(fixture);
-  expect([check.modName, check.selectorLabel]).toEqual([EYE_MAKEUP_MOD.modName, EYE_MAKEUP_MOD.selectorLabel]);
+  expect([check.brand, check.selectorLabel]).toEqual([EYE_MAKEUP_MOD.modName, EYE_MAKEUP_MOD.selectorLabel]);
 
   const root = mkdtempSync(join(tmpdir(), "xfs-branding-"));
   try {
@@ -66,13 +66,16 @@ test("the builders, service and verifiers read branding from the plan instead of
     verify: readFileSync(resolve(hq, "experiments/005-preset-collection/verify.py"), "utf8"),
     shimmer: readFileSync(resolve(hq, "experiments/011-shimmer-plate-comparison/build.py"), "utf8"),
     resources: readFileSync(resolve(authoring, "src/package-resources.ts"), "utf8"),
-    service: readFileSync(resolve(authoring, "src/package-build-service.ts"), "utf8"),
+    info: readFileSync(resolve(authoring, "src/features/eye-makeup/export-info.ts"), "utf8"),
+    builder: readFileSync(resolve(authoring, "src/platform/export/product-builder.ts"), "utf8"),
   };
   expect(sources.build).toContain("'localizedName':plan['selectorLabel']");
   expect(sources.verify).toContain("option['localizedName']==plan['selectorLabel']");
   expect(sources.shimmer).toContain("{plan['modName']} Shimmer diagnostic");
   expect(sources.resources).toContain("localizedName: plan.selectorLabel");
-  expect(sources.service).toContain("modName: check.modName, selectorLabel: check.selectorLabel");
+  // The exporter's brand is the product's default mod name; the builder writes the planned product's name.
+  expect(sources.info).toContain("brand: EYE_MAKEUP_MOD.modName, selectorLabel: EYE_MAKEUP_MOD.selectorLabel");
+  expect(sources.builder).toContain("modName: product.modName");
   for (const [name, source] of Object.entries(sources))
     expect({ name, literal: /XF (?:Studio|Eye Artistry)['"\s·]/.test(source.replace(/"""[\s\S]*?"""/g, "")) })
       .toEqual({ name, literal: false });

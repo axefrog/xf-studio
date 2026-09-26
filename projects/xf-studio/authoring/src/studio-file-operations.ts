@@ -1,6 +1,6 @@
 import { BUILD_NEEDS_SETUP } from "./alpha-availability";
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
-import type { PackageBuild, PackageCheck } from "./package-action";
+import type { PackageBuildResult, PackageCheckResult } from "./platform/api";
 import type { Layer, Recipe } from "./engines/layered-makeup/recipe";
 import { portableRecipe, readPortableRecipe, RECIPE_FILE_MESSAGE } from "./recipe-schema";
 import type { ReadonlyDeep } from "./read-only";
@@ -25,7 +25,7 @@ export type StudioFileOutcome = { ok: true; code: string; message: string;
   result?: CollectionResult;
   savedAppearance?: Readonly<SavedAppearanceState> } |
   { ok: false; code: string; message: string };
-type PackageResult = { kind: "packageCheck"; result: PackageCheck } | { kind: "packageBuild"; result: PackageBuild };
+type PackageResult = { kind: "packageCheck"; result: PackageCheckResult } | { kind: "packageBuild"; result: PackageBuildResult };
 /**
  * One unified list of work in flight (audit A-3): a local file workflow and/or the collection
  * request it (or another caller) started. `requestId` links an entry to collection progress.

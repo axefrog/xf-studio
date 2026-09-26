@@ -1,6 +1,8 @@
-// Compile one filtered collection snapshot into an intermediate build: baked maps, full
-// mip chains, converted XBM/mesh/morph/app/customization resources, the pre-pack path
-// gate, the packed archive and its ArchiveXL declaration, and build.json. Never installs.
+// Eye makeup's feature build: compile one filtered collection snapshot into baked maps, full
+// mip chains and converted XBM/mesh/morph/app/customization resources at their depot paths in the
+// product's staging tree, check its own resources against its plan (the pre-pack path gate for its
+// subset), and write build.json into its work folder. The export host packs the product once and
+// writes the merged ArchiveXL declaration (platform/export). Never installs.
 //
 // TypeScript port of experiments/005-preset-collection/build.py, which remains a research
 // oracle. Differences, all deliberate: the bake runs in-process; the builder no longer
@@ -8,9 +10,10 @@
 // Python verifier read them; and it no longer round-trips the resources or exports the
 // textures, because the independent verifier converts the unbundled archive members itself.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { archiveInventory } from "./archive-inventory-fs";
+import { generatedFiles } from "./archive-inventory-fs";
+import { expectedPaths, inventoryFromFiles } from "./archive-inventory";
 import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
 import { encodeDds, flatMipChain } from "./engines/layered-makeup/flat-mip-chain";
@@ -21,7 +24,7 @@ import { plateUvFootprint, uvTransformConstants, type PlateUvFootprint, type Sto
 import type { TextureChannel } from "./engines/layered-makeup/finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
-  appearanceResource, archiveXlDeclaration, assertBrandedPlan, customizationResource, HandleCounter,
+  appearanceResource, assertBrandedPlan, customizationResource, HandleCounter,
   resourceJson, rewritePlateMesh, rewritePlateMorph,
 } from "./package-resources";
 
@@ -38,8 +41,13 @@ export const PLATE_STEMS = ["xfs_eye_plate", "xfas_eye_plate"] as const;
 export interface ResourceBuildOptions {
   /** Filtered, package-only collection value (already validated by the preflight). */
   readonly collection: unknown;
-  /** Fresh intermediate directory; must not exist. */
-  readonly output: string;
+  /** This feature's fresh work directory (logs, bakes, conversion inputs, build.json); must not exist. */
+  readonly work: string;
+  /**
+   * The product's staging tree: resources go at their depot paths below it, beside other features' files.
+   * Created when missing; none of this build's paths may exist yet.
+   */
+  readonly staging: string;
   /** Directory holding exactly one plate mesh/morphtarget pair. */
   readonly plate: string;
   /** Eye makeup's layered-makeup region: its models, mirror and texture grids. */
@@ -64,7 +72,8 @@ export interface BuildRecord {
    * and the SHA-256 of the plate's whole UV footprint (bounds, window, vertex UVs and triangles).
    */
   plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants; footprintSha256: string };
-  artifacts: ReturnType<typeof archiveInventory>; archiveSha256: string;
+  /** This feature's resources in the staging tree, as the pre-pack gate recorded them. */
+  artifacts: ReturnType<typeof inventoryFromFiles>;
   installed: false; gameRenderingVerified: false;
 }
 
@@ -95,7 +104,7 @@ function chainLevels(data: Uint8Array, width: number, height: number, levels: nu
 }
 const TEXEL_BYTES: Record<TextureChannel, number> = { diffuse: 4, gradient: 4, normal: 2, roughness: 1, metalness: 1, mask: 1, flakes: 1, accent: 1 };
 const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json",
-  "input/dds-colour", "input/dds-scalar", "input/dds-normal", "archive", "package/archive/pc/mod"];
+  "input/dds-colour", "input/dds-scalar", "input/dds-normal"];
 
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
@@ -112,12 +121,13 @@ function checkCancelled(signal?: AbortSignal) {
   if (signal?.aborted) throw new PackageToolError("package_build_cancelled", "Package Build was cancelled.");
 }
 
-export async function buildPackageResources(options: ResourceBuildOptions): Promise<BuildRecord> {
-  const out = resolve(options.output), plate = resolve(options.plate);
+export async function buildEyeMakeupResources(options: ResourceBuildOptions): Promise<BuildRecord> {
+  const out = resolve(options.work), plate = resolve(options.plate), archive = resolve(options.staging);
   const log = options.log ?? (() => {});
   if (existsSync(out)) throw Error(`Output already exists: ${out}`);
   const stem = plateStem(plate);
   for (const folder of FOLDERS) mkdirSync(join(out, ...folder.split("/")), { recursive: true });
+  mkdirSync(archive, { recursive: true });
   const steps: BuildRecord["steps"] = [];
   const step = async (name: string, run: () => Promise<ToolStep>) => {
     checkCancelled(options.signal);
@@ -159,7 +169,9 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   const plan: CollectionPlan = readJson(join(baked, "plan.json"));
   const compiled: BakedRecord[] = readJson(join(baked, "compiled.json"));
   assertBrandedPlan(plan);
-  const archive = join(out, "archive");
+  // Nothing of this feature may be in the staging tree yet (another feature writing its paths is a conflict).
+  const planned = expectedPaths(plan);
+  for (const path of planned) if (existsSync(join(archive, ...path.split("/")))) throw Error(`Staging tree already holds ${path}.`);
   const modelDir = join(archive, ...dirname(plan.mesh).split("/"));
   const appDir = join(archive, ...dirname(plan.app).split("/"));
   const textureDir = join(archive, ...plan.depot.split("/"), "textures");
@@ -219,20 +231,14 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   await step("deserialize-app", () => options.tools.deserialize(join(out, "app-json"), appDir));
   await step("deserialize-customization", () => options.tools.deserialize(join(out, "cc-json"), appDir));
 
-  // 6. Pre-pack gate: the physical tree must equal the planned canonical resource paths exactly.
+  // 6. Pre-pack gate for this feature: its files in the staging tree must be exactly its planned canonical
+  //    resource paths (the export host then requires the whole tree to be the union of every feature's files).
   checkCancelled(options.signal);
-  const artifacts = archiveInventory(archive, plan);
-  const packageDir = join(out, "package", "archive", "pc", "mod");
-  await step("pack", () => options.tools.pack(archive, packageDir));
-  const packed = join(packageDir, "archive.archive");
-  if (!isFile(packed) || readdirSync(packageDir).length !== 1) throw Error("WolvenKit did not produce exactly one packed archive.");
-  const archiveFile = join(packageDir, plan.namespace + ".archive");
-  renameSync(packed, archiveFile);
-  writeFileSync(join(packageDir, plan.namespace + ".archive.xl"), archiveXlDeclaration(plan), "utf8");
+  const artifacts = inventoryFromFiles(generatedFiles(archive).filter(file => planned.has(file.path)), plan);
   const plateInputs = [".mesh", ".morphtarget"].map(suffix => join(plate, stem + suffix))
     .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
   const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, plateLift: lifted.report, plateUv, artifacts,
-    archiveSha256: sha256(readFileSync(archiveFile)), installed: false, gameRenderingVerified: false };
+    installed: false, gameRenderingVerified: false };
   writeFileSync(join(out, "build.json"), JSON.stringify(record) + "\n", "utf8");
   log(`BUILD ${out}`);
   return record;

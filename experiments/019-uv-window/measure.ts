@@ -11,7 +11,7 @@
 //    level is about two above the head atlas's, because its texels are about 4.3 x 3.3 times denser.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readDdsChain } from "../../projects/xf-studio/authoring/src/mod-verifier/dds-reader";
+import { readDdsChain } from "../../projects/xf-studio/authoring/src/features/eye-makeup/verify/dds-reader";
 
 const [build, flag, out] = process.argv.slice(2);
 if (!build) throw Error("Usage: bun experiments/019-uv-window/measure.ts <build-dir> [--json out.json]");

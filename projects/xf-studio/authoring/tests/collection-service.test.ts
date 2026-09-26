@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { eyeCheck } from "./fixtures/package-results";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
@@ -20,9 +21,8 @@ function fixture() {
     list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
     get: async () => saved,
     save: async (value, revision) => { saves++; return { collection: structuredClone(value), revision: (revision ?? 0) + 1, updatedAt: "now" }; },
-    package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
-      namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "test",
-      presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
+    package: async (_action, input) => { const value = input as PresetCollection; packageInput = value;
+      return eyeCheck(value, { presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }); },
   };
   const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), { selected: "", name: "" },
     () => editor, value => editor = value, transport);
@@ -67,14 +67,13 @@ test("async collection service preserves an unsaved draft in package snapshots w
 
 test("successful partial check names omitted layers and whole presets in the Studio result", async () => {
   const f = fixture(); await f.service.execute({ kind: "initialize" });
-  f.transport.package = async (_action, value) => ({ ready: true, collectionId: value.id,
-    namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 2, packagedCollectionSha256: "test",
+  f.transport.package = async (_action, input) => { const value = input as PresetCollection; return eyeCheck(value, { originalPresetCount: 2,
     presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }],
     omissions: [
       { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
         finish: "glitter", reason: "Active finish has no supported game-export adapter." },
       { kind: "preset", presetId: "other", presetName: "Glitter only", reason: "No active exportable layers remain." },
-    ] });
+    ] }); };
   expect((await f.service.execute({ kind: "package", action: "check" })).ok).toBe(true);
   expect(f.service.view().progress?.message).toContain("omitted layer “Sparkle” (Glitter) from preset “Eye”");
   expect(f.service.view().progress?.message).toContain("omitted whole preset “Glitter only”");

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8)",
  "states": {
   "starter": {
    "modes": {
@@ -295,6 +295,13 @@
     },
     "layer/collection.importRecipe": {
      "name": {}
+    },
+    "layer/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "layer/camera.setFov": {
      "degrees": {
@@ -735,6 +742,13 @@
     "point/collection.importRecipe": {
      "name": {}
     },
+    "point/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -1170,6 +1184,13 @@
     },
     "viewport/collection.importRecipe": {
      "name": {}
+    },
+    "viewport/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "viewport/camera.setFov": {
      "degrees": {
@@ -1607,6 +1628,13 @@
     "collection/collection.importRecipe": {
      "name": {}
     },
+    "collection/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -2042,6 +2070,13 @@
     },
     "preset/collection.importRecipe": {
      "name": {}
+    },
+    "preset/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "preset/camera.setFov": {
      "degrees": {
@@ -2687,6 +2722,13 @@
     "layer/collection.importRecipe": {
      "name": {}
     },
+    "layer/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -3133,6 +3175,13 @@
     "point/collection.importRecipe": {
      "name": {}
     },
+    "point/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -3568,6 +3617,13 @@
     },
     "viewport/collection.importRecipe": {
      "name": {}
+    },
+    "viewport/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "viewport/camera.setFov": {
      "degrees": {
@@ -4005,6 +4061,13 @@
     "collection/collection.importRecipe": {
      "name": {}
     },
+    "collection/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -4440,6 +4503,13 @@
     },
     "preset/collection.importRecipe": {
      "name": {}
+    },
+    "preset/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "preset/camera.setFov": {
      "degrees": {
@@ -5086,6 +5156,13 @@
     "layer/collection.importRecipe": {
      "name": {}
     },
+    "layer/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -5533,6 +5610,13 @@
     "point/collection.importRecipe": {
      "name": {}
     },
+    "point/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -5968,6 +6052,13 @@
     },
     "viewport/collection.importRecipe": {
      "name": {}
+    },
+    "viewport/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "viewport/camera.setFov": {
      "degrees": {
@@ -6405,6 +6496,13 @@
     "collection/collection.importRecipe": {
      "name": {}
     },
+    "collection/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -6840,6 +6938,13 @@
     },
     "preset/collection.importRecipe": {
      "name": {}
+    },
+    "preset/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "preset/camera.setFov": {
      "degrees": {
@@ -7485,6 +7590,13 @@
     "layer/collection.importRecipe": {
      "name": {}
     },
+    "layer/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -7931,6 +8043,13 @@
     "point/collection.importRecipe": {
      "name": {}
     },
+    "point/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -8366,6 +8485,13 @@
     },
     "viewport/collection.importRecipe": {
      "name": {}
+    },
+    "viewport/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "viewport/camera.setFov": {
      "degrees": {
@@ -8803,6 +8929,13 @@
     "collection/collection.importRecipe": {
      "name": {}
     },
+    "collection/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -9238,6 +9371,13 @@
     },
     "preset/collection.importRecipe": {
      "name": {}
+    },
+    "preset/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "preset/camera.setFov": {
      "degrees": {
@@ -9883,6 +10023,13 @@
     "layer/collection.importRecipe": {
      "name": {}
     },
+    "layer/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -10329,6 +10476,13 @@
     "point/collection.importRecipe": {
      "name": {}
     },
+    "point/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -10764,6 +10918,13 @@
     },
     "viewport/collection.importRecipe": {
      "name": {}
+    },
+    "viewport/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "viewport/camera.setFov": {
      "degrees": {
@@ -11201,6 +11362,13 @@
     "collection/collection.importRecipe": {
      "name": {}
     },
+    "collection/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -11636,6 +11804,13 @@
     },
     "preset/collection.importRecipe": {
      "name": {}
+    },
+    "preset/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "preset/camera.setFov": {
      "degrees": {
@@ -12284,6 +12459,13 @@
     "layer/collection.importRecipe": {
      "name": {}
     },
+    "layer/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -12733,6 +12915,13 @@
     "point/collection.importRecipe": {
      "name": {}
     },
+    "point/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -13168,6 +13357,13 @@
     },
     "viewport/collection.importRecipe": {
      "name": {}
+    },
+    "viewport/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "viewport/camera.setFov": {
      "degrees": {
@@ -13605,6 +13801,13 @@
     "collection/collection.importRecipe": {
      "name": {}
     },
+    "collection/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -14040,6 +14243,13 @@
     },
     "preset/collection.importRecipe": {
      "name": {}
+    },
+    "preset/package.rename": {
+     "modName": {
+      "minLength": 0,
+      "maxLength": 80,
+      "unit": "characters"
+     }
     },
     "preset/camera.setFov": {
      "degrees": {

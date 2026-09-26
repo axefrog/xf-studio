@@ -51,7 +51,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   expect(kinds("eye-makeup")).toEqual([...RECIPE_ACTION_KINDS, "layer.edit", "layer.setEnabled"].sort());
   // Before step 1: `COLLECTION_KIND_TABLE`.
   expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.open", "collection.rename",
-    "collection.undoOpen", "preset.edit", "preset.select"]);
+    "collection.undoOpen", "package.assign", "package.merge", "package.rename", "package.split", "preset.edit", "preset.select"]);
   // Before step 1: literal comparisons and `startsWith` prefixes, with saved-V as the final fallback.
   expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.undo"]);
   expect(kinds("preview")).toEqual(all.filter(kind => kind.startsWith("preview.") || kind.startsWith("camera.")).sort());
@@ -105,4 +105,20 @@ test("reason codes are structured where refusals are decided, not read from mess
   app.attach({ motion });
   expect(app.capability({ kind: "motion.setIdle", enabled: true }))
     .toEqual({ available: false, code: "asset_unavailable", reason: "Idle clip failed to decode." });
+});
+
+test("every exporting feature has an exporter and an independent verifier in the host composition, and nothing else does (§7 rule 7)", async () => {
+  const { STUDIO_OWNERS } = await import("../src/compose/studio-registry");
+  const { STUDIO_EXPORTERS } = await import("../src/compose/exporters");
+  const exporting = STUDIO_OWNERS.filter(owner => owner.owner === "feature" && owner.exports)
+    .map(owner => owner as { id: string; label: string; exports: import("../src/platform/api").ExportInfo });
+  expect(exporting.map(feature => feature.id)).toEqual(["eye-makeup"]);
+  expect(STUDIO_EXPORTERS.map(entry => entry.exporter.feature)).toEqual(exporting.map(feature => feature.id));
+  for (const feature of exporting) {
+    const entry = STUDIO_EXPORTERS.find(item => item.exporter.feature === feature.id)!;
+    expect(entry.exporter.id).toBe(feature.exports.exporterId);
+    expect(entry.verifier.exporterId).toBe(feature.exports.exporterId);
+    expect(entry.exporter.info).toEqual(feature.exports);
+    expect(entry.exporter.label).toBe(feature.label);
+  }
 });

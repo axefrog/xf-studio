@@ -1,15 +1,15 @@
-// Process adapter: the independent verifier's three WolvenKit commands (unbundle, serialize, texture
-// export), run through the shared WolvenKit runner. The verifier (src/mod-verifier) imports nothing
-// from the Studio, so hosts inject these tools; the verifier still applies its own success checks
-// to each result and writes the logs.
+// Process adapter: the verifiers' three WolvenKit commands (unbundle, serialize, texture export), run
+// through the shared WolvenKit runner. The product verifier (platform/export) and each feature's
+// independent verifier (eye makeup's in features/eye-makeup/verify) import nothing from the Studio, so
+// hosts inject these tools; the verifiers still apply their own success checks to each result and write the logs.
 import { statSync } from "node:fs";
-import type { ToolResult, VerifierTools } from "./mod-verifier/verify-build";
+import type { ToolResult, VerifierTools } from "./platform/api";
 import { runWolvenKitSync, WOLVENKIT_RUNTIME_MISSING_MESSAGE, WolvenKitRunError } from "./wolvenkit-cli";
 
 export const VERIFIER_STEP_TIMEOUT_MS = 240_000;
 const isDirectory = (path: string | undefined) => { try { return !!path && statSync(path).isDirectory(); } catch { return false; } };
 
-/** Tools for `verifyBuild`. `gamepath` is the game folder WolvenKit's `export` command reads (read only). */
+/** Tools for the verifiers. `gamepath` is the game folder WolvenKit's `export` command reads (read only). */
 export function createWolvenKitVerifierTools(cli: string, gamepath: string | undefined,
   options: { timeoutMs?: number } = {}): VerifierTools {
   const run = (args: string[]): ToolResult => {

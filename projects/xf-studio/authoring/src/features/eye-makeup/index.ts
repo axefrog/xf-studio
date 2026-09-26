@@ -17,6 +17,7 @@ import { applyEyeMakeup, assignEyeMakeupIds, eyeMakeupCapability, type EyeMakeup
   type EyeMakeupEffect } from "./core";
 import { eyeMakeupEditor, eyeMakeupMemory, eyeMakeupPart } from "./part";
 import { EYE_MAKEUP_LIMITS, EYE_MAKEUP_UNITS, eyeMakeupConsequence } from "./limits";
+import { EYE_MAKEUP_EXPORT } from "./export-info";
 
 export const EYE_MAKEUP_ID = featureId(EYE_MAKEUP_FEATURE);
 export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./core";
@@ -24,6 +25,7 @@ export { assignEyeMakeupIds } from "./core";
 export type { EyeMakeupEditor, EyeMakeupMemory } from "./part";
 export { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, RECIPE_SCHEMAS, eyeMakeupPartCodec } from "./part";
 export { EYE_MAKEUP_REGION } from "./region";
+export { EYE_MAKEUP_EXPORT, EYE_MAKEUP_EXPORTER_ID, EYE_PLATE_PREREQUISITE } from "./export-info";
 
 /** Registration order is the catalogue order the descriptor table has always had. */
 const KINDS: Record<EyeMakeupAction["kind"], true> = {
@@ -42,7 +44,7 @@ export type EyeMakeupGestureResult = { layerIndex: number; kind: GestureEdit["ki
 export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, EyeMakeupScope, typeof EYE_MAKEUP_ID, Recipe, EyeMakeupEditorState,
   EyeMakeupEffect, GestureEdit, EyeMakeupGestureResult> = Object.freeze({
   owner: "feature", id: EYE_MAKEUP_ID, api: 1, label: "Eye makeup", stage: "stable",
-  part: eyeMakeupPart, editor: eyeMakeupEditor, memory: eyeMakeupMemory,
+  part: eyeMakeupPart, editor: eyeMakeupEditor, memory: eyeMakeupMemory, exports: EYE_MAKEUP_EXPORT,
   // Gesture proposals are catalogued with the gestures; the platform owns the session's Undo transaction.
   gestures: { apply: (recipe: Recipe, edit: GestureEdit) => applyRecipeGesture(recipe, edit, EYE_MAKEUP_REGION.models),
     label: gestureHistoryLabel, descriptors: EYE_MAKEUP_GESTURE_DESCRIPTORS },
