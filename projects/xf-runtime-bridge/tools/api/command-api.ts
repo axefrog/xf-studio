@@ -7,7 +7,7 @@
 //
 // Every write command is recorded in an audit log with its reversal note before it is sent.
 
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BridgeClient, PipeConnectError, defaultRuntimeDir, readSession, type BridgeResponse, type BridgeSession } from "../bridge-lib.ts";
 import { DEFAULT_CAPTURE_ROOT, type CaptureTarget } from "../capture/capture.ts";
@@ -119,7 +119,8 @@ export class CommandApi {
         result = await command.local(params, { api: this, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot), signal: options.signal });
       } else {
         const bridgeParams = command.bridge!.params ? command.bridge!.params(params) : params;
-        const response = await this.callBridge(command.bridge!.method, bridgeParams, cid);
+        let response = await this.callBridge(command.bridge!.method, bridgeParams, cid);
+        if (!response.ok && command.name === "bridge.kill" && response.error.code === "bridge_busy") response = this.killByFile();
         if (!response.ok) {
           const error = "error" in response ? response.error : plainBridgeError("failed");
           if (command.permission !== "read") this.audit({ event: "refused", command: name, cid, code: error.code });
@@ -168,6 +169,21 @@ export class CommandApi {
     this.touch();
     if (response.ok) return { ok: true, result: response.result };
     return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message) };
+  }
+
+  /**
+   * The kill switch when another client (a scripted session) holds the pipe: the plugin also
+   * watches for a KILL file beside session.json and stops within about half a second.
+   */
+  private killByFile(): { ok: true; result: unknown } | { ok: false; error: PlainError } {
+    const file = join(this.runtimeDir, "KILL");
+    try {
+      writeFileSync(file, `killed by an XF tool at ${new Date().toISOString()}
+`);
+    } catch (error) {
+      return { ok: false, error: { code: "failed", message: `Couldn't switch the bridge off: the KILL file couldn't be written (${(error as Error).message}). Use the CET hotkey instead.` } };
+    }
+    return { ok: true, result: { killed: true, route: "kill_file", note: "Another XF tool held the connection, so the bridge was switched off through its KILL file; it stops within about half a second.", file } };
   }
 
   private touch() {
