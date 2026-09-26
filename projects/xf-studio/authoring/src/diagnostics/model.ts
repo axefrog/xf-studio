@@ -61,13 +61,14 @@ export const DIAGNOSTIC_LIMITS = Object.freeze({
 });
 
 const REF_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-export const ERROR_REF = /^XF-[0-9A-HJKMNP-TV-Z]{4}$/;
+/** Six characters since DIAG-12 (four gave a million values, which collide within a few hundred); older four-character ones still read. */
+export const ERROR_REF = /^XF-[0-9A-HJKMNP-TV-Z]{4}(?:[0-9A-HJKMNP-TV-Z]{2})?$/;
 const AREA = /^[a-z][a-z0-9-]{0,31}$/;
 const CODE = /^[a-z0-9][a-z0-9_.-]{0,47}$/i;
 
-/** A new short error reference: `XF-` and four Crockford base-32 characters (no I, L, O or U), about a million values. */
+/** A new short error reference: `XF-` and six Crockford base-32 characters (no I, L, O or U), about a billion values. */
 export function newErrorRef(random: (bytes: Uint8Array) => Uint8Array = bytes => crypto.getRandomValues(bytes)): string {
-  const bytes = random(new Uint8Array(4));
+  const bytes = random(new Uint8Array(6));
   return "XF-" + [...bytes].map(byte => REF_ALPHABET[byte % 32]).join("");
 }
 export const isErrorRef = (value: unknown): value is string => typeof value === "string" && ERROR_REF.test(value);
@@ -167,8 +168,15 @@ export const isExpectedFailure = (code: string | undefined): boolean => !!code &
  */
 export type DiagnosticTrace = {
   readonly deep: boolean;
-  event(area: string, event: string, data?: Readonly<Record<string, unknown>>): void;
+  event(area: string, event: string, data?: Readonly<Record<string, unknown>>, options?: TraceEventOptions): void;
 };
+/**
+ * An event's own bounds, for the few that are large by nature (a V's whole resolution): `bytes` (at most `LARGE_EVENT_BYTES`)
+ * instead of the usual 512 KB, `items` per array or object instead of 200, and which top-level fields to `keep` when it is still
+ * too large, before falling back to its keys alone.
+ */
+export type TraceEventOptions = { bytes?: number; items?: number; keep?: readonly string[] };
+export const LARGE_EVENT_BYTES = 2 * 1024 * 1024;
 /** The sink that keeps nothing (tests, tools, a host without diagnostics). */
 export const NO_TRACE: DiagnosticTrace = Object.freeze({ deep: false, event() {} });
 export type TraceEntry = { t: string; area: string; event: string; data?: Record<string, unknown> };

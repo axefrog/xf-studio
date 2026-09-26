@@ -630,6 +630,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .report-state { display: flex; align-items: center; gap: var(--sp-3); min-height: 24px; }
 .report-status { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .report-groups { display: grid; gap: var(--sp-3); }
+.report-files { margin-bottom: var(--sp-3); }
 .report-group { border: 1px solid var(--line); padding: var(--sp-3) var(--sp-4); }
 .report-group > summary { display: flex; gap: var(--sp-3); align-items: baseline; cursor: pointer; }
 .report-group-title { flex: 1; font-weight: 600; }

@@ -317,8 +317,9 @@ export class ResourceGraph {
   /** Ambiguity collectors of the resolutions running now (`collect`). */
   private readonly collectors = new Set<Map<string, Ambiguity>>();
   /**
-   * The rolling diagnostics window (docs/diagnostics.md), set by whoever resolves through this graph. In diagnostic mode (`deep`)
-   * every consumer read records its winner; reads that fail are always recorded.
+   * The rolling diagnostics window (docs/diagnostics.md), set by the preparation service each time it resolves through this graph.
+   * A process keeps one window per data folder, so this is always the host's own window, not a per-resolution choice (UI boundary
+   * exception 13). In diagnostic mode (`deep`) every consumer read records its winner; reads that fail are always recorded.
    */
   trace: DiagnosticTrace = NO_TRACE;
 

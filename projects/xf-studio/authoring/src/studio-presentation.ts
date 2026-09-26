@@ -22,7 +22,7 @@ import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnaps
  * "Report a problem", diagnostic mode and the references error notices carry (docs/diagnostics.md). `notice` logs a failure a
  * notice is about to show and returns its reference (null for an expected refusal, which gets none).
  */
-export type DiagnosticsPort = Pick<DiagnosticsActions, "capability" | "dispatch" | "descriptors" | "notice"> & {
+export type DiagnosticsPort = Pick<DiagnosticsActions, "capability" | "dispatch" | "descriptors" | "notice" | "fullText"> & {
   snapshot(): ReadonlyDeep<DiagnosticsSnapshot>;
 };
 
@@ -308,12 +308,18 @@ export function createStudioPresentation<Slot>(sources: {
   const noReports = { available: false as const, code: "unavailable" as const, reason: "Reporting a problem isn't available here." };
   const diagnostics: DiagnosticsPort = d ? {
     snapshot: () => d.snapshot(), capability: action => d.capability(action), dispatch: action => d.dispatch(action),
-    descriptors: () => d.descriptors(), notice: failure => d.notice(failure),
+    descriptors: () => d.descriptors(), notice: failure => d.notice(failure), fullText: item => d.fullText(item),
   } : {
     snapshot: () => ({ mode: null, report: null, opens: 0, notice: null }), capability: () => noReports,
     dispatch: async () => ({ ok: false, code: noReports.code, message: noReports.reason }), descriptors: () => structuredClone(DIAGNOSTICS_DESCRIPTORS),
-    notice: () => null,
+    notice: () => null, fullText: async () => null,
   };
+  // The view settings a problem report names: what the 3D head and the preview were doing (DIAG-17).
+  d?.setViewState(() => {
+    const preview = a.previewState(), head = v.snapshot().head;
+    return { "3D head": head?.phase ?? "unknown", "preview quality": String(preview?.quality?.size ?? "unknown"),
+      "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
+  });
   const linkSource = sources.links;
   const links: ProjectLinkPort = Object.freeze({ open: (link: ProjectLink) => linkSource ? linkSource.open(link)
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });

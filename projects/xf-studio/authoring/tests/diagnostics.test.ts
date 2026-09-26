@@ -62,11 +62,12 @@ describe("redaction with the shared vectors (tools/private-data.json)", () => {
 });
 
 describe("error references and entries", () => {
-  test("references are XF- and four unambiguous characters", () => {
+  test("references are XF- and six unambiguous characters (four-character ones still read)", () => {
     const refs = new Set(Array.from({ length: 200 }, () => newErrorRef()));
     for (const ref of refs) expect(isErrorRef(ref)).toBe(true);
     expect(refs.size).toBeGreaterThan(190);
-    expect(newErrorRef(bytes => bytes.fill(18))).toBe("XF-JJJJ");
+    expect(newErrorRef(bytes => bytes.fill(18))).toBe("XF-JJJJJJ");
+    expect(isErrorRef("XF-7K3Q")).toBe(true);
     expect(isErrorRef("XF-7K3O")).toBe(false);
   });
   test("a forward is bounded and read field by field", () => {
@@ -252,7 +253,7 @@ describe("the diagnostics actions", () => {
   const device: DiagnosticsDevice = {
     forward: entries => { forwarded.push(...entries); }, pending: () => [], claimHostRef: () => null,
     pageFacts: () => ({ browser: "Chrome", gpu: null, webgl2: true, state: {} }), state: async () => null,
-    setMode: async mode => ({ mode, until: null, minutes: 30 }), prepare: async () => structuredClone(manifest),
+    setMode: async mode => ({ mode, until: null, minutes: 30 }), prepare: async () => structuredClone(manifest), item: async () => "full",
     bundle: async () => new Uint8Array(10), save: name => { saved.push(name); }, copy: async () => {}, openIssue: async () => {},
   };
   test("notices: a reference only for unexpected failures, logged once", () => {

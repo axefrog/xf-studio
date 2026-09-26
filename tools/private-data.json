@@ -12,26 +12,32 @@
   "userPaths": [
     {
       "id": "windows",
-      "about": "C:\\Users\\name in any case, slash direction, JSON or JavaScript escaping, or percent-encoding",
-      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9_]))[A-Za-z](?::|%3[Aa]|\\\\u003[Aa])(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+users(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
+      "about": "C:\\Users\\name in any case, slash direction, JSON or JavaScript escaping, or percent-encoding; a name of up to four words when a separator or quote follows it",
+      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9_]))[A-Za-z](?::|%3[Aa]|\\\\u003[Aa])(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+users(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+(?:(?: |%20)[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+){1,3}(?=(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)|[\"'`])|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
       "flags": "i"
     },
     {
       "id": "wsl",
       "about": "/mnt/c/Users/name",
-      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9._-]))(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+mnt(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+[A-Za-z](?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+users(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
+      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9._-]))(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+mnt(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+[A-Za-z](?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+users(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+(?:(?: |%20)[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+){1,3}(?=(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)|[\"'`])|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
       "flags": "i"
     },
     {
       "id": "posix",
       "about": "macOS /Users/name and Linux /home/name (case-sensitive, as the systems are)",
-      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9._:-]))(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)+(?:Users|home)(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
+      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9._:-]))(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)+(?:Users|home)(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+(?:(?: |%20)[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+){1,3}(?=(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)|[\"'`])|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
       "flags": ""
+    },
+    {
+      "id": "onedrive",
+      "about": "A OneDrive for work or school folder, which is named after the organisation (OneDrive - Name), when a separator follows it",
+      "source": "(?<![A-Za-z0-9_])OneDrive(?: |%20)-(?: |%20)([^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+(?:(?: |%20)[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+){0,5})(?=(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/))",
+      "flags": "i"
     }
   ],
   "placeholderUser": {
     "about": "Whole folder names that belong to no one: placeholders, shared profiles and CI or sandbox accounts",
-    "source": "^(?:<[^<>]*>|%[A-Za-z_]+%|\\$\\{?[A-Za-z_]+\\}?|\\{[A-Za-z_]+\\}|public|default|all|shared|defaultapppool|wdagutilityaccount|runneradmin|runner|username|user|your|yourname|you|name|someone|example|me)$",
+    "source": "^(?:<[^<>]*>|%[A-Za-z_]+%|\\$\\{?[A-Za-z_]+\\}?|\\{[A-Za-z_]+\\}|public|default|all|shared|defaultapppool|wdagutilityaccount|runneradmin|runner|username|user|your|yourname|you|name|someone|example|me|your name|all users|default user|employer|organisation|organization)$",
     "flags": "i"
   },
   "email": {
@@ -86,7 +92,13 @@
       "file:///Users/jdoe/x",
       "C:\\Users\\user.jdoe\\AppData",
       "C:\\Users\\name-jdoe\\AppData",
-      "C:\\Users\\publicjdoe\\x"
+      "C:\\Users\\publicjdoe\\x",
+      "C:\\Users\\John Doe\\AppData\\Local\\xf",
+      "\"C:\\\\Users\\\\John Doe\\\\AppData\"",
+      "c:/users/Jane Q Public/Documents",
+      "%USERPROFILE%\\OneDrive - Contoso Ltd\\Documents",
+      "D:\\OneDrive - Contoso Ltd\\Games",
+      "/Users/John Doe/Library"
     ],
     "email": [
       "const author = \"someone.real@gmail.com\";",
@@ -141,7 +153,9 @@
       "y = a@np.eye(4)",
       "z = a@np.linalg.inv(m)",
       "w = a@b.T[0]",
-      "noreply at example dot com"
+      "noreply at example dot com",
+      "C:\\Users\\Default User\\x",
+      "OneDrive - Employer is a work folder"
     ]
   }
 }

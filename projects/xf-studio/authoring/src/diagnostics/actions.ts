@@ -8,10 +8,10 @@
  */
 import type { Capability } from "../platform/api";
 import { refusal } from "../platform/api";
-import { diagnosticEntry, errorCode, errorText, isExpectedFailure, newErrorRef, DIAGNOSTIC_LIMITS, type DiagnosticEntry,
+import { diagnosticEntry, errorCode, errorText, isErrorRef, isExpectedFailure, newErrorRef, DIAGNOSTIC_LIMITS, type DiagnosticEntry,
   type DiagnosticLevel } from "./model";
-import { DESCRIPTION_LIMIT, formatBytes, issueSummary, reportFileName, reportSummary, reportTitle, REPORT_GROUPS, previewOf,
-  type PageFacts, type ReportGroup, type ReportItemView, type ReportManifest } from "./report";
+import { DESCRIPTION_LIMIT, formatBytes, issueSummary, PREVIEW_CHARS, reportFileName, reportIndex, reportSummary, reportTitle, REPORT_GROUPS, previewOf,
+  type PageFacts, type ReportFileInput, type ReportGroup, type ReportItemView, type ReportManifest } from "./report";
 import { redactText, redactValue } from "./redact";
 
 export type DiagnosticsMode = "normal" | "deep";
@@ -52,18 +52,22 @@ export type DiagnosticsDevice = {
   pending(): DiagnosticEntry[];
   /** The reference of a failed host request the page saw in the last few seconds and no notice has shown yet. */
   claimHostRef(): string | null;
-  pageFacts(): PageFacts;
+  /** The browser and graphics card (the view settings come from `setViewState`). */
+  pageFacts(): Omit<PageFacts, "state">;
   state(): Promise<{ mode: DiagnosticsMode; until: string | null; minutes: number } | null>;
   setMode(mode: DiagnosticsMode): Promise<{ mode: DiagnosticsMode; until: string | null; minutes: number }>;
   prepare(ref: string | null): Promise<ReportManifest>;
-  /** The report file's bytes from the host (the ticked items only). */
-  bundle(request: { id: string; include: string[]; description: string; page: { facts: PageFacts; items: { id: string; label: string; detail: string; content: unknown }[] } }): Promise<Uint8Array>;
+  /** One prepared host item's whole text (the review's full view). */
+  item(id: string, item: string): Promise<string>;
+  /** The report file's bytes from the host (the ticked items only). A refusal throws an error carrying its `code`. */
+  bundle(request: { id: string; include: string[]; description: string; sharingConfirmed: boolean; page: { facts: PageFacts; items: { id: string; label: string; detail: string; content: unknown }[] } }): Promise<Uint8Array>;
   save(name: string, bytes: Uint8Array, type: string): void;
   copy(text: string): Promise<void>;
   openIssue(title: string, body: string): Promise<void>;
 };
 
-export type ReportItemState = ReportItemView & { size: string; unavailable?: string };
+/** An item as the review shows it; `partial` when its preview is only the start (the whole loads through `fullText`). */
+export type ReportItemState = ReportItemView & { size: string; unavailable?: string; partial: boolean };
 export type ReportState = {
   phase: "preparing" | "ready" | "failed";
   ref: string | null;
@@ -82,6 +86,10 @@ export type ReportState = {
   /** The file name of the last save, so the issue summary can name it. */
   saved: string | null;
   window: ReportManifest["window"] | null;
+  /** The report file's `README.md` and `report.json` as they would be saved now (from the ticked items only), for review. */
+  files: { readme: string; index: string } | null;
+  /** The prepared report expired on the host (it keeps a few, for an hour): preparing it again is the one next step. */
+  expired: boolean;
 };
 export type DiagnosticsSnapshot = {
   mode: { mode: DiagnosticsMode; until: string | null; minutes: number } | null;
@@ -109,8 +117,19 @@ export class DiagnosticsActions {
   private included = new Set<string>();
   private noticeId = 0;
   private lastUncaught = 0;
-  private recent = new Map<string, number>();
-  constructor(private readonly device: DiagnosticsDevice, private readonly now: () => number = Date.now) {}
+  private recent = new Map<string, { at: number; ref: string | null }>();
+  private viewState: () => Record<string, string> = () => ({});
+  constructor(private readonly device: DiagnosticsDevice, private readonly now: () => number = Date.now,
+    private readonly context: Readonly<Record<string, string>> = {}) {}
+
+  /** Which view settings a report names (the presentation's choice, installed by the composition; DIAG-17). */
+  setViewState(read: () => Record<string, string>) { this.viewState = read; }
+  /** The window's facts for a report: the browser and graphics card, the host context and a few view settings. */
+  pageFacts(): PageFacts {
+    let state: Record<string, string> = {};
+    try { state = this.viewState(); } catch { /* Facts without view settings. */ }
+    return { ...this.device.pageFacts(), state: { ...this.context, ...state } };
+  }
 
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   snapshot(): DiagnosticsSnapshot { return structuredClone(this.state); }
@@ -126,15 +145,22 @@ export class DiagnosticsActions {
   // ---------------------------------------------------------------------------------------------------------------------------
   // Failures and references
 
-  private record(level: DiagnosticLevel, area: string, code: string, message: string, error: unknown, ref: string | null, source?: string) {
-    // The same failure repeating (a render loop, a poll) is recorded once every ten seconds.
-    const key = `${area}|${code}|${message}`, at = this.now();
-    if (!ref && at - (this.recent.get(key) ?? -Infinity) < 10_000) return;
-    this.recent.set(key, at);
+  /**
+   * Record a page failure; returns the reference it is logged under. The same failure repeating (a render loop, a poll) is recorded
+   * once every ten seconds, and a repeat shows the reference of the one that was recorded. A repeat that carries a host failure's
+   * reference is a new host failure, so it is always recorded (DIAG-07).
+   */
+  private record(level: DiagnosticLevel, area: string, code: string, message: string, error: unknown, ref: string | null, source?: string,
+    fromHost = false): string | null {
+    const key = `${area}|${code}|${message}`, at = this.now(), before = this.recent.get(key);
+    if (!fromHost && before && at - before.at < 10_000) return before.ref;
+    this.recent.delete(key);
+    this.recent.set(key, { at, ref });
     if (this.recent.size > 200) this.recent.delete(this.recent.keys().next().value!);
     const own = errorCode(error);
     this.device.forward([diagnosticEntry({ level, area, code, message: redactText(message), origin: "page", ref: ref ?? undefined,
       details: { stack: errorText(error), ...(own && own !== code ? { codes: [own] } : {}), ...(source ? { source } : {}) } })]);
+    return ref;
   }
 
   /**
@@ -143,9 +169,8 @@ export class DiagnosticsActions {
    */
   notice(failure: { source: string; message: string; code?: string }): string | null {
     if (isExpectedFailure(failure.code)) return null;
-    const ref = this.device.claimHostRef() ?? newErrorRef();
-    this.record("error", "notice", failure.code ?? "failed", failure.message, undefined, ref, failure.source);
-    return ref;
+    const host = this.device.claimHostRef();
+    return this.record("error", "notice", failure.code ?? "failed", failure.message, undefined, host ?? newErrorRef(), failure.source, !!host);
   }
 
   /**
@@ -153,8 +178,8 @@ export class DiagnosticsActions {
    * published for the shell to show once, with that reference and "Report this problem".
    */
   failure(area: string, code: string, message: string, error?: unknown, options: { notify?: boolean; level?: DiagnosticLevel; source?: string } = {}): string {
-    const ref = this.device.claimHostRef() ?? newErrorRef();
-    this.record(options.level ?? "error", area, code, message, error, ref, options.source);
+    const host = this.device.claimHostRef();
+    const ref = this.record(options.level ?? "error", area, code, message, error, host ?? newErrorRef(), options.source, !!host)!;
     if (options.notify) this.publish({ notice: { id: ++this.noticeId, ref, area, source: options.source ?? area, message } });
     return ref;
   }
@@ -162,8 +187,7 @@ export class DiagnosticsActions {
   /** An uncaught error or rejection: logged; shown at most once a minute, since the page may have recovered by itself. */
   uncaught(kind: "error" | "rejection", error: unknown, message: string) {
     if (BENIGN.test(message)) return;
-    const ref = newErrorRef();
-    this.record("error", "page", kind === "error" ? "uncaught_error" : "unhandled_rejection", message || "Unknown error", error, ref);
+    const ref = this.record("error", "page", kind === "error" ? "uncaught_error" : "unhandled_rejection", message || "Unknown error", error, newErrorRef())!;
     if (this.now() - this.lastUncaught < 60_000) return;
     this.lastUncaught = this.now();
     this.publish({ notice: { id: ++this.noticeId, ref, area: "page", source: "XF Studio", message: UNCAUGHT_NOTICE } });
@@ -191,7 +215,7 @@ export class DiagnosticsActions {
     switch (action.kind) {
       case "diagnostics.prepareReport":
         if (report?.phase === "preparing") return refusal("busy", "The report is being prepared.");
-        if (action.ref !== undefined && action.ref !== null && !/^XF-[0-9A-HJKMNP-TV-Z]{4}$/.test(action.ref)) return refusal("invalid_value", "That isn't an XF Studio error reference.");
+        if (action.ref !== undefined && action.ref !== null && !isErrorRef(action.ref)) return refusal("invalid_value", "That isn't an XF Studio error reference.");
         return { available: true };
       case "diagnostics.setIncluded": {
         if (!ready) return refusal("not_ready", "Prepare the report first.");
@@ -236,7 +260,7 @@ export class DiagnosticsActions {
         this.regroup();
         return { ok: true, message: action.confirmed ? "You can now tick mod files." : "Mod files left out." };
       }
-      case "diagnostics.setDescription": this.publishReport({ description: action.text }); return { ok: true, message: "" };
+      case "diagnostics.setDescription": this.publishReport({ description: action.text }); this.refreshFiles(); return { ok: true, message: "" };
       case "diagnostics.copySummary": return this.step("copying", async () => {
         await this.device.copy(this.summary());
         return "Summary copied. Paste it into your issue, and attach the saved report file.";
@@ -244,7 +268,7 @@ export class DiagnosticsActions {
       case "diagnostics.saveReport": return this.step("saving", async () => {
         const manifest = this.manifest!, report = this.state.report!;
         const bytes = await this.device.bundle({ id: manifest.id, include: [...this.included], description: report.description,
-          page: { facts: this.device.pageFacts(), items: this.pageItems.map(({ text: _text, ...item }) => item) } });
+          sharingConfirmed: report.sharingConfirmed, page: { facts: this.pageFacts(), items: this.pageItems.map(({ text: _text, ...item }) => item) } });
         const name = reportFileName(manifest);
         this.device.save(name, bytes, "application/zip");
         this.publishReport({ saved: name });
@@ -252,7 +276,7 @@ export class DiagnosticsActions {
       });
       case "diagnostics.openIssue": return this.step("opening", async () => {
         const manifest = this.manifest!, report = this.state.report!;
-        await this.device.openIssue(report.title, issueSummary(manifest, report.description, report.saved));
+        await this.device.openIssue(report.title, issueSummary(manifest, report.description, report.saved, new Set(this.included)));
         return report.saved ? "The issue page is open. Attach the saved report file there." : "The issue page is open. Save the report and attach it there.";
       });
       case "diagnostics.setMode": {
@@ -277,8 +301,10 @@ export class DiagnosticsActions {
       return { ok: true, message };
     } catch (error) {
       const message = (error as Error)?.message || "That didn't work. Try again.";
-      this.publishReport({ busy: null, message });
-      return { ok: false, code: "unavailable", message };
+      // The host no longer holds this report: "Prepare again" is the way on (DIAG-14).
+      const expired = (error as { code?: unknown })?.code === "report_expired";
+      this.publishReport({ busy: null, message, ...(expired ? { phase: "failed" as const, expired: true } : {}) });
+      return { ok: false, code: expired ? "stale_result" : "unavailable", message };
     }
   }
 
@@ -286,12 +312,12 @@ export class DiagnosticsActions {
     this.manifest = null; this.included.clear();
     const pending = this.device.pending();
     this.pageItems = [
-      { id: "page", ...PAGE_ITEM_TEXT.page!, content: this.device.pageFacts() },
+      { id: "page", ...PAGE_ITEM_TEXT.page!, content: this.pageFacts() },
       ...(activity.length ? [{ id: "activity", ...PAGE_ITEM_TEXT.activity!, content: activity.slice(-100) }] : []),
       ...(pending.length ? [{ id: "pending", ...PAGE_ITEM_TEXT.pending!, content: pending }] : []),
     ].map(item => ({ ...item, text: JSON.stringify(redactValue(item.content), null, 1) }));
     this.publish({ opens: this.state.opens + 1, report: { phase: "preparing", ref, message: null, title: reportTitle(ref, []), description: this.state.report?.description ?? "",
-      sharingConfirmed: false, groups: [], total: 0, limit: 0, totalSize: "", fileName: null, busy: null, saved: null, window: null } });
+      sharingConfirmed: false, groups: [], total: 0, limit: 0, totalSize: "", fileName: null, busy: null, saved: null, window: null, files: null, expired: false } });
     try {
       const manifest = await this.device.prepare(ref);
       this.manifest = manifest;
@@ -312,7 +338,8 @@ export class DiagnosticsActions {
     if (!report || !manifest) return;
     const pageViews: ReportItemView[] = this.pageItems.map(item => ({ id: item.id, group: item.id === "page" ? "about" : "happened", label: item.label,
       detail: item.detail, bytes: new TextEncoder().encode(item.text).length, included: true, preview: previewOf(item.text) }));
-    const all: ReportItemState[] = [...manifest.items, ...pageViews].map(item => ({ ...item, size: formatBytes(item.bytes), included: this.included.has(item.id) }));
+    const all: ReportItemState[] = [...manifest.items, ...pageViews].map(item => ({ ...item, size: formatBytes(item.bytes), included: this.included.has(item.id),
+      partial: item.bytes > PREVIEW_CHARS }));
     const groups = REPORT_GROUPS.map(group => {
       const items = all.filter(item => item.group === group.id);
       const bytes = items.filter(item => item.included).reduce((sum, item) => sum + item.bytes, 0);
@@ -320,14 +347,35 @@ export class DiagnosticsActions {
     }).filter(group => group.items.length);
     const total = groups.reduce((sum, group) => sum + group.bytes, 0);
     this.publishReport({ groups, total, totalSize: `${formatBytes(total)} of ${formatBytes(report.limit)}` });
+    this.refreshFiles();
+  }
+
+  /** What the summary and the index are built from now. */
+  private fileInput(): ReportFileInput | null {
+    const manifest = this.manifest, report = this.state.report;
+    if (!manifest || !report) return null;
+    const offered = report.groups.flatMap(group => group.items);
+    return { manifest, description: report.description, page: this.pageFacts(), included: offered.filter(item => item.included), offered };
+  }
+  /** The README and index previews, as the host will write them (it redacts again with the configured folders). */
+  private refreshFiles() {
+    const input = this.fileInput();
+    if (input) this.publishReport({ files: { readme: reportSummary(input), index: reportIndex(input) } });
   }
 
   /** The readable summary of what is ticked now (what "Copy summary" copies). */
   summary(): string {
-    const manifest = this.manifest, report = this.state.report;
-    if (!manifest || !report) return "";
-    const included = report.groups.flatMap(group => group.items).filter(item => item.included);
-    return reportSummary({ manifest, description: report.description, page: this.device.pageFacts(), included });
+    const input = this.fileInput();
+    return input ? reportSummary(input) : "";
+  }
+
+  /** One item's whole text for the review's full view (the preview shows its start): the page's own, or the host's. */
+  async fullText(item: string): Promise<string | null> {
+    const own = this.pageItems.find(entry => entry.id === item);
+    if (own) return own.text;
+    const manifest = this.manifest;
+    if (!manifest || !manifest.items.some(entry => entry.id === item)) return null;
+    try { return await this.device.item(manifest.id, item); } catch { return null; }
   }
 }
 

@@ -1,0 +1,286 @@
+// The diagnostics cleanup (code-health DIAG-01..04, 06..09, 12): what a saved report may hold, redaction of names the shared
+// patterns can't see the end of, a log that never throws, a V's resolution that survives its size, and the page's forwards.
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { inflateRawSync } from "node:zlib";
+import { personalDataIn } from "../src/private-data";
+import { redactText, textRedactor } from "../src/diagnostics/redact";
+import { personalRoots, RedactionRoots } from "../src/diagnostics/host-roots";
+import { DIAGNOSTIC_FORWARD_SCHEMA, type DiagnosticEntry } from "../src/diagnostics/model";
+import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host-log";
+import { TraceWindow } from "../src/diagnostics/trace-window";
+import { createDiagnosticsHandler, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
+import { resolutionResources } from "../src/diagnostics/host-report";
+import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
+import type { ReportManifest } from "../src/diagnostics/report";
+import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
+import type { ResolvedCharacter } from "../src/character-resolver";
+
+const root = mkdtempSync(resolve(tmpdir(), "xfs-diagnostics-report-"));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+/** Names assembled at run time, so this file itself holds no personal path for the repository check. */
+const WHO = ["j", "doe"].join(""), FULL = ["John", "Doe"].join(" "), ORG = ["Contoso", "Ltd"].join(" ");
+const PROFILE = `C:\\${"Users"}\\${FULL}`;
+
+function unzip(bytes: Uint8Array): Map<string, string> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), out = new Map<string, string>();
+  let at = 0;
+  while (view.getUint32(at, true) === 0x04034b50) {
+    const method = view.getUint16(at + 8, true), size = view.getUint32(at + 18, true), nameLength = view.getUint16(at + 26, true);
+    const name = new TextDecoder().decode(bytes.subarray(at + 30, at + 30 + nameLength));
+    const body = bytes.subarray(at + 30 + nameLength, at + 30 + nameLength + size);
+    out.set(name, new TextDecoder().decode(method === 8 ? inflateRawSync(body) : body));
+    at += 30 + nameLength + size;
+  }
+  return out;
+}
+
+/** An endpoint over its own data folder and settings; `post` sends a Studio-origin JSON request. */
+function endpoint(name: string, settings: LocalSettings, extra: { openExternal?: (url: string) => boolean } = {}) {
+  const dataRoot = join(root, name);
+  const diagnostics = hostDiagnosticsAt(dataRoot);
+  const handler = createDiagnosticsHandler(diagnostics, { app: () => ({ version: "0.1.0", commit: null, channel: null, host: "localhost" }),
+    settings: () => settings, roots: () => [{ label: "<data>", path: dataRoot }], ...extra });
+  const serve = withRequestDiagnostics(diagnostics, handler);
+  const origin = "http://127.0.0.1:4317";
+  const post = (path: string, body: unknown) => serve(new Request(`${origin}/api/diagnostics/${path}`,
+    { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  return { diagnostics, post, dataRoot };
+}
+
+describe("names the shared patterns can't see the end of (DIAG-02)", () => {
+  test("a profile folder with spaces and an OneDrive folder named after an employer leave nothing behind", () => {
+    const text = `${PROFILE}\\AppData\\Local\\xf and ${PROFILE}\\OneDrive - ${ORG}\\Documents\\x and "${PROFILE.replace(/\\/g, "\\\\")}\\\\y"`;
+    const shared = redactText(text);
+    expect(shared).not.toContain("Doe");
+    expect(shared).not.toContain("Contoso");
+    expect(personalDataIn(shared)).toBeNull();
+  });
+  test("the host names the person's own folders and account literally, in any slash direction or JSON escaping", () => {
+    const roots = personalRoots({ USERPROFILE: PROFILE, OneDriveCommercial: `${PROFILE}\\OneDrive - ${ORG}`, USERNAME: WHO },
+      PROFILE, WHO, true);
+    const redact = textRedactor(roots);
+    const out = redact(`${PROFILE}\\OneDrive - ${ORG}\\a.txt; ${PROFILE.replace(/\\/g, "/")}/b; ${JSON.stringify(`${PROFILE}\\c`)}; signed in as ${WHO}`);
+    expect(out).toBe(`%OneDrive%\\a.txt; %USERPROFILE%/b; "%USERPROFILE%\\\\c"; signed in as <user>`);
+    // A placeholder account name is never treated as a person's.
+    expect(textRedactor(personalRoots({}, null, "user", true))("the user folder")).toBe("the user folder");
+  });
+  test("the log and the window write with the host's roots", () => {
+    const roots = new RedactionRoots(() => personalRoots({}, PROFILE, WHO, true));
+    const log = new DiagnosticLog(join(root, "spaced-log"), { redactor: () => roots.redactor() });
+    log.failure("character", "details_failed", `Failed under ${PROFILE}\\AppData`, Error(`at ${PROFILE}\\src\\x.ts for ${WHO}`));
+    const window = new TraceWindow(join(root, "spaced-log"), Date.now, () => roots.redactor());
+    window.event("character", "prepare", { folder: `${PROFILE}\\Games`, owner: WHO });
+    window.flush();
+    const written = readFileSync(log.path, "utf8") + JSON.stringify(window.read());
+    expect(written).not.toContain("Doe");
+    expect(written).not.toContain(WHO);
+    expect(written).toContain("%USERPROFILE%");
+  });
+});
+
+describe("the log never throws (DIAG-03)", () => {
+  test("escape-bearing text beside a save folder is redacted value by value and stays valid JSON", () => {
+    const log = new DiagnosticLog(join(root, "escapes"));
+    const message = "line one\nMy Run 7\\sav.dat\tand \"quoted\" \\n literal";
+    const written = log.write({ t: new Date().toISOString(), level: "error", area: "page", code: "x", message, origin: "page",
+      details: { stack: `Error: boom\n\tat D:\\Games\\Cyberpunk 2077\\My Run 7\\sav.dat\n\tat "x"` } });
+    expect(written.message).toBe(message);
+    expect(written.details!.stack).toContain("Cyberpunk 2077\\<save>\\sav.dat");
+    const lines = readFileSync(log.path, "utf8").trim().split("\n");
+    expect(() => lines.map(line => JSON.parse(line))).not.toThrow();
+    const window = new TraceWindow(join(root, "escapes"));
+    window.event("resolver", "read_failed", { path: message, nested: { list: [message, 1, null] } });
+    window.flush();
+    expect(window.read()[0]!.data!.path).toBe(written.message);
+  });
+  test("a failure hook survives an error whose stack can't be read, and an entry that can't be written", () => {
+    const hostile = new Proxy({}, { get: () => { throw Error("no"); } });
+    const diagnostics = hostDiagnosticsAt(join(root, "hostile"));
+    const ref = withDiagnostics(diagnostics, () => hostFailure("character", "details_failed", "Failed.", hostile));
+    expect(ref).toMatch(/^XF-/);
+    const cyclic: Record<string, unknown> = { level: "error" };
+    cyclic.self = cyclic;
+    expect(() => diagnostics.log.write(cyclic as unknown as DiagnosticEntry)).not.toThrow();
+  });
+  test("the forwarding endpoint answers a poison entry with 204, so the page doesn't resend it forever", async () => {
+    const { diagnostics, post } = endpoint("poison", defaultLocalSettings());
+    const write = diagnostics.log.write.bind(diagnostics.log);
+    diagnostics.log.write = (entry: DiagnosticEntry) => { if (entry.message === "poison") throw Error("disk full"); return write(entry); };
+    const entries = [{ level: "error", area: "page", code: "a", message: "poison" }, { level: "error", area: "page", code: "b", message: "fine" }];
+    expect((await post("entries", { schema: DIAGNOSTIC_FORWARD_SCHEMA, entries })).status).toBe(204);
+    expect(diagnostics.log.tail(5).map(entry => entry.message)).toContain("fine");
+  });
+});
+
+/** A synthetic V whose parts share their materials, as real ones do: `parts` components × `materials` materials, each naming the same templates. */
+function syntheticV(parts: number, materials: number, alternatives: number): ResolvedCharacter {
+  const provenance = (path: string) => ({ ref: { hash: String(Bun.hash(path)), path }, status: "archive", archive: `${path.split("\\")[1]}.archive`,
+    provider: "Hair Pack", group: "mod", alternatives: Array.from({ length: alternatives }, (_, i) => `other_${i}.archive (mod, Other Mod ${i})`),
+    rule: { rule: "mod archives load after the game's" }, via: [], extractedSha256: null, ambiguities: [] });
+  const material = (index: number) => ({ chunk: index, name: `m${index}`, route: "direct", entry: `e${index}`, dynamic: false,
+    chain: [{ label: "base", baseMaterial: "base", provenance: provenance(`base\\shared\\m${index % 12}.mi`) }],
+    template: provenance(`base\\templates\\t${index % 4}.mt`),
+    params: Array.from({ length: 6 }, (_, p) => ({ name: `p${p}`, setBy: "mi", resource: provenance(`base\\textures\\x${(index + p) % 30}.xbm`), dynamic: null })),
+    gaps: [] });
+  const component = (index: number) => ({ name: `c${index}`, type: "mesh", origin: "app", meshAppearance: "default", chunkMask: null, overriddenBy: [],
+    geometry: { mesh: provenance(`base\\meshes\\c${index % 20}.mesh`), morphTarget: null, drawnFrom: null, patchedFrom: null, renderChunks: 4, visibleChunks: 4,
+      drawsNothing: false, morphTexture: null },
+    meshAppearanceResolved: true, materials: Array.from({ length: materials }, (_, m) => material(m)), notes: [] });
+  return { bodyGender: "female", origin: "ui-state", cco: { base: provenance("base\\cco.inkcc"), customResources: [], hairColorTags: [] },
+    appearances: Array.from({ length: 12 }, (_, a) => ({ part: `part${a}`, option: `o${a}`, groups: [], definition: `d${a}`, requestedApp: { hash: "1", path: `base\\apps\\a${a}.app` },
+      app: provenance(`base\\apps\\a${a}.app`), appOverride: null, choice: 0, appearance: "default",
+      components: Array.from({ length: parts }, (_, c) => component(a * parts + c)), notes: [] })),
+    morphs: [], ambiguities: [], gaps: [], rules: [] } as unknown as ResolvedCharacter;
+}
+
+describe("a V's resolution survives its size (DIAG-04)", () => {
+  test("a realistically sized resolution is kept, one table of resources, and the report's resource parts fill in", async () => {
+    const resolved = syntheticV(6, 10, 6);
+    // Inline, as the window used to record it, this is about the reference V's size.
+    const inline = JSON.stringify(resolved).length;
+    expect(inline).toBeGreaterThan(1_500_000);
+    const compact = resolutionTrace(resolved);
+    const rows = compact.resources as unknown[];
+    expect(rows.length).toBeLessThan(100);
+    const { diagnostics, post } = endpoint("resolution", defaultLocalSettings());
+    diagnostics.trace.event("character", "resolved", compact, RESOLUTION_TRACE_OPTIONS);
+    const [event] = diagnostics.trace.read().filter(entry => entry.event === "resolved");
+    expect(event!.data!.truncated).toBeUndefined();
+    expect(resolutionResources(event!, null)!.length).toBe(rows.length);
+    const manifest = await (await post("report", { ref: null })).json() as ReportManifest;
+    const winners = manifest.items.find(item => item.id === "winners")!;
+    expect(winners.bytes).toBeGreaterThan(1_000);
+    expect(manifest.items.find(item => item.id === "involved-mods")!.preview).toContain("Hair Pack");
+  });
+  test("a record still too large keeps its resource table; without one, the preparation's parts stand in", () => {
+    const window = new TraceWindow(join(root, "oversize"));
+    const huge = { resources: [{ ref: { hash: "1", path: "base\\a.app" }, status: "archive", archive: "a.archive", provider: "A", group: "mod", alternatives: [] }],
+      appearances: Array.from({ length: 5_000 }, (_, i) => ({ note: "x".repeat(500), i })) };
+    window.event("character", "resolved", huge, RESOLUTION_TRACE_OPTIONS);
+    const [kept] = window.read();
+    expect(kept!.data!.truncated).toBe(true);
+    expect(resolutionResources(kept!, null)).toHaveLength(1);
+    // An older window's keys-only record: the preparation's parts and their winning archives.
+    const old = { t: "", area: "character", event: "resolved", data: { truncated: true, bytes: 1_781_146, keys: ["appearances"] } };
+    const prepared = { t: "", area: "character", event: "prepared", data: { components: [{ sources: [{ path: "base\\b.mesh", archive: "b.archive", provider: "B" }] }] } };
+    expect(resolutionResources(old, prepared)).toEqual([expect.objectContaining({ ref: expect.objectContaining({ path: "base\\b.mesh" }), archive: "b.archive", provider: "B" })]);
+  });
+});
+
+describe("a saved report holds only what was ticked (DIAG-01, DIAG-06, DIAG-08, DIAG-09)", () => {
+  const game = join(root, `game-${WHO}`), mo2 = join(root, "mo2");
+  mkdirSync(join(game, "bin", "x64"), { recursive: true });
+  writeFileSync(join(game, "bin", "x64", "Cyberpunk2077.exe"), "not a real exe");
+  mkdirSync(join(mo2, "mods", "Private Mod Name", "archive", "pc", "mod"), { recursive: true });
+  writeFileSync(join(mo2, "mods", "Private Mod Name", "meta.ini"), "[General]\nversion=0.1\n");
+  writeFileSync(join(mo2, "mods", "Private Mod Name", "archive", "pc", "mod", "private.archive"), "private bytes");
+  mkdirSync(join(mo2, "profiles"), { recursive: true });
+  const settings: LocalSettings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Secret Profile" };
+  let opened = "";
+  const { diagnostics, post, dataRoot } = endpoint("ticks", settings, { openExternal: url => { opened = url; return true; } });
+
+  async function prepare() {
+    const ref = diagnostics.log.failure("character", "details_failed", "Failed: SECRET-MESSAGE", Error("SECRET-STACK"));
+    diagnostics.log.info("test", "event", "SECRET-LOG-LINE");
+    diagnostics.trace.event("character", "resolved", { resources: [
+      { ref: { hash: "1", path: "base\\hair.app" }, status: "archive", archive: "private.archive", provider: "Private Mod Name", group: "mod", alternatives: [] }] },
+      RESOLUTION_TRACE_OPTIONS);
+    return { ref, manifest: await (await post("report", { ref })).json() as ReportManifest };
+  }
+
+  test("README.md and report.json leave out unticked parts, and never name an unticked mod", async () => {
+    const { ref, manifest } = await prepare();
+    const byId = new Map(manifest.items.map(item => [item.id, item]));
+    // The full mod list starts unticked (DIAG-08); a small MO2 mod with no source is offered, unticked, with plain words (DIAG-09).
+    expect(byId.get("mods")!.included).toBe(false);
+    const offer = manifest.items.find(item => item.modFiles)!;
+    expect(offer).toMatchObject({ included: false, label: "Files of “Private Mod Name”" });
+    expect(offer.detail).toContain("couldn't tell where this mod came from");
+    const response = await post("bundle", { id: manifest.id, include: ["settings"], description: "Only the settings." });
+    expect(response.status).toBe(200);
+    const files = unzip(new Uint8Array(await response.arrayBuffer()));
+    expect([...files.keys()].sort()).toEqual(["README.md", "about/settings.json", "report.json"]);
+    const all = [...files.values()].join("\n");
+    for (const secret of ["SECRET-MESSAGE", "SECRET-STACK", "SECRET-LOG-LINE", "Private Mod Name", "0.1.0", "Secret Profile"]) expect(all, secret).not.toContain(secret);
+    expect(files.get("README.md")).toContain(`Reference ${ref}; its log entries weren't included.`);
+    const index = JSON.parse(files.get("report.json")!);
+    expect(index).toMatchObject({ app: null, page: null, included: [{ id: "settings" }] });
+    expect(index.leftOut.items).toEqual(expect.arrayContaining(["problem", "log", "mods", offer.id]));
+  });
+
+  test("the full mod list, when ticked, carries no MO2 profile name (DIAG-08)", async () => {
+    const { manifest } = await prepare();
+    const files = unzip(new Uint8Array(await (await post("bundle", { id: manifest.id, include: ["mods"] })).arrayBuffer()));
+    expect(files.get("mods/mods.json")).toContain("<profile>");
+    expect(files.get("mods/mods.json")).not.toContain("Secret Profile");
+  });
+
+  test("a mod's own files need the sharing confirmation on the host too (DIAG-09)", async () => {
+    const { manifest } = await prepare();
+    const offer = manifest.items.find(item => item.modFiles)!;
+    const refused = await post("bundle", { id: manifest.id, include: [offer.id] });
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).code).toBe("sharing_not_confirmed");
+    const confirmed = await post("bundle", { id: manifest.id, include: [offer.id], sharingConfirmed: true });
+    expect([...unzip(new Uint8Array(await confirmed.arrayBuffer())).keys()]).toContain("optional/mod-files/Private Mod Name/private.archive");
+  });
+
+  test("configured folders are redacted in page items, page facts, the description, the issue link, the log and the window (DIAG-06)", async () => {
+    const { manifest } = await prepare();
+    const at = `${game}\\archive\\pc\\mod\\x.archive`;
+    const page = { facts: { browser: "Chrome 140", gpu: null, webgl2: true, state: { folder: at } },
+      items: [{ id: "activity", label: `Recent messages ${game}`, detail: at, content: [{ message: `Couldn't read ${at}` }] },
+        { id: "page", label: "This window", detail: "", content: { folder: at } }] };
+    const response = await post("bundle", { id: manifest.id, include: ["settings", "activity", "page"], description: `I opened ${at}`, page });
+    const all = [...unzip(new Uint8Array(await response.arrayBuffer())).values()].join("\n");
+    expect(all).not.toContain(`game-${WHO}`);
+    expect(all).toContain("<game>");
+    await post("open-issue", { title: `Problem in ${game}`, body: `Folder ${at}` });
+    expect(decodeURIComponent(opened)).not.toContain(`game-${WHO}`);
+    // The files on disk the docs call safe to attach carry the label too.
+    diagnostics.log.info("test", "event", `Reading ${at}`);
+    diagnostics.trace.event("character", "prepare", { folder: at });
+    diagnostics.trace.flush();
+    const disk = readFileSync(join(dataRoot, "diagnostics", "log.jsonl"), "utf8") +
+      readdirSync(join(dataRoot, "diagnostics", "trace")).map(name => readFileSync(join(dataRoot, "diagnostics", "trace", name), "utf8")).join("");
+    expect(disk).not.toContain(`game-${WHO}`);
+  });
+
+  test("files of a game-folder mod are never offered (DIAG-09)", async () => {
+    const plain: LocalSettings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" };
+    mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });
+    writeFileSync(join(game, "archive", "pc", "mod", "loose.archive"), "loose");
+    const other = endpoint("game-folder", plain);
+    other.diagnostics.trace.event("character", "resolved", { resources: [
+      { ref: { hash: "2", path: "base\\x.app" }, status: "archive", archive: "loose.archive", provider: "Installed game", group: "mod", alternatives: [] }] },
+      RESOLUTION_TRACE_OPTIONS);
+    const manifest = await (await other.post("report", { ref: null })).json() as ReportManifest;
+    expect(manifest.items.some(item => item.modFiles)).toBe(false);
+  });
+});
+
+describe("the page's forwards (DIAG-07, DIAG-12)", () => {
+  test("the same page entry is kept once a minute, and a flood can't hide a host failure from its report", async () => {
+    const { diagnostics, post } = endpoint("flood", defaultLocalSettings());
+    const ref = diagnostics.log.failure("character", "details_failed", "The host failure", Error("x"));
+    const same = { level: "error", area: "page", code: "loop", message: "the same thing again" };
+    for (let i = 0; i < 5; i++) await post("entries", { schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: Array(10).fill(same) });
+    expect(diagnostics.log.tail().filter(entry => entry.message === same.message)).toHaveLength(1);
+    // Hundreds of distinct later entries push the failure past the last 200; "This problem" still finds it.
+    for (let i = 0; i < 300; i++) diagnostics.log.info("test", "event", `later ${i}`);
+    const manifest = await (await post("report", { ref })).json() as ReportManifest;
+    expect(manifest.problem.map(entry => entry.ref)).toContain(ref);
+  });
+  test("a page failure links to at most three host failures of the last seconds, and none when it carries a host reference", async () => {
+    const { diagnostics, post } = endpoint("links", defaultLocalSettings());
+    const refs = Array.from({ length: 5 }, (_, i) => diagnostics.log.failure("server", "http_500", `failure ${i}`));
+    await post("entries", { schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: [{ level: "error", area: "notice", code: "failed", message: "page-made", ref: "XF-7K3Q" },
+      { level: "error", area: "notice", code: "failed", message: "host-made", ref: refs[4] }] });
+    const tail = diagnostics.log.tail(10);
+    expect(tail.find(entry => entry.message === "page-made")!.details!.related).toEqual(refs.slice(-3));
+    expect(tail.find(entry => entry.message === "host-made")!.details?.related).toBeUndefined();
+  });
+});

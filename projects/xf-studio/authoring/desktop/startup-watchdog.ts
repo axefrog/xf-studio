@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import type { WebView2Status } from "./webview2";
 import { entryLine, type DiagnosticEntry } from "../src/diagnostics/model";
-import { redactText } from "../src/diagnostics/redact";
+import { textRedactor } from "../src/diagnostics/redact";
+import { processPersonalRoots } from "../src/diagnostics/host-roots";
 
 /** How long the host waits for the WebView to request the Studio page before explaining. */
 export const BLANK_WINDOW_TIMEOUT_MS = 20_000;
@@ -20,11 +21,12 @@ export type BlankWindowNotice = {
 export function blankWindowNotice(webView2: WebView2Status, logPath: string,
   readLog = (path: string) => readFileSync(path, "utf8")): BlankWindowNotice {
   let tail = "";
-  // The structured log's lines as plain lines; redacted, since the person pastes this into a public report.
+  // The structured log's lines as plain lines; redacted with the person's own folders and name and the shared rules, since the
+  // person pastes this into a public report.
   try { tail = readLog(logPath).split("\n").filter(Boolean).slice(-40).map(line => {
     try { return entryLine(JSON.parse(line) as DiagnosticEntry); } catch { return line; }
   }).join("\n"); } catch { /* No log yet. */ }
-  const diagnostics = redactText(`XF Studio startup diagnostics\nWebView2: ${webView2.installed ? webView2.version ?? webView2.source : "not detected"}\n` +
+  const diagnostics = textRedactor(processPersonalRoots())(`XF Studio startup diagnostics\nWebView2: ${webView2.installed ? webView2.version ?? webView2.source : "not detected"}\n` +
     `Log: ${logPath}\n\n${tail}`);
   if (!webView2.installed) return {
     message: "XF Studio needs the Microsoft Edge WebView2 Runtime.",

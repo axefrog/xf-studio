@@ -3,7 +3,8 @@
  * §Report). Facts about the app, the system, the game and the tools; the log; the rolling window; and targeted details the window's
  * references point to: the latest V's resolution, the load-order winners of the resources it used, bounded excerpts of those
  * resources' tables from the resolver's own JSON cache, and the installed frameworks and mod list (names and versions). Never an
- * archive, a mesh or a texture. Every string is redacted with the configured folders and the shared personal-data rules.
+ * archive, a mesh or a texture. Every string is redacted with the person's own folders, the configured folders and the shared
+ * personal-data rules. The full mod list and anything taken from mods' own files start unticked.
  */
 import { existsSync, openSync, readdirSync, readFileSync, readSync, closeSync, statSync } from "node:fs";
 import { arch, platform, release } from "node:os";
@@ -14,8 +15,9 @@ import type { LocalSettings } from "../local-settings";
 import { describeMo2Instance, parseMo2Modlist, parseQSettingsIni } from "../mo2-instance";
 import { readPeFileVersion } from "../pe-version";
 import { boundJson, DIAGNOSTIC_LIMITS, type DiagnosticEntry, type TraceEntry } from "./model";
-import { redactValue, type KnownRoot } from "./redact";
+import { redactValue, textRedactor, type KnownRoot } from "./redact";
 import type { HostDiagnostics } from "./host-log";
+import { processPersonalRoots } from "./host-roots";
 import { involvedMods, MOD_FILE_LIMIT, REPORT_LIMIT } from "./mod-identity";
 import { formatBytes, previewOf, REPORT_MANIFEST_SCHEMA, type ReportFacts, type ReportGroup, type ReportItemView, type ReportManifest } from "./report";
 
@@ -69,9 +71,27 @@ function settingsSummary(settings: LocalSettings | null): Record<string, string>
   };
 }
 
-function knownRoots(sources: HostReportSources, settings: LocalSettings | null): KnownRoot[] {
+/** An MO2 instance's own folders, which ModOrganizer.ini may put anywhere (another drive, a profile folder). */
+function mo2InstanceRoots(settings: LocalSettings | null): KnownRoot[] {
+  if (!settings?.mo2Root) return [];
+  try {
+    let ini: string | null = null;
+    try { ini = readFileSync(join(settings.mo2Root, "ModOrganizer.ini"), "utf8"); } catch { /* The default layout. */ }
+    const { paths, gamePath } = describeMo2Instance(ini, settings.mo2Root, "configured", "instance");
+    return [{ label: "<mo2-mods>", path: paths.mods }, { label: "<mo2-profiles>", path: paths.profiles },
+      { label: "<mo2-overwrite>", path: paths.overwrite }, { label: "<mo2-downloads>", path: paths.downloads },
+      { label: "<mo2-base>", path: paths.base }, { label: "<game>", path: gamePath }];
+  } catch { return []; }
+}
+
+/**
+ * Everything a report (and, through the endpoint, the log and the window) names instead of printing: the person's own folders, the
+ * configured folders, the MO2 instance's folders wherever they are, and the host's own (data, tools, caches).
+ */
+export function knownRoots(sources: HostReportSources, settings: LocalSettings | null): KnownRoot[] {
   return [
-    { label: "<game>", path: settings?.gameRoot }, { label: "<mo2>", path: settings?.mo2Root },
+    ...processPersonalRoots(),
+    { label: "<game>", path: settings?.gameRoot }, { label: "<mo2>", path: settings?.mo2Root }, ...mo2InstanceRoots(settings),
     { label: "<manual-mods>", path: settings?.manualModRoot }, { label: "<wolvenkit>", path: settings?.wolvenKitCli },
     { label: "<source-cache>", path: settings?.sourceCache.directory }, { label: "<preview-cache>", path: settings?.preview.cacheDirectory },
     { label: "<preview-output>", path: settings?.preview.outputDirectory }, { label: "<resolver-cache>", path: sources.resolverCache },
@@ -96,10 +116,33 @@ function provenances(value: unknown, out = new Map<string, Record<string, unknow
   return out;
 }
 
+/**
+ * The resources the latest preparation used, as the resolver's provenance records. From the resolution's table (or its inline
+ * records, in an older window), else, when the resolution was too large to keep, from the preparation's parts and their winning
+ * archives (fewer details: no losing archives or rules).
+ */
+export function resolutionResources(resolved: TraceEntry | null, prepared: TraceEntry | null): Record<string, unknown>[] | null {
+  const data = resolved?.data as Record<string, unknown> | undefined;
+  if (data && (!data.truncated || Array.isArray(data.resources))) {
+    const found = [...provenances(Array.isArray(data.resources) ? data.resources : data).values()];
+    if (found.length) return found;
+  }
+  const parts = (prepared?.data as { components?: unknown } | undefined)?.components;
+  if (!Array.isArray(parts)) return null;
+  const out = new Map<string, Record<string, unknown>>();
+  for (const part of parts) for (const source of Array.isArray(part?.sources) ? part.sources : []) {
+    if (typeof source?.path !== "string" || !source.path) continue;
+    const hash = depotHash(source.path);
+    if (!out.has(hash)) out.set(hash, { ref: { hash, path: source.path }, status: source.archive ? "archive" : "missing",
+      archive: source.archive ?? null, provider: source.provider ?? null, group: null, alternatives: [], rule: { rule: "from the preparation's parts" } });
+  }
+  return out.size ? [...out.values()] : null;
+}
+
 /** The winners (and losing alternatives) of the resources the latest resolution used. */
-function winners(resolved: TraceEntry | null) {
-  if (!resolved) return null;
-  return [...provenances(resolved.data).values()].map(item => {
+function winners(resources: Record<string, unknown>[] | null) {
+  if (!resources) return null;
+  return resources.map(item => {
     const ref = item.ref as { hash: string; path?: string };
     return { path: ref.path ?? null, hash: ref.hash, status: item.status, archive: item.archive ?? null, provider: item.provider ?? null,
       group: item.group ?? null, alternatives: item.alternatives ?? [], rule: (item.rule as { rule?: string } | undefined)?.rule ?? null,
@@ -108,14 +151,14 @@ function winners(resolved: TraceEntry | null) {
 }
 
 /** Bounded excerpts of the resources the latest resolution used, from the resolver's JSON cache (no archive is read). */
-function excerpts(resolved: TraceEntry | null, cacheDir: string | null | undefined) {
-  if (!resolved || !cacheDir) return null;
+function excerpts(resources: Record<string, unknown>[] | null, cacheDir: string | null | undefined) {
+  if (!resources || !cacheDir) return null;
   const folder = join(cacheDir, "json");
   let names: string[] = [];
   try { names = readdirSync(folder); } catch { return { note: "The resolver cache has no resources yet." }; }
   const out: { path: string; archive: unknown; excerpt: unknown }[] = [];
   let total = 0;
-  for (const item of provenances(resolved.data).values()) {
+  for (const item of resources) {
     const ref = item.ref as { hash: string; path?: string };
     if (!ref.path || !EXCERPT_KINDS.test(ref.path) || out.length >= EXCERPT_COUNT) continue;
     const hash = /^\d+$/.test(ref.hash) ? ref.hash : depotHash(ref.path);
@@ -178,14 +221,14 @@ export type PreparedHostReport = {
 
 const FULL_RESOURCES_BYTES = 6 * 1024 * 1024;
 /** Full JSON of the resources the latest resolution used (payload fields left out), for the optional item. */
-function fullResources(resolved: TraceEntry | null, cacheDir: string | null | undefined) {
-  if (!resolved || !cacheDir) return null;
+function fullResources(resources: Record<string, unknown>[] | null, cacheDir: string | null | undefined) {
+  if (!resources || !cacheDir) return null;
   const folder = join(cacheDir, "json");
   let names: string[] = [];
   try { names = readdirSync(folder); } catch { return null; }
   const out: { path: string; archive: unknown; document: unknown }[] = [];
   let total = 0;
-  for (const item of provenances(resolved.data).values()) {
+  for (const item of resources) {
     const ref = item.ref as { hash: string; path?: string };
     if (!ref.path || !EXCERPT_KINDS.test(ref.path)) continue;
     const hash = /^\d+$/.test(ref.hash) ? ref.hash : depotHash(ref.path);
@@ -204,6 +247,18 @@ function fullResources(resolved: TraceEntry | null, cacheDir: string | null | un
 }
 
 const jsonText = (value: unknown) => JSON.stringify(value, null, 1);
+
+/** The framework check as a report shows it: the MO2 profile's name left out wherever the check's wording carries it (DIAG-08). */
+function frameworkRoutes(check: ReturnType<typeof hostFrameworkCheck> | undefined, profile: string | null | undefined) {
+  if (!check) return null;
+  const hide = (text: string) => profile ? text.split(profile).join("<profile>") : text;
+  return check.routes.map(item => ({ ...redactValue({ ...item, label: "" }, hide),
+    label: item.route === "mo2" ? "Mod Organizer 2" : item.label, profileId: item.profileId ? "chosen" : null }));
+}
+/** Mod files are offered only for a mod that is itself a folder the person installed (an MO2 mod, a manual folder), never game files. */
+const OFFERS_FILES: ReadonlySet<string> = new Set(["mo2-mod", "manual"]);
+/** A note for anything taken from mods' own files (DIAG-18). */
+const MOD_CONTENT_NOTE = "Parts of these come from the mods' own files, so include them only when they help explain this problem.";
 const utf8Bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
 /** Build the host's share of a report: the manifest the review screen shows and the contents behind it. Never throws for a part. */
@@ -228,12 +283,15 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
   const roots = knownRoots(sources, settings);
   const trace = diagnostics.trace.read(TRACE_REPORT_BYTES);
   const resolved = latest(trace, "character", "resolved"), prepared = latest(trace, "character", "prepared");
-  const entries = diagnostics.log.tail(200);
-  const problem = matchingEntries(entries, ref);
+  // "This problem" searches the whole log and the host failures kept apart from it, so a flood of later entries can't hide it (DIAG-07).
+  const everything = diagnostics.log.tail();
+  const entries = everything.slice(-200);
+  const problem = matchingEntries(mergeEntries(everything, diagnostics.log.hostFailures()), ref);
   const state = diagnostics.trace.state();
-  const winnerList = winners(resolved);
+  const resources = resolutionResources(resolved, prepared);
+  const winnerList = winners(resources);
   const mods = await involvedMods(winnerList, settings);
-  const full = fullResources(resolved, sources.resolverCache);
+  const full = fullResources(resources, sources.resolverCache);
   type Built = { id: string; group: ReportGroup; label: string; detail: string; content: unknown; included?: boolean };
   const built: Built[] = [
     { id: "environment", group: "about", label: "Versions", detail: "XF Studio, system, game, WolvenKit and framework versions.", content: facts },
@@ -243,38 +301,50 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
     { id: "trace", group: "happened", label: "Recent activity detail", detail: `What XF Studio worked out in the last ${state.minutes} minutes (${trace.length} events): which files won, what was prepared. Names and references only.`, content: trace },
     { id: "involved-mods", group: "mods", label: "Mods involved", detail: mods.length ? `${mods.length} mods supplied or lost resources your V used: names, versions, download sources and file fingerprints.` : "No mods were involved in the recent window.",
       content: mods.map(({ archives, ...mod }) => ({ ...mod, archives: archives.map(({ path: _path, ...archive }) => archive) })) },
-    { id: "mods", group: "mods", label: "Frameworks and mod list", detail: "Installed frameworks and your mod list, by name and version.", content: { frameworks: frameworkCheck?.routes.map(item => ({ ...item, label: item.route === "mo2" ? "Mod Organizer 2" : item.label, profileId: item.profileId ? "chosen" : null })) ?? null, mods: modList(settings) } },
+    // The whole mod list is personal and not needed to reproduce a problem (the involved mods are): unticked by default (DIAG-08).
+    { id: "mods", group: "mods", label: "Frameworks and full mod list", detail: "Installed frameworks and every mod you have, enabled or not, by name and version. Only tick this if you're asked for it.",
+      content: { frameworks: frameworkRoutes(frameworkCheck, settings?.mo2ProfileId), mods: modList(settings) }, included: false },
     { id: "resolution", group: "resources", label: "Your V's latest preparation", detail: "The creator options, apps, meshes and materials your V used, and which mod supplied each.",
-      content: resolved ? { resolved: resolved.data, prepared: prepared?.data ?? null, at: resolved.t } : null },
+      content: resolved || prepared ? { resolved: resolved?.data ?? null, prepared: prepared?.data ?? null, at: (resolved ?? prepared)!.t } : null },
     { id: "winners", group: "resources", label: "Load-order winners", detail: "For each resource: the archive that won, the ones it beat and the rule that decided.", content: winnerList },
-    { id: "excerpts", group: "resources", label: "Resource tables", detail: "Short extracts of those apps, meshes and materials (appearance and material tables). No geometry or textures.", content: excerpts(resolved, sources.resolverCache) },
-    ...(full ? [{ id: "resources-full", group: "optional" as const, label: `Full JSON of these ${full.length} resources`, detail: "Every field of the resources above, for a closer look. Structured data only; no geometry or textures.", content: full, included: false }] : []),
+    { id: "excerpts", group: "resources", label: "Resource tables", detail: `Short extracts of those apps, meshes and materials (appearance and material tables). No geometry or textures. ${MOD_CONTENT_NOTE}`, content: excerpts(resources, sources.resolverCache) },
+    ...(full ? [{ id: "resources-full", group: "optional" as const, label: `Every detail of these ${full.length} resources`, detail: `Everything in the resources above, for a closer look. No geometry or textures. ${MOD_CONTENT_NOTE}`, content: full, included: false }] : []),
   ];
   const contents = new Map<string, string>(), files: PreparedHostReport["files"] = new Map();
   const items: ReportItemView[] = [];
+  const redact = textRedactor(roots);
   for (const item of built) {
     if (item.content === null || item.content === undefined || (Array.isArray(item.content) && !item.content.length && item.id !== "problem")) continue;
-    const text = jsonText(redactValue(item.content, roots));
+    const text = jsonText(redactValue(item.content, redact));
     contents.set(item.id, text);
     items.push({ id: item.id, group: item.group, label: item.label, detail: item.detail, bytes: utf8Bytes(text), included: item.included ?? true, preview: previewOf(text) });
   }
-  // A mod's own files: only when nothing can fetch it again, only when it is small, and never ticked by default.
+  // A mod's own files: only for a mod folder the person installed that nothing can fetch again, only when it is small, and never
+  // ticked by default. Saving them needs the sharing confirmation, which the host checks too (DIAG-09).
   mods.forEach((mod, index) => {
-    if (mod.status !== "local-only") return;
+    if (mod.status !== "local-only" || !OFFERS_FILES.has(mod.kind)) return;
     const archives = mod.archives.filter(archive => archive.path && archive.bytes !== null);
     const bytes = archives.reduce((sum, archive) => sum + archive.bytes!, 0);
     if (!archives.length || bytes > MOD_FILE_LIMIT) return;
     const id = `mod-file:${index}`;
     files.set(id, archives.map(archive => ({ name: archive.name, path: archive.path!, mod: mod.name })));
-    items.push({ id, group: "optional", label: redactValue(`Files of “${mod.name}”`, roots), modFiles: true, bytes, included: false,
-      detail: `${archives.length === 1 ? "Its archive" : `Its ${archives.length} archives`}. XF Studio found no download source for this mod, so it can't be fetched again elsewhere.`,
-      preview: redactValue(archives.map(archive => `${archive.name} · ${formatBytes(archive.bytes!)} · SHA-256 ${archive.sha256 ?? "not computed"}`).join("\n"), roots) });
+    items.push({ id, group: "optional", label: redact(`Files of “${mod.name}”`), modFiles: true, bytes, included: false,
+      detail: `${archives.length === 1 ? "Its archive" : `Its ${archives.length} archives`}. XF Studio couldn't tell where this mod came from. ` +
+        "Usually the details above are enough; only include its files if you made this mod or its permissions allow sharing.",
+      preview: redact(archives.map(archive => `${archive.name} · ${formatBytes(archive.bytes!)} · SHA-256 ${archive.sha256 ?? "not computed"}`).join("\n")) });
   });
   const made = new Date().toISOString();
-  const manifest: ReportManifest = { schema: REPORT_MANIFEST_SCHEMA, id, ref, made, facts: redactValue(facts, roots),
-    problem: redactValue(problem, roots), recent: redactValue(entries.slice(-DIAGNOSTIC_LIMITS.reportEntries), roots), items,
+  const manifest: ReportManifest = { schema: REPORT_MANIFEST_SCHEMA, id, ref, made, facts: redactValue(facts, redact),
+    problem: redactValue(problem, redact), recent: redactValue(entries.slice(-DIAGNOSTIC_LIMITS.reportEntries), redact), items,
     limits: { total: REPORT_LIMIT, modFiles: MOD_FILE_LIMIT }, window: { mode: state.mode, minutes: state.minutes, until: state.until } };
   return { manifest, contents, files };
+}
+
+/** Log entries and the kept host failures together, each once, oldest first. */
+function mergeEntries(log: readonly DiagnosticEntry[], failures: readonly DiagnosticEntry[]): DiagnosticEntry[] {
+  const key = (entry: DiagnosticEntry) => `${entry.t}|${entry.ref ?? ""}|${entry.code}`;
+  const seen = new Set(log.map(key));
+  return [...log, ...failures.filter(entry => !seen.has(key(entry)))].sort((a, b) => a.t.localeCompare(b.t));
 }
 
 /** The entries a reference names, and those they link to, oldest first. */
