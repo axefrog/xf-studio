@@ -238,4 +238,11 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (claude/bridge-batch2)
 
-Filled in after packaging from the clean committed tree (see the next commit).
+Built 26 September 2026 from `claude/bridge-batch2` at `ef7fce3777f9`, clean tree (`XFB_BUILD=ef7fce3777f9a043352c40be2012543ceb08923b;dirty=0`), by `bun tools/package.ts`. On that commit: `xfb_selftest --unit` OK, self-test 188 of 188, `bun test tools` 90 of 91 (the one failure is the on-screen capture route, which needs the synthetic window visible on the desktop and fails when the test runs behind other windows; unrelated to this batch), typecheck clean, redscript lint (against a copy of the 2.31 `final.redscripts`) and Lua lint passed. The -writes manifest says `"variant": "writes"`, `"allow_writes": true`, `"allow_creator_leave": true` and names the camera presets; the default manifest has `"allow_creator_leave": false`, `"photo_mode_presets": null` and no presets file. These are the branch's hashes: after the merge into `main`, rebuild and record the new ones in the build list at the top before staging.
+
+| Zip | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.2.0-writes.zip` | `b74c05159ef142b1ce38fc726f5c4c7dff1f4af671df4744db437e66b250d18f` |
+| `xf-runtime-bridge-0.2.0-diagnostic.zip` | `8b2b3e6ba0c9cedbe63c5f4c6a9c00fb9cba27139eb841a5a9e718926bd09758` |
+| `xf-runtime-bridge-0.2.0.zip` (default) | `a6576ae6dc33fa8734fb30bf91a34c3abb0ae65b8c66f2479faa12b950ee5db2` |
+| (`XFRuntimeBridge.dll` inside each) | `1616c989fb032bf056e3c3a1662d3d2eb50e7aef1ea40e4db6423b492a5ae5ee` |
