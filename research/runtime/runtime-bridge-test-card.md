@@ -1,8 +1,8 @@
 # Runtime bridge: first session and session 2
 
-**Status: prepared, not yet run.** The first in-game run of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 (phase 2: command catalogue, MCP server, session runner, write methods behind `allow_writes`), followed directly by [session 2](../../experiments/020-session-2/README.md) run through the bridge. Design and citations: [runtime bridge design](runtime-bridge-design.md).
+**Status: staged, not yet run.** The first in-game run of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 (phase 2: command catalogue, MCP server, session runner, write methods behind `allow_writes`), followed directly by [session 2](../../experiments/020-session-2/README.md) run through the bridge. Design and citations: [runtime bridge design](runtime-bridge-design.md).
 
-**Who does what.** The maintainer starts MO2 and the game, loads a save and does the few things only a player can (open a mirror, confirm a look, press the photo-mode key if needed). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2 and never stage mods themselves.
+**Who does what.** The maintainer starts MO2 and the game, loads a save and does the few things only a player can (open a mirror, confirm a look, press the photo-mode key if needed). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only this one entry into the test profile.
 
 | Part | Time | Needs |
 |---|---|---|
@@ -15,7 +15,7 @@
 
 A staging checklist. Nothing here launches anything; the maintainer's everyday profile, frameworks and mod list are never touched.
 
-1. **Build under test.** Use the zips from the branch's `projects/xf-runtime-bridge/dist/`, built by `bun tools/package.ts` (it refuses a dirty tree or a DLL not built from `HEAD`):
+1. **Build under test.** Use the zips from `projects/xf-runtime-bridge/dist/`, built by `bun tools/package.ts` (it refuses a dirty tree or a DLL not built from `HEAD`):
 
    | Zip | Bridge | Use |
    |---|---|---|
@@ -23,13 +23,15 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Build record** (26 September 2026, commit `7899779e13e5`, clean tree; self-test 95 of 95 and `bun test tools` 50 of 50 passed on that build):
+   **Build record** (26 September 2026, `main` at `fa2447295b48`, clean tree; self-test 95 of 95 and `bun test tools` 50 of 50 passed on that build). The staged zip is the `-writes` one:
 
    | Zip | SHA-256 |
    |---|---|
-   | `-writes` | `afb8eb83e3c906dc5da6947d0ada9e04e3c41afc1b138cc5f6c82e7fbb4db470` |
-   | `-diagnostic` | `3b4da17c9e61b437c6bf3c4ea1b421965813887529044c072b03abaacb349a5b` |
-   | default | `03d874c56e2f8c9f5d6a01b75b7b21fe5ec78febdbb1b00a940254869e0a3bb8` |
+   | `-writes` | `0e30dd10b4a0c8144ed0c276d052aea05a63de9249c08e46f7e01345d00f56c3` |
+   | `-diagnostic` | `387f7167721989987a532e0cb2989ad6520f1755b6a7559d190f563eb17a4bde` |
+   | default | `cdf6ff5a7e730a39fafc917302314db838d3d9884ab8e7f2a1ea9db28802623d` |
+
+   **Staged** on 26 September 2026: the `-writes` zip unpacked into the MO2 mod `XF Runtime Bridge`, enabled as the first row of the test profile's `modlist.txt`; nothing else changed. Baseline capture `bridge-phase2-pre` taken.
 
    A rebuild after merging gives new hashes (the DLL embeds the commit); record them here if the staged zip is rebuilt. Check the zip's SHA-256 against the build record, and that its `red4ext/plugins/XFRuntimeBridge/manifest.json` says `"variant": "writes"`, `"allow_writes": true` and the expected `commit`. The self-test (`bun tools/selftest.ts`) and `bun test tools` must pass on that commit.
 
