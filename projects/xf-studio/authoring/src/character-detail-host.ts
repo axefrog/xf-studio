@@ -13,6 +13,8 @@ import { CreatorCatalogueHost, structuralInput } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
 import { routeIdentity, routeStamps } from "./route-fingerprint";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
+import type { DiagnosticTrace } from "./diagnostics/model";
+import { hostFailure } from "./diagnostics/host-log";
 
 /**
  * Host application service that owns one character-detail preparation at a time for the preview (both
@@ -70,6 +72,8 @@ export type CharacterDetailHostOptions = {
   /** Test seam over the creator catalogue. */
   creator?: CreatorCatalogueHost;
   log?: (message: string) => void;
+  /** The rolling diagnostics window: what each preparation resolved and prepared (docs/diagnostics.md). */
+  trace?: DiagnosticTrace;
 };
 
 const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair and piercings appear once your game folder and WolvenKit are set up.";
@@ -163,7 +167,7 @@ export class CharacterDetailHost {
         resolverCache: this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"), exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
-        }, log: this.options.log });
+        }, log: this.options.log, trace: this.options.trace });
     };
     // Start now, or once the cancelled run (still settling on the shared cache) has stopped.
     const begun = this.running ? this.running.promise.then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
@@ -178,6 +182,7 @@ export class CharacterDetailHost {
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
+        hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null });
       })
       .finally(() => { if (this.running?.controller === controller) this.running = null; });

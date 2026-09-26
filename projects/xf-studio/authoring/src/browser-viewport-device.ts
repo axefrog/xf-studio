@@ -22,6 +22,8 @@ export function createBrowserViewportDevice(options: {
   /** The feature renderers each loaded head creates (the composition's list, handed down by the composition root). */
   renderers?: readonly FeatureRendererFactory[];
   sceneFactory?: typeof createSceneHost;
+  /** The head's WebGL context was lost or came back (the scene host reports it; the composition root logs it). */
+  onContext?: (event: "lost" | "restored") => void;
   uvFactory?: typeof createUVEditor;
   surfaceFactory?: typeof createSurfaceEditor;
   /** Source of key, pointer, focus and visibility events for modifier tracking. */
@@ -84,7 +86,7 @@ export function createBrowserViewportDevice(options: {
     },
     async loadHead() {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { renderers: options.renderers });
+      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { renderers: options.renderers, onContext: options.onContext });
       return viewer;
     },
     /**

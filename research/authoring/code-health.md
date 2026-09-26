@@ -29,6 +29,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `972ee62` | 2026-09-26 | Diagnostics subsystem (`src/diagnostics/`, boundary exception 13): privacy, endpoint, correctness, architecture | 5 High, 6 Medium, 7 Low (DIAG-01..18). **Open Highs 5: feature merges paused** until at most 3 remain. DIAG-02 and DIAG-03 reproduced; DIAG-04 confirmed against a local trace (sizes only). Endpoint access, size limits, entry validation, disk bounds and the ZIP writer are sound. Fixes in claude/cleanup-diagnostics |
+| `972ee62` | 2026-09-26 | Ponytail export repair (`mesh-export-repair.ts`, 90cb492) and the single-file installer (972ee62) | 0 High, 2 Medium, 5 Low (PIPE-84..87, REL-04..06; renumbered from the reviewer's PIPE-81..84 and DESK-01..03). Matrix maths, guards, cache hashing and GPL hygiene sound; Inno Setup download pinned and hash-checked; workflow permissions least-privilege |
 | `023cbf7` | 2026-09-26 | Platform step 7: scene host, port, head rig, character renderer, feature renderers | 0 High, 5 Medium, 11 Low (PREV-89..98, CORE-86..89, UI-76..77; renumbered from the reviewer's CORE-82..85). No regressions; UI-11 fixed, UI-02 architecture and PIPE-11 preview confirmed. The Mediums block a second feature and are scheduled before module #2 |
 | `81bcac9` | 2026-09-26 | Platform step 5 file moves: `engines/layered-makeup`, `features/eye-makeup/view`, composed views, UI-52 | 0 High, 5 Medium, 6 Low (CORE-75..81, UI-73..75, PREV-88). Nothing broken; the engine isn't region-generic yet and the new boundary tests have holes. UI-52 and CORE-03's layout part confirmed. Fixed in claude/cleanup-engine (CORE-82 recorded there as an open Low) |
 | `6a1ff15` | 2026-09-26 | CC controls slice 2: Character panel, context actions, catalogue endpoint, request-4 | 1 High (PIPE-78), 7 Medium, 11 Low (PIPE-78..83, PREV-86..87, UI-67..72, CORE-70..74; renumbered from the reviewer's IDs, which collided with the blink review). Open Highs 2. All fixed in claude/cleanup-ccpanel |
@@ -55,6 +57,19 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| DIAG-01 | High | Diagnostics | Unticked parts still ship: `README.md` (problem entries with stacks, last 15 log lines, versions, page facts, description) and `report.json` (facts, description, `leftOut` naming unticked mods) are built from the whole manifest regardless of ticks, and neither is previewed (`host-endpoint.ts:99-104`, `report.ts:247-281`); contradicts the issue text and Help | Open (claude/cleanup-diagnostics) |
+| DIAG-02 | High | Diagnostics | A profile name with a space loses only its first word (`C:\Users\<user> Doe\…`; an `OneDrive - Employer` folder survives) in log, trace, report and desktop "Copy diagnostics"; the shared `userPaths` rule stops at whitespace and `personalDataIn` then passes it (`tools/private-data.json`, `private-data.ts:32-36`) | Open (claude/cleanup-diagnostics) |
+| DIAG-03 | High | Diagnostics | `DiagnosticLog.write` can throw: `SAVE_FOLDER` redaction over serialised JSON breaks escapes (`\n`, `\t`) into invalid JSON outside the try (`host-log.ts:48`, `redact.ts:39`); a failure hook then throws inside catch handlers (state never set to failed), `fatal()` throws before its dialog, a poison page entry fails every forward, trace lines are silently dropped | Open (claude/cleanup-diagnostics) |
+| DIAG-04 | High | Diagnostics | The report's resource parts are empty on real setups: `character/resolved` above 512 KB is stored keys-only (reference V: 1.78 MB), so Mods involved, load-order winners, resource tables and full JSON come out empty (`trace-window.ts:186,240`, `host-report.ts:100-235`) | Open (claude/cleanup-diagnostics) |
+| DIAG-05 | High | Diagnostics | The whole game folder is one mod "Installed game": base-game archives get walked and hashed (up to 6 GB) against the documented rule, one Vortex entry's ID is applied to the group, several mods become one "Files of Installed game" tick; the default for every non-MO2 user (`mod-identity.ts:66-93`) | Open (claude/cleanup-diagnostics, after claude/rnd-vortex's mod-identity changes merge) |
+| DIAG-06 | Med | Diagnostics | Configured-folder redaction misses page items, page facts, the description and the issue title/body, MO2 instance paths outside the MO2 folder, and the on-disk `log.jsonl`/`trace/` the docs call safe to attach; the test sets `game-jdoe` but never asserts it absent | Open (claude/cleanup-diagnostics) |
+| DIAG-07 | Med | Diagnostics | Page dedupe never fires (only when no reference, but notices and failures always carry one); the page queue is unbounded; a flood evicts the host failure from the 1 MB log and "This problem" searches only `tail(200)` (`actions.ts`, `browser-device.ts:47-60`, `host-report.ts:231`) | Open (claude/cleanup-diagnostics) |
+| DIAG-08 | Med | Diagnostics | The full personal mod list (disabled mods, folder listings) is ticked by default for a public attachment, and the frameworks `problem` string embeds the MO2 profile name (`host-report.ts:143-169,246`, `framework-versions.ts:197`). Decision: leave the full list unticked by default (involved mods cover reproduction) | Open (claude/cleanup-diagnostics) |
+| DIAG-09 | Med | Diagnostics | Mod-file offers rest on missing metadata (most manual Nexus installs look "local only"), the wording nudges inclusion, and the host bundles any `mod-file:*` without a host-side sharing confirmation (`host-report.ts:262-271`, `host-endpoint.ts:106-114`) | Open (claude/cleanup-diagnostics) |
+| DIAG-10 | Med | Architecture | No boundary test backs exception 13 (pure half DOM- and host-free; only roots import `host-endpoint`/`browser-device`); the exception text omits `browser-device.ts` | Open (claude/cleanup-diagnostics) |
+| DIAG-11 | Med | Diagnostics | Report preparation runs synchronous walks and up to 6 GB of hashing inside the request with no progress, cancel or deadline (`mod-identity.ts:76,144-157`, `host-endpoint.ts:156`) | Open (claude/cleanup-diagnostics) |
+| PIPE-84 | Med | Resolver | "No silent part drops" holds only inside the record: drop notes go to `provenance.notes`, which nothing shows; the `prepared` trace event omits them; the 32-note cap can cut drop notes after informational ones (`character-detail-service.ts:662,686,794,818`) | Open (after claude/choice-prefetch merges; same files) |
+| REL-04 | Med | Packaging | The installer gate proves less than it says: Inno compresses its setup header by default, so the "scanned clean" content scan reads compressed bytes; the payload check is presence plus a 3 MB budget with ~950 KB slack (`single-installer.ts:80,111`, `verify-canary.ts:131-138`, `xf-studio-setup.iss`). Fix: `InternalCompressLevel=none`, tighter budget, honest wording | Open |
 | PIPE-01 | High | Pipeline | Built-in plate always cut from the vanilla head, not the head the game actually loads (head mods/patches) | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
 | PIPE-02 | High | Pipeline | Verifier trusts builder-produced roundtrip/export files; not data-independent; `.xl` only substring-checked | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
 | UI-01 | High | Desktop | Damaged/incompatible `workspace.json` bricks the desktop app; window can't close | **Fixed** (claude/alpha-readiness, 25 Sep) |
@@ -284,9 +299,25 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-40..44** (platform steps 3–4 review at `4bf688a`): Fixed in claude/cleanup-platform2 (see below).
 - **CORE-30..37** (platform steps 1–3 review): Fixed in claude/cleanup-platform (see below); CORE-36 was recorded there as a design gap and is fixed in claude/platform-step4.
 
+- **DIAG-12..18** (diagnostics review at `972ee62`), Open (claude/cleanup-diagnostics):
+  - **DIAG-12:** the 2^20 reference space collides at a few hundred references and `matchingEntries` merges them; every host failure of the last 2 minutes links to every page notice; `claimHostRef` hands any unclaimed reference from the last 8 s to an unrelated notice.
+  - **DIAG-13:** previews show the first 4,000 characters of each item (the trace can be ~4 MB); offer a full view or open-in-folder.
+  - **DIAG-14:** no "Prepare again" after `report_expired`; jargon ("Couldn't reach its diagnostics", "Full JSON of these … resources").
+  - **DIAG-15:** `ResourceGraph.trace` is a mutable field on a shared cached graph set per preparation, not injected per resolution as exception 13 says.
+  - **DIAG-16:** `consoleEcho` prints forwarded page text raw; terminal control sequences reach the dev console.
+  - **DIAG-17:** `studio-startup.ts:93-98` decides which view settings go into a report (startup-file coupling).
+  - **DIAG-18:** mod resource excerpts and full JSON are derived mod content with no sharing note.
+- **PIPE-85..87** (export repair review at `972ee62`), Open (with PIPE-84):
+  - **PIPE-85:** a repaired GLB is cached under the direct export's key; no repair-rule version, so a repair change is never picked up (`game-asset-export.ts:167-168,266-272`).
+  - **PIPE-86:** the repair catch swallows non-tool errors (disk full, parse) and blames WolvenKit; the adapter returns a bare `null` for five reasons (`game-asset-export.ts:262-265`, `game-asset-export-wolvenkit.ts`).
+  - **PIPE-87:** `createWolvenKitMeshRepair` has no adapter test (argument order, layout, `pack.archive`, null paths, non-invertible matrix detail).
+- **REL-05..06** (installer review at `972ee62`), Open (with REL-04):
+  - **REL-05:** custom exit codes 2 and 3 collide with Inno Setup's reserved 1–8 (2 means user cancelled); use 100 and up and document them.
+  - **REL-06:** the marker error names 6.7.3 but checks the 6.7.0 data format; pre-releases share one Windows file version; no `SetupMutex`.
+
 ## New subsystems since last review
 
-- None.
+- **Diagnostics** (`src/diagnostics/`, claude/diagnostics): host log and rolling detail window, error references, page trapping and forwarding endpoint, problem-report builder (mod identities, resource extracts, ZIP), report review UI, and one-line failure hooks in the character, resolver, LUT, preview, eye-plate, package and library hosts. A new host capability and a boundary exception (ui-architecture-boundary.md item 13), so a deep review is due. [docs/diagnostics.md](../../docs/diagnostics.md). Reviewed at `972ee62` (DIAG-01..18).
 
 ## Fixed in claude/platform-step7
 

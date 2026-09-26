@@ -36,7 +36,8 @@ export interface MaterialLink { readonly label: string; readonly provenance: Pro
 export interface ResolvedChunkMaterial {
   readonly chunk: number;
   readonly name: string;
-  readonly route: "entry" | "patch-entry" | "template" | "unresolved";
+  /** `none`: the chunk is past the end of its appearance's chunk material list, so it has no material of its own (`unlistedChunk`). */
+  readonly route: "entry" | "patch-entry" | "template" | "unresolved" | "none";
   readonly entry: { readonly mesh: string; readonly local: boolean; readonly index: number } | null;
   readonly dynamic: { readonly template: string; readonly material: string; readonly context: Readonly<Record<string, string>> } | null;
   readonly chain: readonly MaterialLink[];
@@ -311,6 +312,20 @@ function expandAppearance(mesh: MeshModel, appearance: MeshAppearanceModel): { c
   }) };
 }
 
+/**
+ * A render chunk past the end of its appearance's chunk material list: it has no material of its own (`route: "none"`). CCXL
+ * meshes do this on purpose, pointing their lower levels of detail at three-vertex stub chunks. When ArchiveXL patched the
+ * appearance, it appends the patch source's tag to the list, so the first unlisted chunk gets the tag's empty placeholder material
+ * (`s_dummyMaterial`, a `CMaterialInstance` with no base) [source: ArchiveXL Mesh/Extension.cpp `ProcessAppearance`,
+ * `ProcessDynamicMaterials`]. Neither has a template, so neither draws in the preview; how the engine draws them is unread [hypothesis].
+ */
+function unlistedChunk(chunk: number, listed: number, patchSource: string | null): ResolvedChunkMaterial {
+  const gap = patchSource && chunk === listed
+    ? `The appearance lists ${listed} chunk material(s); ArchiveXL appends the tag of its patch source (${patchSource}), so this chunk gets that tag's empty placeholder material.`
+    : `The appearance lists ${listed} chunk material(s), so this chunk has no material of its own.`;
+  return { chunk, name: "", route: "none", entry: null, dynamic: null, chain: [], template: null, params: [], gaps: [gap] };
+}
+
 async function resolveChunkMaterial(ctx: Context, target: MeshModel, source: MeshModel, chunk: number, name: string): Promise<ResolvedChunkMaterial> {
   const unresolved = (gap: string): ResolvedChunkMaterial =>
     ({ chunk, name, route: "unresolved", entry: null, dynamic: null, chain: [], template: null, params: [], gaps: [gap] });
@@ -428,9 +443,11 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
       meshAppearanceResolved = { requested, used: appearance.name, expandedFrom, patchedFrom: appearance.patchedFrom ? refLabel(appearance.patchedFrom) : null };
       materials = await Promise.all(visible.map(chunk => {
         const name = chunkMaterials[chunk];
-        if (name === undefined) return Promise.resolve<ResolvedChunkMaterial>({ chunk, name: "", route: "unresolved", entry: null, dynamic: null, chain: [], template: null, params: [], gaps: ["Appearance lists fewer chunk materials than render chunks."] });
+        if (name === undefined) return Promise.resolve(unlistedChunk(chunk, chunkMaterials.length, appearance!.patchedFrom ? refLabel(ctx.graph.named(appearance!.patchedFrom)) : null));
         return resolveChunkMaterial(ctx, mesh, source ?? mesh, chunk, name);
       }));
+      if (visible.some(chunk => chunk >= chunkMaterials.length))
+        notes.push(note("R10-short-chunk-list", "hypothesis", `Appearance ${appearance.name} lists ${chunkMaterials.length} chunk material(s) for ${renderChunks} render chunks; the chunks past the list have no material of their own (ArchiveXL gives a patched appearance's first unlisted chunk its empty placeholder material; engine drawing of an unlisted chunk unread).`));
     }
   }
   return { ...base, morphRegions, appliedMorphs, meshAppearanceResolved, materials,

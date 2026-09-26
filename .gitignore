@@ -31,6 +31,7 @@ projects/*/authoring/desktop/build/
 projects/*/authoring/desktop/.hutch/
 projects/*/authoring/desktop/.cottontail-tmp/
 projects/*/authoring/desktop/artifacts/
+projects/*/authoring/desktop/installer-tools/
 projects/*/tools/*/bin/
 projects/*/tools/*/obj/
 

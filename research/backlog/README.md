@@ -44,6 +44,8 @@ Supporting research that sits under a track rather than being ranked on its own:
 - **One-click "prepare idle and blink"** (desktop app, open; under track 9 and the "It just works" policy): a consented flow that downloads the pinned IO Suite solver and bakes the creator idle and the game's blink from the player's own files, so the Motion panel works in an installed app. See [prepare idle and blink](prepare-idle-and-blink.md).
 - **Public knowledge pages: implemented.** The Pages site generates a Knowledge section from Draft-or-better `knowledge/*.md` pages on every build, with caveat banner, evidence-grade legend, last-updated date, source and correction links, and a personal-data guard. Ongoing: keep knowledge pages public-quality. See [public knowledge pages](public-knowledge-site.md).
 
+- **AI integration through MCP** (direction set 26 September): an optional, off-by-default MCP server so users can connect their own AI tools to the game (through the runtime bridge) and later to the Studio's typed actions. See [AI integration](ai-integration-mcp.md).
+
 ## Paused pending in-game evidence
 
 - **Expanded-plate clearance** ([Experiment 006](../../experiments/006-plate-clearance/README.md), [012](../../experiments/012-native-plate-bootstrap/README.md)). Many offline candidates were rejected; no correction is accepted. Pause until the smoke test shows whether residual eyelid contacts are visible in game. Any resumed candidate must be morph-aware and finite-contact-aware and preserve exact native skin bytes in mesh and morph base buffers.

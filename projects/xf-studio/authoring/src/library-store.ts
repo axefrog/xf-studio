@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { readRecipe as parseRecipe, recipeFile } from "./recipe-schema";
+import { hostFailure } from "./diagnostics/host-log";
 
 export type LookSummary = { id: string; name: string; revision: number; updatedAt: string };
 export type StoredLook = LookSummary & { recipe: Recipe };
@@ -97,7 +98,7 @@ export async function libraryRequest(request: Request, library: LookLibrary, pre
     return json(library.save(data, id || undefined), id ? 200 : 201);
   } catch (error) {
     if (error instanceof LibraryError) return json({ error: error.message }, error.status);
-    console.error("Library request failed", error);
+    hostFailure("library", "library_request_failed", "The library couldn't be read or written.", error);
     return json({ error: "Library could not be accessed. Your browser draft is still available." }, 500);
   }
 }
