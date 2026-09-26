@@ -106,3 +106,19 @@ test("reason codes are structured where refusals are decided, not read from mess
   expect(app.capability({ kind: "motion.setIdle", enabled: true }))
     .toEqual({ available: false, code: "asset_unavailable", reason: "Idle clip failed to decode." });
 });
+
+test("every exporting feature has an exporter and an independent verifier in the host composition, and nothing else does (§7 rule 7)", async () => {
+  const { STUDIO_OWNERS } = await import("../src/compose/studio-registry");
+  const { STUDIO_EXPORTERS } = await import("../src/compose/exporters");
+  const exporting = STUDIO_OWNERS.filter(owner => owner.owner === "feature" && owner.exports)
+    .map(owner => owner as { id: string; label: string; exports: { exporterId: string; brand: string } });
+  expect(exporting.map(feature => feature.id)).toEqual(["eye-makeup"]);
+  expect(STUDIO_EXPORTERS.map(entry => entry.exporter.feature)).toEqual(exporting.map(feature => feature.id));
+  for (const feature of exporting) {
+    const entry = STUDIO_EXPORTERS.find(item => item.exporter.feature === feature.id)!;
+    expect(entry.exporter.id).toBe(feature.exports.exporterId);
+    expect(entry.verifier.exporterId).toBe(feature.exports.exporterId);
+    expect(entry.exporter.info).toEqual(feature.exports);
+    expect(entry.exporter.label).toBe(feature.label);
+  }
+});

@@ -23,6 +23,15 @@ The historical proposal of several normal-offset meshes may solve coplanar inter
 
 If offsets fail, investigate actual renderer component/pass ordering, existing decal controls and whether a supported ordering hook exists. Offline texture compositing is now the preferred compatible-finish path; it compiles only authored combinations. Record why each alternative succeeds/fails.
 
+### Several features in one mod (when a second feature exports)
+
+Export groups features into XF mods, one merged mod by default ([feature-module platform §6](../research/authoring/feature-module-platform.md#moving-a-feature-between-mods-without-breaking-saves)). With eye makeup alone every build is exactly the one-feature mod tested so far. Once a second feature exports, one session should show:
+
+- (a) one `.archive.xl` registering two customization resources (written as a YAML list under `female:`) shows both selectors, each switching independently;
+- (b) a saved choice survives moving its feature to another archive or mod;
+- (c) a saved choice survives a mod or folder rename;
+- (d) selector position changes after a move are only cosmetic.
+
 ## Instrumentation to prepare
 
 - A tiny project-local diagnostic mod can log session/build IDs, registered layer options, selected IDs, component/morph/mesh paths, requested appearances and changes in selection order. First verify which fields/events are exposed; do not invent CET APIs.
