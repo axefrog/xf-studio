@@ -1,5 +1,8 @@
 // Bridge methods that need the game. Every game-thread method runs from the Running-state
-// OnUpdate callback (see Main.cpp) and reaches the game only through RTTI lookups by name.
+// OnUpdate callback (see Main.cpp) and reaches the game only through RTTI lookups by name. Every
+// call, native or script, goes through CallFunction (ScriptCall.cpp), which calls the way script
+// code does: with a caller frame and a context that is never null (the first in-game run crashed
+// without one).
 //
 // Why RTTI by name, plus a signature check: if a patch removes or renames a function, the lookup
 // fails; if it changes the function's shape (static flag, parameter count or types, return
@@ -12,7 +15,6 @@
 //   entEntity.GetWorldPosition() -> Vector4                                     (classes/entEntity.json)
 //   ScriptGameInstance.GetPhotoModeSystem(ScriptGameInstance) -> handle:gamePhotoModeSystem, static
 //   gamePhotoModeSystem.IsPhotoModeActive/CanPhotoModeBeEnabled/IsExitLocked() -> Bool
-// The GetPlayer call pattern is RED4ext.SDK examples/native_globals_redscript/Main.cpp:19-23 (tag 1.0.0).
 
 #include <map>
 #include <set>
@@ -29,6 +31,7 @@
 #include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/ScriptCall.hpp"
 
 namespace xfb::plugin
 {
@@ -36,8 +39,8 @@ namespace
 {
 using json = nlohmann::json;
 
-// ExecuteFunction and ScriptGameInstance read CGameEngine::Get()->framework->gameInstance
-// (SDK Scripting/Utils-inl.hpp:52-59); refuse cleanly instead of dereferencing null early on.
+// ScriptGameInstance reads CGameEngine::Get()->framework->gameInstance; refuse cleanly instead
+// of dereferencing null early on.
 void RequireGameInstance()
 {
     auto* engine = RED4ext::CGameEngine::Get();
@@ -283,15 +286,11 @@ RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunct
     return fn;
 }
 
-bool CallBool(RED4ext::ScriptInstance aInstance, const char* aClass, const char* aFunction, const std::string& aCid)
+bool CallBool(RED4ext::IScriptable* aInstance, const char* aClass, const char* aFunction, const std::string& aCid)
 {
     auto* fn = FindClassFunction(aClass, aFunction, {false, "Bool", {}}, aCid);
     bool value = false;
-    RED4ext::StackArgs_t args;
-    if (!RED4ext::ExecuteFunction(aInstance, fn, &value, args))
-    {
-        throw MethodError("call_failed", std::string("call failed: ") + aClass + "." + aFunction);
-    }
+    CallFunction(fn, aInstance, {}, &value, std::string(aClass) + "." + aFunction, aCid);
     return value;
 }
 
@@ -309,10 +308,7 @@ json PlayerPosition(const MethodContext& aContext)
 
     RED4ext::ScriptGameInstance gameInstance;
     RED4ext::Handle<RED4ext::IScriptable> player;
-    if (!RED4ext::ExecuteGlobalFunction(kGetPlayer, &player, gameInstance))
-    {
-        throw MethodError("call_failed", std::string("global call failed: ") + kGetPlayer);
-    }
+    CallFunction(getPlayer, nullptr, {&gameInstance}, &player, kGetPlayer, aContext.cid);
     if (!player)
     {
         log::Debug("game.player_position", "available=false", aContext.cid);
@@ -321,11 +317,7 @@ json PlayerPosition(const MethodContext& aContext)
 
     auto* fn = FindClassFunction("entEntity", "GetWorldPosition", {false, "Vector4", {}}, aContext.cid);
     RED4ext::Vector4 position;
-    RED4ext::StackArgs_t args;
-    if (!RED4ext::ExecuteFunction(player.GetPtr(), fn, &position, args))
-    {
-        throw MethodError("call_failed", "entEntity.GetWorldPosition failed");
-    }
+    CallFunction(fn, player.GetPtr(), {}, &position, "entEntity.GetWorldPosition", aContext.cid);
     log::Debug("game.player_position",
                "x=" + std::to_string(position.X) + " y=" + std::to_string(position.Y) + " z=" +
                    std::to_string(position.Z),
@@ -340,9 +332,8 @@ json PhotoModeState(const MethodContext& aContext)
                                      {true, "handle:gamePhotoModeSystem", {"ScriptGameInstance"}}, aContext.cid);
     RED4ext::ScriptGameInstance gameInstance;
     RED4ext::Handle<RED4ext::IScriptable> system;
-    RED4ext::StackArgs_t args;
-    args.emplace_back(nullptr, &gameInstance);
-    if (!RED4ext::ExecuteFunction(static_cast<RED4ext::ScriptInstance>(nullptr), getter, &system, args) || !system)
+    CallFunction(getter, nullptr, {&gameInstance}, &system, "ScriptGameInstance.GetPhotoModeSystem", aContext.cid);
+    if (!system)
     {
         throw MethodError("unavailable", "PhotoModeSystem is not available");
     }
@@ -375,12 +366,7 @@ json ScriptDescribe(const MethodContext& aContext)
     RequireSignature(fn, "XFRuntimeBridge.XFBridgeQuery.DescribeJson", {true, "String", {"String"}}, aContext.cid);
     RED4ext::CString cid(aContext.cid);
     RED4ext::CString out;
-    RED4ext::StackArgs_t args;
-    args.emplace_back(nullptr, &cid);
-    if (!RED4ext::ExecuteFunction(static_cast<RED4ext::ScriptInstance>(nullptr), fn, &out, args))
-    {
-        throw MethodError("call_failed", "XFBridgeQuery.DescribeJson failed");
-    }
+    CallFunction(fn, nullptr, {&cid}, &out, "XFRuntimeBridge.XFBridgeQuery.DescribeJson", aContext.cid);
     const std::string text(out.c_str(), out.Length());
     try
     {
@@ -437,17 +423,10 @@ json CallScript(const std::string& aClass, const char* aFunction, std::initializ
     auto* fn = FindScriptFunction(aClass, aFunction, {true, "String", types}, aCid);
 
     RED4ext::CString cid(aCid.c_str());
-    RED4ext::StackArgs_t args;
-    args.emplace_back(nullptr, &cid);
-    for (auto* value : aValues)
-    {
-        args.emplace_back(nullptr, value);
-    }
+    std::vector<void*> values{&cid};
+    values.insert(values.end(), aValues.begin(), aValues.end());
     RED4ext::CString out;
-    if (!RED4ext::ExecuteFunction(static_cast<RED4ext::ScriptInstance>(nullptr), fn, &out, args))
-    {
-        throw MethodError("call_failed", "XFRuntimeBridge." + aClass + "." + aFunction + " failed");
-    }
+    CallFunction(fn, nullptr, values, &out, "XFRuntimeBridge." + aClass + "." + aFunction, aCid);
     const std::string text(out.c_str(), out.Length());
     json parsed;
     try
@@ -478,14 +457,7 @@ bool CallScriptHasOption(const params::AppearanceCheck& aCheck, const std::strin
     RED4ext::CString option(aCheck.option.c_str());
     bool fpp = aCheck.fpp;
     bool present = false;
-    RED4ext::StackArgs_t args;
-    args.emplace_back(nullptr, &group);
-    args.emplace_back(nullptr, &option);
-    args.emplace_back(nullptr, &fpp);
-    if (!RED4ext::ExecuteFunction(static_cast<RED4ext::ScriptInstance>(nullptr), fn, &present, args))
-    {
-        throw MethodError("call_failed", "XFCharacter.HasOption failed");
-    }
+    CallFunction(fn, nullptr, {&group, &option, &fpp}, &present, "XFRuntimeBridge.XFCharacter.HasOption", aCid);
     return present;
 }
 
@@ -659,20 +631,13 @@ json PhotoEnterOnGameThread(const std::string& aCid)
 
     RED4ext::ScriptGameInstance gameInstance;
     RED4ext::Handle<RED4ext::IScriptable> quests;
-    RED4ext::StackArgs_t getterArgs;
-    getterArgs.emplace_back(nullptr, &gameInstance);
-    if (!RED4ext::ExecuteFunction(static_cast<RED4ext::ScriptInstance>(nullptr), getter, &quests, getterArgs) || !quests)
+    CallFunction(getter, nullptr, {&gameInstance}, &quests, "ScriptGameInstance.GetQuestsSystem", aCid);
+    if (!quests)
     {
         throw MethodError("unavailable", "the quest system is not available");
     }
     RED4ext::CName socket;
-    RED4ext::StackArgs_t args;
-    args.emplace_back(nullptr, &node);
-    args.emplace_back(nullptr, &socket);
-    if (!RED4ext::ExecuteFunction(quests.GetPtr(), execute, nullptr, args))
-    {
-        throw MethodError("call_failed", "QuestsSystem.ExecuteNode refused the photo-mode node");
-    }
+    CallFunction(execute, quests.GetPtr(), {&node, &socket}, nullptr, "questQuestsSystem.ExecuteNode", aCid);
     log::Info("photo.enter_requested", "route=quest_node questOpenPhotoMode_NodeType alwaysAllowTPP=true undo=photo.exit", aCid);
     return json{{"changed", true}};
 }
@@ -714,22 +679,10 @@ json PhotoCameraSet(const MethodContext& aContext)
     const auto request = params::ParseCamera(aContext.params);
     if (request.reset)
     {
-        json reset = json::array();
-        for (auto key : params::CameraKeys())
-        {
-            try
-            {
-                reset.push_back(CallScript("XFPhoto", "ResetAttribute", {"Int32"}, {&key}, aContext.cid));
-            }
-            catch (const MethodError& e)
-            {
-                if (e.code != "unavailable")
-                {
-                    throw;
-                }
-            }
-        }
-        return writes::CameraResetResult(reset);
+        const auto cid = aContext.cid;
+        return writes::CameraReset(params::CameraKeys(), [&cid](int32_t aKey) {
+            return CallScript("XFPhoto", "ResetAttribute", {"Int32"}, {&aKey}, cid);
+        });
     }
     const auto applied = SetPhotoAttributes(request.attributes, aContext.cid);
     std::vector<std::string> unknown;

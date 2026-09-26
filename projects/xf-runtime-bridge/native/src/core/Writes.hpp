@@ -37,6 +37,13 @@ void AttachUndo(json& aResult, const std::string& aMethod, const json& aParams,
 // undo that puts back every value the reset changed.
 json CameraResetResult(json aResets);
 
+// photo.camera.set reset = true: resets each key through aReset (which returns an attribute
+// result or throws MethodError). A key photo mode doesn't offer ("unavailable") is skipped; any
+// other failure is collected and the rest still run, so the answer is partial (partial = true,
+// errors [{name, key, code, message}]) with an undo for what was reset. When nothing was reset
+// and something failed, the first failure is thrown, naming the rest.
+json CameraReset(const std::vector<int32_t>& aKeys, const std::function<json(int32_t aKey)>& aReset);
+
 // world.pause: the script's {frozen, was_frozen} with an undo to the state before the call; no
 // undo when nothing changed or the earlier state is unknown.
 json PauseResult(json aScript);

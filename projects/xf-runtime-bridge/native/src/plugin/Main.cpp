@@ -32,6 +32,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/ScriptCall.hpp"
 
 namespace
 {
@@ -110,6 +111,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
     // including after a failure.
     return Guarded("Running.update", false, [] {
         auto& state = Get();
+        NoteGameThread();
         const auto tick = state.runningTicks.fetch_add(1) + 1;
         if (tick == 1)
         {

@@ -314,12 +314,9 @@ int wmain(int argc, wchar_t** argv)
                                      requirePhase("photo_mode", "not_in_photo_mode");
                                      if (request.reset)
                                      {
-                                         json resets = json::array();
-                                         for (const auto key : p::CameraKeys())
-                                         {
-                                             resets.push_back(simulatedSet(key, 0.0f));
-                                         }
-                                         return w::CameraResetResult(resets);
+                                         return w::CameraReset(p::CameraKeys(), [&simulatedSet](int32_t aKey) {
+                                             return simulatedSet(aKey, 0.0f);
+                                         });
                                      }
                                      json applied = json::array();
                                      for (const auto& attribute : request.attributes)

@@ -38,6 +38,8 @@ public abstract class XFBridgeQuery {
     let game = GetGameInstance();
     let player = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
     let hasPlayer = IsDefined(player);
+    // Debug step line before the call that crashed the first in-game run (a null script context).
+    XFBridgeLog.Debug(cid, "DescribeJson step: TweakDBInterface.GetInt next");
     let marker = XFBridgeQuery.TweakMarker();
     XFBridgeLog.Info(cid, s"DescribeJson has_player=\(hasPlayer) tweak_marker=\(marker)");
 

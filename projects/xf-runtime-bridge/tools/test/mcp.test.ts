@@ -12,7 +12,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { spawnSync } from "node:child_process";
 import { CATALOGUE, toolName } from "../api/catalogue.ts";
 import { parsePermissionFlags } from "../mcp/server.ts";
-import { acquireSessionLock, LOCK_FILE, readSessionLock } from "../session-lock.ts";
+import { acquireSessionLock, LOCK_FILE, lockPath, processStartTime, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
+import { CommandApi } from "../api/command-api.ts";
+import { PipeConnectError } from "../bridge-lib.ts";
 import { BridgeClient } from "../bridge-lib.ts";
 import { decodePng } from "../capture/image.ts";
 import { openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
@@ -338,5 +340,43 @@ describe("session runner lock", () => {
     expect("release" in taken).toBe(true);
     expect(readSessionLock(dir)?.script).toBe("session-3");
     (taken as { release: () => void }).release();
+  });
+
+  test("RB-30: a reused PID doesn't keep a lock alive; the lock names its runner's start time", () => {
+    const dir = tempDir("xfb-lock-pid-");
+    const parentStarted = processStartTime(process.ppid);
+    expect(typeof parentStarted === "string" && /^\d+$/.test(parentStarted)).toBe(true);
+    expect(processStartTime(0x3ffffff0)).toBeNull();
+    // Same PID, different start time: another process now has that PID.
+    writeFileSync(join(dir, LOCK_FILE), JSON.stringify({ pid: process.ppid, script: "reused", started_at: "", process_started: "1" }));
+    expect(readSessionLock(dir)).toBeNull();
+    writeFileSync(join(dir, LOCK_FILE), JSON.stringify({ pid: process.ppid, script: "live", started_at: "", process_started: parentStarted }));
+    expect(readSessionLock(dir)?.script).toBe("live");
+    rmSync(join(dir, LOCK_FILE), { force: true });
+    const mine = acquireSessionLock(dir, "session-2");
+    expect(readSessionLock(dir)?.process_started).toBe(processStartTime(process.pid) as string);
+    (mine as { release: () => void }).release();
+    const message = sessionRunningMessage({ pid: 1, script: "s", started_at: "" }, lockPath(dir));
+    expect(message).toContain(lockPath(dir));
+    expect(message).toContain("KILL file");
+  });
+
+  test("RB-30: bridge.kill falls back to the KILL file while another client holds the pipe", async () => {
+    const dir = tempDir("xfb-kill-file-");
+    writeFileSync(join(dir, "session.json"), JSON.stringify({ protocol: 1, pid: process.pid, pipe: String.raw`\\.\pipe\none`, sid: "s", token: "t" }));
+    const api = new CommandApi({
+      runtimeDir: dir,
+      auditDir: join(dir, "logs"),
+      transport: async () => {
+        throw new PipeConnectError("pipe busy (another client is connected)", "busy");
+      },
+    });
+    const outcome = await api.run("bridge.kill");
+    expect(outcome.ok).toBe(true);
+    expect(existsSync(join(dir, "KILL"))).toBe(true);
+    expect(JSON.stringify(outcome)).toContain("kill_file");
+    const other = await api.run("game.status");
+    expect(other.ok).toBe(false); // only the kill switch falls back
+    api.close();
   });
 });

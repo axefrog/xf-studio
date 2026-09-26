@@ -11,7 +11,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { findCommand, PERMISSIONS, toolName, type CommandDef, type Permission } from "../api/catalogue.ts";
 import type { CommandApi, CommandOutcome } from "../api/command-api.ts";
-import { readSessionLock, sessionRunningMessage } from "../session-lock.ts";
+import { lockPath, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
 
 export const SERVER_NAME = "xf-runtime-bridge";
 export const SERVER_VERSION = "0.2.0";

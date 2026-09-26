@@ -95,6 +95,7 @@ add_library(xfb_core STATIC
   src/core/Log.cpp
   src/core/Params.cpp
   src/core/PipeServer.cpp
+  src/core/ScriptFrame.cpp
   src/core/Session.cpp
   src/core/Win32.cpp
   src/core/Writes.cpp
@@ -112,6 +113,7 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/Main.cpp
   src/plugin/Natives.cpp
   src/plugin/GameHandlers.cpp
+  src/plugin/ScriptCall.cpp
   src/plugin/Plugin.cpp
   src/plugin/Resource.rc
 )
