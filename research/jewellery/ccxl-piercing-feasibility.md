@@ -238,6 +238,15 @@ Checks 4–7 decide the attachment solver's defaults; check 11 decides whether t
 6. **Body genders.** Female first, male in a later slice (the preview head is female-only)?
 7. **Probe session.** Approve building the scripted fixture above for a batched session, ideally alongside the next planned in-game session?
 
+
+## Decisions (26 September 2026)
+
+- **Own XF rows**, after the vanilla Piercings row, so XF pieces can be worn together with vanilla, PRC or other mods' piercings.
+- **Rows per area** (for example ears, nose, lips, brow), so areas mix and match in the creator; revisit if it feels poor in game. Makeup, brows and cheeks stay separate features with their own rows.
+- **Materials fixed per piece** in the first version; a creator colour row can follow.
+- **First scope:** studs, hoops and septum rings; dangles and chains (physics) later.
+- **Defaults** (changeable): the split mod is "XF Piercings" (merged into "XF Looks" by default); female V first, male next; the scripted test mod is built for a coming session.
+
 ## 9. Open questions (research)
 
 1. Does the game hide creator piercings under helmets and masks through visual tags on the components, the group, or something else? Check 10 observes it; the mechanism is unread.
