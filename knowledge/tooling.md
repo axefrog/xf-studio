@@ -31,7 +31,7 @@ With `-u --uext png --mesh-export-type MeshOnly -gp <game>` over `archive/pc/con
 
 Whether a depot path exists at all is answered from the archives' RDAR indexes (FNV-1a 64 of the sanitized path), not from WolvenKit's output: reading every content index takes about 35 ms. [source] [mod loading](mod-loading.md), [`rdar-index-fs.ts`](../projects/xf-studio/authoring/src/rdar-index-fs.ts).
 
-**A native reader may replace most launches.** XF Studio's R&D reader decodes archives and CR2W resources in-process through the game's own Oodle library. It reproduces WolvenKit's extracted bytes and the resolver's JSON, including resources that WolvenKit refuses to serialize (the mistyped `castShadows` above), and in a cold resolve of the reference save it needed no launches instead of 23. It is not yet used by the app. Format and evidence: [archive and resource formats](archive-format.md).
+**The native reader replaces most launches.** XF Studio's own reader decodes archives and CR2W resources through the game's own Oodle library, in a worker. It reproduces WolvenKit's extracted bytes and the resolver's JSON, including resources that WolvenKit refuses to serialize (the mistyped `castShadows` above). The resolver reads through it first and runs WolvenKit only for what it doesn't answer: a cold resolve of the reference save needed no launches instead of 23 ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)). Textures and meshes for the preview still come from WolvenKit's exports. Format and evidence: [archive and resource formats](archive-format.md).
 
 ## Open questions
 

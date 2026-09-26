@@ -8,7 +8,7 @@ import { readArchiveXlConfig } from "../src/archivexl-config";
 import { installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
 import { depotHash, refFromPath } from "../src/depot-path";
 import { InstallationRegistry, installations } from "../src/installation-registry";
-import { openInstallation, WolvenKitFetcher, type Installation, type InstallationOptions } from "../src/resolver-host";
+import { openInstallation, ResolverFetcher, WolvenKitFetcher, type Installation, type InstallationOptions } from "../src/resolver-host";
 import { ResourceGraph } from "../src/resource-graph";
 import { pathStamp } from "../src/source-discovery";
 import { app, cr2w, ent, mesh, meshComponent, mi, rp } from "./resolver-fixtures";
@@ -190,7 +190,11 @@ test("a view whose consumer read failed transiently gets a fresh graph; views pe
   const plate = await registry.acquire({ ...setup.options, cacheDir: join(setup.root, "plate", "resolver") });
   expect(plate.depot).toBe(first.depot);
   expect(plate.fetcher).not.toBe(first.fetcher);
-  expect(plate.fetcher).toBeInstanceOf(WolvenKitFetcher);
+  expect(plate.fetcher).toBeInstanceOf(ResolverFetcher);
+  expect(plate.fetcher.wolvenKit).toBeInstanceOf(WolvenKitFetcher);
+  // No Oodle library in this game folder: WolvenKit reads everything, and the summary says why.
+  expect(plate.fetcher.native).toBeNull();
+  expect(plate.summary.nativeReader).toMatchObject({ state: "off" });
 });
 
 test("a request key changes once the registry finds the opened installation out of date (no stale answer)", async () => {

@@ -459,6 +459,8 @@ describe("the prepared game files", () => {
     expect(readdirSync(join(roots.exports, "resources")).sort()).toEqual(["newer", "used"]);
     expect(existsSync(json)).toBe(false);
     mkdirSync(roots.store, { recursive: true }); writeFileSync(join(roots.store, "a.png"), "z".repeat(500));
+    // Markers of resources the native reader answered (empty) go with Clear: the next preparation reads the game files again.
+    mkdirSync(join(roots.resolver, "native"), { recursive: true }); writeFileSync(join(roots.resolver, "native", "3-a-b.ok"), "");
     const before = await preparedSize(roots);
     expect(before.store).toBe(500);
     const cleared = await clearPrepared(roots);
@@ -466,6 +468,7 @@ describe("the prepared game files", () => {
     expect((await preparedSize(roots)).bytes).toBe(0);
     // Lasting failure markers are tiny and kept.
     expect(readdirSync(join(roots.resolver, "json"))).toEqual(["2-a-b.json.failed"]);
+    expect(readdirSync(join(roots.resolver, "native"))).toEqual([]);
   });
 });
 

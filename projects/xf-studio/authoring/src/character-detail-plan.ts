@@ -239,7 +239,7 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   const drawn = materials.filter(material => material.drawn);
   // A face or body decal made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.
   if (decalFamilySlot(slot) ? !drawn.length : !drawn.some(material => !material.placeholder)) return null;
-  const readerNotes = [...new Set([...entry.notes, ...component.notes].filter(item => READER_RULES.has(item.rule)).map(item => item.basis))];
+  const readerNotes = [...new Set([...entry.notes ?? [], ...component.notes ?? []].filter(item => READER_RULES.has(item.rule)).map(item => item.basis))];
   return { slot, option: entry.option, definition: entry.definition, component: component.name, drawnFrom: geometry.drawnFrom,
     morphTargets: component.type === "entMorphTargetSkinnedMeshComponent", renderChunks: geometry.renderChunks,
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture,
