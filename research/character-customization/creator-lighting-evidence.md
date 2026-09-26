@@ -82,6 +82,38 @@ Both packages also replace the HDR LUT path. `scan_mods.py` (RDAR index hashes o
   - Post effects: `FilmGrain`, `ChromaticAberration`, `DepthOfField`, `LensFlares` and `Vignette` on, `MotionBlur` High.
   - Camera: `FieldOfView` 80.
 
+## Indirect light (27 September 2026)
+
+Behind [creator lighting §10–11](../../knowledge/creator-lighting.md#10-indirect-light-what-reaches-v). Everything was read-only, and nothing was launched. Only single files were extracted, each through `tools/memory_guard.py` with a 3 GB limit (peak 1.1 GB).
+
+**Resources** (SHA-256 of the extracted file, first 16 hex digits):
+
+| Depot path | Archive | SHA-256 | Read for |
+|---|---|---|---|
+| `…\03_night_city\_compiled\default\quest_a73ac4b55b3d6ec1.streamingsector` | `basegame_3_nightcity` | `d64522df3013c098` (as above) | Box geometry: spawner z −195.11, panels at z −205.11 and −185.11 and x/y ±10 m |
+| `…\03_night_city\_compiled\default\blocks\all.streamingblock` | `ep1_1_nightcity` (the effective copy) | `f829cc5cfb6b380e` | 24,132 descriptors. Grid cell sizes from name index against box centre: exterior 64 m × 2^level, interior 32 m × 2^level. The cells holding the box follow from those sizes |
+| `…\exterior_-2_6_-2_1.streamingsector` | `basegame_3_nightcity` | `6cadbd1467eb98cb` | 64 nodes, all `worldAcousticSectorNode` |
+| `…\exterior_-1_1_-1_3.streamingsector` | `basegame_3_nightcity` | `39f9067f4117e78c` | 185 nodes. `worldGISpaceNode` `gi_003` at (−469.9, 875.6, −1.3), `worldStaticFogVolumeNode` at (−458.3, 860.4, −12.8) and a light at (−479.5, 612.6, −4.2), all at least 200 m from the box. Two `worldInstancedMeshNode`s of `q110_black_box.mesh`, six instances each at scale 100; the second spans (−258.8…−148.6, 782.3…888.1, −241.2…−135.8) and so encloses the box |
+| `…\interior_-1_1_-1_4.streamingsector` | `basegame_3_nightcity` | `040ece15e704bebf` | Five `worldGenericProxyMeshNode`s |
+| `basegame_2_mainmenu.archive` (listing) | — | archive `b0f967f782761974` | All 53 entries: 15 sectors, acoustics, traffic and device resources, one `.env`; no `.envprobe` or `.gidata`. The 15 sectors were already serialized; their node classes are listed on the knowledge page |
+
+`target_face.ent` (above) was re-read for `env` (unset), `params` (three area settings), `depthCutDistance` 9, `backgroundColor` (0, 0, 0, 0), `overrideBackgroundColor` 0 and `renderSceneLayer` `Default`. Class fields come from the RTTI dump red-dump-json `a8e52990`.
+
+**Programs** (static cache as in the [shader-system note](../materials/shader-system/README.md); extracted with `shader_cache.py extract`, decompiled with dxil-spirv `f2d1b554` and SPIRV-Cross `aa217aeb` to Vulkan GLSL):
+
+| Technique | Pixel program | DXBC SHA-256 | Read for |
+|---|---|---|---|
+| `m_shaderLightIntegrate` | `2291179555597019501` | `df2b6c86419a31c4` | Probe loop over a 32 × 32 tile bitmask (`t45`). Per-probe six-colour cubes in `ENV_PROBES`. Fallback where the weight is under 1: the cube at `ENV_PROBES[257 + 6·ENV_PROBES[0].w]`, and the cube at 449–454 scaled by a three-layer world-space array (`t61`, sampled at world XY × 6.1035e−5 + 0.5, height terms with constants 900, −100 and −110). A cube texture at `t43` |
+| `m_shaderLightIntegrate_NoEnvProbes` | `10393055107398307099` | `7df07e2d0e594b5f` | Global cube `GlobalShaderConsts` 21–26 along the normal or `L_e` (diffuse, hair) and along the bent reflection (specular), plus screen buffers `t5`/`t6` (× a per-draw factor) and `t11`/`t12` (× 64, behind `cb6[13].z`) |
+| `m_shaderLightIntegrate_CubeIBL` | `16956390879026470170` | `7df07e2d0e594b5f` | Byte-identical to `NoEnvProbes`, with a different vertex program (`3791666749441714394`) |
+| `m_shaderLightIntegrate_NoAmbient` | `5858691682494776269` | `73b174b058493cda` | Same bindings as `NoEnvProbes`; the two cube evaluations and the hair environment branch are absent (normalised diff of the two listings) |
+
+**Name attribution.** In `static-index.json` each integrate technique's program pair is filed under a `dsFormat` entry five entries before the technique's name. The pattern holds for all eight integrate techniques (entries 245/250, 309/314, 475/480, 533/538, 604/609, 704/709, 714/719, 730/735 and 772/777). `shader_cache.py` attributes GUIDs to the following name, so these programs appeared nameless; the pairing is a layout reading, strongly supported.
+
+**Runtime frames.** These are the private session-2 mirror captures (26 September 2026, bridge build `c31156a`). *Metal ramp · lifted* (full-frame SHA-256 `f9a7c62ce765ba57…`, 3840 × 1600) was sampled on the side of the nose away from the key, a 40 × 60 px box: mean (47, 24, 18), minimum (41, 21, 17). The forehead centre, a 60 × 40 px box, reads (187, 176, 162). The patches were inverted through the Nova LUT's neutral axis from §5. Every frame shows the menu's red backdrop behind V. In the bridge's command log, `world.time.set` restores the clock to 705,706 s (about 04:00) at 09:14 UTC, followed by `world.pause`. The mirror frames follow at 09:37–09:38 UTC, so the hour was early morning if the pause held.
+
+Extracted files and JSON are kept in the ignored `research/consumers/cc-lighting/raw/nc-ambient/`, and the decompiled integrate listings in `research/consumers/shader-system/raw/amb/`.
+
 ## Limits
 
 - The CPU-side conversions are not read: lumens to intensity, cone angles and softness to `a`, `b`, `c`, the `Color` default, and the camera settings to an exposure scale. Neither is the preview camera's placement code (`gameuiPuppetPreviewCameraController` is native).
