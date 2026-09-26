@@ -74,8 +74,19 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_cursors: array<wref<CursorGameController>>;
   private let m_photoPuppet: wref<GameObject>;
 
+  // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
+  // runs in every menu, including the main menu, and a method called on a missing container would
+  // reach a native member function without an object.
   public static func Get() -> ref<XFBridgeRegistry> {
-    return GameInstance.GetScriptableSystemsContainer(GetGameInstance()).Get(n"XFRuntimeBridge.XFBridgeRegistry") as XFBridgeRegistry;
+    let game = GetGameInstance();
+    if !GameInstance.IsValid(game) {
+      return null;
+    }
+    let container = GameInstance.GetScriptableSystemsContainer(game);
+    if !IsDefined(container) {
+      return null;
+    }
+    return container.Get(n"XFRuntimeBridge.XFBridgeRegistry") as XFBridgeRegistry;
   }
 
   // Photo mode ---------------------------------------------------------------------------------

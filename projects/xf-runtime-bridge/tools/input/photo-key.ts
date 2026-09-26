@@ -21,7 +21,7 @@ import { dlopen, FFIType } from "bun:ffi";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const { u64, u32, i32, ptr } = FFIType;
+const { u64, u32, i32, i64, ptr } = FFIType;
 
 export type KeyRoute = "sendinput" | "postmessage";
 export type Binding = { name: string; source: "user_settings" | "default" };
@@ -114,10 +114,14 @@ function openUser32() {
     IsWindow: { args: [u64], returns: i32 },
   }).symbols;
 }
-const { i64 } = FFIType;
 function lib() {
   user32 ??= openUser32();
   return user32;
+}
+
+/** The scan code Windows maps a virtual key to (MapVirtualKeyW, MAPVK_VK_TO_VSC); 0 when there is none. Sends nothing. */
+export function scanCodeFor(vk: number): number {
+  return lib().MapVirtualKeyW(vk, 0) as number;
 }
 
 export class KeySendError extends Error {
@@ -144,7 +148,7 @@ export const sendKeyToWindow: KeySender = async (target, vk, route) => {
   const owner = new Uint32Array(1);
   u.GetWindowThreadProcessId(target.hwnd, owner);
   if (owner[0] !== target.pid) throw new KeySendError("That window doesn't belong to the game, so nothing was sent.", "wrong_window");
-  const scan = u.MapVirtualKeyW(vk, 0) as number; // MAPVK_VK_TO_VSC
+  const scan = scanCodeFor(vk);
   if (!scan) throw new KeySendError("Windows has no scan code for the photo mode key.", "no_scan_code");
   if (route === "postmessage") {
     const WM_KEYDOWN = 0x0100;

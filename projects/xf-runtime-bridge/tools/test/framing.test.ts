@@ -8,7 +8,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { frame, frameByCapture, readingProblem, screenSpace, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
 import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
-import { INPUT_SIZE, keyboardInput, readPhotoModeBinding, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
+import { INPUT_SIZE, keyboardInput, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
 import { runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
 import { openSyntheticWindow, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
@@ -199,6 +199,8 @@ describe("photo.open's key", () => {
     expect(virtualKey("IK_7")).toBe(0x37);
     expect(virtualKey("IK_F9")).toBe(0x78);
     expect(virtualKey("IK_Pad_A")).toBeNull();
+    // The user32 bindings load, and N maps to its set-1 scan code (nothing is sent).
+    expect(scanCodeFor(0x4e)).toBe(0x31);
     const up = keyboardInput(0x31, true);
     const view = new DataView(up.buffer);
     expect(up.length).toBe(INPUT_SIZE);
