@@ -6,7 +6,8 @@
  *   repeating within a minute is kept once (the rest are counted in one "dropped" line). A page failure without a host reference
  *   of its own is linked to the few host failures of the seconds before it (`details.related`). An entry that can't be recorded
  *   is skipped, never answered with an error the page would retry forever.
- * - `GET /api/diagnostics/state`, `POST /api/diagnostics/mode`: the rolling window's size and diagnostic mode.
+ * - `GET /api/diagnostics/state`, `POST /api/diagnostics/mode`: the rolling window's size and diagnostic mode, and while a report is
+ *   being prepared, one plain line on what it is doing (`preparing`), which the review shows.
  * - `POST /api/diagnostics/report`: prepare a report for review (the manifest the review screen shows).
  * - `POST /api/diagnostics/item`: one prepared item's whole text, for the review's full view.
  * - `POST /api/diagnostics/bundle`: the report file (a ZIP) with only the items the person left ticked, for the page to save. Its
@@ -68,6 +69,8 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
   const redactor = (): Redactor => diagnostics.roots.redactor();
   let minute = { start: 0, kept: 0, dropped: 0 };
   const repeats = new Map<string, number>();
+  /** What the report being prepared is doing now (null when none is). */
+  let preparing: string | null = null;
   const prepared = new Map<string, { report: PreparedHostReport; at: number }>();
   const remember = (id: string, report: PreparedHostReport) => {
     prepared.set(id, { report, at: now() });
@@ -148,7 +151,7 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
       return refuse(403, "forbidden", "Local studio requests only.");
     const route = url.pathname.slice(DIAGNOSTICS_PREFIX.length);
     if (request.method === "GET") {
-      if (route === "state") return json({ schema: DIAGNOSTICS_STATE_SCHEMA, ...diagnostics.trace.state(), logBytes: diagnostics.log.bytes() });
+      if (route === "state") return json({ schema: DIAGNOSTICS_STATE_SCHEMA, ...diagnostics.trace.state(), logBytes: diagnostics.log.bytes(), preparing });
       return refuse(404, "not_found", "Not found.");
     }
     if (request.method !== "POST") return refuse(405, "method", "Method not allowed.");
@@ -175,7 +178,9 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
       const ref = value?.ref ?? null;
       if (ref !== null && !isErrorRef(ref)) return refuse(400, "invalid_ref", "That isn't an XF Studio error reference.");
       const id = randomUUID();
-      const report = await buildHostReport(diagnostics, options, ref as string | null, id);
+      let report: PreparedHostReport;
+      try { report = await buildHostReport(diagnostics, options, ref as string | null, id, message => { preparing = message; }); }
+      finally { preparing = null; }
       remember(id, report);
       return json(report.manifest);
     }

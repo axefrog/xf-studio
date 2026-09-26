@@ -14,6 +14,7 @@ import { TraceWindow } from "../src/diagnostics/trace-window";
 import { createDiagnosticsHandler, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
 import { resolutionResources } from "../src/diagnostics/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
+import { hashingSettled, involvedMods } from "../src/diagnostics/mod-identity";
 import type { ReportManifest } from "../src/diagnostics/report";
 import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
 import type { ResolvedCharacter } from "../src/character-resolver";
@@ -282,5 +283,55 @@ describe("the page's forwards (DIAG-07, DIAG-12)", () => {
     const tail = diagnostics.log.tail(10);
     expect(tail.find(entry => entry.message === "page-made")!.details!.related).toEqual(refs.slice(-3));
     expect(tail.find(entry => entry.message === "host-made")!.details?.related).toBeUndefined();
+  });
+});
+
+describe("the game folder is not one mod, and hashing is bounded in time (DIAG-05, DIAG-11)", () => {
+  const game = join(root, "split-game"), mods = join(game, "archive", "pc", "mod");
+  mkdirSync(mods, { recursive: true });
+  mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
+  mkdirSync(join(game, "mods", "My RED Mod", "archives"), { recursive: true });
+  mkdirSync(join(game, "bin", "x64", "deep"), { recursive: true });
+  writeFileSync(join(game, "archive", "pc", "content", "basegame_4_appearance.archive"), "base");
+  for (const name of ["a.archive", "b.archive", "vortexed.archive"]) writeFileSync(join(mods, name), `${name} bytes`);
+  writeFileSync(join(game, "mods", "My RED Mod", "archives", "red.archive"), "red");
+  // Where the game never loads archives from: a same-named file there must not be found by walking the game folder.
+  writeFileSync(join(game, "bin", "x64", "deep", "stray.archive"), "stray");
+  writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ version: 1, instance: "i1", gameId: "cyberpunk2077",
+    files: [{ relPath: "archive\\pc\\mod\\vortexed.archive", source: "Vortexed Mod-1-0", time: 1 }] }));
+  const settings: LocalSettings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" };
+  const winners = [
+    { archive: "basegame_4_appearance.archive", provider: "Installed game", group: "content", alternatives: ["a.archive (mod, Installed game)"] },
+    { archive: "b.archive", provider: "Installed game", group: "mod", alternatives: ["vortexed.archive (mod, Installed game)", "red.archive (mod, Installed game)"] },
+    { archive: "stray.archive", provider: "Installed game", group: "mod", alternatives: [] },
+  ];
+  const none = () => undefined;
+
+  test("base-game archives are one entry, never located or hashed; every other game-folder archive is its own", async () => {
+    const found = await involvedMods(winners, settings, none);
+    const byName = new Map(found.map(mod => [mod.name, mod]));
+    expect(byName.get("Cyberpunk 2077 (the game's own files)")).toMatchObject({ kind: "base-game", status: "base-game",
+      archives: [{ name: "basegame_4_appearance.archive", bytes: null, sha256: null, path: null, identifiedBy: "game version" }] });
+    for (const name of ["a.archive", "b.archive"])
+      expect(byName.get(`${name} (in the game folder)`)).toMatchObject({ kind: "game-folder", archives: [{ name, identifiedBy: "sha-256" }] });
+    // An archive Vortex deployed goes with its Vortex mod; REDmod's archives are found where the game loads them.
+    expect(byName.get("Vortexed Mod-1-0")).toMatchObject({ kind: "vortex-mod", archives: [{ name: "vortexed.archive" }] });
+    expect(byName.get("red.archive (in the game folder)")!.archives[0]).toMatchObject({ bytes: 3, identifiedBy: "sha-256" });
+    // The game folder isn't walked: a file outside the load folders stays not found.
+    expect(byName.get("stray.archive (in the game folder)")!.archives[0]).toMatchObject({ bytes: null, identifiedBy: "not found" });
+  });
+
+  test("out of time, archives are identified by size and date, with progress, and the next report has their hashes", async () => {
+    const fresh = join(mods, "late.archive");
+    writeFileSync(fresh, `late ${Date.now()}`);
+    const seen: [number, number][] = [];
+    const first = await involvedMods([{ archive: "late.archive", provider: "Installed game", group: "mod", alternatives: [] }], settings, none,
+      { hashBudgetMs: 0, progress: (done, total) => seen.push([done, total]) });
+    expect(first[0]!.archives[0]).toMatchObject({ sha256: null, identifiedBy: "size and date" });
+    expect(first[0]!.archives[0]!.bytes).toBeGreaterThan(0);
+    expect(seen).toEqual([[0, 1], [1, 1]]);
+    await hashingSettled();
+    const again = await involvedMods([{ archive: "late.archive", provider: "Installed game", group: "mod", alternatives: [] }], settings, none, { hashBudgetMs: 0 });
+    expect(again[0]!.archives[0]).toMatchObject({ identifiedBy: "sha-256", sha256: new Bun.CryptoHasher("sha256").update(readFileSync(fresh)).digest("hex") });
   });
 });

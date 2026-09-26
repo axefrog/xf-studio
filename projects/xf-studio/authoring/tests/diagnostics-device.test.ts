@@ -70,6 +70,26 @@ describe("repeated failures (DIAG-07, DIAG-12)", () => {
   });
 });
 
+test("while the host prepares, its progress line shows, and it clears when the report is ready (DIAG-11)", async () => {
+  let finish!: () => void;
+  const ready = new Promise<void>(done => { finish = done; });
+  const device = { forward() {}, pending: () => [], claimHostRef: () => null, pageFacts: () => ({ browser: "Chrome", gpu: null, webgl2: true }),
+    state: async () => ({ mode: "normal" as const, until: null, minutes: 30, preparing: "Fingerprinting the mod files involved (2 of 5)…" }),
+    prepare: async () => { await ready; return { schema: "xfs/problem-report-manifest-1", id: "r", ref: null, made: "2026-09-26T00:00:00.000Z",
+      facts: { app: { version: "0.1.0", commit: null, channel: null, host: "localhost" }, os: "", runtime: "", webView2: null, game: { version: null, found: false },
+        launchRoute: "", frameworks: null, wolvenKit: { version: null, source: "" } }, problem: [], recent: [], items: [], limits: { total: 1, modFiles: 1 },
+      window: { mode: "normal", minutes: 30, until: null } } as ReportManifest; },
+  } as unknown as DiagnosticsDevice;
+  const actions = new DiagnosticsActions(device);
+  const prepared = actions.dispatch({ kind: "diagnostics.prepareReport" });
+  await settle(900);
+  expect(actions.snapshot().report).toMatchObject({ phase: "preparing", message: "Fingerprinting the mod files involved (2 of 5)…" });
+  finish();
+  await prepared;
+  await settle(700);
+  expect(actions.snapshot().report).toMatchObject({ phase: "ready", message: null });
+});
+
 describe("the report review (DIAG-01, DIAG-09, DIAG-13, DIAG-14)", () => {
   beforeAll(() => {
     installLightDom();

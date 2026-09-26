@@ -265,7 +265,8 @@ describe("mods involved, for reproduction without their files", () => {
       source: { site: "vortex", staging: "My Tweaks-54321-1-0-1727000001", modId: "54321" } });
     // A name without Nexus's upload-time suffix yields no guessed mod ID.
     expect(byName.get("Cool Hair-1-2-3")).toMatchObject({ kind: "vortex-mod", status: "local-only", source: { site: "vortex", modId: null } });
-    expect(byName.get("Installed game")).toMatchObject({ kind: "game-folder", source: null });
+    // A game-folder file Vortex didn't deploy is its own entry, not one "Installed game" mod (DIAG-05).
+    expect(byName.get("hand.archive (in the game folder)")).toMatchObject({ kind: "game-folder", source: null, archives: [{ name: "hand.archive", identifiedBy: "sha-256" }] });
   });
 });
 

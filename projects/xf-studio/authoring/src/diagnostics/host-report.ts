@@ -33,6 +33,8 @@ export type HostReportSources = {
   roots?: () => KnownRoot[];
   /** The resolver's JSON cache (excerpts come from it, never from archives). */
   resolverCache?: string | null;
+  /** Time a report spends hashing mod files before using their size and date (`HASH_BUDGET_MS`; tests set it). */
+  hashBudgetMs?: number;
 };
 /** The rolling window's share of a report file; its newest events are kept. */
 export const TRACE_REPORT_BYTES = 4 * 1024 * 1024;
@@ -262,7 +264,10 @@ const MOD_CONTENT_NOTE = "Parts of these come from the mods' own files, so inclu
 const utf8Bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
 /** Build the host's share of a report: the manifest the review screen shows and the contents behind it. Never throws for a part. */
-export async function buildHostReport(diagnostics: HostDiagnostics, sources: HostReportSources, ref: string | null, id: string): Promise<PreparedHostReport> {
+export async function buildHostReport(diagnostics: HostDiagnostics, sources: HostReportSources, ref: string | null, id: string,
+  /** One plain line on what it is doing now, for the review's status (DIAG-11). */
+  progress: (message: string) => void = () => {}): Promise<PreparedHostReport> {
+  progress("Reading your setup…");
   let settings: LocalSettings | null = null;
   try { settings = sources.settings(); } catch { /* Unreadable settings are reported as such. */ }
   const exe = settings?.gameRoot ? join(settings.gameRoot, "bin", "x64", "Cyberpunk2077.exe") : null;
@@ -290,7 +295,9 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
   const state = diagnostics.trace.state();
   const resources = resolutionResources(resolved, prepared);
   const winnerList = winners(resources);
-  const mods = await involvedMods(winnerList, settings);
+  const mods = await involvedMods(winnerList, settings, undefined, { hashBudgetMs: sources.hashBudgetMs,
+    progress: (done, total) => { if (total) progress(`Fingerprinting the mod files involved (${done} of ${total})…`); } });
+  progress("Putting the report together…");
   const full = fullResources(resources, sources.resolverCache);
   type Built = { id: string; group: ReportGroup; label: string; detail: string; content: unknown; included?: boolean };
   const built: Built[] = [

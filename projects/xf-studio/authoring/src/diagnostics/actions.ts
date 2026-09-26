@@ -54,7 +54,8 @@ export type DiagnosticsDevice = {
   claimHostRef(): string | null;
   /** The browser and graphics card (the view settings come from `setViewState`). */
   pageFacts(): Omit<PageFacts, "state">;
-  state(): Promise<{ mode: DiagnosticsMode; until: string | null; minutes: number } | null>;
+  /** The rolling window's mode, and while a report is being prepared, what the host is doing (`preparing`). */
+  state(): Promise<{ mode: DiagnosticsMode; until: string | null; minutes: number; preparing?: string | null } | null>;
   setMode(mode: DiagnosticsMode): Promise<{ mode: DiagnosticsMode; until: string | null; minutes: number }>;
   prepare(ref: string | null): Promise<ReportManifest>;
   /** One prepared host item's whole text (the review's full view). */
@@ -139,7 +140,10 @@ export class DiagnosticsActions {
 
   /** Read the rolling window's mode once the host is reachable. */
   async refresh(): Promise<void> {
-    try { const mode = await this.device.state(); if (mode) this.publish({ mode }); } catch { /* The mode stays unknown; nothing depends on it. */ }
+    try {
+      const state = await this.device.state();
+      if (state) this.publish({ mode: { mode: state.mode, until: state.until, minutes: state.minutes } });
+    } catch { /* The mode stays unknown; nothing depends on it. */ }
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
@@ -318,12 +322,25 @@ export class DiagnosticsActions {
     ].map(item => ({ ...item, text: JSON.stringify(redactValue(item.content), null, 1) }));
     this.publish({ opens: this.state.opens + 1, report: { phase: "preparing", ref, message: null, title: reportTitle(ref, []), description: this.state.report?.description ?? "",
       sharingConfirmed: false, groups: [], total: 0, limit: 0, totalSize: "", fileName: null, busy: null, saved: null, window: null, files: null, expired: false } });
+    // While the host prepares (hashing mod files can take a few seconds), its progress line shows in the review (DIAG-11).
+    let preparing = true;
+    const watch = (async () => {
+      while (preparing) {
+        await new Promise(done => setTimeout(done, 600));
+        if (!preparing) break;
+        try {
+          const state = await this.device.state();
+          if (preparing && state?.preparing && this.state.report?.phase === "preparing") this.publishReport({ message: state.preparing });
+        } catch { /* The plain "Preparing" line stays. */ }
+      }
+    })();
     try {
-      const manifest = await this.device.prepare(ref);
+      const manifest = await this.device.prepare(ref).finally(() => { preparing = false; });
+      void watch;
       this.manifest = manifest;
       for (const item of manifest.items) if (item.included) this.included.add(item.id);
       for (const item of this.pageItems) this.included.add(item.id);
-      this.publishReport({ phase: "ready", title: reportTitle(ref, manifest.problem), limit: manifest.limits.total, fileName: reportFileName(manifest), window: manifest.window });
+      this.publishReport({ phase: "ready", message: null, title: reportTitle(ref, manifest.problem), limit: manifest.limits.total, fileName: reportFileName(manifest), window: manifest.window });
       this.regroup();
       return { ok: true, message: "Report ready for review." };
     } catch (error) {
