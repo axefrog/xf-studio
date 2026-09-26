@@ -77,7 +77,14 @@ export interface GameAssetExportSession {
   close(): void;
 }
 /** What one batch asks of one source (archive): the geometry, textures and masks to export from it. */
-export type ExportRequest = { readonly source: ExportSource; readonly geometry: readonly string[]; readonly textures: readonly string[]; readonly masks: readonly string[] };
+export type ExportRequest = { readonly source: ExportSource; readonly geometry: readonly string[]; readonly textures: readonly string[]; readonly masks: readonly string[];
+  /**
+   * Geometry needs WolvenKit's materials file too (the core preview's head and eyes). Without it (the character details, which resolve
+   * materials themselves), a mesh or morph target is exported without the game folder: the same GLB, byte for byte, without decoding
+   * every texture its materials name [resource: a CCXL hair mesh and a vanilla morph target, WolvenKit 9.0.1], seconds sooner. A GLB
+   * that doesn't come out that way is exported again with the game folder.
+   */
+  readonly materials?: boolean };
 export type ExportAnswer = { geometry: Map<string, ExportedGeometry>; textures: Map<string, ExportedTexture>; masks: Map<string, ExportedMask>;
   /** The tool failed on this source (its launch, retried alone when it shared one); what the cache already had is still answered. */
   failed?: GameAssetExportError };
@@ -175,10 +182,11 @@ const touched = new Set<string>();
 /** Mark a cache entry (its `entry.json`, or a cache file) as used now, once per process. */
 export function touchUsed(path: string): void {
   if (touched.has(path)) return;
-  if (touched.size > 50_000) touched.clear();
   touched.add(path);
   try { const now = new Date(); utimesSync(path, now, now); } catch { /* Advisory. */ }
 }
+/** Whether this process used (read or wrote) a cache entry: the disk budget never evicts one (prepared-files.ts). */
+export const usedThisSession = (path: string) => touched.has(path);
 
 /** Persistent per-resource cache in host-owned private storage. */
 export class GameAssetExportCache extends DerivedCache {
@@ -235,7 +243,14 @@ export class GameAssetExportCache extends DerivedCache {
     }
     this.writeJson(join(staging, "entry.json"), meta);
     if (existsSync(directory)) this.remove(directory);
-    renameSync(staging, directory);
+    try { renameSync(staging, directory); }
+    catch (error) {
+      // Another export of the same resource (a prefetch beside a person's own change) published it first: keep theirs.
+      this.remove(staging);
+      if (!existsSync(join(directory, "entry.json"))) throw error;
+    }
+    touched.delete(join(directory, "entry.json"));
+    touchUsed(join(directory, "entry.json"));
     return Object.fromEntries(Object.keys(files).map(name => [name, join(directory, name)]));
   }
 }
@@ -248,11 +263,13 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
   const tool = options.tool ?? UNKNOWN_TOOL;
   const cache = new GameAssetExportCache(cacheRoot, tool);
   const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
-  const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean): ExportedGeometry => ({
+  /** The files a geometry export needs: with materials, `requiredGeometryFiles`; without, the raw resource and its GLB. */
+  const required = (depotPath: string, materials: boolean) => materials ? requiredGeometryFiles(depotPath) : ["raw", "export.glb"];
+  const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean, materials = true): ExportedGeometry => ({
     depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: fileSha256(files.raw!),
     glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
     materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
-    complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached });
+    complete: required(depotPath, materials).every(name => !!files[name]), cached });
   const present = (source: ExportSource, depotPaths: readonly string[]): Set<string> | null => {
     if (!options.contains) return null;
     try {
@@ -279,11 +296,14 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
   };
   /** What the cache already answers for a request; the rest is returned as needed. Only a complete (or lasting partial) entry is a hit. */
   const fromCache = (request: ExportRequest, answer: ExportAnswer, decoded: string | null = null): Needed => {
-    const needed: Needed = { geometry: [], textures: [], masks: [] };
+    const needed: Needed = { geometry: [], textures: [], masks: [] }, materials = request.materials ?? true;
     for (const depotPath of new Set(request.geometry)) {
       checkDepotPath(depotPath);
       const cached = cache.read(depotPath, request.source);
-      if (cached?.raw && cached["export.glb"]) answer.geometry.set(depotPath, geometryFiles(depotPath, cached, true));
+      // A lasting partial entry answers too (its GLB is served; `complete` says what is missing).
+      const lasting = !!cached && cache.partialRuns(depotPath, request.source) >= PARTIAL_RUNS;
+      if (cached && (required(depotPath, materials).every(name => cached[name]) || (lasting && cached.raw && cached["export.glb"])))
+        answer.geometry.set(depotPath, geometryFiles(depotPath, cached, true, materials));
       else needed.geometry.push(depotPath);
     }
     for (const depotPath of new Set(request.textures)) {
@@ -307,7 +327,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
    * never into the launch's work folder (which is removed): a complete export as before, and a partial one (the GLB without its
    * materials file) as a partial entry counting its clean runs (`PARTIAL_RUNS`). Returns the textures and masks not found by name.
    */
-  const collect = (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer): { textures: string[]; masks: string[] } => {
+  const collect = (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer, needMaterials = true): { textures: string[]; masks: string[] } => {
     for (const depotPath of needed.geometry) {
       const raw = depotFile(outDir, depotPath);
       if (!existsSync(raw)) continue;
@@ -315,11 +335,11 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
       const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
       if (existsSync(glb)) files["export.glb"] = glb;
       if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
-      const complete = requiredGeometryFiles(depotPath).every(name => files[name]);
-      // Without a GLB there is nothing to serve; a GLB without its materials file is kept as a partial entry.
+      const complete = required(depotPath, needMaterials).every(name => files[name]);
+      // Without a GLB there is nothing to serve; a GLB without the materials file it was asked for is kept as a partial entry.
       const written = complete ? cache.write(depotPath, source, files)
         : files["export.glb"] ? cache.write(depotPath, source, files, cache.partialRuns(depotPath, source) + 1) : files;
-      answer.geometry.set(depotPath, geometryFiles(depotPath, written, false));
+      answer.geometry.set(depotPath, geometryFiles(depotPath, written, false, needMaterials));
     }
     const unnamed = { textures: [] as string[], masks: [] as string[] };
     for (const depotPath of needed.textures) {
@@ -389,27 +409,32 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
       const lowPriority = exportOptions.lowPriority;
       let serial = 0;
       // One launch over a group; a tool failure of a shared launch is retried per source, so one archive can't fail the others.
-      const launch = async (group: typeof pending): Promise<void> => {
+      const launch = async (group: typeof pending, withGame = false): Promise<void> => {
         const outDir = join(work, `launch-${serial++}`);
         mkdirSync(outDir, { recursive: true });
         try {
           await run({ source: group[0]!.request.source, sources: group.map(item => item.request.source),
             depotPaths: [...new Set(group.flatMap(item => neededPaths(item.needed)))], outDir,
-            withMaterials: group.some(item => item.needed.geometry.length > 0), signal, lowPriority });
+            withMaterials: withGame || group.some(item => item.needed.geometry.length > 0 && (item.request.materials ?? false)), signal, lowPriority });
         } catch (error) {
           if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
-          if (group.length > 1) { for (const item of group) await launch([item]); return; }
+          if (group.length > 1) { for (const item of group) await launch([item], withGame); return; }
           answers[group[0]!.index]!.failed = error;
           return;
         }
+        // Geometry exported without the game folder that came out without a GLB: once more with it.
+        const again: typeof pending = [];
         for (const item of group) {
-          const unnamed = collect(item.request.source, item.needed, outDir, answers[item.index]!);
+          const unnamed = collect(item.request.source, item.needed, outDir, answers[item.index]!, item.request.materials ?? false);
+          const missing = withGame || item.request.materials ? [] : item.needed.geometry.filter(path => !answers[item.index]!.geometry.get(path)?.glb);
+          if (missing.length) again.push({ ...item, needed: { geometry: missing, textures: [], masks: [] }, hashes: missing.map(depotHash) });
           try { await byHash(item.request.source, unnamed, join(outDir, `source-${item.index}`), answers[item.index]!, signal); }
           catch (error) {
             if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
             answers[item.index]!.failed = error;
           }
         }
+        if (again.length) await launch(again, true);
       };
       try { for (const group of launches) await launch(group); }
       finally { try { cache.remove(work); } catch { /* Best effort. */ } }

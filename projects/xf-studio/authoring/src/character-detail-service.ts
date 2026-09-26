@@ -44,6 +44,7 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, parseCharacterDe
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
   type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
+import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
 
@@ -78,6 +79,13 @@ export type PrepareCharacterOptions = {
    * host's `structuralInput`). Without it, a request's choices are ignored with a log line.
    */
   derive?: (request: CharacterRequest, cco: Awaited<ReturnType<typeof loadMergedCco>>) => CharacterInput | Promise<CharacterInput>;
+  /**
+   * Where to keep what a finished preparation depended on (choice-manifest.ts), so a later session knows the request is ready without
+   * preparing it: the folder and the request's manifest name on this route. Without it, nothing is kept.
+   */
+  manifests?: { dir: string; key: (request: CharacterRequest) => string };
+  /** Background work (a prefetch): WolvenKit runs below normal priority. */
+  lowPriority?: boolean;
 };
 /**
  * `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). `note`: one plain line about
@@ -538,7 +546,43 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   return { geometryAt, textureAt, maskAt, toolFailures, toolLabel };
 }
 
+/** Every export a plan's parts are served from, as the preparation cache holds them now: [kind, depot path, archive]. */
+function planExports(graph: ResourceGraph, cache: CharacterPreparationCache, plan: CharacterPlan): [ExportKind, string, string][] {
+  const out: [ExportKind, string, string][] = [];
+  const add = (kind: ExportKind, ref: DepotRef) => {
+    const at = locate(graph, ref);
+    const into = kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks;
+    if (at && into.has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) out.push([kind, at.depotPath, at.archive.id]);
+  };
+  for (const component of plan.components) {
+    add("geometry", component.drawnFrom.ref);
+    for (const material of component.materials) {
+      for (const provenance of Object.values(material.textures)) add("textures", provenance.ref);
+      if (material.layered?.mask) add("masks", material.layered.mask.ref);
+      const setup = material.layered ? cache.setups.get(refLabel(material.layered.setup.ref).toLowerCase()) : null;
+      for (const layer of setup?.values.layers ?? []) {
+        if (!layerDraws(layer.opacity)) continue;
+        const template = layer.template ? cache.layerTemplates.get(refLabel(layer.template).toLowerCase()) : null;
+        for (const ref of [template?.values.textures.color, template?.values.textures.normal, template?.values.textures.roughness,
+          template?.values.textures.metalness, layer.microblend]) if (ref?.path && /\.xbm$/i.test(ref.path)) add("textures", ref);
+      }
+    }
+  }
+  return out;
+}
+/** The merged creator resource's own files (read once per graph, so a later preparation's recording doesn't see them). */
+const creatorReads = (cco: Awaited<ReturnType<typeof loadMergedCco>>): string[] =>
+  [cco.base.ref.hash, ...cco.customs.map(custom => custom.provenance.ref.hash)];
+/** WolvenKit's identity as the installation's fetcher caches by it (`WolvenKitFetcher.tool`). */
+const fetcherTool = (installation: Installation) => (installation.fetcher as { tool?: string } | undefined)?.tool ?? "unknown";
+
 export async function prepareCharacterDetails(options: PrepareCharacterOptions): Promise<CharacterDetailResult> {
+  // What the preparation reads is recorded until it ends, however it ends.
+  const recordings: { end(): void }[] = [];
+  try { return await prepareOnce(options, graph => { const recording = graph.beginReads(); recordings.push(recording); return recording; }); }
+  finally { for (const recording of recordings) recording.end(); }
+}
+async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph: ResourceGraph) => { reads: Set<string> }): Promise<CharacterDetailResult> {
   const { request, signal } = options;
   const log = options.log ?? (() => {});
   const cache = options.cache ?? new CharacterPreparationCache();
@@ -573,6 +617,8 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   progress("resolving");
   // The merged creator resource is memoised by the resolver per graph (character-resolver.ts `loadMergedCco`).
   let cco: Awaited<ReturnType<typeof loadMergedCco>>;
+  // What this preparation reads, kept (with what it exports) so a later session knows the request is ready (choice-manifest.ts).
+  const recording = beginReads(graph);
   try { cco = await loadMergedCco(graph, request.bodyGender); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).message); }
   // The V as stored (a save's descriptors) or the default V: what is shown when there are no choices, or they can't be interpreted.
@@ -836,7 +882,82 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     cache.forget(mark);
     log("Some files couldn't be read this time (WolvenKit or a resource failed in a way that may not repeat); the V will be prepared again next time.");
   }
+  if (!degraded && options.manifests) writeChoiceManifest(options.manifests.dir, options.manifests.key(request),
+    manifestOf(graph, [...recording.reads, ...creatorReads(cco)], planExports(graph, cache, plan), fetcherTool(installation), xlIdentity(installation)));
   log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
   return { record, recordFile: recordName, degraded, ...(choicesNote ? { note: choicesNote } : {}) };
+}
+
+export type WarmOptions = Omit<PrepareCharacterOptions, "request" | "progress"> & {
+  /** The requests to make ready (one body gender): a row's choices, each set on the same V. */
+  requests: readonly CharacterRequest[];
+};
+/** Per request: whether it is ready now (a later preparation of it needs no WolvenKit), or failed in a way that may not repeat. */
+export type WarmOutcome = { ready: boolean; note?: string };
+
+/**
+ * Make several requests ready without writing their records (the Character panel's prefetch, choice-prefetch.ts): everything a
+ * preparation of each would read or export is read and exported now, together. Every level of every request's resource chain is read in
+ * one extraction batch (the requests resolve side by side on the shared graph, whose reads share batches), and every part they draw is
+ * exported in one WolvenKit launch where the archives allow it. The shared preparation cache keeps what was resolved and exported, so a
+ * person's click on one of them only plans and writes. A request whose preparation met a failure that may not repeat is not ready, and
+ * what the batch added is forgotten (PIPE-53); the others' manifests are kept (`manifests`).
+ */
+export async function warmCharacters(options: WarmOptions): Promise<WarmOutcome[]> {
+  const { requests, signal } = options;
+  const log = options.log ?? (() => {});
+  const cache = options.cache ?? new CharacterPreparationCache();
+  if (!requests.length) return [];
+  const cancelled = () => { if (signal?.aborted) throw cancelledError(); };
+  const open = options.open ?? (await import("./installation-registry")).acquireInstallation;
+  let installation: Installation;
+  try { installation = await open({ ...options.route, cacheDir: options.resolverCache, log }); }
+  catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
+  if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
+  cache.installation = installation;
+  const { graph } = installation;
+  const mark = cache.mark(), transientBefore = transientFailures(installation);
+  const recording = graph.beginReads();
+  try {
+    const cco = await loadMergedCco(graph, requests[0]!.bodyGender);
+    cancelled();
+    const inputs = await Promise.all(requests.map(async request => {
+      if (request.choices?.length && options.derive) {
+        try { return await options.derive(request, cco); } catch { return null; }
+      }
+      if (request.source !== "default") return inputFromCharacterRequest(request);
+      const derived = descriptorsFromUiState(cco.merged.cco, {});
+      return { bodyGender: request.bodyGender, origin: "ui-state" as const, appearances: derived.appearances, morphs: derived.morphs };
+    }));
+    // Every request resolves at once, so each level of their chains is one extraction batch.
+    const resolved = await Promise.all(inputs.map(input => input ? resolveThrough(graph, input, cco, cache).then(result => result.resolved) : null));
+    cancelled();
+    await loadTemplates(graph, resolved.flatMap(entry => entry ? entry.appearances.flatMap(appearance => appearance.components.flatMap(component =>
+      component.materials.map(material => material.template).filter((template): template is Provenance => !!template))) : []), cache);
+    const plans = resolved.map(entry => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities) : null);
+    cancelled();
+    const fresh = new Map<string, PlannedComponent>();
+    for (const plan of plans) for (const component of plan?.components ?? []) {
+      const key = canonical(component);
+      if (!cache.components.has(key)) fresh.set(key, component);
+    }
+    const gathered = await gatherParts({ graph, cache, exporter: options.exporter, gameRoot: options.route.gameRoot, storeRoot: options.storeRoot,
+      signal, log, lowPriority: options.lowPriority }, [...fresh.values()]);
+    if (gathered.toolLabel) cache.toolLabel ??= gathered.toolLabel;
+    const degraded = gathered.toolFailures.size > 0 || transientFailures(installation) > transientBefore;
+    if (degraded) {
+      cache.forget(mark);
+      log("Some files couldn't be read while preparing choices ahead (WolvenKit or a resource failed in a way that may not repeat); they are tried again later.");
+    }
+    const reads = [...recording.reads, ...creatorReads(cco)], tool = fetcherTool(installation), xl = xlIdentity(installation);
+    return requests.map((request, index) => {
+      const plan = plans[index];
+      if (!plan) return { ready: false, note: "The choice couldn't be interpreted." };
+      if (degraded) return { ready: false, note: "Some files couldn't be read this time." };
+      // The batch's reads together: a change to any of them makes each of its choices checked again (reading only what changed).
+      if (options.manifests) writeChoiceManifest(options.manifests.dir, options.manifests.key(request), manifestOf(graph, reads, planExports(graph, cache, plan), tool, xl));
+      return { ready: true };
+    });
+  } finally { recording.end(); }
 }

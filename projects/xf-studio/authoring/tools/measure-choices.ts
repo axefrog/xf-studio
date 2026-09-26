@@ -77,11 +77,17 @@ async function choiceOf(spec: string): Promise<CharacterChoice> {
   }
 }
 if (prefetchOption) {
-  const prefetch = (host as unknown as { prefetch?: (request: CharacterRequest, option: string, keys?: string[]) => Promise<unknown> }).prefetch;
-  if (!prefetch) throw Error("This build has no prefetch.");
-  const before = launches(), at = performance.now();
-  const result = await prefetch.call(host, requestOf([]), prefetchOption);
-  console.log(`prefetch ${prefetchOption}: ${((performance.now() - at) / 1000).toFixed(1)} s, ${since(before).count} launch(es): ${since(before).text}; ${JSON.stringify(result)}`);
+  // `--prefetch <part/option>:<first>-<last>`: prepare those positions of the option ahead, as an open row does, and report the cost.
+  const [option, range = "0-7"] = prefetchOption.split(":") as [string, string?];
+  const [first, last] = range.split("-").map(Number) as [number, number];
+  const positions = Array.from({ length: last - first + 1 }, (_, index) => first + index);
+  const before = launches(), at = performance.now(), bytes = (await host.preparedFiles()).bytes;
+  let answer = host.prefetchRow({ base: requestOf([]), option, positions });
+  while (answer.busy) { await Bun.sleep(250); answer = host.prefetchRow({ base: requestOf([]), option, positions }); }
+  const added = (await host.preparedFiles()).bytes - bytes, used = since(before);
+  console.log(`prefetch ${option} ${range}: ${((performance.now() - at) / 1000).toFixed(1)} s, ${used.count} launch(es): ${used.text}; ` +
+    `states ${answer.states}${answer.stopped ? ` (stopped: ${answer.stopped})` : ""}; +${(added / 1024 ** 2).toFixed(1)} MB prepared files ` +
+    `(${(added / 1024 ** 2 / positions.length).toFixed(1)} MB per choice)`);
 }
 for (const spec of args) {
   choices.push(await choiceOf(spec));
