@@ -12,7 +12,8 @@ XF Studio (`projects/xf-studio`) is a specialised, all-in-one Cyberpunk 2077 mod
 
 R&D is a permanent, first-class mandate, run like a research lab beside the product work rather than as an occasional detour. CP2077 modding knowledge is thin in model training data, so our own understanding of the engine is the foundation for every advanced feature to come.
 
-- **Always run R&D.** Keep at least one R&D track active alongside feature work. The standing tracks are the game's material and shader system, and the character-customisation file chain.
+- **Always run R&D.** Keep at least one R&D track active alongside feature work. The standing tracks are the game's material and shader system, the character-customisation file chain, and **load time and responsiveness**.
+- **Load time is a standing research target.** The asymptotic goal: the moment the interface appears, everything is already loaded, visible and interactive, and every change that needs new assets shows with no perceivable wait. Measure end to end, keep budgets, find the next biggest cost, and treat any slow load as a research task, not an accepted cost. See the [performance track](research/backlog/performance.md).
 - **Distil findings into the [knowledge base](knowledge/README.md).** It holds current, cited, evidence-graded answers to "how does X work?". Task logs alone are not enough.
 - **Read before you work.** Agents and subagents read the relevant knowledge pages before starting and update them when they learn something.
 - **Offline understanding serves the tests.** Its purpose is to make the maintainer's in-game tests succeed first time, not to replace them.
