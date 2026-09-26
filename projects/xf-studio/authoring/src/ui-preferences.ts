@@ -7,12 +7,15 @@ export type TourRecord = "completed" | "skipped" | "declined";
 /**
  * `inputHints`: contextual shortcut hints and target tooltips in the viewports (on by default).
  * `tours`: guided tour progress by tour ID (absent until a tour ends or its offer is declined).
+ * `researchTools`: the Studio's research and calibration tools (lighting calibration, the glitter model studies, compiler plans,
+ * developer IDs), off by default so the everyday interface shows only what a person uses (UI-85). Stored only once turned on.
  */
 export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
-  tours?: Record<string, TourRecord> };
+  tours?: Record<string, TourRecord>; researchTools?: boolean };
 export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
   | { kind: "inputHints.set"; enabled: boolean }
+  | { kind: "researchTools.set"; enabled: boolean }
   | { kind: "layout.set"; layout?: DockLayout }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord };
 export type UIPreferenceCapability = { available: boolean; reason?: string };
@@ -106,6 +109,7 @@ export function parseUIPreferences(value: unknown): UIPreferences {
     if (candidate.schema !== result.schema) return result;
     if (theme(candidate.theme)) result.theme = candidate.theme;
     if (typeof candidate.inputHints === "boolean") result.inputHints = candidate.inputHints;
+    if (candidate.researchTools === true) result.researchTools = true;
     const layout = parseDockLayout(candidate.layout);
     if (layout) result.layout = layout;
     if (candidate.tours && typeof candidate.tours === "object" && !Array.isArray(candidate.tours)) {
@@ -128,6 +132,8 @@ export class UIPreferenceActions {
       return { available: false, reason: "Choose System, Light or Dark." };
     if (action.kind === "inputHints.set" && typeof action.enabled !== "boolean")
       return { available: false, reason: "Viewport hints are either shown or hidden." };
+    if (action.kind === "researchTools.set" && typeof action.enabled !== "boolean")
+      return { available: false, reason: "Research tools are either shown or hidden." };
     if (action.kind === "layout.set" && action.layout !== undefined && !parseDockLayout(action.layout))
       return { available: false, reason: "The panel layout is not a supported bounded JSON document." };
     if (action.kind === "tours.record") {
@@ -143,6 +149,7 @@ export class UIPreferenceActions {
     if (!allowed.available) throw Error(allowed.reason);
     if (action.kind === "theme.set") this.value.theme = action.theme;
     else if (action.kind === "inputHints.set") this.value.inputHints = action.enabled;
+    else if (action.kind === "researchTools.set") { if (action.enabled) this.value.researchTools = true; else delete this.value.researchTools; }
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };
     else {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;

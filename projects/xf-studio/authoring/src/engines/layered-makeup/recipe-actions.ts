@@ -128,13 +128,18 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refuse({ code: "range", field: "points", message: "A closed contour needs at least three points." });
   if (action.kind === "field.add" && action.fieldId !== undefined &&
       (typeof action.fieldId !== "string" || !action.fieldId || layer.fields.some(field => field.id === action.fieldId)))
-    return refusal("invalid_value", "The new warp control needs an unused ID.");
+    return refusal("invalid_value", "The new warp needs an unused ID.");
   if (action.kind === "field.add" && layer.fields.length >= MAX_FIELDS)
-    return refuse({ code: "range", field: "fields", message: `A layer supports up to ${MAX_FIELDS} warp controls.` });
+    return refuse({ code: "range", field: "fields", message: `A layer can have up to ${MAX_FIELDS} warps.` });
   if ((action.kind === "field.select" || action.kind === "field.remove" || action.kind === "field.setOrigin" ||
        action.kind === "field.setVector" || action.kind === "field.clear" || action.kind === "field.setReach") &&
       !layer.fields.some(field => field.id === action.fieldId))
-    return refusal("missing_target", "That warp control no longer exists.");
+    return refusal("missing_target", "That warp no longer exists.");
+  // Resetting a warp's pull is refused where there is none to reset: the rule lives here, not in a view (UI-93).
+  if (action.kind === "field.clear") {
+    const field = layer.fields.find(item => item.id === action.fieldId)!;
+    if (!field.du && !field.dv) return refusal("invalid_value", "This warp has no pull to reset.");
+  }
   if (action.kind === "glitter.setIrregular" && !isIrregular(layer.flakes))
     return refuse({ code: "mode", field: "model", message: "Select the irregular Glitter model first." });
   // Flake density and size bound each other; the person hears the rule in their terms, not a parser error (UI-54).

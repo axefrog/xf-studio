@@ -11,7 +11,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "f-shape": { combine: "A bevelled surface never nests inside another bevelled surface of the same size; cards inside panels are bevelled, the panel group is not.",
     drives: "corner-shape: bevel with --bevel / --bevel-sm radii; --shadow only for layers above the dock." },
   "f-icons": { combine: "Icons lead labels in buttons, tabs and menus; menus reserve a 16 px icon column so labels align even without an icon.",
-    adapt: "In condensed tab strips and compact header actions the icon stands alone while the label remains the accessible name.",
+    adapt: "In compact header actions the icon stands alone while the label remains the accessible name. Condensed tab strips keep a short visible label beside the icon (UI-96).",
     drives: "src/studio-ui/icons.ts (icon(), iconMarkup()); the guide's grid is generated from the same table." },
   "f-motion": { combine: "Progress bars sit directly under the action that started the work; readiness badges repeat the state where the result is seen (stage and status bar).",
     adapt: "Motion is identical at every size; reduced-motion users get instant state changes.", drives: "--dur, --ease and the sweep/pulse keyframes; readiness phase from previewReadiness." },

@@ -25,7 +25,10 @@ export const EYE_MAKEUP_VIEW = {
   // Layer-stack kinds first: `layer.setEnabled` is a Layers action, not a colour or finish one.
   activity: [
     { pattern: /^layer\.(edit|setEnabled|select)$/, label: "Layers" },
-    { pattern: /^(point|path|field|pigment|softness|shape)\./, label: "Shape" },
+    // Each source is named as its panel is (UI-92).
+    { pattern: /^(point|path|shape)\./, label: "Shape" },
+    { pattern: /^(pigment|softness)\./, label: "Pigment & edge" },
+    { pattern: /^field\./, label: "Warp" },
     { pattern: /^(layer\.set|layer\.useGameOptics|glitter\.)/, label: "Colour & finish" },
   ],
 } as const satisfies ViewContribution;

@@ -1,4 +1,4 @@
-import { h, setAttr, setDisabled, setText, setValue, uid } from "./dom";
+import { h, isUnavailable, setAttr, setDisabled, setText, setUnavailable, setValue, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 
 /**
@@ -7,23 +7,46 @@ import { icon, type IconName } from "./icons";
  * one Undo step and Escape can restore its starting value.
  */
 export type Transaction<T> = { begin?(): void; edit(value: T): void; commit?(): void; cancel?(): void };
+
+/**
+ * A control's note line never moves the layout (UI-90). A control that has a note (given at construction with `reserveNote`, or
+ * shown once) keeps its line from then on: an empty note keeps its height, and a disabled reason takes the note's place. A control
+ * without one says why it is disabled in its tooltip and accessible description only; its panel says it once where that matters.
+ */
+class NoteLine {
+  readonly element = h("small", { class: "control-note" });
+  private reserved: boolean;
+  constructor(reserve = false) { this.reserved = reserve; this.element.hidden = !reserve; }
+  update(control: HTMLElement, disabled: boolean, reason: string | undefined, note: string | undefined) {
+    if (note) this.reserved = true;
+    const why = disabled && reason ? reason : undefined;
+    const text = why && this.reserved ? why : note ?? "";
+    setText(this.element, text);
+    this.element.hidden = !this.reserved;
+    this.element.classList.toggle("empty", !text);
+    this.element.classList.toggle("info", !(why && this.reserved));
+    setAttr(control, "aria-description", why);
+  }
+}
 const editKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
 export class Slider {
   readonly element: HTMLElement;
   readonly input: HTMLInputElement;
   private readonly output: HTMLOutputElement;
-  private readonly note: HTMLElement;
+  private readonly note: NoteLine;
   private active = false;
   constructor(private options: { label: string; min: number; max: number; step: number; format(value: number): string;
-    transaction: Transaction<number>; help?: string; id?: string }) {
+    transaction: Transaction<number>; help?: string; id?: string;
+    /** Keep a note line from the start: its note comes and goes (a limit that applies only sometimes). */
+    reserveNote?: boolean }) {
     const id = options.id ?? uid("slider");
     this.input = h("input", { id, class: "slider", type: "range", min: String(options.min), max: String(options.max), step: String(options.step) });
     this.output = h("output", { class: "readout", for: id });
-    this.note = h("small", { class: "control-note" });
+    this.note = new NoteLine(options.reserveNote);
     this.element = h("div", { class: "control" },
       h("label", { class: "control-label", for: id }, h("span", { text: options.label }), this.output),
-      this.input, options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note);
+      this.input, options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note.element);
     // A transaction begins lazily on the first value change, so a click that changes nothing
     // never leaves one open. Pointer drags commit after release; browsers fire `change` for
     // every arrow key, so a keyboard burst stays one transaction until a short pause or blur.
@@ -69,32 +92,28 @@ export class Slider {
     this.fill();
     setText(this.output, value === undefined ? "—" : this.options.format(this.active ? Number(this.input.value) : value));
     setDisabled(this.input, !!state.disabled, state.reason);
-    setText(this.note, state.disabled && state.reason ? state.reason : state.note ?? "");
-    this.note.hidden = !this.note.textContent;
-    this.note.classList.toggle("info", !(state.disabled && state.reason));
+    this.note.update(this.input, !!state.disabled, state.reason, state.note);
   }
 }
 
 export class Toggle {
   readonly element: HTMLElement;
   readonly input: HTMLInputElement;
-  private readonly note: HTMLElement;
-  constructor(options: { label: string; help?: string; onChange(checked: boolean): void; id?: string }) {
+  private readonly note: NoteLine;
+  constructor(options: { label: string; help?: string; onChange(checked: boolean): void; id?: string; reserveNote?: boolean }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });
-    this.note = h("small", { class: "control-note" });
+    this.note = new NoteLine(options.reserveNote);
     this.element = h("div", { class: "control toggle-row" },
       h("label", { class: "toggle", for: id }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
         h("span", { class: "toggle-label", text: options.label })),
-      options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note);
+      options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
   update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string } = {}) {
     if (this.input.checked !== checked) this.input.checked = checked;
     setDisabled(this.input, !!state.disabled, state.reason);
-    setText(this.note, state.disabled && state.reason ? state.reason : state.note ?? "");
-    this.note.hidden = !this.note.textContent;
-    this.note.classList.toggle("info", !(state.disabled && state.reason));
+    this.note.update(this.input, !!state.disabled, state.reason, state.note);
   }
 }
 
@@ -182,13 +201,18 @@ export function button(options: { label: string; icon?: IconName; variant?: "pri
   onClick(event: MouseEvent): void; title?: string; iconOnly?: boolean; small?: boolean }) {
   const element = h("button", { class: `btn${options.variant ? ` ${options.variant}` : ""}${options.iconOnly ? " icon-only" : ""}${options.small ? " small" : ""}`,
     type: "button", title: options.title ?? (options.iconOnly ? options.label : undefined), "data-title": options.title ?? (options.iconOnly ? options.label : ""),
-    "aria-label": options.iconOnly ? options.label : undefined, onclick: options.onClick },
+    "aria-label": options.iconOnly ? options.label : undefined,
+    // An unavailable action runs nothing (the page's reason tip answers the click instead; reason-tip.ts).
+    onclick: (event: MouseEvent) => { if (!isUnavailable(element)) options.onClick(event); } },
     options.icon ? icon(options.icon) : null, options.iconOnly ? null : h("span", { text: options.label }));
   return element;
 }
-/** Enable a button from a capability, keeping the reason discoverable as a tooltip and description. */
-export function applyCapability(control: HTMLButtonElement, capability: { available: boolean; reason?: string }) {
-  setDisabled(control, !capability.available, capability.reason);
+/**
+ * A main action's availability from a capability (UI-84): unavailable, it stays focusable with `aria-disabled` and its
+ * reason as its description and a visible tip (the menu pattern; dom.ts `setUnavailable`, reason-tip.ts).
+ */
+export function applyCapability(control: HTMLElement, capability: { available: boolean; reason?: string }) {
+  setUnavailable(control, !capability.available, capability.reason);
 }
 
 export function section(title: string, ...children: (Node | null | undefined | false)[]) {

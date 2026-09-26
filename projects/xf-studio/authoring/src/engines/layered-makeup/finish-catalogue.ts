@@ -1,4 +1,5 @@
 import { canonicalFinish, finishDescription, type Finish } from "./finish";
+import { defaultFlakes } from "./finish";
 import type { GlitterModel } from "./glitter-model";
 import { finishExportSummary } from "./finish-export";
 import type { RegionWording } from "./region";
@@ -26,7 +27,20 @@ export type FinishDescriptor = {
   exportAdapter: "flat-provisional" | "experimental" | "none";
   exportNote: string;
 };
-export type GlitterModelDescriptor = { id: GlitterModel; label: string; summary: string };
+export type GlitterModelDescriptor = { id: GlitterModel; label: string; summary: string;
+  /**
+   * The stored flake-model names that mean this Glitter model (a layer's `flakes.model`; classic flakes have none), so a view
+   * finds a layer's model by data, never by its own table (UI-10).
+   */
+  stored: string[];
+  /** The settings a layer without stored flakes shows for this model (the defaults the model starts from; UI-93). */
+  defaults?: Readonly<Record<string, number>>;
+  /**
+   * A control's usable range where it is narrower than the action accepts: the legacy glint-strength control stopped at 16 of the
+   * parser's 32 for usable slider resolution (UI-93).
+   */
+  controlMax?: Readonly<Record<string, number>>;
+};
 
 const labels: Record<FinishId, string> = {
   matte: "Matte", regular: "Satin", metallic: "Metallic / foil", shimmer: "Shimmer / pearl",
@@ -58,18 +72,21 @@ export function finishCatalogue(wording: RegionWording): FinishDescriptor[] {
   });
 }
 
+/** The legacy glint-strength control's top (of the parser's 32), kept for usable slider resolution. */
+const GLINT_CONTROL_MAX = Object.freeze({ strength: 16 });
+const classicDefaults = () => { const { cells, density, tilt } = defaultFlakes(); return Object.freeze({ cells, density, tilt }); };
 /** The Glitter models' descriptors; `wording` names the region's area. */
 export function glitterModelCatalogue(wording: RegionWording): GlitterModelDescriptor[] {
   return [
-    { id: "classic", label: "Classic reflective flakes",
+    { id: "classic", label: "Classic reflective flakes", stored: [], defaults: classicDefaults(),
       summary: "Original reflective flake map; existing classic recipes retain this look." },
-    { id: "irregular", label: "Irregular raster flakes",
+    { id: "irregular", label: "Irregular raster flakes", stored: ["irregular-planar-1"],
       summary: `Irregular flakes are baked into a texture. Dense settings cover ${wording.area} and can lose sparkle at face distance.` },
-    { id: "direct", label: "Direct-light glints",
+    { id: "direct", label: "Direct-light glints", stored: ["uv-cell-direct-1"], controlMax: GLINT_CONTROL_MAX,
       summary: "Fine facets and occasional larger flashes respond to the preview light." },
-    { id: "clustered", label: "Clustered fine glints",
+    { id: "clustered", label: "Clustered fine glints", stored: ["uv-cell-direct-2"], controlMax: GLINT_CONTROL_MAX,
       summary: "Fine facets gather in soft clusters over a continuous sheen." },
-    { id: "fine", label: "Dense fine speckles",
+    { id: "fine", label: "Dense fine speckles", stored: ["uv-cell-direct-3"], controlMax: GLINT_CONTROL_MAX,
       summary: "Denser tiny speckles with a sparse population of larger flashes; can look frosty." },
   ];
 }

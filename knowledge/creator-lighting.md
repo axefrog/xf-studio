@@ -1,6 +1,6 @@
 # Character-creator and mirror lighting (game 2.31)
 
-**Maturity: Draft.** The scene, its lights, the camera and the display transform are read from the installed 2.31 resources and two decompiled engine programs. Four things are not in any resource or shader: the CPU conversion of a light's lumens and cone angles into shader constants, the default light colour, the exposure scale that the camera's photographic settings produce, and how the preview camera is placed around V. Those are hypotheses. The [capture protocol](#8-capture-protocol) is designed to settle them in one session. Detailed provenance, hashes and reproduction commands are in the [evidence note](../research/character-customization/creator-lighting-evidence.md).
+**Maturity: Draft.** The scene, its lights, the camera, the display transform and the indirect light are read from the installed 2.31 resources and decompiled engine programs. Four things are not in any resource or shader: the CPU conversion of a light's lumens and cone angles into shader constants, the default light colour, the exposure scale that the camera's photographic settings produce, and how the preview camera is placed around V. Those are hypotheses. The [capture protocol](#8-capture-protocol) is designed to settle them in one session. Detailed provenance, hashes and reproduction commands are in the [evidence note](../research/character-customization/creator-lighting-evidence.md).
 
 **Grades:** [resource] installed game or mod resources; [source] decompiled engine programs; [wiki] Cyberpunk Modding Docs at `be2f44ee`; [community] a mod's own files or documentation; [installed] the reference install's current state; [runtime] observed in game; [hypothesis] not established.
 
@@ -9,6 +9,7 @@
 - **One scene serves both screens.** The new-game creator and the mirror's appearance editor draw V through the same puppet-preview widget, the same camera entity and an identical 15-light rig (female; 14 for male). V stands in a 20 m box whose walls are pure black. Only the surrounding world differs: the pre-game menu world or Night City. [resource]
 - **The image is a render-to-texture.** A dedicated camera (15° field of view) renders the box into an 8-bit sRGB texture the size of the screen, and the menu shows that texture. [resource]
 - **The light is theatrical, not neutral.** A soft white key light comes from the front, above and to the left. A strong cyan-white rim light hits V's left side, a magenta rim light hits the back of the right side, and a cool cyan fill rises from below. Hair, especially at the crown and edges, is lit largely by the coloured rim lights. [resource geometry; relative strengths are hypothesis]
+- **Nothing in the data lights V indirectly.** No reflection or light probe, baked GI, area environment or fog volume covers the box in either world. The walls are black, and every wall is beyond the camera's 9 m depth cut, so the menu shows through behind V. The one open path is a world-wide ambient term whose CPU-side value is not in any resource. The mirror frames of session 2 bound it to at most a few per cent of the key light ([§10](#10-indirect-light-what-reaches-v)). [resource] [runtime bound]; the global term is [hypothesis]
 - **The exposure is fixed.** The camera carries manual photographic settings (f/1.4, ISO 450, shutter value 1) and `automated` 0, read here as automatic exposure switched off. The game then applies a LogC-encoded 3D grading LUT. The vanilla LUT gives neutral grey a warm cast. [resource] [source]; the manual-exposure reading is [hypothesis]
 - **The Studio has a matching preset.** Camera & light → Lighting → Character creator shows this rig, camera and display transform with the LUT the installation resolves to; exposure and two strength switches wait on a capture ([§9](#9-the-studios-creator-lighting-preset)).
 - **The reference install replaces that LUT.** Two installed LUT mods replace the vanilla SDR LUT with neutral ones. The expected winner, Nova LUT 3.0, renders mid-grey neutral and darker than vanilla: sRGB about 117 against vanilla's warm (153, 137, 118), roughly a third less display luminance. [resource] [installed]
@@ -36,7 +37,7 @@ The widget's image is a render target, so the pixels of V on screen are the came
 
 ## 2. The box and its lights
 
-**Room.** The box is six `base\items\quest\q110__misc\q110_black_box.mesh` panels scaled to 20 × 20 m around V. Their first material is `metal_base.remt` with `engine\textures\editor\black.xbm` and `BaseColorScale` (0, 0, 0), so the walls are black and reflect nothing. The box's own sectors place no reflection probe and no geometry besides the walls; in the menu world the neighbouring sectors hold none either [resource]. The rig therefore has no bounce light. Whether the world's global ambient or GI reaches V is not established [hypothesis].
+**Room.** The box is six `base\items\quest\q110__misc\q110_black_box.mesh` panels scaled to 20 × 20 m. V's feet are at its centre, 10 m from every panel, floor included. The mesh's two materials are `metal_base.remt` with `engine\textures\editor\black.xbm` and `BaseColorScale` (0, 0, 0), and `starfield.mt` with both intensities 0. So the walls are black and give no bounce light. No probe, GI data, area environment or fog volume reaches the box, and from every creator framing the walls lie beyond the camera's depth cut, so they never appear in the image [resource]. [§10](#10-indirect-light-what-reaches-v) has the details and the one world-wide term that remains open.
 
 **Frame used below.** Positions are metres from the scene marker (V's feet), converted to the Studio's Three.js frame: Y up, V facing −Z, V's anatomical right = +X. That frame assumes V's world yaw is −125°, the controller's `yawDefault`. The spawner nodes use −135°. If the real yaw differs by δ, rotate the whole rig by δ about Y. Directions are spot axes. A light's local +Y is its spot axis, which is the same convention as the Blender add-on's sector importer [resource geometry; yaw is hypothesis]. The designers named left and right from the camera's side, so "L_Rim_Left" hits V's right.
 
@@ -145,7 +146,7 @@ The vanilla grade warms neutrals noticeably and lifts mid-tones. Both mod LUTs a
 
 ## 6. Hair under this rig
 
-Every creator light is a local light. The local-light hair path is the decoded hair model of [hair shading §5](hair-shading.md#5-deferred-hair-light) evaluated per light, with the `LocalLight` intensities R 0.35, TRT 0.8 and MultiScatter 0.47, the executable's defaults [source]. With no ambient in the box, the hair environment path (the same section) adds nothing here, so the mirror isolates direct light on hair [hypothesis, as long as no global ambient reaches the box]. The brow decal and skin use the standard local-light model above. Because the magenta and cyan rims fall mostly on the crown, the back and the silhouette, hair on the creator screen can look cooler or more magenta at its edges than its albedo suggests. Measure hair patches on the front-lit lengths ([§8](#8-capture-protocol)).
+Every creator light is a local light. The local-light hair path is the decoded hair model of [hair shading §5](hair-shading.md#5-deferred-hair-light) evaluated per light, with the `LocalLight` intensities R 0.35, TRT 0.8 and MultiScatter 0.47, the executable's defaults [source]. With no ambient in the box, the hair environment path (the same section) adds nothing here, so the mirror isolates direct light on hair. The data give the box no ambient, and the mirror frames bound any world-wide ambient to a few per cent of the key light ([§10](#10-indirect-light-what-reaches-v)). Even that much would barely reach dark hair, whose ambient carries its albedo twice [resource] [runtime bound]. The brow decal and skin use the standard local-light model above. Because the magenta and cyan rims fall mostly on the crown, the back and the silhouette, hair on the creator screen can look cooler or more magenta at its edges than its albedo suggests. Measure hair patches on the front-lit lengths ([§8](#8-capture-protocol)).
 
 **Qualitative runtime check (25 September 2026, maintainer).** Brightening the Studio's preview makes the hair colour look quite similar to the game, and the game is still a little darker [runtime, qualitative; not a measurement, and no capture on file]. Hue and saturation therefore look close, and the remaining gap is mostly overall light level. This supports putting the rig, exposure and display transform ahead of further hair-shader changes. It is also consistent with the Nova LUT's darker, neutral mid-tones.
 
@@ -155,7 +156,7 @@ A "creator lighting" stage preset for the Studio, separate from the ordinary stu
 
 | Element | Specification | Confidence |
 |---|---|---|
-| Surround | `scene.environment = null`, no ambient or hemisphere light, black background (the walls are albedo 0). The UI stage gradient must not show in this preset. | High for the walls [resource]; medium for "no global ambient" [hypothesis] |
+| Surround | `scene.environment = null`, no ambient or hemisphere light, black background. In game the walls are cut away and the menu shows behind V, so the background colour is a presentation choice, not a measurement. The UI stage gradient must not show in this preset. An optional uniform ambient cube, off by default, is specified in [§11](#11-an-environment-for-the-creator-preset-recommended). | High for "no probe, GI or area environment" [resource]; "no global ambient" is bounded to a few per cent by the mirror frames ([§10](#10-indirect-light-what-reaches-v)) |
 | Lights | One `THREE.SpotLight` per row of the [female table](#2-the-box-and-its-lights) (male table for male V), positioned relative to V's floor origin in the Studio frame, `target` = position + axis. Colours are sRGB 8-bit, so use `color.setRGB(r/255, g/255, b/255, THREE.SRGBColorSpace)`; unset = white. | Positions, axes, colours and angles high [resource]; unset = white medium-high |
 | Cone | `angle` = outer/2, `penumbra` = 1 − inner/outer (full-angle reading). Three's smoothstep cone differs from the engine's `pow(…, softness)`; the lights that matter aim within a few degrees of the head, so the difference there is small. | Medium [hypothesis] |
 | Falloff | Inverse-square lights: `decay` 2, `distance` = radius; this is Three's physical falloff and matches the decoded form. Linear lights: Three has no linear falloff, so use `decay` 0, `distance` 0 and multiply the intensity by `1 − d_head/r`, measured to the head slot. That stays within ±4 % across the head for these distances. | High for the form [source]; the per-light fold is a preview approximation |
@@ -207,13 +208,13 @@ Also collect the CET hair-option dump from that request and the session's logs.
 | Hair | crown, parting, front-lit lengths left and right; separately, a rim-lit edge on each side |
 | Brow | inner and arch, each side |
 | Lash | upper lash line centre, each eye |
-| Controls | sclera (near-neutral), background (black level) |
+| Controls | sclera (near-neutral); the side of the nose away from the key (indirect-light bound, §10). The background is the menu, not the box, so it is no black-level control |
 
 **Measures and pass marks**
 
 | Measure | Target | What it tests |
 |---|---|---|
-| Background | at most 3/255 | no ambient in the box |
+| Nose side away from the key, against the forehead (scene-linear, after inverting the LUT) | about 4 % or less, as in the session-2 frame | an upper bound on ambient (§10) |
 | Left/right cheek luminance ratio | within 10 % of the game | rig strengths (intensity form, cone reading) and yaw |
 | Hair/skin, brow/skin, lash/skin luminance ratio (front-lit patches, display-linear) | within 10 % | material and lighting together, independent of `k` |
 | Hue of hair, brow and lash patches (OKLab hue angle) | within 5° | LUT, profile bake and rim colour |
@@ -222,6 +223,15 @@ Also collect the CET hair-option dump from that request and the session's logs.
 | Ladder luminance ratios against `ash_brown` | compare with the [bake table](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request), after inverting the LUT | the whole colour chain (the profile bake is now decoded from the executable, [hair shading §3](hair-shading.md#3-base-colour)) |
 
 Each pass mark is a first target for iteration, not evidence of parity. Record every run with the screenshot hashes, settings, profile and preset version, as the hair calibration note does.
+
+### Indirect-light checks (same session, four short steps)
+
+These settle what [§10](#10-indirect-light-what-reaches-v) leaves open and set the [§11](#11-an-environment-for-the-creator-preset-recommended) ambient. Use the mirror, the face page (`UI_HeadPreview`, 1.2 m) and the default pose throughout, with ReShade effects off.
+
+1. **Day against night.** Take a frame at 12:00 and one at 00:00 game time, without leaving the screen if the bridge can set the clock (`world.time.set`), otherwise by leaving, waiting and returning. Identical patches, within 1/255, mean no time-dependent world ambient reaches V. They also confirm fixed exposure. A brighter noon frame means the sky's ambient cube reaches the box.
+2. **A metal piercing.** Frame piercing style 1 in silver, then in gold. Measure the piercing's body between highlights. Near black (under about 10/255) keeps the preset's ambient at 0. A uniform grey or warm sheen measures the ambient; fit it in the Studio with `k` frozen.
+3. **Ray tracing off.** Repeat step 2's silver frame with ray-traced lighting and reflections off. Any difference is ray-traced self-bounce or reflection, which no raster preset models.
+4. **Creator against mirror.** Take step 2's silver frame in a new game's creator (the menu world). A match means the surrounding world's environment does not matter.
 
 ## 9. The Studio's creator lighting preset
 
@@ -246,21 +256,114 @@ The Studio implements §7 as a selectable lighting preset: **Camera & light → 
 
 **First look (browser, reference save, 25 September 2026; not a comparison).** Against black, the face is lit mainly from V's left and the front; V's right side is darker, with a thin magenta line along the jaw and nostril. On the hair page the lengths read darker and cooler than under the studio stage. Seen from behind, the hair's left side carries pale grey-cyan rim highlights and the right side strong magenta-red ones, as the rig geometry predicts. The Nova grade makes mid-tones neutral and darker than the studio stage's ACES. Screenshots stay in the ignored `evidence/screenshots/creator-lighting/`.
 
+## 10. Indirect light: what reaches V
+
+**Answer, as far as the evidence goes.** The resources give V no source of indirect light on either screen. No probe, baked GI, area environment, fog or emissive surface covers the box, and its walls are black. The only path left open is a world-wide ambient term that the lighting pass takes from constants the CPU fills, which no resource records. The session-2 mirror frames bound that term to about 4 % of the key-lit forehead or less. The Studio's creator preset without an environment is therefore the right default ([§11](#11-an-environment-for-the-creator-preset-recommended)).
+
+### 10.1 The render target and the box
+
+| Fact | Grade |
+|---|---|
+| The creator camera's `entRenderToTextureCameraComponent` (`target_face.ent`) leaves `env`, a `worldEnvironmentAreaParameters` reference, unset. Its own `params` hold only `CameraAreaSettings` (manual exposure), `DistantFogAreaSettings` and `VolumetricFogAreaSettings` (density 0). It renders the world's `Default` scene layer with reflections, SSAO, contact and local shadows enabled (`RTFP_All`). | [resource] (RTTI: red-dump-json); that every other area setting comes from the world environment where the camera stands is [hypothesis] |
+| `depthCutDistance` is 9 m, and `backgroundColor` (0, 0, 0, 0) is not overridden. | [resource] |
+| V's feet are at the centre of the 20 m box. In Night City the spawner is at z −195.11 and the floor and ceiling panels at −205.11 and −185.11. From the creator's framings (1.2 to 8.3 m) every panel is more than 9 m from the camera, so the render target cuts every wall pixel away. The session-2 mirror frames show the menu's red backdrop around V, not black walls. | [resource] geometry; [runtime] frames |
+| The pre-game world is the whole `basegame_2_mainmenu.archive`: 15 sectors, one environment and no `.envprobe` or `.gidata`. Its sectors hold acoustics, a few collision and mesh nodes, the markers and community areas, and the two box sectors. There is no `worldReflectionProbeNode`, GI node or GI space, trigger area with an environment notifier, fog volume or light-channel volume anywhere in that world. | [resource] |
+| In Night City the box's sectors hold only the lights, panels, camera, spawner and collision. Three sectors have a grid cell containing the box: level-1 `exterior_-2_6_-2_1` (acoustics only), level-3 `exterior_-1_1_-1_3` and level-4 `interior_-1_1_-1_4` (proxy meshes). The level-3 cell's GI space, fog volume and light all lie at least 200 m away. That cell also places **a second black enclosure**: six 100 m panels of the same mesh around the box. | [resource]; a probe with a very large volume placed in another sector is not excluded |
+| Every creator light has `scaleEnvProbes` and `scaleGI` 100 (it can feed probes and GI) and `scaleVolFog` 0. There is no probe or GI data here for them to feed. | [resource] |
+
+### 10.2 The environment's indirect-light settings
+
+Both master environments carry the same values, apart from the exposure minimum [resource]:
+
+- **`AmbientOverrideAreaSettings`**: six colour curves, `enable` 0.
+- **`GlobalIlluminationSettings`**: `localLightsScale` 1.1, `reflectionCompensation` 0.3, `lightScaleCompenensation` 0.025, `emissiveScale` 0.
+- **`RenderFeaturesAreaSettings`**: GI, screen-space reflections and volumetric fog allowed.
+- **`HACK_AREA_Settings`**: bottom-hemisphere tint 0.035 at strength 8.
+- **`DistantIrradianceeSettings`**: enabled.
+- **`ExposureAreaSettings`**: minimum −1.3 EV in the menu world and −1.2 in Night City; maximum 1 at night rising to 5.38 at noon.
+
+The creator camera's manual exposure, EV100 −1.2 read as in [§4](#4-exposure), sits at the world's darkest clamp [hypothesis: the EV reading].
+
+### 10.3 How the lighting-integrate pass adds indirect light
+
+The full-screen pass after the deferred light comes in several techniques [observed programs]:
+
+| Technique | Pixel program | Indirect light it adds |
+|---|---|---|
+| `m_shaderLightIntegrate` | `2291179555597019501` | The **env-probe path**. A 32 × 32 tile bitmask selects the probes. Each probe contributes box-projected reflections from a two-hemisphere array and its own six-colour ambient cube. Where the probe weights sum below 1, the rest comes from global six-colour cubes in `ENV_PROBES`: one picked by `ENV_PROBES[0].w`, and another at registers 449–454. A three-layer world-space map (world XY / 16,384 m) with height terms scales and blends them. A sky cubemap is also bound. |
+| `m_shaderLightIntegrate_NoEnvProbes` (and `_CubeIBL`, whose pixel program is byte-identical) | `10393055107398307099` | **One global six-colour ambient cube** in `GlobalShaderConsts` registers 21–26. Diffuse takes it along the normal; hair takes it along the virtual light direction `L_e`. Specular takes it along the reflection vector bent toward the normal by `0.75·r²`, blended with a per-pixel reflection buffer by that buffer's weight. Two full-resolution buffers scaled by a per-draw factor, and two half-resolution buffers (×64) behind a flag, add screen-space or ray-traced terms. |
+| `m_shaderLightIntegrate_NoAmbient` | `5858691682494776269` | The same bindings **without the ambient cube**; only the screen buffers remain. |
+
+The earlier shader studies call `10393055107398307099` "the ambient composite". It is the `NoEnvProbes` variant. The "diffuse irradiance E" of the hair environment path ([hair shading §5](hair-shading.md#5-deferred-hair-light)) is, in that program, this global cube, plus the screen buffers. The name for each program comes from the static cache's technique descriptors: the program pair sits five entries before its technique name, consistently for all eight integrate techniques [observed layout; the name pairing is hypothesis, strongly supported].
+
+Two things are not in the data [hypothesis]: which variant renders the creator's render target, and what the CPU writes into the global cubes. `AmbientOverrideAreaSettings`' six colours match the cube's shape, so when enabled they probably fill it. Both environments leave it disabled.
+
+### 10.4 What reaches V, by path
+
+| Path | New-game creator (menu world) | Mirror (Night City) | Grade |
+|---|---|---|---|
+| Reflection and light probes | none in the world | none in the cells holding the box | [resource] |
+| Baked GI (`.gidata`, GI spaces) | none in the world | none in those cells | [resource] |
+| Bounce off the box | 0: black panels, zero-intensity starfield | 0, inside a second black enclosure | [resource] |
+| Fog in-scatter | 0: fog density 0 in the camera's settings | 0 | [resource] |
+| Global ambient cube or distant irradiance | whatever the CPU writes; not in any resource | same | [hypothesis]; bounded below |
+| Ray-traced bounce and reflections (the reference install runs ray-traced lighting and reflections) | rays inside black enclosures return about 0 apart from V's own body | same | [hypothesis]; whether the render target traces at all is unknown |
+
+**Bound from the mirror frames** [runtime, one frame; arithmetic hypothesis]. The session-2 frame *Metal ramp · lifted* was taken at an early-morning game hour; the bridge log restores the clock to about 04:00 shortly before. In it, the side of the nose away from the key reads sRGB (41, 21, 17) against the forehead's (187, 176, 162). Through the installed Nova LUT's neutral axis ([§5](#5-tone-mapping-and-grading)), that is about 4 % of the forehead's scene-linear value. The patch is reddish, which suggests subsurface bleed of direct light rather than an ambient term. So any ambient lighting skin in that frame is at most about 4 % of the key-lit forehead. Two points of context on the time:
+
+- **Night.** At that hour the world's automatic exposure is clamped to at most 1.4 EV, 2.6 EV above the creator's. So the world's own night-time ambient, if it reached V at full strength, would be about 6× brighter here than it looks in the street.
+- **Daytime.** A daytime ambient would be up to 2^6.6 ≈ 97× brighter than it looks in the street (noon clamp 5.38 EV). The bound therefore does not cover noon; the day/night check in §8 does.
+
+## 11. An environment for the creator preset (recommended)
+
+**What to emulate.** Use a **uniform six-colour ambient cube** (one neutral scalar `a`, all six faces equal), **off by default (`a` = 0)**. This is not a cubemap. It is the one term the game's data leave open (§10.3), in the form the `NoEnvProbes` pass applies it. A structured reflection would claim detail the data do not have: the studio `RoomEnvironment`, a capture of the creator backdrop or any HDRI.
+
+- **In Three.js:** a six-face `CubeTexture` of constant colour through PMREM as `scene.environment`, with `environmentIntensity` = `a`. This gives Standard diffuse `albedo × a` and a featureless specular `a × (F0·A + B)` at every roughness. A hemisphere or ambient light is not enough, because it gives metals nothing.
+- **Classes it reaches**, as in game:
+  - Standard: `metal_base`, layered piercings, cyberware.
+  - Subsurface: skin diffuse. In game that irradiance also goes through the SSS blur.
+  - Eye: × 1.1 (`1 + cb6[9].w`) on the cornea normal.
+  - Hair: through the environment path (`EnvProbe/R` 0.3, `/TRT` 0.8, `/MultiScatter` 0.47, albedo twice). The Studio's hair ambient differs today ([hair shading §8](hair-shading.md#8-browser-preview-mapping)).
+  - Glass: its own probe loop falls back to a global probe.
+  - Not the eye's wetness shell: its probe term is multiplied by 0.
+- **Default and range.** Default 0, because the data give no ambient. A diagnostic range up to the §10.4 bound: `a × skin albedo` at most about 4 % of the forehead's direct light at the fitted `k`. Keep it with the other switches under **Advanced: creator lighting calibration**, stored in the workspace only.
+
+**How things look.**
+
+| Surface | At `a` = 0 (the data's reading) | At a small `a` (the bound) |
+|---|---|---|
+| Metals: piercings, `metal_base`, layered metals | Only the spot highlights, with a near-black body between them; silver and gold differ only in highlight colour | A flat, directionless sheen of `F0 × a`: warm for gold, grey for silver; no reflected features, and still dim |
+| Metallic makeup (metalness 0.65) | Keeps colour from its 35 % diffuse part under the rig | Barely changes |
+| Hair | Direct light only (the preset today) | Dark hair gains almost nothing (albedo twice); the R sheen takes the ambient's colour |
+| Skin shadows | Only SSS bleed and the fills | A faint neutral lift in unlit areas |
+| `glass_onesided` | No reflection at all: the program has no local lights, so only tint and distortion show (the Gorilla Arms glass reflects nothing in any case) | A uniform film of about `0.08 × a` at the default `FresnelBias` |
+
+**What a capture or runtime check must confirm** (the §8 indirect-light checks):
+
+1. Day and night frames match, so no sky term reaches V.
+2. The silver piercing's body between highlights is near black, so `a` stays 0. Otherwise its level fits `a`, after `k` is fitted and frozen.
+3. Ray tracing off leaves the frame unchanged. Otherwise the preset lacks a ray-traced term and says so.
+4. The new-game creator matches the mirror.
+
+If step 1 fails, the preset needs a time-of-day ambient, which would contradict the fixed exposure. In that case trace the CPU fill of `GlobalShaderConsts` 21–26 through the runtime bridge before modelling it.
+
 ## Open questions
 
 1. The CPU conversions: lumens to shader intensity, and inner/outer/softness to the cone constants. A RED4ext or CET read of a spawned light's render proxy, or a decode of the light-upload code, would settle them without captures.
 2. The default `Color` of `worldStaticLightNode`. A CET check such as reading a new node's `color` would confirm white.
 3. How the puppet-preview camera is placed: yaw relative to V, "zoom" as distance, and FOV axis.
-4. Whether the render target inherits the world's LUT, grain, vignette, chromatic aberration and depth of field, and whether global ambient or GI reaches the box.
+4. Whether the render target inherits the world's LUT, grain, vignette, chromatic aberration and depth of field. **Indirect light, partly answered ([§10](#10-indirect-light-what-reaches-v)):** no probe, GI, area environment, fog or bounce reaches the box [resource]. Still open: which lighting-integrate variant the render target uses, what the CPU writes into the global ambient cubes, and whether ray tracing runs in the render target. The §8 indirect-light checks settle what matters for the preview.
 5. Whether LUT Switcher's menu rule covers the mirror, and whether ray-traced lighting changes the box's image.
 6. The magenta rims' roughness bias. (The local-light hair path is decoded: [hair shading §5](hair-shading.md#5-deferred-hair-light).)
-7. Alpha of the preview texture at hair edges, and the pre-game background video behind it.
+7. Alpha of the preview texture at hair edges, and the pre-game background video behind it. Where there is no surface, the texture is transparent: the 9 m depth cut removes the walls, and the mirror frames show the menu's backdrop around V ([§10.1](#101-the-render-target-and-the-box)). The edge blend at hair tips is still unmeasured.
 8. Both master environments set `forceHdrLut` 1 in their `ColorGradingAreaSettings` [resource]. §5 reads the SDR path as using `ldrLut`; if the flag makes SDR output use the HDR LUT instead, the preview's grade is wrong. The bake program was not read for this flag, and the preview follows `ldrLut` until a capture or decode says otherwise.
 
 ## Sources
 
 - Installed 2.31 resources, extracted and serialized with WolvenKit CLI 9.0.1. The paths and SHA-256s are in the [evidence note](../research/character-customization/creator-lighting-evidence.md).
-- Compiled programs from `staticshader_final.cache`, decompiled with dxil-spirv `f2d1b554` and SPIRV-Cross `aa217aeb` ([shader-system method](../research/materials/shader-system/README.md)): `m_shaderLightsComputeGlobalLocalShadows_Clustered_00000001` (`10862954502888615639`) and `m_LUTGenerateLinear` (`7299616531647440496`).
+- Compiled programs from `staticshader_final.cache`, decompiled with dxil-spirv `f2d1b554` and SPIRV-Cross `aa217aeb` ([shader-system method](../research/materials/shader-system/README.md)): `m_shaderLightsComputeGlobalLocalShadows_Clustered_00000001` (`10862954502888615639`), `m_LUTGenerateLinear` (`7299616531647440496`) and three lighting-integrate programs (`2291179555597019501`, `10393055107398307099`, `5858691682494776269`; §10.3).
+- The RTTI class dump red-dump-json at `a8e52990`: the fields of `entRenderToTextureCameraComponent`, `worldEnvironmentAreaParameters`, `worldReflectionProbeNode`, the GI node classes and the environment notifiers.
+- The session-2 mirror frames (private captures, hashes in the evidence note), for the §10.4 bound and the transparent background.
 - [wiki] at `be2f44ee`:
   - `modding-guides/textures-and-luts/creating-a-lut-from-scratch/README.md` and `archived/advanced-reverse-engineered-lut-pipeline.md` (nullfractal): 3D LUTs with an ARRI LogC3 input;
   - `for-mod-creators-theory/files-and-what-they-do/lights-explained.md`: the falloff modes, text only.

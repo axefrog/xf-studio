@@ -131,5 +131,7 @@ test("readiness distinguishes Check, build and route evidence without exposing p
   }), { installer: true, updater: false });
   expect(unavailable.sourceCache.issues[0]?.code).toBe("source_cache_unavailable");
   expect(unavailable.previewStorage.issues.map(x => x.code)).toEqual(["preview_cache_unavailable", "preview_output_unavailable"]);
-  expect(unavailable.install.issues.map(x => x.code)).toContain("install_route_mismatch");
+  // "Add to my mod manager" installs on the route the person launches with (UI-82): a stale install mode is no issue.
+  expect(unavailable.install.issues.map(x => x.code)).not.toContain("install_route_mismatch");
+  expect(unavailable.install.ready).toBe(true);
 }));

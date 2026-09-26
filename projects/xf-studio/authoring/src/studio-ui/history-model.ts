@@ -18,6 +18,8 @@ export type HistoryRow = {
 };
 
 export const HISTORY_TRIMMED_NOTE = "Older steps were not kept";
+/** What the header's Undo, Redo and History cover (UI-81): the look, not the character it is shown on. */
+export const HISTORY_SCOPE = "Covers your makeup and presets. Changes in the Character panel have their own Undo there.";
 
 export function historyRows(timeline: HistorySnapshot, formatTime: (at: number) => string = defaultTime): HistoryRow[] {
   const atStart = timeline.current < 0;
@@ -49,8 +51,8 @@ export function historySummary(timeline: HistorySnapshot) {
  */
 export function historyCommandTitle(command: "undo" | "redo", capability: StudioCapability, label: string | undefined, shortcut: string) {
   const name = command === "undo" ? "Undo" : "Redo";
-  if (!capability.available) return `${name} (${shortcut}) — ${capability.reason ?? "Unavailable."}`;
-  return `${name}${label ? `: ${label}` : ""} (${shortcut})`;
+  if (!capability.available) return `${name} (${shortcut}) — ${capability.reason ?? "Unavailable."}\n${HISTORY_SCOPE}`;
+  return `${name}${label ? `: ${label}` : ""} (${shortcut})\n${HISTORY_SCOPE}`;
 }
 /** Palette/menu wording without the shortcut, which those surfaces show separately. */
 export function historyCommandLabel(command: "undo" | "redo", capability: StudioCapability, label: string | undefined) {

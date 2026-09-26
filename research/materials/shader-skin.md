@@ -490,7 +490,7 @@ Details to keep:
 - **Metalness > 0.1.** S2 carries the blended metalness, so Metallic makeup switches the scatter off at the same coverage as the current wrap gate (about 15 % for the Metallic finish; [fact index](shader-fact-index.md)). Colour-shifting's 0.08 never crosses it.
 - **The wrap stays as the fallback**: without a renderable half-float target (the `direct` / `srgb8` paths), in study pages, and when the scatter is switched off.
 - **Parity passes share the machinery.** The input variant swap and the S1/depth targets are the `albedo`, `ids` and `depth` passes of the [parity measurement design](../authoring/game-parity-measurement.md) (phase P2). Build the swap once for both.
-- **The ownership gate changes.** The [diffuse SSS gate](../../projects/xf-studio/authoring/evidence/diffuse-sss-gate-2026-09-24.md) asked for a semantic lip partition and depth rejection before any blur. The game has neither: it blurs across the lip parting and onto the teeth wherever they are Subsurface (§6.3.1). Parity means matching the game's class mask, so the gate's no-bleed test should become "no scatter outside the class-1 mask" [recommendation; the gate's owner decides].
+- **The ownership gate changes.** The [diffuse SSS gate](../../projects/xf-studio/authoring/evidence/diffuse-sss-gate-2026-09-24.md) asked for a semantic lip partition and depth rejection before any blur. The game has neither: it blurs across the lip parting and onto the teeth wherever they are Subsurface (§6.3.1). Parity means matching the game's class mask, so the gate's no-bleed test is now "no scatter outside the class-1 mask" (adopted 27 September 2026; [preview fidelity](../backlog/preview-fidelity.md) row 4).
 
 ### 11.5 Performance
 

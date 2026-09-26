@@ -399,7 +399,9 @@ export async function detectGameInstalls(port: DetectionHostPort,
 /** Find global instances under %LOCALAPPDATA%\ModOrganizer and portable instances named by the
  * download handler registration (downloadhandler.ini / legacy nxmhandler.ini, globally or beside the
  * registered nxmhandler.exe). A portable instance is an MO2 folder holding ModOrganizer.ini. */
-export async function detectMo2Instances(port: DetectionHostPort): Promise<Mo2Detection> {
+export async function detectMo2Instances(port: DetectionHostPort,
+  /** The instance folder the settings name, offered too when detection doesn't find it (a portable copy chosen by hand). */
+  configured: string | null = null): Promise<Mo2Detection> {
   const limitations = [
     "Instances are found from MO2's global instance folder and its registered download handler; an unregistered portable copy elsewhere must be chosen manually.",
     "A profile's enabled mods describe MO2's intended virtual files, not what a particular game launch loaded.",
@@ -408,7 +410,7 @@ export async function detectMo2Instances(port: DetectionHostPort): Promise<Mo2De
     instances: [], issues: [{ source: "host", code: "unsupported_platform", detail: unsupportedHost }], limitations };
   const issues: DetectionIssue[] = [];
   const instances = new Map<string, Mo2InstanceDescription>();
-  const add = (root: string, kind: "global" | "portable", name: string) => {
+  const add = (root: string, kind: "global" | "portable" | "configured", name: string) => {
     const absolute = resolve(root);
     if (instances.has(key(absolute))) return;
     const text = port.readText(join(absolute, "ModOrganizer.ini"), iniBytes);
@@ -440,6 +442,7 @@ export async function detectMo2Instances(port: DetectionHostPort): Promise<Mo2De
       if (/modorganizer\.exe$/i.test(handler.executable))
         add(dirname(handler.executable), "portable", basename(dirname(handler.executable)));
   }
+  if (configured) add(configured, "configured", basename(resolve(configured)));
   const ordered = [...instances.values()].sort((a, b) => Number(b.managesCyberpunk) - Number(a.managesCyberpunk) ||
     a.name.localeCompare(b.name));
   return { schema: "xfs/mo2-instance-detection-1", supported: true, instances: ordered, issues, limitations };

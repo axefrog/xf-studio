@@ -55,7 +55,10 @@ let app: ReturnType<typeof createDesktopServer>;
 try {
   app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"),
     resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"), undefined, undefined, undefined,
-    { openExternal: url => Utils.openExternal(url), webView2: webView2.version, nativeDecodeWorker: resolve(viewRoot, "native-decode-worker.js") });
+    { openExternal: url => Utils.openExternal(url), webView2: webView2.version, nativeDecodeWorker: resolve(viewRoot, "native-decode-worker.js"),
+      revealPath: path => { Utils.showItemInFolder(path); return true; },
+      pickFolder: async start => (await Utils.openFileDialog({ startingFolder: start ?? "~/", canChooseFiles: false, canChooseDirectory: true,
+        allowsMultipleSelection: false }))[0] || null });
 } catch (error) {
   await fatal("XF Studio couldn't start.", `Your data folder may be unavailable: ${Utils.paths.userData}. ` +
     `Details are in ${log.path}.`, error);

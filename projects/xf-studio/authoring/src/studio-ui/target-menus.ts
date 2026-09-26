@@ -15,13 +15,13 @@ export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
   "preset.remove": ["Remove preset", "trash"], "preset.rename": ["Rename…", "rename"], "preset.move": ["Move to position…", "arrowDown"],
   "layer.select": ["Select layer", "target"], "layer.duplicate": ["Duplicate layer", "duplicate"],
   "layer.remove": ["Remove layer", "trash"], "layer.toggle": ["Show or hide layer", "eye"], "layer.rename": ["Rename…", "rename"], "layer.move": ["Move to position…", "arrowDown"],
-  "shape.selectLayer": ["Select this layer", "target"], "shape.addWarp": ["Add warp control", "warp"],
+  "shape.selectLayer": ["Select this layer", "target"], "shape.addWarp": ["Add warp", "warp"],
   "shape.enableBezier": ["Enable Bézier handles", "shape"],
   "point.select": ["Select point", "target"], "point.remove": ["Remove point", "trash"],
   "point.mode.aligned": ["Smooth handles", "shape"], "point.mode.symmetric": ["Symmetric handles", "shape"],
   "point.mode.corner": ["Corner handles", "shape"], "point.strength": ["Set point pigment…", "edge"],
   "point.softness": ["Set point edge softness…", "edge"],
-  "field.select": ["Select warp", "target"], "field.clear": ["Reset warp direction", "reset"],
+  "field.select": ["Select warp", "target"], "field.clear": ["Reset warp pull", "reset"],
   "field.remove": ["Remove warp", "trash"], "field.reach": ["Set warp reach…", "warp"],
 };
 const labels = CONTEXT_LABELS;

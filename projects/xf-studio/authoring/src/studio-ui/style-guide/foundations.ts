@@ -113,7 +113,7 @@ export function shell() {
       combine: "Selecting a category will swap the panel registry and default layouts (see the future-category composition); shared panels such as Library and Package stay.",
       avoid: "A menu with nothing to choose, sections that only inform, listing unbuilt categories, or turning preview-context toggles (brows, hair) into authoring entries." }),
     pattern({ id: "s-status", title: "Status bar", status: "implemented", wide: true,
-      specimen: `<footer class="status-bar demo-status"><span class="status-item">● Draft autosaved</span><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · revision 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">Preview 2K · updating</span></footer>`,
+      specimen: `<footer class="status-bar demo-status"><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · revision 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">Preview 2K · updating</span></footer>`,
       what: "Draft autosave state, the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
       when: "Always visible. It reports; it never hosts commands other than opening the activity log.",
       adapt: "Messages truncate with an ellipsis; the Activity panel keeps the full text.",

@@ -20,6 +20,8 @@ type Catalogues = {
   readonly glitterModels: ReturnType<EyeMakeupFacade["glitterModelCatalogue"]>;
   /** The catalogue's finish a layer's stored finish name means (its ID, or a stored alias such as older recipes' `satin`). */
   finishOf(finish: string): ReturnType<EyeMakeupFacade["finishCatalogue"]>[number] | undefined;
+  /** The Glitter model a layer's stored flakes are, by the catalogue's stored names (classic flakes name none; UI-10). */
+  glitterModelOf(flakes: unknown): ReturnType<EyeMakeupFacade["glitterModelCatalogue"]>[number];
 };
 const read = new WeakMap<EyeMakeupViewContext, Catalogues>();
 /** Eye makeup's static catalogues (finishes, Glitter models), read from its facade once per context. */
@@ -27,8 +29,13 @@ export function catalogues(ctx: EyeMakeupViewContext): Catalogues {
   let entry = read.get(ctx);
   if (!entry) {
     const finishes = ctx.facade.finishCatalogue(), glitterModels = ctx.facade.glitterModelCatalogue();
+    const classic = glitterModels.find(item => !item.stored.length)!;
     entry = Object.freeze({ finishes, glitterModels,
-      finishOf: (finish: string) => finishes.find(item => item.id === finish || item.stored.includes(finish)) });
+      finishOf: (finish: string) => finishes.find(item => item.id === finish || item.stored.includes(finish)),
+      glitterModelOf: (flakes: unknown) => {
+        const stored = flakes && typeof flakes === "object" && "model" in flakes ? String((flakes as { model: unknown }).model) : null;
+        return (stored && glitterModels.find(item => item.stored.includes(stored))) || classic;
+      } });
     read.set(ctx, entry);
   }
   return entry;

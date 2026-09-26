@@ -34,7 +34,7 @@ try {
     const found: Entry[] = await browser!.evaluate(`(${script})()`);
     entries.push(...found.map(item => ({ ...item, surface: item.surface || surface })));
   };
-  // First-run welcome, then About and Build setup as a community user sees them.
+  // First-run welcome, then About (opened as the Studio's Help panel and palette open it) as a community user sees them.
   await collect("First-run welcome", `() => [...document.querySelectorAll('#desktop-welcome button')].map(b =>
     ({ control: b.textContent.trim(), available: !b.disabled, reason: b.title || '' }))`);
   const welcomeText = await browser.evaluate("document.querySelector('#desktop-welcome').textContent");
@@ -42,7 +42,7 @@ try {
   await browser.waitFor("!document.querySelector('#desktop-welcome').open");
   await collect("Desktop overlay", `() => [...document.body.children].filter(n => n.tagName === 'BUTTON').map(b =>
     ({ control: b.textContent.trim(), available: !b.disabled, reason: b.title || '' }))`);
-  await browser.evaluate("document.querySelector('#desktop-about-open').click()");
+  await browser.evaluate("window.xfDesktopOpenAbout()");
   await collect("About", `() => [...document.querySelectorAll('#desktop-about button')].filter(b => !b.closest('[hidden]')).map(b =>
     ({ control: b.textContent.trim(), available: !b.disabled, reason: b.title || '' }))`);
   const aboutText = await browser.evaluate("document.querySelector('#desktop-about').textContent");

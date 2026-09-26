@@ -114,9 +114,9 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   // flake size don't go together, the application says why.
   const flakesPerPercent = ctx.range("glitter.setIrregular", "value", "count").max / 100;
   const irregular = {
-    count: new Slider({ label: "Flake field density", min: 0, max: 100, step: 1, format: value => `${Math.round(value)}%`,
+    count: new Slider({ label: "Flake field density", min: 0, max: 100, step: 1, format: value => `${Math.round(value)}%`, reserveNote: true,
       transaction: recipeTransaction<number>(ctx, "irregular-count", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "count", value: Math.round(Math.round(value) * flakesPerPercent) })) }),
-    radius: new Slider({ label: "Flake size", ...ctx.range("glitter.setIrregular", "value", "radius"), step: .00005, format: value => `${(value * 100).toFixed(3)}% UV`,
+    radius: new Slider({ label: "Flake size", ...ctx.range("glitter.setIrregular", "value", "radius"), step: .00005, format: value => `${(value * 100).toFixed(3)}% UV`, reserveNote: true,
       transaction: recipeTransaction<number>(ctx, "irregular-radius", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "radius", value })) }),
     spread: new Slider({ label: "Size variation", ...ctx.range("glitter.setIrregular", "value", "spread"), step: .05, format: pct,
       transaction: recipeTransaction<number>(ctx, "irregular-spread", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "spread", value })) }),
@@ -124,21 +124,26 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       transaction: recipeTransaction<number>(ctx, "irregular-tilt", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "tilt", value })) }),
     color: new ColorField({ label: "Flake colour", transaction: recipeTransaction<string>(ctx, "irregular-color", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "color", value })) }),
   };
+  // Its text changes length as the flakes are counted; it keeps room for its longest form (UI-90).
   const measurement = note("", "info");
-  // The legacy control capped glint strength at 16 of the parser's 32 for usable slider resolution.
+  measurement.classList.add("steady-note");
+  // The glint-strength control's usable top comes from the Glitter model catalogue (UI-93).
+  const glintMax = catalogues(ctx).glitterModels.find(item => item.controlMax?.strength)?.controlMax?.strength;
   const direct = {
     density: new Slider({ label: "Facet density", ...ctx.range("glitter.setDirect", "value", "density"), step: .01, format: pct,
       transaction: recipeTransaction<number>(ctx, "direct-density", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "density", value })) }),
     fineShare: new Slider({ label: "Fine-facet share", ...ctx.range("glitter.setDirect", "value", "fineShare"), step: .01, format: pct,
       transaction: recipeTransaction<number>(ctx, "direct-fineShare", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "fineShare", value })) }),
-    strength: new Slider({ label: "Glint strength", min: 0, max: Math.min(16, ctx.range("glitter.setDirect", "value", "strength").max), step: .5, format: value => value.toFixed(1),
+    strength: new Slider({ label: "Glint strength", min: 0, max: Math.min(glintMax ?? Infinity, ctx.range("glitter.setDirect", "value", "strength").max), step: .5, format: value => value.toFixed(1),
       transaction: recipeTransaction<number>(ctx, "direct-strength", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "strength", value })) }),
     color: new ColorField({ label: "Facet colour", transaction: recipeTransaction<string>(ctx, "direct-color", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "color", value })) }),
   };
-  const glitterSection = section("Glitter preview suite", model.element, modelSummary,
-    note("Layer colour sets the base pigment; facet colour is separate. Density is not a visible sparkle count. Browser previews only; mod packages do not support Glitter yet.", "warning"));
-  const classicSection = section("Flake study", classic.cells.element, classic.density.element, classic.tilt.element,
-    note("Orbit the head to inspect reflections. A browser material candidate; game matching and distant sparkle filtering are still being studied."));
+  // Choosing among the Glitter model studies is a research tool (UI-85); everyone edits the layer's own model.
+  const modelChoice = h("div", { class: "research-only" }, model.element, modelSummary);
+  const glitterSection = section("Glitter", modelChoice,
+    note("Preview only: Glitter can't be built into a mod yet, so it is left out of your mod files. Layer colour sets the base colour; facet colour is separate.", "warning"));
+  const classicSection = section("Flakes", classic.cells.element, classic.density.element, classic.tilt.element,
+    note("Turn the head to see the flakes catch the light. Experimental: may look different in game."));
   const irregularSection = section("Irregular flakes", irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
   const directSection = section("Glint facets", direct.density.element, direct.fineShare.element, direct.strength.element, direct.color.element);
   const body = h("div", { class: "stack" },
@@ -182,9 +187,10 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       if (!shiftSection.hidden) { shift.color.update(optics!.shift!.color); shift.strength.update(optics!.shift!.strength); }
       const flakes = layer.flakes as ReadonlyDeep<LegacyFlakes | IrregularFlakes | DirectGlintFlakes> | undefined;
       const glitter = current === "glitter", shimmer = current === "shimmer";
-      const modelId: GlitterModel = flakes && "model" in flakes ? flakes.model === "irregular-planar-1" ? "irregular"
-        : flakes.model === "uv-cell-direct-1" ? "direct" : flakes.model === "uv-cell-direct-2" ? "clustered" : "fine" : "classic";
+      // The layer's Glitter model, by the catalogue's stored names (UI-10).
+      const glitterModel = catalogues(ctx).glitterModelOf(flakes), modelId: GlitterModel = glitterModel.id;
       glitterSection.hidden = !glitter;
+      modelChoice.hidden = !frame.preferences?.researchTools;
       classicSection.hidden = !(shimmer || (glitter && modelId === "classic"));
       irregularSection.hidden = !(glitter && modelId === "irregular");
       directSection.hidden = !(glitter && ["direct", "clustered", "fine"].includes(modelId));
@@ -196,7 +202,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       }
       if (!classicSection.hidden) {
         setText(classicSection.querySelector(".section-title")!, glitter ? "Classic reflective flakes" : "Shimmer flakes");
-        const legacy = flakes && !("model" in flakes) ? flakes as ReadonlyDeep<LegacyFlakes> : { cells: 128, density: .65, tilt: .65 };
+        // A layer without stored flakes shows the classic model's defaults from the catalogue (UI-93).
+        const legacy = flakes && !("model" in flakes) ? flakes as ReadonlyDeep<LegacyFlakes> : glitterModel.defaults as { cells: number; density: number; tilt: number };
         classic.cells.update(legacy.cells); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
       }
       if (!irregularSection.hidden && flakes && "model" in flakes && flakes.model === "irregular-planar-1") {
@@ -286,7 +293,7 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     const layer = ctx.facade.view().layer(); if (!layer) return;
     ctx.facade.controlBegin("smooth-strength", layer.id);
     const outcome = ctx.facade.controlEdit("smooth-strength", { kind: "pigment.edit", layerId: layer.id, command: { kind: "smooth-strength", enabled } });
-    if (!outcome.ok) ctx.feedback.toast("warning", "Pigment", outcome.message);
+    if (!outcome.ok) ctx.feedback.toast("warning", "Pigment & edge", outcome.message);
     ctx.facade.controlCommit("smooth-strength");
   } });
   const blend = new Slider({ label: "Point blend", ...ctx.range("pigment.edit", "value", "strength-blend"), step: ctx.range("pigment.edit", "value", "strength-blend").min, format: uvPct,
@@ -297,7 +304,7 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     const layer = ctx.facade.view().layer(); if (!layer) return;
     ctx.facade.controlBegin("variable-softness", layer.id);
     const outcome = ctx.facade.controlEdit("variable-softness", { kind: "softness.edit", layerId: layer.id, command: { kind: "variable-softness", enabled } });
-    if (!outcome.ok) ctx.feedback.toast("warning", "Edge", outcome.message);
+    if (!outcome.ok) ctx.feedback.toast("warning", "Pigment & edge", outcome.message);
     ctx.facade.controlCommit("variable-softness");
   } });
   const width = new Slider({ label: "Edge softness", ...ctx.range("softness.edit", "value", "uniform-softness"), step: .0005, format: uvPct,
@@ -341,7 +348,7 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
   const add = button({ label: "Add warp", icon: "plus", small: true, onClick: () => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "field.add", layerId: layer.id });
   } });
-  const chips = h("div", { class: "chip-row", role: "group", "aria-label": "Warp controls" });
+  const chips = h("div", { class: "chip-row", role: "group", "aria-label": "Warps" });
   const reach = new Slider({ label: "Reach", ...ctx.range("field.setReach", "radius"), step: .001, format: uvPct,
     transaction: {
       begin: () => { const layer = ctx.facade.view().layer(); if (layer && ctx.facade.view().selectedField()) ctx.facade.controlBegin("radius", layer.id); },
@@ -350,7 +357,7 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
         if (!outcome.ok) { ctx.feedback.toast("warning", "Warp", outcome.message); ctx.changed(); } },
       commit: () => ctx.facade.controlCommit("radius"), cancel: () => ctx.facade.controlCancel("radius"),
     } });
-  const clear = button({ label: "Reset pull", icon: "reset", small: true, variant: "quiet", onClick: () => {
+  const clear = button({ label: "Reset warp pull", icon: "reset", small: true, variant: "quiet", onClick: () => {
     const layer = ctx.facade.view().layer(), field = ctx.facade.view().selectedField(); if (layer && field) ctx.dispatch({ kind: "field.clear", layerId: layer.id, fieldId: field.id });
   } });
   const remove = button({ label: "Remove warp", icon: "trash", small: true, variant: "quiet", onClick: () => {
@@ -360,7 +367,7 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
   let signature = "";
   const selected = section("Selected warp", reach.element, h("div", { class: "row wrap gap-s" }, clear, remove));
   const body = h("div", { class: "stack" },
-    section("Warp controls", h("div", { class: "row between" }, chips, add), fieldNote), selected,
+    section("Warps", h("div", { class: "row between" }, chips, add), fieldNote), selected,
     note("A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together."));
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
@@ -385,13 +392,12 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
       if (field) {
         reach.update(field.radius);
         const target = { kind: "field" as const, layerId: layer.id, id: field.id };
-        applyCapability(clear, !field.du && !field.dv ? { available: false, reason: "This warp has no pull to reset." } :
-          ctx.facade.contextCapability(target, { kind: "field.clear", layerId: layer.id, fieldId: field.id }));
+        applyCapability(clear, ctx.facade.contextCapability(target, { kind: "field.clear", layerId: layer.id, fieldId: field.id }));
         applyCapability(remove, ctx.facade.contextCapability(target, { kind: "field.remove", layerId: layer.id, fieldId: field.id }));
       }
       setText(fieldNote, field
-        ? `Circle: position · square: pull · dashed ring: reach. ${layer.fields.length} warp control${layer.fields.length === 1 ? "" : "s"} on this layer.`
-        : "No warping. Add a control, then drag its square in the UV map or on the head to pull the makeup.");
+        ? `Circle: position · square: pull · dashed ring: reach. ${layer.fields.length} warp${layer.fields.length === 1 ? "" : "s"} on this layer.`
+        : "No warps. Add a warp, then drag its square in the UV map or on the head to pull the makeup.");
     },
   };
 }

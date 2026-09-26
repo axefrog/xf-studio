@@ -1,6 +1,7 @@
 import type { CollectionRequest } from "./collection-service";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
+import type { ModInstallAction } from "./mod-install-actions";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
@@ -18,7 +19,7 @@ export type ActionScope = StudioTarget["kind"] | "file" | "host";
 export type { PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 export type ActionDescriptor = PlatformActionDescriptor<ActionScope>;
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
-  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool"; async: true;
+  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal"; async: true;
   cancellable: boolean };
 
 const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
@@ -111,6 +112,17 @@ export const DETECTION_DESCRIPTORS = {
   "detect.mo2Instances": request("host", "read"),
   "detect.frameworkVersions": request("host", "read"),
 } satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
+
+/**
+ * "Add to my mod manager" after Build (UI-82; `StudioPresentationPort.modInstall`). `review` reads the host's plan; `apply` is the
+ * person's consent to that reviewed plan (the host refuses a plan that no longer matches); `reveal` opens the build's folder.
+ * The product names a mod of the latest Build; the host decides every path. None changes a recipe, the library or Undo.
+ */
+export const MOD_INSTALL_DESCRIPTORS = {
+  "modInstall.review": request("host", "read", { product: target("string") }),
+  "modInstall.apply": request("host", "install-mod", { product: target("string") }),
+  "modInstall.reveal": request("host", "reveal", { product: target("string") }),
+} satisfies Record<ModInstallAction["kind"], RequestDescriptor>;
 
 /** Gesture payloads are proposals inside one opaque session, not standalone commands (eye makeup's, eye-makeup-descriptors.ts). */
 export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;

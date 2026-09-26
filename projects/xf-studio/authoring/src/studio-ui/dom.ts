@@ -39,6 +39,22 @@ export function setDisabled(control: HTMLButtonElement | HTMLInputElement | HTML
   const title = disabled ? reason ?? "" : control.dataset.title ?? "";
   if (control.title !== title) control.title = title;
 }
+/**
+ * The menu pattern for a main action (UI-84): an unavailable button stays focusable and reachable by keyboard, touch and
+ * screen readers, carries `aria-disabled` and states why (`aria-description`, and a visible tip on focus, hover or tap:
+ * reason-tip.ts). A click on it runs nothing. Native `disabled` is kept for form fields only.
+ */
+export function setUnavailable(control: HTMLElement, unavailable: boolean, reason?: string) {
+  if ((control as HTMLButtonElement).disabled) (control as HTMLButtonElement).disabled = false;
+  const why = unavailable ? reason || "Not available right now." : undefined;
+  setAttr(control, "aria-disabled", unavailable ? "true" : undefined);
+  setAttr(control, "data-reason", why);
+  setAttr(control, "aria-description", why);
+  const title = why ?? control.dataset.title ?? "";
+  if (control.title !== title) control.title = title;
+}
+/** Whether a control is unavailable (native `disabled`, or the main-action pattern's `aria-disabled`). */
+export const isUnavailable = (control: Element) => (control as HTMLButtonElement).disabled === true || control.getAttribute("aria-disabled") === "true";
 let idCounter = 0;
 export const uid = (prefix = "xfs") => `${prefix}-${++idCounter}`;
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));

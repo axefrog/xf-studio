@@ -4,7 +4,8 @@ import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
-import { createInstallDetectionHandler, hostFrameworkCheck } from "../src/install-detection-server";
+import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
+import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, windowsProcessRunning } from "../src/mod-install-host";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
@@ -31,7 +32,7 @@ import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
 import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
 import type { LocalSettings } from "../src/local-settings";
-import { hostDiagnosticsAt, setProcessDiagnostics } from "../src/diagnostics/host-log";
+import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
@@ -45,6 +46,10 @@ export type DesktopHostOptions = {
   wolvenKit?: Partial<Omit<WolvenKitSetupOptions, "root" | "configured">>;
   /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
   openExternal?: (url: string) => boolean;
+  /** Show a file or folder in Explorer, selected (Electrobun `Utils.showItemInFolder`): "Show in folder" after Build. */
+  revealPath?: (path: string) => boolean;
+  /** A native folder picker (Electrobun `Utils.openFileDialog`): the chosen folder, or null when cancelled. */
+  pickFolder?: (startingFolder: string | null) => Promise<string | null>;
   /** The WebView2 Runtime version the host detected, for problem reports. */
   webView2?: string | null;
   /**
@@ -114,7 +119,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const localSettings = createLocalSettingsHandler(settingsStore, {},
     settings => {
       const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes);
-      return { updater: false, installer: false, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
+      return { updater: false, installer: true, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
         wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
         eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
         frameworks: hostFrameworkCheck(settings) };
@@ -158,6 +163,17 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     openExternal: hostOptions.openExternal,
   });
+  // "Add to my mod manager" (UI-82): a verified build into the MO2 profile or game folder Game & tools names, only after the person
+  // accepted its plan; an update restart waits for it (the work activity).
+  const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ candidateStore: resolve(dataRoot, "package-candidates"),
+    receiptsRoot: installReceiptsRoot(dataRoot), settings: () => settingsStore.load().settings,
+    mo2Running: () => windowsProcessRunning("ModOrganizer.exe"), frameworkMods: settings => profileFrameworkMods(settings),
+    reveal: hostOptions.revealPath,
+    transaction: work => {
+      const end = activity.begin("install");
+      if (!end) throw new ModInstallError("install_unavailable", "An update restart is being prepared. Let it finish, then try again.");
+      try { return work(); } finally { end(); }
+    } }), (code, message, error) => { hostFailure("install", code, message, error); });
   const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
@@ -262,6 +278,20 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: logTo("package"),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
+      if (url.pathname === "/api/mod-install") return modInstallRequest(routedRequest);
+      if (url.pathname === "/api/desktop/pick-folder") {
+        // A native folder picker for Game & tools (UI-83); the host returns only the folder the person chose.
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+        let body: any;
+        try { body = await routedRequest.json(); } catch { return new Response("Invalid request", { status: 400 }); }
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).join() !== "field" ||
+          !["gameRoot", "mo2Root", "manualModRoot"].includes(body.field)) return new Response("Invalid request", { status: 400 });
+        if (!hostOptions.pickFolder) return Response.json({ code: "unavailable", error: "This version of XF Studio can't open a folder picker." }, { status: 409 });
+        const saved = savedSettings();
+        const start = (body.field === "gameRoot" ? saved?.gameRoot : body.field === "mo2Root" ? saved?.mo2Root : saved?.manualModRoot) ?? null;
+        try { return Response.json({ path: await hostOptions.pickFolder(start) }, { headers: { "Cache-Control": "no-store" } }); }
+        catch { return Response.json({ code: "picker_failed", error: "The folder picker couldn't open. Type the folder instead." }, { status: 500 }); }
+      }
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);

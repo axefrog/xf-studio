@@ -34,6 +34,8 @@ export type PackageTools = { bun: string; plate: string; plateCache: string; wol
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
+/** Localhost's verified builds (the project's ignored `dist/`), which "Add to my mod manager" installs from. */
+export const localCandidateStore = () => resolve(project, "dist");
 /** Localhost folder for tools XF Studio downloads with consent (WolvenKit CLI); `XFS_TOOLS_DIR` relocates it. */
 export const localToolsRoot = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_TOOLS_DIR || resolve(app, "data", "tools"));
@@ -92,7 +94,7 @@ export function localBuildIssue(tools: PackageTools): string | null {
  */
 export function localPackageAdapter(options: { exporters: readonly FeatureExporterEntry[]; tools: PackageTools;
   prerequisites: (tools: PackageTools) => Readonly<Record<string, HostPrerequisite>>; roots?: { build: string; dist: string } }): PackageHostAdapter {
-  const { tools } = options, build = options.roots?.build ?? resolve(project, "build"), dist = options.roots?.dist ?? resolve(project, "dist");
+  const { tools } = options, build = options.roots?.build ?? resolve(project, "build"), dist = options.roots?.dist ?? localCandidateStore();
   return {
     exporters: options.exporters,
     prerequisites: options.prerequisites(tools),

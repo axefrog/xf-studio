@@ -97,7 +97,7 @@ try {
     if (!build.ready || !capabilities.packageBuild || capabilities.previewAssets !== "ready") throw Error("Build readiness did not turn green.");
     const palette = await browser.evaluate("window.xfStudioPresentation.files.capability({ kind: 'package.build' })");
     if (!palette.available) throw Error(`Build is still unavailable in the Studio: ${JSON.stringify(palette)}`);
-    await browser.evaluate("document.querySelector('#desktop-about-open').click()");
+    await browser.evaluate("window.xfDesktopOpenAbout()");
     await browser.waitFor("document.querySelector('#desktop-wolvenkit-note')?.textContent.includes('is ready')");
     await browser.evaluate("document.querySelector('#desktop-wolvenkit-licence').click()");
     await Bun.sleep(500);

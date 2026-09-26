@@ -304,7 +304,8 @@ test("a saved Closure and Play blink come back on reload; the Motion note says w
   const missing = new MotionActions(freshWorkspace().preview, { ...port, blink: { available: false } });
   expect(missing.snapshot().blinkError).toBe(GAME_BLINK_MISSING);
   expect(missing.capability({ kind: "motion.playBlink", playing: true }).reason).toBe(GAME_BLINK_MISSING);
-  expect(blinkNoteLine(missing.snapshot())).toBe(`${GAME_BLINK_MISSING} It is made once from your own game files, like the idle.`);
+  // One plain line and nothing to do: the Motion panel hides the blink's controls (UI-86).
+  expect(blinkNoteLine(missing.snapshot())).toBe(GAME_BLINK_MISSING);
   const damaged = new MotionActions(freshWorkspace().preview, { ...port, blink: { available: false, error: GAME_BLINK_DAMAGED } });
   expect(damaged.capability({ kind: "motion.setBlink", value: .2 }).reason).toBe(GAME_BLINK_DAMAGED);
 });
