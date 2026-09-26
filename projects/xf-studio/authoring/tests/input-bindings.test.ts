@@ -30,7 +30,7 @@ test("binding IDs are unique and every binding performs a real catalogued action
   const actions: BindingAction[] = [...POINTER_BINDINGS, ...KEY_BINDINGS, ...GESTURE_BINDINGS, ...PANEL_POINTER_BINDINGS].map(binding => binding.action);
   const problems = actions.flatMap(action => {
     if (action.kind === "action") {
-      const descriptor = ACTION_DESCRIPTORS[action.id] as { variants?: Record<string, unknown> } | undefined;
+      const descriptor = (ACTION_DESCRIPTORS as Record<string, { variants?: Record<string, unknown> } | undefined>)[action.id];
       if (!descriptor) return [`missing action ${action.id}`];
       return action.variant && !descriptor.variants?.[action.variant] ? [`missing variant ${action.id}#${action.variant}`] : [];
     }

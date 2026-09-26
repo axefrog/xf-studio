@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices } from "../src/browser-head-attachment";
+import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices, type LayeredSurfaceWiring } from "../src/browser-head-attachment";
 import { createBrowserViewportDevice } from "../src/browser-viewport-device";
 import type { createSceneHost } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/surface-editor";
@@ -58,21 +58,20 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
   const preferenceListeners = new Set<Listener>(), schemeListeners = new Set<Listener>();
   const attached: HeadServices = {};
   let connected: unknown;
-  const surfaces = new Map<unknown, ReturnType<HeadAttachmentPorts["layeredMakeup"]>>();
+  type Surface = NonNullable<ReturnType<LayeredSurfaceWiring["surface"]>>;
+  const surfaces = new Map<unknown, Surface>();
+  const surfaceOf = (scene: unknown) => surfaces.get(scene) ?? surfaces.set(scene, { layers: {}, surface: {}, maxTextureSize: 4096 } as unknown as Surface).get(scene)!;
   const ports: HeadAttachmentPorts = {
     workspace: freshWorkspace(), viewport,
-    // The composition root reads the layered-makeup surface from eye makeup's renderer; here, one per scene.
-    layeredMakeup: scene => surfaces.get(scene) ?? surfaces.set(scene, { layers: {}, surface: {}, maxTextureSize: 4096 } as unknown as
-      ReturnType<HeadAttachmentPorts["layeredMakeup"]>).get(scene)!,
-    preview: {
-      connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<HeadAttachmentPorts["preview"]["connectScene"]>; },
+    // The composition root wires the live feature's layered surface (its renderer's); here, one per scene.
+    layered: [{ feature: "eye-makeup", surface: surfaceOf, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]>, preview: {
+      connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
       disconnectScene: scene => { if (connected === scene) connected = undefined; },
       presentInitialLayers: () => { presents++; if (plan.failPresent?.includes(presents)) throw Error("A layer could not be shown."); },
-    },
+    } }],
     preferences: { snapshot: () => ({ theme: "dark" }), subscribe: listener => { preferenceListeners.add(listener); return () => { preferenceListeners.delete(listener); }; } },
     colourScheme: { matches: true, addEventListener: (_type, listener) => schemeListeners.add(listener), removeEventListener: (_type, listener) => schemeListeners.delete(listener) },
     attach: services => Object.assign(attached, services),
-    surface: {} as HeadAttachmentPorts["surface"],
     persist: () => { persisted++; }, changed: noop,
     // The creator catalogue host never answers here: the context stays loading.
     creator: { panel: () => new Promise(() => {}), page: () => new Promise(() => {}), view: () => new Promise(() => {}), preset: () => new Promise(() => {}),
@@ -155,4 +154,29 @@ test("releasing a head that a later load replaced leaves the current head loaded
   expect(h.viewport.scene()).toBeUndefined();
   expect(h.host.canvases).toBe(0);
   expect(h.log).toEqual(["surface:dispose", "scene:dispose", "scene:dispose"]);
+});
+
+test("every composed layered surface gets its preview connected and presented, the on-head editor mounts on one, and all are released (UI-76)", async () => {
+  const h = harness({});
+  const events: string[] = [];
+  const second: LayeredSurfaceWiring = { feature: "cheek-makeup",
+    surface: scene => ({ layers: {}, surface: { name: `cheek:${h.scenes.length}` }, maxTextureSize: 4096, scene }) as never,
+    preview: {
+      connectScene: () => { events.push("cheek:connect"); return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
+      disconnectScene: () => { events.push("cheek:disconnect"); },
+      presentInitialLayers: () => { events.push("cheek:present"); },
+    } };
+  const head = await attachBrowserHead({ ...h.ports, layered: [...h.ports.layered, second] });
+  expect(h.connected).toBe(h.surfaces.get(head.scene));
+  expect(events).toEqual(["cheek:connect", "cheek:present"]);
+  expect(h.viewport.surfaceEditor()).toBeDefined();
+  head.dispose();
+  expect(events).toEqual(["cheek:connect", "cheek:present", "cheek:disconnect"]);
+  expect(h.connected).toBeUndefined();
+  // A surface whose renderer isn't composed, and two on-head editors, are refused and leave nothing connected.
+  await expect(attachBrowserHead({ ...h.ports, layered: [{ ...second, surface: () => undefined }] })).rejects.toThrow("The cheek-makeup renderer is not composed.");
+  await expect(attachBrowserHead({ ...h.ports, layered: [...h.ports.layered, { ...second, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]> }] }))
+    .rejects.toThrow("Only one layered surface can carry the on-head editor.");
+  expect(h.host.canvases).toBe(0);
+  expect(h.viewport.scene()).toBeUndefined();
 });

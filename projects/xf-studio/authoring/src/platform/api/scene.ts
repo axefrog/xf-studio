@@ -11,15 +11,36 @@ import type * as THREE from "three";
 import type { FeatureId } from "./feature";
 
 /**
- * Draw order bands on the head (Three's `renderOrder`). The skin, hair and eyeballs draw at 0; the V's face decals between 2 and
- * 10 (`EMP_Normal` before `EMP_Front`, each chunk in the creator's option order); feature plates from 10 (eye makeup's layers take
- * 10 to 41, one slot per layer); the eye's wetness shell at 99, brows at 100, lashes at 101; editor guides from 1000.
- * A new feature surface picks a free range from `featurePlates` up and names it in its renderer.
+ * Draw order on the head (Three's `renderOrder`). The skin, hair and eyeballs draw at 0; the V's face decals between 2 and 10
+ * (`EMP_Normal` before `EMP_Front`, each chunk in the creator's option order); feature plates from 10 up to the eye's wetness shell
+ * at 99, brows at 100, lashes at 101; editor guides from 1000. A feature's surfaces draw in the band the host gives it (`RenderBand`).
  */
 export const RENDER_ORDER = Object.freeze({ skin: 0, faceDecals: 2, featurePlates: 10, eyeShell: 99, brows: 100, lashes: 101, guides: 1000 });
 
+/**
+ * A feature's own draw-order slots on the head (PREV-91). The host gives each composed renderer that asks for slots
+ * (`FeatureRendererFactory.renderSlots`) the next free run of the feature-plate range, in composition order, so two layered
+ * features never interleave: eye makeup's 32 layers take 10 to 41, and the next feature starts at 42.
+ */
+export type RenderBand = {
+  /** The first slot's draw order. */
+  readonly first: number;
+  /** How many slots the band holds. */
+  readonly slots: number;
+  /** The draw order of slot `index` (0-based). Throws outside the band. */
+  order(index: number): number;
+};
+
 /** A drawn character slot (render-detail.ts `DetailSlot`); the host checks the two lists agree. */
 export type CharacterSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings";
+
+/**
+ * A resolved part a feature replaces while it says so (PREV-89): a whole slot, or only the slot's components that came from the
+ * named character-creator options (`RenderComponent.option`, the game's own option names), such as a lips feature replacing the lips
+ * decal and leaving the V's other face decals. A superseded part draws as if the V had none there: its meshes are hidden and not
+ * baked, a superseded skin leaves the core head with its default skin, and superseded eyes bring back the core eye.
+ */
+export type SupersededPart = { readonly slot: CharacterSlot; readonly options?: readonly string[] };
 
 /** The drawn skin's own light (skin-material.ts `SkinParameters`): its dual specular lobe and per-channel diffuse wrap. */
 export type SkinLight = { readonly lobes: { readonly roughness0: number; readonly roughness1: number; readonly weight: number };
@@ -35,11 +56,14 @@ export interface SkinUnderlayPort {
   light(): SkinLight | null;
   /** The skin under `surface`'s vertices, read on the head drawn now. Throws when `surface` is not over that head. */
   underlay(surface: THREE.Mesh): SurfaceUnderlay;
-  /** Called whenever the drawn skin changes (a V switch); returns the unsubscribe. Read `light` and `underlay` again then. */
+  /** Called once whenever the drawn skin changes (a V switch, a superseded skin); returns the unsubscribe. Read `light` and `underlay` again then. */
   subscribe(listener: () => void): () => void;
 }
 
-/** A read-only view of the V drawn now: its record identity and which slots show a resolved part. */
+/**
+ * A read-only view of the V drawn now: its record identity and which slots show a resolved part now (a skin drawn on the core head
+ * included; slots the viewer hides or a feature supersedes left out).
+ */
 export type CharacterView = { readonly identity: string | null; readonly drawn: readonly CharacterSlot[] };
 
 /** Which lighting setup draws the viewport now. */
@@ -53,20 +77,35 @@ export interface SceneHostPort {
    * scene; a feature never renders to the canvas or changes the renderer's state for good.
    */
   readonly renderer: THREE.WebGLRenderer;
-  /** The head and the core record's surfaces (by record node key: `plate` is the expanded eye plate), all rigged to the head. */
+  /**
+   * The head and the core record's surfaces (by record node key: `plate` is the expanded eye plate), all rigged to the head. They are
+   * the platform's and read-only to a feature (PREV-97): the surfaces are anchors the platform never draws (hidden, skinned with all
+   * their influences), which a feature copies for its own meshes (sharing the skeleton, geometry attributes and facial influences). A
+   * feature never changes their material, visibility, geometry or transform.
+   */
   anchors(): { head: THREE.SkinnedMesh; surface(id: string): THREE.SkinnedMesh | undefined };
   /**
    * Put `object` on the head rig, beside `beside` (default: the head), so it shares the head's skeleton space. With `morphs`, every
-   * mesh under it that carries facial targets follows the V's facial shapes by name, as the head's own surfaces do (a mesh that
-   * shares an anchor's `morphTargetInfluences` follows without it). Returns the detach, which the host also runs on disposal.
+   * mesh under it that carries facial targets follows the V's facial shapes by name, as the head's own surfaces do, meshes added under
+   * it later included (PREV-93; a mesh that shares an anchor's `morphTargetInfluences` follows without it). With `rig`, the bones under
+   * it join the rig motion by name, as the V's details do, so the game idle and the blink pose them (PREV-90). Returns the detach, which
+   * the host also runs on disposal.
    */
-  attach(object: THREE.Object3D, options?: { beside?: THREE.Object3D; morphs?: boolean }): () => void;
-  /** The skin drawn under the feature's surfaces. */
+  attach(object: THREE.Object3D, options?: { beside?: THREE.Object3D; morphs?: boolean; rig?: boolean }): () => void;
+  /** This feature's draw-order slots (`FeatureRendererFactory.renderSlots`; no slots when it asked for none). */
+  readonly renderBand: RenderBand;
+  /**
+   * The resolved parts this feature replaces from now on (PREV-89), replacing what it said before; `[]` gives them back. Call it
+   * whenever what the feature draws changes (a brow feature supersedes the V's brows only while it has brows of its own). The host
+   * shows and hides the V's parts at once, and forgets the list when the renderer is disposed.
+   */
+  supersede(parts: readonly SupersededPart[]): void;
+  /** The skin drawn under the feature's surfaces. Its subscriptions also end with the renderer's disposal. */
   readonly skin: SkinUnderlayPort;
-  /** The V drawn now, and a change subscription (returns the unsubscribe). */
+  /** The V drawn now, and a change subscription (returns the unsubscribe; it also ends with disposal). */
   character(): CharacterView;
   subscribeCharacter(listener: () => void): () => void;
-  /** The lighting setup, and a change subscription (returns the unsubscribe). */
+  /** The lighting setup, and a change subscription (returns the unsubscribe; it also ends with disposal). */
   lighting(): LightingView;
   subscribeLighting(listener: () => void): () => void;
   /** Something the feature draws changed: draw a frame (render on demand; coalesced). */
@@ -79,7 +118,8 @@ export interface SceneHostPort {
 
 /**
  * A feature's renderer: its parts on the head, created once the host is ready and disposed with it (or when it fails part-way).
- * Every method but `dispose` is optional: a feature implements what it draws.
+ * Every method but `dispose` is optional: a feature implements what it draws. A method that throws is reported and skipped for that
+ * call, and the host and the other features draw on (PREV-94).
  */
 export interface FeatureRenderer {
   /** Bring the feature's own GPU state up to date right before the host draws a frame (only on frames that are drawn). */
@@ -87,10 +127,6 @@ export interface FeatureRenderer {
   /** The viewer's display toggles, applied to the feature's own materials. */
   setNormals?(enabled: boolean): void;
   setWireframe?(enabled: boolean): void;
-  /** The feature's hit under a picking ray (a feature-owned hit; the platform binds it, §4). */
-  pick?(ray: THREE.Raycaster): unknown | undefined;
-  /** Resolved character slots this feature replaces while its renderer is active: the host hides them (none today). */
-  readonly supersedes?: readonly CharacterSlot[];
   /** Read-only developer evidence (verification pages); plain data. */
   evidence?(): unknown;
   /** Release everything the renderer made: meshes it attached, materials, textures and render targets. */
@@ -100,6 +136,8 @@ export interface FeatureRenderer {
 /** A feature's renderer entry in the composition (`compose/renderers.ts`). */
 export interface FeatureRendererFactory<R extends FeatureRenderer = FeatureRenderer> {
   readonly feature: FeatureId;
+  /** How many draw-order slots its surfaces take (`SceneHostPort.renderBand`); none when omitted. */
+  readonly renderSlots?: number;
   create(host: SceneHostPort): R;
 }
 
@@ -115,4 +153,12 @@ export function invalidating<T extends object, K extends keyof T>(target: T, key
     }) as T[K];
   }
   return out;
+}
+
+/** A band of `slots` draw-order slots from `first` (the scene host allocates them; tests make their own). */
+export function renderBand(first: number, slots: number): RenderBand {
+  return Object.freeze({ first, slots, order(index: number) {
+    if (!Number.isInteger(index) || index < 0 || index >= slots) throw RangeError(`Draw-order slot ${index} is outside this feature's ${slots} slots.`);
+    return first + index;
+  } });
 }

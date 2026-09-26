@@ -1,6 +1,5 @@
-import type { AuthoringDocument } from "./authoring-document";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
-import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
+import { AuthoringRenderScheduler, type PreviewLayerSource } from "./authoring-render-scheduler";
 import { canonicalFinish, isIrregular } from "./engines/layered-makeup/finish";
 import { isDirectGlint } from "./engines/layered-makeup/direct-glint-settings";
 import { maskAlphaKey, previewOpticalKey } from "./engines/layered-makeup/makeup-dependencies";
@@ -12,7 +11,7 @@ import type { RasterRegion } from "./engines/layered-makeup/region";
 import type { ReadonlyDeep } from "./read-only";
 import type { LayeredMakeupSurface } from "./engines/layered-makeup/render/makeup-stack";
 
-/** The layered-makeup surface the composition root connects (eye makeup's renderer). */
+/** The layered-makeup surface the composition root connects (the live feature's renderer; UI-76). */
 type Scene = LayeredMakeupSurface;
 type CompleteRaster = Extract<RasterResponse, { data: unknown }>;
 type PreviewOptics = NonNullable<CompleteRaster["optics"]>;
@@ -23,7 +22,8 @@ export { previewOpticalKey };
 
 /** Trusted browser resource owner. A replacement presentation receives quality actions, never these canvases or worker. */
 export function createBrowserPreviewDevice(options: {
-  document: AuthoringDocument;
+  /** Where the surface's layers come from (the live feature's authoring document). */
+  document: PreviewLayerSource;
   /** The live feature's region (its mirror and fine-Glitter scope), for the raster worker and optical identities. */
   region: RasterRegion;
   initialSize: PreviewTextureSize;

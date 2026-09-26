@@ -33,8 +33,7 @@ import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
-import { STUDIO_RENDERERS } from "./compose/renderers";
-import { eyeMakeupRenderer } from "./features/eye-makeup/render";
+import { STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { UIPreferenceActions } from "./ui-preferences";
 import { DiagnosticsActions } from "./diagnostics/actions";
 import { createBrowserDiagnostics } from "./diagnostics/browser-device";
@@ -116,6 +115,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
+  // The live feature's layered surface: the renderer the preview device fills and the on-head editor edits (UI-76; none named here).
+  const liveSurface = STUDIO_LAYERED_SURFACES.get(STUDIO_COMPOSITION.documents.live);
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
@@ -218,7 +219,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: eyeMakeupRenderer(scene)?.evidence() ?? null, features: scene.featureEvidence() }) : null,
+      frames: scene.frameTiming(), plateBlend: (liveSurface && scene.feature(liveSurface)?.evidence?.()) ?? null,
+      features: scene.featureEvidence(), bands: scene.featureBands() }) : null,
     xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
@@ -262,24 +264,21 @@ async function start(host: StudioHost, root: HTMLElement) {
     let attached: AttachedHead | undefined;
     try {
       attached = await attachBrowserHead({
-        workspace, viewport: viewportDevice, preview: previewDevice, preferences,
-        // Eye makeup's renderer draws the layers the preview device fills and the on-head editor edits.
-        layeredMakeup: loaded => {
-          const renderer = eyeMakeupRenderer(loaded);
-          if (!renderer) throw Error("Eye makeup's renderer is not composed.");
-          return renderer;
-        },
+        workspace, viewport: viewportDevice, preferences,
+        // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
+        // surfaces have no layer source until the core edits more than one live feature.
+        layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,
+          editor: {
+            layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
+            selected: () => core.presentation.selected, ...fieldHooks,
+            begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
+            apply: proposal => core.app.applyGesture("surface", proposal),
+            cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
+            message: text => adapterMessage("surface", text),
+          } }] : [],
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
         attach: services => core.app.attach(services),
-        surface: {
-          layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
-          selected: () => core.presentation.selected, ...fieldHooks,
-          begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
-          apply: proposal => core.app.applyGesture("surface", proposal),
-          cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-          message: text => adapterMessage("surface", text),
-        },
         persist, changed: () => statusSource.changed(),
       });
       head = attached;

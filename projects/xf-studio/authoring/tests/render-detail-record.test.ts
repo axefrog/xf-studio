@@ -187,14 +187,24 @@ describe("render record versions", () => {
 // Complexion mods and texture frameworks work through archive precedence and ArchiveXL patches, so none of
 // their names, archives or donor paths may appear either, nor any particular skin type or tone.
 describe("rendering boundary", () => {
-  const RENDERING_PATH = ["platform/scene/scene-host", "platform/scene/head-rig", "platform/scene/character-renderer",
-    "platform/scene/feature-renderers", "platform/api/scene", "features/eye-makeup/render/index", "render-detail", "render-templates", "character-detail-plan", "character-detail-request",
+  /** Every module under `dir` (src-relative, without `.ts`). */
+  const walk = (dir: string): string[] => readdirSync(new URL(`../src/${dir}/`, import.meta.url), { withFileTypes: true }).flatMap(entry =>
+    entry.isDirectory() ? walk(`${dir}/${entry.name}`) : entry.name.endsWith(".ts") ? [`${dir}/${entry.name.slice(0, -3)}`] : []);
+  /** Every renderer folder: the scene host and each engine's and feature's `render/`, found on disk so a new one is covered (PREV-98). */
+  const renderers = () => [...walk("platform/scene"), ...["engines", "features"].flatMap(root =>
+    readdirSync(new URL(`../src/${root}/`, import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory())
+      .flatMap(entry => { try { return walk(`${root}/${entry.name}/render`); } catch { return []; } }))];
+  const RENDERING_PATH = [...new Set([...renderers(), "platform/api/scene", "render-detail", "render-templates", "character-detail-plan", "character-detail-request",
     "character-detail-service", "character-detail-host", "character-detail-server", "character-detail-loader", "character-detail-actions",
     "character-material-adapters", "browser-character-detail-device", "brow-material", "hair-shading", "hair-colour-model",
     "browser-head-attachment", "browser-scene-preview-ports", "material-template", "skin-material", "head-surface", "eye-material",
     "scene-evidence", "detail-limits", "resource-graph", "character-resolver", "face-decal-material", "decal-underlay", "head-skin-placement",
-    "engines/layered-makeup/render/plate-blend", "layered-setup", "layered-material", "game-asset-export", "trusted-preview-services", "preview-actions",
-    "studio-ui/panels/preview"];
+    "layered-setup", "layered-material", "game-asset-export", "trusted-preview-services", "preview-actions",
+    "studio-ui/panels/preview"])];
+  test("the rendering path covers every renderer module on disk", () => {
+    for (const name of ["platform/scene/scene-host", "platform/scene/character-renderer", "features/eye-makeup/render/index",
+      "engines/layered-makeup/render/makeup-stack", "engines/layered-makeup/render/plate-blend"]) expect(RENDERING_PATH).toContain(name);
+  });
   const PER_MOD = new RegExp(String.raw`arkhe|icxrus|softnatural|mel_ccxl|meluminary|island_dancer|alliekat|preemhair|eagul|\bprc\b|kala|brown_ombre|ash_brown|10_brown|38_ash|05_brown|\/assets\/(?:brows|lashes|hair)\b|brows\.glb|lashes\.glb|local-hair-assets|lash-profile-preview|brow-preview-1|\b\d{17,20}\b|universalskintone|complexion|ks_uv|ks_donor|uv_framework|uv4\.xl|facialcustomizationfix|xbaebsae|warmsmooth|wa_head_overlay|wa_head_glow|4k\\\\common|_ca_pale|_ca_senna|_bl_espresso|_bl_dark|skin_type_0\d|basehead_d0\d|nutboy|brocreate|photoreal|unique_eyes|unique eyes|pit_eyes|forbidden_eyes|forbidden eyes|beautiful_iris|beautiful iris|beautiful_exotic|heterochrom|ccxl_eye|eye_\d\d_|\/assets\/eyes\b|local-eye-assets|eye-appearance|eye-optics|he_000_base|eye_mask\.xbm|eye_shadow_mask|gradient_(?:light_)?blue|gradient_brown|rebecca|cybereye|eye_blue|eye_red|eye_brown|` +
     // Face details: no option, definition, mesh, material or archive of a particular makeup, scar, tattoo, cyberware or
     // CCXL pack (the legacy XF selectors included). Creator slot names (`makeupLips_color`) are the game's slot rules.

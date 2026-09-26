@@ -1,5 +1,6 @@
 import { clamp, curve, type Layer } from "./engines/layered-makeup/recipe";
 import { tangentEndpoint } from "./engines/layered-makeup/bezier-path";
+import { mirrored as mirrorPoint, type Mirror } from "./engines/layered-makeup/region";
 
 export type UV = { u: number; v: number };
 /**
@@ -57,7 +58,14 @@ export function uvViewRegion(view: UVView, width: number, height: number, insets
 /** Region for a pane of the given aspect with no insets; the frame itself when the aspects match. */
 export const uvRegion = (view: UVView, aspect = frameAspect(view)): UVRegion =>
   uvViewRegion(view, Number.isFinite(aspect) && aspect > 0 ? aspect : frameAspect(view), 1);
-export const reflectUV = (p: UV, mirror: boolean): UV => ({ u: mirror ? 1 - p.u : p.u, v: p.v });
+/** `p`, or its mirrored instance across the region's mirror line (a symmetric layer draws both; CORE-82). */
+export const reflectUV = (p: UV, mirrored: boolean, across: Mirror): UV => {
+  if (!mirrored) return p;
+  const [u, v] = mirrorPoint(across)(p.u, p.v);
+  return { u, v };
+};
+/** Which side of the mirror line a point is on: its coordinate across the line, measured from the line. */
+const acrossLine = (p: UV, mirror: Mirror) => (mirror.axis === "u" ? p.u : p.v) - mirror.centre;
 export const uvToPixel = (p: UV, region: UVRegion, width: number, height: number) =>
   ({ x: (p.u - region.u) / region.w * width, y: (p.v - region.v) / region.h * height });
 export const pixelToUV = (p: { x: number; y: number }, region: UVRegion, width: number, height: number): UV =>
@@ -92,7 +100,7 @@ function frameView(view: UVView, u: number, v: number, width: number, height: nu
  * the content's bounds plus a margin, so the content fills the pane (minus its safe insets) whatever
  * the pane's shape: a single eye fills the pane, and both eyes fill it side by side.
  */
-export function fitUVView(view: UVView, layer?: Layer): UVView {
+export function fitUVView(view: UVView, layer: Layer | undefined, mirror: Mirror): UVView {
   const fallback = view.mode === "both" ? frameView(view, .5, .2775, .5, .5 / uvAspect("both"))
     : frameView(view, view.side === "low" ? .375 : .625, .2775, .25, .25 / uvAspect("single"));
   if (!layer) return fallback;
@@ -102,9 +110,11 @@ export function fitUVView(view: UVView, layer?: Layer): UVView {
   for (const f of layer.fields) path.push({ p: f, owner: f }, { p: { u: f.u + f.du, v: f.v + f.dv }, owner: f });
   // Classify controls by their knot/origin, never by the far endpoint: an arm
   // that crosses the atlas centre must still be reachable in its owner's view.
-  const positions = (layer.symmetry ? [false, true] : [false]).flatMap(mirror => path
-    .filter(({ owner }) => view.mode === "both" || (view.side === "low" ? reflectUV(owner, mirror).u <= .5 : reflectUV(owner, mirror).u >= .5))
-    .map(({ p }) => reflectUV(p, mirror)));
+  // One side is the region's mirror line's low or high side (eye makeup's: u = ½, one eye each).
+  const positions = (layer.symmetry ? [false, true] : [false]).flatMap(mirrored => path
+    .filter(({ owner }) => view.mode === "both" || (view.side === "low" ? acrossLine(reflectUV(owner, mirrored, mirror), mirror) <= 0
+      : acrossLine(reflectUV(owner, mirrored, mirror), mirror) >= 0))
+    .map(({ p }) => reflectUV(p, mirrored, mirror)));
   if (!positions.length) return fallback;
   const minU = Math.min(...positions.map(p => p.u)), maxU = Math.max(...positions.map(p => p.u)),
     minV = Math.min(...positions.map(p => p.v)), maxV = Math.max(...positions.map(p => p.v));
@@ -117,11 +127,11 @@ export type UVSelectionVisibility = { point?: { index: number; visible: boolean 
 /** `shown` is the region the pane displays (`uvViewRegion`), or a pane aspect for an inset-free pane. */
 export function selectionVisibility(view: UVView, shown: UVRegion | number, layer: {
   symmetry: boolean; points: readonly UV[]; fields: readonly (UV & { id: string })[] },
-  selected: number, fieldId?: string): UVSelectionVisibility {
+  selected: number, fieldId: string | undefined, mirror: Mirror): UVSelectionVisibility {
   const r = typeof shown === "number" ? uvRegion(view, shown) : shown;
   // A mirrored layer is visible when either drawn instance is inside the view.
-  const visible = (p: UV) => (layer.symmetry ? [false, true] : [false]).some(mirror => {
-    const q = reflectUV(p, mirror);
+  const visible = (p: UV) => (layer.symmetry ? [false, true] : [false]).some(mirrored => {
+    const q = reflectUV(p, mirrored, mirror);
     return q.u >= r.u && q.u <= r.u + r.w && q.v >= r.v && q.v <= r.v + r.h;
   });
   const point = layer.points[selected], field = layer.fields.find(item => item.id === fieldId);

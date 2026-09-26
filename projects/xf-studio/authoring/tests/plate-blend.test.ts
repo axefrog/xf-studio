@@ -220,7 +220,9 @@ describe("the makeup stack's plate", () => {
     layers.forEach((layer, i) => stack.updateLayer(i, layer, i === 2 ? optics(64) : undefined));
     stack.prepareBlend(renderer);
     expect(reads).toBe(1);
-    expect(anchor.geometry.getAttribute("xfsUnderlay")).toBeDefined();
+    // The skin underlay lands on the stack's geometry, never on the platform's surface (PREV-97).
+    expect(stack.geometry.getAttribute("xfsUnderlay")).toBeDefined();
+    expect(anchor.geometry.getAttribute("xfsUnderlay")).toBeUndefined();
     const evidence = stack.blendDiagnostics();
     expect(evidence.plate).toMatchObject({ drawn: true, route: "flat", slots: [0, 1, 3], renderOrder: 10, skinLight: false, fresnel: false });
     // The window is the plate UVs (0.25–0.75 × 0.5–0.625) padded by 0.002: 33 × 9 of the 64-texel masks, half-float here.
@@ -336,14 +338,14 @@ describe("the makeup stack's plate", () => {
     }
   });
 
-  test("a new skin of the same shape reuses the plate's underlay buffers; a different shape frees the old ones first (PREV-60)", () => {
+  test("a new skin of the same shape reuses the plate's underlay buffers; a different shape replaces them without freeing the surface's (PREV-60, PREV-97)", () => {
     const anchor = plateAnchor(), stack = createMakeupStack(anchor, 1), { renderer } = fakeRenderer();
     stack.setCanvases([{ width: 32, height: 32 } as HTMLCanvasElement]);
     stack.updateLayer(0, initialRecipe().layers[0]!);
     const names = ["xfsUnderlay", "xfsUnderRoughness", "xfsUnderMetalness"];
-    const read = () => names.map(name => anchor.geometry.getAttribute(name) as THREE.BufferAttribute);
+    const read = () => names.map(name => stack.geometry.getAttribute(name) as THREE.BufferAttribute);
     let freed = 0;
-    anchor.geometry.addEventListener("dispose", () => freed++);
+    for (const geometry of [anchor.geometry, stack.geometry]) geometry.addEventListener("dispose", () => freed++);
     stack.setUnderlaySource(underlay);
     stack.prepareBlend(renderer);
     const first = read(), versions = first.map(attribute => attribute.version);
@@ -361,13 +363,15 @@ describe("the makeup stack's plate", () => {
     stack.prepareBlend(renderer);
     expect(stack.blendDiagnostics().plate.drawn).toBe(false);
     read().forEach((attribute, i) => expect(attribute).toBe(first[i]!));
-    // A skin of another shape replaces them after the geometry's buffers are freed.
+    // A skin of another shape replaces them. Freeing the stack's geometry would free the buffers it shares with the platform's
+    // surface, so neither geometry is disposed (a surface's vertex count never changes; the old buffers go with the renderer).
     const four = (): PlateUnderlay => ({ colour: new THREE.BufferAttribute(new Float32Array(12), 3), roughness: new THREE.BufferAttribute(new Float32Array(4), 1),
       metalness: new THREE.BufferAttribute(new Float32Array(4), 1) });
     stack.setUnderlaySource(four);
     stack.prepareBlend(renderer);
-    expect(freed).toBe(1);
+    expect(freed).toBe(0);
     expect(read()[0]!.count).toBe(4);
+    expect(anchor.geometry.getAttribute("xfsUnderlay")).toBeUndefined();
     stack.setCanvases([]);
   });
 

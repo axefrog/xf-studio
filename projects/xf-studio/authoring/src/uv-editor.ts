@@ -43,6 +43,8 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   fit: HTMLButtonElement; note: HTMLElement;
 } | undefined, hooks: Hooks, initial: UVView) {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
+  /** A symmetric layer's mirrored instance: across the live feature's mirror line (CORE-82). */
+  const reflect = (p: UV, mirrored: boolean) => reflectUV(p, mirrored, hooks.region.mirror);
   const listeners = new AbortController();
   let view = parseUVView(initial);
   // Read once per draw: insets change only with the host's CSS, which is followed by a resize.
@@ -86,13 +88,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       return { side, uv, endpoint, collapsed };
     }) : [];
     return (l.symmetry ? [false, true] : [false]).flatMap(mirror => [
-      ...l.points.map((p, index) => ({ kind: "point" as const, index, mirror, uv: reflectUV(p, mirror) })),
+      ...l.points.map((p, index) => ({ kind: "point" as const, index, mirror, uv: reflect(p, mirror) })),
       ...l.fields.flatMap((f, index) => [
-        { kind: "field" as const, index, fieldId: f.id, mirror, uv: reflectUV({ u: f.u + f.du, v: f.v + f.dv }, mirror) },
-        { kind: "origin" as const, index, fieldId: f.id, mirror, uv: reflectUV(f, mirror) },
+        { kind: "field" as const, index, fieldId: f.id, mirror, uv: reflect({ u: f.u + f.du, v: f.v + f.dv }, mirror) },
+        { kind: "origin" as const, index, fieldId: f.id, mirror, uv: reflect(f, mirror) },
       ]),
       ...tangents.map(t => ({ ...t, kind: "tangent" as const, index: hooks.selected(), mirror,
-        uv: reflectUV(t.uv, mirror), endpoint: reflectUV(t.endpoint, mirror) })),
+        uv: reflect(t.uv, mirror), endpoint: reflect(t.endpoint, mirror) })),
     ]);
   }
   function draw() {
@@ -146,10 +148,10 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     for (const mirror of l.symmetry ? [false, true] : [false]) {
       const path = curve(l.points);
       ctx.strokeStyle = "#f1dbee"; ctx.lineWidth = 1.25 * unit; ctx.beginPath();
-      path.forEach((p, i) => { const q = pixel(reflectUV(p, mirror)); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+      path.forEach((p, i) => { const q = pixel(reflect(p, mirror)); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
       ctx.closePath(); ctx.stroke();
       for (const f of l.fields) {
-        const a = pixel(reflectUV(f, mirror)), b = pixel(reflectUV({ u: f.u + f.du, v: f.v + f.dv }, mirror));
+        const a = pixel(reflect(f, mirror)), b = pixel(reflect({ u: f.u + f.du, v: f.v + f.dv }, mirror));
         const selected = f.id === hooks.selectedField();
         ctx.strokeStyle = selected ? "#b1ebc9" : "#7f9c8a"; ctx.lineWidth = 1.25 * unit;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -164,7 +166,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       const p = pixel(h.uv), selected = isKnotHandle(h) ? h.index === hooks.selected() : h.fieldId === hooks.selectedField();
       if (h.kind === "point" && selected && p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height) selectedVisible = true;
       if (h.kind === "tangent") {
-        const knot = pixel(reflectUV(l.points[h.index], h.mirror));
+        const knot = pixel(reflect(l.points[h.index], h.mirror));
         ctx.strokeStyle = "#f4ca8a"; ctx.lineWidth = unit;
         ctx.setLineDash(h.collapsed ? [2 * unit, 3 * unit] : []);
         ctx.beginPath(); ctx.moveTo(knot.x, knot.y); ctx.lineTo(p.x, p.y); ctx.stroke(); ctx.setLineDash([]);
@@ -219,10 +221,11 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   }
   function viewCommand(command: UVViewCommand): boolean {
     if (command === "other" && view.mode !== "single") return false;
-    const next = command === "both" ? fitUVView({ ...view, mode: "both" }, hooks.layer()) :
-      command === "single" ? fitUVView({ ...view, mode: "single" }, hooks.layer()) :
-      command === "other" ? { ...view, side: view.side === "low" ? "high" as const : "low" as const, u: 1 - view.u } :
-      fitUVView(view, hooks.layer());
+    const mirror = hooks.region.mirror;
+    const next = command === "both" ? fitUVView({ ...view, mode: "both" }, hooks.layer(), mirror) :
+      command === "single" ? fitUVView({ ...view, mode: "single" }, hooks.layer(), mirror) :
+      command === "other" ? { ...view, side: view.side === "low" ? "high" as const : "low" as const, ...reflect({ u: view.u, v: view.v }, true) } :
+      fitUVView(view, hooks.layer(), mirror);
     updateView(next); return true;
   }
   function navigate(command: { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: UV }): boolean {
@@ -309,13 +312,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       // control beneath the pointer. Use the visible mirrored instance's space.
       drag = { kind: effect === "shape-rotate" ? "rotate" : "translate", pointer: e.pointerId, changed: false,
         layer: l, recipe: hooks.recipe(), original: structuredClone(l), expected: l.points,
-        start: reflectUV(p, hit.mirror), pivot: { u: pivot.u, v: pivot.v }, mirror: hit.mirror,
+        start: reflect(p, hit.mirror), pivot: { u: pivot.u, v: pivot.v }, mirror: hit.mirror,
         screen: { x: e.clientX, y: e.clientY }, limited: false };
     } else if (effect === "handle-drag" && closest) {
       if (isKnotHandle(closest)) hooks.select(closest.index);
       else hooks.selectField(closest.fieldId!);
       drag = { kind: "handle", handle: closest, pointer: e.pointerId, layer: l, recipe: hooks.recipe(), changed: false,
-        start: reflectUV(p, closest.mirror), endpoint: closest.endpoint ? reflectUV(closest.endpoint, closest.mirror) : undefined,
+        start: reflect(p, closest.mirror), endpoint: closest.endpoint ? reflect(closest.endpoint, closest.mirror) : undefined,
         target: isKnotHandle(closest) ? l.points[closest.index] : l.fields.find(f => f.id === closest.fieldId)! };
     } else return;
     view.side = p.u <= .5 ? "low" : "high";
@@ -336,7 +339,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     }
     if (drag.kind !== "handle") {
       if (!drag.changed && Math.hypot(e.clientX - drag.screen.x, e.clientY - drag.screen.y) < 4) return;
-      const p = reflectUV(coordinate(e), drag.mirror), start = drag.start, pivot = drag.pivot;
+      const p = reflect(coordinate(e), drag.mirror), start = drag.start, pivot = drag.pivot;
       const a = { u: start.u - pivot.u, v: start.v - pivot.v }, b = { u: p.u - pivot.u, v: p.v - pivot.v };
       if (drag.kind === "rotate" && Math.hypot(a.u, a.v) < 1e-8) { drag.start = p; return; }
       if (drag.kind === "rotate" && Math.hypot(b.u, b.v) < 1e-8) return;
@@ -355,7 +358,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
         drag.expected = drag.layer.points;
       return;
     }
-    const l = drag.layer, h = drag.handle, p = reflectUV(coordinate(e), h.mirror);
+    const l = drag.layer, h = drag.handle, p = reflect(coordinate(e), h.mirror);
     if (h.kind === "tangent") {
       const point = l.points[h.index], endpoint = drag.endpoint!;
       const next = moveTangent(point, h.side!, { u: endpoint.u + p.u - drag.start.u, v: endpoint.v + p.v - drag.start.v });
@@ -431,7 +434,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (pointerBinding("uv", "double-click", targetAt(p).target, modifierKey(modifiersOf(e)))?.effect !== "insert-point") return;
     // Compare both displayed instances, not a hardcoded u<.5 folding rule.
     const candidates = (l.symmetry ? [false, true] : [false]).map(mirror => ({ mirror,
-      click: reflectUV(p, mirror), section: nearestPathSection(l.points, reflectUV(p, mirror), scale) }));
+      click: reflect(p, mirror), section: nearestPathSection(l.points, reflect(p, mirror), scale) }));
     candidates.sort((a, b) => (a.section?.distancePx ?? Infinity) - (b.section?.distancePx ?? Infinity));
     const chosen = candidates[0], result = chosen && insertPathPoint(l.points, chosen.click, scale);
     if (!result) { hooks.message(l.points.length >= 24 ? "A shape supports up to 24 points." : "Choose a curve section inside the texture area and away from existing points."); return; }
@@ -467,7 +470,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     snapshot: () => ({ ...view }),
     selection: () => {
       const l = hooks.layer();
-      return l ? selectionVisibility(view, region(), l, hooks.selected(), hooks.selectedField()) : undefined;
+      return l ? selectionVisibility(view, region(), l, hooks.selected(), hooks.selectedField(), hooks.region.mirror) : undefined;
     },
     diagnostics: () => {
     const b = bounds();

@@ -3,14 +3,14 @@ import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, 
 import { parseWorkspace } from "../src/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { initialRecipe, freshWorkspace, EYE_MIRROR } from "./fixtures/eye-region";
 
 test("UV mapping is invertible and isotropic across both crops, pane sizes, insets and mirrored instances", () => {
   for (const mode of ["both", "single"] as const) for (const [width, height] of [[260, 112], [400, 700], [1200, 380], [333.3, 333.3]]) {
-    const view = fitUVView({ ...defaultUVView(), mode }, initialRecipe().layers[0]);
+    const view = fitUVView({ ...defaultUVView(), mode }, initialRecipe().layers[0], EYE_MIRROR);
     const region = uvViewRegion(view, width, height, { top: 8, right: 8, bottom: 58, left: 8 });
     for (const point of [{ u: .303, v: .231 }, { u: .64, v: .26 }, { u: -.05, v: 1.1 }]) for (const mirror of [false, true]) {
-      const shown = reflectUV(point, mirror), p = uvToPixel(shown, region, width, height), back = reflectUV(pixelToUV(p, region, width, height), mirror);
+      const shown = reflectUV(point, mirror, EYE_MIRROR), p = uvToPixel(shown, region, width, height), back = reflectUV(pixelToUV(p, region, width, height), mirror, EYE_MIRROR);
       expect(Math.abs(back.u - point.u)).toBeLessThan(1e-12);
       expect(Math.abs(back.v - point.v)).toBeLessThan(1e-12);
       const x = uvToPixel({ u: shown.u + .01, v: shown.v }, region, width, height), y = uvToPixel({ u: shown.u, v: shown.v + .01 }, region, width, height);
@@ -21,7 +21,7 @@ test("UV mapping is invertible and isotropic across both crops, pane sizes, inse
 
 test("single-eye fitting enlarges the shape without mutating it and mirrors the crop exactly", () => {
   const layer = initialRecipe().layers[0], before = structuredClone(layer);
-  const both = fitUVView(defaultUVView(), layer), low = fitUVView({ ...both, mode: "single", side: "low" }, layer), high = fitUVView({ ...low, side: "high" }, layer);
+  const both = fitUVView(defaultUVView(), layer, EYE_MIRROR), low = fitUVView({ ...both, mode: "single", side: "low" }, layer, EYE_MIRROR), high = fitUVView({ ...low, side: "high" }, layer, EYE_MIRROR);
   expect(low.span).toBeLessThan(both.span / 2);
   expect(Math.abs(1 - low.u - high.u)).toBeLessThan(1e-12);
   expect(Math.abs(low.span - high.span)).toBeLessThan(1e-12);
@@ -32,9 +32,9 @@ test("single-eye fitting enlarges the shape without mutating it and mirrors the 
   }
   expect(layer).toEqual(before);
   layer.symmetry = false;
-  expect(fitUVView({ ...high, mode: "single" }, layer).u).toBe(.625);
+  expect(fitUVView({ ...high, mode: "single" }, layer, EYE_MIRROR).u).toBe(.625);
   layer.fields[0] = { id: "outside", u: 0, v: .2, du: -.1, dv: 0, radius: .07 };
-  const edgeView = fitUVView({ ...low, side: "low" }, layer);
+  const edgeView = fitUVView({ ...low, side: "low" }, layer, EYE_MIRROR);
   const outsideAtlas = uvToPixel({ u: -.1, v: .2 }, uvRegion(edgeView), 720, 520);
   expect(outsideAtlas.x).toBeGreaterThan(0); expect(outsideAtlas.x).toBeLessThan(720);
   expect(parseUVView(edgeView)).toEqual(edgeView);
@@ -56,11 +56,11 @@ test("selection visibility reports whether the selected point or warp origin is 
   const { selectionVisibility, defaultUVView } = await import("../src/uv-view");
   const layer = { symmetry: false, points: [{ u: .3, v: .28 }, { u: .9, v: .9 }], fields: [{ id: "w", u: .31, v: .27 }] };
   const view = defaultUVView();
-  expect(selectionVisibility(view, 720 / 310, layer, 0, "w")).toEqual({ point: { index: 0, visible: true }, field: { id: "w", visible: true } });
-  expect(selectionVisibility(view, 720 / 310, layer, 1).point).toEqual({ index: 1, visible: false });
+  expect(selectionVisibility(view, 720 / 310, layer, 0, "w", EYE_MIRROR)).toEqual({ point: { index: 0, visible: true }, field: { id: "w", visible: true } });
+  expect(selectionVisibility(view, 720 / 310, layer, 1, undefined, EYE_MIRROR).point).toEqual({ index: 1, visible: false });
   // A mirrored layer counts as visible when its reflected instance is in view.
   const single = { ...view, mode: "single" as const, u: .75, span: .3 };
-  expect(selectionVisibility(single, 720 / 520, layer, 0).point?.visible).toBe(false);
-  expect(selectionVisibility(single, 720 / 520, { ...layer, symmetry: true }, 0).point?.visible).toBe(true);
-  expect(selectionVisibility(view, 1, layer, 7)).toEqual({});
+  expect(selectionVisibility(single, 720 / 520, layer, 0, undefined, EYE_MIRROR).point?.visible).toBe(false);
+  expect(selectionVisibility(single, 720 / 520, { ...layer, symmetry: true }, 0, undefined, EYE_MIRROR).point?.visible).toBe(true);
+  expect(selectionVisibility(view, 1, layer, 7, undefined, EYE_MIRROR)).toEqual({});
 });

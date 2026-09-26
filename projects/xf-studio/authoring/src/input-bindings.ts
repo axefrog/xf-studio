@@ -1,7 +1,3 @@
-import type { CollectionRequest } from "./collection-service";
-import type { StudioAction } from "./studio-application";
-import type { UVViewCommand } from "./viewport-attachment";
-
 /**
  * Input binding catalogue: the single typed table of every pointer gesture and keyboard
  * shortcut the Studio responds to, per context and exact modifier set, with the action it
@@ -11,7 +7,9 @@ import type { UVViewCommand } from "./viewport-attachment";
  * gesture-cancel policy resolve their input through this module, so behaviour cannot drift
  * from what the viewport hint strips, target tooltips, cursors, menu and palette shortcut
  * labels and the Keyboard & mouse dialog derive from it. Pure data and functions: no DOM,
- * no state, no I/O. See research/authoring/input-bindings.md.
+ * no state, no I/O, and no imports: the scene host's camera input builds on it, so it names the
+ * application's action and request kinds as plain strings, which tests/input-bindings.test.ts
+ * checks against the action registry (CORE-86). See research/authoring/input-bindings.md.
  */
 
 // ---------- Modifiers ----------
@@ -42,15 +40,20 @@ export type ShellCommand = "palette" | "shortcuts" | "help" | "regions" | "regio
   "gesture.cancel" | "gesture.commit" |
   "tab.switch" | "tab.reorder" | "tab.close" | "tab.content" | "tab.float" |
   "row.focus" | "row.reorder" | "row.rename" | "row.remove" | "row.duplicate";
+/** The UV viewport's framing commands (viewport-attachment.ts `uvCommand`). */
+export type UVViewCommand = "both" | "single" | "other" | "fit";
 export type ViewCommandId = `uv.${UVViewCommand}` | "uv.pan" | "uv.zoom";
-/** What a binding does. `action`/`request` IDs are checked against the action registry in tests. */
+/**
+ * What a binding does. `action` IDs are `StudioAction` kinds and `request` IDs `CollectionRequest` kinds, checked
+ * against the action registry in tests (the catalogue imports neither: CORE-86).
+ */
 export type BindingAction =
-  | { kind: "action"; id: StudioAction["kind"]; variant?: string }
-  | { kind: "request"; id: CollectionRequest["kind"] }
+  | { kind: "action"; id: string; variant?: string }
+  | { kind: "request"; id: string }
   | { kind: "view"; id: ViewCommandId }
   | { kind: "shell"; id: ShellCommand }
   | { kind: "none" };
-const act = (id: StudioAction["kind"], variant?: string): BindingAction => ({ kind: "action", id, ...(variant ? { variant } : {}) });
+const act = (id: string, variant?: string): BindingAction => ({ kind: "action", id, ...(variant ? { variant } : {}) });
 const view = (id: ViewCommandId): BindingAction => ({ kind: "view", id });
 const shell = (id: ShellCommand): BindingAction => ({ kind: "shell", id });
 const NONE: BindingAction = { kind: "none" };

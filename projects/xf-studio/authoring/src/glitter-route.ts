@@ -90,13 +90,16 @@ export function flakeCatalogue(rect: RectUv, window: UvWindow, f: GlitterFlakes)
 }
 
 /**
- * The same flakes mirrored across the region's mirror (eye makeup's u = ½: the other lid): positions mirrored in UV,
- * rotation and tangent X negated. Only a mirror across a u line is supported (the window's millimetres run along u).
+ * The same flakes mirrored across the region's mirror (eye makeup's u = ½: the other lid): positions mirrored in UV, and the
+ * rotation and the tangent component across the mirror negated. A mirror across a v line mirrors the window's v millimetres (CORE-82).
  */
 export function mirrorCatalogue(c: Catalogue, window: UvWindow, mirror: Mirror): Catalogue {
-  if (mirror.axis !== "u") throw Error("Glitter regions mirror only across a u line.");
-  const span = (2 * mirror.centre - 2 * window.u0) * MM_PER_UV.u;
-  return { ...c, cx: c.cx.map(x => span - x), rot: c.rot.map(r => -r), nx: c.nx.map(x => -x) };
+  if (mirror.axis === "u") {
+    const span = (2 * mirror.centre - 2 * window.u0) * MM_PER_UV.u;
+    return { ...c, cx: c.cx.map(x => span - x), rot: c.rot.map(r => -r), nx: c.nx.map(x => -x) };
+  }
+  const span = (2 * mirror.centre - 2 * window.v0) * MM_PER_UV.v;
+  return { ...c, cy: c.cy.map(y => span - y), rot: c.rot.map(r => -r), ny: c.ny.map(y => -y) };
 }
 
 /** E[sin²θ] of the tilt distribution (degrees): |N(0, σ)| below the maximum, redrawn uniformly when above it. */

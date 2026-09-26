@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { canvasResolution } from "../src/canvas-resolution";
 import { defaultUVView, fitUVView, frameAspect, MAX_UV_VIEW_SPAN, MIN_UV_VIEW_SPAN, panUVView, parseUVView, pixelToUV, reflectUV,
   uvAspect, uvToPixel, uvViewRegion, uvViewScale, zoomUVView, type UVInsets, type UVView } from "../src/uv-view";
-import { initialRecipe } from "./fixtures/eye-region";
+import { initialRecipe, EYE_MIRROR } from "./fixtures/eye-region";
 
 // The UV viewport fills its whole pane; these are the pane shapes it must handle: docked narrow and
 // wide, a floating square, a tall strip and a tiny pane where the insets would not fit.
@@ -21,7 +21,7 @@ function safeArea(width: number, height: number, insets: UVInsets) {
 }
 function fittedBoundsPx(view: UVView, width: number, height: number, insets: UVInsets, mode: UVView["mode"], side: UVView["side"]) {
   const layer = initialRecipe().layers[0], region = uvViewRegion(view, width, height, insets);
-  const points = [false, true].flatMap(mirror => layer.points.map(p => reflectUV(p, mirror)))
+  const points = [false, true].flatMap(mirror => layer.points.map(p => reflectUV(p, mirror, EYE_MIRROR)))
     .filter(p => mode === "both" || (side === "low" ? p.u <= .5 : p.u >= .5)).map(p => uvToPixel(p, region, width, height));
   const xs = points.map(p => p.x), ys = points.map(p => p.y);
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
@@ -31,7 +31,7 @@ test("Fit fills the pane's safe area with a small margin at every pane shape; a 
   const layer = initialRecipe().layers[0];
   for (const [width, height] of PANES) for (const insets of [NONE, HINT_INSETS]) for (const mode of ["both", "single"] as const)
     for (const side of ["low", "high"] as const) {
-      const view = fitUVView({ ...defaultUVView(), mode, side }, layer);
+      const view = fitUVView({ ...defaultUVView(), mode, side }, layer, EYE_MIRROR);
       const b = fittedBoundsPx(view, width, height, insets, mode, side);
       const safe = safeArea(width, height, insets);
       // Content stays inside the safe area (never under the hint band)...
@@ -47,7 +47,7 @@ test("Fit fills the pane's safe area with a small margin at every pane shape; a 
       expect(centre.x).toBeCloseTo(safe.left + safe.width / 2, 8);
       expect(centre.y).toBeCloseTo(safe.top + safe.height / 2, 8);
     }
-  const both = fitUVView(defaultUVView(), layer), single = fitUVView({ ...defaultUVView(), mode: "single" }, layer);
+  const both = fitUVView(defaultUVView(), layer, EYE_MIRROR), single = fitUVView({ ...defaultUVView(), mode: "single" }, layer, EYE_MIRROR);
   for (const [width, height] of PANES) expect(uvViewScale(single, width, height).scale).toBeGreaterThan(uvViewScale(both, width, height).scale * 1.4);
 });
 
@@ -57,7 +57,7 @@ test("Wheel zoom stays anchored under the cursor at any pane size, inset and DPR
     const css = canvasResolution(width, height, dpr);
     for (const cursor of [{ x: 3, y: 4 }, { x: css.cssWidth * .7, y: css.cssHeight * .35 }, { x: css.cssWidth - 1, y: css.cssHeight - 1 }])
       for (const factor of [1.2, 1 / 1.2, 4]) {
-        const view = fitUVView(defaultUVView(), initialRecipe().layers[0]);
+        const view = fitUVView(defaultUVView(), initialRecipe().layers[0], EYE_MIRROR);
         const anchor = pixelToUV(cursor, uvViewRegion(view, css.cssWidth, css.cssHeight, insets), css.cssWidth, css.cssHeight);
         const zoomed = zoomUVView(view, anchor, factor);
         const after = uvToPixel(anchor, uvViewRegion(zoomed, css.cssWidth, css.cssHeight, insets), css.cssWidth, css.cssHeight);
@@ -79,7 +79,7 @@ test("Zoom limits apply to the frame's larger side, so tall and wide frames stay
 });
 
 test("Pan follows the pointer over the whole pane and clamps the view centre to the legal range", () => {
-  const view = fitUVView(defaultUVView(), initialRecipe().layers[0]);
+  const view = fitUVView(defaultUVView(), initialRecipe().layers[0], EYE_MIRROR);
   for (const [width, height] of PANES) {
     const region = uvViewRegion(view, width, height, HINT_INSETS), grab = { x: width * .6, y: height * .4 }, under = pixelToUV(grab, region, width, height);
     // A drag keeps the grabbed UV under the pointer, wherever in the pane it starts.
@@ -95,7 +95,7 @@ test("Pan follows the pointer over the whole pane and clamps the view centre to 
 });
 
 test("Pixel ↔ UV round-trips at several pane sizes and DPRs, and resizing keeps the frame visible and centred", () => {
-  const view = { ...fitUVView({ ...defaultUVView(), mode: "single" }, initialRecipe().layers[0]) };
+  const view = { ...fitUVView({ ...defaultUVView(), mode: "single" }, initialRecipe().layers[0], EYE_MIRROR) };
   const frame = { u0: view.u - view.span / 2, u1: view.u + view.span / 2, v0: view.v - view.span / frameAspect(view) / 2, v1: view.v + view.span / frameAspect(view) / 2 };
   for (const [width, height] of PANES) for (const dpr of [1, 1.5, 3]) {
     const r = canvasResolution(width, height, dpr), region = uvViewRegion(view, r.cssWidth, r.cssHeight, HINT_INSETS);
@@ -125,7 +125,7 @@ test("Stored views from the fixed-box canvas keep their meaning: same crop in a 
     expect(r.v).toBeLessThanOrEqual(box.v + 1e-12); expect(r.v + r.h).toBeGreaterThanOrEqual(box.v + box.h - 1e-12);
   }
   // A frame aspect round-trips; an unusable one is rejected like any other damaged field.
-  const fitted = fitUVView(defaultUVView(), initialRecipe().layers[0]);
+  const fitted = fitUVView(defaultUVView(), initialRecipe().layers[0], EYE_MIRROR);
   expect(fitted.aspect).toBeGreaterThan(0);
   expect(parseUVView(JSON.parse(JSON.stringify(fitted)))).toEqual(fitted);
   for (const aspect of [0, -1, 11, Infinity, "wide"]) expect(parseUVView({ ...fitted, aspect })).toEqual(defaultUVView());

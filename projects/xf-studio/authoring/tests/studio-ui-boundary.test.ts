@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import type { EyeMakeupViewContext } from "../src/features/eye-makeup/view/actions";
 import type { PanelController } from "../src/studio-ui/panels/collection";
@@ -7,15 +7,14 @@ import type { StudioRuntime } from "../src/studio-ui/runtime";
 import type { FeatureViewFactory } from "../src/studio-ui/views/feature-view";
 import type { EyeMakeupFacade } from "../src/studio-presentation";
 import { importUses, imports, resolveFrom } from "./fixtures/import-scan";
+import { sourceFiles, sourceText } from "./fixtures/source-files";
 
 const root = resolve(import.meta.dir, "..", "src");
 const ui = join(root, "studio-ui");
-function files(dir: string): string[] {
-  return readdirSync(dir).flatMap(name => {
-    const path = join(dir, name);
-    return statSync(path).isDirectory() ? files(path) : path.endsWith(".ts") ? [path] : [];
-  });
-}
+/** Every `.ts` file under `dir`, listed once per test process (tests/fixtures/source-files.ts). */
+const files = (dir: string) => [...sourceFiles(dir)];
+/** A file's text, read once per test process. */
+const readFileSync = (path: string, _encoding?: "utf8") => sourceText(path);
 /** A file's src-relative module name (`features/eye-makeup/view/layers`). */
 const moduleOf = (file: string) => relative(root, file).replaceAll("\\", "/").replace(/\.ts$/, "");
 /** Each feature's view folder (`features/<id>/view/`): presentation under the same rules as studio-ui (platform §7 rule 4). */

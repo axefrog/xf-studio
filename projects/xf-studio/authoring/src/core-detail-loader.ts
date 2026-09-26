@@ -17,7 +17,11 @@ export type LoadedCoreDetail = {
   gltf: GLTF;
   meshes: THREE.Mesh[];
   head: THREE.SkinnedMesh;
-  plate: THREE.SkinnedMesh;
+  /**
+   * The record's surfaces beside the head, by node key: every geometry node but the head and the eyes (today one, `plate`, the
+   * expanded eye plate). Features draw on them through the scene port (CORE-89).
+   */
+  surfaces: ReadonlyMap<string, THREE.SkinnedMesh>;
   eyes: THREE.Mesh;
   textures: Record<CoreTextureSlot, THREE.Texture>;
 };
@@ -60,8 +64,10 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
     const meshes: THREE.Mesh[] = [];
     gltf.scene.traverse(object => { if (object instanceof THREE.Mesh) meshes.push(object); });
     const named = (name: string) => meshes.find(mesh => mesh.name === name);
-    const head = named(record.geometry.nodes.head), plate = named(record.geometry.nodes.plate), eyes = named(record.geometry.nodes.eyes);
-    if (!(head instanceof THREE.SkinnedMesh) || !(plate instanceof THREE.SkinnedMesh) || !eyes)
+    const head = named(record.geometry.nodes.head), eyes = named(record.geometry.nodes.eyes);
+    const surfaces = new Map(Object.entries(record.geometry.nodes).filter(([key]) => key !== "head" && key !== "eyes")
+      .map(([key, node]) => [key, named(node)] as const));
+    if (!(head instanceof THREE.SkinnedMesh) || !eyes || [...surfaces.values()].some(mesh => !(mesh instanceof THREE.SkinnedMesh)))
       throw Error("Preview asset is missing required meshes.");
     for (const mesh of meshes) {
       mesh.frustumCulled = false;
@@ -85,7 +91,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
         textures[slot] = texture;
       } finally { URL.revokeObjectURL(url); }
     }));
-    return { record, gltf, meshes, head, plate, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
+    return { record, gltf, meshes, head, surfaces: surfaces as Map<string, THREE.SkinnedMesh>, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
   } catch (error) {
     for (const texture of Object.values(textures)) texture?.dispose();
     gltf?.scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });

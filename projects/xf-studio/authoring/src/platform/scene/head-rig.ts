@@ -107,12 +107,21 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   releases: (() => void)[];
   loadMotion?: MotionLoader;
 }) {
-  const { gltf, meshes, head, plate } = core;
+  const { gltf, meshes, head } = core;
   let eyes = core.eyes;
   scene.add(gltf.scene);
-  // The record's surfaces beside the head, by node key: today one, the expanded eye plate (`geometry.nodes.plate`), which eye makeup's
-  // renderer draws on. The rig deforms and poses them with the head and knows nothing of what a feature draws there.
-  const surfaces = new Map<string, THREE.SkinnedMesh>([["plate", plate]]);
+  // The record's surfaces beside the head, by node key (CORE-89): today one, the expanded eye plate (`geometry.nodes.plate`), which eye
+  // makeup's renderer draws on. The rig deforms and poses them with the head and knows nothing of what a feature draws there. They are
+  // anchors, never drawn themselves (PREV-97): hidden, with a double-sided material skinned with all their influences, so a pick on
+  // them lands where the drawn surface is; a feature copies them for what it draws.
+  const surfaces: ReadonlyMap<string, THREE.SkinnedMesh> = new Map(core.surfaces);
+  for (const surface of surfaces.values()) {
+    const anchorMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
+    options.releases.push(() => anchorMaterial.dispose());
+    surface.visible = false;
+    surface.material = anchorMaterial;
+    extendSkin(surface, anchorMaterial);
+  }
   const { "head.albedo": albedo, "eyes.albedo": eyeColor, "head.normal": normal, "head.roughness": roughness } = core.textures;
   const skin = new THREE.MeshStandardMaterial({
     map: albedo,

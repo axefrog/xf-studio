@@ -10,7 +10,7 @@ import { priorityRank } from "../../render-templates";
 import type { DetailLimit } from "../../detail-limits";
 import { layeredContextRestored } from "../../layered-material";
 import { characterDetailsEvidence } from "../../scene-evidence";
-import { RENDER_ORDER, type CharacterSlot, type CharacterView, type SkinUnderlayPort } from "../api/scene";
+import { RENDER_ORDER, type CharacterSlot, type CharacterView, type SkinUnderlayPort, type SupersededPart } from "../api/scene";
 import type { HeadRig } from "./head-rig";
 
 /**
@@ -21,8 +21,9 @@ import type { HeadRig } from "./head-rig";
  * mod, a choice or a feature.
  *
  * What a feature would own later: a feature that authors a part of the character (a brow feature's own brows, a lip feature's
- * lips) renders it through its own `FeatureRenderer` and names the resolved slot it replaces in `supersedes`; this renderer then
- * hides that slot while the feature's renderer is active. Until such a feature exists, every slot is drawn here.
+ * lips) renders it through its own `FeatureRenderer` and tells the port which resolved parts it replaces (`supersede`: a whole slot,
+ * or only the components of named creator options), and changes that list as its own parts come and go. This renderer then draws
+ * those parts as if the V had none there (PREV-89). Until such a feature exists, every part is drawn here.
  */
 
 /**
@@ -52,18 +53,20 @@ export function createCharacterRenderer(input: {
   scene: THREE.Scene;
   renderer: THREE.WebGLRenderer;
   rig: HeadRig;
-  /** Slots an active feature renderer replaces (its `supersedes`). */
-  superseded(): ReadonlySet<CharacterSlot>;
+  /** The resolved parts the active feature renderers replace (their `supersede` lists). */
+  superseded(): readonly SupersededPart[];
 }) {
   const { scene, renderer, rig } = input;
   const { head, eyes, skin, coreEye } = rig;
   const rigMotion = rig.motion.rig;
   let eyeOpticsEnabled = false;
   /** The resolved eyeballs drawn now (empty while the core eye shows). */
-  const resolvedEyeballs = () => drawnDetails().flatMap(item => item.eyes?.eyeballs ?? []);
+  const resolvedEyeballs = () => drawnDetails().filter(componentShown).flatMap(item => item.eyes?.eyeballs ?? []);
   /** A layered eye design's baked eyeball chunks (the multilayered eye has no refraction or eye light; it replaces the core eye too). */
-  const layeredEyes = () => drawnDetails().filter(item => item.component.slot === "eyes").flatMap(item => item.layered ?? [])
+  const layeredEyes = () => drawnDetails().filter(item => item.component.slot === "eyes" && componentShown(item)).flatMap(item => item.layered ?? [])
     .filter(entry => entry.handle.state === "baked");
+  /** The V's own eyeball (a baked layered design's included) replaces the core eye; without one shown, the core eye shows. */
+  function applyEyes() { eyes.visible = !resolvedEyeballs().length && !layeredEyes().length; }
   function applyEyeOptics() {
     for (const { handle } of [{ handle: coreEye.handle }, ...resolvedEyeballs()]) handle.setSourceRoughness(eyeOpticsEnabled);
   }
@@ -125,32 +128,67 @@ export function createCharacterRenderer(input: {
     load: (record, options) => loadCharacterDetails(record, { ...options, anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
       context: detailContext }),
   };
-  // The skin drawn under a feature's surfaces (the scene port's `skin`): the resolved skin's light, and the skin under a surface read on
-  // the drawn head, like the face decals' underlay. Features read both again whenever the drawn skin changes.
+  // The skin drawn under a feature's surfaces (the scene port's `skin`): the shown resolved skin's light, and the skin under a surface
+  // read on the drawn head, like the face decals' underlay. Features read both again whenever the drawn skin changes, told once.
   const skinListeners = new Set<() => void>();
   const skinPort: SkinUnderlayPort = {
-    light: () => resolvedSkin?.item.skin?.handle.parameters ?? null,
+    light: () => shownSkin()?.item.skin?.handle.parameters ?? null,
     underlay(surface) {
-      const item = resolvedSkin?.item, skinSurface: ResolvedSkinSurface | null = item?.skin
+      const item = shownSkin()?.item, skinSurface: ResolvedSkinSurface | null = item?.skin
         ? { base: item.skin.base, roughness: item.skin.roughness, chunks: item.meshes } : null;
       return skinPlacement.surfaceUnderlay(surface, skinSurface);
     },
     subscribe(listener) { skinListeners.add(listener); return () => { skinListeners.delete(listener); }; },
   };
-  function skinChanged() { for (const listener of [...skinListeners]) listener(); }
-  /** The V drawn now, for feature renderers (the scene port's `character`), and its change notices. */
+  /** The resolved skin drawn now: none while the default skin shows, or while a feature supersedes it or the viewer hides it. */
+  const shownSkin = () => resolvedSkin && componentShown(resolvedSkin.item) ? resolvedSkin : null;
+  /** The skin the head shows, as last applied (listeners hear of a change once, with the new V in place: PREV-95). */
+  let appliedSkin: { item: LoadedCharacterComponent; placement: HeadSkinPlacement } | null = null;
+  /**
+   * Show the drawn skin on the head: the resolved skin on the core head (core-head placement), or the resolved head itself with the core
+   * head hidden, or the core head's default skin when none is shown. Tells the skin listeners when that changed.
+   */
+  function applySkin() {
+    const shown = shownSkin();
+    if (shown?.placement.mode === "core-head") {
+      head.material = shown.item.meshes[0]!.material;
+      // A skin kept from the previous details already drew on the core head with this material's extension.
+      const material = head.material as THREE.MeshStandardMaterial;
+      if (!material.userData.xfsHeadExtended) { extendSkin(head, material); material.userData.xfsHeadExtended = true; }
+      head.visible = true;
+    } else {
+      head.material = skin;
+      head.visible = !shown;
+    }
+    if (shown?.item === appliedSkin?.item && shown?.placement === appliedSkin?.placement) return;
+    appliedSkin = shown;
+    for (const listener of [...skinListeners]) listener();
+  }
+  /** The V drawn now, for feature renderers (the scene port's `character`), and its change notices (once per change). */
   const characterListeners = new Set<() => void>();
   const view = (): CharacterView => ({ identity: characterDetails?.record.identity ?? null,
-    drawn: [...new Set(drawnDetails().map(item => item.component.slot))] });
-  function characterChanged() { for (const listener of [...characterListeners]) listener(); }
+    drawn: [...new Set((characterDetails?.components ?? []).filter(componentShown).map(item => item.component.slot))] });
+  let publishedView = JSON.stringify({ identity: null, drawn: [] } satisfies CharacterView);
+  function publishView() {
+    const text = JSON.stringify(view());
+    if (text === publishedView) return;
+    publishedView = text;
+    for (const listener of [...characterListeners]) listener();
+  }
   // Resolved details join and leave with each character record (a skin drawn on the core head adds no mesh).
   const drawnDetails = () => characterDetails?.components.filter(item => !(resolvedSkin?.placement.mode === "core-head" && resolvedSkin.item === item)) ?? [];
-  /** Whether a slot shows: the viewer's preference, unless an active feature renderer replaces that slot (`supersedes`). */
-  const slotShown = (slot: DetailSlot) => detailVisible[slot] && !input.superseded().has(slot);
+  /** Whether a feature renderer replaces this component now (a `supersede` entry for its slot, for all its options or this one's). */
+  const supersededNow = (item: LoadedCharacterComponent) => input.superseded().some(part => part.slot === item.component.slot &&
+    (!part.options || part.options.includes(item.component.option)));
+  /** Whether a component shows: its slot's viewer preference, unless an active feature renderer replaces it (PREV-89). */
+  const componentShown = (item: LoadedCharacterComponent) => detailVisible[item.component.slot] && !supersededNow(item);
   function refreshDetailVisibility() {
-    for (const item of drawnDetails()) item.root.visible = slotShown(item.component.slot);
+    for (const item of drawnDetails()) item.root.visible = componentShown(item);
     // A layered part of a slot that was hidden is baked when the slot is first shown (PREV-63); its outcome reaches the panel (PREV-74).
     if (characterDetails) publishBakeLimits([...skinLimits(), ...bakeLayered()]);
+    applySkin();
+    applyEyes();
+    publishView();
   }
   /**
    * The placed V's limits (its skin placement's and its bakes') when they change after `setCharacterDetails` returned them: a slot
@@ -181,31 +219,24 @@ export function createCharacterRenderer(input: {
     const kept = new Set(next?.components ?? []);
     if (previous) {
       rigMotion.detach(drawnBefore.flatMap(item => item.bones));
-      // Nothing of the previous V's skin or eyes may linger: the core head and eye return to their fixed defaults.
+      // Nothing of the previous V's skin or eyes may linger: the core head and eye return to their fixed defaults before its parts are
+      // released (the skin listeners hear once, below, when the new V is in place).
       head.material = skin;
       head.visible = true;
       eyes.visible = true;
-      resolvedSkin = null;
     }
+    resolvedSkin = null;
     // The previous V is released after the new one has baked, so a tried style can share a bake it keeps (PREV-78).
     const releasePrevious = () => previous?.dispose(kept);
-    skinChanged();
-    if (!next) { releasePrevious(); publishedBakeLimits = "[]"; characterChanged(); return { limits: [] }; }
+    if (!next) { releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
       // A skin kept from the previous details keeps its placement (comparing it with the core head again would decide the same).
       const placement = placedSkin?.item === skinItem ? placedSkin.placement : skinPlacement.place(skinItem.meshes);
       placedSkin = { item: skinItem, placement };
-      if (placement.mode === "core-head") {
-        head.material = skinItem.meshes[0]!.material;
-        // A skin kept from the previous details already drew on the core head with this material's extension.
-        const material = head.material as THREE.MeshStandardMaterial;
-        if (!material.userData.xfsHeadExtended) { extendSkin(head, material); material.userData.xfsHeadExtended = true; }
-      } else head.visible = false;
       resolvedSkin = { item: skinItem, placement };
       skinItem.skin!.handle.setNormals(normalsEnabled);
-      skinChanged();
     }
     for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);
     characterDetails = next;
@@ -229,14 +260,14 @@ export function createCharacterRenderer(input: {
     const bakeLimits = bakeLayered();
     releasePrevious();
     publishedBakeLimits = JSON.stringify([...skinLimits(), ...bakeLimits]);
-    // The V's own eyeball (a baked layered design's included) replaces the core eye.
-    eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;
+    // The drawn skin goes on the head (its listeners hear once, with the new V in place), and the V's own eyeball replaces the core eye.
+    applySkin();
+    applyEyes();
     applyEyeOptics();
     scene.updateMatrixWorld(true);
     // The blink binds first: it must capture the details' neutral pose before a playing idle poses them.
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
-    characterChanged();
     return { limits: [...skinLimits(), ...bakeLimits] };
   }
   /**
@@ -247,7 +278,7 @@ export function createCharacterRenderer(input: {
   function bakeLayered(): { slot: DetailSlot; limit: DetailLimit }[] {
     const limits: { slot: DetailSlot; limit: DetailLimit }[] = [];
     for (const item of characterDetails?.components ?? []) for (const { mesh, handle } of item.layered ?? []) {
-      if (handle.state === "pending" && slotShown(item.component.slot)) handle.bake(renderer);
+      if (handle.state === "pending" && componentShown(item)) handle.bake(renderer);
       if (handle.state !== "failed") continue;
       mesh.visible = false;
       const limit: DetailLimit = item.component.slot === "eyes" ? "eye-design" : "layered-material";
@@ -264,18 +295,18 @@ export function createCharacterRenderer(input: {
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
     publishBakeLimits([...skinLimits(), ...bakeLayered()]);
-    if (characterDetails) eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;
+    if (characterDetails) applyEyes();
   }
   return {
     skin: skinPort,
     details,
     view,
     subscribe(listener: () => void) { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },
+    /** The resolved parts the feature renderers supersede changed: show and hide again (PREV-89). */
     /** Meshes of the drawn V that follow the facial shapes with the head. */
     drawnMeshes: () => drawnDetails().flatMap(item => item.meshes),
     setCharacterDetails,
     setSlotVisible,
-    /** A feature renderer began or stopped replacing a slot: show and hide again. */
     refreshVisibility: refreshDetailVisibility,
     setEyeOptics,
     eyeAppearance,
@@ -293,7 +324,7 @@ export function createCharacterRenderer(input: {
     },
     profileEncoding,
     /** How the V's details landed (developer evidence). */
-    evidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
+    evidence: () => characterDetailsEvidence({ details: characterDetails, skin: shownSkin(), head, browUnderlay,
       eyes: { core: eyes, appearance: eyeAppearance() } }),
     /** Developer evidence: each baked layered part's packed maps read back at their centre texel (colour + roughness, normal + metalness). */
     layeredSamples: () => (characterDetails?.components ?? []).flatMap(item => (item.layered ?? []).map(({ mesh, handle }) => {

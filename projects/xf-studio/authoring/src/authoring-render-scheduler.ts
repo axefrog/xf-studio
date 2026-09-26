@@ -2,6 +2,12 @@ import type { AuthoringDocument, DocumentEffect } from "./authoring-document";
 import { layerRenderQueue } from "./layer-render-queue";
 import type { Layer } from "./engines/layered-makeup/recipe";
 
+/**
+ * Where a layered surface's preview reads its layers (UI-76): the stack, the active layer and the document's change intents. The live
+ * feature's authoring document is one; the preview devices depend on nothing more of it.
+ */
+export type PreviewLayerSource = Pick<AuthoringDocument, "recipe" | "active" | "subscribeEffects">;
+
 export type AuthoringRenderPort = {
   frame(run: () => void): void;
   render(layerIndex: number): void;
@@ -12,7 +18,7 @@ export type AuthoringRenderPort = {
 export class AuthoringRenderScheduler {
   private queue: (layer: Layer | undefined) => void;
   private unsubscribe: () => void;
-  constructor(private document: AuthoringDocument, private port: AuthoringRenderPort) {
+  constructor(private document: PreviewLayerSource, private port: AuthoringRenderPort) {
     this.queue = layerRenderQueue(() => document.recipe.layers, port.frame, port.render);
     this.unsubscribe = document.subscribeEffects(effect => this.handle(effect));
   }
