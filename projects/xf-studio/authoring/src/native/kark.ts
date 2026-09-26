@@ -6,22 +6,27 @@
  * archives; source: knowledge/archive-format.md §2]. A compressed segment without that header is refused (never seen; the
  * caller falls back to another reader) rather than guessed at.
  */
+import { NativeBudgetError, NativeDecompressError, NativeMalformedError } from "./native-errors";
+
 export const KARK_MAGIC = 0x4b52414b; // "KARK" little-endian
 export const KARK_HEADER_SIZE = 8;
 
-/** Decompress one Oodle stream to exactly `size` bytes, or throw. */
+/** Decompress one Oodle stream to exactly `size` bytes, or throw (`NativeDecompressError` when the stream is refused). */
 export type Decompress = (stored: Uint8Array, size: number) => Uint8Array;
 
-export class SegmentError extends Error {}
+/** A segment whose framing is wrong (a malformed input, not a decompressor failure). */
+export class SegmentError extends NativeMalformedError { override name = "SegmentError"; }
 
-export function decodeSegment(stored: Uint8Array, size: number, decompress: Decompress): Uint8Array {
+/** Decode one segment to `size` bytes. `maxSize` caps what the decompressor is asked to allocate. */
+export function decodeSegment(stored: Uint8Array, size: number, decompress: Decompress, maxSize = Number.MAX_SAFE_INTEGER): Uint8Array {
   if (stored.length === size) return stored;
+  if (size > maxSize) throw new NativeBudgetError(`A segment of ${size} bytes passes the ${maxSize}-byte cap.`);
   if (stored.length < KARK_HEADER_SIZE) throw new SegmentError("Truncated compressed segment.");
   const view = new DataView(stored.buffer, stored.byteOffset, stored.byteLength);
   if (view.getUint32(0, true) !== KARK_MAGIC) throw new SegmentError("Compressed segment without a KARK header.");
   const declared = view.getUint32(4, true);
   if (declared !== size) throw new SegmentError(`Segment header declares ${declared} bytes, the index ${size}.`);
   const out = decompress(stored.subarray(KARK_HEADER_SIZE), size);
-  if (out.length !== size) throw new SegmentError(`Segment decompressed to ${out.length} bytes, expected ${size}.`);
+  if (out.length !== size) throw new NativeDecompressError(`Segment decompressed to ${out.length} bytes, expected ${size}.`);
   return out;
 }

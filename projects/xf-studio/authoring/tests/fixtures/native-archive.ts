@@ -4,11 +4,19 @@
  * exercise the container logic without the game's Oodle library.
  */
 import { depotHash } from "../../src/depot-path";
+import { NativeDecompressError } from "../../src/native/native-errors";
 
 export const fakeCompress = (raw: Uint8Array) => raw.map(byte => byte ^ 0x5a);
+/** The stand-in codec's decoder; like the real one it refuses a stream it cannot decode with `NativeDecompressError`. */
 export const fakeDecompress = (stored: Uint8Array, size: number) => {
-  if (stored.length !== size) throw Error("fake codec: size mismatch");
+  if (stored.length !== size) throw new NativeDecompressError("fake codec: size mismatch");
   return stored.map(byte => byte ^ 0x5a);
+};
+/** A decoder that spins for three seconds first (for the worker's time budget). */
+export const slowDecompress = (stored: Uint8Array, size: number) => {
+  const until = Date.now() + 3000;
+  while (Date.now() < until) { /* spin */ }
+  return fakeDecompress(stored, size);
 };
 
 export interface SyntheticFile {

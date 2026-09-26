@@ -6,12 +6,17 @@
  * then a u16 0. Nested struct values repeat that layout. A few classes append data after the terminator; this reader decodes
  * the `CMaterialInstance` parameter list (`values`) and the `CMaterialTemplate` parameter table (`parameterInfo`) and refuses any
  * other trailing data. Every record's size is checked against what its value used, so a misread fails instead of drifting.
+ *
+ * One `DecodeSession` (limits.ts) spans the file and every buffer parsed inside it: it counts decoded values and bytes, caps
+ * nesting, and collects notes such as a property stored with a type the RTTI slice disagrees with (decoded by the stored type).
  */
-import { Cr2wError, Cr2wFile } from "./cr2w-file";
+import { Cr2wError, Cr2wFile, CR2W_MIN_SIZE } from "./cr2w-file";
 import type { Decompress } from "./kark";
+import { DecodeSession } from "./limits";
+import { NativeUnsupportedError } from "./native-errors";
 import { readPackage } from "./red-package";
-import { NativeUnsupportedError, RedBuffer, RedHandle, RedObject, type RedDocument } from "./red-model";
-import { cname, Cursor, emptyReference, importFlagsText, normalizedPath, readValue, readVarString, type ValueContext } from "./red-values";
+import { RedBuffer, RedHandle, RedObject, type RedDocument } from "./red-model";
+import { cname, Cursor, emptyReference, importFlagsText, normalizedPath, noteStoredType, readValue, readVarString, type ValueContext } from "./red-values";
 
 /** Which buffers are parsed, by owning `Class.property` (others stay bytes). */
 const PARSED_BUFFERS: Record<string, "package" | "cr2w-list"> = {
@@ -22,8 +27,9 @@ const PARSED_BUFFERS: Record<string, "package" | "cr2w-list"> = {
 
 export class Cr2wDecoder implements ValueContext {
   private readonly objects = new Map<number, RedObject>();
+  readonly session: DecodeSession;
 
-  constructor(readonly file: Cr2wFile, private readonly decompress: Decompress) {}
+  constructor(readonly file: Cr2wFile, private readonly decompress: Decompress) { this.session = file.session; }
 
   name(index: number): string { return this.file.name(index); }
 
@@ -35,10 +41,12 @@ export class Cr2wDecoder implements ValueContext {
     if (!entry) throw new Cr2wError(`CR2W export ${index} does not exist.`);
     object = new RedObject(entry.className);
     this.objects.set(index, object);
+    this.session.enter();
     const cursor = new Cursor(this.file.bytes, entry.dataOffset, entry.dataOffset + entry.dataSize);
     this.readBody(cursor, object);
     this.readAppendix(cursor, object);
     if (cursor.pos !== cursor.end) throw new NativeUnsupportedError(`${entry.className} has ${cursor.end - cursor.pos} bytes of data after its properties that this reader does not decode.`);
+    this.session.leave();
     return object;
   }
 
@@ -54,6 +62,7 @@ export class Cr2wDecoder implements ValueContext {
       const name = this.name(nameIndex);
       const end = start + size;
       if (size < 4 || end > cursor.end) throw new Cr2wError(`${object.type}.${name}: record size ${size} is out of range.`);
+      noteStoredType(this.session, object.type, name, type);
       const inner = new Cursor(cursor.bytes, cursor.pos, end);
       object.fields[name] = readValue(this, inner, type, `${object.type}.${name}`);
       if (inner.pos !== end) throw new Cr2wError(`${object.type}.${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
@@ -65,11 +74,13 @@ export class Cr2wDecoder implements ValueContext {
     if (cursor.pos === cursor.end) return;
     if (object.type === "CMaterialInstance") {
       // u32 count; per entry: u32 size (counting itself and the two names), u16 parameter name, u16 type name, value.
-      const count = cursor.u32();
+      const count = cursor.count("CMaterialInstance.values");
+      this.session.nodes(count);
       const values: unknown[] = [];
       for (let i = 0; i < count; i++) {
         const start = cursor.pos, size = cursor.u32();
         const name = this.name(cursor.u16()), type = this.name(cursor.u16());
+        if (size < 8 || start + size > cursor.end) throw new Cr2wError(`CMaterialInstance value ${name}: size ${size} is out of range.`);
         const inner = new Cursor(cursor.bytes, cursor.pos, start + size);
         const value = readValue(this, inner, type, `CMaterialInstance.values`);
         if (inner.pos !== start + size) throw new Cr2wError(`CMaterialInstance value ${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
@@ -84,6 +95,7 @@ export class Cr2wDecoder implements ValueContext {
       const groups: unknown[] = [];
       while (cursor.pos < cursor.end) {
         const count = cursor.u8();
+        this.session.nodes(count + 1);
         const group: unknown[] = [];
         for (let i = 0; i < count; i++) {
           const type = cursor.u8(), offset = cursor.u16(), name = this.name(cursor.u16());
@@ -97,7 +109,9 @@ export class Cr2wDecoder implements ValueContext {
 
   object(cursor: Cursor, type: string): RedObject {
     const object = new RedObject(type);
+    this.session.enter();
     this.readBody(cursor, object);
+    this.session.leave();
     return object;
   }
 
@@ -150,38 +164,38 @@ export class Cr2wDecoder implements ValueContext {
   private parsed(flags: number, memSize: number, bytes: () => Uint8Array, owner: string): RedBuffer {
     // An empty buffer stays bytes (nothing to parse).
     const kind = memSize ? PARSED_BUFFERS[owner] : undefined;
-    if (kind === "package") return new RedBuffer(flags, memSize, bytes, readPackage(bytes(), owner));
-    if (kind === "cr2w-list") return new RedBuffer(flags, memSize, bytes, { kind: "cr2w-list", files: readCr2wList(bytes(), this.decompress) });
+    if (kind === "package") return new RedBuffer(flags, memSize, bytes, readPackage(bytes(), owner, this.session));
+    if (kind === "cr2w-list") {
+      this.session.enter();
+      const files = readCr2wList(bytes(), this.decompress, this.session);
+      this.session.leave();
+      return new RedBuffer(flags, memSize, bytes, { kind: "cr2w-list", files });
+    }
     return new RedBuffer(flags, memSize, bytes);
   }
 
   document(): RedDocument {
     const root = this.exportObject(0);
-    const embedded = [];
-    // Embedded files: (u32 1-based import index, u32 chunk index, u64 path hash) records.
-    const table = this.file.view.getUint32(40 + 6 * 12, true);
-    for (let i = 0; i < this.file.embeddedCount; i++) {
-      const at = table + i * 16;
-      const importIndex = this.file.view.getUint32(at, true), chunk = this.file.view.getUint32(at + 4, true);
-      embedded.push({ path: normalizedPath(this.file.imports[importIndex - 1]?.path ?? ""), content: this.exportObject(chunk) });
-    }
+    const embedded = this.file.embedded.map(record => ({ path: normalizedPath(record.importIndex ? this.file.imports[record.importIndex - 1]!.path : ""),
+      content: this.exportObject(record.chunkIndex) }));
     return { version: this.file.version, buildVersion: this.file.buildVersion, root, embedded };
   }
 }
 
-/** A CR2W file's red model. */
-export function readCr2w(bytes: Uint8Array, decompress: Decompress): RedDocument {
-  return new Cr2wDecoder(new Cr2wFile(bytes), decompress).document();
+/** A CR2W file's red model. The session carries the budgets and collects notes (a fresh one with the default limits if omitted). */
+export function readCr2w(bytes: Uint8Array, decompress: Decompress, session = new DecodeSession()): RedDocument {
+  return new Cr2wDecoder(new Cr2wFile(bytes, session), decompress).document();
 }
 
 /** Complete CR2W files placed back to back (a mesh's local material buffer); each one's length is its own buffers end. */
-export function readCr2wList(bytes: Uint8Array, decompress: Decompress): RedDocument[] {
+export function readCr2wList(bytes: Uint8Array, decompress: Decompress, session = new DecodeSession()): RedDocument[] {
   const files: RedDocument[] = [];
   for (let at = 0; at < bytes.length;) {
-    const file = new Cr2wFile(bytes.subarray(at));
-    if (file.buffersEnd <= 0) throw new Cr2wError("Empty CR2W file in a list.");
-    files.push(new Cr2wDecoder(new Cr2wFile(bytes.subarray(at, at + file.buffersEnd)), decompress).document());
-    at += file.buffersEnd;
+    if (bytes.length - at < CR2W_MIN_SIZE) throw new Cr2wError("Truncated CR2W file in a list.");
+    const length = new DataView(bytes.buffer, bytes.byteOffset + at, CR2W_MIN_SIZE).getUint32(28, true);
+    if (length < CR2W_MIN_SIZE || length > bytes.length - at) throw new Cr2wError(`A CR2W file in a list claims ${length} of ${bytes.length - at} bytes.`);
+    files.push(new Cr2wDecoder(new Cr2wFile(bytes.subarray(at, at + length), session), decompress).document());
+    at += length;
   }
   return files;
 }

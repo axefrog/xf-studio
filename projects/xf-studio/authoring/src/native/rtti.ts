@@ -37,6 +37,27 @@ export function classProperties(type: string): readonly (readonly [string, strin
   return props;
 }
 
+const propertyTypesMemo = new Map<string, ReadonlyMap<string, string>>();
+/**
+ * The RTTI type of `type.property`, or null when the slice does not know the class or the property. Memoised for classes in the
+ * slice only, so the cache is bounded by the slice, not by the files read.
+ */
+export function propertyType(type: string, property: string): string | null {
+  let types = propertyTypesMemo.get(type);
+  if (!types) {
+    const props = classProperties(type);
+    if (!props) return null;
+    types = new Map(props.map(([name, t]) => [name, t]));
+    propertyTypesMemo.set(type, types);
+  }
+  return types.get(property) ?? null;
+}
+
+/** `static:N,T` and `[N]T` name the same type; everything else compares as text. */
+const canonicalType = (type: string) => type.replace(/static:(\d+),/g, "[$1]");
+/** Whether a stored type string names the RTTI's type. */
+export const sameType = (stored: string, rtti: string) => stored === rtti || canonicalType(stored) === canonicalType(rtti);
+
 /** `type` and its base classes, nearest first (as far as the slice knows them). */
 export function baseClasses(type: string): string[] {
   const out: string[] = [];

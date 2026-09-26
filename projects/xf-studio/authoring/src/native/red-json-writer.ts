@@ -8,7 +8,12 @@
  *   package's roots and a local material list's roots are written plainly and take no id.
  * - Buffers: `{BufferId, Flags, Bytes}`, numbered in write order; parsed ones carry `Type` and `Data` instead of `Bytes`. With
  *   `buffers: "trim"` the bytes are left out as `{$trimmedBase64Length}`, as the resolver's cache stores them.
+ *
+ * Writing fills in defaults, so a small file can ask for a large document: the values written and the nesting are counted against
+ * the session's budget (limits.ts). A watched property the file left out (`rendChunk.renderMask`) is reported with its path, so a
+ * consumer can tell "missing" from a stored zero although both are written the same way.
  */
+import { DecodeSession } from "./limits";
 import { defaultValue, learnedDefault, learnedKeys } from "./red-defaults";
 import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
 import { classProperties } from "./rtti";
@@ -35,20 +40,43 @@ function ordered(keys: string[]): string[] {
 /** `4·ceil(n/3)`: the length of `n` bytes in base64. */
 export const base64Length = (bytes: number) => 4 * Math.ceil(bytes / 3);
 
+const isNested = (value: unknown) => value !== null && typeof value === "object";
+
 class JsonWriter {
   private readonly ids = new Map<RedObject, number>();
   private nextHandle = 0;
   private nextBuffer = 0;
-  constructor(private readonly options: JsonWriteOptions) {}
+  /** Keys and indexes from the document root to the value being written, kept only when properties are watched. */
+  private readonly path: (string | number)[] = [];
+  private readonly tracking: boolean;
+  constructor(private readonly options: JsonWriteOptions, private readonly session: DecodeSession) { this.tracking = session.watched.size > 0; }
+
+  at(key: string | number, write: () => unknown): unknown {
+    if (!this.tracking) return write();
+    this.path.push(key);
+    try { return write(); } finally { this.path.pop(); }
+  }
+
+  private pathText(): string {
+    return this.path.map(part => typeof part === "number" ? `[${part}]` : `.${part}`).join("");
+  }
 
   value(value: unknown): unknown {
     if (value instanceof RedObject) return this.object(value);
     if (value instanceof RedHandle) return this.handle(value);
     if (value instanceof RedBuffer) return this.buffer(value);
-    if (Array.isArray(value)) return value.map(item => this.value(item));
+    if (Array.isArray(value)) {
+      this.session.jsonNodes(value.length);
+      this.session.enter();
+      const out = value.map((item, i) => isNested(item) ? this.at(i, () => this.value(item)) : item);
+      this.session.leave();
+      return out;
+    }
     if (value && typeof value === "object") {
+      const entries = Object.entries(value);
+      this.session.jsonNodes(entries.length);
       const out: Record<string, unknown> = {};
-      for (const [key, item] of Object.entries(value)) out[key] = this.value(item);
+      for (const [key, item] of entries) out[key] = isNested(item) ? this.at(key, () => this.value(item)) : item;
       return out;
     }
     return value;
@@ -60,14 +88,20 @@ class JsonWriter {
     const keys = new Set(Object.keys(object.fields));
     for (const [name] of props ?? []) keys.add(name);
     if (!this.options.omitDefaults) for (const name of learnedKeys(object.type)) keys.add(name);
+    this.session.jsonNodes(keys.size + 1);
+    this.session.enter();
     const out: Record<string, unknown> = { $type: object.type };
     for (const key of ordered([...keys])) {
-      if (Object.hasOwn(object.fields, key)) out[key] = this.value(object.fields[key]);
-      else {
+      if (Object.hasOwn(object.fields, key)) {
+        const item = object.fields[key];
+        out[key] = isNested(item) ? this.at(key, () => this.value(item)) : item;
+      } else {
         const learned = learnedDefault(object.type, key);
-        out[key] = learned !== undefined ? structuredClone(learned) : types.has(key) ? this.value(defaultValue(types.get(key)!)) : null;
+        out[key] = learned !== undefined ? structuredClone(learned) : types.has(key) ? this.at(key, () => this.value(defaultValue(types.get(key)!))) : null;
+        if (this.tracking && this.session.watched.has(`${object.type}.${key}`)) this.session.defaulted(`${object.type}.${key}`, () => `${this.pathText()}.${key}`);
       }
     }
+    this.session.leave();
     return out;
   }
 
@@ -78,7 +112,7 @@ class JsonWriter {
     if (known !== undefined) return { HandleRefId: String(known) };
     const id = this.nextHandle++;
     this.ids.set(target, id);
-    return { HandleId: String(id), Data: this.object(target) };
+    return { HandleId: String(id), Data: this.at("Data", () => this.object(target)) };
   }
 
   buffer(buffer: RedBuffer): unknown {
@@ -86,20 +120,33 @@ class JsonWriter {
     const parsed = buffer.parsed;
     if (parsed?.kind === "package")
       return { ...head, Type: "RedPackage", Data: { Version: parsed.version, Sections: parsed.sections, CruidIndex: parsed.cruidIndex,
-        CruidDict: parsed.cruidDict, Chunks: parsed.chunks.map(chunk => this.object(chunk)) } };
+        CruidDict: parsed.cruidDict, Chunks: this.at("Data", () => this.at("Chunks", () => this.list(parsed.chunks, chunk => this.object(chunk)))) } };
     if (parsed?.kind === "cr2w-list")
-      return { ...head, Type: "CR2WList", Data: { Files: parsed.files.map(file => this.file(file)) } };
+      return { ...head, Type: "CR2WList", Data: { Files: this.at("Data", () => this.at("Files", () => this.list(parsed.files, file => this.file(file)))) } };
     return { ...head, Bytes: this.options.buffers === "trim" ? { $trimmedBase64Length: base64Length(buffer.memSize) } : Buffer.from(buffer.bytes()).toString("base64") };
   }
 
+  private list<T>(items: readonly T[], write: (item: T) => unknown): unknown[] {
+    this.session.jsonNodes(items.length);
+    return items.map((item, i) => this.at(i, () => write(item)));
+  }
+
   file(document: RedDocument): Record<string, unknown> {
-    return { Version: document.version, BuildVersion: document.buildVersion, RootChunk: this.object(document.root),
-      EmbeddedFiles: document.embedded.map(item => ({ FileName: { $type: "ResourcePath", $storage: item.path ? "string" : "uint64", $value: item.path || "0" },
-        Content: this.object(item.content) })) };
+    this.session.enter();
+    const out = { Version: document.version, BuildVersion: document.buildVersion, RootChunk: this.at("RootChunk", () => this.object(document.root)),
+      EmbeddedFiles: this.at("EmbeddedFiles", () => this.list(document.embedded, item => ({ FileName: { $type: "ResourcePath", $storage: item.path ? "string" : "uint64", $value: item.path || "0" },
+        Content: this.at("Content", () => this.object(item.content)) }))) };
+    this.session.leave();
+    return out;
   }
 }
 
-/** The JSON document of a decoded CR2W file. */
-export function writeResourceJson(document: RedDocument, options: JsonWriteOptions): { Header: Record<string, unknown>; Data: Record<string, unknown> } {
-  return { Header: { ...options.header, WKitJsonVersion: "0.0.9", DataType: "CR2W" }, Data: new JsonWriter(options).file(document) };
+/**
+ * The JSON document of a decoded CR2W file. The session (normally the one that decoded it) budgets the writing and receives the
+ * watched-default reports; paths start at `Data`.
+ */
+export function writeResourceJson(document: RedDocument, options: JsonWriteOptions, session = new DecodeSession()): { Header: Record<string, unknown>; Data: Record<string, unknown> } {
+  const writer = new JsonWriter(options, session);
+  const data = writer.at("Data", () => writer.file(document)) as Record<string, unknown>;
+  return { Header: { ...options.header, WKitJsonVersion: "0.0.9", DataType: "CR2W" }, Data: data };
 }
