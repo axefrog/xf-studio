@@ -12,5 +12,5 @@ export function withGlitterKnob<T extends Collection>(value: T) {
   for (const l of copy.presets.find(p => p.id === preset.id)!.recipe.layers) if (l.id === layer.id) l.symmetry = false;
   return { ...copy, diagnostics: { schema: "xfs/export-diagnostics-1", presets: { [preset.id]: { glitter: {
     base: { roughness: .5, metalness: 0 }, regions: [{ layer: layer.id, mips: "nested", flakes: { sizeMm: .3, sizeSigma: .2, cover: .1,
-      tiltSigmaDeg: 25, tiltMaxDeg: 50, roughness: .2, metalness: .8, color: "#e8c46a", seed: 1 } }], accent: { layer: layer.id, share: .1, ev: 0 } } } } } };
+      tiltSigmaDeg: 25, tiltMaxDeg: 50, roughness: .2, metalness: .8, color: "#e8c46a", seed: 1 } }], accent: { layer: layer.id, share: .1, ev: 1 } } } } } };
 }

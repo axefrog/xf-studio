@@ -67,9 +67,13 @@ striped("C", "Glitter C · size", (i, side) => `${SIZES[i]} mm ${side}`, i => ({
 striped("D", "Glitter D · surface", (i, side) => side === "left" ? `Roughness ${ROUGH[i]} left` : `Metalness ${METAL[i]} right`,
   i => ({ roughness: ROUGH[i] }), i => ({ metalness: METAL[i] }));
 // E · accent: the base recipe on both lids (mirrored flakes); 8 % of the left lid's flakes also drive the emissive accent chunk.
+// ACCENT_EV is the accent's EmissiveEV. mesh_decal_emissive_subsurface writes EmissiveEV × EmissiveColor as a plain product
+// (research/materials/shader-decal.md §5.4), so 0 is black; 1 writes the flake colour itself, the brightest value that keeps
+// every channel within the colour's own 0–1 range (no over-range emission for bloom to catch).
+const ACCENT_EV = 1;
 { const left = patch("Glitter + accent left", LID), right = patch("Glitter right", mirror(LID));
   preset("E", "Glitter E · accent", [left, right], [{ layer: left.id, mips: "nested", flakes: BASE }, { layer: right.id, mips: "nested", mirrorOf: left.id }],
-    { layer: left.id, share: .08, ev: 0 }); }
+    { layer: left.id, share: .08, ev: ACCENT_EV }); }
 // F · tilt: tilt σ/max 10°/20°, 25°/50° and 40°/70°.
 striped("F", "Glitter F · tilt", (i, side) => `Tilt ${TILT[i][0]}/${TILT[i][1]} ${side}`,
   i => ({ tiltSigmaDeg: TILT[i][0], tiltMaxDeg: TILT[i][1] }), i => ({ tiltSigmaDeg: TILT[i][0], tiltMaxDeg: TILT[i][1] }));

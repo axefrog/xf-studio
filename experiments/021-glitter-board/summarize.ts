@@ -5,13 +5,18 @@
 // with its stored rows and placement at the plate's UVs).
 //
 //   bun experiments/021-glitter-board/summarize.ts <build-dir> [--json experiments/021-glitter-board/result.json]
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const [build, flag, out] = process.argv.slice(2);
 if (!build) throw Error("Usage: bun experiments/021-glitter-board/summarize.ts <build-dir> [--json <file>]");
-const record = JSON.parse(readFileSync(join(build, "build.json"), "utf8"));
-const report = JSON.parse(readFileSync(join(build, "verification.json"), "utf8"));
+const read = (path: string) => JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
+// Product builds keep each feature's record under features/<feature>/ and its verifier report in the product's
+// verification.json; earlier single-feature builds kept both at the build root.
+const featureRecord = join(build, "features", "eye-makeup", "build.json");
+const record = read(existsSync(featureRecord) ? featureRecord : join(build, "build.json"));
+const verification = read(join(build, "verification.json"));
+const report = verification.features?.find((f: { feature: string }) => f.feature === "eye-makeup") ?? verification;
 const round = (v: unknown, digits = 4): unknown => typeof v === "number" ? Math.round(v * 10 ** digits) / 10 ** digits
   : Array.isArray(v) ? v.map(x => round(x, digits)) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, round(x, digits)])) : v;
 

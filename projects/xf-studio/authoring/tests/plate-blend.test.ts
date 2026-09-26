@@ -77,7 +77,7 @@ describe("the plate's arithmetic", () => {
     // Glossy over Matte at half coverage each: the G-buffer holds one roughness in between, lit once.
     const layers = [texel("#6d4a7e", 1), texel("#6d4a7e", 0.5, "glossy")];
     const once = light(exported(SKIN, layers));
-    const separately = light({ colour: exported(SKIN, layers).colour, roughness: 0.88, metalness: 0 }).map((v, k) =>
+    const separately = light({ colour: exported(SKIN, layers).colour, roughness: flatSurface("matte")!.roughness, metalness: 0 }).map((v, k) =>
       0.5 * v + 0.5 * light({ colour: exported(SKIN, layers).colour, roughness: 0.12, metalness: 0 })[k]!);
     expect(Math.abs(once[0]! - separately[0]!)).toBeGreaterThan(0.05);
   });
