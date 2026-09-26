@@ -41,12 +41,12 @@ export class WorkspaceComposer {
       idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
       idlePaused: motion?.idlePaused ?? original.idlePaused,
       idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
-    // The context owns every creator choice (CORE-58): once it is attached, the retired tried piercing style is written empty, and the
-    // context is stored only when something was set.
+    // The context owns every creator choice (CORE-58) and is stored only when something was set. The retired tried piercing style is
+    // written back as read until the context stores choices (it migrates the style into them once its catalogue is ready, CORE-74);
+    // then it is written empty.
     const character = this.ports.character?.();
     if (character !== undefined) {
-      preview.piercingStyle = ""; preview.piercingDefinition = "";
-      if (character) preview.character = character; else delete preview.character;
+      if (character) { preview.character = character; preview.piercingStyle = ""; preview.piercingDefinition = ""; } else delete preview.character;
     }
     return structuredClone({ ...this.initial, ...editing, preview });
   }

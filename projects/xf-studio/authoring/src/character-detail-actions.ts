@@ -9,6 +9,8 @@
  * the status stays `ready` with `updating` (the presentation shows a small inline indicator), and the device swaps in only what changed
  * (PREV-68). When a change can't be prepared, the V stays as it was shown and `updateError` says so in one plain line, until the next
  * change (CORE-63). The full "preparing" status is for a V's first preparation only.
+ *
+ * The same request asked again is never prepared again, even after a failure (PREV-86): trying again is the explicit `retry`.
  */
 import { sameCharacter, type CharacterRequest } from "./character-detail-request";
 import type { DetailSlot, DetailSlotState } from "./render-detail";
@@ -70,6 +72,8 @@ export class CharacterDetailActions {
     updating: false, updateError: null, choices: 0, drawn: [] };
   private listeners = new Set<() => void>();
   private current: { key: string; request: CharacterRequest; controller: AbortController } | null = null;
+  /** The last request asked for (kept after a failure, so asking for it again changes nothing until `retry`). */
+  private asked: { key: string; request: CharacterRequest } | null = null;
   /** The request whose record is shown now (a failed change on the same V falls back to it). */
   private shown: CharacterRequest | null = null;
   private disposed = false;
@@ -85,13 +89,25 @@ export class CharacterDetailActions {
   }
 
   /**
-   * Show the details of `request`. The same request again is a no-op (unless it failed, which retries); the same V with other choices
-   * is updated in place; a different V clears the previous details first and supersedes any preparation still running for it.
+   * Show the details of `request`. The same request again is a no-op, also after it failed (`retry` tries again); the same V with other
+   * choices is updated in place; a different V clears the previous details first and supersedes any preparation still running for it.
    */
   setCharacter(request: CharacterRequest): Promise<void> {
     if (this.disposed) return Promise.resolve();
     const key = JSON.stringify(request);
-    if (this.current?.key === key && this.status.phase !== "failed") return Promise.resolve();
+    if (this.asked?.key === key) return Promise.resolve();
+    this.asked = { key, request };
+    return this.prepare(key, request);
+  }
+  /** The last request failed (the V, or a change on it): `retry` can try it again. */
+  failed(): boolean { return !!this.asked && (this.status.phase === "failed" || !!this.status.updateError); }
+  /** Try the last request again after it failed. */
+  retry(): Promise<void> {
+    if (this.disposed || !this.asked || !this.failed()) return Promise.resolve();
+    return this.prepare(this.asked.key, this.asked.request);
+  }
+
+  private prepare(key: string, request: CharacterRequest): Promise<void> {
     // Only another V clears the scene: a changed choice on the same V keeps it, fully interactive, until the new record swaps in.
     const sameV = !!this.shown && sameCharacter(this.shown, request) && this.status.phase === "ready";
     this.current?.controller.abort();
@@ -110,7 +126,7 @@ export class CharacterDetailActions {
       console.error(error);
       const notice = (error as { notice?: DetailNotice })?.notice ?? null;
       if (sameV && !notice) {
-        // The shown V stays as it was; the change is explained, not silently reverted (CORE-63). Asking for it again retries.
+        // The shown V stays as it was; the change is explained, not silently reverted (CORE-63). `retry` tries it again.
         if (this.current?.controller === controller) this.current = null;
         this.publish({ ...this.status, updating: false, updateError: (error as { plain?: string })?.plain ?? UPDATE_FAILED });
         return;
@@ -145,9 +161,9 @@ export class CharacterDetailActions {
     if (signal.aborted) return;
     this.shown = request;
     const slots = DETAIL_SLOTS.map(slot => shown.slots.find(entry => entry.slot === slot) ?? { slot, state: "none" as const, label: "None" });
-    // Unavailable slots first, then shown slots with a line of their own from the record.
-    const lines = [...slots.filter(slot => slot.state === "unavailable" && slot.message), ...slots.filter(slot => slot.state === "shown" && slot.message)]
-      .map(slot => slot.message!);
+    // The host's own line first (what the V is shown without), then unavailable slots, then shown slots with a line of their own.
+    const lines = [...(state.message ? [state.message] : []), ...[...slots.filter(slot => slot.state === "unavailable" && slot.message),
+      ...slots.filter(slot => slot.state === "shown" && slot.message)].map(slot => slot.message!)];
     this.publish({ phase: "ready", source: request.source, message: lines.join(" "), notice: null, progress: null, slots,
       updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: shown.drawn ?? [] });
   }
@@ -157,6 +173,7 @@ export class CharacterDetailActions {
     this.disposed = true;
     this.current?.controller.abort();
     this.current = null;
+    this.asked = null;
     this.listeners.clear();
   }
 }

@@ -60,43 +60,29 @@ const character = (): CharacterDetail => ({
               normalStrength: "None?", roughLevelsIn: "None?", roughLevelsOut: "None?", metalLevelsIn: "None?", metalLevelsOut: "None?" }, textures: {} }] } })) }],
   slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "face", state: "shown", label: "lipstick (red)" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
     { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" }],
-  choices: [{ slot: "piercings", options: [{ choice: "01", label: "Style 01", definitions: [{ name: "i0_000_pwa__earring__01_silver", label: "Silver" }] },
-    { choice: "09", label: "Style 09", definitions: [{ name: "i0_000_pwa__earring__01_silver", label: "Silver" }, { name: "i0_000_pwa__earring__03_black", label: "Black" }] }] }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
   geometry: { ...resource("head.glb"), nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" }, morphs: [] },
   textures: Object.fromEntries(["head.albedo", "head.normal", "head.roughness", "eyes.albedo"].map(slot => [slot, resource("head-color.png")])) });
 
 describe("render record versions", () => {
-  test("v6 carries the character record with its piercings, layered stacks and creator choices; parsing is lossless and idempotent", () => {
+  test("v7 carries the character record with its piercings and layered stacks, and no choices to try; parsing is lossless and idempotent", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-6");
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-7");
     expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(parseRenderDetail(record)).toEqual(record);
-    // A tried choice the host applied travels with the record.
-    const tried = { ...record, character: { ...record.character, override: { slot: "piercings" as const, choice: "01", definition: "i0_000_pwa__earring__01_silver" } } };
-    expect(parseCharacterDetail(JSON.parse(JSON.stringify(tried)))).toEqual(tried);
+    // The retired tried-choice fields are not read (PIPE-82): every creator choice is the character context's.
+    const retired = { ...record, choices: [{ slot: "piercings", options: [] }], character: { ...record.character, override: { slot: "piercings", choice: "01", definition: "x" } } };
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(retired)))).toEqual(record);
     // The host writes this reader's output, so parsing it again changes nothing (PIPE-40).
     const once = parseCharacterDetail(JSON.parse(JSON.stringify(record)));
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(once)))).toEqual(once);
   });
 
-  test("one oddly named creator choice, an over-long definition or CName, or too many parts never blanks the V (PIPE-40)", () => {
+  test("an over-long CName or too many parts never blanks the V (PIPE-40)", () => {
     const parse = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return parseCharacterDetail(JSON.parse(JSON.stringify(record))); };
     const shown = (r: CharacterDetail) => r.slots.filter(slot => slot.state === "shown").map(slot => slot.slot);
-    // A CCXL pack's style named with parentheses and a CName with spaces are ordinary names: they parse.
-    const odd = parse(r => { r.choices[0]!.options[0]!.choice = "piercings_(ccxl)"; r.choices[0]!.options[1]!.definitions[0]!.name = "a name with spaces"; });
-    expect(odd.choices[0]!.options.map(option => option.choice)).toEqual(["piercings_(ccxl)", "09"]);
-    // An over-long definition name is left out with a note; the rest of the style, and the whole V, stay.
-    const long = parse(r => { r.choices[0]!.options[1]!.definitions[0]!.name = "x".repeat(200); });
-    expect(long.choices[0]!.options[1]!.definitions.map(definition => definition.label)).toEqual(["Black"]);
-    expect(long.provenance.notes.at(-1)).toContain("Left out of the prepared details");
-    expect(shown(long)).toEqual(shown(character()));
-    // A choice with nothing left, a control character, a repeated choice: each left out alone.
-    const bad = parse(r => { r.choices[0]!.options[0]!.definitions[0]!.name = "x".repeat(200);
-      r.choices[0]!.options.push({ choice: "bad\u0001", label: "B", definitions: [{ name: "n", label: "N" }] }, { ...r.choices[0]!.options[1]! }); });
-    expect(bad.choices[0]!.options.map(option => option.choice)).toEqual(["09"]);
     // An over-long layer CName breaks only its piercing part: the part is left out, the slot says so, and the V is shown.
     const cname = parse(r => { (r.components[4]!.materials[0]!.layered!.layers[0]!.names as { colorScale: string }).colorScale = "c".repeat(130); });
     expect(cname.components.map(item => item.slot)).toEqual(["skin", "face", "hair", "eyes"]);
@@ -106,12 +92,9 @@ describe("render record versions", () => {
     const many = parse(r => { const part = r.components[4]!; r.components.push(...Array.from({ length: 100 }, (_, i) => ({ ...part, id: `${part.id}:${i}` }))); });
     expect(many.components.length).toBe(RECORD_LIMITS.components);
     expect(many.provenance.notes.at(-1)).toMatch(/beyond the first 96 \(9\)/);
-    // A tried choice that breaks the rule is dropped, not the record.
-    const override = parse(r => { (r.character as { override: unknown }).override = { slot: "piercings", choice: "x".repeat(300), definition: "b" }; });
-    expect(override.character.override).toBeUndefined();
   });
 
-  test("a layered stack, the creator choices and a tried choice are checked; what breaks a rule is left out alone", () => {
+  test("a layered stack is checked; what breaks a rule is left out alone", () => {
     // A broken stack leaves its part out (the loader never sees it); the record and the rest of the V stay.
     const dropsPart = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record);
       const parsed = parseCharacterDetail(record);
@@ -126,18 +109,12 @@ describe("render record versions", () => {
       (r: CharacterDetail) => { (layers(r).layers[0]!.names as { colorScale: unknown }).colorScale = 5; },
       (r: CharacterDetail) => { (layers(r).layers[0] as { templateUnreadable: unknown }).templateUnreadable = "yes"; }])
       expect(dropsPart(mutate)).toBe("unavailable");
-    // Choices and the tried choice: a broken entry is left out; a missing or foreign list is empty.
     const parse = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return parseCharacterDetail(record); };
-    expect(parse(r => { delete (r as { choices?: unknown }).choices; }).choices).toEqual([]);
-    expect(parse(r => { (r.choices[0] as { slot: string }).slot = "hair"; }).choices).toEqual([]);
-    expect(parse(r => { r.choices[0]!.options[1]!.choice = "01"; }).choices[0]!.options.length).toBe(1);
-    expect(parse(r => { r.choices[0]!.options[0]!.definitions = []; }).choices[0]!.options.map(option => option.choice)).toEqual(["09"]);
-    expect(parse(r => { (r.character as { override: unknown }).override = { slot: "hair", choice: "a", definition: "b" }; }).character.override).toBeUndefined();
     // The record's frame stays strict: without every slot's outcome it is refused.
     expect(() => parse(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
   });
 
-  test("v1 stays the core head, and a v6 reader accepts it under every version; v2 to v5 characters are refused plainly, as a version error", () => {
+  test("v1 stays the core head, and a v7 reader accepts it under every version; v2 to v6 characters are refused plainly, as a version error", () => {
     expect(parseRenderDetail(core())).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: CHARACTER_DETAIL_SCHEMA })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-2" })).toMatchObject({ detail: "core-head" });
@@ -145,9 +122,11 @@ describe("render record versions", () => {
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-5" })).toMatchObject({ detail: "core-head" });
     // A newer record (a host updated while the page ran) is a version error the page words, not a silent failure.
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
-    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-8" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-8" })).toThrow(RenderDetailVersionError);
     expect(() => parseRenderDetail({ ...core(), schema: "xfs/elsewhere" })).toThrow("unsupported record version");
+    // A v6 character record (with choices to try) is prepared again, never read (PIPE-82).
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-6" })).toThrow(RenderDetailVersionError);
     // A v5 character record (choices named by option) is prepared again, never read.
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-5" })).toThrow(RenderDetailVersionError);
     // A v4 character record (no piercings, no layered stacks) is prepared again, never read.

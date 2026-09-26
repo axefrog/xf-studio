@@ -58,7 +58,7 @@ describe("the creator catalogue service", () => {
     const { host } = await service();
     const request: CharacterRequest = { ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "eyes_color", choice: "he__03_violet" }] };
     const view = await host.view(request);
-    expect(view.values["head/eyes_color"]).toEqual({ choice: "he__03_violet", own: "he__01_brown", set: true, active: true, label: "Violet", color: "#7828a0", ownLabel: "Brown" });
+    expect(view.values["head/eyes_color"]).toEqual({ choice: "he__03_violet", own: "he__01_brown", position: 2, set: true, active: true, label: "Violet", color: "#7828a0", ownLabel: "Brown" });
     expect(view.missing.entries).toEqual([]);
     const input = await host.inputFor({ ...request, choices: [...request.choices!, { part: "head", option: "skin_color", choice: "tone_c" }] });
     expect(input.appearances.every(item => item.part === "head")).toBe(true);

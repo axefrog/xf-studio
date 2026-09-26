@@ -35,7 +35,7 @@ describe("the character context's interpretation (host side)", () => {
     const expected = descriptorsFromUiState(source.cco, {});
     expect(request.appearances).toEqual(expected.appearances);
     expect(request.morphs).toEqual(expected.morphs);
-    expect(view.values["head/piercings_00"]).toEqual({ choice: "", own: "", set: false, active: true });
+    expect(view.values["head/piercings_00"]).toEqual({ choice: "", own: "", position: 0, set: false, active: true });
     expect(view.values["head/piercings_01"]).toBeUndefined();
     expect(view.values["head/skin_type_01"]).toBeUndefined();
   });
@@ -54,7 +54,7 @@ describe("the character context's interpretation (host side)", () => {
     // The activation the view reports is R5's own (CORE-57).
     const active = activeOptions(source.cco, { skin_type: "02", piercings: "XL-Pretty-Ring" });
     for (const a of request.appearances) expect(active.has(`${a.part}/${a.option}`)).toBe(true);
-    expect(view.values["head/xl_ring"]).toEqual({ choice: "ring_gold", own: "ring_silver", set: true, active: true });
+    expect(view.values["head/xl_ring"]).toEqual({ choice: "ring_gold", own: "ring_silver", position: 1, set: true, active: true });
   });
 
   test("followers are derived at request time: removing a controller's choice gives the family back its base (CORE-50)", async () => {
@@ -89,9 +89,9 @@ describe("the character context's interpretation (host side)", () => {
     const recovered = recoverSave(source, savedDescriptorsOf(saveFor(descriptorsFromUiState(source.cco, state))));
     expect(recovered.saveCheck).toMatchObject({ savedOnly: [], derivedOnly: [] });
     expect(recovered.saveCheck.matched).toBe(recovered.saveCheck.saved);
-    expect(recovered.state.get("head/skin_type")).toBe("02");
-    expect(recovered.state.get("head/skin_color")).toBe("tone_b");
-    expect(recovered.state.get("head/piercings")).toBe("01");
+    expect(recovered.state.get("head/skin_type")?.key).toBe("02");
+    expect(recovered.state.get("head/skin_color")?.key).toBe("tone_b");
+    expect(recovered.state.get("head/piercings")?.key).toBe("01");
     expect(recovered.missing).toEqual([]);
   });
 
@@ -132,7 +132,7 @@ describe("the character context's interpretation (host side)", () => {
     const missing = deriveCharacter(lacking, { kind: "default" }, choicesOfPreset(parseCcPreset(stored))).view.missing;
     expect(missing.entries.map(e => [e.option, e.reason, e.mod])).toEqual([["eyes_color", "choice-missing", MOD_NAME], ["piercings", "choice-missing", MOD_NAME],
       ["xl_ring", "option-missing", MOD_NAME]]);
-    expect(missing.summary).toEqual([{ mod: MOD_NAME, count: 3, message: `“${MOD_NAME}” isn't installed or enabled here, so 3 choices use the creator default instead.` }]);
+    expect(missing.summary).toEqual([{ mod: MOD_NAME, count: 3, message: `“${MOD_NAME}” isn't installed or enabled here, so 3 choices keep the V's own look instead.` }]);
     const parsed = parseCcPreset(stored);
     const kept = serializeCcPreset(presetOfChoices(lacking, choicesOfPreset(parsed), { kept: { entries: [...parsed.values] } }).preset);
     expect((kept.values as { option: string }[]).map(v => v.option).sort()).toEqual(["eyes", "eyes_color", "piercings", "skin_color", "xl_ring"]);
@@ -197,8 +197,12 @@ describe("xfs/cc-preset-1 codec", () => {
     expect(() => readCcPreset("{")).toThrow("not valid JSON");
   });
 
-  test("a CName with a slash or a long name round-trips; what the reader would refuse is left out on writing, not the file (CORE-53)", async () => {
-    expect(parseCcPreset({ ...sample, values: [{ part: "head", option: "folder/option", definition: "x".repeat(300) }] }).values[0]!.option).toBe("folder/option");
+  test("a CName with a slash round-trips; a name over the shared limit is kept verbatim, not the file refused; what the reader would refuse is left out on writing (CORE-53, PIPE-79)", async () => {
+    expect(parseCcPreset({ ...sample, values: [{ part: "head", option: "folder/option", definition: "x".repeat(255) }] }).values[0]!.option).toBe("folder/option");
+    const long = parseCcPreset({ ...sample, values: [{ part: "head", option: "folder/option", definition: "x".repeat(300) }] });
+    expect(long.values).toEqual([]);
+    expect(long.unknownEntries).toMatchObject([{ at: 0, unusable: true }]);
+    expect(serializeCcPreset(long).values).toEqual([{ part: "head", option: "folder/option", definition: "x".repeat(300) }]);
     const source = await fixtureSource(true);
     const { preset, leftOut } = presetOfChoices(source, [set("eyes_color", "he__03_violet"), set("y".repeat(600), "z")]);
     expect(leftOut).toBe(1);
@@ -334,8 +338,8 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
   });
 
   test("the action family has a descriptor per kind, records nothing in a look's history and is registered in the Studio", () => {
-    expect(Object.keys(CHARACTER_CONTEXT_FAMILY.actions)).toEqual(["character.setOption", "character.setOptions", "character.reset", "character.resetAll",
-      "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.undo", "character.redo"]);
+    expect(Object.keys(CHARACTER_CONTEXT_FAMILY.actions)).toEqual(["character.setOption", "character.setOptions", "character.hideOwnMakeup", "character.reset",
+      "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.retry", "character.undo", "character.redo"]);
     for (const spec of Object.values(CHARACTER_CONTEXT_FAMILY.actions)) expect(spec.descriptor.undo).toBe("none");
     expect(STUDIO_OWNERS).toContain(CHARACTER_CONTEXT_FAMILY);
     expect(() => new Registry([...STUDIO_OWNERS])).not.toThrow();

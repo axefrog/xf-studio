@@ -180,9 +180,13 @@ test("a failed preparation clears the previous V's details and says so in one li
   expect(cleared).toBeGreaterThan(0);
   expect(details.snapshot()).toMatchObject({ phase: "failed", source: "save" });
   expect(details.snapshot().message).toContain("The head still works.");
-  // Asking again for a V that failed tries again (the setup may have been fixed meanwhile).
-  await details.setCharacter(REQUEST_B);
-  expect(cleared).toBe(4);
+  // Asking again for the same V changes nothing (every context publish asks, PREV-86); Try again prepares it again.
+  const before = cleared;
+  for (let i = 0; i < 5; i++) await details.setCharacter(REQUEST_B);
+  expect(cleared).toBe(before);
+  expect(details.failed()).toBe(true);
+  await details.retry();
+  expect(cleared).toBe(before + 2);
 });
 
 /** A port whose host prepares every request at once (or fails the ones `fail` names), recording what it is asked. */
@@ -228,7 +232,7 @@ test("a changed choice keeps the V on screen and interactive until its record sw
   details.dispose();
 });
 
-test("a change that can't be prepared keeps the V as it was shown and says why; asking again tries again (CORE-63)", async () => {
+test("a change that can't be prepared keeps the V as it was shown and says why; only Try again tries again (CORE-63, PREV-86)", async () => {
   const events: string[] = [];
   let failing = true;
   const details = new CharacterDetailActions(choicePort(events, request => failing && !!request.choices?.length));
@@ -239,9 +243,14 @@ test("a change that can't be prepared keeps the V as it was shown and says why; 
   expect(details.snapshot()).toMatchObject({ phase: "ready", updating: false,
     updateError: "That change couldn't be shown in the 3D view, so your V is shown as before it. The tried part couldn't be read." });
   failing = false;
+  // The same request asked again (a context publish) is not prepared again.
   await details.setCharacter(withChoice("12"));
+  expect(events.length).toBe(4);
+  expect(details.failed()).toBe(true);
+  await details.retry();
   expect(events.slice(4)).toEqual(["request:12", "show"]);
   expect(details.snapshot().updateError).toBeNull();
+  expect(details.failed()).toBe(false);
   details.dispose();
 });
 

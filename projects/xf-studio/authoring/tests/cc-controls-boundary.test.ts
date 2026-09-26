@@ -4,13 +4,19 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const MODULES = ["cc-catalogue", "cc-presentation", "cc-render-coverage", "cc-preset", "character-context", "game-text", "tweakdb-flats", "cc-panel",
-  "character-context-actions", "browser-cc-catalogue-device", "studio-ui/panels/character", "cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server"];
-const HOST = new Set(["cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server", "browser-cc-catalogue-device", "studio-ui/panels/character"]);
+  "character-context-actions", "browser-cc-catalogue-device", "studio-ui/panels/character", "studio-ui/panels/character-choices", "cc-catalogue-host",
+  "cc-catalogue-service", "cc-catalogue-server", "creator-names", "character-follow",
+  // The composition root that wires the context to the preview (UI-71).
+  "browser-head-attachment"];
+const HOST = new Set(["cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server", "browser-cc-catalogue-device", "studio-ui/panels/character",
+  "studio-ui/panels/character-choices", "browser-head-attachment"]);
 const PURE = MODULES.filter(name => !HOST.has(name));
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
 /** Code without comments, so prose may explain the rules with examples. */
 const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");
-const literals = (text: string) => [...code(text).matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'/g)].map(match => match[1] ?? match[2] ?? "");
+/** String literals, and the static parts of template literals (a name hidden in a template counts too; UI-71). */
+const literals = (text: string) => [...code(text).matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)]
+  .flatMap(match => match[3] !== undefined ? match[3].split(/\$\{[^}]*\}/) : [match[1] ?? match[2] ?? ""]);
 
 const inventory = JSON.parse(readFileSync(new URL("../../../../research/character-customization/cc-option-inventory.json", import.meta.url), "utf8"));
 const vanilla = new Set<string>();
@@ -35,6 +41,7 @@ test("no catalogue or context module names a vanilla option, link family or mod"
 
 test("the literal scan sees what it should", () => {
   expect(literals(`const a = "eyes_color"; // "skin color" in a comment\n/* "piercings" */ const b = 'x';`)).toEqual(["eyes_color", "x"]);
+  expect(literals("const c = `teeth`; const d = `${x}hairstyle${y}`;")).toEqual(["teeth", "", "hairstyle", ""]);
 });
 
 test("pure modules leave files, processes and browser globals to the host adapter", () => {

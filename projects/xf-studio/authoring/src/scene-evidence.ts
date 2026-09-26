@@ -94,7 +94,7 @@ export function characterDetailsEvidence(input: {
     option: item.component.option, definition: item.component.definition, component: item.component.component, mesh: mesh.name,
     visible: mesh.visible && item.root.visible, ...handle.evidence() }))) ?? [];
   return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null,
-    override: loaded?.record.character.override ?? null, face: faceEvidence, layered: layeredEvidence,
+    face: faceEvidence, layered: layeredEvidence,
     slots: loaded?.record.slots.map(slot => ({ ...slot })) ?? [], problems: loaded?.problems.map(problem => ({ ...problem })) ?? [],
     limits: loaded?.limits.map(limit => ({ ...limit })) ?? [],
     notes: [...(loaded?.notes ?? [])], browUnderlay: input.browUnderlay, skin: skinEvidence, eyes: eyeEvidence,

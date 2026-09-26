@@ -12,7 +12,8 @@
  */
 import type { AppearanceDescriptor, CcoPart, MorphDescriptor } from "./cco-model";
 import type { BodyGender, CharacterInput } from "./character-resolver";
-import { type CharacterChoice, characterChoiceOf, SAVED_LIMITS, type SavedDescriptors } from "./character-context";
+import { type CharacterChoice, characterChoiceOf, type SavedDescriptors } from "./character-context";
+import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 import { refFromHash } from "./depot-path";
 import type { SavedV } from "./save-reader";
 
@@ -31,7 +32,7 @@ export type CharacterRequest =
       appearances: SavedAppearance[]; morphs: SavedMorph[]; choices?: CharacterChoice[] };
 
 export const DEFAULT_CHARACTER: CharacterRequest = Object.freeze({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female" });
-const MAX_APPEARANCES = SAVED_LIMITS.appearances, MAX_MORPHS = SAVED_LIMITS.morphs, MAX_CHOICES = SAVED_LIMITS.choices;
+const MAX_APPEARANCES = CREATOR_LIMITS.appearances, MAX_MORPHS = CREATOR_LIMITS.morphs, MAX_CHOICES = CREATOR_LIMITS.choices;
 const PARTS: readonly string[] = ["head", "body", "arms"];
 
 /** The descriptors of a decoded save, in stored order (the save repeats a choice per consumer group); `parts` limits them (default: the head). */
@@ -53,8 +54,8 @@ export function characterRequestOf(base: { bodyGender: BodyGender; saved: SavedD
 }
 
 const fail = (message: string): never => { throw Error(`Character request: ${message}`); };
-const cname = (value: unknown, what: string) =>
-  typeof value === "string" && value.length <= 128 && /^[^\u0000-\u001f\\/<>"]*$/.test(value) ? value : fail(`${what} is invalid.`);
+/** A name by the shared creator rule (creator-names.ts; PIPE-79): what a preset or a save accepted, the request carries. */
+const cname = (value: unknown, what: string) => isCreatorName(value, true) ? value : fail(`${what} is invalid.`);
 const hash = (value: unknown) => typeof value === "string" && /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18446744073709551615n
   ? value : fail("an appearance resource hash is invalid.");
 const exactKeys = (value: object, keys: string[], optional: string[] = []) => {
