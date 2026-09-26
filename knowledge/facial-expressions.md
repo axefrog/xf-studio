@@ -97,7 +97,7 @@ The expressions are asymmetric by design (charming, disgusted and pissed favour 
 
 ## 4. Photo-mode poses and "idles"
 
-Poses are **body** clips; faces are separate [resource].
+Poses are **body** clips; faces are separate [resource]. The full pose chain (lists, records, clip format, the deformation rig and the mod routes) is in [poses](poses.md).
 
 - A pose is a `PhotoModePose` record (`animationName`, `category`, `acceptedWeaponConfig`, `poseStateConfig`, `lookAtPreset`, garment-tag filters, `positionOffset`, `rotation`, `animationTime`, `poseSize`, `allowMoveUpDown`), appended to `photo_mode.character.femalePoses` / `malePoses` or a per-NPC list; categories are `PhotoModePoseCategory` records in `poseCategories` [resource] [source].
 - The **"Idle" category is a pose category**, not motion: its vanilla clips (`idle_stand_01` … `idle__sniper`, 133 female clips in `photomode__female__idle.anims`) are all 2-frame static poses; the 2.3 "natural" poses are 2–3 frames [resource]. Photo mode therefore has **no body idle loop**; the only motion is look-at and the gaze-triggered blinks. Community tools freeze even that with individual time dilation [resource: Photo Mode Pose Selector].
