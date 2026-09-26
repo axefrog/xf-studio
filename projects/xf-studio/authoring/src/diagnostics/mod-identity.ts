@@ -4,7 +4,8 @@
  * V used is traced back to the mod that provides it, with:
  *
  * - the mod's name, version and source where the mod manager recorded one (MO2 `meta.ini`: `modid`, `fileid`, `version`,
- *   `installationFile`, `repository`, `url`; a Vortex deployment manifest's staging folder name), else nothing;
+ *   `installationFile`, `repository`, `url`; for a Vortex mod, the Nexus mod and file IDs and version in Vortex's state, else its
+ *   staging folder name from the deployment manifest: knowledge/vortex.md), else nothing;
  * - each archive's file name, size and SHA-256, so the identical file can be fetched and checked.
  *
  * A mod with a Nexus Mods mod and file ID is **re-downloadable**; one with only a mod ID or a page is **findable**; anything else is
@@ -14,6 +15,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { LocalSettings } from "../local-settings";
 import { describeMo2Instance, parseQSettingsIni } from "../mo2-instance";
+import { inspectVortexSetup, readVortexManifests, type VortexSetup } from "../vortex-host";
 
 /** A local-only mod may be offered for inclusion up to this size (all its involved archives together). */
 export const MOD_FILE_LIMIT = 5 * 1024 * 1024;
@@ -32,14 +34,15 @@ export type InvolvedArchive = { name: string; group: string | null; bytes: numbe
   won: number; lost: number;
   /** Private: where it is, for the report's optional file; never sent to the page. */
   path: string | null };
-export type InvolvedMod = { name: string; kind: "mo2-mod" | "mo2-overwrite" | "game-folder" | "manual" | "base-game" | "unknown";
+export type InvolvedMod = { name: string; kind: "mo2-mod" | "mo2-overwrite" | "vortex-mod" | "game-folder" | "manual" | "base-game" | "unknown";
   version: string | null; source: ModSource | null; status: ModStatus; archives: InvolvedArchive[] };
 
 type Winner = { archive: unknown; provider: unknown; group: unknown; alternatives: unknown };
 const ALTERNATIVE = /^(.+?) \(([a-z0-9-]+), (.+)\)$/i;
 
 /** The mods behind a resolution's winners and losers, each archive counted once. */
-export async function involvedMods(winners: readonly Winner[] | null, settings: LocalSettings | null): Promise<InvolvedMod[]> {
+export async function involvedMods(winners: readonly Winner[] | null, settings: LocalSettings | null,
+  env: (name: string) => string | undefined = name => process.env[name]): Promise<InvolvedMod[]> {
   if (!winners) return [];
   const byMod = new Map<string, { group: string | null; archives: Map<string, { group: string | null; won: number; lost: number }> }>();
   const add = (provider: string, archive: string, group: string | null, won: boolean) => {
@@ -58,13 +61,17 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
     }
   }
   const mo2 = mo2Folders(settings);
-  const vortex = vortexManifest(settings?.gameRoot ?? null);
+  // Vortex's state is read only for a game folder Vortex has deployed into.
+  const vortex = settings?.gameRoot && readVortexManifests(settings.gameRoot).deployment ? inspectVortexSetup(settings.gameRoot, env) : null;
+  // Source discovery names a Vortex-deployed file's provider after its Vortex mod (the manifest's `source`).
+  const vortexMods = new Set([...(vortex?.deployment?.byPath.values() ?? [])].map(entry => entry.file.source));
   let hashed = 0;
   const mods: InvolvedMod[] = [];
   for (const [name, mod] of [...byMod].sort(([a], [b]) => a.localeCompare(b))) {
-    const kind = modKind(name, mod.archives, mo2);
+    const kind = vortexMods.has(name) ? "vortex-mod" : modKind(name, mod.archives, mo2);
     const folder = kind === "mo2-mod" && mo2 ? join(mo2.mods, name) : kind === "mo2-overwrite" && mo2 ? mo2.overwrite
-      : kind === "manual" && settings?.manualModRoot ? settings.manualModRoot : kind === "game-folder" && settings?.gameRoot ? settings.gameRoot : null;
+      : kind === "manual" && settings?.manualModRoot ? settings.manualModRoot
+      : (kind === "game-folder" || kind === "vortex-mod") && settings?.gameRoot ? settings.gameRoot : null;
     const meta = kind === "mo2-mod" && folder ? readMeta(folder) : null;
     const archives: InvolvedArchive[] = [];
     for (const [archive, entry] of [...mod.archives].sort(([a], [b]) => a.localeCompare(b))) {
@@ -77,13 +84,16 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
       } catch { /* Reported without size. */ }
       archives.push({ name: archive, group: entry.group, bytes, sha256, modified, won: entry.won, lost: entry.lost, path });
     }
-    const staging = kind === "game-folder" ? archives.map(item => vortex.get(item.name.toLowerCase())).find(Boolean) ?? null : null;
-    const source = meta ? metaSource(meta) : staging ? { site: "vortex" as const, staging, modId: /-(\d+)-[\d-]+$/.exec(staging)?.[1] ?? null } : null;
+    const staging = kind === "vortex-mod" ? name : kind === "game-folder"
+      ? archives.map(item => vortex?.deployment?.byPath.get(`archive/pc/mod/${item.name}`.toLowerCase())?.file.source).find(Boolean) ?? null : null;
+    const identity = staging ? vortex?.state?.game.mods.get(staging) ?? null : null;
+    const source = meta ? metaSource(meta) : staging ? vortexSource(staging, identity) : null;
     const status: ModStatus = kind === "base-game" ? "base-game"
       : source?.site === "nexusmods" && source.modId && source.fileId ? "re-downloadable"
       : source && (source.site === "vortex" ? source.modId : source.site === "nexusmods" ? source.modId || source.url : source.url || source.repository) ? "findable"
       : "local-only";
-    mods.push({ name: kind === "base-game" ? "Cyberpunk 2077 (the game's own files)" : name, kind, version: meta?.get("version") || null, source, status, archives });
+    mods.push({ name: kind === "base-game" ? "Cyberpunk 2077 (the game's own files)" : kind === "vortex-mod" ? identity?.name ?? name : name, kind,
+      version: meta?.get("version") || identity?.version || null, source, status, archives });
   }
   return mods;
 }
@@ -126,18 +136,21 @@ function nexusFileIdFromNxm(meta: Map<string, string>): string | null {
   return null;
 }
 
-/** Vortex's deployment manifest (where readable): archive file name → the staging folder name, which carries the Nexus mod ID. */
-function vortexManifest(gameRoot: string | null): Map<string, string> {
-  const out = new Map<string, string>();
-  if (!gameRoot) return out;
-  for (const file of [join(gameRoot, "vortex.deployment.json"), join(gameRoot, "archive", "pc", "mod", "vortex.deployment.json")]) {
-    try {
-      const manifest = JSON.parse(readFileSync(file, "utf8")) as { files?: { relPath?: unknown; source?: unknown }[] };
-      for (const entry of manifest.files ?? [])
-        if (typeof entry.relPath === "string" && typeof entry.source === "string") out.set(basename(entry.relPath.replace(/\\/g, "/")).toLowerCase(), entry.source);
-    } catch { /* Not a Vortex setup, or unreadable. */ }
+type VortexIdentity = NonNullable<VortexSetup["state"]>["game"]["mods"] extends ReadonlyMap<string, infer T> ? T : never;
+/**
+ * A Vortex mod's source. Vortex records the Nexus Mods mod and file IDs of a download in its state (knowledge/vortex.md §3); without
+ * readable state, the staging folder name is the downloaded archive's name, and a Nexus download is named
+ * `<name>-<mod id>-<version parts>-<upload time>`. That is a naming convention, not a Vortex record, so the mod ID is taken from it only
+ * when the name ends in such a time (nine or more digits), and it is reported as the staging name's, never as a file ID.
+ */
+function vortexSource(staging: string, identity: VortexIdentity | null): ModSource {
+  const nexus = identity?.nexus;
+  if (nexus && (nexus.modId || nexus.fileId)) {
+    const modId = nexus.modId ? String(nexus.modId) : null;
+    return { site: "nexusmods", modId, fileId: nexus.fileId ? String(nexus.fileId) : null,
+      url: modId ? `https://www.nexusmods.com/${nexus.gameDomain ?? "cyberpunk2077"}/mods/${modId}` : null, installationFile: null };
   }
-  return out;
+  return { site: "vortex", staging, modId: /-(\d+)(?:-\d+)*-\d{9,}$/.exec(staging)?.[1] ?? null };
 }
 
 /** A file by name under a mod's folder (archives live in `archive/pc/mod`, sometimes deeper), bounded. */

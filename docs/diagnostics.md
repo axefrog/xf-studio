@@ -71,7 +71,7 @@ Reports should let a developer rebuild the setup locally, not ship it. For every
 - the mod's name and version;
 - its source where the mod manager recorded one:
   - MO2's `meta.ini`: `modid`, `fileid`, `version`, `installationFile`, `repository`, `url`;
-  - a Vortex deployment manifest's staging folder, which carries the Nexus mod ID (`vortex.deployment.json` in the game folder or `archive/pc/mod`; this layout is our reading and hasn't been checked against a real Vortex setup yet);
+  - for a Vortex mod (named by `vortex.deployment.json` in the game folder): the Nexus mod ID, file ID and version Vortex keeps in its state, read without starting Vortex; when its state can't be read, the mod's staging folder name, whose Nexus mod ID is used only when the name follows Nexus's `<name>-<mod id>-<version>-<upload time>` download naming ([Vortex](../knowledge/vortex.md));
   - manual installs: nothing;
 - each involved archive's file name, size, modification time, SHA-256, and how many resources it won and lost.
 

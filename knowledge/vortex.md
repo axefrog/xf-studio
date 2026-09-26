@@ -115,6 +115,7 @@ One manifest per mod type, in that type's target folder: `vortex.deployment.json
 - `leveldb-read.ts` (pure): a read-only LevelDB reader (log records, write batches, tables with Snappy blocks, MANIFEST live-file set). When the MANIFEST can't be read it reads every file and keeps each key's newest sequence number, and says so.
 - `vortex-host.ts` (adapter): `readVortexManifests` (used by source discovery on every route: game-folder files get `deployedBy` and name their Vortex mod as provider; the manifest is watched, so a redeploy reopens the installation) and `inspectVortexSetup` (the installation that deployed, matched by instance id; state from the database or a backup; staging marker).
 - `tools/vortex-check.ts`: a read-only report for one game folder, with no paths in its output.
+- `diagnostics/mod-identity.ts`: a problem report's involved mods. A provider that is a Vortex mod gets its Nexus mod and file IDs and version from Vortex's state (re-downloadable); without readable state, the staging folder name's mod ID is used only when the name follows Nexus's `<name>-<mod id>-<version>-<upload time>` download naming, a convention rather than a Vortex record **[hypothesis]**.
 
 Tests: `tests/vortex-deployment.test.ts`, `vortex-setup.test.ts`, `leveldb-read.test.ts`; fixtures in `tests/fixtures/vortex/`. The manifest fixture is built from the source-documented format.
 
