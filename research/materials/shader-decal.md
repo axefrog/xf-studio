@@ -337,6 +337,8 @@ Decisions on defaults are the maintainer's; each item names what it depends on.
 6. **After the verdict, consider partial surface weight or grain for flat finishes** (item 3 of §9.1): either `RoughnessMetalnessAlpha` below 1 so the skin's roughness variation shows through, as vanilla matte lipstick does, or a fine noise in the surface coverage like vanilla eye makeup's. Only if *Gloss D* still reads "plastic".
 7. **Preview**: draw brows' normal (0.4, mode 1) and roughness (≈ 0.50) writes through the face-decal family (already the [eyebrows §5](../../knowledge/brows.md#5-what-the-studio-draws-today) gap), and the double-diffuse gradient clip at intensity 2 (the preview already clamps; keep a test).
 
+**Coordinator decisions (26 September 2026, provisional, for the maintainer's review):** items 1 (glitter accent `EmissiveEV` > 0 before the glitter board is staged), 2 (Colour-shifting metalness 0.25 → 0.08) and 5 (Matte 0.88 → 1.0) are taken now and scheduled as one finish-defaults change; item 3 (the Shimmer rebake) waits for the *Shimmer · strong* verdict; items 4, 6 and 7 stay proposals.
+
 ## 11. What the browser adapters reproduce
 
 | Step | Adapter | Status |
