@@ -1,0 +1,1020 @@
+{
+ "CBitmapTexture": {
+  "depth": 1,
+  "histBiasAddCoef": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 0,
+   "Z": 0
+  },
+  "histBiasMulCoef": {
+   "$type": "Vector3",
+   "X": 1,
+   "Y": 1,
+   "Z": 1
+  },
+  "renderResourceBlob": null
+ },
+ "CMaterialInstance": {
+  "audioTag": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "baseMaterial": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Default"
+  },
+  "enableMask": 0,
+  "resourceVersion": 0
+ },
+ "CMaterialParameter": {
+  "register": 0
+ },
+ "CMaterialParameterColor": {
+  "color": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  }
+ },
+ "CMaterialParameterScalar": {
+  "max": 3.40282347e+38,
+  "min": -3.40282347e+38,
+  "scalar": 0
+ },
+ "CMaterialParameterTexture": {
+  "texture": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Default"
+  }
+ },
+ "CMaterialParameterVector": {
+  "vector": {
+   "$type": "Vector4",
+   "W": 0,
+   "X": 0,
+   "Y": 0,
+   "Z": 0
+  }
+ },
+ "CMaterialTemplate": {
+  "audioTag": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "materialPriority": "EMP_Normal",
+  "materialType": "RMT_Standard"
+ },
+ "CMesh": {
+  "appearances": [],
+  "boneNames": [],
+  "boneRigMatrices": [],
+  "boneVertexEpsilons": [],
+  "boundingBox": {
+   "$type": "Box",
+   "Max": {
+    "$type": "Vector4",
+    "W": -3.40282347e+38,
+    "X": -3.40282347e+38,
+    "Y": -3.40282347e+38,
+    "Z": -3.40282347e+38
+   },
+   "Min": {
+    "$type": "Vector4",
+    "W": 3.40282347e+38,
+    "X": 3.40282347e+38,
+    "Y": 3.40282347e+38,
+    "Z": 3.40282347e+38
+   }
+  },
+  "castGlobalShadowsCachedInCook": 0,
+  "castLocalShadowsCachedInCook": 0,
+  "castsRayTracedShadowsFromOriginalGeometry": 0,
+  "consoleBias": 0,
+  "constrainAutoHideDistanceToTerrainHeightMap": 0,
+  "externalMaterials": [],
+  "floatTrackNames": [],
+  "forceLoadAllAppearances": 0,
+  "geometryHash": "0",
+  "inplaceResources": [],
+  "isPlayerShadowMesh": 0,
+  "isShadowMesh": 0,
+  "localMaterialBuffer": {
+   "$type": "meshMeshMaterialBuffer",
+   "materials": [],
+   "rawData": null,
+   "rawDataHeaders": []
+  },
+  "localMaterialInstances": [],
+  "lodBoneMask": [],
+  "lodLevelInfo": [],
+  "materialEntries": [],
+  "objectType": "ROT_Static",
+  "parameters": [],
+  "preloadExternalMaterials": [],
+  "preloadLocalMaterialInstances": [],
+  "renderResourceBlob": null,
+  "resourceVersion": 0,
+  "saveDateTime": "1048576",
+  "surfaceAreaPerAxis": {
+   "$type": "Vector3",
+   "X": -1,
+   "Y": -1,
+   "Z": -1
+  },
+  "useRayTracingShadowLODBias": 0
+ },
+ "CMeshMaterialEntry": {
+  "index": 0,
+  "isLocalInstance": 0
+ },
+ "CResource": {
+  "cookingPlatform": "PLATFORM_None"
+ },
+ "GpuWrapApiVertexLayoutDesc": {
+  "slotMask": 0
+ },
+ "GpuWrapApiVertexPackingPackingElement": {
+  "streamIndex": 0,
+  "streamType": "ST_PerVertex",
+  "type": "PT_Float1",
+  "usageIndex": 0
+ },
+ "IMaterialDefinition": {
+  "canBeMasked": 1,
+  "canHaveTangentUpdate": 0,
+  "hasDPL": 0,
+  "shadingRateMode": "MSRM_Default"
+ },
+ "MaterialPass": {
+  "enablePixelShader": 0,
+  "orderIndex": 0,
+  "stencilReadMask": 0,
+  "stencilRef": 0,
+  "stencilWriteMask": 0
+ },
+ "MaterialUsedParameter": {
+  "register": 0
+ },
+ "MorphTargetMesh": {
+  "baseMesh": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Default"
+  },
+  "baseMeshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "blob": null,
+  "boundingBox": {
+   "$type": "Box",
+   "Max": {
+    "$type": "Vector4",
+    "W": 0,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   },
+   "Min": {
+    "$type": "Vector4",
+    "W": 0,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   }
+  },
+  "resourceVersion": 0,
+  "targets": []
+ },
+ "MorphTargetMeshEntry": {
+  "boneNames": [],
+  "boneRigMatrices": [],
+  "faceRegion": "FACE_REGION_NONE"
+ },
+ "Multilayer_Layer": {
+  "matTile": 1,
+  "mbTile": 1,
+  "microblendNormalStrength": 1,
+  "microblendOffsetU": 0,
+  "microblendOffsetV": 0,
+  "offsetU": 0,
+  "offsetV": 0,
+  "opacity": 1,
+  "overrides": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "Multilayer_LayerTemplate": {
+  "colorMaskLevelsOut": {
+   "Elements": [
+    0,
+    0
+   ]
+  },
+  "defaultOverrides": {
+   "$type": "Multilayer_LayerOverrideSelection",
+   "colorScale": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "null_null"
+   },
+   "metalLevelsIn": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "null"
+   },
+   "metalLevelsOut": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "null"
+   },
+   "normalStrength": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "null"
+   },
+   "roughLevelsIn": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "null"
+   },
+   "roughLevelsOut": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "null"
+   }
+  },
+  "tilingMultiplier": 1
+ },
+ "Multilayer_LayerTemplateOverridesColor": {
+  "v": {
+   "Elements": [
+    0,
+    0,
+    0
+   ]
+  }
+ },
+ "Multilayer_LayerTemplateOverridesLevels": {
+  "v": {
+   "Elements": [
+    0,
+    0
+   ]
+  }
+ },
+ "Multilayer_LayerTemplateOverridesNormalStrength": {
+  "v": 0
+ },
+ "Multilayer_Setup": {
+  "ratio": 1,
+  "useNormal": 1
+ },
+ "PSODescBlendModeDesc": {
+  "alphaToCoverage": 0,
+  "independent": 0,
+  "numTargets": 1
+ },
+ "PSODescDepthStencilModeDesc": {
+  "depthWriteEnable": 0,
+  "frontFace": {
+   "$type": "PSODescStencilFuncDesc",
+   "stencilFunc": "COMPARISON_Never",
+   "stencilPassOp": "STENCILOP_Keep"
+  },
+  "stencilEnable": 0,
+  "stencilReadMask": 0,
+  "stencilWriteMask": 0
+ },
+ "PSODescRasterizerModeDesc": {
+  "allowMSAA": 0,
+  "conservativeRasterization": 0,
+  "cullMode": "CULL_None",
+  "frontWinding": "FRONTFACE_CCW",
+  "offsetMode": "OFFSET_None",
+  "scissors": 0,
+  "wireframe": 0
+ },
+ "PSODescRenderTarget": {
+  "alphaOp": "OP_Add",
+  "blendEnable": 0,
+  "colorOp": "OP_Add",
+  "destAlphaFactor": "FAC_One",
+  "destFactor": "FAC_One",
+  "srcAlphaFactor": "FAC_Zero",
+  "srcFactor": "FAC_Zero",
+  "writeMask": "MASK_RGBA"
+ },
+ "PSODescStencilFuncDesc": {
+  "stencilPassOp": "STENCILOP_Keep"
+ },
+ "STextureGroupSetup": {
+  "allowTextureDowngrade": 1,
+  "alphaToCoverageThreshold": 0,
+  "compression": "TCM_None",
+  "group": "TEXG_Generic_Color",
+  "hasMipchain": 1,
+  "isGamma": 0,
+  "isStreamable": 1,
+  "platformMipBiasConsole": 0,
+  "platformMipBiasPC": 0,
+  "rawFormat": "TRF_TrueColor"
+ },
+ "SamplerStateInfo": {
+  "addressU": "TA_Wrap",
+  "addressV": "TA_Wrap",
+  "addressW": "TA_Wrap",
+  "comparisonFunc": "TCF_None",
+  "register": 0
+ },
+ "animAnimSetup": {
+  "cinematics": [],
+  "gameplay": []
+ },
+ "animAnimSetupEntry": {
+  "priority": 128,
+  "variableNames": []
+ },
+ "appearanceAppearanceDefinition": {
+  "censorFlags": 0,
+  "compiledData": null,
+  "cookedDataPathOverride": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  },
+  "forcedLodDistance": 0,
+  "hitRepresentationOverrides": [],
+  "inheritedVisualTags": {
+   "$type": "redTagList",
+   "tags": []
+  },
+  "looseDependencies": [],
+  "parametersBuffer": {
+   "$type": "entEntityParametersBuffer",
+   "parameterBuffers": []
+  },
+  "parentAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "partsMasks": [],
+  "partsOverrides": [],
+  "partsValues": [],
+  "proxyMesh": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  },
+  "proxyMeshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "resolvedDependencies": [],
+  "visualTags": {
+   "$type": "redTagList",
+   "tags": []
+  }
+ },
+ "appearanceAppearancePartOverrides": {
+  "partResource": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  }
+ },
+ "appearanceAppearanceResource": {
+  "DismEffects": [],
+  "DismWoundConfig": {
+   "$type": "entdismembermentWoundsConfigSet",
+   "Configs": []
+  },
+  "Wounds": [],
+  "alternateAppearanceMapping": [],
+  "alternateAppearanceSettingName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "alternateAppearanceSuffixes": [],
+  "baseEntity": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  },
+  "baseEntityType": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "baseType": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "censorshipMapping": [],
+  "commonCookData": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  },
+  "forceCompileProxy": 0,
+  "generatePlayerBlockingCollisionForProxy": 0,
+  "partType": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "preset": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "proxyPolyCount": 1400
+ },
+ "appearancePartComponentOverrides": {
+  "acceptDismemberment": 1,
+  "chunkMask": "9223372036854775807",
+  "initialTransform": {
+   "$type": "Transform",
+   "orientation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+   },
+   "position": {
+    "$type": "Vector4",
+    "W": 0,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   }
+  },
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "useCustomTransform": 0,
+  "visualScale": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 0,
+   "Z": 0
+  }
+ },
+ "entAnimatedComponent": {
+  "animParameters": [],
+  "animTags": {
+   "$type": "redTagList",
+   "tags": []
+  },
+  "audioAltName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "calculateAccelerationWs": 0,
+  "clientForcedLod": -1,
+  "clientForcedVisibility": 0,
+  "facialSetup": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  },
+  "serverForcedLod": -1,
+  "serverForcedVisibility": 0,
+  "useLongRangeVisibility": 0
+ },
+ "entAnimationSetupExtensionComponent": {
+  "isOverrideContainer": 0
+ },
+ "entEntity": {
+  "customCameraTarget": "ECCTV_All",
+  "renderSceneLayerMask": "Default"
+ },
+ "entEntityTemplate": {
+  "appearances": [],
+  "backendDataOverrides": [],
+  "bindingOverrides": [],
+  "compiledEntityLODFlags": 0,
+  "componentResolveSettings": [],
+  "defaultAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "includeInstanceBuffer": null,
+  "includes": [],
+  "inplaceResources": [],
+  "localData": null,
+  "visualTagsSchema": null
+ },
+ "entHardTransformBinding": {
+  "slotName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "entIBinding": {
+  "enableMask": {
+   "$type": "entTagMask",
+   "excludedTags": {
+    "$type": "redTagList",
+    "tags": [
+     {
+      "$type": "CName",
+      "$storage": "string",
+      "$value": "NoBinding"
+     }
+    ]
+   },
+   "hardTags": {
+    "$type": "redTagList",
+    "tags": []
+   },
+   "softTags": {
+    "$type": "redTagList",
+    "tags": []
+   }
+  },
+  "enabled": 1
+ },
+ "entIComponent": {
+  "id": "0",
+  "isReplicable": 0,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "entIPlacedComponent": {
+  "localTransform": {
+   "$type": "WorldTransform",
+   "Orientation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+   },
+   "Position": {
+    "$type": "WorldPosition",
+    "x": {
+     "$type": "FixedPoint",
+     "Bits": 0
+    },
+    "y": {
+     "$type": "FixedPoint",
+     "Bits": 0
+    },
+    "z": {
+     "$type": "FixedPoint",
+     "Bits": 0
+    }
+   }
+  },
+  "parentTransform": null
+ },
+ "entISkinTargetComponent": {
+  "useSkinningLOD": 0
+ },
+ "entIVisualComponent": {
+  "autoHideDistance": 0,
+  "forceLODLevel": -1,
+  "renderSceneLayerMask": "Default"
+ },
+ "entLightBlockingComponent": {
+  "lightBlockerComponentVersion": 0
+ },
+ "entMorphTargetSkinnedMeshComponent": {
+  "acceptDismemberment": 1,
+  "castLocalShadows": "Default",
+  "castShadows": "Default",
+  "chunkMask": "9223372036854775807",
+  "isEnabled": 1,
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "renderingPlaneAnimationParam": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "tags": {
+   "$type": "redTagList",
+   "tags": []
+  },
+  "version": 0,
+  "visibilityAnimationParam": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "entSkinnedMeshComponent": {
+  "LODMode": "AlwaysVisible",
+  "acceptDismemberment": 1,
+  "chunkMask": "9223372036854775807",
+  "forcedLodDistance": "Default",
+  "isEnabled": 1,
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "navigationImpact": {
+   "$type": "NavGenNavigationSetting",
+   "navmeshImpact": "Ignored"
+  },
+  "order": 0,
+  "overrideMeshNavigationImpact": 1,
+  "renderingPlaneAnimationParam": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "useProxyMeshAsShadowMesh": 0,
+  "version": 0,
+  "visibilityAnimationParam": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "entSlot": {
+  "relativePosition": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 0,
+   "Z": 0
+  },
+  "relativeRotation": {
+   "$type": "Quaternion",
+   "i": 0,
+   "j": 0,
+   "k": 0,
+   "r": 1
+  }
+ },
+ "entSlotComponent": {
+  "fallbackSlots": []
+ },
+ "entTagMask": {
+  "excludedTags": {
+   "$type": "redTagList",
+   "tags": []
+  },
+  "hardTags": {
+   "$type": "redTagList",
+   "tags": []
+  },
+  "softTags": {
+   "$type": "redTagList",
+   "tags": []
+  }
+ },
+ "entVisualTagsSchema": {
+  "schema": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "entdismembermentWoundConfigContainer": {
+  "Wounds": []
+ },
+ "gameaudioSoundComponent": {
+  "minVocalizationRepeatTime": 0,
+  "streamingDistance": 0,
+  "subSystems": [],
+  "voEventOverride": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "gameaudioSoundComponentBase": {
+  "applyAcousticOcclusion": 0,
+  "applyAcousticRepositioning": 0,
+  "applyObstruction": 0,
+  "audioName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "maxPlayDistance": 40,
+  "obstructionChangeTime": 0.200000003
+ },
+ "gameprojectileSpawnComponent": {
+  "projectileTemplates": [],
+  "spawnOffset": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 0,
+   "Z": 0
+  }
+ },
+ "gameuiAppearanceInfo": {
+  "definitions": [],
+  "resource": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Soft"
+  },
+  "useThumbnails": 0
+ },
+ "gameuiCharacterCustomizationAction": {
+  "applyImmediately": 0,
+  "applyToUISlot": 0
+ },
+ "gameuiCharacterCustomizationInfo": {
+  "censorFlag": "0",
+  "censorFlagAction": "Activate",
+  "defaultIndex": 0,
+  "editTags": [],
+  "enabled": 1,
+  "hidden": 0,
+  "index": 0,
+  "link": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "linkController": 0,
+  "localizedName": "",
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "onDeactivateActions": [],
+  "randomizeCategory": "Body",
+  "uiSlot": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "gameuiCharacterCustomizationInfoResource": {
+  "armsCustomizationOptions": [],
+  "armsGroups": [],
+  "bodyCustomizationOptions": [],
+  "bodyGroups": [],
+  "excludedFromRandomize": [],
+  "headGroups": [],
+  "perspectiveInfo": [],
+  "uiPresets": [],
+  "version": 0,
+  "versionUpdateInfo": []
+ },
+ "gameuiCharacterCustomizationOptionVersionPrereq": {
+  "definitionName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "gameuiCharacterCustomizationOptionVersionUpdateInfo": {
+  "curDefintionName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "curOptionNames": [],
+  "newDefinitionName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "newOptionName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "optionPrereqs": [],
+  "replaceCurOption": 0
+ },
+ "gameuiCharacterCustomizationVersionUpdateInfo": {
+  "optionUpdates": []
+ },
+ "gameuiCharacterRandomizationInfo": {
+  "maxRating": 10,
+  "minRating": 1
+ },
+ "gameuiIndexedAppearanceDefinition": {
+  "actions": [],
+  "color": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "icon": {
+   "$type": "TweakDBID",
+   "$storage": "uint64",
+   "$value": "0"
+  },
+  "index": 0,
+  "localizedName": "",
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "randomizationInfo": {
+   "$type": "gameuiCharacterRandomizationInfo",
+   "maxRating": 10,
+   "minRating": 1
+  },
+  "tags": {
+   "$type": "redTagList",
+   "tags": []
+  }
+ },
+ "gameuiIndexedMorphName": {
+  "index": 0,
+  "morphName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "randomizationInfo": {
+   "$type": "gameuiCharacterRandomizationInfo",
+   "maxRating": 10,
+   "minRating": 1
+  },
+  "tags": {
+   "$type": "redTagList",
+   "tags": []
+  }
+ },
+ "gameuiOptionsGroup": {
+  "options": []
+ },
+ "gameuiSwitcherInfo": {
+  "switchVisibility": 0,
+  "uiSlots": []
+ },
+ "gameuiSwitcherOption": {
+  "actions": [],
+  "index": 0,
+  "localizedName": "",
+  "randomizationInfo": {
+   "$type": "gameuiCharacterRandomizationInfo",
+   "maxRating": 10,
+   "minRating": 1
+  },
+  "tags": {
+   "$type": "redTagList",
+   "tags": []
+  }
+ },
+ "garmentMeshParamGarmentChunkData": {
+  "isTwoSided": 0,
+  "uv": null
+ },
+ "meshLocalMaterialHeader": {
+  "offset": 0
+ },
+ "meshMeshAppearance": {
+  "chunkMaterials": [],
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "tags": []
+ },
+ "meshMeshMaterialBuffer": {
+  "rawDataHeaders": []
+ },
+ "rendChunk": {
+  "baseRenderMask": 0,
+  "lodMask": 0,
+  "materialId": [],
+  "mergedRenderMask": 0
+ },
+ "rendGradientEntry": {
+  "color": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "value": 0
+ },
+ "rendIndexBufferChunk": {
+  "teOffset": 0
+ },
+ "rendRenderMeshBlobHeader": {
+  "customData": [],
+  "customDataElemStride": 0,
+  "opacityMicromaps": [],
+  "renderChunkInfos": [],
+  "renderChunks": [],
+  "speedTreeWind": [],
+  "topologyData": [],
+  "topologyDataStride": 0,
+  "topologyMetadata": [],
+  "topologyMetadataStride": 0
+ },
+ "rendRenderMorphTargetMeshBlob": {
+  "textureDiffsBuffer": null
+ },
+ "rendRenderMorphTargetMeshBlobTextureData": {
+  "targetDiffOffset": {
+   "Elements": []
+  },
+  "targetDiffScale": {
+   "Elements": []
+  },
+  "targetDiffsDataOffset": {
+   "Elements": []
+  },
+  "targetDiffsDataSize": {
+   "Elements": []
+  },
+  "targetDiffsMipLevelCounts": {
+   "Elements": []
+  },
+  "targetDiffsWidth": {
+   "Elements": []
+  }
+ },
+ "rendRenderTextureBlobHeader": {
+  "histogramData": []
+ },
+ "rendRenderTextureBlobMipMapInfo": {
+  "layout": {
+   "$type": "rendRenderTextureBlobMemoryLayout",
+   "rowPitch": 0,
+   "slicePitch": 0
+  }
+ },
+ "rendRenderTextureBlobPlacement": {
+  "offset": 0
+ },
+ "rendRenderTextureBlobSizeInfo": {
+  "depth": 1
+ },
+ "rendRenderTextureBlobTextureInfo": {
+  "type": "TEXTYPE_2D"
+ },
+ "rendTopologyData": {
+  "data": [],
+  "dataStride": 0,
+  "metadata": [],
+  "metadataStride": 0
+ }
+}
