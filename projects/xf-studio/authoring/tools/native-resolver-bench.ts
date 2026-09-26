@@ -6,16 +6,21 @@
  * each reader answered, then compares the two resolved characters leaf by leaf.
  *
  *   bun tools/native-resolver-bench.ts (--save <sav.dat | appearance.json> | --ui-state <state.json>) \
- *     [--game <root>] [--mo2 <instance> --profile <name> | --direct] [--wolvenkit <WolvenKit.CLI.exe>] [--order native-first] [--worker] [--keep]
+ *     [--game <root>] [--mo2 <instance> --profile <name> | --direct] [--wolvenkit <WolvenKit.CLI.exe>] [--order native-first] [--worker]
+ *     [--worker-script <file>] [--seed-wolvenkit <resolver cache>] [--keep]
  *
  * `--worker` decodes in a worker with a time budget per resource (native-decode.ts `WorkerDecoder`, as the Studio's hosts do) instead
  * of in-process; `--worker-script <file>` starts that worker from a built bundle (the desktop app's `native-decode-worker.js`).
+ *
+ * `--seed-wolvenkit <folder>` copies a resolver cache's extracted JSON (`<folder>/json`, e.g. a copy of the Studio's own) into the
+ * WolvenKit run's cache first, so that run launches WolvenKit only for what the copy lacks: a warm baseline for the comparison when a
+ * cold WolvenKit run is too heavy for the machine (its launches use several GB). The native run always starts cold.
  *
  * Paths default to the Studio's local settings (game folder, launch route, MO2 instance and profile, WolvenKit CLI). The caches
  * live under the OS temp folder and are removed afterwards unless `--keep`. The printed summary names no mods; the per-run
  * reports (which do) stay in the temp folder.
  */
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { descriptorsFromUiState } from "../src/cco-model";
@@ -133,10 +138,12 @@ async function drive(): Promise<void> {
   }
   const work = mkdtempSync(join(tmpdir(), "xfs-resolver-bench-"));
   const order: Mode[] = option("order") === "native-first" ? ["native", "wolvenkit"] : ["wolvenkit", "native"];
-  const passThrough = args.filter((arg, i) => !["--order", "--keep"].includes(arg) && args[i - 1] !== "--order");
+  const passThrough = args.filter((arg, i) => !["--order", "--keep", "--seed-wolvenkit"].includes(arg) && !["--order", "--seed-wolvenkit"].includes(args[i - 1]!));
+  const seed = option("seed-wolvenkit");
   const reports = new Map<Mode, { report: RunReport; failures: string[]; result: unknown }>();
   for (const mode of order) {
     const cacheDir = join(work, `cache-${mode}`), out = join(work, `${mode}.json`);
+    if (mode === "wolvenkit" && seed) cpSync(join(seed, "json"), join(cacheDir, "json"), { recursive: true });
     const child = Bun.spawnSync([process.execPath, import.meta.path, "--run", mode, "--cache", cacheDir, "--out", out, ...passThrough], { stdout: "inherit", stderr: "inherit" });
     if (child.exitCode !== 0) { console.error(`${mode} run failed (exit ${child.exitCode}); work folder ${work}`); process.exit(1); }
     reports.set(mode, JSON.parse(readFileSync(out, "utf8")));
@@ -152,7 +159,7 @@ async function drive(): Promise<void> {
   // Expected: a `.app` package reference WolvenKit names from its path list while the native reader keeps the hash (a name-only gap).
   const nameOnly = differences.filter(d => /\/path$/.test(d.path) && (d.a === null || d.b === null || typeof d.a === "string" && typeof d.b === "string"));
   const summary = {
-    order, runs: [wk.report, nat.report],
+    order, seededWolvenKit: !!seed, runs: [wk.report, nat.report],
     equal: differences.length === 0, differences: differences.length, nameOnlyDifferences: nameOnly.length,
     otherDifferences: differences.filter(d => !nameOnly.includes(d)).slice(0, 20),
     speedup: { resolve: +(wk.report.resolveMs / nat.report.resolveMs).toFixed(1), total: +(wk.report.totalMs / nat.report.totalMs).toFixed(1) },
