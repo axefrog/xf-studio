@@ -316,7 +316,11 @@ World Objects Removed, Crunch Plaza Expanded, Japantown North Verticality Expand
 
 ## Research papers
 
-These papers informed our research. No algorithm from them was implemented.
+These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
+
+### Ottosson (2020)
+
+Björn Ottosson, [A perceptual color space for image processing](https://bottosson.github.io/posts/oklab/). Its OKLab space is where the Studio compares colours: the creator-capture calibration and the planned game-parity measurements report hue and colour differences in it, and the stage backdrop interpolates its gradient in it. The conversion is implemented in the Studio from the published formulas.
 
 ### Lagarde and de Rousiers (2014)
 
