@@ -16,8 +16,8 @@ import { NativeArchivePool } from "../src/native/archive-reader";
 import type { NativeDecodeOutcome, NativeDecoder } from "../src/native/native-decode";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "../src/native/native-errors";
 import { inProcessDecoder, NativeFirstFetcher, type NativeReader, nativeReaderIdentity, TRANSIENT_NATIVE_FAILURES } from "../src/native/native-fetch-port";
-import { installationView, NativeAnswerFiles, type NativeRoute, openInstallation, type InstallationOptions } from "../src/resolver-host";
-import { forgetDefaulted, jsonPathSteps, ResourceGraph, type ResourceFetchPort } from "../src/resource-graph";
+import { installationView, NativeAnswerFiles, type NativeRoute, openInstallation, type InstallationOptions, ResolverFetcher, WolvenKitFetcher } from "../src/resolver-host";
+import { ResourceGraph, type ResourceFetchPort } from "../src/resource-graph";
 import { detailFixture, P, REQUEST_A } from "./character-detail-fixtures";
 import { inputFromCharacterRequest } from "../src/character-detail-request";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
@@ -151,16 +151,17 @@ test("which resources a later session answers without WolvenKit is keyed by arch
   expect(installationView({ ...first, native: route("reader-1") }, setup.options).fetcher.isCached(archive, hp)).toBe(false);
 });
 
-test("the reader's notes and left-out properties reach the resolver's models: a mesh chunk without a render mask is drawn", async () => {
+test("the reader's notes and left-out properties reach the resolver's models: a mesh chunk without a render mask is its class default, not drawn (NATIVE-41)", async () => {
   const setup = gameFolder(), diagnostics = hostDiagnosticsAt(join(setup.root, "data"));
   const installation = openInstallation({ ...setup.options, native: route() });
   const mesh = await installation.graph.mesh(refFromPath("base\\fixture\\m.mesh"));
-  // Chunk 1 leaves its mask out: the engine's default flags draw it (WolvenKit's JSON shows "0", which would read as not drawn).
-  expect(mesh!.renderChunkScene).toEqual([true, true, false]);
+  // Chunk 1 leaves its mask out: the class default, no flags, so it isn't drawn, as WolvenKit's JSON ("0") reads.
+  expect(mesh!.renderChunkScene).toEqual([true, false, false]);
   expect(mesh!.notes.map(note => note.rule)).toEqual(["R11-stored-type", "R13-array-past-count", "R12-property-absent"]);
   expect(mesh!.notes[0]!.basis).toContain("CMesh.objectType is stored as Bool where the game's current type is ERenderObjectType");
   expect(mesh!.notes[1]!.basis).toBe("rendRenderMeshBlobHeader.renderLODs says it holds 1 element(s) but its record holds 4; all were read, as WolvenKit shows them. Whether the game reads past the count is unread.");
-  expect(mesh!.notes[2]!.basis).toContain("rendChunk.renderMask 1 time(s)");
+  expect(mesh!.notes[2]!.basis).toBe("The file leaves out rendChunk.renderMask 1 time(s); read as its class default, no flags, as WolvenKit shows it, so those render chunks are not drawn.");
+  expect(mesh!.notes[2]!.grade).toBe("source");
   // Every element in the record is read, as WolvenKit shows them.
   const document = (await installation.fetcher.fetch(installation.plan.archives[0]!, refFromPath("base\\fixture\\m.mesh"), "mesh"))!.document as any;
   expect(document.Data.RootChunk.renderResourceBlob.Data.header.renderLODs).toEqual([0, 3, 6, 9]);
@@ -187,19 +188,6 @@ test("an array record's elements past its count are read only while each uses by
   // An element that uses no bytes (an empty struct) can't make the reader loop: refused.
   const empty = new Cr2wBuilder(); empty.export("CMesh", [prop("parameters", "array:Box", w => { w.u32(0); w.u8(0); })]);
   expect(() => readResource(empty.build(), fakeDecompress)).toThrow();
-});
-
-test("forgetDefaulted removes only watched properties at the reader's paths, and counts what it could not place", () => {
-  expect(jsonPathSteps(".Data.RootChunk.list[12].renderMask")).toEqual(["Data", "RootChunk", "list", 12, "renderMask"]);
-  expect(jsonPathSteps("Data")).toBeNull();
-  expect(jsonPathSteps(".a..b")).toBeNull();
-  const document = { Data: { RootChunk: { list: [{ renderMask: "0" }, { renderMask: "0" }], other: { renderMask: "0" } } } };
-  const unresolved = forgetDefaulted(document, [
-    { property: "rendChunk.renderMask", count: 4, paths: [".Data.RootChunk.list[1].renderMask", ".Data.RootChunk.missing[0].renderMask", ".Data.RootChunk.list[1].renderMask"] },
-    { property: "somethingElse.value", count: 1, paths: [".Data.RootChunk.other.renderMask"] }]);
-  expect(document as unknown).toEqual({ Data: { RootChunk: { list: [{ renderMask: "0" }, {}], other: { renderMask: "0" } } } });
-  // One path past the reader's list (count 4, 3 paths), one that leads nowhere, and the repeated path (already removed).
-  expect(unresolved).toBe(3);
 });
 
 test("a request may widen the decoder's root classes for itself (the clothing preset through the route's decoder)", async () => {
@@ -245,6 +233,12 @@ test("each fallback is logged by kind (bounded), a reader bug as a failure; expe
     expect(logged[0]!.details?.stack).toContain("TypeError: x\n    at f");
     expect(logged[0]!.message).toContain("so WolvenKit will read it instead");
     expect(installation.fetcher.nativeStats!.byKind).toMatchObject({ internal: 1, "over-budget": 1, "not-indexed": 1, unavailable: 1 });
+    // The same failure again, through a fetcher made anew (a route reopened): counted, not logged again (NATIVE-45).
+    const reopened = openInstallation({ ...setup.options, native: { decoder } });
+    fakeWolvenKit(reopened.fetcher);
+    await reopened.graph.load(refFromPath("base\\fixture\\m.mesh"), null);
+    expect(reopened.fetcher.nativeStats!.byKind["over-budget"]).toBe(1);
+    expect(diagnostics.log.tail().filter(entry => entry.area === "resolver").length).toBe(3);
   });
 });
 
@@ -370,6 +364,24 @@ test("a decoder off for the session doesn't keep a failed read retryable (NATIVE
   expect(downPort.transient(archive, ref)).toBe(true);
 });
 
+test("a native failure that may pass, then a lasting WolvenKit refusal, counts as a transient null answer, which the preparation's check reads (NATIVE-40)", async () => {
+  const cacheDir = temporary();
+  const archive = { id: join(cacheDir, "x.archive"), name: "x.archive" } as MountedArchive, ref = refFromPath("base\\x.mi");
+  put(archive.id, "an archive");
+  // Without WolvenKit set up, its answer is null and lasting for the route; its own `stats.transient` stays 0.
+  const fetcherOver = (decoder: NativeDecoder) => new ResolverFetcher(new WolvenKitFetcher(null, cacheDir, () => true), { decoder }, cacheDir);
+  const down = fetcherOver({ identity: "t", close() {}, decode: async () => ({ ok: false, kind: "unavailable", message: "starting again in a minute" }) });
+  const off = fetcherOver({ identity: "t", close() {}, decode: async () => ({ ok: false, kind: "unavailable", message: "off for this session", lasting: true }) });
+  expect(await down.fetch(archive, ref, "mi")).toBeNull();
+  expect(await off.fetch(archive, ref, "mi")).toBeNull();
+  expect(down.stats.transient).toBe(0);
+  expect(down.transientNulls).toBe(1);
+  // A decoder off for the session answers the same next time: nothing to read again (NATIVE-29).
+  expect(off.transientNulls).toBe(0);
+  expect(await down.fetchJsonResource(archive, refFromPath("base\\x.json"))).toBeNull();
+  expect(down.transientNulls).toBe(2);
+});
+
 test("an answer marker removed by Clear is written again; markers of another reader identity are pruned (NATIVE-27)", async () => {
   const setup = gameFolder();
   const installation = openInstallation({ ...setup.options, native: route("marker-1") });
@@ -396,15 +408,18 @@ test("an answer marker removed by Clear is written again; markers of another rea
 test("the plan carries a part's reader notes to the record: a value stored with an older type, a render mask left out", async () => {
   const fixture = detailFixture();
   const { graph } = fixture.installation();
-  const hairApp = refFromPath(P.hairApp).hash, shadowMesh = refFromPath(P.shadowMesh).hash;
+  const hairApp = refFromPath(P.hairApp).hash, hairMesh = refFromPath(P.hairMesh).hash;
   const port: ResourceFetchPort = { fetch: async (archive, ref, extension) => {
     const answer = await graph.port.fetch(archive, ref, extension);
     if (!answer) return answer;
     if (ref.hash === hairApp) return { ...answer, notes: [{ kind: "type-mismatch", property: "entSkinnedMeshComponent.castShadows", stored: "Bool", rtti: "shadowsShadowCastingMode", count: 2 }] };
-    if (ref.hash === shadowMesh) {
-      const document = structuredClone(answer.document) as { Data: { RootChunk: { renderResourceBlob: { Data: { header: { renderChunkInfos: unknown[] } } } } } };
-      const paths = document.Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos.map((_, i) => `.Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos[${i}].renderMask`);
-      return { ...answer, document, defaulted: [{ property: "rendChunk.renderMask", paths, count: paths.length }] };
+    if (ref.hash === hairMesh) {
+      // The file leaves the last chunk's mask out: the reader writes its class default, "0", and reports where.
+      const document = structuredClone(answer.document) as { Data: { RootChunk: { renderResourceBlob: { Data: { header: { renderChunkInfos: Record<string, unknown>[] } } } } } };
+      const infos = document.Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos;
+      infos[infos.length - 1]!.renderMask = "0";
+      const path = `.Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos[${infos.length - 1}].renderMask`;
+      return { ...answer, document, defaulted: [{ property: "rendChunk.renderMask", paths: [path], count: 1 }] };
     }
     return answer;
   } };
@@ -412,14 +427,12 @@ test("the plan carries a part's reader notes to the record: a value stored with 
   const cco = await loadMergedCco(native, "female");
   const resolved = await resolveCharacter(native, inputFromCharacterRequest(REQUEST_A as never), cco);
   const plan = planCharacterDetails(resolved, cco.merged.cco);
+  // The chunk whose mask the file left out is not drawn: its class default has no flags (NATIVE-41).
+  const hairPart = resolved.appearances.flatMap(entry => entry.components).find(component => component.name === "hair")!;
+  expect(hairPart.geometry!.chunkInScene).toEqual([true, true, false]);
   const hair = plan.components.find(component => component.component === "hair")!;
-  expect(hair.readerNotes).toEqual(["entSkinnedMeshComponent.castShadows is stored as Bool where the game's current type is shadowsShadowCastingMode (2 times); it was read as stored. How the game treats such a value is unread."]);
-  // The shadow proxy's masks were left out of the file: its chunks draw (with WolvenKit's "0" they were shadow-only).
-  const proxy = resolved.appearances.flatMap(entry => entry.components).find(component => component.name === "hair_shadow")!;
-  expect(proxy.geometry!.chunkInScene).toEqual([true, true]);
-  // Only the parts read from those two files carry reader notes: the hair appearance's parts (its .app), and the skin's seam fix, which
-  // draws the same shadow mesh. Parts read alike by WolvenKit and the native reader carry none.
-  const noted = plan.components.filter(component => component.readerNotes);
-  expect(noted.map(component => component.component).sort()).toEqual(["hair", "hair_shadow", "seam_fix"]);
-  expect(noted.find(component => component.component === "seam_fix")!.readerNotes).toEqual([expect.stringContaining("rendChunk.renderMask 2 time(s)")]);
+  expect(hair.readerNotes).toEqual(["entSkinnedMeshComponent.castShadows is stored as Bool where the game's current type is shadowsShadowCastingMode (2 times); it was read as stored. How the game treats such a value is unread.",
+    "The file leaves out rendChunk.renderMask 1 time(s); read as its class default, no flags, as WolvenKit shows it, so those render chunks are not drawn."]);
+  // Only the parts read from those two files carry reader notes. Parts read alike by WolvenKit and the native reader carry none.
+  expect(plan.components.filter(component => component.readerNotes).map(component => component.component)).toEqual(["hair"]);
 });

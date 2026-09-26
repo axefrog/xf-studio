@@ -159,7 +159,7 @@ for (const custom of graph.xl.customizations.female) {
   const loaded = await graph.load(refFromPath(custom.path), "inkcharcustomization");
   if (loaded) customs.push(readCco(loaded.root, custom.path));
 }
-const catalogue = (await loadCreatorCatalogue({ installation, gameRoot, wolvenKitCli: cli, cacheDir, log }, "female")).catalogue;
+const catalogue = (await loadCreatorCatalogue({ installation, gameRoot, cacheDir, log }, "female")).catalogue;
 const labels = new Set(catalogue.options.flatMap(o => [o.label.text, ...o.choices.map(c => c.label.text)]).map(l => l.toLowerCase()));
 const takenPaths = plannedPaths().filter(p => installation.depot.lookup(depotHash(p)).winner);
 checks.push(...verifyAdditive({ base: readCco(baseLoaded.root, "base game"), fix: graph.xl.fixes.get(baseRef.hash), customs, labels, takenPaths },

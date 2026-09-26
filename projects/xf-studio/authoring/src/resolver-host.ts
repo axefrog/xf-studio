@@ -657,8 +657,13 @@ function pruneStaleMarkers(cacheDir: string, tag: string): void {
   })();
 }
 
-/** Fallbacks one fetcher reports to the diagnostics log (the rest are counted in its stats and the rolling window). */
-const LOGGED_FALLBACKS = 16;
+/**
+ * Fallbacks reported to the diagnostics log this session, each resource and kind once, across every fetcher (a route's fetchers are made again
+ * when it reopens), so they can't crowd earlier failures out of the log (NATIVE-45); the rest are counted in the fetchers' stats and the
+ * rolling window.
+ */
+const LOGGED_FALLBACKS = 24;
+const loggedFallbacks = new Set<string>();
 /** Kinds the native reader falls back on by design (a resource it doesn't read); not logged, only counted. */
 const EXPECTED_FALLBACKS: ReadonlySet<NativeFailureKind> = new Set(["not-indexed", "not-verified"]);
 
@@ -669,7 +674,11 @@ const EXPECTED_FALLBACKS: ReadonlySet<NativeFailureKind> = new Set(["not-indexed
  */
 export class ResolverFetcher implements ResourceFetchPort {
   readonly native: NativeFirstFetcher | null;
-  private logged = 0;
+  /**
+   * Null answers whose failure may not repeat (`transient`), whichever reader failed: a native failure that may pass followed by a lasting
+   * WolvenKit refusal counts too, which WolvenKit's own `stats.transient` can't see. A preparation that saw one is degraded (NATIVE-40).
+   */
+  transientNulls = 0;
   constructor(readonly wolvenKit: WolvenKitFetcher, route: NativeRoute | null | undefined, cacheDir: string) {
     this.native = route?.decoder ? new NativeFirstFetcher(route.decoder, wolvenKit, { strict: route.strict,
       ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message, stack) => this.fellBack(kind, resource, message, stack) }) : null;
@@ -680,8 +689,13 @@ export class ResolverFetcher implements ResourceFetchPort {
   get nativeStats(): NativeFirstFetcher["stats"] | null { return this.native?.stats ?? null; }
   /** The route's native decoder, shared with the host's other native reads (the clothing preset), or null. */
   get nativeDecoder(): NativeDecoder | null { return this.native?.decoder ?? null; }
-  fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
-    return this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension);
+  async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
+    return this.counted(archive, ref, await (this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension)));
+  }
+  /** Count a null answer that may not repeat (`transientNulls`). */
+  private counted<T extends FetchedResource>(archive: MountedArchive, ref: DepotRef, answer: T | null): T | null {
+    if (!answer && this.transient(archive, ref)) this.transientNulls++;
+    return answer;
   }
   /**
    * A CR2W `.json` resource (a `JsonResource`, such as the game's and mods' on-screen texts) whose payload class is one of `payloads`
@@ -691,9 +705,9 @@ export class ResolverFetcher implements ResourceFetchPort {
    */
   async fetchJsonResource(archive: MountedArchive, ref: DepotRef, payloads: readonly string[] = [...NATIVE_JSON_PAYLOADS]):
     Promise<(FetchedResource & { readonly reader: string }) | null> {
-    const answer = this.native
+    const answer = this.counted(archive, ref, this.native
       ? await this.native.fetch(archive, ref, "json", { roots: ["JsonResource"], payloads, priority: "background" })
-      : await this.wolvenKit.fetch(archive, ref, "json");
+      : await this.wolvenKit.fetch(archive, ref, "json"));
     if (!answer) return null;
     return { ...answer, reader: "native" in answer && answer.native ? `native:${this.native!.identity}` : this.tool };
   }
@@ -706,8 +720,9 @@ export class ResolverFetcher implements ResourceFetchPort {
   }
   private fellBack(kind: NativeFailureKind, resource: string, message: string, stack?: string): void {
     hostTrace().event("resolver", "native_fallback", { kind, resource, message: message.slice(0, 300) });
-    if (EXPECTED_FALLBACKS.has(kind) || this.logged >= LOGGED_FALLBACKS) return;
-    this.logged++;
+    const key = `${kind}|${resource}`;
+    if (EXPECTED_FALLBACKS.has(kind) || loggedFallbacks.has(key) || loggedFallbacks.size >= LOGGED_FALLBACKS) return;
+    loggedFallbacks.add(key);
     // Logged as the fallback starts: WolvenKit hasn't read it yet, and may not be set up at all (NATIVE-32).
     const plain = this.wolvenKit.available ? `XF Studio couldn't read ${resource} itself (${kind}), so WolvenKit will read it instead.`
       : `XF Studio couldn't read ${resource} itself (${kind}), and WolvenKit isn't set up to read it instead.`;

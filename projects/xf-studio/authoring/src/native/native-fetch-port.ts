@@ -225,8 +225,13 @@ export class NativeFirstFetcher implements ResourceFetchPort {
     return (TRANSIENT_NATIVE_FAILURES.has(failure.kind) && !failure.lasting) || (this.fallback.transient?.(archive, ref) ?? true);
   }
 
-  /** Whether this resource was answered natively from this archive's current bytes by this reader (this session or, with a ledger, before). */
-  answeredNatively(archive: MountedArchive, hash: string): boolean { return this.options.ledger?.has(archive, hash) ?? false; }
+  /**
+   * Whether this resource was answered natively from this archive's current bytes by this reader (this session or, with a ledger, before),
+   * and the decoder would answer it now: while it is closed or its worker won't start, a prepared choice would need WolvenKit (NATIVE-43).
+   */
+  answeredNatively(archive: MountedArchive, hash: string): boolean {
+    return (this.decoder.canAnswer?.() ?? true) && (this.options.ledger?.has(archive, hash) ?? false);
+  }
 
   close(): void { this.decoder.close(); }
 }

@@ -242,15 +242,37 @@ function load({ ffi, held, sha256 }: Prepared, verdict: OodleVerdict): OodleLibr
         FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.i64, FFIType.i32], returns: FFIType.i64 },
     }) as unknown as typeof library;
   } catch (error) { throw new OodleUnavailableError(`The game's Oodle library could not be loaded: ${(error as Error).message}`); }
+  const unload = moduleUnloader(ffi, held.finalPath);
+  let closed = false;
   const pointer = (view: Uint8Array) => ffi.ptr(view);
   const decompress: Decompress = (stored, size) => {
+    // Never call into a library that was unloaded.
+    if (closed) throw new NativeDecompressError("The Oodle library was closed.");
     if (!stored.length || !size) throw new NativeDecompressError("Empty Oodle stream.");
     const out = new Uint8Array(size + OUTPUT_MARGIN);
     const written = Number(library.symbols.OodleLZ_Decompress(pointer(stored), stored.length, pointer(out), size, 1, 0, 0, null, 0, null, null, null, 0, 3));
     if (written !== size) throw new NativeDecompressError(`Oodle decompressed ${written} of ${size} bytes.`);
     return out.subarray(0, size);
   };
-  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress, close: () => library.close() };
+  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress,
+    close: () => { if (!closed) { closed = true; unload(); } } };
+}
+
+/**
+ * How to unload the library `dlopen` just loaded from `path`. Bun's own `close` doesn't unload a library on Windows (Bun 1.4.2: the module
+ * stays mapped, so its file can't be overwritten), which kept the game's Oodle library locked until the Studio exited and a game update
+ * or repair couldn't replace it (NATIVE-42). So `close` releases it here instead of through Bun: `FreeLibrary` once, for the one
+ * `LoadLibrary` the `dlopen` made (Windows counts loads, so another holder in this process keeps it loaded). Bun's `close` is not also
+ * called, so a Bun that does unload can't free it twice.
+ */
+function moduleUnloader(ffi: Ffi, path: string): () => void {
+  const { FFIType } = ffi;
+  const kernel32 = ffi.dlopen("kernel32.dll", {
+    GetModuleHandleW: { args: [FFIType.ptr], returns: FFIType.ptr },
+    FreeLibrary: { args: [FFIType.ptr], returns: FFIType.i32 },
+  });
+  const module = kernel32.symbols.GetModuleHandleW(ffi.ptr(Buffer.from(`${path}\0`, "utf16le")));
+  return () => { if (module) kernel32.symbols.FreeLibrary(module); };
 }
 
 /**

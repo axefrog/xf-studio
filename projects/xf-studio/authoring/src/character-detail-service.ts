@@ -33,7 +33,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, ren
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
@@ -112,7 +112,7 @@ export class CharacterDetailError extends Error {
     message: string, readonly detail = "") { super(message); }
 }
 const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown yet. The head still works.";
+const TOOL_MISSING = "XF Studio needs WolvenKit to turn your V's own skin, face details, eyes, brows, lashes, hair, piercings and body into the 3D view, and it isn't set up yet. Set it up from the 3D preview card; XF Studio can download it for you. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -502,9 +502,13 @@ export class RunMap<K, V> extends Map<K, V> {
   }
 }
 
-/** The installation fetcher's count of null answers for a reason that may not repeat (resolver-host.ts `WolvenKitFetcher.stats`). */
+/**
+ * The installation fetcher's count of null answers for a reason that may not repeat, whichever reader failed (resolver-host.ts
+ * `ResolverFetcher.transientNulls`, NATIVE-40); a synthetic fetcher's `stats.transient` otherwise.
+ */
 const transientFailures = (installation: Installation) => {
-  const count = (installation.fetcher as { stats?: { transient?: unknown } } | undefined)?.stats?.transient;
+  const fetcher = installation.fetcher as { transientNulls?: unknown; stats?: { transient?: unknown } } | undefined;
+  const count = typeof fetcher?.transientNulls === "number" ? fetcher.transientNulls : fetcher?.stats?.transient;
   return typeof count === "number" ? count : 0;
 };
 
@@ -744,6 +748,10 @@ function planExports(graph: ResourceGraph, cache: CharacterPreparationCache, pla
 /** The merged creator resource's own files (read once per graph, so a later preparation's recording doesn't see them). */
 const creatorReads = (cco: Awaited<ReturnType<typeof loadMergedCco>>): string[] =>
   [cco.base.ref.hash, ...cco.customs.map(custom => custom.provenance.ref.hash)];
+/** Which readers the installation has: whether WolvenKit is set up to read what XF Studio's own reader can't (a synthetic fetcher: yes). */
+const readersOf = (installation: Installation): PlanReaders =>
+  ({ wolvenKit: (installation.fetcher as { wolvenKit?: { available?: boolean } } | undefined)?.wolvenKit?.available !== false });
+
 /** WolvenKit's identity as the installation's fetcher caches by it (`WolvenKitFetcher.tool`). */
 const fetcherTool = (installation: Installation) => (installation.fetcher as { tool?: string } | undefined)?.tool ?? "unknown";
 
@@ -835,7 +843,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const templates = [...resolved.appearances.flatMap(entry => entry.components), ...clothingComponents(clothing)].flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template));
   await loadTemplates(graph, templates, cache);
-  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope);
+  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope, readersOf(installation));
   time("resolve and plan");
   cancelled();
 
@@ -1102,7 +1110,9 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const bodyWithdrawn = !coversServed && !!firstCovered && !censoredServed.size;
   if (bodyWithdrawn) for (let i = components.length - 1; i >= 0; i--) if (components[i]!.slot === "body") components.splice(i, 1);
   if (cache.components.size > 2048) for (const key of [...cache.components.keys()].slice(0, 512)) cache.components.delete(key);
-  if (overBudget) notes.push(`${overBudget} texture(s) are over what the preview can load for one V, so the parts that need them are drawn without them.`);
+  // What the whole V is shown without comes before any one part's notes, so many parts' reader notes can't crowd it out (NATIVE-45).
+  const whole: string[] = [];
+  if (overBudget) whole.push(`${overBudget} texture(s) are over what the preview can load for one V, so the parts that need them are drawn without them.`);
   for (const [slot, why] of partial) {
     const current = slots.get(slot)!, { noun, pronoun } = SLOT_WORDS[slot];
     const all = pronoun === "it" ? "not all of it is" : "not all of them are";
@@ -1116,12 +1126,12 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   for (const [slot, state] of slots) if (state.state === "shown" && !components.some(item => item.slot === slot)) unavailable(slot, "export");
   if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
   else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
-  if (summary.scanGaps.length) notes.push("Some installed mod files could not be read; the resolved details may differ from the game.");
+  if (summary.scanGaps.length) whole.push("Some installed mod files could not be read; the resolved details may differ from the game.");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
     character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
-      notes: recordNotes(drops, notes), ...(toolLabel ? { tool: toolLabel } : {}) },
+      notes: recordNotes([...drops, ...whole], notes), ...(toolLabel ? { tool: toolLabel } : {}) },
     components, slots: [...slots.values()],
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
@@ -1186,9 +1196,12 @@ export const CENSORED_BODY = "The underwear the game draws on your V couldn't be
 
 /** The most notes a record's provenance carries. */
 export const RECORD_NOTE_CAP = 32;
-/** A record's notes: each once, drop notes first, so the cap cuts informational notes and never a part left out (PIPE-84). */
-export function recordNotes(drops: readonly string[], notes: readonly string[]): string[] {
-  return [...new Set([...drops, ...notes])].slice(0, RECORD_NOTE_CAP).map(line => line.slice(0, 500));
+/**
+ * A record's notes: each once, `first` (the parts left out, then what the whole V is shown without) before the rest, so the cap cuts
+ * informational notes and never a part left out (PIPE-84) or a limit of the whole V (NATIVE-45).
+ */
+export function recordNotes(first: readonly string[], notes: readonly string[]): string[] {
+  return [...new Set([...first, ...notes])].slice(0, RECORD_NOTE_CAP).map(line => line.slice(0, 500));
 }
 
 export type WarmOptions = Omit<PrepareCharacterOptions, "request" | "progress"> & {

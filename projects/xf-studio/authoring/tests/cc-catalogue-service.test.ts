@@ -51,7 +51,7 @@ describe("the creator catalogue service", () => {
     await settle();
     expect(builds()).toBe(2);
     const { host: unset } = await service({ route: false });
-    expect(unset.state("female")).toMatchObject({ phase: "failed", message: expect.stringContaining("game folder and WolvenKit") });
+    expect(unset.state("female")).toMatchObject({ phase: "failed", message: expect.stringContaining("once your game folder is set up") });
   });
 
   test("the view names each row's current and own choice with labels; the input carries every part, the choices applied", async () => {
@@ -189,7 +189,7 @@ describe("degraded preparations (PIPE-53)", () => {
   test("a preparation during which the fetcher failed in a way that may not repeat is degraded, and forgets what it added", async () => {
     const cache = new CharacterPreparationCache(), installation = detailFixture().installation();
     let transient = 0;
-    const flaky = { ...installation, fetcher: { ...installation.fetcher, get stats() { return { transient: transient++ }; } } } as typeof installation;
+    const flaky = { ...installation, fetcher: { ...installation.fetcher, get transientNulls() { return transient++; } } } as typeof installation;
     const prepare = (open: () => typeof installation) => prepareCharacterDetails({ request: REQUEST_A, route: { gameRoot: root, launchRoute: "direct", wolvenKitCli: "wk" },
       storeRoot: join(root, "store"), resolverCache: join(root, "resolver"), exporter: exporter(join(root, "exports")), open, cache });
     const first = await prepare(() => flaky);
