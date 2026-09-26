@@ -110,7 +110,7 @@ Taken as executive decisions while the maintainer was away; each is the proposal
 
 1. **EquipmentEx:** its saved outfits are not read from the save; outfits other mods apply are shown through the runtime bridge's "connect the game" snapshot.
 2. **Default dressing:** as saved, minus headwear and face items while the eye-makeup editor is open.
-3. **Nudity:** the Studio never shows more than the game's own uncensored mode would, and by default follows the game's default (underwear on). "Underwear only" is the lowest clothing state offered; anything further would be a separate, explicit setting and isn't planned.
+3. **Nudity (decided 27 September 2026):** the player decides, as in the game. The Studio offers the game's own uncensored mode as one plain, opt-in setting ("Show my V uncensored, as the game can"): with it on, body options draw exactly as the game draws them with nudity allowed (the uncensored skin, nipples, genitals and breast shape as chosen, no cover); with it off (the default), the censorship cover stays and keeps failing closed. It never shows more than the game itself can. Public material (the site, README images, committed evidence) stays censored.
 4. **Priority:** after `body-render` merges, phases 1–4 as one track, with 5 and 6 in parallel.
 
 ## Questions for the maintainer
