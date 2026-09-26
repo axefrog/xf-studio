@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `15941da`, `26d0dea` | 2026-09-27 | Native texture decoder (BCn, xbm, texture worker, export split) and the framework arm fix (substitution check, garment-data repair) | 0 High, 0 Medium, 9 Low (NATIVE-54..57, PIPE-107..109, plus two latent parts of PIPE-109). Header bounds, worker lifecycle, cache identity, colour flags, BC4 rounding, flips and the layering are sound |
 | `17d2585` | 2026-09-27 | Native catalogue merge (creator texts read natively, WolvenKit optional until export, Oodle release, degraded rule, R12) | 0 High, 2 Medium, 6 Low (NATIVE-46..53). Oodle lifecycle, payload gate, language keys, retry rules, the degraded rule, R12 and the boundary are sound. Fixed in claude/cleanup-native-catalogue |
 | `536bff3` | 2026-09-27 | UI polish merge, above all the first feature that writes into the user's MO2 profile and game folder (Add to my mod manager) | 1 High, 6 Medium, 8 Low (INSTALL-01..12, UI-98..100). Separator placement, BOM/CRLF, consent tokens, ownership refusals, path and link checks, framework safety and the architecture are sound. All fixed in claude/cleanup-install |
 | `36b5c87` | 2026-09-27 | Second pass on the production native reader (resolver-host fallbacks, decoder lifetime, ledger keys, R11–R13, worker cost) | 0 High, 2 Medium, 4 Low (NATIVE-40..45), none repeating NATIVE-26..34. The past-count loop bounds, widened roots, ledger key, `forgetDefaulted` and worker failure paths are sound. NATIVE-40..43 and 45 fixed in claude/native-catalogue; NATIVE-44 open |
@@ -381,6 +382,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **INSTALL-07..12, UI-99..100** (install review at `536bff3`): Fixed in claude/cleanup-install (see below).
 
 - **NATIVE-48..53** (native catalogue review at `17d2585`): Fixed in claude/cleanup-native-catalogue (see below).
+
+- **NATIVE-54..57, PIPE-107..109** (native textures and arm fix review at `15941da`/`26d0dea`), Open:
+  - **NATIVE-54:** textures larger than 8192² with no smaller mip pass the checks, decode fully, then fail PNG encoding as `internal` and fall back to a full-size WolvenKit export; refuse early with a budget error or box-halve to the cap (reproduced).
+  - **NATIVE-55:** raw and deprecated formats have no oracle evidence; padded raw rows would pass the size check and show sheared.
+  - **NATIVE-56:** BC7 allocates three arrays per block and `hasAlpha()` decodes mode 4–7 blocks twice.
+  - **NATIVE-57:** the texture oracle tool holds every decoded mip 0 in memory at once.
+  - **PIPE-107:** with the texture reader off, textures still leave the geometry launch and cost a second WolvenKit launch.
+  - **PIPE-108:** a failed WolvenKit fallback launch for refused textures marks the whole archive failed, dropping its geometry and native textures (`native-texture-export.ts:197`, `character-detail-service.ts:614`).
+  - **PIPE-109:** the substitution check trusts an answer whose no-game copy's file is missing, the repair's with-game attempt skips the check without a `.mesh`, `collect` gets the game-folder flag per request rather than per launch (latent), and old cache entries without `rawChecked` are trusted.
 
 ## New subsystems since last review
 
