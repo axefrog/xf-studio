@@ -18,6 +18,8 @@
 
 Supporting research that sits under a track rather than being ranked on its own: [wgpu/ray-tracing assessment](wgpu-renderer-assessment.md) (under track 2/4; current recommendation is to keep the browser renderer), [hair, piercings and jewellery context](jewellery-and-customization.md) (preview context under track 2; jewellery *authoring* is a later feature), and the [portable mod-source resolver](jewellery-and-customization.md#portable-mod-source-discovery) (shared by tracks 2, 3 and 5).
 
+Later-domain research queue (below the body and appearance work): [world, terminals, arcade and scripting](world-and-interactive-ideas.md).
+
 ## Standing direction (set 25 September 2026)
 
 1. **First goal: a fully working XF Eye Artistry export.** Prove the supported finishes (Matte, Satin, Metallic) in game, then design and prove game materials for every finish the editor offers (Shimmer, Glitter, Glossy, Colour-shifting). Shader decompilation and R&D are approved where they're needed to do this properly.
@@ -33,6 +35,7 @@ Supporting research that sits under a track rather than being ranked on its own:
 ## Queued R&D and background work
 
 - **Runtime access baseline** (early mod R&D; baseline built and hardened after its security review, awaiting its first game session): heavily logged base mods per type (RED4ext C++, redscript, CET Lua, TweakXL data) and a local named-pipe bridge, read-only by default, in [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md). Phase 2 (command catalogue, MCP server, CLI, session scripts, writes behind `allow_writes`) is built offline. Next: the [first session](../runtime/runtime-bridge-test-card.md), then session 2 through the bridge. See [runtime access baseline](runtime-access-baseline.md).
+- **Runtime bridge autonomy** (R&D done, nothing built): ranked bridge features that remove the player's remaining steps in a test session — light on/off, hiding the photo-mode cursor, camera presets for repeatable framing, opening and leaving the creator from script, row labels that follow scripted changes, NPC hiding and a fixed studio spot, and the full photo mode via the player's key. Evidence in [photo mode](../../knowledge/photo-mode.md). See [bridge autonomy](bridge-autonomy.md).
 - **Shader decompile annotator** (R&D tooling, in progress): rename decompiled material constants and bindless textures from template register maps. See [shader-system tooling](../materials/shader-system/README.md).
 - **Generic game-file resolver** (architecture, feeds tracks 2–3): support for installed mods and frameworks such as PRC and CCXL packs must come from interpreting files as the game does, not per-mod adapters. Phase 1 is implemented and validated ([mod loading](../../knowledge/mod-loading.md), [validation](../character-customization/resolver-validation.md)); next are a geometry/texture export adapter and wiring it into the preview, after which the PRC-specific preview code (migration debt) can be removed. Specified by the [CC file chain](cc-file-chain.md) research.
 - **Vortex support** (background R&D, feeds the generic resolver): a read-only prototype attributes Vortex-deployed game-folder files to their Vortex mods (with Nexus ids from Vortex's state), finds the deploying installation and profile, and reports out-of-date deployments. Next: first-run detection, placing XF Eye Artistry through Vortex's own `--install-archive`, and staleness guidance. See [Vortex support](vortex-support.md) and [knowledge/vortex.md](../../knowledge/vortex.md).
@@ -60,7 +63,7 @@ In order:
 2. Eyebrows
 3. Cheek makeup
 
-   Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md).
+   Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md). Brow editor proposal (field-driven groom rasterised into the brow texture set, phased plan): [brow editor design](../brows/brow-editor-design.md).
 4. Hair design
 5. Facial expressions and idles (static/animated; varied idle animations)
 

@@ -291,3 +291,47 @@ export function decodePng(bytes: Uint8Array): Pixels {
   }
   return { width, height, rgb };
 }
+
+// --- Comparing and tiling frames ---------------------------------------------------------------
+
+/**
+ * How much two same-sized pictures differ: the mean absolute difference over every channel
+ * (0-255) and the share of pixels where any channel differs by more than `threshold`.
+ */
+export function diffStats(a: Pixels, b: Pixels, threshold = 8): { mean: number; changed_fraction: number } {
+  if (a.width !== b.width || a.height !== b.height) throw new RangeError("diffStats needs pictures of the same size");
+  let sum = 0;
+  let changed = 0;
+  for (let i = 0; i < a.rgb.length; i += 3) {
+    const dr = Math.abs(a.rgb[i] - b.rgb[i]);
+    const dg = Math.abs(a.rgb[i + 1] - b.rgb[i + 1]);
+    const db = Math.abs(a.rgb[i + 2] - b.rgb[i + 2]);
+    sum += dr + dg + db;
+    if (dr > threshold || dg > threshold || db > threshold) changed++;
+  }
+  const pixels = a.width * a.height;
+  return { mean: Number((sum / (pixels * 3)).toFixed(3)), changed_fraction: Number((changed / pixels).toFixed(5)) };
+}
+
+/** Tiles frames left to right, top to bottom (at most 4 per row) into one picture at most maxWidth wide. */
+export function contactSheet(frames: Pixels[], maxWidth = 1600, gap = 4): Pixels {
+  if (!frames.length) throw new RangeError("contactSheet needs at least one frame");
+  const cols = Math.min(4, frames.length);
+  const rows = Math.ceil(frames.length / cols);
+  const first = frames[0];
+  const cellWidth = Math.max(1, Math.min(first.width, Math.floor((maxWidth - gap * (cols + 1)) / cols)));
+  const cellHeight = Math.max(1, Math.round((first.height * cellWidth) / first.width));
+  const width = cols * cellWidth + gap * (cols + 1);
+  const height = rows * cellHeight + gap * (rows + 1);
+  const rgb = new Uint8Array(width * height * 3).fill(24);
+  for (const [i, frame] of frames.entries()) {
+    const size = fitSize(frame.width, frame.height, { maxWidth: cellWidth, maxHeight: cellHeight });
+    const small = downscaleArea(frame, size.width, size.height);
+    const x0 = gap + (i % cols) * (cellWidth + gap);
+    const y0 = gap + Math.floor(i / cols) * (cellHeight + gap);
+    for (let y = 0; y < small.height; y++) {
+      rgb.set(small.rgb.subarray(y * small.width * 3, (y + 1) * small.width * 3), ((y0 + y) * width + x0) * 3);
+    }
+  }
+  return { width, height, rgb };
+}

@@ -44,6 +44,10 @@ json CameraResetResult(json aResets);
 // and something failed, the first failure is thrown, naming the rest.
 json CameraReset(const std::vector<int32_t>& aKeys, const std::function<json(int32_t aKey)>& aReset);
 
+// photo.hud.hide: the script's {hidden, was_hidden, cursor_hidden, was_cursor_hidden} with an undo
+// that puts the menu (and the cursor, when both were in the same state) back.
+json HudResult(json aScript);
+
 // world.pause: the script's {frozen, was_frozen} with an undo to the state before the call; no
 // undo when nothing changed or the earlier state is unknown.
 json PauseResult(json aScript);

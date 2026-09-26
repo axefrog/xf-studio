@@ -62,7 +62,12 @@ describe("regions follow the window's aspect ratio", () => {
       expect(face.width).toBe(Math.round(0.5 * h));
       expect(Math.abs(face.x + face.width / 2 - w / 2)).toBeLessThanOrEqual(1);
       const eyes = resolveRegion({ name: "eyes" }, w, h);
-      expect(eyes.height).toBe(Math.round(0.2 * h));
+      expect(Math.abs(eyes.height - 0.28 * h)).toBeLessThanOrEqual(1);
+      expect(Math.abs(eyes.y + eyes.height / 2 - h / 2)).toBeLessThanOrEqual(1);
+      // cc-eyes: the creator's eyes zoom, 0.0875 heights left of the centre on every aspect ratio.
+      const cc = resolveRegion({ name: "cc-eyes" }, w, h);
+      expect(Math.abs(cc.height - 0.2 * h)).toBeLessThanOrEqual(1);
+      expect(Math.abs(cc.x + cc.width / 2 - (w / 2 - 0.0875 * h))).toBeLessThanOrEqual(1);
       const centre = resolveRegion({ name: "center-16x9" }, w, h);
       expect(Math.abs(centre.width / centre.height - 16 / 9)).toBeLessThan(0.01);
       expect(centre.height).toBe(Math.min(h, Math.round((w * 9) / 16)));

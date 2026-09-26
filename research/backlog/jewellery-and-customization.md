@@ -1,11 +1,12 @@
 # Hair, piercings, jewellery and character customization roadmap
 
-## Status (25 Sep 2026)
+## Status (26 Sep 2026)
 
+- **Direction (26 Sep 2026):** the preferred route is **piercings as character-creator (CCXL) choices**, which no existing mod offers, with a version of the jewellery construction set as the design kit behind it. Feasibility research first ([CCXL piercing feasibility](../jewellery/ccxl-piercing-feasibility.md)); build only after the design is discussed. The research verdict is feasible: an additive own XF row of complete looks, with owned pieces bound to the head's skeleton and morph targets, reusing the runtime-proven XF Eye Artistry option shape. Seven design decisions and one batched probe session await the maintainer.
 - **Preview context done (with documented fidelity gaps):** optional saved-V hair ([preview](../eye-artistry/saved-v-hair-preview.md)), and the V's own piercings from the generic resolver through the layered (`multilayered.mt`) adapter, PRC-style frameworks included by archive precedence ([head CC rendering](../../knowledge/head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)); the earlier manifest-based [vanilla preview](../jewellery/vanilla-piercing-preview.md) and [PRC slice](../jewellery/prc-preview-slice.md) are historical. Hair colour/material is open under [preview fidelity](preview-fidelity.md) (track 2).
 - **Awaiting the maintainer's review:** the [jewellery construction-set proposal](../jewellery/construction-set-design.md) and [earring reference inventory](../jewellery/earring-reference-inventory.md). Piercing/earring *authoring* is the first later feature and needs discussion before building.
 - **Moved to its own track:** the data-driven character-creator editor below is now [CC controls and presets](cc-controls-and-presets.md) (track 3). Portable mod-source discovery below remains the shared requirement for tracks 2, 3 and 5.
-- **Open:** CCXL vs EquipmentEx piercing export route (unproven either way); effective runtime winners for all preview assets.
+- **Open:** the CCXL route's in-game proof (the [probe plan](../jewellery/ccxl-piercing-feasibility.md#6-in-game-test-plan)); EquipmentEx items remain only a possible later route for removable earrings; effective runtime winners for all preview assets.
 
 Requests of 23 September 2026. These are part of the general XF Studio roadmap; "asap" expresses interest, not a demand to interrupt every active makeup checkpoint. Coordinate independent slices in worktrees and review outcomes before promoting them. Priorities are in the [ranked queue](README.md).
 
@@ -20,7 +21,7 @@ The rendering adapters should be reusable context for later feature authoring, n
 - Render the saved V's actual hairstyle as an optional head-preview detail, with a visibility toggle. Resolve the saved choice through its installed provider and report missing maps/material dependencies. A plausible placeholder must be labelled as such. This is preview context, not hair-design tooling.
 - Render vanilla nose/ear piercing choices first, also optional. Maintain their rigging, morph alignment, occlusion and material provenance. Compare against a known save or character-creator choice before calling them accurate.
 - Inventory `PRC`-named entries under MO2 `mods/` and inspect the older Piercing Resource Collection/framework technique. Installed resources and profile enablement are candidates, not proof of the effective in-game winner. Use PRC meshes/shape keys to understand attach points and style coverage before choosing a new export path.
-- Probe whether CCXL can provide a clean piercing selector whose choice activates the needed components. If that fails or has a poorer user experience, evaluate ArchiveXL fashion items via inventory/EquipmentEx using the same owned geometry. Do not claim either route is proven until an offline package and a batched runtime test pass.
+- CCXL is the preferred export route; the [feasibility study](../jewellery/ccxl-piercing-feasibility.md) maps how vanilla piercings are built, what ArchiveXL can add without replacing anything, and a batched probe. ArchiveXL fashion items via inventory/EquipmentEx remain a possible later route for removable earrings using the same owned geometry. Do not claim either route is proven until an offline package and a batched runtime test pass.
 
 ## Jewellery construction set — design before editor implementation
 

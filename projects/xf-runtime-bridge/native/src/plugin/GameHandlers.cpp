@@ -642,15 +642,20 @@ json PhotoEnterOnGameThread(const std::string& aCid)
     return json{{"changed", true}};
 }
 
+// photo.enter refuses unless route = "quest" (params::ParsePhotoEnter): the quest node opened a
+// restricted photo mode in the first session (first-person camera only, no V tab), so until a proper
+// route exists the player presses the photo-mode key and game.wait follows.
 json PhotoEnter(const MethodContext& aContext)
 {
-    params::RequireOnly(aContext.params, {});
+    params::ParsePhotoEnter(aContext.params);
     const auto cid = aContext.cid;
     auto result = RunGameTask(Get().queue, Timeout(), [cid] { return PhotoEnterOnGameThread(cid); }, "photo.enter");
     if (result.value("changed", false))
     {
         result["active"] = WaitForPhotoMode(true, 3000, cid);
-        result["route"] = "quest node questOpenPhotoMode_NodeType through Codeware QuestsSystem.ExecuteNode";
+        result["route"] = "quest";
+        result["route_detail"] = "quest node questOpenPhotoMode_NodeType through Codeware QuestsSystem.ExecuteNode";
+        result["research_only"] = "this route opens a restricted photo mode (first-person camera only, no V tab)";
         if (!result["active"].get<bool>())
         {
             result["note"] = "the request was sent, but photo mode had not opened after 3 s";
@@ -670,7 +675,9 @@ json PhotoExit(const MethodContext& aContext)
     {
         result["active"] = !WaitForPhotoMode(false, 3000, cid);
     }
-    result["undo"] = {{"method", "photo.enter"}, {"params", json::object()}};
+    // Reopening is photo.open in the tools (it presses the photo-mode key); the plugin can't.
+    result["undo"] = nullptr;
+    result["undo_note"] = "photo.open (or the player's photo mode key) opens photo mode again; its settings start fresh";
     return result;
 }
 
@@ -718,10 +725,22 @@ json PhotoLightSet(const MethodContext& aContext)
 
 json PhotoHudHide(const MethodContext& aContext)
 {
-    bool visible = !params::ParseHudHidden(aContext.params);
-    auto result = CallScript("XFPhoto", "SetUiVisible", {"Bool"}, {&visible}, aContext.cid);
-    result["undo"] = {{"method", "photo.hud.hide"}, {"params", {{"hidden", result.value("was_hidden", false)}}}};
-    return result;
+    const auto request = params::ParseHud(aContext.params);
+    bool visible = !request.hidden;
+    bool cursor = request.cursor;
+    return writes::HudResult(CallScript("XFPhoto", "SetUiVisible", {"Bool", "Bool"}, {&visible, &cursor}, aContext.cid));
+}
+
+// Read-only: where V's head (plus an offset) is in the world and on screen, and the photo-mode
+// camera's transform, field of view and aspect ratio (XFPhoto.Subject). photo.frame (tools) centres
+// and sizes the shot from this without hand-tuned offsets.
+json PhotoSubject(const MethodContext& aContext)
+{
+    const auto request = params::ParseSubject(aContext.params);
+    float up = request.up;
+    float forward = request.forward;
+    float right = request.right;
+    return CallScript("XFPhoto", "Subject", {"Float", "Float", "Float"}, {&up, &forward, &right}, aContext.cid);
 }
 
 json PhotoExpressionSet(const MethodContext& aContext)
@@ -740,6 +759,30 @@ json CharacterApply(const MethodContext& aContext)
                       {"params", {{"option", result.value("option", request.option)}, {"index", result.value("before", 0)}}},
                       {"note", "or press Back in the appearance screen and confirm, which discards every change made there"}};
     return result;
+}
+
+// cc.confirm / cc.back: the creator menu's own Confirm (keeps the look) and Back-and-confirm (discards
+// every change), refused unless [bridge] allow_creator_leave = true.
+json CreatorLeave(const MethodContext& aContext, bool aKeep)
+{
+    params::RequireOnly(aContext.params, {});
+    params::CreatorLeaveAllowed(Get().config.allowCreatorLeave);
+    bool keep = aKeep;
+    auto result = CallScript("XFCharacter", "Leave", {"Bool"}, {&keep}, aContext.cid);
+    result["undo"] = nullptr;
+    result["undo_note"] = aKeep ? "the look is kept in the running game; load the safety save to undo it"
+                                : "every change made on the appearance screen was discarded; nothing to undo";
+    return result;
+}
+
+json CreatorConfirm(const MethodContext& aContext)
+{
+    return CreatorLeave(aContext, true);
+}
+
+json CreatorBack(const MethodContext& aContext)
+{
+    return CreatorLeave(aContext, false);
 }
 
 json WorldTimeSet(const MethodContext& aContext)
@@ -829,21 +872,30 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register({"photo.state", Access::Read, RunOn::GameThread,
                           "Photo mode flags; with menu=true every menu item's range, options and current value.",
                           &PhotoState});
+    aDispatcher.Register({"photo.subject", Access::Read, RunOn::GameThread,
+                          "V's head (plus an offset) in the world and on screen, and the photo-mode camera's transform and "
+                          "field of view.",
+                          &PhotoSubject});
 
     // Phase 2. Writes (refused unless allow_writes = true); each logs its reversal.
-    aDispatcher.Register(WriteMethod("photo.enter", Access::WritePhoto, RunOn::BridgeThread, "Opens photo mode (needs Codeware).", &PhotoEnter));
+    aDispatcher.Register(WriteMethod("photo.enter", Access::WritePhoto, RunOn::BridgeThread,
+                                     "Refuses (press the photo-mode key); route quest opens a restricted photo mode for research.", &PhotoEnter));
     aDispatcher.Register(WriteMethod("photo.exit", Access::WritePhoto, RunOn::BridgeThread, "Leaves photo mode.", &PhotoExit));
     aDispatcher.Register(WriteMethod("photo.camera.set", Access::WritePhoto, RunOn::GameThread,
                                      "Photo-mode camera and subject settings (FOV, roll, focus, DOF, V's placement), or reset.",
                                      &PhotoCameraSet));
     aDispatcher.Register(WriteMethod("photo.light.set", Access::WritePhoto, RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
                                      &PhotoLightSet));
-    aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface.", &PhotoHudHide));
+    aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface and its mouse cursor.", &PhotoHudHide));
     aDispatcher.Register(WriteMethod("photo.expression.set", Access::WritePhoto, RunOn::GameThread, "Sets V's photo-mode expression by its value.",
                                      &PhotoExpressionSet));
     aDispatcher.Register(WriteMethod("cc.apply", Access::WriteCharacter, RunOn::GameThread,
                                      "Sets one character-creator option on the open appearance screen (never confirms).",
                                      &CharacterApply));
+    aDispatcher.Register(WriteMethod("cc.confirm", Access::WriteCharacter, RunOn::GameThread,
+                                     "Confirms the appearance screen (keeps the look); off unless allow_creator_leave.", &CreatorConfirm));
+    aDispatcher.Register(WriteMethod("cc.back", Access::WriteCharacter, RunOn::GameThread,
+                                     "Backs out of the appearance screen, discarding its changes; off unless allow_creator_leave.", &CreatorBack));
     aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
     aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
 

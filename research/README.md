@@ -12,6 +12,7 @@ Research notes, contracts and evidence for XF Studio and related Cyberpunk 2077 
 | [eye-artistry/](eye-artistry/) | Saved-V import and resource resolution (eyes, brows, lashes, hair, skin), preview fidelity audits, Eye Artistry lineage. |
 | [character-customization/](character-customization/) | CC file-chain map, CCXL merge boundary, read-only catalogue probe, portable mod-source resolution. |
 | [animation/](animation/) | Character-creator idle playback, idle control design, brow idle gap. |
+| [brows/](brows/brow-editor-design.md) | Brow editor design: field-driven groom into the brow texture set, platform fit and phased plan. |
 | [jewellery/](jewellery/) | Vanilla piercing preview, PRC inventory/preview/catalogue audit, jewellery construction-set proposal, earring references. |
 | [runtime/](runtime/runtime-bridge-design.md) | Runtime access: base mods per mod type, the local bridge design, the agent autonomy capability matrix and the bridge test card. |
 | [archive-xl/](archive-xl/) | ArchiveXL expansion strategy (legacy matrix lessons) and pinned upstream source notes. |

@@ -99,6 +99,18 @@ The rule's default is **extra choices in the vanilla `makeupCheeks` switcher** (
 - **Packaging.** Merged by default: a collection with eye makeup, cheeks and brows builds one "XF Looks" mod; each feature can be split into its own XF-branded mod. Each feature keeps its own selector contributions (eye makeup its own selector; brows into `eyebrows`; cheeks into `makeupCheeks`) whether merged or split, and resources under `…/<key>/<feature>/` with `xfs_` names.
 - **Documentation inconsistency to settle first.** The platform design's §6 says lip makeup joins the vanilla lipstick choices, while its §9 example gives lips "the lips selector" ([feature-module platform](../authoring/feature-module-platform.md#9-how-module-2-plugs-in)). Cheeks follow whichever rule is settled for lips.
 
+## Decisions (26 September 2026)
+
+1. **Brow scope:** symmetric texture styles on the vanilla strip (A) first; asymmetric and larger-footprint brows (B) follow.
+2. **Brow colour:** XF brows follow the creator's colour row (35 hair colours plus installed packs); authored multi-tone brows are an opt-in; the Studio preselects the brow colour that matches the V's hair colour.
+3. **Brow resolution:** hair-by-hair 2048 × 1024 by default, with a lighter 1024 × 512 option.
+4. **Cheeks:** XF looks join the vanilla `makeupCheeks` row (they replace vanilla freckles and blush while chosen).
+5. **Cheek plate footprint:** cheeks, nose, temples and jaw line; the under-eye band stays with the eye plate.
+6. **Names:** split mods are "XF Brow Artistry" and "XF Cheek Artistry"; several features merged into one mod are "XF Looks".
+7. **Editor reference:** an earlier first-party project's eyebrow editor is the starting point for the Studio's brow editor, adapted to this context. The proposal is the [brow editor design](../brows/brow-editor-design.md): a field-driven groom (outline, density centres, flow controls) rasterised into the brow's `_d`/`_ds`/`_n` set with greyscale tone so the creator's colour row still applies, a new `strand-field` engine and an `eyebrows` feature module, in six phases.
+
+Still open: the §6/§9 lip selector wording (question 7 below).
+
 ## Questions for the maintainer
 
 1. **Brows, scope of the first version:** symmetric texture styles on the vanilla strip (A) first, with asymmetric and larger-footprint brows (B) later, or asymmetry from the start?
@@ -124,4 +136,4 @@ None needs a session now; add them to the prepared session in which the first br
 
 ## Related
 
-[Eyebrows](../../knowledge/brows.md) · [Face makeup](../../knowledge/face-makeup.md) · [Evidence](../character-customization/brows-cheeks-evidence.md) · [Feature-module platform](../authoring/feature-module-platform.md) · [Eye-makeup authoring](eye-artistry-authoring.md) · [Jewellery construction set](../jewellery/construction-set-design.md) (the preceding feature's proposal)
+[Eyebrows](../../knowledge/brows.md) · [Face makeup](../../knowledge/face-makeup.md) · [Evidence](../character-customization/brows-cheeks-evidence.md) · [Feature-module platform](../authoring/feature-module-platform.md) · [Eye-makeup authoring](eye-artistry-authoring.md) · [Brow editor design](../brows/brow-editor-design.md) · [Jewellery construction set](../jewellery/construction-set-design.md) (the preceding feature's proposal)

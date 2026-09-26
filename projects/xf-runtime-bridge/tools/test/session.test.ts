@@ -63,21 +63,31 @@ describe("planScript", () => {
       expect(problems, file).toEqual([]);
       expect(existsSync(join(projectDir, "..", "..", s.card!)), file).toBe(true);
       // Every photo-mode excursion ends with photo.exit, and restore leaves photo mode too.
-      const enters = plan.filter((p) => p.command === "photo.enter").length;
+      const enters = plan.filter((p) => p.command === "photo.enter" || p.command === "photo.open").length;
       const exits = plan.filter((p) => p.phase === "steps" && p.command === "photo.exit").length;
       expect(exits, file).toBe(enters);
       expect(plan.some((p) => p.phase === "restore" && p.command === "photo.exit")).toBe(true);
       // The very first thing the player is asked is to make a safety save, before any write.
-      const firstWrite = plan.findIndex((p) => p.command && !["bridge.info", "game.status", "game.wait", "player.appearance", "photo.state", "capture.screenshot"].includes(p.command));
+      const firstWrite = plan.findIndex((p) => p.command && !["bridge.info", "game.status", "game.wait", "player.appearance", "photo.state", "photo.subject", "capture.screenshot", "capture.burst"].includes(p.command));
       const firstAsk = plan.findIndex((p) => p.kind === "ask");
       expect(firstAsk).toBeLessThan(firstWrite);
       expect(plan[firstAsk].text).toContain("manual save");
     }
     const s2 = planScript(JSON.parse(readFileSync(join(dir, "session-2.json"), "utf8"))).plan;
     const indices = s2.filter((p) => p.command === "cc.apply").map((p) => p.input!.index as number);
-    expect(new Set(indices)).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]));
-    // Card step 2: the placement pair comes before every other preset.
-    expect(indices.slice(0, 3)).toEqual([11, 12, 11]);
+    // Every index is one of the card's presets (Off plus 12), and the steps still open after 26
+    // September are all covered: Gloss A-D, Shimmer and Metal (5-10), Depth C and D, Lines new and old.
+    expect(indices.every((i) => i >= 0 && i <= 12)).toBe(true);
+    for (const i of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) expect(indices, `preset ${i}`).toContain(i);
+    for (const file of files) {
+      const plan = planScript(JSON.parse(readFileSync(join(dir, file), "utf8"))).plan;
+      // Every ask that opens the creator is marked for the later cc.open, every photo excursion hides
+      // the cursor before its first capture, and every photo-mode capture follows a frame step.
+      for (const p of plan.filter((p) => p.kind === "ask" && /Open the character creator/.test(p.text ?? ""))) expect(p.step.replaced_by, `${file} ${p.label}`).toBe("cc.open");
+      expect(plan.filter((p) => p.command === "photo.hud.hide" && (p.input as { hidden?: boolean }).hidden === true).every((p) => (p.input as { cursor?: boolean }).cursor === true)).toBe(true);
+      expect(plan.some((p) => p.command === "photo.frame")).toBe(true);
+      expect(plan.some((p) => p.command === "photo.light.set" && (p.input as { on?: boolean }).on === true)).toBe(true);
+    }
   });
 });
 
@@ -98,7 +108,7 @@ describe("runScript against the self-test host", () => {
     const out = tempDir("xfb-sess-out-");
     const s = script(
       [
-        { do: "run", label: "enter", command: "photo.enter" },
+        { do: "run", label: "enter", command: "photo.enter", input: { route: "quest" } },
         { do: "set camera", label: "cam", preset: "face" },
         { do: "capture", label: "shot", region: "center-16x9", max_width: 640 },
         { do: "apply cc", label: "cc-refused", option: "XF", index: 1, expect_error: "not_in_character_menu" },
@@ -179,7 +189,7 @@ describe("runScript against the self-test host", () => {
     const lines: string[] = [];
     const s = script(
       [
-        { do: "run", label: "enter", command: "photo.enter" },
+        { do: "run", label: "enter", command: "photo.enter", input: { route: "quest" } },
         { do: "run", label: "hide", command: "photo.hud.hide", input: { hidden: true } },
         { do: "run", label: "wait-menu", command: "game.wait", input: { phase: ["character_menu"], timeout_ms: 60000 } },
         { do: "wait", label: "long", ms: 60000 },

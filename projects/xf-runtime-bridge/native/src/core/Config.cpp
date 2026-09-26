@@ -101,6 +101,10 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.allowWrites);
         }
+        else if (key == "bridge.allow_creator_leave")
+        {
+            ok = ParseBool(value, config.allowCreatorLeave);
+        }
         else if (key == "bridge.allow_write_classes")
         {
             // A comma-separated list; an unknown name is ignored with a warning, so a typo can
@@ -199,6 +203,7 @@ std::string DescribeConfig(const Config& aConfig)
         classes += (classes.empty() ? "" : ",") + name;
     }
     text += " bridge.allow_write_classes=" + (classes.empty() ? std::string("<none>") : classes);
+    text += " bridge.allow_creator_leave=" + std::string(aConfig.allowCreatorLeave ? "true" : "false");
     text += " bridge.request_timeout_ms=" + std::to_string(aConfig.requestTimeoutMs);
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);

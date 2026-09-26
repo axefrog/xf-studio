@@ -54,11 +54,26 @@ json UndoParams(const json& aApplied, std::vector<std::string>* aUnknown)
         {
             undo["subject"][name.substr(8)] = before;
         }
-        else if (name == "dof" || name == "autofocus")
+        else if (name == "dof" || name == "autofocus" || name == "on" || name == "shadow")
         {
             undo[name] = before != 0.0;
         }
-        else if (name == "look_at" || name == "look_at_part" || name == "faceId")
+        else if (name == "type")
+        {
+            // Light type option data: 1 Spot, 2 Ambient. Anything else (-1: the menu showed no
+            // type) can't be put back.
+            const auto data = std::llround(before);
+            if (data != 1 && data != 2)
+            {
+                if (aUnknown)
+                {
+                    aUnknown->push_back(name);
+                }
+                continue;
+            }
+            undo[name] = data == 1 ? "spot" : "ambient";
+        }
+        else if (name == "look_at" || name == "look_at_part" || name == "faceId" || name == "camera_preset")
         {
             if (before < 0.0)
             {
@@ -157,6 +172,24 @@ json CameraReset(const std::vector<int32_t>& aKeys, const std::function<json(int
         out["errors"] = errors;
     }
     return out;
+}
+
+json HudResult(json aScript)
+{
+    const bool wasHidden = aScript.value("was_hidden", false);
+    const bool wasCursorHidden = aScript.value("was_cursor_hidden", false);
+    // One call moves the menu and (with cursor = true) the cursor together, so the undo can put
+    // both back only when they were in the same state before; otherwise it restores the menu and
+    // leaves the cursor, and says so.
+    aScript["undo"] = {{"method", "photo.hud.hide"},
+                       {"params", {{"hidden", wasHidden}, {"cursor", wasHidden == wasCursorHidden}}}};
+    if (wasHidden != wasCursorHidden)
+    {
+        aScript["undo_note"] = std::string("the menu was ") + (wasHidden ? "hidden" : "shown") + " and the cursor " +
+                               (wasCursorHidden ? "hidden" : "shown") +
+                               " before; the undo restores the menu only; leaving photo mode resets both";
+    }
+    return aScript;
 }
 
 json PauseResult(json aScript)

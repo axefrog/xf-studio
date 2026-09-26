@@ -4,10 +4,10 @@
   "title": "Session 3: Glitter board, blink and creator checks",
   "card": "experiments/022-session-3/README.md",
   "requires": [
-    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build)",
-    "a loaded save with V in the world, next to a mirror",
+    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build, with its XF camera presets)",
+    "a loaded save with V in the world, in an open spot",
     "a fresh manual safety save (step p0-ready)",
-    "session 2 done through the bridge (camera presets calibrated)"
+    "the game window in front (photo.open presses the photo-mode key in it)"
   ],
   "steps": [
     {
@@ -23,16 +23,17 @@
     {
       "do": "ask",
       "label": "p0-ready",
-      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Check that the XF selector lists Off plus six Glitter presets. Stand next to a mirror, but don't open it yet."
+      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the game version, the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Check that the XF selector lists Off plus six Glitter presets. Stand V in an open, quiet spot with room in front of her (photo mode's camera needs a few metres); keep the game window in front."
     },
     {
-      "do": "note",
-      "label": "p0-mirror",
-      "text": "Open a mirror's appearance screen and go to the page with the XF row. Zoom its camera onto the face as far as it goes, then leave the camera alone until the mirror part ends."
+      "do": "ask",
+      "label": "a-first-open-creator",
+      "text": "Open the character creator (a mirror's appearance screen, or F12 with Character Customization Anywhere) and go to the page with the XF row. Leave its camera on the eyes zoom.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "p0-wait-mirror",
+      "label": "a-first-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -51,97 +52,104 @@
     },
     {
       "do": "capture",
-      "label": "a-xf-off"
+      "label": "a-xf-off",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
-      "label": "a-mirror-a-apply",
+      "label": "a-creator-a-apply",
       "option": "XF",
       "index": 1
     },
     {
       "do": "wait",
-      "label": "a-mirror-a-settle",
+      "label": "a-creator-a-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "a-mirror-a-mirror"
+      "label": "a-creator-a-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
-      "label": "a-mirror-b-apply",
+      "label": "a-creator-b-apply",
       "option": "XF",
       "index": 2
     },
     {
       "do": "wait",
-      "label": "a-mirror-b-settle",
+      "label": "a-creator-b-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "a-mirror-b-mirror"
+      "label": "a-creator-b-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
-      "label": "a-mirror-c-apply",
+      "label": "a-creator-c-apply",
       "option": "XF",
       "index": 3
     },
     {
       "do": "wait",
-      "label": "a-mirror-c-settle",
+      "label": "a-creator-c-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "a-mirror-c-mirror"
+      "label": "a-creator-c-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
-      "label": "a-mirror-d-apply",
+      "label": "a-creator-d-apply",
       "option": "XF",
       "index": 4
     },
     {
       "do": "wait",
-      "label": "a-mirror-d-settle",
+      "label": "a-creator-d-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "a-mirror-d-mirror"
+      "label": "a-creator-d-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
-      "label": "a-mirror-e-apply",
+      "label": "a-creator-e-apply",
       "option": "XF",
       "index": 5
     },
     {
       "do": "wait",
-      "label": "a-mirror-e-settle",
+      "label": "a-creator-e-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "a-mirror-e-mirror"
+      "label": "a-creator-e-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
-      "label": "a-mirror-f-apply",
+      "label": "a-creator-f-apply",
       "option": "XF",
       "index": 6
     },
     {
       "do": "wait",
-      "label": "a-mirror-f-settle",
+      "label": "a-creator-f-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "a-mirror-f-mirror"
+      "label": "a-creator-f-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
@@ -156,12 +164,19 @@
     },
     {
       "do": "capture",
-      "label": "a-a-mirror"
+      "label": "a-a-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-a-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-a-confirm",
-      "text": "At the mirror: Confirm to keep XF = Glitter A · base, then leave the appearance screen. Nothing is saved."
+      "label": "a-a-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -177,12 +192,12 @@
     {
       "do": "run",
       "label": "a-a-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-a-photo-key",
+      "label": "a-a-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -198,23 +213,47 @@
     },
     {
       "do": "wait",
-      "label": "a-a-wait-photo-prefs",
+      "label": "a-a-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-a-effects",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-a-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "a-a-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-a-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-a-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -227,9 +266,10 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "a-a-face-camera",
-      "preset": "face"
+      "do": "frame",
+      "label": "a-a-face-frame",
+      "target": "face",
+      "xf_preset": true
     },
     {
       "do": "wait",
@@ -242,9 +282,10 @@
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-a-head-and-shoulders-camera",
-      "preset": "head-and-shoulders"
+      "do": "frame",
+      "label": "a-a-head-and-shoulders-frame",
+      "target": "head-and-shoulders",
+      "xf_preset": true
     },
     {
       "do": "wait",
@@ -257,76 +298,84 @@
       "region": "head-and-shoulders"
     },
     {
-      "do": "set camera",
-      "label": "a-a-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
+      "do": "frame",
+      "label": "a-a-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
     },
     {
       "do": "wait",
-      "label": "a-a-yaw150-settle",
+      "label": "a-a-yaw-30-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-a-yaw150",
+      "label": "a-a-yaw-30",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-a-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
+      "do": "frame",
+      "label": "a-a-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
     },
     {
       "do": "wait",
-      "label": "a-a-yaw165-settle",
+      "label": "a-a-yaw-15-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-a-yaw165",
+      "label": "a-a-yaw-15",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-a-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
+      "do": "frame",
+      "label": "a-a-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
     },
     {
       "do": "wait",
-      "label": "a-a-yaw-165-settle",
+      "label": "a-a-yaw15-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-a-yaw-165",
+      "label": "a-a-yaw15",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-a-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
+      "do": "frame",
+      "label": "a-a-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
     },
     {
       "do": "wait",
-      "label": "a-a-yaw-150-settle",
+      "label": "a-a-yaw30-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-a-yaw-150",
+      "label": "a-a-yaw30",
       "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "a-a-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "run",
+      "label": "a-a-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
     },
     {
       "do": "run",
@@ -334,13 +383,14 @@
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "a-a-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "a-b-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "a-a-wait-mirror",
+      "label": "a-b-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -362,12 +412,19 @@
     },
     {
       "do": "capture",
-      "label": "a-b-mirror"
+      "label": "a-b-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-b-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-b-confirm",
-      "text": "At the mirror: Confirm to keep XF = Glitter B · mips, then leave the appearance screen. Nothing is saved."
+      "label": "a-b-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -383,12 +440,12 @@
     {
       "do": "run",
       "label": "a-b-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-b-photo-key",
+      "label": "a-b-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -404,23 +461,47 @@
     },
     {
       "do": "wait",
-      "label": "a-b-wait-photo-prefs",
+      "label": "a-b-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-b-effects",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-b-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "a-b-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-b-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-b-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -433,100 +514,110 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "a-b-fov6-camera",
-      "preset": "face",
-      "fov": 6
+      "do": "frame",
+      "label": "a-b-span0p1-frame",
+      "target": "eyes",
+      "span_m": 0.1
     },
     {
       "do": "wait",
-      "label": "a-b-fov6-settle",
+      "label": "a-b-span0p1-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-b-fov6",
+      "label": "a-b-span0p1",
       "region": "head-and-shoulders"
     },
     {
-      "do": "set camera",
-      "label": "a-b-fov9-camera",
-      "preset": "face",
-      "fov": 9
+      "do": "frame",
+      "label": "a-b-span0p2-frame",
+      "target": "eyes",
+      "span_m": 0.2
     },
     {
       "do": "wait",
-      "label": "a-b-fov9-settle",
+      "label": "a-b-span0p2-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-b-fov9",
+      "label": "a-b-span0p2",
       "region": "head-and-shoulders"
     },
     {
-      "do": "set camera",
-      "label": "a-b-fov12-camera",
-      "preset": "face",
-      "fov": 12
+      "do": "frame",
+      "label": "a-b-span0p3-frame",
+      "target": "eyes",
+      "span_m": 0.3
     },
     {
       "do": "wait",
-      "label": "a-b-fov12-settle",
+      "label": "a-b-span0p3-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-b-fov12",
+      "label": "a-b-span0p3",
       "region": "head-and-shoulders"
     },
     {
-      "do": "set camera",
-      "label": "a-b-fov15-camera",
-      "preset": "face",
-      "fov": 15
+      "do": "frame",
+      "label": "a-b-span0p45-frame",
+      "target": "eyes",
+      "span_m": 0.45
     },
     {
       "do": "wait",
-      "label": "a-b-fov15-settle",
+      "label": "a-b-span0p45-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-b-fov15",
+      "label": "a-b-span0p45",
       "region": "head-and-shoulders"
     },
     {
-      "do": "set camera",
-      "label": "a-b-fov20-camera",
-      "preset": "face",
-      "fov": 20
+      "do": "frame",
+      "label": "a-b-span0p6-frame",
+      "target": "eyes",
+      "span_m": 0.6
     },
     {
       "do": "wait",
-      "label": "a-b-fov20-settle",
+      "label": "a-b-span0p6-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-b-fov20",
+      "label": "a-b-span0p6",
       "region": "head-and-shoulders"
     },
     {
-      "do": "set camera",
-      "label": "a-b-fov30-camera",
-      "preset": "face",
-      "fov": 30
+      "do": "frame",
+      "label": "a-b-span0p9-frame",
+      "target": "eyes",
+      "span_m": 0.9
     },
     {
       "do": "wait",
-      "label": "a-b-fov30-settle",
+      "label": "a-b-span0p9-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-b-fov30",
+      "label": "a-b-span0p9",
       "region": "head-and-shoulders"
+    },
+    {
+      "do": "run",
+      "label": "a-b-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
     },
     {
       "do": "run",
@@ -534,13 +625,14 @@
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "a-b-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "a-c-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "a-b-wait-mirror",
+      "label": "a-c-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -562,12 +654,19 @@
     },
     {
       "do": "capture",
-      "label": "a-c-mirror"
+      "label": "a-c-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-c-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-c-confirm",
-      "text": "At the mirror: Confirm to keep XF = Glitter C · size, then leave the appearance screen. Nothing is saved."
+      "label": "a-c-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -583,12 +682,12 @@
     {
       "do": "run",
       "label": "a-c-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-c-photo-key",
+      "label": "a-c-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -604,23 +703,47 @@
     },
     {
       "do": "wait",
-      "label": "a-c-wait-photo-prefs",
+      "label": "a-c-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-c-effects",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-c-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "a-c-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-c-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-c-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -633,9 +756,10 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "a-c-face-camera",
-      "preset": "face"
+      "do": "frame",
+      "label": "a-c-face-frame",
+      "target": "face",
+      "xf_preset": true
     },
     {
       "do": "wait",
@@ -670,13 +794,18 @@
     },
     {
       "do": "run",
-      "label": "a-c-photo-dlaa",
-      "command": "photo.enter",
+      "label": "a-c-dlaa-photo",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
+      "do": "note",
+      "label": "a-c-dlaa-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
       "do": "run",
-      "label": "a-c-wait-photo-dlaa",
+      "label": "a-c-dlaa-wait-photo",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -687,23 +816,47 @@
     },
     {
       "do": "wait",
-      "label": "a-c-wait-photo-dlaa-prefs",
+      "label": "a-c-dlaa-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
-      "label": "a-c-effects-dlaa",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "do": "run",
+      "label": "a-c-dlaa-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-c-dlaa-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "a-c-dlaa-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-c-dlaa-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-c-dlaa-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -716,9 +869,10 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "a-c-dlaa-face-camera",
-      "preset": "face"
+      "do": "frame",
+      "label": "a-c-dlaa-face-frame",
+      "target": "face",
+      "xf_preset": true
     },
     {
       "do": "wait",
@@ -732,6 +886,16 @@
     },
     {
       "do": "run",
+      "label": "a-c-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
       "label": "a-c-exit",
       "command": "photo.exit"
     },
@@ -741,13 +905,14 @@
       "text": "Set the upscaler back to how it was."
     },
     {
-      "do": "note",
-      "label": "a-c-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "a-d-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "a-c-wait-mirror",
+      "label": "a-d-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -769,12 +934,19 @@
     },
     {
       "do": "capture",
-      "label": "a-d-mirror"
+      "label": "a-d-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-d-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-d-confirm",
-      "text": "At the mirror: Confirm to keep XF = Glitter D · surface, then leave the appearance screen. Nothing is saved."
+      "label": "a-d-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -790,12 +962,12 @@
     {
       "do": "run",
       "label": "a-d-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-d-photo-key",
+      "label": "a-d-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -811,23 +983,47 @@
     },
     {
       "do": "wait",
-      "label": "a-d-wait-photo-prefs",
+      "label": "a-d-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-d-effects",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-d-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "a-d-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-d-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-d-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -840,76 +1036,84 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "a-d-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
+      "do": "frame",
+      "label": "a-d-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
     },
     {
       "do": "wait",
-      "label": "a-d-yaw150-settle",
+      "label": "a-d-yaw-30-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-d-yaw150",
+      "label": "a-d-yaw-30",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-d-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
+      "do": "frame",
+      "label": "a-d-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
     },
     {
       "do": "wait",
-      "label": "a-d-yaw165-settle",
+      "label": "a-d-yaw-15-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-d-yaw165",
+      "label": "a-d-yaw-15",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-d-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
+      "do": "frame",
+      "label": "a-d-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
     },
     {
       "do": "wait",
-      "label": "a-d-yaw-165-settle",
+      "label": "a-d-yaw15-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-d-yaw-165",
+      "label": "a-d-yaw15",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-d-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
+      "do": "frame",
+      "label": "a-d-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
     },
     {
       "do": "wait",
-      "label": "a-d-yaw-150-settle",
+      "label": "a-d-yaw30-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-d-yaw-150",
+      "label": "a-d-yaw30",
       "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "a-d-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "run",
+      "label": "a-d-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
     },
     {
       "do": "run",
@@ -917,13 +1121,14 @@
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "a-d-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "a-f-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "a-d-wait-mirror",
+      "label": "a-f-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -945,12 +1150,19 @@
     },
     {
       "do": "capture",
-      "label": "a-f-mirror"
+      "label": "a-f-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-f-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-f-confirm",
-      "text": "At the mirror: Confirm to keep XF = Glitter F · tilt, then leave the appearance screen. Nothing is saved."
+      "label": "a-f-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -966,12 +1178,12 @@
     {
       "do": "run",
       "label": "a-f-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-f-photo-key",
+      "label": "a-f-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -987,23 +1199,47 @@
     },
     {
       "do": "wait",
-      "label": "a-f-wait-photo-prefs",
+      "label": "a-f-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-f-effects",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-f-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "a-f-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-f-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-f-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -1016,76 +1252,101 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "a-f-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
+      "do": "frame",
+      "label": "a-f-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
     },
     {
       "do": "wait",
-      "label": "a-f-yaw150-settle",
+      "label": "a-f-yaw-30-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-f-yaw150",
+      "label": "a-f-yaw-30",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-f-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
+      "do": "frame",
+      "label": "a-f-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
     },
     {
       "do": "wait",
-      "label": "a-f-yaw165-settle",
+      "label": "a-f-yaw-15-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-f-yaw165",
+      "label": "a-f-yaw-15",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-f-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
+      "do": "frame",
+      "label": "a-f-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
     },
     {
       "do": "wait",
-      "label": "a-f-yaw-165-settle",
+      "label": "a-f-yaw15-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-f-yaw-165",
+      "label": "a-f-yaw15",
       "region": "face"
     },
     {
-      "do": "set camera",
-      "label": "a-f-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
+      "do": "frame",
+      "label": "a-f-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
     },
     {
       "do": "wait",
-      "label": "a-f-yaw-150-settle",
+      "label": "a-f-yaw30-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-f-yaw-150",
+      "label": "a-f-yaw30",
       "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "a-f-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "frame",
+      "label": "a-f-burst-frame",
+      "target": "eyes"
+    },
+    {
+      "do": "wait",
+      "label": "a-f-burst-settle",
+      "ms": 600
+    },
+    {
+      "do": "burst",
+      "label": "a-f-burst",
+      "region": "eyes",
+      "frames": 10,
+      "interval_ms": 100
+    },
+    {
+      "do": "run",
+      "label": "a-f-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
     },
     {
       "do": "run",
@@ -1093,13 +1354,14 @@
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "a-f-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "a-e-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "a-f-wait-mirror",
+      "label": "a-e-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -1121,12 +1383,19 @@
     },
     {
       "do": "capture",
-      "label": "a-e-mirror"
+      "label": "a-e-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-e-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-e-confirm",
-      "text": "At the mirror: Confirm to keep XF = Glitter E · accent, then leave the appearance screen. Nothing is saved."
+      "label": "a-e-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -1151,12 +1420,12 @@
     {
       "do": "run",
       "label": "a-e-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "a-e-photo-key",
+      "label": "a-e-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -1172,23 +1441,47 @@
     },
     {
       "do": "wait",
-      "label": "a-e-wait-photo-prefs",
+      "label": "a-e-prefs",
       "ms": 2000
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-e-effects",
-      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "a-e-face-camera",
-      "preset": "face"
+      "do": "run",
+      "label": "a-e-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "a-e-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "a-e-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -1207,6 +1500,16 @@
     },
     {
       "do": "run",
+      "label": "a-e-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
       "label": "a-e-exit",
       "command": "photo.exit"
     },
@@ -1221,13 +1524,14 @@
       "continue_on_error": true
     },
     {
-      "do": "note",
-      "label": "a-e-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "a-clear-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "a-e-wait-mirror",
+      "label": "a-clear-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -1249,7 +1553,8 @@
     },
     {
       "do": "capture",
-      "label": "a-clear-e-mirror"
+      "label": "a-clear-e-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
@@ -1264,7 +1569,8 @@
     },
     {
       "do": "capture",
-      "label": "a-clear-a-mirror"
+      "label": "a-clear-a-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "apply cc",
@@ -1279,7 +1585,15 @@
     },
     {
       "do": "capture",
-      "label": "a-clear-off-mirror"
+      "label": "a-clear-off-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "burst",
+      "label": "a-motion-burst",
+      "region": "cc-eyes",
+      "frames": 20,
+      "interval_ms": 150
     },
     {
       "do": "ask",
@@ -1293,52 +1607,68 @@
     },
     {
       "do": "capture",
-      "label": "a-winterkissed-shot"
+      "label": "a-winterkissed-shot",
+      "region": "cc-eyes"
     },
     {
       "do": "ask",
       "label": "b-shape-01",
-      "text": "Part B: set eye shape 01, close V's eyes (a closed-eyes photo-mode expression, or a blink in the creator), frontal close-up."
+      "text": "Part B: set eye shape 01 and catch V's eyes closed in a blink (the bridge takes a burst next)."
     },
     {
-      "do": "capture",
-      "label": "b-shape-01-shot"
+      "do": "burst",
+      "label": "b-shape-01-burst",
+      "region": "cc-eyes",
+      "frames": 12,
+      "interval_ms": 120
     },
     {
       "do": "ask",
       "label": "b-shape-10",
-      "text": "Eye shape 10, eyes closed, same framing."
+      "text": "Eye shape 10."
     },
     {
-      "do": "capture",
-      "label": "b-shape-10-shot"
+      "do": "burst",
+      "label": "b-shape-10-burst",
+      "region": "cc-eyes",
+      "frames": 12,
+      "interval_ms": 120
     },
     {
       "do": "ask",
       "label": "b-shape-12",
-      "text": "Eye shape 12, eyes closed, same framing."
+      "text": "Eye shape 12."
     },
     {
-      "do": "capture",
-      "label": "b-shape-12-shot"
+      "do": "burst",
+      "label": "b-shape-12-burst",
+      "region": "cc-eyes",
+      "frames": 12,
+      "interval_ms": 120
     },
     {
       "do": "ask",
       "label": "b-shape-h011",
-      "text": "The eye shape that uses morph h011, eyes closed."
+      "text": "The eye shape that uses morph h011."
     },
     {
-      "do": "capture",
-      "label": "b-shape-h011-shot"
+      "do": "burst",
+      "label": "b-shape-h011-burst",
+      "region": "cc-eyes",
+      "frames": 12,
+      "interval_ms": 120
     },
     {
       "do": "ask",
       "label": "b-makeup-closed",
-      "text": "Eye shape 12 with an XF look covering the upper lid, eyes closed: does bare skin show between the crease and the lashes?"
+      "text": "Eye shape 12 with an XF look covering the upper lid: does bare skin show between the crease and the lashes when the eyes close?"
     },
     {
-      "do": "capture",
-      "label": "b-makeup-closed-shot"
+      "do": "burst",
+      "label": "b-makeup-closed-burst",
+      "region": "cc-eyes",
+      "frames": 12,
+      "interval_ms": 120
     },
     {
       "do": "ask",
@@ -1347,7 +1677,12 @@
     },
     {
       "do": "capture",
-      "label": "c-legacy-off-shot"
+      "label": "c-legacy-off-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-legacy-off-shot-full"
     },
     {
       "do": "ask",
@@ -1356,7 +1691,12 @@
     },
     {
       "do": "capture",
-      "label": "c-hair-5-shot"
+      "label": "c-hair-5-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-hair-5-shot-full"
     },
     {
       "do": "ask",
@@ -1365,7 +1705,12 @@
     },
     {
       "do": "capture",
-      "label": "c-hair-cyberware-shot"
+      "label": "c-hair-cyberware-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-hair-cyberware-shot-full"
     },
     {
       "do": "ask",
@@ -1374,7 +1719,12 @@
     },
     {
       "do": "capture",
-      "label": "c-piercing-9-black-shot"
+      "label": "c-piercing-9-black-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-piercing-9-black-shot-full"
     },
     {
       "do": "ask",
@@ -1383,7 +1733,12 @@
     },
     {
       "do": "capture",
-      "label": "c-piercing-1-silver-shot"
+      "label": "c-piercing-1-silver-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-piercing-1-silver-shot-full"
     },
     {
       "do": "ask",
@@ -1392,7 +1747,12 @@
     },
     {
       "do": "capture",
-      "label": "c-piercing-1-gold-shot"
+      "label": "c-piercing-1-gold-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-piercing-1-gold-shot-full"
     },
     {
       "do": "ask",
@@ -1401,7 +1761,12 @@
     },
     {
       "do": "capture",
-      "label": "c-eye-24-shot"
+      "label": "c-eye-24-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "c-eye-24-shot-full"
     },
     {
       "do": "ask",
@@ -1409,13 +1774,19 @@
       "text": "Step 6 needs a new game's body page; note the rows in order and any unlabelled row the next time a new game is started. Skip it here."
     },
     {
+      "do": "run",
+      "label": "c-back",
+      "command": "cc.back",
+      "continue_on_error": true
+    },
+    {
       "do": "note",
-      "label": "d-start",
-      "text": "Part D (optional): leave the mirror with Back, stand in the world."
+      "label": "c-back-fallback",
+      "text": "If the creator is still open, press Back and confirm."
     },
     {
       "do": "run",
-      "label": "d-wait-world",
+      "label": "c-wait-world",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -1425,10 +1796,20 @@
       }
     },
     {
+      "do": "note",
+      "label": "d-start",
+      "text": "Part D (optional): photo mode for expressions."
+    },
+    {
       "do": "run",
       "label": "d-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "d-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
       "do": "run",
@@ -1443,8 +1824,31 @@
     },
     {
       "do": "wait",
-      "label": "d-wait-photo-prefs",
+      "label": "d-prefs",
       "ms": 2000
+    },
+    {
+      "do": "run",
+      "label": "d-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "d-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
     },
     {
       "do": "run",
@@ -1455,19 +1859,29 @@
       }
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "d-neutral",
-      "text": "Set expression Neutral and look-at off in the photo-mode menu."
+      "command": "photo.expression.set",
+      "input": {
+        "faceId": 0
+      },
+      "continue_on_error": true
     },
     {
-      "do": "set camera",
-      "label": "d-face-camera",
-      "preset": "face"
+      "do": "frame",
+      "label": "d-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "d-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -1536,10 +1950,11 @@
     },
     {
       "do": "run",
-      "label": "d-hud-show",
+      "label": "d-hud-show-for-menu",
       "command": "photo.hud.hide",
       "input": {
-        "hidden": false
+        "hidden": false,
+        "cursor": true
       }
     },
     {
@@ -1550,7 +1965,11 @@
     {
       "do": "run",
       "label": "d-hud-again",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -1577,16 +1996,36 @@
     },
     {
       "do": "run",
+      "label": "d-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
       "label": "d-exit",
       "command": "photo.exit"
     },
     {
       "do": "ask",
       "label": "wrap",
-      "text": "Done. Load the safety save to restore your usual look, the time of day and the save lock."
+      "text": "Done. Load the safety save: it restores your usual look, the time of day and the save lock."
     }
   ],
   "restore": [
+    {
+      "do": "run",
+      "label": "restore-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
     {
       "do": "run",
       "label": "restore-photo-exit",

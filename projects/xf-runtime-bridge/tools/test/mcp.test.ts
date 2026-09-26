@@ -27,6 +27,8 @@ async function startMcp(args: string[]): Promise<Mcp> {
     args: [join(projectDir, "tools", "mcp-server.ts"), ...args],
     cwd: projectDir,
     stderr: "pipe",
+    // photo_open must never press a key on the test machine.
+    env: { ...(process.env as Record<string, string>), XFB_NO_INPUT: "1" },
   });
   const client = new Client({ name: "xfb-test", version: "0.0.0" });
   await client.connect(transport);
@@ -129,7 +131,17 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("This only works in photo mode");
 
+    // photo.enter refuses without a route (the quest node opens a restricted photo mode) and points at
+    // photo_open; photo_open refuses plainly when it can't send the key safely (here: the self-test host
+    // has no game window, and the MCP process runs with key input switched off).
     result = await call(mcp, "photo_enter");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("photo_key_needed");
+    expect(text(result)).toContain("photo_open");
+    result = await call(mcp, "photo_open");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/no_window|input_disabled/);
+    result = await call(mcp, "photo_enter", { route: "quest" });
     expect(result.isError).toBeFalsy();
     expect(json(result).result.undo).toEqual({ method: "photo.exit", params: {} });
     expect(json(result).undo).toBe("photo.exit.");
@@ -157,19 +169,53 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(json(result).result.undo).toEqual({ method: "photo.light.set", params: { light: 2, brightness: 0, hue: 0, select_after: 1 } });
     result = await call(mcp, "photo_light_set", json(result).result.undo.params);
     expect(json(result).result.selected).toBe(1);
+    // Light on/off, type and shadow: applied first, and undone as a flag and a type name.
+    result = await call(mcp, "photo_light_set", { light: 1, on: true, type: "spot", shadow: true, brightness: 80 });
+    expect(result.isError).toBeFalsy();
+    expect((json(result).result.applied as { key: number }[]).map((a) => a.key)).toEqual([44, 45, 46, 47]);
+    expect(json(result).result.undo_note).toContain("type"); // the simulated menu had no type yet (0)
+    expect(json(result).result.undo.params).toMatchObject({ light: 1, on: false, shadow: false, brightness: 0 });
     result = await call(mcp, "photo_hud_hide", {});
-    expect(json(result).result.undo).toEqual({ method: "photo.hud.hide", params: { hidden: false } });
+    expect(json(result).result.cursor_hidden).toBe(true);
+    expect(json(result).result.undo).toEqual({ method: "photo.hud.hide", params: { hidden: false, cursor: true } });
+    result = await call(mcp, "photo_hud_hide", { hidden: false });
+    expect(json(result).result.cursor_hidden).toBe(false);
     result = await call(mcp, "photo_expression_set", { faceId: 9 });
     expect(json(result).result.after).toBe(9);
 
+    // photo_frame against the self-test host's simulated camera: centres the face and sizes it by
+    // projection, and undoes to the values before it.
+    result = await call(mcp, "photo_camera_set", { reset: true });
+    result = await call(mcp, "photo_subject", { up: 0.045, forward: 0.08 });
+    expect(result.isError).toBeFalsy();
+    expect(json(result).result.slot).toBe("Head");
+    result = await call(mcp, "photo_frame", { target: "face", look_at: "off" });
+    expect(result.isError, text(result)).toBeFalsy();
+    const framed = json(result).result;
+    expect(framed.method).toBe("project");
+    expect(framed.converged).toBe(true);
+    expect(Math.abs(framed.residual.x)).toBeLessThan(0.011);
+    expect(Math.abs(framed.residual.size - 1)).toBeLessThan(0.05);
+    expect(framed.undo.method).toBe("photo.camera.set");
+    expect(framed.undo.params).toHaveProperty("look_at");
+    result = await call(mcp, "photo_frame", { target: "eyes", xf_preset: true, yaw_offset: 15 });
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(json(result).result.camera_preset).toBe(8);
+    expect(json(result).result.undo.params).toHaveProperty("camera_preset");
+
     result = await call(mcp, "photo_exit");
     expect(json(result).result.active).toBe(false);
+    expect(json(result).result.undo_note).toContain("photo.open");
   });
 
   test("character and world commands are refused outside their screens", async () => {
     let result = await call(mcp, "cc_apply", { option: "XF", index: 3 });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("appearance screen");
+    // Leaving the creator is off unless allow_creator_leave (this host runs without it).
+    result = await call(mcp, "cc_confirm");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("creator_leave_disabled");
     result = await call(mcp, "world_time_set", { hours: 20, minutes: 30 });
     expect(json(result).result.undo).toEqual({ method: "world.time.set", params: { total_seconds: 12 * 3600 } });
     result = await call(mcp, "world_time_set", { total_seconds: 12 * 3600 });
@@ -283,7 +329,7 @@ describe("MCP server permissions, no bridge, and captures", () => {
 
     const recropped = await call(mcp, "capture_recrop", { path: fullRecord.full.path, region: "eyes", name: "mcp-eyes" });
     expect(recropped.isError).toBeFalsy();
-    expect(json(recropped).result.crop).toMatchObject({ width: 800, height: 320 });
+    expect(json(recropped).result.crop).toMatchObject({ width: 992, height: 448 });
   }, 30000);
 });
 
