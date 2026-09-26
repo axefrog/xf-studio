@@ -10,9 +10,13 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
 /**
  * Host endpoint for the Character panel's creator options (cc-catalogue-service.ts), shared by localhost and the desktop, mounted
  * behind the caller's own session checks like the character endpoint:
- * - `GET ?gender=female` → the catalogue's state and, once ready, the panel's first-paint projection (`xfs/cc-panel-3`);
+ * - `GET ?gender=female` → the catalogue's state and, once ready, the panel's first-paint projection (`xfs/cc-panel-4`);
  * - `GET ?gender=female&option=<part/name>&offset=<n>[&search=<text>]` → one page of that option's choices (the matching ones);
  * - `GET ?gender=female&search=<text>` → the options with a choice matching a search;
+ * - `GET ?gender=female&swatches=<part/name>` → a colour row's swatches and icons by choice position (`CcSwatches`; `pending` while the
+ *   host is still working them out);
+ * - `GET ?gender=female&sheet=<id>&key=<key>` → an icon sheet (PNG of game or mod pictures, served only to the local page; its key names
+ *   its content, so it is cached by the browser);
  * - `POST {kind:"view", request}` → the character context's view of a request (`xfs/character-request-4`);
  * - `POST {kind:"preset", request, name?, kept?}` → a portable `xfs/cc-preset-1` of the request's choices;
  * - `POST {kind:"retry", bodyGender}` → Try again after a failed build, answered as the state;
@@ -50,6 +54,19 @@ export function createCreatorHandler(host: CreatorCatalogueHost, options: { trus
       if (request.method === "GET") {
         const body = gender(url.searchParams.get("gender"));
         if (!body) return json({ code: "invalid", error: "Unknown body type." }, 400);
+        const swatches = url.searchParams.get("swatches"), sheet = url.searchParams.get("sheet");
+        if (swatches !== null) {
+          if (!isOptionId(swatches)) return json({ code: "invalid", error: "Unknown option." }, 400);
+          const answer = await host.swatches(body, swatches);
+          return answer ? json(answer) : json({ code: "missing_target", error: "That creator option isn't offered by the installed game and mods." }, 404);
+        }
+        if (sheet !== null) {
+          const id = Number(sheet), key = url.searchParams.get("key") ?? "";
+          if (!Number.isInteger(id) || id < 0 || id > 255 || !/^[a-f0-9]{8,64}$/.test(key)) return json({ code: "invalid", error: "Unknown sheet." }, 400);
+          const png = await host.sheet(body, id, key);
+          return png ? new Response(new Blob([png as Uint8Array<ArrayBuffer>]), { headers: { "Content-Type": "image/png", "Cache-Control": "private, max-age=31536000, immutable" } })
+            : json({ code: "missing_target", error: "That icon sheet isn't ready." }, 404);
+        }
         const option = url.searchParams.get("option"), search = url.searchParams.get("search") ?? "";
         if (search.length > 200) return json({ code: "invalid", error: "The search is too long." }, 400);
         if (option === null) {

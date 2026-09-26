@@ -12,6 +12,10 @@
  *   provenance and, for a switcher, the options the choice activates (its identity across same-named choices, CORE-70). A page can be
  *   limited to the choices matching a search, and `searchChoices` names the options that have one (UI-72). Every page names the
  *   catalogue it came from (`identity`), so the page notices a catalogue that changed under it (PIPE-81).
+ * - **Swatches** (`xfs/cc-panel-4`; `CcSwatches`), per colour row, fetched when the row opens and again while the host is still working
+ *   them out: each choice's swatch derived from the resource that wins for it (cc-swatch.ts, compact text: one colour or a gradient root
+ *   to tip) and its creator icon as a cell of an icon sheet (cc-icons.ts), with the sheets' table. The view's current choices carry their
+ *   swatch too (`CreatorValue.swatch`).
  *
  * Nothing here names an option, a slot or a mod.
  */
@@ -21,7 +25,7 @@ import type { RenderCoverage, RenderStatus } from "./cc-render-coverage";
 import type { CharacterChange, CharacterView } from "./character-context";
 import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 
-export const CC_PANEL_SCHEMA = "xfs/cc-panel-3" as const;
+export const CC_PANEL_SCHEMA = "xfs/cc-panel-4" as const;
 export const CC_PAGE_SIZE = 240;
 /**
  * The game's creator category (`gamedataCharacterRandomizationCategory`) whose rows are makeup: the section "hide my V's own makeup"
@@ -40,7 +44,7 @@ export interface CcPanelOption {
   /** The creator shows a colour grid (`useThumbnails`) rather than a stepper. */
   readonly grid: boolean;
   readonly count: number;
-  /** The key of its Off choice (adds nothing where its other choices add something), when it has one. */
+  /** The key of the choice the creator labels Off (catalogue `labelledOff`), when it has one. */
   readonly off: string | null;
   readonly defaultChoice: string | null;
   /** Index into `mods`, or -1 for vanilla. */
@@ -98,6 +102,20 @@ export interface CcChoicePage {
   readonly total: number;
   readonly choices: readonly CcPanelChoice[];
 }
+/** An icon sheet: `columns` × `rows` cells of `cell` pixels, fetched by its `key` (changes when the sheet does). */
+export interface CcIconSheet { readonly id: number; readonly key: string; readonly columns: number; readonly rows: number; readonly cell: number }
+/** One colour row's swatches and icons by choice position (`GET ?gender=&swatches=<option>`). */
+export interface CcSwatches {
+  readonly identity: string;
+  readonly option: string;
+  /** Some are still being worked out: ask again shortly. */
+  readonly pending: boolean;
+  /** Compact swatch text (cc-swatch.ts `encodeSwatch`) by position, "" for none. */
+  readonly swatches: readonly string[];
+  /** `<sheet>:<cell>` by position, "" for none. */
+  readonly icons: readonly string[];
+  readonly sheets: readonly CcIconSheet[];
+}
 /** The options with a choice matching a search (`searchChoices`). */
 export interface CcChoiceSearch { readonly identity: string; readonly query: string; readonly options: readonly string[]; readonly more: boolean }
 
@@ -130,9 +148,10 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
     if (known !== undefined) return known;
     const shown = coverage.get(option.id) ?? { status: "not-rendered" as const, note: "" };
     const entry: CcPanelOption = { id: option.id, part: option.part, name: option.name, label: option.label.text, type: option.type,
-      // An Off choice is one that adds nothing while others add something (every choice of a colour-only controller adds nothing itself).
+      // Off is the choice the creator labels Off (the game's own text), never one inferred from adding nothing (the base face shape and the
+      // skin's own nipples add nothing and are not Off).
       grid: option.useThumbnails, count: option.choices.length,
-      off: option.choices.some(choice => !choice.off) ? option.choices.find(choice => choice.off)?.key ?? null : null,
+      off: option.choices.find(choice => choice.labelledOff)?.key ?? null,
       defaultChoice: option.defaultChoice, mod: option.provenance.kind === "mod" ? modIndex(option.provenance.mod) : -1,
       link: option.link ? { ...option.link } : null,
       dependsOn: option.controlledBy.map(name => index.option(option.part, name)?.label.text ?? name),
@@ -168,10 +187,9 @@ export function choicePage(index: CatalogueIndex, mods: ReadonlyMap<string, numb
   const all = option.choices.filter(choice => isCreatorName(choice.key, true) && choice.activates.length <= CREATOR_LIMITS.activates &&
     choice.activates.every(name => isCreatorName(name)) && matches(choice, query));
   const start = Math.max(0, Math.min(all.length, Math.floor(offset)));
-  const someAdd = option.choices.some(choice => !choice.off);
   return { identity: options.identity ?? "", option: option.id, query, offset: start, total: all.length,
     choices: all.slice(start, start + Math.max(1, Math.min(CC_PAGE_SIZE, options.limit ?? CC_PAGE_SIZE))).map(choice => ({ key: choice.key,
-      position: choice.position, label: choice.label.text, off: choice.off && someAdd, color: hex(choice.swatch?.color),
+      position: choice.position, label: choice.label.text, off: choice.labelledOff, color: hex(choice.swatch?.color),
       mod: choice.provenance.kind === "mod" ? mods.get(choice.provenance.mod ?? "") ?? -1 : -1,
       ...(option.type === "switcher" ? { activates: [...choice.activates] } : {}) })) };
 }
@@ -202,6 +220,8 @@ export interface CreatorValue {
   /** The current choice's position among the option's choices (the checked choice, CORE-70). */
   readonly position: number;
   readonly label: string; readonly color: string | null; readonly ownLabel: string;
+  /** The current choice's swatch derived from what wins for it (cc-swatch.ts), when the host has worked it out. */
+  readonly swatch?: string | null;
 }
 export interface CreatorView extends Omit<CharacterView, "values"> {
   readonly identity: string;
@@ -271,6 +291,20 @@ export function readChoicePage(value: unknown, mods: number): CcChoicePage {
       mod: int(choice.mod, "mod", mods - 1),
       ...(choice.activates === undefined ? {} : { activates: Array.isArray(choice.activates) && choice.activates.length <= CREATOR_LIMITS.activates
         ? choice.activates.map(entry => name(entry, "activated option")) : fail("activated options") }) })) };
+}
+
+const SWATCH_TEXT = /^!?#[0-9a-f]{6}(?:>#[0-9a-f]{6}){0,7}$/, ICON_TEXT = /^\d{1,3}:\d{1,6}$/;
+/** Most positions a swatch answer lists (the largest colour rows have a few hundred choices). */
+export const SWATCH_POSITIONS_MAX = 100_000;
+export function readSwatches(value: unknown): CcSwatches {
+  const answer = value as CcSwatches;
+  if (!answer || !Array.isArray(answer.swatches) || !Array.isArray(answer.icons) || !Array.isArray(answer.sheets) ||
+    answer.swatches.length > SWATCH_POSITIONS_MAX || answer.icons.length > SWATCH_POSITIONS_MAX || answer.sheets.length > 256) fail("swatches");
+  return { identity: str(answer.identity, "identity"), option: str(answer.option, "option"), pending: answer.pending === true,
+    swatches: answer.swatches.map(text => text === "" || SWATCH_TEXT.test(String(text)) ? String(text) : fail("swatch")),
+    icons: answer.icons.map(text => text === "" || ICON_TEXT.test(String(text)) ? String(text) : fail("icon")),
+    sheets: answer.sheets.map(sheet => ({ id: int(sheet?.id, "sheet", 255), key: /^[a-f0-9]{8,64}$/.test(String(sheet?.key)) ? String(sheet.key) : fail("sheet key"),
+      columns: int(sheet.columns, "sheet", 4096), rows: int(sheet.rows, "sheet", 4096), cell: int(sheet.cell, "sheet", 512) })) };
 }
 
 export function readChoiceSearch(value: unknown): CcChoiceSearch {

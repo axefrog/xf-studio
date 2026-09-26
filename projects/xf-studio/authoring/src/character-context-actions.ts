@@ -41,7 +41,7 @@
  */
 import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
-import { type CcChoicePage, type CcChoiceSearch, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView,
+import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView,
   makeupOff, searchQuery } from "./cc-panel";
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
 import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
@@ -71,6 +71,10 @@ export type CreatorPort = {
   prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal): Promise<PrefetchReply>;
   /** Stop preparing ahead (the row closed). */
   stopPrefetch?(): Promise<void>;
+  /** A colour row's swatches and icons by position (`pending` while the host is still working them out). */
+  swatches?(gender: BodyGender, option: string, signal: AbortSignal): Promise<CcSwatches>;
+  /** Where the page fetches an icon sheet. */
+  sheetUrl?(gender: BodyGender, id: number, key: string): string;
   /** The prepared game files' size on this computer, and clearing them. */
   preparedFiles?(signal?: AbortSignal): Promise<{ bytes: number }>;
   clearPrepared?(): Promise<{ freed: number }>;
@@ -114,6 +118,11 @@ export type ClothingSnapshot = { state: ClothingState; custom: ClothingArea[]; w
   /** The areas the current state shows, and the states and areas as the control words them (so the presentation derives nothing). */
   shown: ClothingArea[]; states: { value: ClothingState; label: string }[]; areas: { area: ClothingArea; label: string }[];
   source: "save" | "none" | "unread" | "older"; note: string; undo: string | null; redo: string | null };
+/** An icon sheet as the panel draws from it: its URL and `columns` × `rows` cells. */
+export type CharacterIconSheet = { readonly url: string; readonly columns: number; readonly rows: number };
+/** A colour row's swatches and icons by choice position ("" for none), as loaded so far. */
+export type CharacterSwatchState = { readonly swatches: readonly string[]; readonly icons: readonly string[];
+  readonly sheets: ReadonlyMap<number, CharacterIconSheet>; readonly pending: boolean };
 export type CharacterChoicesState = { readonly choices: readonly CcPanelChoice[]; readonly total: number; readonly loading: boolean; readonly error: string | null };
 export type CharacterSearchState = { readonly query: string; readonly options: ReadonlySet<string> | null; readonly more: boolean; readonly loading: boolean;
   readonly error: string | null };
@@ -153,6 +162,8 @@ const HISTORY_LIMIT = 100;
 const CHOICE_PREFETCH_POSITIONS = 512;
 /** Polling the catalogue's build: while the panel is being looked at, and otherwise (PIPE-78). */
 const POLL_MS = 800, POLL_IDLE_MS = 4000, WATCHED_MS = 3000;
+/** How often an open colour row asks again while the host is still working out its swatches. */
+const SWATCH_POLL_MS = 1500;
 const LOADING = "The creator options are still loading.";
 const plainStep = (option: CcPanelOption | undefined, choice: string, label?: string) =>
   label ? label : option ? `Change ${option.label}` : `Change ${choice || "an option"}`;
@@ -199,6 +210,9 @@ export class CharacterContextActions {
   private byId = new Map<string, CcPanelOption>();
   /** Pages by option and search (`pageKey`). */
   private pages = new Map<string, { choices: CcPanelChoice[]; total: number; loading: boolean; error: string | null }>();
+  /** Colour rows' swatches by option, and the rows being asked about now. */
+  private swatchRows = new Map<string, CharacterSwatchState>();
+  private swatchLoading = new Set<string>();
   private searching: (CharacterSearchState & { controller: AbortController | null }) | null = null;
   private currentView: CreatorView | null = null;
   private viewKey: string | null = null;
@@ -319,6 +333,33 @@ export class CharacterContextActions {
     const page = this.pages.get(key);
     if (!page || (!page.loading && !page.error && page.choices.length < Math.min(want, page.total))) void this.loadPage(option, wanted);
     return this.pages.get(key) ?? { choices: [], total: this.byId.get(option)?.count ?? 0, loading: true, error: null };
+  }
+  /**
+   * A colour row's swatches and icons (derived on the host from what wins for each choice; cc-swatch.ts), or null before they arrive or
+   * when the host doesn't offer them. Asking loads them, and asks again while the host is still working them out.
+   */
+  swatches(option: string): CharacterSwatchState | null {
+    if (!this.swatchRows.has(option) || this.swatchRows.get(option)!.pending) void this.loadSwatches(option);
+    return this.swatchRows.get(option) ?? null;
+  }
+  private async loadSwatches(option: string) {
+    const port = this.ports.creator;
+    if (!port.swatches || this.swatchLoading.has(option) || this.catalogue.phase !== "ready" || !this.session) return;
+    const generation = this.generation, gender = this.state.bodyGender, signal = this.session.signal;
+    this.swatchLoading.add(option);
+    try {
+      // A row asked about again while its swatches are pending waits a moment first.
+      if (this.swatchRows.get(option)?.pending) await port.wait(SWATCH_POLL_MS, signal);
+      if (generation !== this.generation || this.disposed) return;
+      const answer = await port.swatches(gender, option, signal);
+      if (generation !== this.generation || this.disposed || this.stale(answer.identity)) return;
+      const sheets = new Map(answer.sheets.map(sheet => [sheet.id, { url: port.sheetUrl?.(gender, sheet.id, sheet.key) ?? "", columns: sheet.columns, rows: sheet.rows }]));
+      this.swatchRows.set(option, deepFreeze({ swatches: [...answer.swatches], icons: [...answer.icons], sheets, pending: answer.pending }));
+    } catch {
+      // Swatches are a nicety: without them the row shows the definitions' own colours.
+      if (generation === this.generation && !this.disposed) this.swatchRows.set(option, { swatches: [], icons: [], sheets: new Map(), pending: false });
+    } finally { this.swatchLoading.delete(option); }
+    if (generation === this.generation && !this.disposed) this.publish();
   }
   /** The options with a choice matching `query` (the host searches every choice, not only those loaded; UI-72). */
   search(query: string): CharacterSearchState {
@@ -466,7 +507,7 @@ export class CharacterContextActions {
     this.session = controller;
     this.loading = true;
     this.catalogue = { phase: "preparing", message: "", panel: null, gender };
-    this.byId.clear(); this.pages.clear();
+    this.byId.clear(); this.pages.clear(); this.swatchRows.clear(); this.swatchLoading.clear();
     this.publish();
     const live = () => !controller.signal.aborted && generation === this.generation && !this.disposed;
     void (async () => {

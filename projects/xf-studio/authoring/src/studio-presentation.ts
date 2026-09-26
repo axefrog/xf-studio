@@ -113,7 +113,7 @@ export type StudioPresentationPort<Slot> = {
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
     "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" |
-    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch"> & {
+    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
@@ -244,7 +244,8 @@ export function createStudioPresentation<Slot>(sources: {
     layerExport: layerId => a.layerExport(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
     characterPanel: () => a.characterPanel(), characterView: () => a.characterView(),
-    characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSearch: query => a.characterSearch(query),
+    characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSwatches: option => a.characterSwatches(option),
+    characterSearch: query => a.characterSearch(query),
     characterPrefetch: (option, positions, focus) => a.characterPrefetch(option, positions, focus), characterStopPrefetch: option => a.characterStopPrefetch(option),
   };
   const fallback = () => a.snapshot().document;

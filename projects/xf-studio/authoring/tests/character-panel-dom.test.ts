@@ -34,6 +34,11 @@ async function harness() {
       return { ...view, identity: "fixture", values, faceMorphs: [] } as CreatorView;
     },
     preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }), wait: async () => {},
+    // Swatches as the host derives them: the eye colour's second choice a root-to-tip gradient, its first the game's icon (cell 3 of sheet 0).
+    swatches: async (_gender, option) => ({ identity: "fixture", option, pending: false,
+      swatches: option === "head/eyes_color" ? ["#503214", "#000000>#808080>#ffffff", "!#aa00aa"] : [], icons: option === "head/eyes_color" ? ["0:3", "", "0:4"] : [],
+      sheets: [{ id: 0, key: "abcdef0123", columns: 2, rows: 2, cell: 64 }] }),
+    sheetUrl: (_gender, id, key) => `/sheet/${id}/${key}`,
     // Preparing choices ahead: each position's state is what the test sets (queued by default).
     prefetch: async (_request, option, positions, focus) => {
       prefetches.push({ option, positions: [...positions], focus });
@@ -49,6 +54,7 @@ async function harness() {
     port: {
       authoring: { characterPanel: () => context.panel(), characterView: () => context.view(),
         characterChoices: (option: string, want?: number, query?: string) => context.choices(option, want, query), characterSearch: (query: string) => context.search(query),
+        characterSwatches: (option: string) => context.swatches(option),
         characterPrefetch: (option: string, positions: number[], focus?: number | null) => context.prefetch(option, positions, focus ?? null),
         characterStopPrefetch: (option: string) => context.stopPrefetch(option),
         capability: (action: { kind: string }) => action.kind.startsWith("character.") ? context.capability(action as never) : { available: true } },
@@ -145,6 +151,49 @@ describe("the Character panel's DOM", () => {
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.resetAll" });
     // The fixture's piercing colour depends on the style switcher, so its row keeps a detail line; the eye colour has none.
     expect(row(h.root, "Eye Color").querySelector(".cc-row-detail")).toBeNull();
+  });
+});
+
+describe("one hierarchy in the Character panel (Next 4)", () => {
+  test("Head, Body and Clothing hold every part; the 3D view's switches sit on the headings of what they show", async () => {
+    const h = await harness();
+    expect(h.root.querySelectorAll(".section-title").map(title => title.textContent)).not.toContain("In the 3D view");
+    expect(h.root.querySelectorAll(".cc-group-title").map(title => title.textContent)).toEqual(["Head", "Body", "Clothing"]);
+    const group = (id: string) => h.root.querySelectorAll(".cc-group").find(element => element.getAttribute("data-group") === id)!;
+    // The uncensored setting and the body's switch are on Body; the clothes' switch on Clothing.
+    expect(group("body").querySelectorAll(".toggle-label").map(label => label.textContent)).toContain("Show my V uncensored, as the game can");
+    const switches = (element: LightElement) => element.querySelectorAll("input").map(input => input.getAttribute("aria-label")).filter(Boolean);
+    expect(switches(group("body"))).toContain("Show the body in the 3D view");
+    expect(switches(group("clothing"))).toEqual(["Show clothes in the 3D view"]);
+    // The piercings switch is on the heading of the section holding the piercing colours; the eye shape is in Eyes.
+    const sectionOf = (element: LightElement) => { let at: LightElement | null = element; while (at && !at.classList.contains("cc-section")) at = at.parentNode; return at; };
+    const piercings = h.root.querySelectorAll("input").find(input => input.getAttribute("aria-label") === "Show piercings in the 3D view")!;
+    expect(sectionOf(piercings)!.getAttribute("data-section")).toBe("head/FaceModification");
+    expect(h.root.querySelectorAll("select").some(select => sectionOf(select)?.getAttribute("data-section") === "head/Eyes")).toBe(true);
+    // Without a 3D preview a switch can't change: it stays focusable, says why in the line under its heading, and a click runs nothing.
+    expect(piercings.disabled).toBe(false);
+    expect(piercings.getAttribute("aria-disabled")).toBe("true");
+    expect(sectionOf(piercings)!.querySelector(".cc-heading-note")!.textContent).toContain("3D preview");
+    const before = h.dispatched.length;
+    piercings.click();
+    expect(h.dispatched.length).toBe(before);
+  });
+
+  test("every colour choice is a narrow swatch: the game's icon, else the derived colour or gradient; a replaced colour shows the derived one", async () => {
+    const h = await harness();
+    const eyes = row(h.root, "Eye Color");
+    eyes.querySelector(".cc-row-main")!.click();
+    h.paint(); await settle(); h.paint(); await settle(); h.paint();
+    const choices = items(eyes);
+    // No choice of a colour grid is a text button (the label is the accessible name).
+    expect(choices.every(item => !item.querySelector(".cc-choice-label"))).toBe(true);
+    const look = (item: LightElement) => item.querySelector(".swatch")!;
+    const byPosition = (position: number) => choices.find(item => item.getAttribute("data-position") === String(position))!;
+    expect(look(byPosition(0)).getAttribute("data-look")).toBe("icon");
+    expect((look(byPosition(0)).style as unknown as { values: Map<string, string> }).values.get("--swatch-image")).toBe(`url("/sheet/0/abcdef0123")`);
+    expect(look(byPosition(1)).getAttribute("data-look")).toBe("gradient");
+    // Replaced (`!`): the icon would show the old colour, so the derived colour shows.
+    expect(look(byPosition(2)).getAttribute("data-look")).toBe("colour");
   });
 });
 

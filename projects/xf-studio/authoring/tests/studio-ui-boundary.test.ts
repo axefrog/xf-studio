@@ -29,6 +29,8 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["context-menu", ["allowsNativeTextMenu"]],
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
+  // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
+  ["character-panel-sections", ["CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
   // The pure input binding catalogue: hint/cursor/label derivation and key matching.
   ["input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
     "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],

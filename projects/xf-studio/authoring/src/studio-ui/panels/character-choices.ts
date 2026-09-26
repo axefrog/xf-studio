@@ -12,9 +12,14 @@
  *   a moving one, and one that couldn't be prepared ahead a warning mark; a ready choice has none. The mark sits in the item's corner, so
  *   it never moves the layout, and its state joins the accessible description and the tooltip. Hovering or focusing a choice hints the
  *   host to prepare it next (`onHint`).
+ * - **Swatches show what you'll get** (cc-swatch.ts): in a colour grid every choice, the game's or a mod's, is a narrow swatch: the game's
+ *   own atlas icon where the choice has one (unless a mod replaced the colour's resource, when the icon would show the old colour), else
+ *   the colour the host derived from the winning resource (a hair, brow or lash profile as a small root-to-tip gradient), else the
+ *   definition's own colour. Swatches arriving later update the items in place; a choice still without one keeps its place, marked as
+ *   waiting. The label stays the item's accessible name and tooltip.
  */
 import type { CcPanelChoice } from "../../cc-panel";
-import type { ChoiceFetch } from "../../character-context-actions";
+import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 
 export type ChoiceListInput = {
@@ -29,7 +34,32 @@ export type ChoiceListInput = {
   loading: boolean; error: string | null;
   /** Each choice's state of being prepared ahead, by position (none: the host doesn't prepare ahead). */
   fetch?: ReadonlyMap<number, ChoiceFetch> | null;
+  /** A colour row's swatches and icons by position (grid rows; null until they arrive). */
+  swatches?: CharacterSwatchState | null;
 };
+
+/** How one grid choice's swatch is drawn: CSS custom properties on its swatch element, and whether it is still waiting. */
+export type SwatchLook = { readonly background: string; readonly image: string; readonly size: string; readonly position: string; readonly waiting: boolean;
+  readonly kind: "icon" | "gradient" | "colour" | "none" };
+/** One choice's swatch look from the row's swatches (see the module note for the order). */
+export function swatchLook(choice: Pick<CcPanelChoice, "position" | "color">, swatches: CharacterSwatchState | null | undefined): SwatchLook {
+  const text = swatches?.swatches[choice.position] ?? "", replaced = text.startsWith("!");
+  const colours = text ? text.replace(/^!/, "").split(">") : [];
+  const tint = colours.length === 1 ? colours[0]! : choice.color ?? (colours.length ? colours[Math.floor(colours.length / 2)]! : "");
+  const icon = swatches?.icons[choice.position] ?? "";
+  const [sheetId, cell] = icon ? icon.split(":").map(Number) as [number, number] : [NaN, NaN];
+  const sheet = icon ? swatches?.sheets.get(sheetId) : undefined;
+  if (sheet?.url && !replaced) {
+    const column = cell % sheet.columns, row = Math.floor(cell / sheet.columns);
+    const at = (index: number, count: number) => count > 1 ? `${(index / (count - 1)) * 100}%` : "0%";
+    return { background: tint || "transparent", image: `url("${sheet.url}")`, size: `${sheet.columns * 100}% ${sheet.rows * 100}%`,
+      position: `${at(column, sheet.columns)} ${at(row, sheet.rows)}`, waiting: false, kind: "icon" };
+  }
+  if (colours.length > 1) return { background: colours[0]!, image: `linear-gradient(to bottom, ${colours.join(", ")})`, size: "100% 100%", position: "0 0",
+    waiting: false, kind: "gradient" };
+  if (tint) return { background: tint, image: "none", size: "auto", position: "0 0", waiting: false, kind: "colour" };
+  return { background: "", image: "none", size: "auto", position: "0 0", waiting: !!swatches?.pending || !swatches, kind: "none" };
+}
 
 /** A choice's prepared-ahead state as the item shows it: `data-fetch` and the words its description adds. */
 const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>> = {
@@ -42,7 +72,7 @@ export class ChoiceList {
   readonly element: HTMLElement;
   readonly list: HTMLElement;
   private readonly status: HTMLElement;
-  private items: { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string }[] = [];
+  private items: { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string; swatch: HTMLElement | null; look: string }[] = [];
   private byPosition = new Map<number, HTMLButtonElement>();
   private shown: { option: string; query: string } | null = null;
   private selected: number | null = null;
@@ -71,7 +101,7 @@ export class ChoiceList {
       if (item) setAttr(item, "aria-selected", "true");
       if (!this.focused()) this.rove(item ?? this.active);
     } else if (!this.active && this.items.length) this.rove(this.selected !== null ? this.byPosition.get(this.selected) : undefined);
-    for (const entry of this.items) this.showFetch(entry, input.fetch?.get(entry.choice.position));
+    for (const entry of this.items) { this.showFetch(entry, input.fetch?.get(entry.choice.position)); this.paintSwatch(entry, input.swatches); }
     const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
     setText(this.status, line);
     this.status.hidden = !line;
@@ -91,6 +121,21 @@ export class ChoiceList {
     const restore = focusedAt === undefined ? undefined : this.byPosition.get(focusedAt);
     this.rove(restore ?? selected);
     restore?.focus();
+  }
+
+  /** Draw a grid item's swatch (only when its look changes: swatches arrive after the items). */
+  private paintSwatch(entry: ChoiceList["items"][number], swatches: CharacterSwatchState | null | undefined) {
+    if (!entry.swatch) return;
+    const look = swatchLook(entry.choice, swatches), key = JSON.stringify(look);
+    if (entry.look === key) return;
+    entry.look = key;
+    const style = entry.swatch.style;
+    style.setProperty("--swatch", look.background || "transparent");
+    style.setProperty("--swatch-image", look.image);
+    style.setProperty("--swatch-size", look.size);
+    style.setProperty("--swatch-position", look.position);
+    setAttr(entry.swatch, "data-look", look.kind);
+    if (look.kind === "none") setAttr(entry.swatch, "data-empty", look.waiting ? "waiting" : "true"); else entry.swatch.removeAttribute("data-empty");
   }
 
   /** Mark an item with its prepared-ahead state (only when it changes). */
@@ -117,18 +162,21 @@ export class ChoiceList {
 
   private add(choice: CcPanelChoice, input: ChoiceListInput) {
     const from = choice.mod >= 0 ? `From ${input.mods[choice.mod] ?? "a mod"}` : "From the game";
+    // In a colour grid every choice but Off is a narrow swatch; its label is the accessible name and tooltip.
+    const swatch = input.grid && !choice.off ? h("span", { class: "swatch", "aria-hidden": "true" }) : null;
     const item = h("button", { class: `cc-choice${input.grid ? " swatch-choice" : ""}${choice.off ? " off" : ""}`, type: "button", role: "option",
       "aria-selected": String(choice.position === input.selected), tabindex: "-1", title: `${choice.off ? "Off" : choice.label} · ${from}`,
       "aria-label": choice.off ? "Off" : choice.label, "aria-description": from, "data-position": String(choice.position) },
-      input.grid ? h("span", { class: "swatch", style: choice.color ? `--swatch:${choice.color}` : undefined, "data-empty": choice.color ? undefined : "true" }) : null,
-      input.grid && !choice.off && choice.color ? null : h("span", { class: "cc-choice-label", text: choice.off ? "Off" : choice.label }));
+      swatch, swatch ? null : h("span", { class: "cc-choice-label", text: choice.off ? "Off" : choice.label }));
     item.addEventListener("click", () => { this.rove(item); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
     item.addEventListener("pointerenter", () => this.onHint(choice));
     const firstPlain = choice.off ? this.items.find(entry => !entry.choice.off)?.element : undefined;
     if (firstPlain) this.list.insertBefore(item, firstPlain); else this.list.appendChild(item);
     const at = firstPlain ? this.items.findIndex(entry => entry.element === firstPlain) : this.items.length;
-    this.items.splice(at, 0, { choice, element: item, from, fetch: "" });
+    const entry = { choice, element: item, from, fetch: "", swatch, look: "" };
+    this.items.splice(at, 0, entry);
+    this.paintSwatch(entry, input.swatches);
     this.byPosition.set(choice.position, item);
   }
 

@@ -11,8 +11,14 @@
  * Clothing) in the order they were made; the header's Undo covers the makeup only and says so. Nothing here moves the layout on its own (UI-68):
  * one status line of fixed height carries what is on its way or failed, with Try again and Keep my changes inline, and a Details
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
- * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72). What the 3D
- * view shows (eye shape, visibility switches) comes before the long list of creator options (UI-96); files come last.
+ * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72); files come last.
+ *
+ * **One hierarchy** (character-panel-sections.ts): the parts of V (Head, Body, Clothing), then sections (the creator's categories and
+ * what contributions add), then rows. What the 3D view shows is part of it, not a list of its own: each show/hide switch sits on the
+ * heading row of what it shows (Hair on Hair, the body on Body, clothes on Clothing), the eye shape in Eyes, and the uncensored setting
+ * in Body. The tree is derived from the creator projection and the contributions, so a module adds sections without this module
+ * changing; a switch that can't change says why in the line reserved under its heading and stays focusable (UI-84). Colour rows draw
+ * every choice as a narrow swatch derived from the resource that wins for it, with the game's icons (character-choices.ts).
  *
  * An open row's choices are prepared ahead in the background (character-context-actions.ts `prefetch`), the ones in view first; each
  * choice not prepared yet carries a corner mark, one line under the search explains the marks once, and a first-time change says why
@@ -22,13 +28,15 @@
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
 import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
-import { h, isTextInput, setAttr, setText } from "../dom";
+import { h, isTextInput, setAttr, setText, setUnavailable } from "../dom";
+import { CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterSectionContribution, type CharacterToggle,
+  type CharacterToggleState } from "../../character-panel-sections";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { characterDetailLine } from "./preview";
-import { ChoiceList } from "./character-choices";
+import { ChoiceList, swatchLook } from "./character-choices";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { ClothingState } from "../../clothing-dressing";
 import type { ClothingArea } from "../../save-loadout";
@@ -65,7 +73,36 @@ const rowOption = (panel: Readonly<CcPanel>, row: Readonly<CcPanelRow>, view: Re
   return view ? options.find(option => view.values[option.id]?.active) ?? null : options[0] ?? null;
 };
 
-export function characterPanel(rt: StudioRuntime): PanelController {
+/**
+ * A show/hide switch on a heading row: a compact switch whose accessible name says what it shows. When it can't change it stays
+ * focusable, marked `aria-disabled`, and its reason shows in the line reserved under the heading (UI-84); the switch then snaps back.
+ */
+class HeadingToggle {
+  readonly element: HTMLElement;
+  readonly input: HTMLInputElement;
+  private unavailable = false;
+  constructor(readonly toggle: CharacterToggle, onChange: (shown: boolean) => void) {
+    this.input = h("input", { type: "checkbox", role: "switch", class: "switch", "aria-label": toggle.label });
+    this.element = h("label", { class: "toggle cc-heading-toggle", title: toggle.label }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
+      h("span", { class: "toggle-label", text: "Shown" }));
+    this.input.addEventListener("click", event => { if (this.unavailable) event.preventDefault(); });
+    this.input.addEventListener("change", () => { if (!this.unavailable) onChange(this.input.checked); });
+  }
+  update(shown: boolean, unavailable: string | null) {
+    if (this.input.checked !== shown) this.input.checked = shown;
+    this.unavailable = !!unavailable;
+    setUnavailable(this.input, !!unavailable, unavailable ?? undefined);
+    this.element.classList.toggle("unavailable", !!unavailable);
+  }
+}
+/** The controls contributions name, by ID: the panel's own; a module passes its own beside them. */
+export type CharacterControls = Readonly<Record<string, HTMLElement>>;
+
+/** The Character panel with the Studio's own contributions. */
+export const characterPanel = (rt: StudioRuntime): PanelController => characterPanelWith(rt);
+/** The Character panel with a module's contributions and the controls they name (beside the panel's own). */
+export function characterPanelWith(rt: StudioRuntime, contributions: readonly CharacterSectionContribution[] = CHARACTER_CONTRIBUTIONS,
+  moduleControls: CharacterControls = {}): PanelController {
   const port = rt.port;
   const dispatch = (action: Parameters<StudioRuntime["dispatch"]>[0]) => rt.dispatch(action);
 
@@ -104,7 +141,6 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     h("span", { class: "cc-fetch-mark", "data-fetch": "fetching", "aria-hidden": "true" }), ` ${LEGEND_FETCHING}`);
   const legendStopped = h("span", { class: "cc-legend-text", hidden: true });
   const legend = h("p", { class: "note cc-legend" }, legendText, legendStopped);
-  const sections = h("div", { class: "cc-sections" });
   const noMatch = note("No option or choice matches.");
   noMatch.hidden = true;
 
@@ -115,14 +151,9 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const clothingAreas = h("div", { class: "cc-clothing-areas" });
   const clothingNote = note("");
 
-  // ---- Preview-only controls (not creator choices) ----
+  // ---- Controls contributions name (character-panel-sections.ts): the eye shape, the uncensored look, the clothes ----
   const eyeShape = new SelectField<string>({ label: "Eye shape in the 3D view", onChange: value => dispatch({ kind: "preview.setEyeShape", index: Number(value) }) });
   const eyeNote = note("");
-  const brows = new Toggle({ label: "Eyebrows", onChange: enabled => dispatch({ kind: "preview.setDetail", detail: "brows", enabled }) });
-  const lashes = new Toggle({ label: "Eyelashes", onChange: enabled => dispatch({ kind: "preview.setDetail", detail: "lashes", enabled }) });
-  const hair = new Toggle({ label: "Hair", onChange: enabled => dispatch({ kind: "preview.setHair", enabled }) });
-  const piercings = new Toggle({ label: "Piercings", onChange: enabled => dispatch({ kind: "preview.setPiercings", enabled }) });
-  const body = new Toggle({ label: "Body", onChange: enabled => dispatch({ kind: "preview.setBody", enabled }) });
   const uncensored = new Toggle({ label: "Show my V uncensored, as the game can", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }) });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const detailNote = note("");
@@ -132,15 +163,20 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     title: "Removes the files XF Studio prepared from your game for the 3D view. They are read from your game again when needed; your makeup, presets and settings stay.",
     onClick: () => dispatch({ kind: "character.clearPreparedFiles" }) });
 
+  const controls_: CharacterControls = {
+    eyeShape: h("div", { class: "cc-control" }, eyeShape.element, eyeNote),
+    uncensored: h("div", { class: "cc-control" }, uncensored.element),
+    clothingState: h("div", { class: "cc-control" }, h("div", { class: "row gap-s cc-clothing" }, clothingState.element), clothingNote),
+    clothingAreas,
+    ...moduleControls,
+  };
+  const groupsHost = h("div", { class: "cc-groups" });
   const element = h("div", { class: "panel-content cc-panel" },
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
-      h("span", { class: "cc-history" }, undo, redo)), status, messages),
+      h("span", { class: "cc-history" }, undo, redo)), status, messages, detailNote),
     h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
-    section("Clothing", h("div", { class: "row gap-s cc-clothing" }, clothingState.element), clothingAreas, clothingNote),
-    // What the 3D view shows sits above the long list of creator options, so its switches are found without scrolling (UI-96).
-    section("In the 3D view", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, uncensored.element, detailNote,
-      note("These change what the 3D view shows, never your V or your makeup.")),
-    h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, legend, sections, noMatch),
+    h("div", { class: "cc-find" }, search, legend, noMatch),
+    groupsHost,
     section("Files", h("div", { class: "row wrap gap-s" }, exportV),
       h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared),
       note("A save is read on this computer and never changed or uploaded.")));
@@ -161,7 +197,10 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     open: boolean; query: string;
     /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
     prefetching: string | null; positions: number[]; loaded: number };
-  let built: { identity: string; rows: RowControls[] } | null = null;
+  type Heading = { toggles: HeadingToggle[]; note: HTMLElement | null };
+  type SectionControls = { element: HTMLElement; heading: Heading; rows: RowControls[]; fixed: boolean };
+  type GroupControls = { element: HTMLElement; heading: Heading; sections: SectionControls[] };
+  let built: { identity: string; rows: RowControls[]; groups: GroupControls[] } | null = null;
   const openRows = new Set<string>();
   /** The one open row whose choices are prepared ahead: the one opened or pointed at last. */
   let aheadRow: string | null = null;
@@ -171,20 +210,56 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption, uncensoredOn: boolean) => [notDrawn(option, uncensoredOn) ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
     option.dependsOn.length ? `Choose ${option.dependsOn.join(" or ")} first: this follows it.` : ""].filter(Boolean).join(" ");
 
-  function buildRows(panel: Readonly<CcPanel>) {
+  /** A heading row: its title and the switches for what it shows, with the line under it reserved when it has any (UI-68). */
+  function heading(tag: "h3" | "h4", title: string, toggles: readonly CharacterToggle[]): { row: HTMLElement; heading: Heading } {
+    const switches = toggles.map(toggle => new HeadingToggle(toggle, shown => dispatch(toggle.action(shown))));
+    const row = h("div", { class: `cc-heading ${tag === "h3" ? "cc-group-head" : "cc-section-head"}` },
+      h(tag, { class: tag === "h3" ? "cc-group-title" : "cc-section-title", text: title }), ...switches.map(toggle => toggle.element));
+    const line = switches.length ? h("p", { class: "cc-heading-note" }) : null;
+    return { row: line ? h("div", {}, row, line) : row, heading: { toggles: switches, note: line } };
+  }
+  /** The tree's shape: what decides a rebuild (a catalogue or the contributions changing, never a paint). */
+  const treeIdentity = (panel: Readonly<CcPanel> | null, tree: readonly CharacterPanelGroup[]) =>
+    `${panel?.identity ?? ""}
+${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.controls}:${group.sections.map(section =>
+      `${section.key}/${section.rows.length}/${section.toggles.map(t => t.id)}/${section.controls}`).join(",")}`).join(";")}`;
+
+  function buildTree(panel: Readonly<CcPanel> | null, tree: readonly CharacterPanelGroup[]) {
+    for (const controls of built?.rows ?? []) stopPrefetch(controls);
     const rows: RowControls[] = [];
     let serial = 0;
-    sections.replaceChildren(...panel.sections.map(entry => {
-      const body = h("div", { class: "cc-rows" });
-      for (const row of entry.rows) {
-        const view: RowView = { row, section: entry.label, options: row.options.map(index => panel.options[index]!) };
-        const id = `cc-choices-${++serial}`;
+    const groups: GroupControls[] = tree.map(group => {
+      const sections: SectionControls[] = group.sections.map(entry => {
+        const body = h("div", { class: "cc-rows" });
+        const sectionRows: RowControls[] = [];
+        for (const row of panel ? entry.rows : []) {
+          const view: RowView = { row, section: entry.title, options: row.options.map(index => panel!.options[index]!) };
+          const controls = buildRow(panel!, view, `cc-choices-${++serial}`);
+          body.append(controls.element);
+          rows.push(controls); sectionRows.push(controls);
+        }
+        const head = heading("h4", entry.title, entry.toggles);
+        const extras = entry.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
+        const element = h("section", { class: "cc-section", "data-section": entry.key }, head.row, ...extras, body);
+        return { element, heading: head.heading, rows: sectionRows, fixed: extras.length > 0 || entry.toggles.length > 0 };
+      });
+      const head = heading("h3", group.title, group.toggles);
+      const extras = group.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
+      const element = h("section", { class: "cc-group", "data-group": group.id }, head.row, ...extras,
+        h("div", { class: "cc-sections" }, ...sections.map(section => section.element)));
+      return { element, heading: head.heading, sections };
+    });
+    groupsHost.replaceChildren(...groups.map(group => group.element));
+    built = { identity: treeIdentity(panel, tree), rows, groups };
+  }
+
+  function buildRow(panel: Readonly<CcPanel>, view: RowView, id: string): RowControls {
         const label = h("span", { class: "cc-row-label" }), swatch = h("span", { class: "swatch cc-row-swatch", hidden: true });
         const value = h("span", { class: "cc-row-value" });
         const notShown = h("span", { class: "cc-row-not-shown", title: NOT_SHOWN, "aria-hidden": "true" }, icon("eyeOff"));
         const main = h("button", { class: "cc-row-main", type: "button", "aria-expanded": "false", "aria-controls": id },
           icon("chevronRight"), label, h("span", { class: "cc-row-current" }, swatch, value), notShown);
-        const controls: RowControls = { view, element: h("div", { class: "cc-row" }), main, label, value, swatch, notShown,
+        const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot }), main, label, value, swatch, notShown,
           off: h("button", { class: "chip-button cc-off", type: "button", text: "Off" }),
           reset: button({ label: "Back to your V's own", icon: "reset", iconOnly: true, small: true, variant: "quiet", onClick: () => {} }),
           // A detail line is reserved only where one of the row's options has one, so it never appears or vanishes (UI-68).
@@ -215,12 +290,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         controls.list.element.hidden = true;
         controls.element.append(h("div", { class: "cc-row-head" }, main, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
           ...(controls.detail ? [controls.detail] : []), controls.list.element, controls.more);
-        body.append(controls.element);
-        rows.push(controls);
-      }
-      return h("section", { class: "cc-section", "data-section": entry.id }, h("h4", { class: "cc-section-title", text: entry.label }), body);
-    }));
-    built = { identity: panel.identity, rows };
+        return controls;
   }
   const current = (controls: RowControls): CcPanelOption | null => {
     const panel = port.authoring.characterPanel();
@@ -256,8 +326,9 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     });
   }, { capture: true, passive: true });
 
-  function updateRows(frame: Frame, panel: Readonly<CcPanel>, view: Readonly<CreatorView> | null) {
-    if (built?.identity !== panel.identity) buildRows(panel);
+  function updateRows(frame: Frame, panel: Readonly<CcPanel> | null, view: Readonly<CreatorView> | null) {
+    const tree = characterPanelTree(panel, contributions);
+    if (built?.identity !== treeIdentity(panel, tree)) buildTree(panel, tree);
     const query = search.value.trim().toLowerCase();
     // The host searches every choice, not only those loaded (UI-72); rows matching by name show while it answers.
     const found = query ? port.authoring.characterSearch(query) : null;
@@ -265,8 +336,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     const details = frame.status.assets.characterDetails, drawn = new Set(details?.drawn ?? []);
     const uncensoredOn = frame.preview.preview?.uncensored === true;
     let visibleRows = 0;
-    for (const controls of built!.rows) {
-      const option = rowOption(panel, controls.view.row, view);
+    for (const controls of panel ? built!.rows : []) {
+      const option = rowOption(panel!, controls.view.row, view), creator = panel!;
       const value = option ? view?.values[option.id] : undefined;
       const rowText = `${controls.view.section} ${controls.view.options.map(entry => entry.label).join(" ")}`.toLowerCase();
       const rowMatches = !query || rowText.includes(query);
@@ -279,14 +350,23 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       setText(controls.label, option.label);
       const chosenLabel = value?.label ?? (view ? "" : "…");
       setText(controls.value, value ? (value.choice === option.off ? "Off" : chosenLabel) : chosenLabel);
-      controls.swatch.hidden = !value?.color;
-      if (value?.color) controls.swatch.style.setProperty("--swatch", value.color);
+      // The current choice's swatch: what wins for it (the row's swatches once open, else the view's), else its own colour.
+      const rowSwatches = option.grid && controls.open ? port.authoring.characterSwatches(option.id) : null;
+      const look = value ? swatchLook({ position: value.position, color: value.color },
+        rowSwatches ?? (value.swatch ? { swatches: { [value.position]: value.swatch } as unknown as string[], icons: [], sheets: new Map(), pending: false } : null)) : null;
+      controls.swatch.hidden = !look || look.kind === "none" || isOffChoice(option, value);
+      if (look && look.kind !== "none") {
+        controls.swatch.style.setProperty("--swatch", look.background || "transparent");
+        controls.swatch.style.setProperty("--swatch-image", look.image);
+        controls.swatch.style.setProperty("--swatch-size", look.size);
+        controls.swatch.style.setProperty("--swatch-position", look.position);
+      }
       controls.element.classList.toggle("changed", !!value?.set);
       setAttr(controls.main, "aria-expanded", String(controls.open));
       // Honest coverage: what the 3D view can't draw says so; a conditional option settles from what the shown V draws.
       const isOff = !!value && value.choice === option.off;
       const conditionalHidden = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready" && !drawn.has(option.name);
-      const from = option.mod >= 0 ? `From ${panel.mods[option.mod]}` : "From the game";
+      const from = option.mod >= 0 ? `From ${creator.mods[option.mod]}` : "From the game";
       const own = value && value.choice !== value.own ? `Your V's own: ${value.ownLabel}.` : "";
       const describe = [from, own, conditionalHidden ? NOT_SHOWN : ""].filter(Boolean).join(". ").replace(/\.\./g, ".");
       controls.main.title = `${option.label}: ${value?.label ?? ""} · ${describe}`;
@@ -300,7 +380,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       controls.reset.title = value?.set ? `Back to your V's own: ${value.ownLabel}` : "This is your V's own choice.";
       setAttr(controls.reset, "aria-label", controls.reset.title);
       applyCapability(controls.reset, port.authoring.capability({ kind: "character.reset", part: option.part, option: option.name }));
-      if (controls.detail) setText(controls.detail, staticDetail(panel, option, uncensoredOn));
+      if (controls.detail) setText(controls.detail, staticDetail(creator, option, uncensoredOn));
       controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
       controls.list.element.hidden = !controls.open;
       if (!controls.open) { controls.more.hidden = true; continue; }
@@ -313,7 +393,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const fetch = ahead ? prefetchRow(controls, option) : null;
       if (fetch?.stopped) stopped = fetch.stopped;
       controls.list.update({ option: option.id, query: controls.query, label: option.label, grid: option.grid, choices: loaded?.choices ?? [],
-        selected: value?.position ?? null, mods: panel.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null });
+        selected: value?.position ?? null, mods: creator.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null,
+        swatches: option.grid ? rowSwatches : null });
       if (ahead && (loaded?.choices.length ?? 0) !== controls.loaded) {
         controls.loaded = loaded?.choices.length ?? 0;
         controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
@@ -323,14 +404,46 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       controls.more.hidden = remaining <= 0;
       setText(controls.more, `Show ${Math.min(PAGE, remaining)} more of ${remaining}`);
     }
-    for (const node of sections.querySelectorAll<HTMLElement>(".cc-section"))
-      node.hidden = ![...node.querySelectorAll<HTMLElement>(".cc-row")].some(row => !row.hidden);
+    // A section shows while it has a row to show, or controls of its own (not while a search finds nothing in it); a group while a section does.
+    for (const group of built!.groups) {
+      let any = false;
+      for (const section of group.sections) {
+        const shown = section.rows.some(row => !row.element.hidden) || (section.fixed && !query);
+        section.element.hidden = !shown;
+        any ||= shown;
+      }
+      group.element.hidden = !any && !!query;
+    }
+    updateHeadings(frame);
     noMatch.hidden = !query || visibleRows > 0 || !!found?.loading;
     legendText.hidden = !!stopped; legendStopped.hidden = !stopped;
     if (stopped) { setText(legendStopped, STOPPED[stopped]); legendStopped.title = STOPPED[stopped]; }
     return visibleRows;
   }
   search.addEventListener("input", () => rt.changed());
+  const isOffChoice = (option: CcPanelOption, value: { choice: string } | undefined) => !!value && option.off !== null && value.choice === option.off;
+
+  /** Every heading switch: its state from the preview, and why it can't change when it can't (in the line under its heading). */
+  function updateHeadings(frame: Frame) {
+    const preview = frame.preview.preview, clothing = frame.preview.character?.clothing;
+    const state: CharacterToggleState = { preview: preview ?? null, clothing: clothing ? { state: clothing.state } : null };
+    const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "This works once the 3D preview is ready.";
+    const paint = (heading: Heading) => {
+      const lines: string[] = [];
+      for (const control of heading.toggles) {
+        const toggle = control.toggle, shown = toggle.shown(state);
+        const clothes = toggle.action(true).kind === "character.setClothing";
+        const ready = clothes ? !!clothing : !!preview;
+        const allowed = ready ? port.authoring.capability(toggle.action(!shown) as Parameters<typeof port.authoring.capability>[0]) : { available: false, reason: loading };
+        const reason = allowed.available ? null : allowed.reason || loading;
+        control.update(shown && ready, reason);
+        const line = reason ?? toggle.note?.(state) ?? "";
+        if (line) lines.push(line);
+      }
+      if (heading.note) { const text = [...new Set(lines)].join(" "); setText(heading.note, text); heading.note.title = text; }
+    };
+    for (const group of built?.groups ?? []) { paint(group.heading); for (const section of group.sections) paint(section.heading); }
+  }
 
   return {
     spec: { id: "character", ...PANEL_META["character"], element },
@@ -390,8 +503,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       applyCapability(resetAll, port.authoring.capability({ kind: "character.resetAll" }));
       search.disabled = !panel;
       legend.hidden = !panel;
-      if (panel) updateRows(frame, panel, view);
-      else if (built) { for (const controls of built.rows) stopPrefetch(controls); sections.replaceChildren(); built = null; }
+      // The hierarchy is there before the creator options arrive (the 3D view's switches and controls), and fills in with them.
+      updateRows(frame, panel, view);
 
       // Clothing.
       const clothing = context?.clothing;
@@ -427,18 +540,6 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
       // Before the preview is ready this line says why the section waits, once (UI-90).
       setText(eyeNote, !preview ? loading : overriding || "The 3D view's eye shape, which eye makeup is placed on. It overrides your V's Eyes row in the 3D view.");
-      for (const [control, detail] of [[brows, "brows"], [lashes, "lashes"]] as const) {
-        const enabled = !!preview?.[detail], allowed = port.authoring.capability({ kind: "preview.setDetail", detail, enabled: true });
-        control.update(enabled, { disabled: !preview || (!enabled && !allowed.available), reason: allowed.reason ?? loading });
-      }
-      const hairAllowed = port.authoring.capability({ kind: "preview.setHair", enabled: true });
-      hair.update(!!preview?.hair, { disabled: !preview || (!preview.hair && !hairAllowed.available), reason: hairAllowed.reason ?? loading, note: "Hair physics is not simulated." });
-      const piercingAllowed = port.authoring.capability({ kind: "preview.setPiercings", enabled: true });
-      piercings.update(!!preview?.piercings, { disabled: !preview || (!preview.piercings && !piercingAllowed.available), reason: piercingAllowed.reason ?? loading });
-      // Absent means shown (workspace-state.ts); a head-only preview can't show a body.
-      const bodyShown = preview?.body ?? true, bodyAllowed = port.authoring.capability({ kind: "preview.setBody", enabled: !bodyShown });
-      body.update(!!preview && bodyShown && bodyAllowed.available, { disabled: !preview || !bodyAllowed.available, reason: bodyAllowed.reason ?? loading,
-        note: preview?.uncensored ? "The body and the clothes on it." : "The body and the clothes on it. Where no clothes are shown, the game's own underwear covers it." });
       // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
       const uncensoredOn = preview?.uncensored === true, uncensoredAllowed = port.authoring.capability({ kind: "preview.setUncensored", enabled: !uncensoredOn });
       uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading,

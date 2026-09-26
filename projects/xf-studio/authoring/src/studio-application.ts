@@ -402,6 +402,8 @@ export class StudioApplication {
   characterPanel() { return this.services.characterContext?.panel() ?? null; }
   characterView() { return this.services.characterContext?.view() ?? null; }
   characterChoices(option: string, want?: number, query?: string) { return this.services.characterContext?.choices(option, want, query) ?? null; }
+  /** A colour row's swatches and icons derived from what wins for each choice (asking loads them); null until they arrive. */
+  characterSwatches(option: string) { return this.services.characterContext?.swatches(option) ?? null; }
   /** The creator options with a choice matching a search (the host searches every choice; UI-72); null before the 3D preview is ready. */
   characterSearch(query: string) { return this.services.characterContext?.search(query) ?? null; }
   /** A row's choices prepared ahead (visible ones first, `focus` first of all), and their states; `characterStopPrefetch` when it closes. */
