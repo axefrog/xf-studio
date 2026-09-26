@@ -659,11 +659,13 @@ function pruneStaleMarkers(cacheDir: string, tag: string): void {
 
 /**
  * Fallbacks reported to the diagnostics log this session, each resource and kind once, across every fetcher (a route's fetchers are made again
- * when it reopens), so they can't crowd earlier failures out of the log (NATIVE-45); the rest are counted in the fetchers' stats and the
- * rolling window.
+ * when it reopens), at most `LOGGED_FALLBACKS_PER_KIND` of each kind, so they can't crowd earlier failures out of the log (NATIVE-45) and one
+ * kind can't use up the others' room: a worker outage's `unavailable` lines never keep a reader bug (`internal`) out (NATIVE-49). The rest
+ * are counted in the fetchers' stats and the rolling window.
  */
-const LOGGED_FALLBACKS = 24;
+export const LOGGED_FALLBACKS_PER_KIND = 12;
 const loggedFallbacks = new Set<string>();
+const loggedPerKind = new Map<NativeFailureKind, number>();
 /** Kinds the native reader falls back on by design (a resource it doesn't read); not logged, only counted. */
 const EXPECTED_FALLBACKS: ReadonlySet<NativeFailureKind> = new Set(["not-indexed", "not-verified"]);
 
@@ -677,8 +679,12 @@ export class ResolverFetcher implements ResourceFetchPort {
   /**
    * Null answers whose failure may not repeat (`transient`), whichever reader failed: a native failure that may pass followed by a lasting
    * WolvenKit refusal counts too, which WolvenKit's own `stats.transient` can't see. A preparation that saw one is degraded (NATIVE-40).
+   * Only the resolver's reads (`fetch`) count here: the creator catalogue's text reads keep their own count (`jsonTransientNulls`) and
+   * their own rule, so a text read that may pass never degrades a person's V (NATIVE-50).
    */
   transientNulls = 0;
+  /** `fetchJsonResource`'s null answers that may not repeat (the catalogue's texts; cc-catalogue-host.ts `readTextResources`). */
+  jsonTransientNulls = 0;
   constructor(readonly wolvenKit: WolvenKitFetcher, route: NativeRoute | null | undefined, cacheDir: string) {
     this.native = route?.decoder ? new NativeFirstFetcher(route.decoder, wolvenKit, { strict: route.strict,
       ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message, stack) => this.fellBack(kind, resource, message, stack) }) : null;
@@ -692,22 +698,23 @@ export class ResolverFetcher implements ResourceFetchPort {
   async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
     return this.counted(archive, ref, await (this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension)));
   }
-  /** Count a null answer that may not repeat (`transientNulls`). */
-  private counted<T extends FetchedResource>(archive: MountedArchive, ref: DepotRef, answer: T | null): T | null {
-    if (!answer && this.transient(archive, ref)) this.transientNulls++;
+  /** Count a null answer that may not repeat (`transientNulls`, or `jsonTransientNulls` for `fetchJsonResource`). */
+  private counted<T extends FetchedResource>(archive: MountedArchive, ref: DepotRef, answer: T | null, json = false): T | null {
+    if (!answer && this.transient(archive, ref)) { if (json) this.jsonTransientNulls++; else this.transientNulls++; }
     return answer;
   }
   /**
    * A CR2W `.json` resource (a `JsonResource`, such as the game's and mods' on-screen texts) whose payload class is one of `payloads`
    * (default: the payloads the reader is verified on): natively first, asking for that root and payload at background priority, so a
    * V's resolution never waits behind it; else WolvenKit's, batched with the other reads on this cache folder and cached like any
-   * resource (PIPE-50). `reader` says which answered: `native` or WolvenKit's identity (`tool`).
+   * resource (PIPE-50). `reader` says which answered: `native` or WolvenKit's identity (`tool`). A null answer's `transient` says whether
+   * it may not repeat; it counts in `jsonTransientNulls`, never in the preparations' `transientNulls` (NATIVE-50).
    */
   async fetchJsonResource(archive: MountedArchive, ref: DepotRef, payloads: readonly string[] = [...NATIVE_JSON_PAYLOADS]):
     Promise<(FetchedResource & { readonly reader: string }) | null> {
     const answer = this.counted(archive, ref, this.native
       ? await this.native.fetch(archive, ref, "json", { roots: ["JsonResource"], payloads, priority: "background" })
-      : await this.wolvenKit.fetch(archive, ref, "json"));
+      : await this.wolvenKit.fetch(archive, ref, "json"), true);
     if (!answer) return null;
     return { ...answer, reader: "native" in answer && answer.native ? `native:${this.native!.identity}` : this.tool };
   }
@@ -720,9 +727,10 @@ export class ResolverFetcher implements ResourceFetchPort {
   }
   private fellBack(kind: NativeFailureKind, resource: string, message: string, stack?: string): void {
     hostTrace().event("resolver", "native_fallback", { kind, resource, message: message.slice(0, 300) });
-    const key = `${kind}|${resource}`;
-    if (EXPECTED_FALLBACKS.has(kind) || loggedFallbacks.has(key) || loggedFallbacks.size >= LOGGED_FALLBACKS) return;
+    const key = `${kind}|${resource}`, logged = loggedPerKind.get(kind) ?? 0;
+    if (EXPECTED_FALLBACKS.has(kind) || loggedFallbacks.has(key) || logged >= LOGGED_FALLBACKS_PER_KIND) return;
     loggedFallbacks.add(key);
+    loggedPerKind.set(kind, logged + 1);
     // Logged as the fallback starts: WolvenKit hasn't read it yet, and may not be set up at all (NATIVE-32).
     const plain = this.wolvenKit.available ? `XF Studio couldn't read ${resource} itself (${kind}), so WolvenKit will read it instead.`
       : `XF Studio couldn't read ${resource} itself (${kind}), and WolvenKit isn't set up to read it instead.`;

@@ -10,6 +10,7 @@ import { viewportMenu } from "../target-menus";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { DETAIL_NOTICE_TEXT } from "./preview";
+import { wolvenKitStepButton } from "../wolvenkit-step";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
 export function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (event: MouseEvent) => void) {
@@ -76,8 +77,11 @@ export function headPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(port.viewport, "head", slot, element);
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
-  // when something can't be shown. Absolutely placed, so it never moves the viewport's other overlays.
-  const detailStatus = h("p", { class: "viewport-detail-status", role: "status", hidden: true });
+  // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). Absolutely placed, so it never moves the
+  // viewport's other overlays.
+  const detailText = h("span", { class: "viewport-detail-text", role: "status" });
+  const detailStep = wolvenKitStepButton(rt);
+  const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element);
   element.append(slot, loading, detailStatus,
     h("div", { class: "viewport-top" }, context, h("div", { class: "viewport-tools" }, front, bodyView, surface, wire, idle)),
     h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
@@ -141,13 +145,15 @@ export function headPanel(rt: StudioRuntime): PanelController {
         { kind: "motion.setPaused", paused: !motion.idlePaused }));
       const details = frame.status.assets.characterDetails;
       const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
-      const detailText = state.phase !== "ready" || !details ? ""
+      const line = state.phase !== "ready" || !details ? ""
         : details.phase === "preparing" ? "Preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body…"
         : details.phase === "failed" ? (details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message)
+        : details.need ? details.updateError ?? ""
         : unavailable?.message ?? "";
-      detailStatus.hidden = !detailText;
+      detailStatus.hidden = !line;
       detailStatus.dataset.tone = details?.phase === "preparing" ? "progress" : "notice";
-      setText(detailStatus, detailText);
+      setText(detailText, line);
+      detailStep.update(frame, !!line && details?.need === "wolvenkit");
       const draft = frame.library.draft, presetName = draft?.presets.find(preset => preset.id === draft.selected)?.name;
       setText(context, [presetName, frame.layer?.name].filter(Boolean).join(" › ") || "No layer selected");
     },

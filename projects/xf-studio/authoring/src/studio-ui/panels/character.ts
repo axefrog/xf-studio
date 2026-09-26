@@ -29,6 +29,7 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { characterDetailLine } from "./preview";
 import { ChoiceList } from "./character-choices";
+import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { ClothingState } from "../../clothing-dressing";
 import type { ClothingArea } from "../../save-loadout";
 
@@ -37,9 +38,10 @@ const NOT_SHOWN = "Not shown in the 3D view yet.";
 const FIRST_TIME = "Updating… A first-time choice is read from your game files, so it takes a few seconds; after that it's instant.";
 const LEGEND = "Not prepared yet: the first time, XF Studio reads it from your game files, which takes a few seconds.";
 const LEGEND_FETCHING = "Being prepared in the background.";
-const STOPPED: Record<"time" | "disk", string> = {
+const STOPPED: Record<"time" | "disk" | "setup", string> = {
   time: "Preparing ahead has paused for this row. Every choice still works; the first time takes a few seconds.",
   disk: "Preparing ahead has paused: it used its disk space for this session. Every choice still works; the first time takes a few seconds.",
+  setup: "Choices are prepared for the 3D view once WolvenKit is set up.",
 };
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
 /** The part of the page a list scrolls in (its nearest scrolling ancestor, clipped to the window), or null without layout. */
@@ -86,9 +88,11 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const statusText = h("span", { class: "cc-status-text", role: "status", "aria-live": "polite" });
   const retry = button({ label: "Try again", icon: "refresh", small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.retry" }) });
   const keep = button({ label: "Keep my changes", icon: "check", small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.keepChanges" }) });
+  // Offered when the V's details or the creator's labels wait for WolvenKit (NATIVE-46, NATIVE-47).
+  const setupWolvenKit = wolvenKitStepButton(rt);
   const detailsToggle = h("button", { class: "btn small quiet cc-details-toggle", type: "button", "aria-expanded": "false", "aria-controls": "cc-messages" },
     h("span", { text: "Details" }));
-  const status = h("div", { class: "cc-status" }, statusText, retry, keep, detailsToggle);
+  const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
   detailsToggle.addEventListener("click", () => { showMessages = !showMessages; rt.changed(); });
@@ -254,7 +258,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     const query = search.value.trim().toLowerCase();
     // The host searches every choice, not only those loaded (UI-72); rows matching by name show while it answers.
     const found = query ? port.authoring.characterSearch(query) : null;
-    let stopped: "time" | "disk" | null = null;
+    let stopped: "time" | "disk" | "setup" | null = null;
     const details = frame.status.assets.characterDetails, drawn = new Set(details?.drawn ?? []);
     let visibleRows = 0;
     for (const controls of built!.rows) {
@@ -346,8 +350,12 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       redo.title = context?.redo ? `Redo: ${context.redo} (${keys.redo} in this panel)` : "No undone change in this panel to redo.";
       setAttr(undo, "aria-label", context?.undo ? `Undo in the Character panel: ${context.undo}` : "Undo in the Character panel");
       setAttr(redo, "aria-label", context?.redo ? `Redo in the Character panel: ${context.redo}` : "Redo in the Character panel");
-      // What couldn't be used, in plain lines, behind Details.
-      const lines = [...(view?.missing.summary.map(item => item.message) ?? []), ...(context?.notes ?? []), ...(context?.viewError ? [context.viewError] : [])];
+      // What couldn't be used, in plain lines, behind Details: labels the catalogue couldn't read first (NATIVE-46).
+      const labels = context?.phase === "ready" && context.next ? context.message : "";
+      const lines = [...(labels ? [labels] : []), ...(view?.missing.summary.map(item => item.message) ?? []), ...(context?.notes ?? []),
+        ...(context?.viewError ? [context.viewError] : [])];
+      // The V's details waiting for WolvenKit are said here too, with the same next step (NATIVE-47).
+      const detailsNeed = details?.need === "wolvenkit" ? details.updateError ?? details.message : "";
       const messageKey = JSON.stringify(lines);
       if (messages.dataset.key !== messageKey) {
         messages.dataset.key = messageKey;
@@ -357,13 +365,14 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const line = !context ? "" : context.phase === "preparing" ? context.message || "Reading your game's character-creator options…"
         : context.phase === "failed" ? context.message
           : details?.updating || context.viewing ? (details?.updating && context.firstTime ? FIRST_TIME : "Updating…")
-            : details?.updateError ?? (lines.length ? lines[0]! : "");
+            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : ""));
       setText(statusText, line);
       statusText.title = line;
-      status.classList.toggle("warning", !!line && (line === details?.updateError || context?.phase === "failed" || lines.includes(line)));
+      status.classList.toggle("warning", !!line && (line === details?.updateError || line === detailsNeed || context?.phase === "failed" || lines.includes(line)));
       status.classList.toggle("busy", line === "Updating…" || line === FIRST_TIME || context?.phase === "preparing");
       retry.classList.toggle("cc-unoffered", !context?.retry);
       applyCapability(retry, port.authoring.capability({ kind: "character.retry" }));
+      setupWolvenKit.update(frame, (!!detailsNeed && line === detailsNeed) || (context?.phase === "ready" && context.next === "wolvenkit" && line === labels));
       keep.classList.toggle("cc-unoffered", !context?.keepable);
       setText(keep.querySelector("span")!, context?.keepable ? `Keep my ${context.keepable === 1 ? "change" : `${context.keepable} changes`}` : "Keep my changes");
       applyCapability(keep, port.authoring.capability({ kind: "character.keepChanges" }));

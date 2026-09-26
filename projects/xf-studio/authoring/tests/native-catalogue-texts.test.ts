@@ -6,7 +6,7 @@ import { afterAll, afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadCreatorCatalogue, readTextResources } from "../src/cc-catalogue-host";
+import { labelsOf, loadCreatorCatalogue, readTextResources } from "../src/cc-catalogue-host";
 import { depotHash, refFromPath } from "../src/depot-path";
 import { readOnscreenEntries, type TextEntry } from "../src/game-text";
 import { NativeArchivePool } from "../src/native/archive-reader";
@@ -202,4 +202,91 @@ test("a worker decodes a background request only when no other request waits", a
   for (let i = 0; i < 4; i++) { reply(); await Bun.sleep(1); }
   await Promise.all(all);
   expect(answered).toEqual(["text-1", "mesh", "text-2", "text-3"]);
+});
+
+// ---- Labels that couldn't be read (NATIVE-46), languages and the text cache (NATIVE-52) ----
+
+const FR_TEXTS = "base\\localization\\fr-fr\\onscreens\\onscreens.json";
+/** A game folder with French texts only, and no WolvenKit: the reviewer's case (a worker that can't start yet). */
+function frenchFolder() {
+  const root = temporary(), game = join(root, "game");
+  put(join(game, "archive", "pc", "content", "basegame_4_gamedata.archive"), syntheticArchive([
+    { path: BASE_CCO, segments: [{ bytes: new Cr2wBuilder().build() }] }], { names: true }));
+  put(join(game, "archive", "pc", "content", "lang_fr_text.archive"), syntheticArchive([
+    { path: FR_TEXTS, segments: [{ bytes: textResource(TEXTS) }] }], { names: true }));
+  put(join(game, "bin", "x64", "Cyberpunk2077.exe"), "game");
+  const options: InstallationOptions = { gameRoot: game, launchRoute: "direct", manualModRoot: null, wolvenKitCli: null, cacheDir: join(root, "cache") };
+  return { root, game, options };
+}
+/** The creator from the fixture; every other read answered by `other` (a worker that is down, or the real reader). */
+function creatorDecoder(other: (request: NativeDecodeRequest) => Promise<NativeDecodeOutcome>): NativeDecoder {
+  const creator = depotHash(BASE_CCO);
+  return { identity: nativeReaderIdentity("labels"), close() {}, decode: async request => request.hash === creator
+    ? { ok: true, document: vanillaCreator(), extractedSha256: "", root: "gameuiCharacterCustomizationInfoResource", name: null, notes: [], defaulted: [] }
+    : other(request) };
+}
+
+test("a worker that briefly can't start, with no WolvenKit: the labels are read again later, never called 'not installed' (NATIVE-46)", async () => {
+  const setup = frenchFolder();
+  let down = true;
+  const real = inProcessDecoder(readerOver("labels"));
+  closers.push(() => real.close());
+  const decoder = creatorDecoder(async request => down ? { ok: false, kind: "unavailable", message: "worker did not start" } : real.decode(request));
+  const installation = openInstallation({ ...setup.options, native: { decoder } });
+  const load = await loadCreatorCatalogue({ installation, gameRoot: setup.game, cacheDir: setup.options.cacheDir, language: "fr-fr" }, "female");
+  expect(load.labels).toEqual({ next: "retry", message: expect.stringContaining("Try again") });
+  expect(load.catalogue.gaps.map(gap => gap.code)).toContain("texts-transient");
+  expect(load.catalogue.gaps.map(gap => gap.code)).not.toContain("texts-language-missing");
+  expect(load.evidence.language.code).toBe("fr-fr");
+  // A person's V isn't marked degraded by a text read (NATIVE-50).
+  expect(installation.fetcher.transientNulls).toBe(0);
+  expect(installation.fetcher.jsonTransientNulls).toBe(1);
+
+  // Once the worker starts, the same installation reads them: the game's labels, nothing to try again.
+  down = false;
+  const again = await loadCreatorCatalogue({ installation, gameRoot: setup.game, cacheDir: setup.options.cacheDir, language: "fr-fr" }, "female");
+  expect(again.labels).toBeNull();
+  expect(again.catalogue.options.find(option => option.name === "eyes_color")!.label).toMatchObject({ text: "Eye Color", source: "game" });
+});
+
+test("labels only WolvenKit could read, with the reader off for good and no WolvenKit: said plainly, with that next step (NATIVE-46)", async () => {
+  const setup = frenchFolder();
+  // The reader answers the creator (as the resolver's own reads do) but refuses the texts lastingly: WolvenKit would read them.
+  const refusing = openInstallation({ ...setup.options, native: { decoder: creatorDecoder(async () => ({ ok: false, kind: "not-verified", message: "no" })) } });
+  const load = await loadCreatorCatalogue({ installation: refusing, gameRoot: setup.game, cacheDir: setup.options.cacheDir, language: "fr-fr" }, "female");
+  expect(load.labels).toEqual({ next: "wolvenkit", message: expect.stringContaining("Set up WolvenKit") });
+  expect(load.catalogue.gaps.map(gap => gap.code)).toEqual(expect.arrayContaining(["texts-need-wolvenkit"]));
+  expect(load.catalogue.gaps.map(gap => gap.code)).not.toContain("texts-language-missing");
+  // A reader off only for a while opens again with the installation: its labels are to be read again, not WolvenKit's to read.
+  const brieflyOff = { fetcher: refusing.fetcher, native: { decoder: null, reason: "busy", permanent: false } } as const;
+  expect(labelsOf(brieflyOff, { transient: 0, unreadable: 1 })).toMatchObject({ next: "retry" });
+  expect(labelsOf({ ...brieflyOff, native: { decoder: null, reason: "not Windows", permanent: true } }, { transient: 0, unreadable: 1 })).toMatchObject({ next: "wolvenkit" });
+});
+
+test("a language whose texts no archive holds is 'not installed' and shows English (PIPE-51)", async () => {
+  const setup = gameFolder();
+  const { decoder } = routeDecoder();
+  const installation = openInstallation({ ...setup.options, native: { decoder } });
+  const load = await loadCreatorCatalogue({ installation, gameRoot: setup.game, cacheDir: setup.options.cacheDir, language: "de-de" }, "female");
+  expect(load.catalogue.gaps.find(gap => gap.code === "texts-language-missing")).toMatchObject({ subject: "de-de" });
+  expect(load.evidence.language.code).toBe("en-us");
+  expect(load.labels).toBeNull();
+});
+
+test("parsed texts of another reader are removed from the cache once the native reader is on (NATIVE-52)", async () => {
+  const setup = gameFolder();
+  const folder = join(setup.options.cacheDir, "text");
+  mkdirSync(folder, { recursive: true });
+  const stale = `${refFromPath(BASE_TEXTS).hash}-${"a".repeat(24)}-${"b".repeat(12)}.json`, unrelated = "notes.txt";
+  writeFileSync(join(folder, stale), "{}");
+  writeFileSync(join(folder, unrelated), "kept");
+  const { decoder } = routeDecoder();
+  const installation = openInstallation({ ...setup.options, native: { decoder } });
+  await readTextResources(installation, [BASE_TEXTS], setup.options.cacheDir);
+  for (let i = 0; i < 50 && readdirSync(folder).includes(stale); i++) await Bun.sleep(5);
+  const left = readdirSync(folder);
+  expect(left).not.toContain(stale);
+  expect(left).toContain(unrelated);
+  // This reader's own file stays.
+  expect(left.filter(name => name.endsWith(".json")).length).toBe(1);
 });

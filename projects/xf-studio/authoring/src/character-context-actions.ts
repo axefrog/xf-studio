@@ -41,7 +41,7 @@
  */
 import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
-import { type CcChoicePage, type CcChoiceSearch, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorState, type CreatorView,
+import { type CcChoicePage, type CcChoiceSearch, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView,
   makeupOff, searchQuery } from "./cc-panel";
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
 import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
@@ -76,13 +76,13 @@ export type CreatorPort = {
   clearPrepared?(): Promise<{ freed: number }>;
 };
 /** The host's answer about a row's choices prepared ahead (choice-prefetch.ts `PrefetchAnswer`). */
-export type PrefetchReply = { states: string; stopped: "time" | "disk" | null; busy: boolean };
+export type PrefetchReply = { states: string; stopped: "time" | "disk" | "setup" | null; busy: boolean };
 /**
  * One choice prepared ahead: `?` not known yet, `n` not prepared (the host stopped preparing ahead), `q` waiting to be prepared,
  * `f` being prepared, `r` ready, `x` couldn't be prepared ahead this time.
  */
 export type ChoiceFetch = "?" | "n" | "q" | "f" | "r" | "x";
-export type CharacterFetchState = { readonly option: string; readonly states: ReadonlyMap<number, ChoiceFetch>; readonly stopped: "time" | "disk" | null;
+export type CharacterFetchState = { readonly option: string; readonly states: ReadonlyMap<number, ChoiceFetch>; readonly stopped: "time" | "disk" | "setup" | null;
   readonly busy: boolean };
 export type CharacterContextPorts = {
   creator: CreatorPort;
@@ -118,9 +118,11 @@ export type CharacterChoicesState = { readonly choices: readonly CcPanelChoice[]
 export type CharacterSearchState = { readonly query: string; readonly options: ReadonlySet<string> | null; readonly more: boolean; readonly loading: boolean;
   readonly error: string | null };
 export type CharacterContextSnapshot = {
-  /** The catalogue: loading, ready, or failed with one plain line. */
+  /** The catalogue: loading, ready, or failed with one plain line (when ready: labels it couldn't read, or empty). */
   phase: "idle" | "preparing" | "ready" | "failed";
   message: string;
+  /** Ready: the one next step for labels the catalogue couldn't read (NATIVE-46); null when there is none. */
+  next: CreatorNext | null;
   origin: ContextOrigin;
   bodyGender: BodyGender;
   /** How many choices a person set. */
@@ -192,7 +194,7 @@ export class CharacterContextActions {
   private future: { label: string; state: State }[] = [];
   /** Choices a V change cleared (for `keepChanges`), until the next change. */
   private cleared: readonly CharacterChoice[] = [];
-  private catalogue: { phase: CharacterContextSnapshot["phase"]; message: string; panel: CcPanel | null; gender: BodyGender | null } =
+  private catalogue: { phase: CharacterContextSnapshot["phase"]; message: string; next?: CreatorNext | null; panel: CcPanel | null; gender: BodyGender | null } =
     { phase: "idle", message: "", panel: null, gender: null };
   private byId = new Map<string, CcPanelOption>();
   /** Pages by option and search (`pageKey`). */
@@ -218,7 +220,7 @@ export class CharacterContextActions {
   private legacy: { style: string; definition: string } | null;
   /** The row being prepared ahead: its V and option, the positions asked about, and their states (`prefetch`). */
   private fetch: { key: string; option: string; positions: number[]; focus: number | null; sent: string; states: Map<number, ChoiceFetch>;
-    stopped: "time" | "disk" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
+    stopped: "time" | "disk" | "setup" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
   private firstTime = false;
   private prepared: { bytes: number | null; clearing: boolean; freed: number | null; asking: boolean } = { bytes: null, clearing: false, freed: null, asking: false };
   /** The Clothing setting and its own Undo history (it is not a creator choice). */
@@ -253,7 +255,7 @@ export class CharacterContextActions {
 
   snapshot(): CharacterContextSnapshot {
     const notes = summariseMissing(this.state.notCarried).summary.map(item => item.message);
-    return structuredClone({ phase: this.catalogue.phase, message: this.catalogue.message, origin: this.state.origin, bodyGender: this.state.bodyGender,
+    return structuredClone({ phase: this.catalogue.phase, message: this.catalogue.message, next: this.catalogue.next ?? null, origin: this.state.origin, bodyGender: this.state.bodyGender,
       set: this.state.choices.length, undo: this.stepLabel(this.order, this.past, this.clothingPast), redo: this.stepLabel(this.undone, this.future, this.clothingFuture),
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
       retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
@@ -474,7 +476,8 @@ export class CharacterContextActions {
         }
         const panel = deepFreeze(state.panel);
         this.byId = new Map(panel.options.map(option => [option.id, option]));
-        this.catalogue = { phase: "ready", message: "", panel, gender };
+        // Labels it couldn't read are said, with their next step (NATIVE-46).
+        this.catalogue = { phase: "ready", message: state.next ? state.message : "", next: state.next ?? null, panel, gender };
         this.publish();
         this.refreshView();
         this.refreshPrepared();
@@ -586,6 +589,8 @@ export class CharacterContextActions {
   private saveOf(value: SavedV) { return { value, saved: savedDescriptorsOf(value) }; }
   private option(part: CcoPart, name: string) { return this.byId.get(`${part}/${name}`); }
   private ready() { return this.catalogue.phase === "ready" && this.catalogue.gender === this.state.bodyGender; }
+  /** The ready catalogue's labels may read if built again (NATIVE-46). */
+  private retryableLabels() { return this.ready() && this.catalogue.next === "retry"; }
   private notReady(): Capability {
     return refusal("not_ready", this.catalogue.phase === "failed" && this.catalogue.gender === this.state.bodyGender ? this.catalogue.message || LOADING : LOADING);
   }
@@ -670,7 +675,7 @@ export class CharacterContextActions {
         return this.withChoices(this.cleared).choices.length > CREATOR_LIMITS.choices
           ? refusal("limit", "That's more changes than one V can hold.") : { available: true };
       case "character.retry":
-        return this.catalogue.phase === "failed" || this.ports.details?.failed() ? { available: true }
+        return this.catalogue.phase === "failed" || this.retryableLabels() || this.ports.details?.failed() ? { available: true }
           : refusal("invalid_value", "Nothing failed, so there is nothing to try again.");
       case "character.clearPreparedFiles":
         if (!this.ports.creator.clearPrepared) return refusal("unavailable", "This version of XF Studio can't clear its prepared game files.");
@@ -791,7 +796,7 @@ export class CharacterContextActions {
         break;
       }
       case "character.retry":
-        if (this.catalogue.phase === "failed") {
+        if (this.catalogue.phase === "failed" || this.retryableLabels()) {
           const gender = this.state.bodyGender, creator = this.ports.creator;
           this.follow(gender, signal => creator.retry ? creator.retry(gender, signal) : creator.panel(gender, signal));
         }

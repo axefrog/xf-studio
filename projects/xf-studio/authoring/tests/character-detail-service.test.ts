@@ -487,6 +487,36 @@ describe("host preparation", () => {
     expect(overlap).toBe(1);
   });
 
+  test("without WolvenKit the host stops at once as a need, resolving nothing and reporting no failure (NATIVE-47, NATIVE-48)", async () => {
+    const { hostDiagnosticsAt, withDiagnostics } = await import("../src/diagnostics/host-log");
+    const { TOOL_MISSING } = await import("../src/character-detail-service");
+    const diagnostics = hostDiagnosticsAt(join(root, "diagnostics-need"));
+    const settings: CharacterDetailSettings = { gameRoot: route.gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
+      manualModRoot: null, wolvenKitCli: null };
+    let prepared = 0;
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "host-need"), settings: () => settings, exporter: () => fakeExporter(),
+      prepare: async () => { prepared++; throw new CharacterDetailError("character_tool_missing", TOOL_MISSING, "WolvenKit CLI isn't available."); } });
+    await withDiagnostics(diagnostics, async () => {
+      const state = host.request(REQUEST_A);
+      expect(state).toMatchObject({ phase: "failed", message: TOOL_MISSING, need: "wolvenkit" });
+      expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", need: "wolvenkit" });
+      await host.settled();
+      expect(prepared).toBe(0);
+      // WolvenKit set up, but it can't run (its .NET runtime): the same need, from the preparation, still not an error in the log.
+      settings.wolvenKitCli = process.execPath;
+      const again = host.request(REQUEST_A);
+      expect(again.phase).toBe("preparing");
+      await host.settled();
+      expect(prepared).toBe(1);
+      expect(host.state(again.key)).toMatchObject({ phase: "failed", message: TOOL_MISSING, need: "wolvenkit" });
+      expect(diagnostics.log.tail().filter(entry => entry.level === "error")).toEqual([]);
+    });
+    // The page's reader keeps the need of a failed state only.
+    const device = createBrowserCharacterDetailDevice({ setCharacterDetails: () => ({ limits: [] }), details: {} as never }, async () => new Response(JSON.stringify({
+      ...host.state(characterRequestKey(REQUEST_A, installationFingerprint(settings))), recordSchema: (await import("../src/render-detail")).CHARACTER_DETAIL_SCHEMA })));
+    expect(await device.poll("k", new AbortController().signal)).toMatchObject({ phase: "failed", need: "wolvenkit" });
+  });
+
   test("without a game folder or WolvenKit the host says what's needed", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
       mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });

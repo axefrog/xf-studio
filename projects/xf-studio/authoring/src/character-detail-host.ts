@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
-import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, STORE_FILE, warmCharacters,
+import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, STORE_FILE, TOOL_MISSING, warmCharacters,
   type CharacterRoute, type PrepareCharacterOptions, type WarmOptions } from "./character-detail-service";
 import { choiceKey, manifestHolds, readChoiceManifest, xlIdentity } from "./choice-manifest";
 import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
@@ -64,6 +64,11 @@ export type CharacterDetailState = {
   progress: { index: number; total: number; label: string } | null;
   /** The record file name (under `/assets/character/`) once ready. */
   record: string | null;
+  /**
+   * Failed: what must be set up first, which the page offers as its one next step (NATIVE-47): `wolvenkit` while WolvenKit isn't set up
+   * (or can't run). Absent otherwise.
+   */
+  need?: "wolvenkit";
 };
 export type CharacterDetailSettings = { gameRoot: string | null; launchRoute: LaunchRoute; mo2Root: string | null;
   mo2ProfileId: string | null; manualModRoot: string | null; wolvenKitCli: string | null };
@@ -169,6 +174,7 @@ export class CharacterDetailHost {
       foregroundIdle: () => this.foregroundIdle(),
       preparedBytes: async () => (await preparedSize(this.preparedRoots)).bytes,
       afterBatch: () => this.keepWithinBudget(),
+      needsSetup: () => this.needsSetup(),
       log: options.log,
       failed: error => hostFailure("character", "prefetch_failed", "Some character choices couldn't be prepared ahead; they are read when picked.", error, "warn"),
     }, options.prefetchLimits);
@@ -222,6 +228,12 @@ export class CharacterDetailHost {
     if (active) { active.controller.abort(); this.states.delete(active.key); }
     const route = this.route();
     if (!route) return this.set({ key, phase: "failed", message: NEEDS_SETUP, progress: null, record: null });
+    // Without WolvenKit nothing can be exported for the 3D view: say so at once, as a need rather than a failure, without resolving the V
+    // (NATIVE-48). Setting it up changes the fingerprint, so the page's next request prepares the V.
+    if (!route.wolvenKitCli) {
+      if (known?.phase !== "failed" || known.need !== "wolvenkit") this.options.log?.("Your V's details wait for WolvenKit to be set up.");
+      return this.set({ key, phase: "failed", message: TOOL_MISSING, progress: null, record: null, need: "wolvenkit" });
+    }
     const controller = new AbortController();
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
     const cache = this.shared.cache;
@@ -262,8 +274,10 @@ export class CharacterDetailHost {
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair, piercings and body were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
-        hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
-        if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null });
+        // WolvenKit gone or unable to run (its .NET runtime) is a need with a next step, not a failure to report (NATIVE-47, NATIVE-48).
+        const need = error instanceof CharacterDetailError && error.code === "character_tool_missing";
+        if (!need) hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
+        if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null, ...(need ? { need: "wolvenkit" as const } : {}) });
       })
       .finally(() => { if (this.running.get(page)?.controller === controller) this.running.delete(page); });
     this.running.set(page, { key, controller, promise });
@@ -319,10 +333,12 @@ export class CharacterDetailHost {
       return !!manifest && manifestHolds(manifest, check);
     };
   }
+  /** Whether preparing waits for setup (no game folder, or no WolvenKit): preparing ahead then stops early (NATIVE-48). */
+  private needsSetup(): boolean { return !this.route()?.wolvenKitCli; }
   /** Prepare requests ahead, in the background, sharing the preparations' cache. */
   private async warm(requests: readonly CharacterRequest[], signal: AbortSignal) {
     const route = this.route();
-    if (!route || !requests.length) return requests.map(() => ({ ready: false }));
+    if (!route?.wolvenKitCli || !requests.length) return requests.map(() => ({ ready: false }));
     const settings = this.options.settings();
     const fingerprint = installationFingerprint(settings);
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };

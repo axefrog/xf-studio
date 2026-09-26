@@ -112,7 +112,8 @@ export class CharacterDetailError extends Error {
     message: string, readonly detail = "") { super(message); }
 }
 const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown. The head still works.";
-const TOOL_MISSING = "XF Studio needs WolvenKit to turn your V's own skin, face details, eyes, brows, lashes, hair, piercings and body into the 3D view, and it isn't set up yet. Set it up from the 3D preview card; XF Studio can download it for you. The head still works.";
+/** Said with the one next step, "Set up WolvenKit" (the host's state names the need; NATIVE-47). */
+export const TOOL_MISSING = "XF Studio needs WolvenKit to turn your V's own skin, face details, eyes, brows, lashes, hair, piercings and body into the 3D view, and it isn't set up yet. XF Studio can download it for you. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;

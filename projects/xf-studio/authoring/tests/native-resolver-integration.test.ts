@@ -16,7 +16,8 @@ import { NativeArchivePool } from "../src/native/archive-reader";
 import type { NativeDecodeOutcome, NativeDecoder } from "../src/native/native-decode";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "../src/native/native-errors";
 import { inProcessDecoder, NativeFirstFetcher, type NativeReader, nativeReaderIdentity, TRANSIENT_NATIVE_FAILURES } from "../src/native/native-fetch-port";
-import { installationView, NativeAnswerFiles, type NativeRoute, openInstallation, type InstallationOptions, ResolverFetcher, WolvenKitFetcher } from "../src/resolver-host";
+import { installationView, LOGGED_FALLBACKS_PER_KIND, NativeAnswerFiles, type NativeRoute, openInstallation, type InstallationOptions, ResolverFetcher,
+  WolvenKitFetcher } from "../src/resolver-host";
 import { ResourceGraph, type ResourceFetchPort } from "../src/resource-graph";
 import { detailFixture, P, REQUEST_A } from "./character-detail-fixtures";
 import { inputFromCharacterRequest } from "../src/character-detail-request";
@@ -242,6 +243,24 @@ test("each fallback is logged by kind (bounded), a reader bug as a failure; expe
   });
 });
 
+test("the log's room is per kind: a worker outage's fallbacks never keep a later reader bug out of it (NATIVE-49)", async () => {
+  const cacheDir = temporary(), diagnostics = hostDiagnosticsAt(join(cacheDir, "data"));
+  const archive = { id: join(cacheDir, "x.archive"), name: "x.archive" } as MountedArchive;
+  put(archive.id, "an archive");
+  let kind: NativeFailureKind = "unavailable";
+  const decoder: NativeDecoder = { identity: "t", close() {}, decode: async () => ({ ok: false, kind, message: `${kind} here`, ...(kind === "internal" ? { stack: "TypeError: late\n    at g" } : {}) }) as NativeDecodeOutcome };
+  await withDiagnostics(diagnostics, async () => {
+    const fetcher = new ResolverFetcher(new WolvenKitFetcher(null, cacheDir, () => true), { decoder }, cacheDir);
+    for (let i = 0; i < LOGGED_FALLBACKS_PER_KIND * 3; i++) await fetcher.fetch(archive, refFromPath(`base\\outage\\${i}.mi`), "mi");
+    kind = "internal";
+    await fetcher.fetch(archive, refFromPath("base\\bug\\late.mi"), "mi");
+    const logged = diagnostics.log.tail().filter(entry => entry.area === "resolver");
+    expect(logged.filter(entry => entry.details?.codes?.[0] === "unavailable").length).toBeLessThanOrEqual(LOGGED_FALLBACKS_PER_KIND);
+    expect(logged.at(-1)).toMatchObject({ code: "native_internal" });
+    expect(logged.at(-1)!.details?.stack).toContain("TypeError: late");
+  });
+});
+
 test("the registry opens one native decoder per game folder, shares it across routes and cache folders, and says why when it can't", async () => {
   const setup = gameFolder(), diagnostics = hostDiagnosticsAt(join(setup.root, "data"));
   let opened = 0, closed = 0, stamp = "dll|1";
@@ -378,8 +397,11 @@ test("a native failure that may pass, then a lasting WolvenKit refusal, counts a
   expect(down.transientNulls).toBe(1);
   // A decoder off for the session answers the same next time: nothing to read again (NATIVE-29).
   expect(off.transientNulls).toBe(0);
+  // A catalogue text read keeps its own count: it never marks a person's V degraded (NATIVE-50).
   expect(await down.fetchJsonResource(archive, refFromPath("base\\x.json"))).toBeNull();
-  expect(down.transientNulls).toBe(2);
+  expect(down.transientNulls).toBe(1);
+  expect(down.jsonTransientNulls).toBe(1);
+  expect(down.transient(archive, refFromPath("base\\x.json"))).toBe(true);
 });
 
 test("an answer marker removed by Clear is written again; markers of another reader identity are pruned (NATIVE-27)", async () => {
