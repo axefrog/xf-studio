@@ -22,7 +22,7 @@ import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
  * writing changes what a resource's document holds. 2: hardened decoding (budgets, strict packages, typed refusals); documents of
  * well-formed resources are unchanged.
  */
-export const NATIVE_READER_VERSION = 2;
+export const NATIVE_READER_VERSION = 3;
 
 function derive(object: RedObject, seen: Set<RedObject>, session: DecodeSession): void {
   if (seen.has(object)) return;

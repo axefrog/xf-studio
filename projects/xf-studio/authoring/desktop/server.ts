@@ -23,6 +23,7 @@ import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 import { CharacterDetailHost } from "../src/character-detail-host";
+import { installations } from "../src/installation-registry";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
@@ -52,8 +53,9 @@ export type DesktopHostOptions = {
   /** The WebView2 Runtime version the host detected, for problem reports. */
   webView2?: string | null;
   /**
-   * The bundled native decode worker (prepare-static.ts `native-decode-worker.js`), which decodes the clothing preset off the host's
-   * event loop (NATIVE-25); the source file next to the reader when absent (tests, running from source).
+   * The bundled native decode worker (prepare-static.ts `native-decode-worker.js`). The host is one bundle, so the native reader can't
+   * start its worker from its source: the resolver's route decoder (installation-registry.ts `useNativeWorker`) and the clothing
+   * preset's decode start this file. Absent (tests, running from source): the source file next to the reader.
    */
   nativeDecodeWorker?: string;
 };
@@ -88,6 +90,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // `onReport` adds a listener (tests), it doesn't replace the log.
   const diagnostics = hostDiagnosticsAt(dataRoot);
   setProcessDiagnostics(diagnostics);
+  // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
+  if (hostOptions.nativeDecodeWorker) installations.useNativeWorker(hostOptions.nativeDecodeWorker);
   let listener: ((message: string) => void) | null = null;
   const logTo = (area: string) => (message: string) => { diagnostics.log.info(area, "event", message); listener?.(message); };
   const report = logTo("desktop");

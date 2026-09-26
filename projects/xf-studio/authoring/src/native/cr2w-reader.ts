@@ -5,7 +5,10 @@
  * An export's body is a 0x00 byte, then property records (u16 name index, u16 type-name index, u32 size counting itself, value),
  * then a u16 0. Nested struct values repeat that layout. A few classes append data after the terminator; this reader decodes
  * the `CMaterialInstance` parameter list (`values`) and the `CMaterialTemplate` parameter table (`parameterInfo`) and refuses any
- * other trailing data. Every record's size is checked against what its value used, so a misread fails instead of drifting.
+ * other trailing data. Every record's size is checked against what its value used, so a misread fails instead of drifting, with one
+ * exception: an array record may hold more elements than the count at its front says (some mod tools write the count short). Its
+ * elements are read to the record's end, as WolvenKit shows them, and a note says so (`arrayPastCount`); each must use at least one
+ * byte, so a record can't make the reader loop.
  *
  * One `DecodeSession` (limits.ts) spans the file and every buffer parsed inside it: it counts decoded values and bytes, caps
  * nesting, and collects notes such as a property stored with a type the RTTI slice disagrees with (decoded by the stored type).
@@ -66,10 +69,25 @@ export class Cr2wDecoder implements ValueContext {
       if (size < 4 || end > cursor.end) throw new Cr2wError(`${object.type}.${name}: record size ${size} is out of range.`);
       noteStoredType(this.session, object.type, types, name, type);
       const inner = cursor.span(cursor.pos, end);
-      object.fields[name] = readValue(this, inner, type, `${object.type}.${name}`);
+      const value = object.fields[name] = readValue(this, inner, type, `${object.type}.${name}`);
+      if (inner.pos !== end && Array.isArray(value) && type.startsWith("array:")) this.readPastCount(inner, value, type, `${object.type}.${name}`);
       if (inner.pos !== end) throw new Cr2wError(`${object.type}.${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
       cursor.pos = end;
     }
+  }
+
+  /**
+   * The elements an array record holds past its declared count, to the record's end (the count at the front is short in some mod files:
+   * a hair mesh's `renderLODs` says 1 and holds 4). Stops, leaving the record's size check to refuse it, at an element that uses no bytes.
+   */
+  private readPastCount(cursor: Cursor, items: unknown[], type: string, property: string): void {
+    const declared = items.length, element = type.slice("array:".length);
+    while (cursor.pos < cursor.end) {
+      const before = cursor.pos;
+      items.push(readValue(this, cursor, element, property));
+      if (cursor.pos === before) return;
+    }
+    this.session.arrayPastCount(property, declared, items.length);
   }
 
   private readAppendix(cursor: Cursor, object: RedObject): void {

@@ -211,6 +211,7 @@
  "Multilayer_Layer": {
   "matTile": 1,
   "mbTile": 1,
+  "microblendContrast": 0.5,
   "microblendNormalStrength": 1,
   "microblendOffsetU": 0,
   "microblendOffsetV": 0,
@@ -981,6 +982,8 @@
   "LODMode": "AlwaysVisible",
   "acceptDismemberment": 1,
   "autoHideDistance": 0,
+  "castLocalShadows": "Default",
+  "castShadows": "Default",
   "chunkMask": "9223372036854775807",
   "forceLODLevel": -1,
   "forcedLodDistance": "Default",

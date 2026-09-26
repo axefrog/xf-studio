@@ -2,7 +2,8 @@
  * Host adapter: the game files XF Studio prepared for the 3D preview on this computer, their size, a disk budget and "Clear prepared
  * game files". Prepared files are derived from the player's own game and mods and are all re-creatable:
  * - `exports`: the game-asset exporter's cache (GLBs, textures, mask layers), one folder per resource and archive identity;
- * - `resolver`: the resolver's extracted JSON (`json/`), one file per resource, archive identity and WolvenKit identity;
+ * - `resolver`: the resolver's extracted JSON (`json/`), one file per resource, archive identity and WolvenKit identity, and the empty
+ *   markers of resources the native reader answered (`native/`, resolver-host.ts `NativeAnswerFiles`);
  * - `store`: the content-addressed files and records the preview loads (`files/`, `records/`, `chunks/`);
  * - `manifests`: what each prepared request depended on (choice-manifest.ts).
  *
@@ -106,6 +107,7 @@ export async function clearPrepared(roots: PreparedRoots): Promise<{ freed: numb
     await Promise.all(names.filter(name => !keep(name)).map(name => remove(join(folder, name))));
   };
   await Promise.all([children(roots.exports, name => name.startsWith(".work-")), children(join(roots.resolver, "json"), name => name.endsWith(".failed")),
+    children(join(roots.resolver, "native")),
     children(roots.store), children(roots.manifests)]);
   const after = await preparedSize(roots);
   return { freed: Math.max(0, before.bytes - after.bytes) };

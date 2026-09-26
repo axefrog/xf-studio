@@ -98,7 +98,7 @@ discard if (t67.Load(int3(x & 63, y & 63, frame & 63)).x * MaterialModifiersCons
 |---|---|---|
 | Eye makeup (36 options) | `mesh_decal` | Colour; roughness 0.50 (`roughmetal.xbm`) at surface alpha 1; coverage broken by a noise `SecondaryMask` (`noise_decal_d01`, ×30 UV, influence 1) ([experiment 017 §2](../../experiments/017-plate-depth/README.md#2-uniform-gloss-the-roughness-reaches-the-lighting-the-finish-values-are-glossier-than-skin)) |
 | Lipstick (114 styles) | 78 `mesh_decal`, 36 `mesh_decal_double_diffuse` | Regular and glossy styles write **no** roughness; glossy styles 21–38 add a white metalness map at surface alpha **0.05**; matte styles write white roughness (1.0) at surface alpha **0.35–0.4** ([head CC render evidence](../character-customization/head-cc-render-evidence.md)) |
-| Cheeks (24) | `mesh_decal` | Colour; gold and silver blush write white metalness at surface alpha 0.1–1 with roughness 0.51 read raw ([face makeup §1](../../knowledge/face-makeup.md#1-vanilla-cheek-makeup)) |
+| Cheeks (24) | `mesh_decal` | Colour; gold and silver blush write white metalness at surface alpha 0.1–1 with roughness 0.51 if read raw, ≈ 0.22 if decoded (open; [face makeup §1](../../knowledge/face-makeup.md#1-vanilla-cheek-makeup)) |
 | Brows (13) | `mesh_decal_double_diffuse` | Gradient tint, powder alpha, normal 0.4 in mode 1, roughness ≈ 0.50 at surface alpha 1 ([eyebrows §3](../../knowledge/brows.md#3-material-and-colour)) |
 | Scars, face cyberware | `mesh_decal` | Normals at `NormalAlpha` 0.2–1 in mode 1, small surface alphas |
 | XF Eye Artistry (flat, faceted) | `mesh_decal`, local entries `@preset` / `@faceted` | Every channel at alpha 1 through √-encoded coverage (§8) |

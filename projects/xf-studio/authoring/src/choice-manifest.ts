@@ -7,8 +7,9 @@
  * read from after ArchiveXL copies and links, and that archive), every export it served (kind, depot path, archive), the WolvenKit
  * identity and the identity of the route's ArchiveXL files. It **holds** when, on the installation opened now:
  * - WolvenKit and every `.xl` file are the same;
- * - each read still resolves to the same entry in the same archive, and the resolver's cache has it for that archive's current path,
- *   size and modification time (a changed archive has another cache key, so a mod updated in place is not ready);
+ * - each read still resolves to the same entry in the same archive, and is answered without WolvenKit for that archive's current path,
+ *   size and modification time: in the resolver's JSON cache, or answered natively before by the same native reader (resolver-host.ts
+ *   `ResolverFetcher.isCached`; a changed archive or reader has another key, so a mod updated in place is not ready);
  * - each export's archive still wins its path, and the exporter's cache has it for that archive's current identity.
  * Anything else (a mod installed, updated, removed or reordered so another archive wins; a cache file evicted or cleared) makes the
  * choice "not prepared" again, and preparing it reads only what changed. The caches themselves stay the authority: a manifest only

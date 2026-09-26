@@ -13,6 +13,7 @@ First per-family reference of the [materials and shader study](../backlog/materi
 | `staticshader_final.cache` | SHA-256 `bff160…59ff` |
 | `base\materials\skin.mt` | resource hash `41843641457625498`, SHA-256 `d7e50733acd1881805898078fd642a3fb9d70346e3ae23bcd4ebff4157ad4720` |
 | Disassembler / decompilers | Windows SDK 10.0.22621 `dxc -dumpbin`; dxil-spirv `f2d1b554` → SPIRV-Cross `aa217aeb` |
+| `bin\x64\Cyberpunk2077.exe` (2.31) | SHA-256 `a7de8294…a60991` (full hash in the [hair reference](shader-hair.md#1-pinned-inputs)); read with Capstone 5.0.9 through `exe_hair.py dis` at the RVAs in §6.3 |
 | Method | [shader-system evidence note](shader-system/README.md#method-repeatable-in-minutes); outputs stay local and ignored |
 
 | Program (MeshSkinned unless noted) | GUID | DXBC SHA-256 |
@@ -23,6 +24,7 @@ First per-family reference of the [materials and shader study](../backlog/materi
 | static `…_Setup_UseTranslucency` (content-confirmed, below) | `11387959167119825062` | `5760e2dc…b425901` |
 | static `…_Blur_Horizontal` | `13638945895069409584` | `296eb4a5…fb1372` |
 | static `…_Blur_Vertical` | `1061893983243070248` | `65b9ed67…314ef1f` |
+| static `…_Blur_Stochastic` | `5799281617917762538` | `8f0ad92c…4bec45` |
 | static `…_Combine` | `7703933925853799832` | `1124fb96…dcbacf` |
 | static `m_shaderLightsComputeGlobalLocalShadows_Clustered_11111111` (all-class light) | `6606735909222169407` | `c0ce7b53…dac86` |
 
@@ -224,37 +226,120 @@ In the tiled deferred light (`6606735909222169407`), class 1 [observed; [materia
 
 ### 6.2 Setup
 
-`m_postfx_SubsurfaceScattering_Setup` (`18323727242039837728`), for pixels whose stencil class is 1 (`(stencil & ~31) == 32`): copies the light's diffuse output and writes linear depth `1 / (a·(b·z + c) + d)` from `cb12` registers 25–26 [observed].
+`m_postfx_SubsurfaceScattering_Setup` (`18323727242039837728`), for pixels whose stencil class is 1 (`(stencil & ~31) == 32`): copies the light's diffuse output as `.xyzx` (so its alpha is the red irradiance) and writes linear depth `1 / (a·(b·z + c) + d)` from `cb12` registers 25–26 [observed].
 
-### 6.3 Blur and combine
+All SSS programs are compute shaders with 8 × 8 threads that walk a list of 16 × 16-pixel tiles (`t11`), so only tiles holding skin are processed [observed]; the tile list is most plausibly the per-tile class mask of `m_classifyMaterials` ([shader-system note](shader-system/README.md#g-buffer-decode-in-the-deferred-light-_00000001-ssa-in-that-program)) [hypothesis].
 
-**Blur** (`13638945895069409584` horizontal, `1061893983243070248` vertical; the two differ only in axis and in `cb0[3].x` versus `.y`) [observed]:
+### 6.3 Blur, kernel and combine
 
-- For a class-1 pixel with metalness ≤ 0.1: `slot = (GBuffer1.w·3) << 1 | bit 6 of GBuffer2.w·255`.
-- A **kernel table** texture holds one row per slot. Column `cb6[0].y` is the centre weight (RGB); columns `cb6[0].y + 1 … + cb6[0].z − 1` are taps, RGB weight plus **A = offset**.
-- Each tap is read at `± offset · cb6[0].x / (linearDepth · 100) · 3072 · cb0[3].x` pixels: a **world-space-constant radius**, narrower on screen as the face moves away.
-- Taps count only if the neighbour is also class 1 and its copied diffuse (red) is positive; the result is normalised per channel by the weights of the taps that counted, so blur does not leak off the skin and renormalises at its edges. There is no depth-difference test.
-- Metallic centre pixels (> 0.1) output zero and are handled by the combine's non-SSS path.
+The GPU side is read from the compiled blur and combine programs. The kernel itself is built on the CPU, and was read from the executable (RVAs of the 2.31 build; `exe_hair.py dis <start> <end>` reproduces each listing).
 
-This is the structure of Jimenez et al.'s **separable subsurface scattering** (a per-profile kernel of RGB weights and offsets, applied horizontally then vertically, scaled by 1/depth) [source-supported by the structural match]. How `CSkinProfile.blurSize`, `falloff` and `diffuse` become the kernel rows is CPU-side and not in any shader [hypothesis: `blurSize` scales the offsets and `falloff` the per-channel spread, as width and falloff do in that paper's kernel].
+#### 6.3.1 The separable blur (GPU)
 
-**Combine** (`7703933925853799832`) [observed]:
+`13638945895069409584` (horizontal) and `1061893983243070248` (vertical) are identical except for the axis and `cb0[3].x` versus `.y` [observed, decompiled listings compared]. Their only constant register is `cb6[0]` = (width scale `w`, first kernel column `c₀`, tap count `n`, frame index). For each class-1 pixel [observed]:
+
+```
+if GBuffer2.x (metalness) > 0.1:  out = 0                                    // handled by the combine's non-SSS path
+slot = uint(GBuffer1.w·3) << 1 | (uint(GBuffer2.w·255) >> 6) & 1
+s    = w / (linearDepth · 100)                                               // linearDepth from the setup (§6.2)
+K₀   = table[slot, c₀]                                                       // centre weight, RGB
+num  = K₀.rgb · C(p);   den = K₀.rgb + 1e-5
+for i in 1 … n−1:
+    K = table[slot, c₀ + i]                                                  // RGB weight, A = offset
+    for each side ±:
+        q = p ± int(K.a · s · 3072 · cb0[3].x) along the axis                // truncated to whole pixels, unfiltered load
+        if class(q) == 1 and C(q).a > 0:  num += K.rgb · C(q).rgb;  den += K.rgb
+out.rgb = num / den (per channel);  out.a = out.r
+```
+
+`C` is the pass input: the setup's copy for the first pass, the first pass's output for the second. Because the setup and each pass write alpha = red, a neighbour counts when its red irradiance is positive.
+
+Consequences [observed arithmetic unless marked]:
+
+- **The only rejection is the lighting class.** There is no depth or normal test. The blur crosses any Subsurface pixels that touch on screen: the two lips across the parting, skin and **teeth** (the teeth are `skin.mt`, §3.1), a hand in front of the face. Eyes (class 3), hair (class 4) and everything Standard are excluded, and the weights renormalise at their edges.
+- **Shadow does not darken light.** An unlit neighbour (red 0) is excluded and the rest renormalise, so light spreads into a shadowed pixel from its lit neighbours, but a lit pixel is not darkened by shadowed ones. Ambient light is not in this buffer (the combine adds it), so a hard sun terminator softens only towards its dark side [visual consequence source-supported by the arithmetic].
+- **Whole-pixel taps.** Offsets are truncated towards zero and read without filtering. Taps closer than one pixel land on the centre pixel, so a distant face gets less blur than the kernel's width suggests, and the kernel steps as the face moves instead of scaling smoothly.
+- **Only the centre is gated by metalness.** A metallic neighbour's irradiance still counts.
+- **One kernel per pixel, from its own slot.** A neighbour is weighted with the *centre's* row, whatever its own profile.
+- **Order** is not in the programs. Horizontal first, as in the published technique, is a [hypothesis]; the order matters only at mask and shadow edges, where each pass renormalises differently.
+
+#### 6.3.2 The kernel table (CPU)
+
+Built by `0xae31e8` whenever the profile list changes; the getter `0xae3188` rebuilds a dirty table, then `0xae3a5c` copies the dual-specular kernels of §6.1 [observed]:
+
+- **Profiles.** At most 8 (`min(count, 8)`). Each render-side record is 32 bytes: +0 `blurSize` (float), +4 `diffuse` (RGBA8), +8 `falloff` (RGBA8), +0xC `roughness0`, +0x10 `roughness1`, +0x14 `lobeMix` [observed use of each offset; field names by `CSkinProfile`'s field order, source-supported].
+- **Colours are sRGB-decoded.** RGB goes through the engine's 256-entry sRGB-to-linear table (built at `0xf55d0` from 0.04045, 1/12.92, 1/1.055 and 2.4); A is byte/255. Strength = `srgb(diffuse)` clamped to [0, 1]; falloff = `srgb(falloff)` clamped to [0.009, 1]. This covers profile colours only; it does not settle the encoding of material `Color` parameters ([materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions)).
+- **Table 1: 32 × 8 texels, one row per slot.** Column 0 = strength (the combine's `P`), column 1 = falloff (read by no program examined), columns 2–14 the 25-sample kernel (`n` = 13), 15–23 the 17-sample kernel (`n` = 9), 24–29 the 11-sample kernel (`n` = 6).
+- **Table 2: 256 × 8** holds one 511-sample kernel per slot (`n` = 256) for the stochastic blur (§6.3.4), with the RGB weights multiplied by 536.
+- **Offsets carry `blurSize`.** Every entry's A is multiplied by `blurSize / 3072` (a 1/3 in the vector constant and a 1/1024 scalar); RGB is left alone. So `blurSize` scales the radius and nothing else, and the shader's 3072 undoes the constant.
+
+**The kernel of `n` stored entries** (`0xae35f4`, with `profile` at `0xae389c` and `gaussian` at `0xae39b0`) [observed]:
+
+```
+N = 2n − 1;  range = N > 20 ? 3 : 2;  step = 2·range / (N − 1)
+x_i = sign(o_i) · o_i² / range,  o_i = −range + i·step                  // offsets, dense near 0
+area_i = (|x_i − x_{i−1}| + |x_{i+1} − x_i|) / 2                          // a missing neighbour contributes 0
+K_i.rgb = area_i · profile(x_i),  K_i.a = x_i
+profile(r) = 0.100·G(0.0484, r) + 0.118·G(0.187, r) + 0.113·G(0.567, r) + 0.358·G(1.99, r) + 0.078·G(7.41, r)
+G(v, r).c = exp(−(r / (falloff.c + 0.001))² / (2v)) / (2πv)             // per channel c
+move the centre entry first; divide each channel by its sum over all N; store the centre and the n − 1 positive offsets
+```
+
+This is **Jimenez et al.'s reference kernel** (`calculateKernel`, `profile` and `gaussian` of the published Separable SSS code, exponent 2) line for line [source-supported: a constant-for-constant match]. Its profile is d'Eon and Luebke's six-Gaussian skin fit without the narrowest term (variance 0.0064), as in the reference, and with that fit's red-channel weights for all three channels: **colour enters only through `falloff`**. One difference: the reference bakes the strength into the kernel (centre lerped towards 1, the others scaled); the game stores it in column 0 and applies it once, in the combine.
+
+The default profile (`default.sp`: falloff 255/178/165 → (1.000, 0.445, 0.376); strength (1, 1, 1)) gives this 25-sample kernel. Offsets are before the `blurSize` scale; the two taps of a pair share each weight, so centre + 2 × the rest = 1 per channel [observed construction, computed]:
+
+| Offset | 0 | 0.021 | 0.083 | 0.188 | 0.333 | 0.521 | 0.750 | 1.021 | 1.333 | 1.688 | 2.083 | 2.521 | 3.000 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R | 0.0221 | 0.0440 | 0.0839 | 0.1028 | 0.0855 | 0.0549 | 0.0373 | 0.0268 | 0.0197 | 0.0146 | 0.0104 | 0.0070 | 0.0020 |
+| G | 0.0480 | 0.0944 | 0.1492 | 0.1008 | 0.0543 | 0.0332 | 0.0213 | 0.0126 | 0.0062 | 0.0025 | 0.0010 | 0.0004 | 0.0001 |
+| B | 0.0564 | 0.1103 | 0.1595 | 0.0907 | 0.0493 | 0.0296 | 0.0177 | 0.0090 | 0.0036 | 0.0013 | 0.0005 | 0.0002 | 0.0000 |
+
+Red keeps weight out to the full range; green and blue fall off within about a third of it. The teeth profile (`customisation_teeth.sp`, zero falloff, clamped to 0.009) puts essentially all weight on the centre, so teeth pixels are not blurred, though neighbouring skin pixels still gather light from them.
+
+#### 6.3.3 Quality, radius and scale
+
+- **The quality setting picks the kernel** [observed]. The blur's `c₀` and `n` come from two static arrays, {0, 2, 15, 24} and {2, 13, 9, 6}, indexed by a value (`0x3462c2c`) that the `SubsurfaceScatteringQuality` setting writes (`0x18bcca4`, `0x20403d2`): setting 0 → 11 samples, 1 → 17, 2 → 25. That settings 0–2 are the menu's Low, Medium and High is a [hypothesis] from their order. Index 0 (columns 0–1, the strength and falloff colours) is presumably never used [hypothesis]. These are the three sample counts the Separable SSS demo offers.
+- **Screen radius.** A tap at stored offset `x` lands `x · blurSize · w · cb0[3].x / (100 · d)` pixels away, with `d` the linear depth [observed formula]. It is world-space-constant if `cb0[3].x` is the focal length in pixels, which the per-axis `.x`/`.y` use suggests [hypothesis].
+- **`w`** (`cb6[0].x`) is a float from the frame's render settings times 1/6 (`0x621822`); its source is not identified [observed arithmetic, unknown input]. `cb6[0].w` is a frame counter, the stochastic blur's seed.
+- **Units.** The profile is evaluated at `r = x`, so `x` is in the units of d'Eon and Luebke's variances (mm²). If one unit maps to `blurSize` millimetres, `default.sp` reaches 4.2 mm at High [hypothesis]. The true product `w · cb0[3].x` is the first thing a parity capture must measure (§11.6).
+
+#### 6.3.4 The stochastic blur
+
+`5799281617917762538` replaces the two passes with **one random tap per pixel per frame** [observed]:
+
+- a hash of the pixel and the frame counter gives a position `u ∈ [0, 256)` along table 2 (interpolating two entries) and an angle uniform in [0, 2π);
+- the tap is `3 · 1024 · x · s` pixels away along that angle (`cb0[3].x` horizontally, `.y` vertically), the same radius as the separable passes;
+- the output is the tap's irradiance times the interpolated weight, or zero if the tap is not a lit Subsurface pixel. There is no normalisation, so the result is only right after temporal accumulation (TAA or an upscaler) [source-supported].
+
+The blur node binds table 2 in its mode 2 (`0x62164b` → `0x292757c`) [observed]. Which setting selects it (the executable names a `CharacterSubsurfaceStochastic` option) is a [hypothesis]. Accumulated, it approximates a 2D radial kernel, not the separable product.
+
+#### 6.3.5 Combine
+
+`7703933925853799832` [observed]:
 
 ```
 metal > 0.1:  out = E · (specular + diffuse·k)                         // no SSS
-otherwise:    D = diffuse·k, B = blurred·k,  P = profileTable[slot, column 0].rgb
+otherwise:    D = diffuse·k, B = blurred·k,  P = table[slot, column 0].rgb
               albedo = lerp(GBuffer0², cb6[0].rgb, cb6[0].w)
               out = E · ( lerp(D, B, P) · albedo  +  specular
-                          + cb6[1].rgb · ambient·k  +  cb6[1].rgb · (luma709(ambient·k)·cb6[1].w − ambient·k) · cb6[2].x )
+                          + cb6[1].rgb · A  +  cb6[1].rgb · (luma709(A)·cb6[1].w − A) · cb6[2].x ),   A = ambient·k
 ```
 
-`E` and `k` are per-frame exposure scalars; `luma709` uses 0.2126/0.7152/0.0722. Consequences:
+`E` and `k` are per-frame exposure scalars; `luma709` uses 0.2126/0.7152/0.0722. The constants come from `0x6209e8` [observed in the executable; that this 4-register block is the combine's `cb6` is source-supported by its size and by the kernel-table getter it calls]:
+
+- `cb6[0]` = 0 in normal rendering, so albedo is simply GBuffer0². Three debug view modes set it to 18 % grey or white.
+- `cb6[1]` = (`SubsurfaceSpecularTint` R, G, B, 1 / luma709(tint)), built at `0xcedab4`; defaults (0.21, 0.26, 0.29) and 3.98.
+- `cb6[2].x` = `SubsurfaceSpecularTintWeight` (0.3); `.y` is a flag; `.zw` are two values scaled by 2/width and 2/height. `cb6[3]` holds three integers × 2⁻¹⁷ and 1 (roles unknown).
+
+Consequences:
 
 - **Post-scatter texturing.** The blur spreads *light*, then the pixel's own albedo multiplies it. Skin colour detail, freckles and **makeup colour stay sharp**; only shading softens [observed].
-- **`P` is a per-channel strength** that lerps between unblurred and blurred light. That matches the role of a "strength" colour in the separable-SSS kernel and plausibly comes from `CSkinProfile.diffuse` (255, 255, 255 in the default profile: full blur) [hypothesis].
+- **`P` is the profile's `diffuse` colour, sRGB-decoded** (§6.3.2) [observed]: 255/255/255 in the default profile, so full blur.
 - **Specular is added unblurred.**
-- The **ambient** term is added outside the scatter, tinted and partly desaturated by `cb6[1..2]`; the character `GameOptions` `SkinAmbientIntensity_Factor` (0.4) and `SkinAmbientMix_Factor` (1.0) are plausible sources of those registers [hypothesis; values [community]: [head CC rendering §2](../../knowledge/head-cc-rendering.md#2-skin-type-tone-and-the-complexion-texture-set)].
+- **The `A` term is tinted, outside the scatter.** It becomes `tint · (0.7·A + 0.3 · luma(A)/luma(tint))`, about (0.40, 0.49, 0.55) × a grey `A` at the defaults: halved and cooled. The option's name suggests `A` is the skin's environment specular (reflections) [hypothesis]. `SkinAmbientIntensity_Factor` and `SkinAmbientMix_Factor` do not feed these registers; they are read elsewhere (`0x154610`, not traced).
 - A second output stores a weighted luminance of the scattered part (R ¼, G ½, B ¼); its consumer is unknown.
+- `CombineRTXDI_RELAX` and `CombineRTXDI_REBLUR` variants exist for the ray-traced direct-light paths and are not read.
 
 ### 6.4 Translucency (the `UseTranslucency` setup)
 
@@ -275,7 +360,17 @@ diffuse += sunColour · max(0, dot(cb1[41].xyz, sunDir)) · T · w · t3.y
 
 ### 6.5 Skin profiles
 
-`CSkinProfile` fields: `blurSize`, `diffuse`, `falloff`, `roughness0`, `roughness1`, `lobeMix` [source-supported: RED4ext `G/CSkinProfile.hpp:19-24`]. `default.sp` (2.31): `roughness0` 0.966366, `roughness1` 1.59684, `lobeMix` 1, `blurSize` 1.4, `diffuse` 255/255/255, `falloff` 255/178/165 [observed]. The engine keeps **8 slots** per frame (the `cb6` kernel array and the 3-bit slot) [observed]; what happens with more than 8 distinct profiles on screen is [hypothesis].
+`CSkinProfile` fields: `blurSize`, `diffuse`, `falloff`, `roughness0`, `roughness1`, `lobeMix` [source-supported: RED4ext `G/CSkinProfile.hpp:19-24`]. `default.sp` (2.31): `roughness0` 0.966366, `roughness1` 1.59684, `lobeMix` 1, `blurSize` 1.4, `diffuse` 255/255/255, `falloff` 255/178/165 [observed]. The engine keeps **8 slots** per frame (the `cb6` kernel array, the 3-bit slot and the 8-row kernel tables, filled from at most 8 profiles) [observed]; what happens with more than 8 distinct profiles on screen is [hypothesis].
+
+What each field does [observed, §6.1 and §6.3.2]:
+
+| Field | Reaches | As |
+|---|---|---|
+| `blurSize` | Every kernel offset | A radius multiplier; the weights do not change |
+| `diffuse` (RGB, sRGB-decoded) | Kernel table column 0 → combine `P` | Per-channel strength: 0 keeps the unblurred light, 1 takes the blurred |
+| `falloff` (RGB, sRGB-decoded, clamped to ≥ 0.009) | The kernel's Gaussians | Per-channel width: `r / (falloff + 0.001)`, so a smaller value keeps that channel's light closer |
+| `roughness0`, `roughness1`, `lobeMix` | `cb6` registers 4–11 of the light | The dual specular lobe |
+| The colours' alpha | Columns 0–1's A | Scaled like an offset; read by no program examined |
 
 ## 7. The lip seam artefact
 
@@ -310,28 +405,131 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 | Wetness | Not drawn | Faithful when dry |
 | Emissive | Not drawn; reported when a mask would glow | Gap |
 | Dual-lobe GGX, F0 0.04, Burley diffuse | Same | Faithful to the direct light |
-| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1 | Approximation: the game blurs irradiance in screen space and multiplies albedo afterwards (§6.3); a wrap softens the terminator but not texture-scale shading |
+| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1 | Approximation: the game blurs irradiance in screen space with a decoded kernel and multiplies albedo afterwards (§6.3); a wrap softens the terminator but not texture-scale shading. The port is planned in §11 |
 | Translucency | Not drawn | Gap for thin, back-lit parts |
-| Ambient and reflections | Three's image-based light through both lobes | Approximation; the game's ambient bypasses the scatter and is tinted by `cb6[1]` |
+| Ambient and reflections | Three's image-based light through both lobes | Approximation; the game adds one ambient term (probably the reflections) outside the scatter, tinted by `SubsurfaceSpecularTint` (§6.3.5) |
 
 **Browser follow-ups this study suggests** (separate reviewable changes with before/after evidence, per the backlog):
 
-1. A screen-space separable blur of diffuse irradiance with post-scatter albedo would reproduce §6.3 more faithfully than the wrap. The kernel's CPU construction is still unknown, so a first version should take Jimenez's published kernel with `blurSize` as width and `falloff` as the per-channel falloff, labelled as an approximation.
+1. Port the screen-space scatter with the game's own kernel (§11).
 2. The lip seam capture of §7 on the current preview.
 
 ## 9. Open questions
 
-1. How the CPU turns `blurSize`, `falloff` and `diffuse` into the kernel table and the column-0 strength (a RED4ext read of the kernel texture, or a debug capture, would settle it).
-2. Which setting selects the `UseTranslucency` setup, and what `cb1[41]` and the transmission's `t3.y` are.
-3. The source of the wrinkle regions (`TextureRegionsCB`) and float tracks, and whether they come from the facial setup's wrinkle outputs.
-4. `TintColor` encoding (byte/255 or sRGB-decoded): [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions).
-5. What happens with more than 8 skin profiles on screen.
-6. The three siblings (`skin_blendable`, `skin_morph`, `blackwall_blendable_skin`) are not decompiled.
+1. **The kernel's screen scale.** The kernel table, the strength and the quality mapping are decoded (§6.3.2–6.3.3); the product `w · cb0[3].x` that turns kernel units into pixels is not. The source of `w` (a render-settings float × 1/6) and the meaning of `cb0[3]` would settle it (a RED4ext read), or a parity capture can fit it (§11.6).
+2. **Which blur runs.** Separable or stochastic, under which setting (`CharacterSubsurfaceStochastic`, the upscaler, ray tracing), and whether the separable passes run horizontal first.
+3. **The combine's tinted term.** Whether the `A` input (`t6`) is the environment specular or the ambient diffuse, and where `SkinAmbientIntensity_Factor` and `SkinAmbientMix_Factor` act.
+4. Which setting selects the `UseTranslucency` setup, and what `cb1[41]` and the transmission's `t3.y` are.
+5. The source of the wrinkle regions (`TextureRegionsCB`) and float tracks, and whether they come from the facial setup's wrinkle outputs.
+6. `TintColor` encoding (byte/255 or sRGB-decoded): [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions).
+7. What happens with more than 8 skin profiles on screen.
+8. The three siblings (`skin_blendable`, `skin_morph`, `blackwall_blendable_skin`) are not decompiled.
 
 ## 10. In-game test asks (batch into the prepared session)
 
 1. **Back-lit ear** in photo mode, sun behind the head, with and without a decal over the ear: shows whether the translucency variant runs at the test's settings.
 2. **Closed-mouth close-up** under a slowly moving key light: is there a thin bright line along the parting in the game at all?
 3. **Neck seam**: head and body tone match at the neck under the creator light (with the body track's body test).
+4. **Scatter width and quality.** Photo mode, one hard key light raking across the cheek so its shadow terminator crosses the face, camera fixed: frames at Subsurface Scattering Quality Low and High, then High again at a second camera distance (about twice as far). Record the upscaler, ray-tracing mode and SSS quality. This gives the parity fit of §11.6 its data, and shows the 11- versus 25-sample difference. A Low/High pair that looks identical would suggest the stochastic blur, which ignores the quality setting.
+
+## 11. Preview port plan: screen-space scatter in Three.js
+
+A plan for a code track, ranked; nothing here is built yet. It replaces the wrap stand-in (§8) with the game's mechanism (§6.3) in the WebGL 2 renderer (Three.js 0.186). Grades on the game side are those of §6; statements about the Studio's code are [observed] in the files named, and costs are estimates to be measured.
+
+### 11.1 What to reproduce, and the shortcut that makes it cheap
+
+For a Subsurface pixel with blended metalness ≤ 0.1, the game outputs `lerp(E, B, P) · albedo + specular + tinted A`, where `E` is the direct diffuse irradiance (albedo 1), `B` its blurred copy, `P` the profile strength and `albedo` the pixel's final G-buffer colour after decals (§6.3.5). The preview's forward pass already writes `E · albedo + specular + ambient` for skin, decals and the plate. So the scatter can be added as a **delta**:
+
+```
+Δ = (lerp(E, B, P) − E) · albedo        on class-1 pixels with metalness ≤ 0.1, else 0
+final = forward scene + Δ               before the display transform
+```
+
+Specular and the image-based light never enter `E`, so they stay sharp exactly as in game, and the forward materials keep their outputs. The one requirement is that the forward skin diffuse is the same `E` that the scatter pass sees: the wrap must be off (`xfsWrap = 0`) whenever the scatter runs.
+
+### 11.2 Render targets
+
+All targets are single-sample, at the display target's drawing-buffer size (`linear-display.ts` `ensureTarget`), created and resized with it.
+
+| Target | Format | Contents |
+|---|---|---|
+| **S0** scatter input | RGBA16F | RGB = `E`, the direct diffuse irradiance with albedo 1: Burley at the pixel's roughness, all direct lights with their shadows, no wrap, no image-based light. A = the pixel's **class-1 flag**, written opaque by skin and never changed by decals |
+| **S1** surface | RGBA8 (RGBA16F if Three.js 0.186 cannot mix attachment types) | RGB = `sqrt(albedo)`, blended by decals in that space exactly like GBuffer0. A = profile slot, (slot + 1)/8 |
+| **S2** metalness | same type as S1 | R = the blended metalness (the SSS gate) |
+| Depth | `DepthTexture` (float) | Linear view depth for the radius, from the camera's near/far |
+| **P0**, **P1** | RGBA16F | Blur ping-pong: P0 = horizontal result, P1 = `Δ` |
+
+S0–S2 are one multiple-render-target (`count: 3`) target. Blending uses each attachment's own output alpha, so a decal can blend S1 at its colour alpha and S0 at its normal alpha in one draw. With colour factors `SrcAlpha/OneMinusSrcAlpha` and alpha factors `Zero/One`, the class flag and slot are never touched, which matches the game's RGB write mask and untouched stencil (§6.3.1, [decal reference](shader-decal.md)).
+
+Memory is about 36 bytes per drawing-buffer pixel (S0–S2 and depth 20–28, P0–P1 16): about 75 MB at 1920 × 1080 and about 230 MB at 3200 × 2000 (a large canvas at pixel ratio 2). This is outside the preview-quality contract's 1 GiB generated-texture budget, which excludes framebuffers.
+
+### 11.3 Passes
+
+1. **Forward scene** (unchanged), with the wrap off when the scatter is on.
+2. **Scatter input** into S0–S2. Every mesh draws with an *input variant* of its material, swapped in for this pass:
+   - **Skin** (`skin-material.ts`): the same surface arithmetic; outputs `E`, `sqrt(albedo)`, metalness, class flag and slot.
+   - **Face decals and brows** (`face-decal-material.ts`, `brow-material.ts`): S1 = `sqrt(decal colour)` at the colour alpha, so the hardware blend *is* the game's square-root blend, with no underlay solve. S0 = `E` of the blended surface at the normal/surface alpha (the decal's normal and roughness change `E`). S2 = metalness at the surface alpha.
+   - **Authored plate** (`engine/render/plate-blend.ts`): it already forms the blended surface G and the skin under it S per fragment. S0 takes the same residual form it uses for light, `Y = (E(G) − (1 − A)·E(S)) / A` at alpha A. S1 and S2 take G's √colour and metalness at the colour and surface alphas.
+   - **Everything else that the game draws into the G-buffer** (eyes, hair and lash cards where their alpha test passes, clothing, piercings) writes class flag 0 and depth, so it occludes and is excluded. Forward-only passes (the `eye_shadow` shell, glitter plates) are skipped, as they come after the game's SSS.
+   - The teeth, once drawn (coverage audit rank 1), are skin with their own profile slot.
+3. **Horizontal blur**: S0 → P0, the §6.3.1 loop with the game's kernel.
+4. **Vertical blur and combine**: P0 → P1 = `Δ`, reading S1 (squared), S2 (gate), the slot's `P` and the unblurred `E` from S0.
+5. **Display**: the creator and studio passes (`linear-display.ts`) add `Δ` to the scene value they read, before exposure and grade; in the studio path `Δ` is weighted by coverage like the scene colour.
+
+Details to keep:
+
+- **Kernel data.** A pure domain module (for example `skin-scatter-kernel.ts`) ports `0xae35f4` and the table layout of §6.3.2 and returns, per slot, the strength and the `n` entries for the chosen quality. The blur takes them as a uniform array (8 slots × 14 `vec4`, within WebGL 2's fragment uniform minimum), not a texture. It reimplements Jimenez et al.'s reference algorithm; if the code follows their published source, their licence notice goes into the release's third-party notices ([community credits](../../docs/community-credits.md#jimenez-et-al-2015)).
+- **Slots.** The adapter assigns slots to the distinct resolved `.sp` profiles among drawn skin chunks, in first-seen order, up to 8. A ninth profile falls back to slot 0 and is reported in diagnostics, since the game's behaviour there is unknown.
+- **The game's rules, not stricter ones.** Class mask and `red > 0` only, no depth test; whole-pixel taps (truncate, `texelFetch`); per-channel renormalisation; only the centre's metalness gates. The whole-pixel rule matters: it is why a distant face shows less scatter.
+- **Scissor** the full-screen passes to the projected bounds of the skin meshes: the WebGL stand-in for the game's tile list.
+
+### 11.4 How it meets the existing materials
+
+- **Strength `P` and post-scatter albedo.** `P` is the profile's `diffuse` colour, sRGB-decoded (§6.3.2); `RenderSkinProfile` already carries it. The albedo is the *final* surface colour after decals and the plate (S1), so makeup and freckle colour stay sharp while shading under them softens, as in game.
+- **Decals are lit as skin.** A post-G-buffer decal never changes the class or slot. Under the delta scheme, decal pixels scatter with the skin's kernel because S0.A and S1.A come from the skin underneath. The forward decal and plate materials already light with `patchSkinLight`; their wrap goes to zero with the skin's.
+- **Metalness > 0.1.** S2 carries the blended metalness, so Metallic makeup switches the scatter off at the same coverage as the current wrap gate (about 15 % for the Metallic finish; [fact index](shader-fact-index.md)). Colour-shifting's 0.08 never crosses it.
+- **The wrap stays as the fallback**: without a renderable half-float target (the `direct` / `srgb8` paths), in study pages, and when the scatter is switched off.
+- **Parity passes share the machinery.** The input variant swap and the S1/depth targets are the `albedo`, `ids` and `depth` passes of the [parity measurement design](../authoring/game-parity-measurement.md) (phase P2). Build the swap once for both.
+- **The ownership gate changes.** The [diffuse SSS gate](../../projects/xf-studio/authoring/evidence/diffuse-sss-gate-2026-09-24.md) asked for a semantic lip partition and depth rejection before any blur. The game has neither: it blurs across the lip parting and onto the teeth wherever they are Subsurface (§6.3.1). Parity means matching the game's class mask, so the gate's no-bleed test is now "no scatter outside the class-1 mask" (adopted 27 September 2026; [preview fidelity](../backlog/preview-fidelity.md) row 4).
+
+### 11.5 Performance
+
+- **Cost follows drawing-buffer pixels, not the preview quality presets.** The 512–4K presets size generated makeup textures ([preview quality contract](../authoring/preview-quality-contract.md)); the scatter's cost scales with canvas size × pixel ratio (at most 2) and the fraction covered by skin.
+- **Per pixel**, at High: 25 taps per pass with one fetch each (S0 carries the class flag, so no second fetch), plus 5 fetches for the combine: about 55 fetches. At Medium 17 + 17 + 5, at Low 11 + 11 + 5.
+- **Estimate** [hypothesis, to measure]: about 1–3 ms per frame on a mid-range discrete GPU at 1920 × 1080, and several times that at 3200 × 2000 or on integrated graphics. The input pass costs about one more draw of the skin with its full surface arithmetic.
+- **Only drawn frames pay.** The viewport renders on change, and continuously only while the idle plays.
+- **Default quality** follows the game's own setting; High (25 samples) is the default until the game-side default is known. Offer it as a viewing preference beside the lighting presets, not as a recipe property. If High costs too much at pixel ratio 2, Medium is the first step down, not a half-resolution blur: whole-pixel taps make resolution part of the look.
+
+### 11.6 Unknowns a parity capture must settle
+
+1. **The screen scale `w · cb0[3].x`** (§6.3.3). Until then the preview uses one kernel unit = `blurSize` mm [hypothesis]. Fit: in-game test ask 4 (§10) gives a hard terminator at two distances and two qualities. Registered against the Studio's depth pass, the red fringe width versus depth fits the scale in one parameter, and the Low/High pair checks the kernel.
+2. **Separable or stochastic**, and the pass order (edge-only).
+3. **The tinted `A` term** (§6.3.5): whether the skin's image-based light in the preview should be multiplied by the `SubsurfaceSpecularTint` blend. A separate, small change once the input is known.
+4. **The game's SSS quality at the test profile**, recorded with every capture.
+
+### 11.7 Ranked work
+
+| Rank | Step | Effort | Depends on |
+|---|---|---|---|
+| 1 | Kernel builder and table as a pure module, tested against §6.3.2's 25-sample table (to 1e-4), the channel sums and the offsets | S | – |
+| 2 | Input-variant swap and the S0–S2 + depth target, with resize and dispose; shared with parity P2 | M | – |
+| 3 | Blur, combine and display integration for both presets; wrap off while active; fallback kept | M | 1, 2 |
+| 4 | Decal, brow and plate input variants (√-space colour, `E` at the normal alpha, metalness) | M | 2 |
+| 5 | Scissor, quality setting, slot diagnostics, GPU timing at pixel ratio 1 and 2 | S | 3 |
+| 6 | Fit the scale from the parity capture; update `w` and this page | S | test ask 4 |
+
+Total **M–L**, as the coverage audit ranks it. Ranks 1–3 alone give a correct scatter on bare skin; rank 4 is needed before made-up faces are compared.
+
+### 11.8 Checks that validate it
+
+- **Unit**: the kernel table (rank 1); a TypeScript reference blur on a small synthetic class mask and irradiance image, compared with a GPU readback of the same passes, including renormalisation at mask edges, the `red > 0` rule and whole-pixel truncation.
+- **Browser, in a `?verify=1` workspace**:
+  - `Δ` is zero outside class 1 (against the ID pass) and on a Metallic plate above the threshold;
+  - makeup colour sharpness is unchanged (the high-pass of the albedo-normalised image matches scatter off);
+  - with diffuse light off, the frame is identical to scatter off (specular untouched);
+  - the scatter fades out as the camera pulls away (whole-pixel collapse);
+  - Low, Medium and High differ.
+- **Parity**: test ask 4 fits the scale (§11.6), then the terminator's red fringe on cheek, nose wing and ear is compared per region with the [parity metrics](../authoring/game-parity-measurement.md#32-measures).
+- **In game**: test asks 2 and 4 (closed mouth; terminator at two qualities) are the acceptance frames.
 
 Related: [materials and shaders](../../knowledge/materials-and-shaders.md) · [head CC rendering](../../knowledge/head-cc-rendering.md) · [shader-system evidence](shader-system/README.md) · [annotation results](shader-system/annotation-results.md#basematerialsskinmt) · [hair reference](shader-hair.md) · [fact index](shader-fact-index.md).

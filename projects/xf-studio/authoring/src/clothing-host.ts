@@ -8,11 +8,13 @@
  *   more [resource: 1,351 and 1,907 entities in 2.31]): a `JsonResource` whose root is `gameAppearanceNameVisualTagsPreset {presets:
  *   [{entityPathHash, appearancesToTags: [{appearanceName, visualTags}], commonVisualTags}]}` [resource]. It holds the vanilla items'
  *   hide tags (`hide_T1`, `hide_T1part`, …) that their `.app`s don't carry, which answers the knowledge page's open question 2. WolvenKit
- *   9.0.1 doesn't serialize it, so it is decoded by the Studio's native reader (native/, the only resource read that way in production),
- *   from the archive that wins its path, and kept as a compact table in the resolver cache per archive identity. The decode runs in the
- *   native reader's worker (`openNativeDecoderAsync`: the game's Oodle library is checked asynchronously, and the 13 MB document is
- *   decoded off the host's event loop; NATIVE-25). Only a worker that can't start falls back to decoding in this process, after the same
- *   asynchronous check. A failure is logged and not kept, so the next preparation tries again (PIPE-100).
+ *   9.0.1 doesn't serialize it, so it is decoded by the Studio's native reader (native/), from the archive that wins its path, and kept
+ *   as a compact table in the resolver cache per archive identity. The decode runs in the route's native decode worker, the one the
+ *   resolver reads through (resolver-host.ts `ResolverFetcher.nativeDecoder`, `routePresetDecoder`), with the preset's root class and a
+ *   longer time budget for this one request; a route without that decoder opens a worker for the read (`workerPresetDecoder`). Either
+ *   way the game's Oodle library is checked asynchronously and the 13 MB document is decoded off the host's event loop (NATIVE-25). Only
+ *   a worker that can't start falls back to decoding in this process, after the same asynchronous check. A failure is logged and not
+ *   kept, so the next preparation tries again (PIPE-100).
  * - **Failures** are never silent: an unreadable TweakDB makes `records` answer null (each item then says the records couldn't be read).
  */
 import { createHash } from "node:crypto";
@@ -21,6 +23,7 @@ import { join } from "node:path";
 import type { ClothingPorts, ItemRecord } from "./clothing-resolver";
 import { refFromPath } from "./depot-path";
 import { NativeArchive } from "./native/archive-reader";
+import type { NativeDecodeOutcome, NativeDecoder } from "./native/native-decode";
 import { openNativeDecoderAsync } from "./native/native-fetch-port";
 import { openGameOodle } from "./native/oodle";
 import { readResourceJson } from "./native/resource-document";
@@ -109,19 +112,33 @@ export function workerPresetDecoder(gameRoot: string, script?: string | URL): Pr
   return async (archivePath, hash) => {
     const opened = await openNativeDecoderAsync(gameRoot, { roots: new Set([PRESET_ROOT]), timeoutMs: PRESET_DECODE_TIMEOUT_MS, ...(script ? { script } : {}) });
     if (!opened.decoder) throw Error(opened.reason);
-    let outcome: Awaited<ReturnType<typeof opened.decoder.decode>>;
+    let outcome: NativeDecodeOutcome;
     try { outcome = await opened.decoder.decode({ archivePath, hash, needName: false }); } finally { opened.decoder.close(); }
-    if (outcome.ok) return outcome.document;
-    if (outcome.kind !== "unavailable") throw Error(`${outcome.kind}: ${outcome.message}`);
-    const oodle = await openGameOodle(gameRoot);
-    try {
-      const archive = NativeArchive.open(archivePath, oodle.decompress);
-      let bytes: Uint8Array | null;
-      try { bytes = archive.read(hash); } finally { archive.close(); }
-      if (!bytes) throw Error("The archive doesn't hold it.");
-      return readResourceJson(bytes, oodle.decompress);
-    } finally { oodle.close(); }
+    return presetDocument(outcome, gameRoot, archivePath, hash);
   };
+}
+
+/**
+ * Decode through the route's own native decoder (the worker the resolver reads through), asking it for the preset's root class and the
+ * preset's time budget for this one request, so the host runs one decode worker per route rather than one more per preset read.
+ */
+export function routePresetDecoder(decoder: NativeDecoder, gameRoot: string): PresetDecoder {
+  return async (archivePath, hash) =>
+    presetDocument(await decoder.decode({ archivePath, hash, needName: false, roots: [PRESET_ROOT], timeoutMs: PRESET_DECODE_TIMEOUT_MS }), gameRoot, archivePath, hash);
+}
+
+/** A decode's document; a worker that can't start (`unavailable`) is answered by decoding here, after the asynchronous library check. */
+async function presetDocument(outcome: NativeDecodeOutcome, gameRoot: string, archivePath: string, hash: string): Promise<unknown> {
+  if (outcome.ok) return outcome.document;
+  if (outcome.kind !== "unavailable") throw Error(`${outcome.kind}: ${outcome.message}`);
+  const oodle = await openGameOodle(gameRoot);
+  try {
+    const archive = NativeArchive.open(archivePath, oodle.decompress);
+    let bytes: Uint8Array | null;
+    try { bytes = archive.read(hash); } finally { archive.close(); }
+    if (!bytes) throw Error("The archive doesn't hold it.");
+    return readResourceJson(bytes, oodle.decompress);
+  } finally { oodle.close(); }
 }
 
 /**
@@ -168,12 +185,16 @@ export async function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir:
   } finally { reading.delete(identity); }
 }
 
-/** The clothing resolver's ports for one installation (`decodeWorker`: the native decode worker a packaged host ships). */
+/**
+ * The clothing resolver's ports for one installation. The preset is decoded by `decode`, else through the route's native decoder
+ * (`routeDecoder`), else by a worker opened for the read (`decodeWorker`: the native decode worker a packaged host ships).
+ */
 export async function clothingPorts(graph: ResourceGraph, gameRoot: string, cacheDir: string, log?: (message: string) => void,
-  options: { decodeWorker?: string | URL; decode?: PresetDecoder } = {}): Promise<ClothingPorts & { tweakDb: string | null; preset: boolean }> {
+  options: { decodeWorker?: string | URL; decode?: PresetDecoder; routeDecoder?: NativeDecoder | null } = {}): Promise<ClothingPorts & { tweakDb: string | null; preset: boolean }> {
   const tweakDb = (() => { try { return tweakDbOf(gameRoot, graph.depot.plan.ep1Installed); } catch (error) { log?.(`The game's TweakDB couldn't be read: ${(error as Error).message}`); return null; } })();
   if (!tweakDb) log?.("The game's TweakDB couldn't be found, so worn items can't be read.");
-  const preset = await presetOf(graph, gameRoot, cacheDir, log, options.decode ?? workerPresetDecoder(gameRoot, options.decodeWorker));
+  const preset = await presetOf(graph, gameRoot, cacheDir, log, options.decode
+    ?? (options.routeDecoder ? routePresetDecoder(options.routeDecoder, gameRoot) : workerPresetDecoder(gameRoot, options.decodeWorker)));
   return {
     tweakDb: tweakDb?.source ?? null, preset: !!preset,
     // Without the TweakDB no item can be read: the whole answer says so (PIPE-100).

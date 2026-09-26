@@ -8,7 +8,7 @@ Grades as in the [knowledge rules](../../knowledge/README.md): [source] compiled
 
 - **No data or interpretation bug in the colour chain.** The save selects `38_ash_brown`, which resolves to redacted-c01's `ash_brown.hp`; the game logged that expansion for both saved hair meshes. Its stops are light-to-mid warm browns with a near-black root band, not dark or cool. The root-to-tip direction, the ID channel, the texture colour spaces and the shader arithmetic all check out.
 - **The lighting constants were the main error.** The preview used Karis's published defaults for the hair light. The game's own option values, listed for game 2.31 by a CET tool, differ a lot: multiple-scatter (diffuse) intensity 0.47 instead of 1, R 0.3 instead of 1, and a much tighter diffuse wrap. The preview also left out two gate terms that are in the compiled program. With both fixed, the preview hair's brightness relative to skin falls from 0.20 to 0.093. The portrait gives 0.060, under uncontrolled lighting.
-- **The bake colour space stays sRGB-decoded.** Two designer colour sets agree with it on hue and show a roughly uniform brightness factor, not a steeper curve.
+- **The bake colour space stays sRGB-decoded.** Two designer colour sets agree with it on hue and show a roughly uniform brightness factor, not a steeper curve. The bake has since been read from the executable: sRGB-decoded after 8-bit interpolation, as assumed, but with stop positions rescaled to span 0 to 1 and samples at `k/N` ([hair reference §7](../materials/shader-hair.md#7-hp-profiles-and-their-resolution)).
 - **What remains is a calibration question.** The portrait's cool hue and its extra darkness need a controlled capture. The capture request is [below](#refined-capture-request).
 
 ## Inputs and their limits
@@ -51,7 +51,7 @@ These are warm light-to-mid browns with a black root band. Under any monotone co
 | (c) Gradient direction or ID channel | Of the 910 connected strand cards of `lm097_hair_pt2` with a clear scalp end, that end has the lower `Strand_Gradient` value on 868 and the higher on 42 [resource geometry]. `hair_lm60_id` is greyscale (R = G = B in every texel), so the channel does not matter. Both are `isGamma=0`. | Rejected |
 | (c′) Mipmapping of index textures | The strand maps have `hasMipchain=0`, so the game samples level 0. The preview generates mips. Averaging before the truncated lookup shifts the coverage-weighted mean by at most 7 sRGB levels (74 → 81 at mip 4) | Minor; not changed |
 | (d) Vertex-red darkening, AlbedoMultiplier, tint | Strand vertex colour is zero, so the shadow term is inert. AlbedoMultiplier is 1.0 in vanilla [community]. The reference install runs "Arkhe Balanced", which sets it to 0.8091. Separately, the base-colour pass multiplies by a rain-wetness factor down to 0.25 when the character is wet [source] | Explains at most 0.81× (plus wetness, if it rained); calibration |
-| (e) Lash profile: base or Alliekat | Under the model, base `brown_liquorice.hp` gives golden tan (177,136,44) and Alliekat's gives dark red-brown (62,30,0). The portrait's darkest lash-box decile is 3 % of skin luminance, close to the mod candidate after the same lighting factor as the hair. The base candidate would need about 28× darkening. The box also contains near-black legacy eyeliner. | Weakly favours Alliekat, as the resolver picks. Not proof |
+| (e) Lash profile: base or Alliekat | Under the model, base `brown_liquorice.hp` gives golden tan (177,136,44) and Alliekat's gives dark red-brown (62,30,0) (under the since-decoded bake: (172,130,15) and (59,28,0)). The portrait's darkest lash-box decile is 3 % of skin luminance, close to the mod candidate after the same lighting factor as the hair. The base candidate would need about 28× darkening. The box also contains near-black legacy eyeliner. | Weakly favours Alliekat, as the resolver picks. Not proof |
 | Lighting constants | Section 3 | **Error found and fixed** |
 
 Designer-reference fits (uniform ID × gradient grid; exposure is reference luminance / model luminance):
@@ -78,7 +78,7 @@ Re-reading the Hair branch of `m_shaderLightsComputeGlobalOnly_Clustered_0001000
 - The R-lobe width uses `r / cb0[17].x`.
 - A per-strand shift `frac(frac(ID·0.0729477)·52.98292)`, scaled into `[cb0[17].z, cb0[17].w]`, is added to the R angle and subtracted in the TRT lobe.
 
-The register-to-option pairing below follows each register's role in the program and the option names [hypothesis]. The values are the Character Rendering Editor's "Vanilla" preset [community].
+The register-to-option pairing below follows each register's role in the program and the option names. The values are the Character Rendering Editor's "Vanilla" preset [community]. Both have since been confirmed from the executable, which holds the options' defaults and the function that copies them into these registers ([hair reference §6.4](../materials/shader-hair.md#64-option-values-and-registers-executable)).
 
 | Register | Role in program | Option | Vanilla | Karis (old preview) | Arkhe Balanced (reference install) |
 |---|---|---|---:|---:|---:|
@@ -91,9 +91,9 @@ The register-to-option pairing below follows each register's role in the program
 | cb0[18].x/y/w | diffuse wrap / Kajiya mix / gate | MultiScatter/{Wrap,DiffuseScatterFactor,Mask_Intensity} | 0.35 / 0 / 1 | 1 / 0.33 / (absent) | 0.4364 / 0 / 1 |
 | cb0[19].y/z | R wrap / gate | Specular/{Wrap,Mask_Intensity} | 0.3 / 1 | (absent) | same |
 | cb0[20].x/y | TRT azimuth `exp(x·cosφ − y)` | TRT_Params/{EXP_SCALE,EXP_BIAS} | 1 / 1.5 | 17 / 16.78 | 1 / 2.5795 |
-| — | environment-probe path (not decoded) | EnvProbe/{MultiScatter,R,TRT} | 0.47 / 0.3 / 0.8 | — | same |
+| cb0[14].w/.x/.z | environment path (since decoded, [hair reference §6.5](../materials/shader-hair.md#65-environment-path)) | EnvProbe/{MultiScatter,R,TRT} | 0.47 / 0.3 / 0.8 | — | same |
 
-The preview now defaults to the vanilla column (`HAIR_LIGHTING_VANILLA`) and implements the two gates and the per-strand shift. It also scales Three's ambient diffuse on hair by `EnvProbe/MultiScatter`, which approximates an undecoded path [hypothesis]. It does not read the Arkhe preset: GameOptions are per-install runtime state, and the Studio has no generic way to read them yet.
+The preview now defaults to the vanilla column (`HAIR_LIGHTING_VANILLA`) and implements the two gates and the per-strand shift. It also scales Three's ambient diffuse on hair by `EnvProbe/MultiScatter`, an approximation of the environment path; the decoded path multiplies hair's ambient diffuse by its albedo once more and adds irradiance-lit R and TRT lobes ([hair reference §6.5](../materials/shader-hair.md#65-environment-path)). It does not read the Arkhe preset: GameOptions are per-install runtime state, and the Studio has no generic way to read them yet.
 
 ## 4. Before and after (fixed cameras, isolated `?verify=1`)
 
@@ -121,19 +121,19 @@ Visual inspection at normal and enlarged size:
 |---|---|---|
 | Profile selection | `ash_brown.hp` from Hair Profiles CCXL | [runtime-log] expansion, [resource] single provider |
 | Profile sampling | Truncated lookup, overlay with root-to-tip as base, `|c|` | [source] |
-| Stop bake | Linear interpolation of 8-bit stops at `k/(N−1)`, then sRGB decode | [hypothesis], best of the tested set on two designer sets |
+| Stop bake | Linear interpolation of 8-bit stops at `k/(N−1)`, then sRGB decode | [hypothesis] at the time; the executable's bake (since decoded) rescales positions to 0–1 and samples at `k/N` |
 | Direction, channel, texture colour space | Root = 0; red channel; `isGamma=0` | [resource] |
 | Vertex-red shadow | Inert for these strands | [resource] |
 | Light structure (R, TRT, gated diffuse, per-strand shift) | As decoded | [source] |
-| Light constants | Vanilla option values | [community] values, [hypothesis] register pairing |
+| Light constants | Vanilla option values | [community] values, since confirmed with the register pairing from the executable |
 | Environment lighting | Three ambient × EnvProbe/MultiScatter; no hair environment specular | [hypothesis] |
 | Wetness, contact shadows, self-shadowing, tone mapping | Not modelled | Open |
 
 ## Remaining uncertainty
 
-- **Brightness.** The portrait's hair is still about 1.5× darker relative to skin than the preview. Candidates are the reference install's AlbedoMultiplier of 0.81, self-shadowing and contact shadows the preview lacks, rain wetness (up to 4× darker), the undecoded environment-probe path, the game's tone curve and grading, and any Photoshop edit.
-- **Hue.** The portrait's cool sheen is most likely environment specular (EnvProbe R/TRT), which the preview does not model.
-- **Unconfirmed values.** The option values come from a third-party list, and the register pairing is inferred. Neither has been confirmed by a dump from our own game session.
+- **Brightness.** The portrait's hair is still about 1.5× darker relative to skin than the preview. Candidates are the reference install's AlbedoMultiplier of 0.81, self-shadowing and contact shadows the preview lacks, rain wetness (up to 4× darker), the environment path (since decoded: it scales hair's ambient diffuse by about `0.52 × C` where the preview uses 0.47: about 0.03 for this hair's mean albedo, sRGB (74, 61, 54)), the game's tone curve and grading, and any Photoshop edit.
+- **Hue.** The portrait's cool sheen is most likely environment specular (EnvProbe R/TRT), which the preview does not model. The decoded environment path lights those lobes with the diffuse irradiance, so a cool sky gives exactly such a sheen.
+- **Option values in a session.** The defaults and the register pairing are now read from the executable. A dump from a game session is still needed to see what a CET preset changes.
 - **Lash winner.** The runtime winner for `brown_liquorice.hp` has only weak photographic support.
 
 ## Refined capture request
@@ -145,22 +145,23 @@ One session, current stable ArchiveXL/TweakXL/CET, the usual MO2 profile. Steps 
    ```lua
    for _, g in ipairs({ "Editor/Characters/Hair", "Editor/Characters/Hair/AlphaShifts", "Editor/Characters/Hair/TRT_Params",
      "Editor/Characters/Hair/MultiScatter", "Editor/Characters/Hair/Specular", "Editor/Characters/Hair/GlobalLight",
-     "Editor/Characters/Hair/LocalLight", "Editor/Characters/Hair/EnvProbe", "Editor/Characters/Hair/HACKS" }) do
+     "Editor/Characters/Hair/LocalLight", "Editor/Characters/Hair/EnvProbe", "Editor/Characters/Hair/HACKS",
+     "Editor/Characters/Hair/Debug", "Developer/FeatureToggles" }) do
      GameOptions.List(g)
    end
    ```
 
-   Run it twice. The first run uses the Character Rendering Editor's active preset, as normally played. For the second, select its "Vanilla" preset (or disable the mod and restart). This records the values in play and checks the mod's vanilla list.
+   Run it twice. The first run uses the Character Rendering Editor's active preset, as normally played. For the second, select its "Vanilla" preset (or disable the mod and restart). This records the values in play; the vanilla run should reproduce the executable's defaults, with `DebugSwitch1` false.
 2. **Photo mode under a known neutral light.** V's apartment or another interior with no sky in view. Clear weather: no rain or wet hair, since wetness darkens hair up to 4×. Fixed time of day. Use one CharLi or photo-mode light in plain white. Turn off depth of field, vignette, grain and camera effects; HDR off. Save PNGs straight from the game with no editing. Take three frames without moving the camera between them: face front (about 30° vertical FOV), left-eye close-up, and hair three-quarter.
-3. **Character-editor colour ladder (removes lighting).** Keep the `lm097_hair` style and the same framing, and take one frame for each of these redacted-c01 colours, all single-provider: `38_ash_brown`, `39_ash_grey`, `74_steel_smoke` and `66_platinum_blonde`. Expected luminance ratio of the lengths to `ash_brown` (scene-linear; the game's tone curve compresses displayed ratios):
+3. **Character-editor colour ladder (removes lighting).** Keep the `lm097_hair` style and the same framing, and take one frame for each of these redacted-c01 colours, all single-provider: `38_ash_brown`, `39_ash_grey`, `74_steel_smoke` and `66_platinum_blonde`. With the bake decoded, the ladder now checks the whole chain rather than choosing a bake. Expected luminance ratio to `ash_brown` of the mean albedo over a uniform grid of root-to-tip and ID values (scene-linear; the game's tone curve compresses displayed ratios):
 
    | Bake | ash_grey | steel_smoke | platinum_blonde |
    |---|---:|---:|---:|
-   | Raw stops | 1.5 | 2.1 | 2.3 |
-   | sRGB-decoded (preview) | 2.2 | 4.9 | 6.4 |
-   | Stops³ | 2.7 | 7.5 | 10.8 |
+   | Executable bake (decoded) | 3.1 | 4.2 | 6.6 |
+   | Earlier Studio model (`k/(N−1)`, raw positions) | 3.7 | 5.0 | 7.4 |
+   | Raw stops, no decode | 1.8 | 2.2 | 2.5 |
 
-   Add one frame with the lashes on `05_brown_liquorice`. Alliekat's profile gives dark red-brown and the base profile gives golden tan, which settles that winner visually.
+   The numbers cover the full strand. They replace earlier ones whose sampling this note did not record. Add one frame with the lashes on `05_brown_liquorice`. Alliekat's profile gives dark red-brown, (59, 28, 0), and the base profile gives golden tan, (172, 130, 15), which settles that winner visually.
 4. The session's `red4ext/logs/*.log` and `ArchiveXL-*.log`, and the game and framework versions from those logs.
 
 ## Reproduction

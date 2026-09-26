@@ -1,6 +1,6 @@
 # Archive and resource formats
 
-**Maturity: Draft.** How a game `.archive` stores resources, how a resource's CR2W bytes encode its objects, and how XF Studio's native reader (R&D, not yet used by the app) turns them into the same JSON documents the resolver reads from WolvenKit. Everything here was checked against game 2.31's own archives and installed mods, with WolvenKit CLI 9.0.1 as the reference. It is offline evidence: it says what the files hold, not what the engine does with them.
+**Maturity: Draft.** How a game `.archive` stores resources, how a resource's CR2W bytes encode its objects, and how XF Studio's native reader turns them into the same JSON documents the resolver used to read only from WolvenKit (the resolver now reads natively first, §9). Everything here was checked against game 2.31's own archives and installed mods, with WolvenKit CLI 9.0.1 as the reference. It is offline evidence: it says what the files hold, not what the engine does with them.
 
 Grades follow the [knowledge base](README.md) legend. **[resource]** here means the native reader decoded the bytes and the result matched WolvenKit's output, byte for byte or leaf for leaf; **[source]** means the layout is described in a community tool or SDK listed under [Sources](#sources), and this page only restates format facts. XF Studio's reader is written from those facts and from the bytes. It contains no code from WolvenKit, which is GPL-3.0 and serves only as a documentation source and a test oracle.
 
@@ -155,10 +155,11 @@ WolvenKit adds some properties that the file does not store as properties: `CMat
 
 ### 6.5 What the JSON cannot say
 
-Two facts about a resource have no place in the JSON, so the reader reports them beside it. [resource]
+Three facts about a resource have no place in the JSON, so the reader reports them beside it, and the resolver turns them into rule notes on the model and the record ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)). [resource]
 
 - **A stored type that disagrees with the RTTI.** A body-UV framework mod's `.app` stores `castShadows` as `Bool` where the RTTI has `shadowsShadowCastingMode` (§7). The value is decoded by the stored type and a note names the property and both types. No resource in the resolver's cache has such a mismatch.
-- **Where a watched property was left out.** `rendChunk.renderMask` is written as `"0"` whether the file stores no flags or omits the property, and the resolver treats the two differently. The reader lists the JSON paths where it was omitted. In the 1,722 distinct cached resources every chunk stores it, so the difference only matters for a mod that omits it.
+- **Where a watched property was left out.** `rendChunk.renderMask` is written as `"0"` whether the file stores no flags or omits the property, and the resolver treats the two differently. The reader lists the JSON paths where it was omitted, and the resource graph removes the property there before reading the mesh, so an omitted mask counts as drawn, which the resolver takes to be the engine's default flags [hypothesis; open question 3], rather than as no flags. A WolvenKit answer can't tell the two apart, so on a fallback it still reads as not drawn. In the 2,448 cached resources every chunk stores it, so the difference only matters for a mod that omits it.
+- **An array record holding more than its count.** A record's size bounds its value, and an array's count comes first. A hair replacer pack's meshes store `rendRenderMeshBlobHeader.renderLODs` with a count of 1 in front of 4 floats. WolvenKit keeps reading elements while the record has bytes left, so its JSON shows all four [source: WolvenKit `Red4Reader.ReadCArray`, studied as documentation]; the reader does the same, stopping at an element that uses no bytes (so a record can't make it loop), and notes it. Before, it refused such a resource as malformed and WolvenKit answered it. Whether the engine reads past the count is unread.
 
 ### 6.6 Numbers and paths
 
@@ -171,10 +172,10 @@ Offline measurements on game 2.31 with WolvenKit CLI 9.0.1, 26 September 2026. T
 | Check | Result |
 |---|---|
 | Bytes vs `unbundle` | 138/138 sampled entries and 2,348/2,348 cached resolver resources identical (SHA-256) [resource] |
-| Documents vs `convert` | All 2,348 equal leaf for leaf except two name-only gaps: `.app` package references are hashes, and CCO `icon` TweakDBIDs are hashes (same ids). Resolver models equal for all 2,348 [resource] |
+| Documents vs `convert` | All 2,348 equal leaf for leaf except two name-only gaps: `.app` package references are hashes, and CCO `icon` TweakDBIDs are hashes (same ids). Resolver models equal for all 2,348 [resource]. Rerun on 27 September over 2,448 cached resources (a copy of the Studio's cache, including creator, body and cyberware resources first read since): three `.mlsetup`s differed (`Multilayer_Layer.microblendContrast` left out, WolvenKit's default 0.5, the reader's 0), so the defaults were learned again from the larger set (3 added: that one and `entSkinnedMeshComponent.castShadows`/`castLocalShadows` = `Default`; none changed or dropped). All 2,446 decodable documents then equal except the name-only gaps, and the 44 hair-pack meshes WolvenKit extracted after the reader refused them now equal too [resource] |
 | Hold-out | Defaults learned from half the resources: resolver models equal on the other 1,100 [resource] |
 | Speed | Resource read 0.06–0.16 ms; decode + JSON per resource: `.mi` 0.07 ms, `.xbm` 0.14, `.ent` 0.3, `.mt` 0.6, `.app` 4.3, `.mesh` 4.2, `.morphtarget` 31 (the player head's 12.5 MB body: 160 ms). A WolvenKit launch costs 2.6–3.1 s before doing any work [resource] |
-| Cold resolve of the reference save (MO2 route, 1,079 archives, fresh caches) | WolvenKit only: 90–95 s, 23 launches, 612 resources extracted (117 MB of cached JSON). Native first: 2.7–2.9 s, no launches, 519 resources read natively, none fell back. The route open (3–4 s) is the same either way [resource] |
+| Cold resolve of the reference save (MO2 route, 1,079 archives, fresh caches) | WolvenKit only: 90–95 s, 23 launches, 612 resources extracted (117 MB of cached JSON). Native first: 2.7–2.9 s, no launches, 519 resources read natively, none fell back. The route open (3–4 s) is the same either way [resource]. Through the integrated fetch port with the hosts' worker (27 September): 4.0–4.2 s, no launches, 515 native reads, none fell back (3.5 s decoding in-process) [resource] |
 | Cold resolve of the default V with one framework piercing (same route) | WolvenKit only: 119 s, 25 launches. Native first: 3.9 s, no launches, none fell back [resource] |
 | Hardened reader (§8) | Documents of all 1,722 distinct cached resources byte-identical to the unhardened reader's; the harness results unchanged. Mutation fuzz: no internal failure in 3.3 million synthetic mutants (slowest 7 ms) or 18,700 mutated real resources (slowest 9 ms) [resource] |
 
@@ -195,13 +196,13 @@ Mod archives are untrusted input, and every size and count in them is chosen by 
 
 ## 9. Where this lives in XF Studio
 
-`projects/xf-studio/authoring/src/native/` holds the code. `rdar-archive.ts`, `kark.ts`, `oodle.ts` and `archive-reader.ts` cover §1–2; `cr2w-file.ts`, `cr2w-reader.ts`, `red-values.ts` and `red-package.ts` cover §3–5; `red-json-writer.ts`, `red-defaults.ts`, `json-numbers.ts` and `resource-document.ts` cover §6. `native-errors.ts` and `limits.ts` hold the typed failures and budgets of §8. `native-decode.ts` and `native-decode-worker.ts` hold the in-process and worker decoders, and `native-fetch-port.ts` holds the `NativeFirstFetcher` prototype. The code is not wired into the app; the [backlog page](../research/backlog/native-archive-reader.md) holds the integration plan and the texture and mesh phases.
+`projects/xf-studio/authoring/src/native/` holds the code. `rdar-archive.ts`, `kark.ts`, `oodle.ts` and `archive-reader.ts` cover §1–2; `cr2w-file.ts`, `cr2w-reader.ts`, `red-values.ts` and `red-package.ts` cover §3–5; `red-json-writer.ts`, `red-defaults.ts`, `json-numbers.ts` and `resource-document.ts` cover §6. `native-errors.ts` and `limits.ts` hold the typed failures and budgets of §8. `native-decode.ts` and `native-decode-worker.ts` hold the in-process and worker decoders, and `native-fetch-port.ts` the `NativeFirstFetcher`. The resolver reads through it: one decoder per game folder, native first and WolvenKit per resource ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)); the clothing host decodes the item visual-tag preset ([worn clothing §4.1](clothing.md#41-where-visual-tags-come-from-source-wiki)) through the same decoder. The [backlog page](../research/backlog/native-archive-reader.md) holds the measurements and the texture and mesh phases.
 
 ## Open questions
 
 1. The engine's own defaults for omitted properties (read them from the RTTI at runtime through the bridge, instead of learning from WolvenKit output).
-2. How does the engine treat a property whose stored type disagrees with the RTTI (`castShadows` as `Bool`)? Skip, convert, or fail the resource? The reader reports such properties (§6.5).
-3. `rendChunk.renderMask` absent from a file is written as 0 (WolvenKit's default), which the resolver reads as "not drawn". Is that the engine's default too? The reader reports where it was absent (§6.5).
+2. How does the engine treat a property whose stored type disagrees with the RTTI (`castShadows` as `Bool`)? Skip, convert, or fail the resource? The reader reports such properties (§6.5). And does it read an array record past its count, as WolvenKit does?
+3. `rendChunk.renderMask` absent from a file is written as 0 (WolvenKit's default). The resolver now reads an absent mask as the engine's default flags, which it takes to draw the chunk [hypothesis]; is that the engine's default? The reader reports where it was absent (§6.5).
 4. The meaning of the index CRC, and whether the engine checks the per-entry SHA-1. It is the extracted file's SHA-1 in game archives but not in most mod archives (§1.2), which suggests the engine does not check it [hypothesis].
 5. `curveData` encoding (needed for `.env` and animation-adjacent resources).
 6. Texture (`.xbm` mip data) and mesh render-blob decoding, the reader's phases 3 and 4.
@@ -210,7 +211,7 @@ Mod archives are untrusted input, and every size and count in them is chosen by 
 
 Format facts were learned from the following, at these commits, without copying code:
 
-- WolvenKit ([GitHub](https://github.com/WolvenKit/WolvenKit), GPL-3.0) at `11720772`: `WolvenKit.RED4/Archive/IO/ArchiveReader.cs`, `CR2WReader.cs`, `RedPackageReader.cs`, `WolvenKit.Core/Compression/Oodle.cs`, `WolvenKit.Common/RED4/CR2W/JSON/RedJsonSerializer.cs`. Studied as documentation only, and its CLI 9.0.1 serves as the byte and JSON oracle.
+- WolvenKit ([GitHub](https://github.com/WolvenKit/WolvenKit), GPL-3.0) at `11720772`: `WolvenKit.RED4/Archive/IO/ArchiveReader.cs`, `CR2WReader.cs`, `RedPackageReader.cs`, `WolvenKit.RED4/Types/IO/Red4Reader.cs` (`ReadCArray`: elements past an array's count), `WolvenKit.Core/Compression/Oodle.cs`, `WolvenKit.Common/RED4/CR2W/JSON/RedJsonSerializer.cs`. Studied as documentation only, and its CLI 9.0.1 serves as the byte and JSON oracle.
 - Cyberpunk 2077 Modding Wiki at `be2f44eed841`: `for-mod-creators-theory/files-and-what-they-do/file-formats/README.md` §Archive Format (tables, no images; section history by manavortex, muad_ and Zhincore).
 - RED4ext.SDK ([GitHub](https://github.com/wopss/RED4ext.SDK), MIT) at `ad7277714ad3`: `include/RED4ext/ResourcePath.hpp`, `include/RED4ext/Hashing/FNV1a.hpp`.
 - Cyber Engine Tweaks at `9a8522f2a3d6`: `src/reverse/TweakDB/ResourcesList.cpp` (the `OodleLZ_Decompress` call).

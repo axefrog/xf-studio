@@ -107,6 +107,11 @@ export type PlannedComponent = {
   /** Garment components: the clothing area and item record that brought it, and its layer score. */
   garment?: { area: string; item: string; layer: number | null };
   /**
+   * How the reader read this part's files, when that may differ from the game (resource-graph.ts `readerRuleNotes`): a value stored with
+   * an older type, a watched property left out. The record's notes carry them.
+   */
+  readerNotes?: string[];
+  /**
    * Body components in the censorship policy (`censorRole`): a `cover` (the game's underwear), or a part `covered` by the covers (the
    * uncensored skin), which is drawn only while every cover is.
    */
@@ -234,11 +239,15 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   const drawn = materials.filter(material => material.drawn);
   // A face or body decal made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.
   if (decalFamilySlot(slot) ? !drawn.length : !drawn.some(material => !material.placeholder)) return null;
+  const readerNotes = [...new Set([...entry.notes ?? [], ...component.notes ?? []].filter(item => READER_RULES.has(item.rule)).map(item => item.basis))];
   return { slot, option: entry.option, definition: entry.definition, component: component.name, drawnFrom: geometry.drawnFrom,
     morphTargets: component.type === "entMorphTargetSkinnedMeshComponent", renderChunks: geometry.renderChunks,
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture,
-    ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}) };
+    ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}),
+    ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}) };
 }
+/** The resolver's notes about how a file was read (resource-graph.ts `readerRuleNotes`). */
+const READER_RULES = new Set(["R11-stored-type", "R12-property-absent", "R13-array-past-count"]);
 
 /** The record's form of a planned morph texture rule. */
 export const recordMorphTexture = (rule: PlannedComponent["morphTexture"]): RenderMorphTexture | undefined =>
