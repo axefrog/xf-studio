@@ -254,6 +254,8 @@ Estimates assume one agent, with the platform, resolver and Build pipeline as th
 
 ## 9. Questions for the maintainer
 
+**Decided 27 September 2026:** all nine proposed defaults accepted. On question 4, another mod's colour profile is a reference only (shown and compared), never copied into an exported colour; revisit if needed. The mod at Nexus 21613 (popular, not installed in the reference profile) is to be studied once installed.
+
 | # | Question | Proposed default |
 |---|---|---|
 | 1 | Should each authored colour also appear in the brow, lash and beard rows? | Yes: hair, brows and lashes, plus beard for masculine V, with Studio-derived brow and lash colours (brows match roots, lashes darkened roots) |
