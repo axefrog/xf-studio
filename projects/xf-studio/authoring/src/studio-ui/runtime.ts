@@ -21,7 +21,7 @@ export class Frame {
     if (!this.cache.has(key)) this.cache.set(key, read());
     return this.cache.get(key) as T;
   }
-  /** Eye makeup's editor view (its facade's `view()`). */
+  /** Eye makeup's editor view (its facade's `view()`): the eye-makeup reads below are a recorded coupling (UI-75). */
   private get editor() { return this.port.feature("eye-makeup").view(); }
   get recipe() { return this.once("recipe", () => this.editor.recipe()); }
   get layer() { return this.once("layer", () => this.editor.layer()); }
@@ -29,7 +29,8 @@ export class Frame {
   get selected() { return this.once("selected", () => this.editor.selected()); }
   get field() { return this.once("field", () => this.editor.selectedField()); }
   get revision() { return this.once("revision", () => this.editor.revision()); }
-  get canUndo() { return this.once("canUndo", () => this.editor.canUndo()); }
+  /** Whether Undo has a step: the look-wide history, across every feature's part. */
+  get canUndo() { return this.once("canUndo", () => this.port.authoring.history().undo !== undefined); }
   /** The plain reason when the selected look was made with a newer XF Studio (its eye makeup is kept as it is); else undefined. */
   get locked() { return this.once("locked", () => this.port.feature("eye-makeup").locked()); }
   get library() { return this.once("library", () => this.port.library.summary()); }
@@ -57,10 +58,14 @@ export class StudioRuntime {
   /** Named guidance anchors that panels and the shell register as they build their controls. */
   readonly anchors = new AnchorRegistry();
   readonly descriptors: Ret<Port["authoring"]["actionDescriptors"]>;
-  /** Eye makeup's facade: its editor view, form-control transactions and catalogues (feature-module platform §4). */
+  /**
+   * Eye makeup's facade and finish catalogue, for the shell's remaining eye-makeup reads (context-menu values,
+   * viewport crumbs and hints, guidance facts and tours, the finish lists in Help and Mod package, the toast
+   * Undo's revision check). Recorded couplings (UI-75, ui-architecture-boundary.md) that go once the shell
+   * mounts with no features; feature views never see the runtime (they get a `FeatureViewContext`).
+   */
   readonly eyeMakeup: EyeMakeupFacade;
   readonly finishes: Ret<EyeMakeupFacade["finishCatalogue"]>;
-  readonly glitterModels: Ret<EyeMakeupFacade["glitterModelCatalogue"]>;
   private listeners = new Set<() => void>();
   /**
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
@@ -70,7 +75,6 @@ export class StudioRuntime {
     this.descriptors = port.authoring.actionDescriptors();
     this.eyeMakeup = port.feature("eye-makeup");
     this.finishes = this.eyeMakeup.finishCatalogue();
-    this.glitterModels = this.eyeMakeup.glitterModelCatalogue();
   }
   /** Eye makeup's live editor view (cheap, cached and read-only). */
   get editor() { return this.eyeMakeup.view(); }
@@ -80,8 +84,6 @@ export class StudioRuntime {
     const schema = (variant ? descriptor.variants?.[variant]?.payload[field] : undefined) ?? descriptor.payload[field];
     return { min: schema?.min ?? 0, max: schema?.max ?? 1 };
   }
-  /** The catalogue's finish a layer's stored finish name means (its ID, or a stored alias such as older recipes' `satin`). */
-  finishOf(finish: string) { return this.finishes.find(item => item.id === finish || item.stored.includes(finish)); }
   /** The activity-log source an action kind reports under, from the view contributions. */
   sourceLabel(kind: string) { return activitySource(kind, this.views); }
   /** Validated dispatch. Failures surface their typed reason; nothing is retried silently. */
@@ -125,10 +127,6 @@ export class StudioRuntime {
     }
     this.changed();
     return outcome;
-  }
-  /** Layer creation; the application refuses it (with a reason) while no preset owns the editor. */
-  addLayerCapability() {
-    return this.port.authoring.capability({ kind: "layer.edit", command: { kind: "add" } });
   }
   /** A toast "Undo" that only undoes the change it announced, never a later unrelated edit. */
   undoAction(): FeedbackAction {

@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
 import type { CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { finishCatalogue } from "../src/engines/layered-makeup/finish-catalogue";
-import { preparePackageCollection } from "../src/package-filter";
 import type { PresetCollection } from "../src/preset-collection";
 import { emptyPresentationStatus, PresentationStatusSource } from "../src/presentation-status";
 import { PreviewQualityActions } from "../src/preview-quality-actions";
@@ -10,9 +8,10 @@ import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedStudioBootstrap } from "../src/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment } from "../src/viewport-attachment";
-import { freshWorkspace } from "../src/workspace-state";
 import { recipeFile } from "../src/recipe-schema";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { finishCatalogue, freshWorkspace } from "./fixtures/eye-region";
+import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 function mountFixture() {
   const workspace = freshWorkspace();

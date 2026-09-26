@@ -9,13 +9,13 @@ import { STUDIO_COMPOSITION, STUDIO_OWNERS } from "../src/compose/studio-registr
 import { CollectionSession } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";
 import { COLLECTION_2, featureActionTable, featureId } from "../src/platform/api";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { PartRegistry } from "../src/platform/core/document";
 import { Registry } from "../src/platform/core/registry";
 import { hairCodec, withHair, type Hair } from "./fixtures/hair-feature";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
 const RESET = { label: "Reset look", actionKind: "look.reset" };
 const ids = () => { let n = 0; return () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`; };
@@ -189,7 +189,7 @@ function withTint() {
       }),
   });
   return { registry: new Registry([...STUDIO_OWNERS, TINT as never]),
-    documents: Object.freeze({ parts: new PartRegistry([EYE_MAKEUP, TINT as never]), live: "eye-makeup" }) };
+    documents: Object.freeze({ parts: new PartRegistry([EYE_MAKEUP, TINT as never]), live: "eye-makeup" }), region: STUDIO_COMPOSITION.region };
 }
 
 test("a change that records no step hides Redo, which would overwrite it (CORE-46)", () => {

@@ -84,7 +84,7 @@ for (const density of ["new", "old"]) {
       profiles.push({ density, level, pattern: l.name, ...measure(inside, [[u, b.v1 + h / 2]]) });
     }
     for (const size of [.5, 1, 2]) {
-      const row = dots.filter((d: { points: { u: number }[] }) => Math.abs((bounds(d).u1 - bounds(d).u0) * 569 - size) < .05);
+      const row = dots.filter((d: { points: { u: number; v: number }[] }) => Math.abs((bounds(d).u1 - bounds(d).u0) * 569 - size) < .05);
       const first = bounds(row[0]), w = first.u1 - first.u0, v = (first.v0 + first.v1) / 2;
       const inside = row.flatMap((d: { points: { u: number; v: number }[] }) => { const b = bounds(d); return Array.from({ length: 5 }, (_, k): [number, number] => [b.u0 + w * (k + .5) / 5, v]); });
       const gaps = row.slice(0, -1).map((d: { points: { u: number; v: number }[] }): [number, number] => [bounds(d).u1 + w / 2, v]);

@@ -1,8 +1,9 @@
 # XF Studio authoring suite: tests, typechecks and the browser build on every push to main and
 # every pull request that touches the Studio source. Nothing is built for release or uploaded.
 #
-# - authoring (Ubuntu): `bun test` (which also runs the desktop host tests), `bun run check` and
-#   `bun run build` in projects/xf-studio/authoring. The suite has no platform-specific tests.
+# - authoring (Ubuntu): `bun test` (which also runs the desktop host tests), `bun run check` (which
+#   also typechecks the authoring tools and the experiment scripts) and `bun run build` in
+#   projects/xf-studio/authoring. The suite has no platform-specific tests.
 # - desktop (Windows): the desktop typecheck extends the Electrobun SDK type devkit, which Hutch
 #   generates; that step is proven on Windows by desktop-release.yml, so it runs there, followed by
 #   the desktop package's own `bun test tests`.
@@ -20,12 +21,14 @@ on:
       - "projects/xf-studio/authoring/**"
       - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
+      - "experiments/*/*.ts"
       - ".github/workflows/authoring.yml"
   pull_request:
     paths:
       - "projects/xf-studio/authoring/**"
       - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
+      - "experiments/*/*.ts"
       - ".github/workflows/authoring.yml"
   workflow_dispatch:
 

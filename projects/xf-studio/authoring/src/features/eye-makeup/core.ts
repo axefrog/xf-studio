@@ -11,8 +11,9 @@
 import type { Capability } from "../../platform/api";
 import { parseFieldSelection } from "../../engines/layered-makeup/field-selection";
 import type { GlitterChoices, LayerChoices } from "../../engines/layered-makeup/glitter-model";
-import { applyLayerAction, layerCapability, type LayerAction } from "../../editor-actions";
+import { applyLayerAction, layerCapability, type LayerAction } from "../../engines/layered-makeup/layer-stack";
 import { applyRecipeAction, recipeActionCapability } from "../../engines/layered-makeup/recipe-actions";
+import { EYE_MAKEUP_REGION } from "./region";
 import type { EyeMakeupAction, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
 
 export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
@@ -45,7 +46,7 @@ export function applyEyeMakeup(state: EyeMakeupState, action: EyeMakeupAction): 
   if (lacksId(action)) throw Error(`${action.kind} needs the new item's ID from its host (assignEyeMakeupIds).`);
   const editor = state.editor;
   if (isLayerAction(action)) {
-    const next = applyLayerAction(state.part, state.part.layers[editor.active]?.id, action);
+    const next = applyLayerAction(state.part, state.part.layers[editor.active]?.id, action, EYE_MAKEUP_REGION);
     if (!next.structure) return { part: next.recipe, editor, changed: true,
       effect: { kind: "immediate", layerIndex: next.changed } };
     // The same selection rule AuthoringDocument.replaceRecipe applies after a stack edit.
@@ -58,7 +59,7 @@ export function applyEyeMakeup(state: EyeMakeupState, action: EyeMakeupAction): 
   const choices: GlitterChoices = {};
   for (const [layerId, remembered] of Object.entries(editor.choices)) choices[`${SCOPE}/${layerId}`] = remembered;
   const result = applyRecipeAction({ recipe: state.part, active: editor.active, selected: editor.selected,
-    fieldSelection: editor.fieldSelection }, action, choices, SCOPE);
+    fieldSelection: editor.fieldSelection }, action, EYE_MAKEUP_REGION.models, choices, SCOPE);
   if (!result.changed) return { part: state.part, editor, changed: false, effect: { kind: "none" } };
   const nextChoices: Record<string, LayerChoices> = {};
   for (const [key, remembered] of Object.entries(result.choices))

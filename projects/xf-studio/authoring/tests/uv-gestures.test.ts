@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { initialRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, panUVView, parseUVView, pixelToUV, uvAspect, uvRegion, uvToPixel, zoomUVView } from "../src/uv-view";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("UV navigation preserves anchor/aspect, round trips and stays inside persisted view bounds", () => {
   for (const mode of ["both", "single"] as const) for (const factor of [.8, 1.25, 3]) {
@@ -44,7 +45,7 @@ function setup() {
   recipe.layers[0].points = [[.3,.2], [.45,.2], [.45,.35], [.3,.35]].map(([u,v]) => ({u,v,weight:1, handles:{in:{u:0,v:0},out:{u:0,v:0},mode:"corner"}}));
   recipe.layers[0].fields = [{id:"warp",u:.32,v:.22,du:.005,dv:.001,radius:.03}];
   const messages: string[] = [], element = () => ({setAttribute() {}, disabled:false, textContent:""}) as any;
-  const editor = createUVEditor(canvas, {both:element(),single:element(),other:element(),fit:element(),note:element()}, {
+  const editor = createUVEditor(canvas, {both:element(),single:element(),other:element(),fit:element(),note:element()}, { region: EYE_REGION,
     recipe:()=>recipe,layer:()=>recipe.layers[0],selected:()=>selected,canvases:()=>[],albedo:()=>undefined,
     select:index=>{selected=index;},selectedField:()=>undefined,selectField() {},
     begin:()=>{checkpoint=structuredClone(recipe);begins++;},

@@ -108,7 +108,7 @@ function openInput(rt: StudioRuntime, context: StudioBoundContext, option: Extra
   }
 }
 
-/** Extra commands for a known target, checked with the hit target's identity, not the selection. */
+/** Extra platform commands for a known target (a preset), checked with the hit target's identity, not the selection. */
 export function targetAction(rt: StudioRuntime, target: StudioTarget, action: StudioAction, label: string,
   iconName?: IconName, extra: Partial<Extract<MenuItem, { kind: "action" }>> = {}): MenuItem {
   const capability: StudioCapability = rt.port.authoring.contextCapability(target, action);
@@ -119,42 +119,9 @@ export function targetAction(rt: StudioRuntime, target: StudioTarget, action: St
  * Context menus are actionable, not informational: every menu below is built from sections, and
  * `menuFromSections` drops any section with no action. Target-specific actions come first, then
  * view actions. Nothing here decides availability; each entry carries the application's capability.
+ * A feature's own targets (eye makeup's layers) get their menus from its view (`FeatureTargetMenu`,
+ * rendered by `views/feature-context.ts`).
  */
-export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAnchor): MenuSection[] {
-  const port = rt.port, recipe = rt.editor.recipe(), index = recipe.layers.findIndex(layer => layer.id === layerId);
-  const layer = recipe.layers[index];
-  if (!layer) return [];
-  const query = port.authoring.contextQuery({ kind: "layer", id: layerId });
-  const target: StudioTarget = { kind: "layer", id: layerId };
-  return [{ label: layer.name, detail: `Layer ${recipe.layers.length - index} of ${recipe.layers.length} from front`, items: contextItems(rt, query, anchor) },
-    { items: [
-      targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } }, "Bring forward", "arrowUp",
-        { shortcut: reorderKey(0) }),
-      targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index - 1 } }, "Send backward", "arrowDown",
-        { shortcut: reorderKey(1) }),
-      targetAction(rt, target, { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry }, "Mirror across the face", "mirror",
-        { checked: layer.symmetry }),
-      { kind: "submenu", label: "Finish", icon: "finish", items: () => port.authoring.choicesFor(target, "layer.setFinish", "finish")
-        // Only the catalogue's finishes are offered; legacy stored names stay accepted but hidden.
-        .filter(choice => rt.finishes.some(item => item.id === choice.value))
-        .map(choice => {
-          const descriptor = rt.finishes.find(item => item.id === choice.value);
-          return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,
-            checked: (rt.finishOf(layer.finish)?.id ?? layer.finish) === choice.value,
-            hint: descriptor?.exportAdapter === "none" ? "Preview only · not built into your mod"
-              : descriptor?.exportAdapter === "experimental" ? "Experimental export · not yet tested in game" : undefined,
-            run: () => { rt.dispatch(choice.action); } };
-        }) },
-      targetAction(rt, target, { kind: "layer.edit", command: { kind: "reset", id: layerId } }, "Reset shape and settings", "reset",
-        { hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}` }),
-    ] }];
-}
-export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor, invoker?: Element) {
-  const layer = rt.editor.recipe().layers.find(item => item.id === layerId);
-  if (!layer) return;
-  openMenu(menuFromSections(layerSections(rt, layerId, anchor)), anchor, { label: `${layer.name} layer actions`, invoker });
-}
-
 export function presetSections(rt: StudioRuntime, presetId: string, anchor: MenuAnchor): MenuSection[] {
   const port = rt.port, draft = port.library.summary().draft;
   const presets = draft?.presets ?? [], index = presets.findIndex(preset => preset.id === presetId);

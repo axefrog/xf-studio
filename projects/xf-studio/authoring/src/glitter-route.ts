@@ -31,7 +31,8 @@
 // catalogue is sized over them within a flake budget. Region membership at each level is the texel rectangle those
 // bounds touch, [floor(a·n), ceil(b·n)) in window texels. The independent verifier restates all three.
 import type { GlitterDiagnostic, GlitterFlakes } from "./export-diagnostics";
-import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, planPresetExport } from "./engines/layered-makeup/finish-export";
+import { planPresetExport } from "./engines/layered-makeup/finish-export";
+import type { LayeredMakeupRegion, Mirror } from "./engines/layered-makeup/region";
 import { flatMipChain, mipDimensions, reducePlanes } from "./engines/layered-makeup/flat-mip-chain";
 import type { UvWindow } from "./engines/layered-makeup/plate-uv-window";
 import { compileFlatPreset } from "./engines/layered-makeup/preset-compiler";
@@ -88,9 +89,13 @@ export function flakeCatalogue(rect: RectUv, window: UvWindow, f: GlitterFlakes)
   return { cx, cy, width, rot, aspect, nx, ny, key, areaMm2: area };
 }
 
-/** The same flakes mirrored across u = ½ (the other lid): positions mirrored in UV, rotation and tangent X negated. */
-export function mirrorCatalogue(c: Catalogue, window: UvWindow): Catalogue {
-  const span = (1 - 2 * window.u0) * MM_PER_UV.u;
+/**
+ * The same flakes mirrored across the region's mirror (eye makeup's u = ½: the other lid): positions mirrored in UV,
+ * rotation and tangent X negated. Only a mirror across a u line is supported (the window's millimetres run along u).
+ */
+export function mirrorCatalogue(c: Catalogue, window: UvWindow, mirror: Mirror): Catalogue {
+  if (mirror.axis !== "u") throw Error("Glitter regions mirror only across a u line.");
+  const span = (2 * mirror.centre - 2 * window.u0) * MM_PER_UV.u;
   return { ...c, cx: c.cx.map(x => span - x), rot: c.rot.map(r => -r), nx: c.nx.map(x => -x) };
 }
 
@@ -237,7 +242,7 @@ export interface GlitterChains {
   /** Two bytes (X, Y) per texel. */
   readonly normal: Uint8Array[];
   readonly flakes: Uint8Array[];
-  /** The emissive accent's head-UV mask chain (ACCENT_TEXTURE_SIZE square), when the knob asks for one. */
+  /** The emissive accent's head-UV mask chain (the region's `textures.accent` square), when the knob asks for one. */
   readonly accent?: Uint8Array[];
   readonly stats: { level: number; width: number; height: number; texelMm: [number, number]; regions: GlitterRegionStats[] }[];
   readonly accentStats?: { layer: string; share: number; flakes: number; levels: { level: number; represented: number }[] };
@@ -245,15 +250,17 @@ export interface GlitterChains {
 
 /**
  * Compile one preset through the diagnostic Glitter route: its layers (flat finishes only) are the pigment, and
- * the knob's regions add flakes. `window` is the packaged plate's window.
+ * the knob's regions add flakes. `window` is the packaged plate's window; `makeup` is eye makeup's layered-makeup
+ * region (the models the recipe is read with, its mirror and texture grids).
  */
 export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, window: UvWindow,
-  dims: { width: number; height: number } = GLITTER_WINDOW_TEXTURE): GlitterChains {
-  const recipe: Recipe = parseRecipe(value), plan = planPresetExport(recipe);
+  makeup: Pick<LayeredMakeupRegion, "models" | "mirror" | "textures">,
+  dims: { width: number; height: number } = makeup.textures.glitterWindow): GlitterChains {
+  const recipe: Recipe = parseRecipe(value, makeup.models), plan = planPresetExport(recipe);
   if (plan.excluded.length || plan.route !== "flat") throw Error("The diagnostic Glitter route needs a preset of flat-finish pigment layers only.");
   const { width: W, height: H } = dims;
   // Pigment: the flat merge on the window, with the knob's base surface wherever it covers.
-  const flat = compileFlatPreset(recipe, { kind: "window", width: W, height: H, window });
+  const flat = compileFlatPreset(recipe, makeup, { kind: "window", width: W, height: H, window });
   const base = { r: unitByte(knob.base.roughness), m: unitByte(knob.base.metalness) };
   for (let t = 0; t < W * H; t++) if (flat.diffuse[t * 4 + 3]) { flat.roughness[t] = base.r; flat.metalness[t] = base.m; }
   const pigment = flatMipChain(flat.diffuse, flat.roughness, flat.metalness, W, H);
@@ -275,7 +282,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
   }
   const flakesOf = (layer: string) => knob.regions.find(r => r.layer === layer)!.flakes
     ?? knob.regions.find(r => r.layer === knob.regions.find(q => q.layer === layer)!.mirrorOf)!.flakes!;
-  for (const { region } of regions) if (region.mirrorOf) catalogues.set(region.layer, mirrorCatalogue(catalogues.get(region.mirrorOf)!, window));
+  for (const { region } of regions) if (region.mirrorOf) catalogues.set(region.layer, mirrorCatalogue(catalogues.get(region.mirrorOf)!, window, makeup.mirror));
 
   const t0 = Math.max((window.u1 - window.u0) * MM_PER_UV.u / W, (window.v1 - window.v0) * MM_PER_UV.v / H);
   const out = { diffuse: [] as Uint8Array[], roughness: [] as Uint8Array[], metalness: [] as Uint8Array[], normal: [] as Uint8Array[], flakes: [] as Uint8Array[] };
@@ -299,7 +306,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
       const widths = c.width.map(d => Math.max(d, GLITTER_NESTING.minTexels * t));
       const keep = region.mips === "box" && L > 0 ? [] : represented(c, orderOf.get(region.layer)!, widths, target * c.areaMm2, GLITTER_NESTING.capMm);
       if (keep.length) {
-        const clip = clipStore.subarray(0, w * h), coverage = rasterWindow(layer, w, h, window);
+        const clip = clipStore.subarray(0, w * h), coverage = rasterWindow(layer, w, h, window, makeup.mirror);
         for (let p = 0; p < w * h; p++) clip[p] = coverage[p * 4 + 3];
         const col = hexLinear(f.color);
         for (let k = keep.length - 1; k >= 0; k--) {
@@ -375,7 +382,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
   if (knob.accent) {
     const { layer: id, share } = knob.accent, c = catalogues.get(id)!, layer = layers.get(id)!;
     const chosen = [...orderOf.get(id)!].filter(i => c.key[i] < share);
-    const size0 = ACCENT_TEXTURE_SIZE, head0 = Math.max(MM_PER_UV.u / size0, MM_PER_UV.v / size0);
+    const size0 = makeup.textures.accent, head0 = Math.max(MM_PER_UV.u / size0, MM_PER_UV.v / size0);
     const area = (widths: number[]) => widths.reduce((sum, d, k) => sum + HEX_AREA * d * d * c.aspect[chosen[k]], 0);
     const a0 = area(chosen.map(i => Math.max(c.width[i], GLITTER_NESTING.minTexels * head0)));
     accent = []; accentStats = { layer: id, share, flakes: chosen.length, levels: [] };
@@ -389,7 +396,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
       for (let k = 0; k < chosen.length; k++) { sum += HEX_AREA * widths[k] ** 2 * c.aspect[chosen[k]]; if (sum > target) break; if (widths[k] <= GLITTER_NESTING.capMm) keep.push(k); }
       const canvas = accentCanvas.level(size, size);
       if (keep.length) {
-        const coverage = raster(layer, size), clip = accentClip.subarray(0, size * size);
+        const coverage = raster(layer, size, makeup.mirror), clip = accentClip.subarray(0, size * size);
         for (let p = 0; p < size * size; p++) clip[p] = coverage[p * 4 + 3];
         // Head texels: x = u·size, y = v·size (authored v); window millimetres shift by the window's origin.
         const ox = window.u0 * MM_PER_UV.u, oy = window.v0 * MM_PER_UV.v;

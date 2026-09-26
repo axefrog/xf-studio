@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { AuthoringControlEdits } from "../src/authoring-control-edits";
 import { AuthoringDocument } from "../src/authoring-document";
-import { eyeMakeupPort } from "../src/authoring-eye-makeup";
-import { RecipeActions } from "../src/engines/layered-makeup/recipe-actions";
 import { registeredEditing } from "./gesture-test-adapter";
 import { WorkspaceComposer } from "../src/workspace-composer";
 import { planLayerPreview, previewCapacity } from "../src/authoring-preview-policy";
 import { assessPreviewQuality } from "../src/preview-quality";
-import { freshWorkspace } from "../src/workspace-state";
+import { RecipeActions } from "../src/authoring-eye-makeup";
+import { freshWorkspace } from "./fixtures/eye-region";
+import { eyeMakeupPort } from "./fixtures/eye-region";
 
 test("form edits group a slider gesture into one Undo and Escape restores its starting value", () => {
   const document = new AuthoringDocument(freshWorkspace());

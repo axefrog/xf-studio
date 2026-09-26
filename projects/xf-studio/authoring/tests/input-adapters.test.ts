@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { createUVEditor } from "../src/uv-editor";
 import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
 import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
 import type { EditorInputState } from "../src/input-bindings";
 import { applyAdapterProposal } from "./gesture-test-adapter";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /**
  * The gesture adapters resolve every input through the binding catalogue (B-17 option b) and
@@ -45,7 +46,7 @@ function surfaceFixture(options: { lazy?: boolean } = {}) {
   const controls = { enabled: true }, reports: EditorInputState[] = [], camera_ = { events: 0 };
   let checkpoints = 0;
   const viewer = { renderer: { domElement: canvas }, scene, camera, plate, head, eyes, controls, onFrame: (fn: () => void) => { frame = fn; } };
-  const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+  const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
     layer: read, selected: () => selected, select: i => { selected = i; }, selectedField: () => undefined, selectField: () => {},
     begin: () => { checkpoints++; }, apply: action => applyAdapterProposal(document, action), cancel: () => {}, message: () => {},
     input: state => reports.push(state),
@@ -145,7 +146,7 @@ test("UV: Ctrl-drag pans, Shift off makeup does nothing, Shift-double-click neve
     recipe.layers[0].fields = []; recipe.layers[0].symmetry = false;
     const reports: EditorInputState[] = [];
     let begins = 0;
-    const editor = createUVEditor(canvas, undefined, {
+    const editor = createUVEditor(canvas, undefined, { region: EYE_REGION,
       recipe: () => recipe, layer: () => recipe.layers[0], selected: () => 0, canvases: () => [], albedo: () => undefined,
       select() {}, selectedField: () => undefined, selectField() {}, begin: () => { begins++; },
       apply: action => applyAdapterProposal(recipe.layers[0], action), cancel() {}, persist() {}, message() {},

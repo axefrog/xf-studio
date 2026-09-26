@@ -4,11 +4,11 @@ import { collectionDraft } from "../src/collection-workspace";
 import { PreviewActions } from "../src/preview-actions";
 import { CharacterContextActions } from "../src/character-context-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
 import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/studio-action-descriptors";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 function fixture() {
   const workspace = freshWorkspace();

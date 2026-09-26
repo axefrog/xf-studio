@@ -5,6 +5,7 @@ import { modifierKey, modifiersOf, pointerBinding, pointerInputOf, type EditorIn
 import { insertPathPoint, nearestPathSection } from "./engines/layered-makeup/path-edit";
 import { moveTangent, tangentEndpoint } from "./engines/layered-makeup/bezier-path";
 import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer, wheelScaleFactor } from "./engines/layered-makeup/shape-transform";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, NO_UV_INSETS, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvToPixel, uvViewRegion, zoomUVView,
   type UV, type UVInsets, type UVView } from "./uv-view";
@@ -20,6 +21,8 @@ type Hooks = {
   persist(): void; message(text: string): void;
   /** Hover target, active gesture and editability for hint strips and cursors (see surface-editor). */
   input?(state: EditorInputState): void;
+  /** The live feature's region: the layer models shape edits validate with and the mirror hit tests reflect across. */
+  region: Pick<LayeredMakeupRegion, "models" | "mirror">;
 };
 type Handle = { kind: "point" | "origin" | "field" | "tangent"; index: number; fieldId?: string;
   side?: "in" | "out"; mirror: boolean; uv: UV; endpoint?: UV; collapsed?: boolean };
@@ -264,7 +267,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     // Painted makeup: the selected layer first, then the frontmost other visible layer.
     const others = [...hooks.recipe().layers].reverse().filter(item => item.id !== layer.id);
     for (const candidate of [layer, ...others]) {
-      const shape = shapeHit(candidate, p);
+      const shape = shapeHit(candidate, p, hooks.region.mirror);
       if (shape) return { hit: { kind: "shape", layerId: candidate.id }, mirror: shape.mirror, affordance: "shape" };
     }
     return { hit: { kind: "uv-empty" }, affordance: "empty" };
@@ -273,7 +276,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   function targetAt(p: UV) {
     const l = hooks.layer();
     if (!l) return { target: "empty" as PointerTarget };
-    const handle = pickHandle(p), painted = handle ? { mirror: handle.mirror } : shapeHit(l, p);
+    const handle = pickHandle(p), painted = handle ? { mirror: handle.mirror } : shapeHit(l, p, hooks.region.mirror);
     return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget, layer: l, handle, painted };
   }
   let hoverTarget: PointerTarget | undefined, inputKey = "";
@@ -340,7 +343,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       const operation = drag.kind === "translate" ? { kind: "translate" as const, du: p.u - start.u, dv: p.v - start.v }
         : { kind: "rotate" as const, pivot, radians: Math.atan2(a.u * b.v - a.v * b.u, a.u * b.u + a.v * b.v) };
       if (!drag.changed && operation.kind === "rotate" && Math.abs(operation.radians) < 1e-12) return;
-      const next = transformLayer(drag.original, operation);
+      const next = transformLayer(drag.original, operation, hooks.region.models);
       if (!next) {
         if (!drag.limited) hooks.message("This move reaches the layer's limits. Reduce the movement to continue.");
         drag.limited = true; return;
@@ -395,7 +398,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const pivot = l.points[hooks.selected()] ?? l.points[0];
     const factor = shapeWheelScaleFactor(shiftWheelDelta(e), e.deltaMode);
     if (factor === 1) return;
-    const next = transformLayer(l, { kind: "scale", pivot: { u: pivot.u, v: pivot.v }, factor });
+    const next = transformLayer(l, { kind: "scale", pivot: { u: pivot.u, v: pivot.v }, factor }, hooks.region.models);
     if (!next) { hooks.message("This scale reaches the layer's limits. Scroll back to continue."); return; }
     if (JSON.stringify(next) === JSON.stringify(l)) return;
     if (!wheel) {

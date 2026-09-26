@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { createMakeupStack } from "../src/engines/layered-makeup/render/makeup-stack";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe } from "./fixtures/eye-region";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 test("new makeup layers inherit morphs and extra bone weights; removal frees only owned resources", () => {
   const geometry = new THREE.BufferGeometry();

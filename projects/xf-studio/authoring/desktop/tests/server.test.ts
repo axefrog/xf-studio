@@ -6,10 +6,11 @@ import { createDesktopServer } from "../server";
 import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { createPackageHandler } from "../../src/package-server";
 import { collectionDraft } from "../../src/collection-workspace";
-import { freshWorkspace, loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
+import { loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
+import { freshWorkspace } from "../../tests/fixtures/eye-region";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
+import { createPackageHandler } from "../../tests/fixtures/eye-exporter";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));

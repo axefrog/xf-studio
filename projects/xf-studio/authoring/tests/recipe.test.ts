@@ -1,11 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import {
-  initialRecipe,
-  parseRecipe,
-  coverage,
-  raster,
-  curve,
-} from "../src/engines/layered-makeup/recipe";
+import { curve } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe, coverage, raster } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 describe("portable authoring contract", () => {
   test("round trips without aliasing the loaded document", () => {
     const a = initialRecipe(),

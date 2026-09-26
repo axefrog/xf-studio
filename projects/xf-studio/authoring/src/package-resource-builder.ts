@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { archiveInventory } from "./archive-inventory-fs";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
 import { encodeDds, flatMipChain } from "./engines/layered-makeup/flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./engines/layered-makeup/route-mip-chains";
@@ -41,6 +42,8 @@ export interface ResourceBuildOptions {
   readonly output: string;
   /** Directory holding exactly one plate mesh/morphtarget pair. */
   readonly plate: string;
+  /** Eye makeup's layered-makeup region: its models, mirror and texture grids. */
+  readonly region: LayeredMakeupRegion;
   readonly tools: PackageResourceTools;
   /**
    * The plate UV footprint the preflight planned on (which presets reach the plate). The plate this build
@@ -144,10 +147,10 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
 
   // 2. Compile each preset's route maps in-process, yielding between presets so a cancel is seen.
   const baked = join(out, "baked");
-  const { records } = await bakeCollection(options.collection, baked, async () => {
+  const { records } = await bakeCollection(options.collection, baked, { window, region: options.region }, async () => {
     await new Promise(done => setImmediate(done));
     checkCancelled(options.signal);
-  }, { window });
+  });
   writeFileSync(join(out, "logs", "bake.log"),
     `Compiled ${records.length} authored presets; ${records.reduce((n, r) => n + r.maps.length, 0)} map inputs. No installation.\n`, "utf8");
   steps.push({ name: "bake", exitCode: 0 });

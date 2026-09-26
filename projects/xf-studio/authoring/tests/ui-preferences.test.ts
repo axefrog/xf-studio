@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { WorkspaceComposer } from "../src/workspace-composer";
-import { freshWorkspace, loadWorkspace, parseWorkspace, workspaceKeys } from "../src/workspace-state";
+import { loadWorkspace, parseWorkspace, workspaceKeys } from "../src/workspace-state";
 import { defaultUIPreferences, effectiveTheme, parseDockLayout, parseUIPreferences,
   recoverDockLayout, UIPreferenceActions, type DockLayout } from "../src/ui-preferences";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 const layout: DockLayout = { format: "xfs/dock", version: 1,
   state: { panels: [{ id: "viewport", x: 40, y: 10 }, { id: "layers", x: 500, y: 10 }] } };

@@ -61,7 +61,7 @@ To reproduce extraction with WolvenKit Console 8.17.4:
 
 ## Rendering implication and next step
 
-The current `authoring/src/scene.ts` loads the fixed `eye-color` preview texture into a `MeshStandardMaterial`. A first correction can resolve the saved option to this extracted diffuse, retaining an explicit local-asset manifest and current placeholder only for unresolved choices. Verify current eye UV orientation and imported colour space before replacing it.
+At the time of this study, `authoring/src/scene.ts` (since split into `src/platform/scene/`) loaded the fixed `eye-color` preview texture into a `MeshStandardMaterial`. A first correction can resolve the saved option to this extracted diffuse, retaining an explicit local-asset manifest and current placeholder only for unresolved choices. Verify current eye UV orientation and imported colour space before replacing it. <!-- historical-paths --><!-- /historical-paths -->
 
 A faithful eye cannot be obtained by swapping diffuse alone. The actual material includes a reflection cubemap, `NormalBubble`, iris/refraction/parallax controls, `RoughnessScale` about 0.493421 and `SubsurfaceFactor` about 0.2. These are shader-specific parameters, not directly interchangeable with Three.js controls. Export and inspect the normal/roughness maps, inspect `eye.mt` and its shader behavior, and check any active Character Rendering Editor runtime changes before claiming parity. This supplies a concrete input for the already queued waxy-eye/fidelity investigation without introducing another feature editor.
 

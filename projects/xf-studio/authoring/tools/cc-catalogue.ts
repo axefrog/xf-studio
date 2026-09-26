@@ -11,6 +11,7 @@
 import { resolve } from "node:path";
 import { loadCreatorCatalogue } from "../src/cc-catalogue-host";
 import { userFacing } from "../src/cc-catalogue";
+import { catalogueCoverage } from "../src/cc-render-coverage";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { openInstallation } from "../src/resolver-host";
 
@@ -44,14 +45,18 @@ console.log(`texts: ${evidence.texts.map(t => `${t.kind}:${t.entries}${t.archive
 console.log(`options ${catalogue.counts.options} (user-facing ${catalogue.counts.userFacing}), choices ${catalogue.counts.choices}; ` +
   `mod options ${catalogue.counts.modOptions}, mod choices ${catalogue.counts.modChoices} (${catalogue.counts.modChoicesOnVanillaOptions} on vanilla options); ${evidence.customResources} custom resources`);
 console.log(`option labels by source: ${JSON.stringify(Object.fromEntries(labelSources))}; choice labels: ${JSON.stringify(Object.fromEntries(choiceSources))}`);
-console.log(`preview coverage of user-facing options: ${JSON.stringify(catalogue.counts.render)}`);
+// Preview coverage is the preview's projection of the catalogue, not stored in it (CORE-60).
+const coverage = catalogueCoverage(catalogue);
+const coverageCounts = { rendered: 0, conditional: 0, "not-rendered": 0 };
+for (const item of catalogue.options.filter(o => userFacing(o))) coverageCounts[coverage.get(item.id)!.status]++;
+console.log(`preview coverage of user-facing options: ${JSON.stringify(coverageCounts)}`);
 for (const section of catalogue.sections) {
   console.log(`\n[${section.order}] ${section.label.text} (${section.id}, ${section.source}): ${section.rows.length} rows, ${catalogue.counts.perSection[section.id]} options`);
   for (const row of section.rows) {
-    const first = catalogue.options.find(o => o.id === row.options[0])!;
+    const first = catalogue.options.find(o => o.id === row.options[0])!, render = coverage.get(first.id)!;
     const mods = row.options.filter(id => catalogue.options.find(o => o.id === id)!.provenance.kind === "mod").length;
     console.log(`   ${String(row.order).padStart(5)} ${row.part}/${row.slot}: "${first.label.text}" [${first.type}, ${first.label.source}] ${row.options.length} option(s)${mods ? ` (${mods} from mods)` : ""}; ` +
-      `${first.choices.length} choices; preview: ${first.render.status}${first.render.detail ? ` (${first.render.detail})` : ""}`);
+      `${first.choices.length} choices; preview: ${render.status}${render.detail ? ` (${render.detail})` : ""}`);
   }
 }
 console.log(`\ngaps (${catalogue.gaps.length}): ${catalogue.gaps.slice(0, 12).map(g => `${g.code} ${g.subject}`).join("; ")}`);

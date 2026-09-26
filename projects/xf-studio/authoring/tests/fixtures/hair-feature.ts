@@ -3,7 +3,7 @@
  * strands with a colour, a per-look editor (the selected strand) and three actions. It registers
  * through the same `FeatureModule` shape as eye makeup and is composed beside it only in tests.
  */
-import { STUDIO_OWNERS } from "../../src/compose/studio-registry";
+import { LIVE_REGION, STUDIO_OWNERS } from "../../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../../src/features/eye-makeup";
 import type { DocumentModel } from "../../src/collection-workspace";
 import { featureActionTable, featureId, refusal, type ActionDescriptor, type EditorCodec, type FeatureModule,
@@ -72,5 +72,5 @@ export const HAIR: FeatureModule<HairAction, "workspace", typeof HAIR_ID, Hair, 
 export function withHair(): StudioComposition & { documents: DocumentModel } {
   const owners = [...STUDIO_OWNERS, HAIR];
   const parts = new PartRegistry([EYE_MAKEUP, HAIR]);
-  return { registry: new Registry(owners), documents: Object.freeze({ parts, live: "eye-makeup" }) };
+  return { registry: new Registry(owners), documents: Object.freeze({ parts, live: "eye-makeup" }), region: LIVE_REGION };
 }

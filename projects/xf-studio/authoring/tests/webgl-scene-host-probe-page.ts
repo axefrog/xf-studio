@@ -20,7 +20,7 @@ import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { eyeMakeupRenderer } from "../src/features/eye-makeup/render";
 import { featureId } from "../src/platform/api";
 import type { FeatureRendererFactory } from "../src/platform/api/scene";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe } from "./fixtures/eye-region";
 
 type Memory = { geometries: number; textures: number };
 export type SceneHostProbe = {

@@ -4,19 +4,19 @@ import { AuthoringGestures } from "../src/authoring-gestures";
 import { CollectionApplication } from "../src/collection-application";
 import type { CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { eyeMakeupPort } from "../src/authoring-eye-makeup";
 import { PreviewQualityActions } from "../src/preview-quality-actions";
 import type { PresetCollection } from "../src/preset-collection";
-import { RecipeActions } from "../src/engines/layered-makeup/recipe-actions";
 import { StudioApplication } from "../src/studio-application";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createStudioPresentation, type StudioPresentationPort } from "../src/studio-presentation";
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
-import { freshWorkspace } from "../src/workspace-state";
 import { recipeFile } from "../src/recipe-schema";
 import { registeredEditing } from "./gesture-test-adapter";
 import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { RecipeActions } from "../src/authoring-eye-makeup";
+import { freshWorkspace } from "./fixtures/eye-region";
+import { eyeMakeupPort } from "./fixtures/eye-region";
 
 /**
  * A trusted presentation over real application services, without a browser. `hitAt` stands in

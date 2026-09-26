@@ -1,7 +1,8 @@
 import { canonicalFinish, defaultFlakes, isIrregular, type LegacyFlakes } from "./finish";
 import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16,
-  STUDIO_FINE_REGIONS, validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
+  validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
+import type { FineGlitterScope } from "./region";
 import type { ReadonlyDeep } from "../../read-only";
 
 /** Pure preparation for future material scheduling, not yet wired into the
@@ -84,12 +85,12 @@ export function irregularOpticalKey(catalogue: CatalogueKey, size: number, sampl
 }
 
 /** Main editor's 16-sample optical contract. High-count catalogues are valid
- * only in the fixed eye regions; the scope is part of the exact cache key. */
-export function studioIrregularOpticalKey(settings: IrregularFlakes,size:number): OpticalKey {
+ * only in the region's fixed fine-Glitter scope; the scope (its ID and bounds) is part of the exact cache key. */
+export function studioIrregularOpticalKey(settings: IrregularFlakes,size:number,fine:FineGlitterScope): OpticalKey {
   if (!validStudioIrregularSettings(settings)) throw Error("Invalid studio Glitter settings.");
   const catalogue=settings.count<=FLAKE_LIMITS.count ? irregularCatalogueKey(settings)
-    : key("catalogue",["eye-region-global-ids-1",settings.model,settings.count,settings.radius,
-      settings.spread,settings.tilt,settings.seed,STUDIO_FINE_REGIONS.map(r=>[r.minU,r.minV,r.maxU,r.maxV])]);
+    : key("catalogue",[fine.id,settings.model,settings.count,settings.radius,
+      settings.spread,settings.tilt,settings.seed,fine.regions.map(r=>[r.minU,r.minV,r.maxU,r.maxV])]);
   return irregularOpticalKey(catalogue,size,4,"studio-planar-16-covered-1","covered-average");
 }
 
@@ -112,8 +113,8 @@ export function irregularAlbedoKey(optics: OpticalKey, alpha: AlphaKey, baseColo
 }
 
 /** Browser preview optical-map identity for one layer at one preview tier (pure; shared by device and measurement services). */
-export function previewOpticalKey(layer: ReadonlyDeep<Layer>, size: number) {
+export function previewOpticalKey(layer: ReadonlyDeep<Layer>, size: number, fine: FineGlitterScope) {
   return isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? studioIrregularOpticalKey(layer.flakes, size)
+    ? studioIrregularOpticalKey(layer.flakes, size, fine)
     : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 }

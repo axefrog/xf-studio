@@ -1,6 +1,7 @@
 import type * as THREE from "three";
 import { createSceneHost, type SceneHost } from "./platform/scene/scene-host";
 import type { FeatureRendererFactory } from "./platform/api/scene";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
 import { modifiersOf, NO_MODIFIERS } from "./input-bindings";
@@ -13,6 +14,8 @@ type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
 
 /** Browser resource owner. The presentation receives only `attachment`, never these handles. */
 export function createBrowserViewportDevice(options: {
+  /** The live feature's region: the layer models its editors' shape edits validate with and the mirror their hit tests reflect across. */
+  region: Pick<LayeredMakeupRegion, "models" | "mirror">;
   headHost: HTMLElement;
   uvHost: HTMLElement;
   queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
@@ -72,9 +75,9 @@ export function createBrowserViewportDevice(options: {
   return {
     attachment,
     mountUV(canvas: HTMLCanvasElement, controls: Parameters<typeof createUVEditor>[1],
-      hooks: Parameters<typeof createUVEditor>[2], initial: Parameters<typeof createUVEditor>[3]) {
+      hooks: Omit<Parameters<typeof createUVEditor>[2], "region">, initial: Parameters<typeof createUVEditor>[3]) {
       uvEditor = (options.uvFactory ?? createUVEditor)(canvas, controls,
-        { ...hooks, input: state => attachment.reportInput("uv", state) }, initial);
+        { ...hooks, region: options.region, input: state => attachment.reportInput("uv", state) }, initial);
       editors.attach("uv", uvEditor);
       attachment.setReady("uv");
       return uvEditor;
@@ -92,11 +95,11 @@ export function createBrowserViewportDevice(options: {
       if (scene === viewer) releaseHead();
     },
     /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate). */
-    mountSurface(surface: THREE.SkinnedMesh, hooks: Parameters<typeof createSurfaceEditor>[1]) {
+    mountSurface(surface: THREE.SkinnedMesh, hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
       if (!viewer) throw Error("The head scene must load before mounting surface controls.");
       const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
       surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
-        requestRender, plate: surface }, { ...hooks, input: state => attachment.reportInput("head", state) });
+        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },

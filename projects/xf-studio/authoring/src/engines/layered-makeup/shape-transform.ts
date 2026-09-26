@@ -1,6 +1,8 @@
 import { coverage, curve, parseRecipe, type Layer } from "./recipe";
-// Single-layer validation reads the layer as an in-memory recipe (part-2), where every registered
-// layer model (direct-light Glitter, game-matched optics) validates itself.
+import type { LayerModelRegistry } from "./layer-models";
+import { mirrored, type Mirror } from "./region";
+// Single-layer validation reads the layer as an in-memory recipe, where every layer model the
+// feature registers (direct-light Glitter, game-matched optics) validates itself.
 
 type UV = { u: number; v: number };
 export type ShapeTransform =
@@ -14,7 +16,7 @@ const finiteUV = (uv: UV) => uv != null && Number.isFinite(uv.u) && Number.isFin
  * Reject the whole edit at recipe limits rather than silently distorting it.
  * Symmetry stays a rendering rule; adapters reflect gestures into source UV.
  */
-export function transformLayer(layer: Layer, command: ShapeTransform): Layer | null {
+export function transformLayer(layer: Layer, command: ShapeTransform, models: LayerModelRegistry): Layer | null {
   if (!command || typeof command !== "object") return null;
   let position: (uv: UV) => UV, vector: (uv: UV) => UV;
   let scale = 1;
@@ -43,7 +45,7 @@ export function transformLayer(layer: Layer, command: ShapeTransform): Layer | n
   try {
     // Validate before transforming, so invalid source data cannot be repaired
     // accidentally and accepted as an otherwise valid edit.
-    const next = parseRecipe({uv: "gltf-uv0-top-left", layers: [layer]}).layers[0];
+    const next = parseRecipe({uv: "gltf-uv0-top-left", layers: [layer]}, models).layers[0];
     if ((command.kind === "translate" && command.du === 0 && command.dv === 0) ||
       (command.kind === "scale" && command.factor === 1) ||
       (command.kind === "rotate" && command.radians === 0)) return next;
@@ -59,16 +61,17 @@ export function transformLayer(layer: Layer, command: ShapeTransform): Layer | n
     next.feather *= scale;
     if (next.softness.mode === "boundary") next.softness.blend *= scale;
     if (next.strength.mode === "smooth-boundary") next.strength.blend *= scale;
-    return parseRecipe({uv: "gltf-uv0-top-left", layers: [next]}).layers[0];
+    return parseRecipe({uv: "gltf-uv0-top-left", layers: [next]}, models).layers[0];
   } catch { return null; }
 }
 
-/** Pick the painted footprint, including warp and edge falloff, not its hull. */
-export function shapeHit(layer: Layer, uv: UV): { mirror: boolean } | null {
+/** Pick the painted footprint, including warp and edge falloff, not its hull; `mirror` is the feature's. */
+export function shapeHit(layer: Layer, uv: UV, mirror: Mirror): { mirror: boolean } | null {
   if (!layer.enabled || !finiteUV(uv)) return null;
   const source = { ...layer, symmetry: false }, polygon = curve(layer.points);
-  const authored = coverage(uv.u, uv.v, source, polygon);
-  const reflected = layer.symmetry ? coverage(1 - uv.u, uv.v, source, polygon) : 0;
+  const authored = coverage(uv.u, uv.v, source, mirror, polygon);
+  const [mu, mv] = mirrored(mirror)(uv.u, uv.v);
+  const reflected = layer.symmetry ? coverage(mu, mv, source, mirror, polygon) : 0;
   if (Math.max(authored, reflected) < .01) return null;
   return { mirror: reflected > authored };
 }

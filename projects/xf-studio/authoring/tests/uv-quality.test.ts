@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { defaultUVView } from "../src/uv-view";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 const close = (actual: any[], expected: any[]) => {
   expect(actual.length).toBe(expected.length);
@@ -22,7 +22,7 @@ test("UV tint samples actual mask dimensions into display-sized scratch without 
     const recipe=initialRecipe(), mask:any={width:4096,height:4096}, albedo:any={width:512,height:256};
     const element=()=>({setAttribute(){},disabled:false,textContent:""}) as any;
     const editor=createUVEditor(canvas,{both:element(),single:element(),other:element(),fit:element(),note:element()},
-      {recipe:()=>recipe,layer:()=>recipe.layers[0],selected:()=>0,canvases:()=>[mask],albedo:()=>albedo,
+      { region: EYE_REGION,recipe:()=>recipe,layer:()=>recipe.layers[0],selected:()=>0,canvases:()=>[mask],albedo:()=>albedo,
         select(){},selectedField:()=>undefined,selectField(){},begin(){},apply:action=>applyAdapterProposal(recipe.layers[0],action),cancel(){},persist(){},message(){}},defaultUVView());
     editor.draw();
     const state=editor.diagnostics(), r=state.region, h=1000/(720/310);

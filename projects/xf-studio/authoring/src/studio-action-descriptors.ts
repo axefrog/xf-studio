@@ -1,5 +1,4 @@
 import type { CollectionRequest } from "./collection-service";
-import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./engines/layered-makeup/finish-catalogue";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
@@ -10,6 +9,8 @@ import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio
 import type { ActionDescriptor as PlatformActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 import type { StudioFileAction } from "./studio-file-operations";
 import { CHARACTER_CONTEXT_DESCRIPTORS } from "./character-context";
+import { describe, enumerated, input, inputText, state, target } from "./action-descriptor-kit";
+import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "./eye-makeup-descriptors";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -20,77 +21,17 @@ export type RequestDescriptor = { scope: readonly ActionScope[]; payload: Payloa
   effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool"; async: true;
   cancellable: boolean };
 
-const target = (type: ValueSchema["type"]): ValueSchema => ({ type, required: true, from: "target" });
-const input = (type: ValueSchema["type"], min?: number, max?: number): ValueSchema =>
-  ({ type, required: true, from: "input", ...(min === undefined ? {} : { min }), ...(max === undefined ? {} : { max }) });
-const inputText = (minLength?: number, maxLength?: number): ValueSchema =>
-  ({ type: "string", required: true, from: "input", minLength, maxLength });
-const state = (type: ValueSchema["type"]): ValueSchema => ({ type, required: true, from: "state" });
-const enumerated = (values: readonly (string | number)[], from: ValueSchema["from"] = "input"): ValueSchema =>
-  ({ type: "enum", required: true, from, values });
-const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"],
-  undo: UndoPolicy, payload: PayloadSchema = {}, variants?: Record<string, PayloadSchema>,
-  variantUndo?: Record<string, UndoPolicy>): ActionDescriptor =>
-  ({ scope: typeof scope === "string" ? [scope] : scope, effect, undo, payload,
-    ...(variants ? { variants: Object.fromEntries(Object.entries(variants).map(([key, fields]) =>
-      [key, { payload: fields, undo: variantUndo?.[key] ?? undo }])) } : {}) });
+const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
+  payload: PayloadSchema = {}, variants?: Record<string, PayloadSchema>, variantUndo?: Record<string, UndoPolicy>): ActionDescriptor =>
+  describe<ActionScope>(scope, effect, undo, payload, variants, variantUndo);
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
   "history.undo": desc("workspace", "content", "none"),
   "history.redo": desc("workspace", "content", "none"),
   "history.jumpTo": desc("workspace", "content", "none", { entryId: input("string") }),
-  "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
-  "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
-  "point.remove": desc("point", "content", "part", { layerId: target("string"), index: target("integer") }),
-  "path.edit": desc(["layer", "point"], "content", "part", { layerId: target("string"), command: input("object") }, {
-    "enable-bezier": {}, "point-mode": { index: target("integer"), mode: enumerated(["aligned", "symmetric", "corner"]) } }),
-  "field.select": desc("field", "selection", "none", { layerId: target("string"), fieldId: target("string") }),
-  "field.add": desc("layer", "content", "part", { layerId: target("string") }),
-  "field.remove": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string") }),
-  "field.clear": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string") }),
-  "field.setReach": desc("field", "content", "transaction", { layerId: target("string"), fieldId: target("string"), radius: input("number", .005, .2) }),
-  "pigment.edit": desc(["point", "layer"], "content", "transaction", { layerId: target("string"), command: input("object") }, {
-    "point-strength": { index: target("integer"), value: input("number", 0, 1) },
-    "smooth-strength": { enabled: input("boolean") },
-    "strength-blend": { value: input("number", .000125, .02) } }),
-  "softness.edit": desc(["point", "layer"], "content", "transaction", { layerId: target("string"), command: input("object") }, {
-    "variable-softness": { enabled: input("boolean") },
-    "point-softness": { index: target("integer"), value: input("number", .0005, .06) },
-    "uniform-softness": { value: input("number", .0005, .06) } }),
-  "layer.setColor": desc("layer", "content", "transaction", { layerId: target("string"), color: input("string") }),
-  "layer.setOpacity": desc("layer", "content", "transaction", { layerId: target("string"), opacity: input("number", 0, 1) }),
-  "layer.setSymmetry": desc("layer", "content", "part", { layerId: target("string"), symmetry: input("boolean") }),
-  "layer.setFinish": desc("layer", "content", "part", { layerId: target("string"), finish: enumerated([...FINISH_IDS, ...LEGACY_FINISH_ALIASES]) }),
-  "layer.useGameOptics": desc("layer", "content", "part", { layerId: target("string") }),
-  "layer.setShift": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["color", "strength"]), value: input("number|string") }, {
-    color: { value: inputText(7, 7) }, strength: { value: input("number", 0, 1) } }),
-  "glitter.selectModel": desc("layer", "content", "part", { layerId: target("string"), model: enumerated(["classic", "irregular", "direct", "clustered", "fine"]) }),
-  "glitter.setClassic": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["cells", "density", "tilt"]), value: input("number") }, {
-    cells: { value: input("integer", 32, 256) }, density: { value: input("number", 0, 1) },
-    tilt: { value: input("number", 0, 1) } }),
-  "glitter.setIrregular": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["count", "radius", "spread", "tilt", "color"]), value: input("number|string") }, {
-    count: { value: input("integer", 0, 500000) }, radius: { value: input("number", .00025, .003) },
-    spread: { value: input("number", 0, 1) }, tilt: { value: input("number", 0, 1) },
-    color: { value: inputText(7, 7) } }),
-  "glitter.setDirect": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["density", "fineShare", "strength", "color"]), value: input("number|string") }, {
-    density: { value: input("number", 0, 1) }, fineShare: { value: input("number", 0, 1) },
-    strength: { value: input("number", 0, 32) }, color: { value: inputText(7, 7) } }),
-  "point.move": desc("point", "content", "part", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "point.insert": desc("layer", "content", "part", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "point.setTangent": desc("point", "content", "part", { layerId: target("string"), index: target("integer"),
-    side: enumerated(["in", "out"]), du: input("number", -1, 1), dv: input("number", -1, 1) }),
-  "shape.transform": desc("layer", "content", "part", { layerId: target("string"), command: input("object"),
-    pivotIndex: { type: "integer", required: false, from: "state", min: 0 } }, {
-    translate: { du: input("number", -1, 1), dv: input("number", -1, 1) }, rotate: { radians: input("number") },
-    scale: { factor: input("number", .01, 100) } }),
-  "field.setOrigin": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "field.setVector": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
-  "layer.edit": desc(["layer", "collection"], "content", "part", { command: input("object") }, {
-    add: {}, duplicate: { id: target("string") }, remove: { id: target("string") },
-    reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
-    move: { id: target("string"), to: input("integer", 0) } }),
-  "layer.setEnabled": desc("layer", "content", "part", { id: target("string"), enabled: input("boolean") }),
+  // Eye makeup's actions, in catalogue order (eye-makeup-descriptors.ts).
+  ...EYE_MAKEUP_DESCRIPTORS,
   "preset.edit": desc(["preset", "collection"], "library", "none", { command: input("object") }, {
     add: {}, copy: { id: target("string") }, remove: { id: target("string") },
     restore: {}, rename: { id: target("string"), name: inputText(1, 120) },
@@ -164,13 +105,8 @@ export const DETECTION_DESCRIPTORS = {
   "detect.frameworkVersions": request("host", "read"),
 } satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
 
-/** Gesture payloads are proposals inside one opaque session, not standalone commands. */
-export const GESTURE_DESCRIPTORS = {
-  "shape.replace": desc("layer", "content", "transaction", { next: input("object") }),
-  "point.replace": desc("point", "content", "transaction", { index: target("integer"), next: input("object") }),
-  "field.replace": desc("field", "content", "transaction", { fieldId: target("string"), next: input("object") }),
-  "path.replacePoints": desc("layer", "content", "transaction", { points: input("object") }),
-} satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;
+/** Gesture payloads are proposals inside one opaque session, not standalone commands (eye makeup's, eye-makeup-descriptors.ts). */
+export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;
 
 /**
  * File workflows (`StudioFileOperations`). Each runs asynchronously through a device

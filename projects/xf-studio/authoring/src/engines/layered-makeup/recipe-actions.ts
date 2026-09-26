@@ -10,6 +10,7 @@ import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS, validStudioIrregularSettings, type IrregularFlakes } from "./flake-field";
 import { hasGameOptics } from "./finish-export";
 import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
+import type { LayerModelRegistry } from "./layer-models";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "../../validation-issues";
 import { refusal, type ReasonCode } from "../../platform/api";
@@ -70,18 +71,18 @@ type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
 export type ReadonlyRecipeState = ReadonlyDeep<RecipeActionState>;
 
 /**
- * One gesture frame on a live recipe (eye makeup's gesture provider): the edit's layer must still
+ * One gesture frame on a live recipe (a feature's gesture provider): the edit's layer must still
  * be the live one (stable identities until pointer release, so a stale gesture cannot edit a new
- * preset), then it is validated and applied in place. Returns the changed layer, or undefined.
+ * preset), then it is validated with the feature's `models` and applied in place. Returns the changed layer, or undefined.
  */
-export function applyRecipeGesture(recipe: Recipe, action: GestureEdit): { layerIndex: number; kind: GestureEdit["kind"] } | undefined {
+export function applyRecipeGesture(recipe: Recipe, action: GestureEdit, models: LayerModelRegistry): { layerIndex: number; kind: GestureEdit["kind"] } | undefined {
   const layerIndex = recipe.layers.findIndex(layer => layer.id === action.layerId);
   if (layerIndex < 0 || recipe.layers[layerIndex] !== action.expectedLayer) return undefined;
-  return applyGestureEdit(action) ? { layerIndex, kind: action.kind } : undefined;
+  return applyGestureEdit(action, models) ? { layerIndex, kind: action.kind } : undefined;
 }
 
 /** Validate a gesture proposal before changing its live target, preserving point/field identity. */
-export function applyGestureEdit(action: GestureEdit): boolean {
+export function applyGestureEdit(action: GestureEdit, models: LayerModelRegistry): boolean {
   const layer = action.expectedLayer;
   const proposal = structuredClone(action.kind === "shape.replace" ? action.next : layer);
   let pointIndex = -1, fieldIndex = -1;
@@ -94,7 +95,7 @@ export function applyGestureEdit(action: GestureEdit): boolean {
     if (fieldIndex < 0 || layer.fields[fieldIndex] !== action.expectedField) return false;
     proposal.fields[fieldIndex] = { ...proposal.fields[fieldIndex], ...action.next };
   } else if (action.kind === "path.replacePoints") proposal.points = action.points;
-  const validated = parseRecipe({ uv: "gltf-uv0-top-left", layers: [proposal] }).layers[0];
+  const validated = parseRecipe({ uv: "gltf-uv0-top-left", layers: [proposal] }, models).layers[0];
   if (JSON.stringify(validated) === JSON.stringify(layer)) return false;
   if (action.kind === "shape.replace") Object.assign(layer, validated);
   else if (action.kind === "point.replace") Object.assign(layer.points[pointIndex], validated.points[pointIndex]);
@@ -160,8 +161,11 @@ const gameOptics = (finish: Layer["finish"], shift: GameOptics["shift"] = DEFAUL
 /** Actions that read or write per-layer editor memory (inactive Glitter models, Colour-shift settings). */
 export const remembers = (kind: RecipeAction["kind"]) => kind === "glitter.selectModel" || kind === "layer.setFinish";
 
-/** Applies a single validated document/selection command without DOM or renderer access. */
-export function applyRecipeAction(state: RecipeActionState, action: RecipeAction,
+/**
+ * Applies a single validated document/selection command without DOM or renderer access. The result is
+ * validated with the feature's layer `models`.
+ */
+export function applyRecipeAction(state: RecipeActionState, action: RecipeAction, models: LayerModelRegistry,
   choices: GlitterChoices = {}, presetId = "draft") {
   const capability = recipeActionCapability(state, action);
   if (!capability.available) throw Error(capability.reason);
@@ -233,7 +237,7 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
     changed.optics = { ...layer.optics!, shift: { ...layer.optics!.shift!, [action.key]: action.value } };
   } else if (action.kind === "glitter.selectModel") {
     if (glitterModel(layer.flakes) === action.model) return unchanged();
-    next.recipe = parseRecipe(selectGlitterModel(state.recipe, layer.id, action.model, nextChoices, presetId));
+    next.recipe = parseRecipe(selectGlitterModel(state.recipe, layer.id, action.model, nextChoices, presetId), models);
     changed = next.recipe.layers[index];
     effect = "immediate";
   } else if (action.kind === "glitter.setClassic") {
@@ -256,7 +260,7 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   } else if (action.kind === "shape.transform") {
     const pivotIndex = action.pivotIndex ?? (state.recipe.layers[state.active]?.id === layer.id ? state.selected : 0);
     const pivot = { u: layer.points[pivotIndex].u, v: layer.points[pivotIndex].v }, command = action.command;
-    const transformed = transformLayer(layer, command.kind === "translate" ? command : { ...command, pivot });
+    const transformed = transformLayer(layer, command.kind === "translate" ? command : { ...command, pivot }, models);
     if (!transformed) throw Error("That transform would take the shape outside the supported range.");
     changed = transformed;
   } else if (action.kind === "field.setOrigin") {
@@ -267,59 +271,12 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   if (effect !== "selection") {
     const layers = next.recipe.layers.map((entry, i) => i === index ? changed : entry);
     // Every edit is validated as a whole recipe; each layer's models validate themselves (no recipe schema).
-    const validated = parseRecipe({ ...next.recipe, layers });
+    const validated = parseRecipe({ ...next.recipe, layers }, models);
     // Deferred layer renders use object identity; keep untouched layers' live identities.
     next.recipe = { ...validated, layers: state.recipe.layers.map((entry, i) => i === index ? validated.layers[i] : entry) };
   }
   const changedState = JSON.stringify(next) !== JSON.stringify(state);
   return { state: next, choices: nextChoices, effect: { kind: effect, layerIndex: index }, changed: changedState };
-}
-
-/**
- * Publishes eye makeup's recipe results to the live document: the registered apply's results
- * (`commit`) and gesture frames (`publishGesture`), with the per-layer memory they use. It applies
- * nothing itself: every edit is dispatched through `app.dispatch`, form controls and gestures (CORE-44).
- */
-export class RecipeActions {
-  private listeners = new Set<(effect: RecipeActionEffect) => void>();
-  constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
-    private history: { checkpoint(recipe: Recipe): void }, private choices: GlitterChoices, private presetId: () => string,
-    private gestureChanged?: (layerIndex: number, kind: GestureEdit["kind"]) => void) {}
-  snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
-  subscribe(listener: (effect: RecipeActionEffect) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  /**
-   * The current preset's per-layer memory (inactive Glitter models, Colour-shift settings),
-   * keyed by layer ID: the editor state eye makeup's pure actions read. Not cloned; read-only.
-   */
-  layerChoices(): Readonly<Record<string, LayerChoices>> {
-    const prefix = `${this.presetId()}/`, result: Record<string, LayerChoices> = {};
-    for (const [key, choices] of Object.entries(this.choices)) if (key.startsWith(prefix)) result[key.slice(prefix.length)] = choices;
-    return result;
-  }
-  /**
-   * Publish a result computed by eye makeup's pure apply: one checkpoint when `record` and the result
-   * is more than a selection, the per-layer memory written back for actions that use it, then the
-   * state and its effect.
-   */
-  commit(action: RecipeAction, next: RecipeActionState, effect: RecipeActionEffect,
-    choices: Readonly<Record<string, LayerChoices>>, record: boolean) {
-    if (record && effect.kind !== "selection") this.history.checkpoint(this.read().recipe);
-    if (remembers(action.kind)) {
-      const prefix = `${this.presetId()}/`;
-      for (const [layerId, remembered] of Object.entries(choices)) this.choices[prefix + layerId] = remembered;
-    }
-    this.write(next, effect);
-    for (const listener of this.listeners) listener(effect);
-  }
-  /**
-   * Publish a gesture edit eye makeup's registered gesture provider applied in place: the changed
-   * layer is scheduled for the preview, as every gesture frame always was.
-   */
-  publishGesture(layerIndex: number, kind: GestureEdit["kind"]) {
-    this.gestureChanged?.(layerIndex, kind);
-    const effect: RecipeActionEffect = { kind: "scheduled", layerIndex };
-    for (const listener of this.listeners) listener(effect);
-  }
 }
 
 /** Why an irregular Glitter density and flake size can't go together, in the person's terms (the limits are `flake-field`'s). */

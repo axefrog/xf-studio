@@ -2,11 +2,12 @@
  * These are field candidates whose centres land in the painted mask, not
  * screen-visible sparks. The constants mirror the browser shader's three
  * explicitly versioned profiles and should be updated with that shader. */
-import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
+import { raster } from "../src/engines/layered-makeup/recipe";
+import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
 
 const size=1024,seed=2077,density=.88,fineShare=.88;
 const layer=initialRecipe().layers[0]!;
-const alpha=raster(layer,size);
+const alpha=raster(layer, size, EYE_MAKEUP_REGION.mirror);
 const at=(u:number,v:number)=>alpha[(Math.floor(v*size)*size+Math.floor(u*size))*4+3]??0;
 const unit=(x:number,y:number,salt:number)=>{
   let h=(2166136261^salt^seed)>>>0;

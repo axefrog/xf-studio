@@ -17,8 +17,8 @@ if (mode === "mirror") plugin({
       const source = await Bun.file(path).text();
       if (!source.includes("export function rasterWindow(")) throw Error("rasterWindow not found");
       return { loader: "ts", contents: source.replace("export function rasterWindow(", "function realRasterWindow(") + `
-export function rasterWindow(l: Layer, width: number, height: number, window: { u0: number; u1: number; v0: number; v1: number }) {
-  const data = realRasterWindow(l, width, height, window), out = new Uint8ClampedArray(data.length), row = width * 4;
+export function rasterWindow(l: Layer, width: number, height: number, area: { u0: number; u1: number; v0: number; v1: number }, mirror: Mirror) {
+  const data = realRasterWindow(l, width, height, area, mirror), out = new Uint8ClampedArray(data.length), row = width * 4;
   for (let y = 0; y < height; y++) out.set(data.subarray((height - 1 - y) * row, (height - y) * row), y * row);
   return out;
 }
@@ -27,5 +27,5 @@ export function rasterWindow(l: Layer, width: number, height: number, window: { 
   },
 });
 
-const { bakeCollection } = await import("../src/package-bake");
+const { bakeCollection } = await import("./fixtures/eye-exporter");
 await bakeCollection(await Bun.file(collectionFile).json(), outDir, () => {}, { window: JSON.parse(windowJson) });

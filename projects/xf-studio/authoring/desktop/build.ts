@@ -4,6 +4,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, re
 import { basename, resolve, sep } from "node:path";
 import { parseCollection } from "../src/preset-collection";
 import { preparePackageCollection } from "../src/package-filter";
+import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import { packageErrorCode, type PackageBuild } from "../src/package-action";
 import type { LocalSettings } from "../src/local-settings";
@@ -219,7 +220,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
   const started = Date.now();
   let collection: ReturnType<typeof parseCollection>;
   let prepared: ReturnType<typeof preparePackageCollection>;
-  try { collection = parseCollection(value); prepared = preparePackageCollection(collection); }
+  try { collection = parseCollection(value); prepared = preparePackageCollection(collection, EYE_MAKEUP_REGION); }
   catch (error) { return { kind: "failure", code: "invalid_collection", message: (error as Error).message }; }
   const source = JSON.stringify(collection);
   const work = resolve(dataRoot, "package-snapshots", randomUUID());
@@ -250,7 +251,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
   try {
     const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
     if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
-    prepared = preparePackageCollection(collection, reach);
+    prepared = preparePackageCollection(collection, EYE_MAKEUP_REGION, reach);
   } catch (error) {
     const message = (error as Error).message;
     if (message.startsWith("No mod files can be made")) return { kind: "failure", code: "no_exportable_content", message };

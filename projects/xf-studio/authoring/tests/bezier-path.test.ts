@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { bezierAt, convertToBezier, moveTangent, setPointMode, splitBezierSegment, tangentEndpoint, tessellateBezier, MAX_CURVE_POINTS, BEZIER_TOLERANCE } from "../src/engines/layered-makeup/bezier-path";
-import { curve, initialRecipe, parseRecipe, parseRecipeFile, raster, type Layer, type Point } from "../src/engines/layered-makeup/recipe";
+import { curve, type Layer, type Point } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe, raster } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
 
 const legacy = (): Layer => {
   const l = initialRecipe().layers[0];

@@ -9,7 +9,7 @@ Versions actually pinned or used by current XF Studio work. Lockfiles and `packa
 | Tool | Version | Used for | Pinned by |
 |---|---|---|---|
 | [Bun](https://bun.sh/) | 1.4.2 | Studio server, bundling, tests; desktop main; public site | `@types/bun` in each `package.json`; `bun-version` in `.github/workflows/pages.yml` |
-| TypeScript | 7.0.2 (authoring), 5.9.3 (desktop) | `tsc --noEmit` checks | `projects/xf-studio/authoring/package.json`, `authoring/desktop/package.json` |
+| TypeScript | 7.0.2 (authoring), 5.9.3 (desktop) | `tsc --noEmit` checks (authoring: `bun run check` also covers `tools/` and the experiment scripts) | `projects/xf-studio/authoring/package.json`, `authoring/desktop/package.json` |
 | three.js | 0.186.0 | Browser renderer; skinning shader patches are pinned to this version | `authoring/package.json` (with `@types/three` 0.186.0) |
 | [Electrobun](https://github.com/blackboardsh/electrobun) | 2.0.1 (compatible global Hutch 0.24.3 as builder fallback) | Private Windows desktop trial | `authoring/desktop/package.json` and its `bunx electrobun@2.0.1` scripts |
 | WolvenKit CLI | 9.0.1 (what users get) and 8.17.4 (accepted) | Resource conversion, pack/unbundle, package verification, 3D preview export | Users without WolvenKit get the official [9.0.1 console release](https://github.com/WolvenKit/WolvenKit/releases/tag/9.0.1) downloaded on first use with consent, pinned by size and SHA-256 in [`wolvenkit-release.ts`](../projects/xf-studio/authoring/src/wolvenkit-release.ts); a path in Local/Build setup or `XFS_PACKAGE_WOLVENKIT` wins. Readiness accepts either version. |
