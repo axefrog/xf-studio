@@ -49,6 +49,10 @@ export type PackageManifestView = {
   readonly features: readonly { readonly feature: string; readonly namespace: string }[];
   readonly files: readonly [ManifestFile, ManifestFile];
   readonly verifiedUnpackedFiles: number;
+  /** Looks the independent verifiers checked, across the product's features (0 when a manifest records none). */
+  readonly presetCount: number;
+  /** How many things the build left out (looks, layers, parts, whole features), all features together. */
+  readonly omissionCount: number;
 };
 
 const ARCHIVE = /^xfs_[a-z0-9_]{1,124}$/;
@@ -82,7 +86,9 @@ export function readPackageManifest(value: unknown, legacyFeature: string): Pack
     return { schema: LOCAL_PACKAGE_1, productId: typeof input.collectionId === "string" ? input.collectionId : "",
       ...(typeof input.modName === "string" ? { modName: input.modName } : {}), archive,
       features: [{ feature: legacyFeature, namespace: archive }], files: files(input.files, archive),
-      verifiedUnpackedFiles: input.verifiedUnpackedFiles as number };
+      verifiedUnpackedFiles: input.verifiedUnpackedFiles as number,
+      presetCount: Number.isSafeInteger(input.verifiedPresetCount) ? input.verifiedPresetCount as number : 0,
+      omissionCount: Array.isArray(input.omissions) ? input.omissions.length : 0 };
   }
   if (input.schema !== LOCAL_PACKAGE_2) return fail();
   const archive = input.archive;
@@ -96,8 +102,12 @@ export function readPackageManifest(value: unknown, legacyFeature: string): Pack
     seen.add(entry.feature); seen.add(`ns:${entry.namespace}`);
     return { feature: entry.feature, namespace: entry.namespace };
   });
+  const presetCount = (input.features as { verification?: { presetCount?: unknown } }[])
+    .reduce((sum, feature) => sum + (Number.isSafeInteger(feature.verification?.presetCount) ? feature.verification!.presetCount as number : 0), 0);
+  const omissionCount = (Array.isArray(input.omissions) ? input.omissions.length : 0) + (input.features as { omissions?: unknown }[])
+    .reduce((sum, feature) => sum + (Array.isArray(feature.omissions) ? feature.omissions.length : 0), 0);
   return { schema: LOCAL_PACKAGE_2, productId: input.productId, modName: input.modName, archive, features,
-    files: files(input.files, archive), verifiedUnpackedFiles: input.verifiedUnpackedFiles as number };
+    files: files(input.files, archive), verifiedUnpackedFiles: input.verifiedUnpackedFiles as number, presetCount, omissionCount };
 }
 
 /**

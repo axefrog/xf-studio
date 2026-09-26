@@ -228,3 +228,46 @@ test("MO2 install targets the instance's configured mod and profile directories"
     transport.uninstall();
   } finally { f.cleanup(); }
 });
+
+/** A local-package-2 candidate: one product with its archive and feature namespaces. */
+function productCandidate(store: string, candidateId: string, options: { archive: string; modName: string; features: { feature: string; namespace: string }[] }) {
+  const folder = join(store, candidateId), payload = join(folder, "archive", "pc", "mod");
+  mkdirSync(payload, { recursive: true });
+  const files = [`${options.archive}.archive`, `${options.archive}.archive.xl`].map((name, index) => {
+    const body = `${candidateId}-${index}`;
+    writeFileSync(join(payload, name), body);
+    return { path: `archive/pc/mod/${name}`, sha256: digest(body), bytes: Buffer.byteLength(body) };
+  });
+  writeFileSync(join(folder, "manifest.json"), JSON.stringify({ schema: "xfs/local-package-2", productId: "11111111-2222-4333-8444-555555555555",
+    modName: options.modName, nameSource: "derived", archive: options.archive, features: options.features, files, verifiedUnpackedFiles: 2,
+    installed: false, gameRenderingVerified: false }));
+}
+
+test("the transport reads local-package-2 candidates and records their feature namespaces", () => {
+  const f = fixture("direct");
+  try {
+    productCandidate(f.store, "product", { archive: "xfs_cabc", modName: EYE_MAKEUP_MOD.modName,
+      features: [{ feature: "eye-makeup", namespace: "xfs_cabc" }] });
+    expect(f.transport.preflight("product").files.map(file => file.path)).toEqual(["archive/pc/mod/xfs_cabc.archive", "archive/pc/mod/xfs_cabc.archive.xl"]);
+    expect(f.transport.install("product").features).toEqual([{ feature: "eye-makeup", namespace: "xfs_cabc" }]);
+    // A product of another mod belongs in that mod's folder: this transfer refuses it.
+    productCandidate(f.store, "lips", { archive: "xfs_mdef", modName: "XF Lip Artistry", features: [{ feature: "lips", namespace: "xfs_clips" }] });
+    expect(() => f.transport.preflight("lips")).toThrow("This build is the mod “XF Lip Artistry”");
+  } finally { f.cleanup(); }
+});
+
+test("a feature namespace already installed in another XF mod is refused (no duplicated looks in game)", () => {
+  const f = fixture("direct");
+  try {
+    f.candidate("first", "one"); // local-package-1: eye makeup, namespace xfs_test
+    f.transport.install("first");
+    // The same eye makeup, split into another mod placed through a second target (MO2), would appear twice in game.
+    const mo2 = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot,
+      settings: { ...f.settings, launchRoute: "mo2", installMode: "mo2" }, modName: "XF Night" });
+    productCandidate(f.store, "moved", { archive: "xfs_m123", modName: "XF Night", features: [{ feature: "eye-makeup", namespace: "xfs_test" }] });
+    expect(() => mo2.preflight("moved")).toThrow("already installed in another XF mod (xfs_test)");
+    // After the first mod is uninstalled, the move can be placed.
+    f.transport.uninstall();
+    expect(mo2.preflight("moved").files).toHaveLength(2);
+  } finally { f.cleanup(); }
+});
