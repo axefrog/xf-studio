@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { defaultLocalSettings } from "../src/local-settings";
 import { LocalSettingsStore } from "../src/local-settings-store";
@@ -12,6 +12,8 @@ import { localHostState, machineInstallReceiptsRoot } from "../src/host-state";
 import { READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION } from "../src/mod-install-host";
 
 const LOCAL = "C:\\Users\\someone\\AppData\\Local";
+// Game folders the settings accept on this OS: a saved game folder must be absolute here, and a drive path is absolute only on Windows.
+const GAME = resolve("/Games/Cyberpunk 2077"), ELSEWHERE = resolve("/Elsewhere"), TEST_GAME = resolve("/Test game");
 
 test("settings and install receipts follow an isolated data or settings folder, and an isolated server doesn't add mods", () => {
   const real = localHostState("D:\\studio\\data", { LOCALAPPDATA: LOCAL }, "win32");
@@ -27,18 +29,24 @@ test("settings and install receipts follow an isolated data or settings folder, 
     isolated: true, installs: true });
   for (const state of [data, settings]) expect(JSON.stringify(state)).not.toContain(JSON.stringify(LOCAL).slice(1, -1));
   expect(localHostState("D:\\studio\\data", { LOCALAPPDATA: LOCAL, XFS_MOD_INSTALL: "off" }, "win32").installs).toBe(false);
+  // Elsewhere the per-user folder is the platform's own: XDG_CONFIG_HOME (or ~/.config) on Linux, Application Support on macOS.
+  const config = resolve("/home/someone/.config");
+  expect(localHostState(resolve("/srv/studio"), { XDG_CONFIG_HOME: config }, "linux")).toMatchObject({ settingsDirectory: resolve(config, "xf-studio"),
+    installReceipts: resolve(config, "xf-studio", "install-receipts"), isolated: false, installs: true });
+  expect(localHostState(resolve("/srv/studio"), { XDG_CONFIG_HOME: "relative" }, "linux").settingsDirectory).toBe(resolve(homedir(), ".config", "xf-studio"));
+  expect(localHostState(resolve("/srv/studio"), {}, "darwin").settingsDirectory).toBe(resolve(homedir(), "Library", "Application Support", "XF Studio"));
 });
 
 test("a verification store starts from the host's settings and keeps every change to itself", () => {
   const root = mkdtempSync(join(tmpdir(), "xfs-verify-settings-"));
   try {
     const host = new LocalSettingsStore(join(root, "host"));
-    host.save({ ...defaultLocalSettings(), gameRoot: "E:\\Games\\Cyberpunk 2077" }, 0);
+    host.save({ ...defaultLocalSettings(), gameRoot: GAME }, 0);
     const verification = new LocalSettingsStore(join(root, "verify"), { seed: () => host.load().settings });
-    expect(verification.load()).toMatchObject({ source: "new", settings: { gameRoot: "E:\\Games\\Cyberpunk 2077", revision: 1 } });
-    verification.save({ ...verification.load().settings, gameRoot: "F:\\Elsewhere", launchRoute: "mo2" }, 1);
-    expect(verification.load().settings).toMatchObject({ gameRoot: "F:\\Elsewhere", launchRoute: "mo2", revision: 2 });
-    expect(host.load().settings).toMatchObject({ gameRoot: "E:\\Games\\Cyberpunk 2077", launchRoute: "direct", revision: 1 });
+    expect(verification.load()).toMatchObject({ source: "new", settings: { gameRoot: GAME, revision: 1 } });
+    verification.save({ ...verification.load().settings, gameRoot: ELSEWHERE, launchRoute: "mo2" }, 1);
+    expect(verification.load().settings).toMatchObject({ gameRoot: ELSEWHERE, launchRoute: "mo2", revision: 2 });
+    expect(host.load().settings).toMatchObject({ gameRoot: GAME, launchRoute: "direct", revision: 1 });
     // A seed that can't be read starts from the defaults.
     expect(new LocalSettingsStore(join(root, "other"), { seed: () => { throw Error("unreadable"); } }).load().settings.gameRoot).toBeNull();
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -56,7 +64,7 @@ test("an isolated localhost server never touches the real settings folder, and n
   const local = join(root, "local"), data = join(root, "data");
   mkdirSync(local); mkdirSync(data);
   const port = await freePort();
-  const server = Bun.spawn(["bun", "server.ts"], { cwd: resolve(import.meta.dir, ".."), stdout: "ignore", stderr: "ignore",
+  const server = Bun.spawn([process.execPath, "server.ts"], { cwd: resolve(import.meta.dir, ".."), stdout: "ignore", stderr: "ignore",
     env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data, LOCALAPPDATA: local, XDG_CONFIG_HOME: local, XFS_SETTINGS_DIR: "", XFS_MOD_INSTALL: "" } });
   try {
     const base = `http://127.0.0.1:${port}`;
@@ -66,14 +74,14 @@ test("an isolated localhost server never touches the real settings folder, and n
     }
     const headers = { Origin: base, "Content-Type": "application/json" };
     const patch = (path: string, revision: number, fields: object) => fetch(base + path, { method: "PATCH", headers, body: JSON.stringify({ revision, fields }) });
-    expect((await patch("/api/local-settings", 0, { launchRoute: "mo2", gameRoot: "E:\\Games\\Cyberpunk 2077" })).status).toBe(200);
-    expect(JSON.parse(readFileSync(join(data, "settings.json"), "utf8"))).toMatchObject({ launchRoute: "mo2", gameRoot: "E:\\Games\\Cyberpunk 2077" });
+    expect((await patch("/api/local-settings", 0, { launchRoute: "mo2", gameRoot: GAME })).status).toBe(200);
+    expect(JSON.parse(readFileSync(join(data, "settings.json"), "utf8"))).toMatchObject({ launchRoute: "mo2", gameRoot: GAME });
     // ?verify edits its own copy, which starts from the server's.
     const verification = await (await fetch(`${base}/api/verification/local-settings`)).json();
-    expect(verification).toMatchObject({ revision: 1, fields: { launchRoute: "mo2", gameRoot: "E:\\Games\\Cyberpunk 2077" } });
-    expect((await patch("/api/verification/local-settings", 1, { gameRoot: "F:\\Test game" })).status).toBe(200);
-    expect(JSON.parse(readFileSync(join(data, "settings.json"), "utf8")).gameRoot).toBe("E:\\Games\\Cyberpunk 2077");
-    expect(JSON.parse(readFileSync(join(data, "verification-settings", "settings.json"), "utf8")).gameRoot).toBe("F:\\Test game");
+    expect(verification).toMatchObject({ revision: 1, fields: { launchRoute: "mo2", gameRoot: GAME } });
+    expect((await patch("/api/verification/local-settings", 1, { gameRoot: TEST_GAME })).status).toBe(200);
+    expect(JSON.parse(readFileSync(join(data, "settings.json"), "utf8")).gameRoot).toBe(GAME);
+    expect(JSON.parse(readFileSync(join(data, "verification-settings", "settings.json"), "utf8")).gameRoot).toBe(TEST_GAME);
     // Neither adds a mod, whatever the page sends.
     const install = (path: string) => fetch(base + path, { method: "POST", headers, body: JSON.stringify({ action: "install", candidateId: "any", token: "t" }) });
     const refused = await install("/api/mod-install");
