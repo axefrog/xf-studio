@@ -22,7 +22,7 @@ Effort is rough agent effort once the bridge's redscript actions layer is in pla
 | 12 | **A reference NPC beside V** | Photo Mode Ex's photo-mode characters (attribute 55, placement 60–62/66); outside photo mode Codeware `DynamicEntitySystem` with a friendly attitude and god mode | Photo Mode Ex, Photomode NPCs Extended, AMM [source] [resource] | M | Medium: depends on the player's installed mods; three NPC slots |
 | 13 | **Native photo-mode entry** | Identify the native function behind `TogglePhotoMode` (the caller of `PhotoModeSystem::Activate`) and call it from the plugin on the main thread | Photo Mode Ex's address-library entries [source]; entry point unknown | L | High: a wrong call crashes; addresses change per game build |
 
-**Built (offline, awaiting the next session's [autonomy checks](../runtime/runtime-bridge-test-card.md#next-session-autonomy-checks-then-session-2-continued)):**
+**Built (offline, awaiting the next session's [autonomy checks](../runtime/runtime-bridge-test-card.md#next-session-autonomy-checks-expression-checks-then-session-2-continued)):**
 
 | Rank | As built |
 |---|---|
@@ -33,7 +33,7 @@ Effort is rough agent effort once the bridge's redscript actions layer is in pla
 | 6 | `cc.apply` goes through the row (`SetSelected…(info, index, true)`), falling back to the bare call when no row shows the option; the result names the route |
 | 9 | `photo.open` in the tools (`tools/input/photo-key.ts`): the player's binding from `UserSettings.json` or `IK_N`, sent only to the game's own window after the write gate, the phase and `photo_mode_can_open` pass; `sendinput` refuses unless the game window is in front. `photo.enter` now refuses without `route: "quest"` |
 
-Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. **Next:** rank 4 (`cc.open`, after question 1), rank 7 (scene attributes), rank 8 (studio spot), then ranks 10–13.
+Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. Batch 2 (claude/bridge-batch2, offline) hardened these for the session: the key is sent only to `Cyberpunk2077.exe`, only on an explicit "photo mode allowed", re-checked after the window comes forward, never on an unbound or layout-dependent binding; the cursor hide works only in photo mode ([code-health ledger](../authoring/code-health.md#fixed-in-claudebridge-batch2), RB-34..41). **Next:** rank 4 (`cc.open`, after question 1), rank 7 (scene attributes), rank 8 (studio spot), then ranks 10–13.
 
 ## Questions for the next session
 

@@ -1,14 +1,15 @@
 # Runtime bridge test card
 
-**Status: the next session is [autonomy checks, then session 2 continued](#next-session-autonomy-checks-then-session-2-continued).** The first in-game runs of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 on 26 September 2026 passed the [script-call check](#script-call-check-first) and the [first-session checks](#first-session-bridge-checks), and ran session 2 semi-manually ([results](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial)). Since then the bridge can open photo mode with the player's own key, frame V without hand-tuned values, switch lights on, hide the cursor, keep the creator's row labels in step and press the creator's Confirm and Back; all of it is built and tested offline only. Design and citations: [runtime bridge design](runtime-bridge-design.md); photo mode and the creator from script: [knowledge/photo-mode.md](../../knowledge/photo-mode.md).
+**Status: the next session is [autonomy checks, the expression checks R1 and R2, then session 2 continued](#next-session-autonomy-checks-expression-checks-then-session-2-continued).** The first in-game runs of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 on 26 September 2026 passed the [script-call check](#script-call-check-first) and the [first-session checks](#first-session-bridge-checks), and ran session 2 semi-manually ([results](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial)). Since then the bridge can open photo mode with the player's own key, frame V without hand-tuned values, switch lights on, hide the cursor, keep the creator's row labels in step and press the creator's Confirm and Back, and it has two research commands for the [expression editor](../animation/expression-editor-design.md#8-runtime-questions-r1r5-through-the-bridge) (`face_rig_read`, `photo_expression_index`); all of it is built and tested offline only. Design and citations: [runtime bridge design](runtime-bridge-design.md); photo mode and the creator from script: [knowledge/photo-mode.md](../../knowledge/photo-mode.md).
 
 **Who does what.** The maintainer starts MO2 and the game, loads a save, keeps the game window in front, and opens the character creator when asked (a mirror, or F12 with Character Customization Anywhere). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only the `XF Runtime Bridge` entry in the test profile.
 
 | Part | Time | Needs |
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
-| [Next session: autonomy checks](#next-session-autonomy-checks-then-session-2-continued) | 15–20 min | V in the world in an open, quiet spot; the game window in front |
-| [Session 2 continued](#session-2-through-the-bridge) | about 40 min | Directly after the checks, same game |
+| [Next session: autonomy checks](#next-session-autonomy-checks-expression-checks-then-session-2-continued) | 15–20 min | V in the world in an open, quiet spot; the game window in front |
+| [Expression checks R1 and R2](#expression-checks-r1-and-r2) | 10–15 min | Directly after the autonomy checks, in photo mode; the photo-mode expression list (the Mega Pack's) as in the first session |
+| [Session 2 continued](#session-2-through-the-bridge) | about 40 min | Directly after the expression checks, same game |
 | [Kill switch and wrap-up](#kill-switch-and-wrap-up) | 3 min | End of the evening |
 | [Script-call check](#script-call-check-first), [first session](#first-session-bridge-checks) | done | Results kept below |
 
@@ -24,7 +25,11 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Next build:** from the `main` commit that merges `claude/bridge-autonomy`; record its zip and DLL hashes here before staging. What it adds to the staged zips: the -writes zip sets `allow_creator_leave = true`, and the -diagnostic and -writes zips carry `r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml` (XF camera presets 7-9; the default zip doesn't). Check the -writes manifest for `"allow_creator_leave": true` and `"photo_mode_presets"`.
+   **Next build:** the autonomy batch and batch 2 (below), rebuilt from the `main` commit that merges `claude/bridge-batch2`; record its zip and DLL hashes here before staging (the DLL embeds the commit, so they differ from the branch build recorded below). What it adds to the staged zips: the -writes zip sets `allow_creator_leave = true`, and the -diagnostic and -writes zips carry `r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml` (XF camera presets 7-9; the default zip doesn't). Check the -writes manifest for `"allow_creator_leave": true` and `"photo_mode_presets"`.
+
+   **Branch build of batch 2** (`claude/bridge-batch2`, recorded at the end of this page under [build record](#build-record-claudebridge-batch2)): the checks there passed on that commit; restaging uses the `main` rebuild.
+
+   **New in this build, watch in the next session:** the plugin log's load lines now include `evt=script.addresses_resolved … script_calls=on`; `script_calls=off` (or any answer `script_calls_unavailable`) means RED4ext's address library lacks an address the calls need: stop and send the log. The cursor hide works only in photo mode and clears itself in any other phase or after a 120 s idle disconnect. `photo_open` re-checks the game after bringing the window forward, refuses an unbound or unreadable key binding and punctuation keys, and sends only to `Cyberpunk2077.exe`. `face_rig_read` and `photo_expression_index` are new ([expression checks](#expression-checks-r1-and-r2)).
 
    **Build record of the first sessions** (26 September 2026, `main` at `c31156aaf29b`, clean tree: the script-call fix, RB-29..31, and every earlier review fix; `xfb_selftest --unit` OK, self-test 157 of 157, `bun test tools` 65 of 65, redscript and Lua lint passed on that build). The zip to stage is the `-writes` one:
 
@@ -70,7 +75,7 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 
 8. **Tell the maintainer before the session:** use a save next to a mirror (V's apartment bathroom works); make a new manual save when asked, before the first change (this profile shares the save folder, and after the first change the bridge holds a save lock until a save is loaded; the kill switch does not release it); bind the kill hotkey once the game is at the main menu (first-session step 1); the game must run in **borderless windowed** or windowed mode for captures that include overlays, and the screenshot route is recorded either way.
 
-## Next session: autonomy checks, then session 2 continued
+## Next session: autonomy checks, expression checks, then session 2 continued
 
 Each check proves one new bridge feature in the game before session 2's script relies on it. Tool names are the MCP names. Restage first (above), and tell the maintainer: borderless windowed, the game window in front (`photo_open` presses the photo-mode key in it, and refuses if another window is in front), V standing in an open, quiet spot with a few metres in front of her (the XF camera presets put the camera 1.8 m from V), and a new manual safety save before the first change. The kill hotkey stays bound from last time.
 
@@ -90,7 +95,27 @@ Each check proves one new bridge feature in the game before session 2's script r
 | A12 | C | `cc_confirm` | The creator closes and V keeps Gloss A in the world (`kept: true`); `game_status` shows `bridge_save_lock: true` | `creator_leave_disabled`: wrong build. `not_in_character_menu`: M presses Confirm |
 | A13 | M, C | With an XF Eye Artistry look on, M equips a full-head item that hides V's head in first person or all views (a full helmet or mask with `hide_Head`). C: `capture_screenshot {region: "face"}` in photo mode | The makeup hides with the head. If it floats in the air, the export's component prefix (`xfs_c<key>_makeup`) isn't covered by ArchiveXL's `hide_Head` rule ([clothing knowledge](../../knowledge/clothing.md)); record it for a rename decision | Record and carry on |
 
-Then run session 2 continued (below). The kill-switch check with the cursor hidden is at the [wrap-up](#kill-switch-and-wrap-up).
+Then run the [expression checks](#expression-checks-r1-and-r2), then session 2 continued (below). The kill-switch check with the cursor hidden is at the [wrap-up](#kill-switch-and-wrap-up).
+
+## Expression checks R1 and R2
+
+The [expression editor design](../animation/expression-editor-design.md#8-runtime-questions-r1r5-through-the-bridge) needs two answers only the running game gives: **R1**, which facial setup, graph and animation sets photo mode's `face_rig` uses after ArchiveXL, and **R2**, whether the photo-mode `faceId` is the face database's index and which entity takes the face input. Both use this profile as it is (the Photomode Facial Expression Mega Pack enabled; 207 expressions in the first session). `face_rig_read` only reads. `photo_expression_index` is a write-photo research command: it feeds a face index straight to the photo-mode face animation (`AnimFeature_PhotomodeFacial`, then the `updateFacialPose` event, the game's own input for it) on V's stand-in or its head item; its undo selects the menu's expression again, and leaving photo mode resets the face. "Static: Sleeping" is 57th in the menu (position 56) with faceId 60, and the face table's row 56 is "Static: Skeptical", so the two faces tell faceId and position apart ([facial expressions](../../knowledge/facial-expressions.md)).
+
+Start in photo mode after A13 (take the helmet off), or `photo_open`. Set up once: `photo_frame {target: "face", look_at: "off", xf_preset: true}`, `photo_hud_hide {}`. Every capture below is `capture_screenshot {region: "face", name: "<step>"}` after a 1.5 s wait (the face cross-fades over 1 s).
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| R1a | C | `face_rig_read {}` (the head item, the default components) | `class` the head item, `record` `Items.PlayerWaPhotomodeHead`; `face_rig` found, `kind: "animated"`, with `facial_setup`, `graph` and `rig` hashes; `man_face_base_animations` and `PhotomodeAnimations` found with their `gameplay` sets and priorities. Keep the whole JSON: the Studio labels the hashes (the male player setup or the female head's own is question D1) | `face_rig` not found: record the answer and try `components` with the names from the photo-mode `.app`. `unreadable` entries: record them (a layout differs on 2.31). Any refusal: record its code |
+| R1b | C | `face_rig_read {target: "puppet"}` | The stand-in's own components; `face_rig` probably not found there | Record |
+| R2a | C | `photo_state {options: true}` | Record key 28's option list: the position and value of "Static: Sleeping" (expected 56 and 60) and "Static: Skeptical" | Different numbers: use the recorded ones below |
+| R2b | C | `photo_expression_set {faceId: 60}`, capture `r2-menu-60`; then `photo_expression_set {faceId: 0}`, capture `r2-neutral` | Sleeping, then neutral: the menu's own route, as references | — |
+| R2c | C | `photo_expression_index {index: 60}` (the stand-in), capture `r2-puppet-60` | Sleeping, if the stand-in takes the face input and faceId is the database index | Neutral still: go on with R2d |
+| R2d | C | `photo_expression_index {index: 60, target: "head"}`, capture `r2-head-60` | Sleeping, if the head item takes it | Neutral on both targets: the input needs another route; record and stop R2 |
+| R2e | C | On the target that worked: `photo_expression_index {index: 56, target: …}` (add `unlisted: true` if refused), capture `r2-index-56` | Skeptical: the index is the table's `Index` column (row 56), confirming faceId 60 = index 60 above. Sleeping would mean the menu position | Record which face |
+| R2f | C | Wait 5 s, capture `r2-hold` | The face from R2e holds (photo mode doesn't re-apply its own index) | Back to the menu's face: record; the bridge's face lasts only moments |
+| R2g | C | Run R2e's result's `undo` (`photo_expression_set` with the menu's value), capture `r2-undo` | The menu's expression (neutral) again | Pick an expression in the menu; record |
+
+Evidence: the JSON of R1a, R1b and R2a–R2g, the captures, and the plugin log's `photo face index …` lines. Afterwards the answers go into the [expression editor design](../animation/expression-editor-design.md) (R1, R2, question D1) and [facial expressions](../../knowledge/facial-expressions.md). R1's second half (the same read with the Mega Pack disabled) needs a throwaway profile and waits for a later session.
 
 ## Script-call check (first)
 
@@ -210,3 +235,14 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (claude/bridge-batch2)
+
+Built 26 September 2026 from `claude/bridge-batch2` at `ef7fce3777f9`, clean tree (`XFB_BUILD=ef7fce3777f9a043352c40be2012543ceb08923b;dirty=0`), by `bun tools/package.ts`. On that commit: `xfb_selftest --unit` OK, self-test 188 of 188, `bun test tools` 90 of 91 (the one failure is the on-screen capture route, which needs the synthetic window visible on the desktop and fails when the test runs behind other windows; unrelated to this batch), typecheck clean, redscript lint (against a copy of the 2.31 `final.redscripts`) and Lua lint passed. The -writes manifest says `"variant": "writes"`, `"allow_writes": true`, `"allow_creator_leave": true` and names the camera presets; the default manifest has `"allow_creator_leave": false`, `"photo_mode_presets": null` and no presets file. These are the branch's hashes: after the merge into `main`, rebuild and record the new ones in the build list at the top before staging.
+
+| Zip | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.2.0-writes.zip` | `b74c05159ef142b1ce38fc726f5c4c7dff1f4af671df4744db437e66b250d18f` |
+| `xf-runtime-bridge-0.2.0-diagnostic.zip` | `8b2b3e6ba0c9cedbe63c5f4c6a9c00fb9cba27139eb841a5a9e718926bd09758` |
+| `xf-runtime-bridge-0.2.0.zip` (default) | `a6576ae6dc33fa8734fb30bf91a34c3abb0ae65b8c66f2479faa12b950ee5db2` |
+| (`XFRuntimeBridge.dll` inside each) | `1616c989fb032bf056e3c3a1662d3d2eb50e7aef1ea40e4db6423b492a5ae5ee` |

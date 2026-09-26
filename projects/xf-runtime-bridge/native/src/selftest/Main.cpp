@@ -5,6 +5,7 @@
 // clearly marked simulated values; nothing here proves anything about the game itself.
 //
 // Usage: xfb_selftest --runtime-dir <dir> [--seconds N] [--allow-writes] [--write-classes <list>] [--no-pump]
+//                    [--allow-creator-leave] [--idle-seconds N]
 //        xfb_selftest --unit        (in-process checks only; no pipe)
 
 #include <Windows.h>
@@ -62,6 +63,7 @@ int wmain(int argc, wchar_t** argv)
     std::wstring writeClasses = L"photo,world,character";
     bool pump = true;
     bool allowCreatorLeave = false;
+    uint32_t idleSeconds = 120;
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
@@ -93,6 +95,11 @@ int wmain(int argc, wchar_t** argv)
         {
             allowCreatorLeave = true;
         }
+        else if (arg == L"--idle-seconds" && i + 1 < argc)
+        {
+            // Below config.ini's 5 s minimum on purpose: the idle test shouldn't wait long.
+            idleSeconds = static_cast<uint32_t>(std::clamp(std::stoi(argv[++i]), 1, 3600));
+        }
         else
         {
             std::fwprintf(stderr, L"unknown argument: %ls\n", arg.c_str());
@@ -119,6 +126,7 @@ int wmain(int argc, wchar_t** argv)
     config.allowCreatorLeave = allowCreatorLeave;
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
+    config.idleDisconnectSeconds = idleSeconds;
 
     xfb::Session session;
     std::string error;
@@ -207,6 +215,7 @@ int wmain(int argc, wchar_t** argv)
         bool hudHidden = false;
         bool cursorHidden = false;
         bool frozen = false;
+        int32_t faceIndex = -1; // the last photo.expression.index applied (-1: none)
         int32_t clock = 12 * 3600;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
     };
@@ -263,6 +272,7 @@ int wmain(int argc, wchar_t** argv)
                                          {"world_frozen", sim.frozen},
                                          {"ui_hidden", sim.hudHidden},
                                          {"cursor_hidden", sim.cursorHidden},
+                                         {"face_index", sim.faceIndex},
                                          {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}}};
                          }});
     dispatcher.Register({"player.appearance", xfb::Access::Read, xfb::RunOn::GameThread,
@@ -317,6 +327,7 @@ int wmain(int argc, wchar_t** argv)
                                          sim.phase = "gameplay";
                                          sim.hudHidden = false; // leaving photo mode always shows its menu again
                                          sim.cursorHidden = false;
+                                         sim.faceIndex = -1;
                                      }
                                      return json{{"simulated", true}, {"changed", changed}, {"active", false}, {"undo", nullptr},
                                                  {"undo_note", "photo.open (or the player's photo mode key) opens photo mode again; its settings start fresh"}};
@@ -443,6 +454,64 @@ int wmain(int argc, wchar_t** argv)
                                      requirePhase("photo_mode", "not_in_photo_mode");
                                      return w::ExpressionResult(simulatedSet(p::key::kExpression, static_cast<float>(face)));
                                  }));
+    // V's photo-mode face, simulated like XFFace: the head item has a face rig and two animation-setup
+    // components with made-up hashes; the stand-in has none of them.
+    dispatcher.Register({"face.rig.read", xfb::Access::Read, xfb::RunOn::GameThread, "Face components (simulated).",
+                         [requirePhase](const xfb::MethodContext& aContext) {
+                             const auto request = p::ParseFaceRig(aContext.params);
+                             requirePhase("photo_mode", "not_in_photo_mode");
+                             const bool head = request.target == p::FaceTarget::Head;
+                             const auto hash = [](uint64_t aValue) {
+                                 char hex[19];
+                                 std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(aValue));
+                                 return json{{"hash", std::to_string(aValue)}, {"hex", hex}};
+                             };
+                             json components = json::array();
+                             for (const auto& name : request.components)
+                             {
+                                 json entry{{"name", name}, {"found", false}};
+                                 if (head && name == "face_rig")
+                                 {
+                                     entry = {{"name", name}, {"found", true}, {"class", "entAnimatedComponent"}, {"kind", "animated"},
+                                              {"facial_setup", hash(0x1111111111111111ull)}, {"graph", hash(0x2222222222222222ull)},
+                                              {"rig", hash(0x3333333333333333ull)},
+                                              {"animations", {{"gameplay", json::array()}, {"cinematics", json::array()}}}};
+                                 }
+                                 else if (head && (name == "man_face_base_animations" || name == "PhotomodeAnimations"))
+                                 {
+                                     entry = {{"name", name}, {"found", true}, {"class", "entAnimationSetupExtensionComponent"},
+                                              {"kind", "animation_setup_extension"},
+                                              {"animations", {{"gameplay", json::array({{{"anim_set", hash(0x4444444444444444ull)}, {"priority", 128}}})},
+                                                              {"cinematics", json::array()}}}};
+                                 }
+                                 components.push_back(entry);
+                             }
+                             return json{{"simulated", true},
+                                         {"target", p::FaceTargetName(request.target)},
+                                         {"class", head ? "gameItemObject" : "PlayerPuppet"},
+                                         {"components", components}};
+                         }});
+    dispatcher.Register(simWrite("photo.expression.index", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Face index (simulated).",
+                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseExpressionIndex(aContext.params);
+                                     requirePhase("photo_mode", "not_in_photo_mode");
+                                     std::scoped_lock _(sim.mutex);
+                                     // The simulated expression list offers 0-14, like vanilla photo mode.
+                                     if (!request.unlisted && request.index > 14)
+                                     {
+                                         throw xfb::MethodError("bad_params", "simulated: index " + std::to_string(request.index) +
+                                                                                  " is not one of the photo-mode expression values");
+                                     }
+                                     const auto menu = sim.attributes.find(p::key::kExpression);
+                                     const bool known = menu != sim.attributes.end();
+                                     sim.faceIndex = request.index;
+                                     return w::ExpressionIndexResult(json{{"simulated", true},
+                                                                          {"target", p::FaceTargetName(request.target)},
+                                                                          {"index", request.index},
+                                                                          {"unlisted", request.unlisted},
+                                                                          {"menu_value", known ? menu->second : -1.0f},
+                                                                          {"menu_value_known", known}});
+                                 }));
     dispatcher.Register(simWrite("cc.apply", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Character option (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseCharacterApply(aContext.params);
@@ -521,6 +590,15 @@ int wmain(int argc, wchar_t** argv)
         {
             queue.Drain(4); // the plugin does this once per engine tick
             restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
+            // As the plugin's tick: a client dropped for idleness gives the cursor back (RB-34).
+            if (bridge.TakeIdleDisconnect() && restore.WritesUsed() && !restore.Done())
+            {
+                std::scoped_lock _(sim.mutex);
+                xfb::log::Info("bridge.idle_cursor_released",
+                               std::string("{\"simulated\":true,\"cursor_shown\":") + (sim.cursorHidden ? "true" : "false") + "}",
+                               "idle-release");
+                sim.cursorHidden = false;
+            }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }

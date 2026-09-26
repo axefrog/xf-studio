@@ -38,6 +38,7 @@ bool Bridge::Start(std::string& aError)
         return false;
     }
 
+    m_server.SetIdleCallback([this] { m_idleDisconnect.store(true); });
     if (!m_server.Start(
             m_session.pipeName, m_config.idleDisconnectSeconds,
             [this](const std::string& aLine, uint32_t aPid) {
@@ -137,6 +138,11 @@ Dispatcher& Bridge::GetDispatcher()
 bool Bridge::RestoreReady() const
 {
     return m_dispatcher.IsKilled() && m_queue.IsClosed();
+}
+
+bool Bridge::TakeIdleDisconnect()
+{
+    return m_idleDisconnect.exchange(false);
 }
 
 bool Bridge::IsListening() const

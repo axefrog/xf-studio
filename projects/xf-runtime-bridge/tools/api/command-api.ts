@@ -95,10 +95,15 @@ export class CommandApi {
     return this.options.keySender ?? sendKeyToWindow;
   }
 
-  /** The window photo.open may send its key to: the game's main window (from session.json's pid), or the test override's window. */
+  /**
+   * The window photo.open may send its key to: the game's main window (from session.json's pid). The
+   * test-only capture override (--capture-hwnd) is honoured only in a process that can't send keys
+   * (XFB_NO_INPUT=1, set by the test preload), so it can never aim the key at another window (RB-35);
+   * the real sender also checks the process image is the game's.
+   */
   keyTarget(): { hwnd: bigint; pid: number } | null {
     const override = this.options.captureTarget;
-    if (override && "hwnd" in override) {
+    if (override && "hwnd" in override && process.env.XFB_NO_INPUT === "1") {
       const info = describeWindow(override.hwnd);
       return info ? { hwnd: info.hwnd, pid: info.pid } : null;
     }

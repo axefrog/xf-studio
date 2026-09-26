@@ -36,6 +36,9 @@ public:
     // True once the kill switch has fired and the queue is closed: the kill-switch undo may run
     // on the game thread, and no bridge write can run after it.
     bool RestoreReady() const;
+    // True once after the pipe dropped a client for idleness (idle_disconnect_seconds): the game
+    // thread then gives the mouse cursor back (RB-34). Clears the flag.
+    bool TakeIdleDisconnect();
 
     Dispatcher& GetDispatcher();
     nlohmann::json Status() const;
@@ -57,5 +60,6 @@ private:
     std::condition_variable m_watchWake;
     std::atomic<bool> m_watching{false};
     std::atomic<bool> m_sessionFileWritten{false};
+    std::atomic<bool> m_idleDisconnect{false};
 };
 } // namespace xfb

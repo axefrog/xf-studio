@@ -813,6 +813,56 @@ void ScriptFrameTests()
           s::BuildParamCode(std::vector<s::Arg>(15, s::Arg{&typeA, &valueA, false}), code, sizeof(code)) == 256 &&
               s::BuildParamCode(many, code, sizeof(code)) == 0);
     Check("a short buffer is refused, never overrun", s::BuildParamCode(two, code, 34) == 0);
+
+    // RB-32: every address the call path needs is checked at load; a 0 turns script calls off.
+    const std::vector<s::Address> addresses{{"A", 1}, {"B", 2}, {"C", 3}};
+    std::vector<uintptr_t> resolved;
+    const auto allThere = s::MissingAddresses(addresses, [](uint32_t aHash) -> uintptr_t { return 0x1000 + aHash; }, resolved);
+    Check("resolved addresses: none missing, each result kept in order",
+          allThere.empty() && resolved == std::vector<uintptr_t>{0x1001, 0x1002, 0x1003});
+    const auto oneMissing = s::MissingAddresses(addresses, [](uint32_t aHash) -> uintptr_t { return aHash == 2 ? 0 : 0x1000 + aHash; }, resolved);
+    Check("an address that resolves to 0 is named", oneMissing == std::vector<std::string>{"B"} && resolved[1] == 0);
+    Check("without a resolver every address is missing",
+          s::MissingAddresses(addresses, nullptr, resolved).size() == 3);
+}
+
+// face.rig.read and photo.expression.index (the expression design's R1/R2 commands).
+void FaceTests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    const auto rig = p::ParseFaceRig(json::object());
+    Check("face.rig.read defaults to the head item and its known face components",
+          rig.target == p::FaceTarget::Head && rig.components == p::DefaultFaceComponents() && !rig.components.empty());
+    const auto named = p::ParseFaceRig(json::parse(R"({"target":"puppet","components":["face_rig","xfs_PhotomodeAnimations"]})"));
+    Check("face.rig.read takes a target and component names",
+          named.target == p::FaceTarget::Puppet && named.components.size() == 2 && named.components[1] == "xfs_PhotomodeAnimations");
+    Check("component names are letters, digits and underscores only",
+          ParamsCode([] { p::ParseFaceRig(json::parse(R"({"components":["face rig"]})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseFaceRig(json::parse(R"({"components":["a\\b"]})")); }) == "bad_params");
+    Check("component lists are 1 to 16 names without repeats",
+          ParamsCode([] { p::ParseFaceRig(json::parse(R"({"components":[]})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseFaceRig(json{{"components", json(std::vector<std::string>(17, "x"))}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseFaceRig(json::parse(R"({"components":["a","a"]})")); }) == "bad_params");
+    Check("an unknown face target is refused", ParamsCode([] { p::ParseFaceRig(json::parse(R"({"target":"body"})")); }) == "bad_params");
+
+    const auto index = p::ParseExpressionIndex(json::parse(R"({"index":60})"));
+    Check("photo.expression.index defaults to the stand-in and listed indices",
+          index.index == 60 && index.target == p::FaceTarget::Puppet && !index.unlisted);
+    Check("photo.expression.index takes head and unlisted",
+          p::ParseExpressionIndex(json::parse(R"({"index":56,"target":"head","unlisted":true})")).unlisted);
+    Check("photo.expression.index needs a whole index from 0 to 100000",
+          ParamsCode([] { p::ParseExpressionIndex(json::object()); }) == "bad_params" &&
+              ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":-1})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":100001})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":1.5})")); }) == "bad_params");
+
+    const auto known = w::ExpressionIndexResult(json{{"index", 60}, {"menu_value", 1.0}, {"menu_value_known", true}});
+    Check("the face index's undo selects the menu's expression again",
+          known["undo"] == json{{"method", "photo.expression.set"}, {"params", {{"faceId", 1}}}}, known.dump());
+    const auto unknown = w::ExpressionIndexResult(json{{"index", 60}, {"menu_value", -1.0}, {"menu_value_known", false}});
+    Check("no undo when the menu's expression is unknown, and a note says what to do",
+          unknown["undo"].is_null() && unknown.contains("undo_note"), unknown.dump());
 }
 } // namespace
 
@@ -830,6 +880,7 @@ int RunUnitTests()
     WriteClassTests();
     ParamsTests();
     ScriptFrameTests();
+    FaceTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }
