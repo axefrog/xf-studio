@@ -113,6 +113,17 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(brows.message).toBe("Your V's eyebrows (brown) aren't in your installed game files, so they aren't shown.");
   });
 
+  test("an appearance an archive provides but WolvenKit can't read names that archive instead of saying it isn't installed", async () => {
+    const fixture = detailFixture();
+    // A mod's .app WolvenKit refuses (a hair replacer written with an older property type): its index lists it, but it can't be read.
+    fixture.archives.push({ virtualPath: "archive/pc/mod/old_brows.archive", files: { [P.browApp1]: null as unknown as object } });
+    const { plan: result, resolved } = await plan("default", fixture);
+    expect(resolved.appearances.find(entry => entry.option === "eyebrows_color1")!.appearance.status).toBe("unreadable");
+    const brows = result.slots.find(s => s.slot === "brows")!;
+    expect(brows.state).toBe("unavailable");
+    expect(brows.message).toBe("WolvenKit couldn't read your V's eyebrows (brown) from old_brows.archive, so they aren't shown.");
+  });
+
   test("plain skin labels: tone name and skin type, without index numbers or group codes", () => {
     expect(skinLabel("skin_type_05", TONES.ivory)).toBe("pale warm ivory, skin type 5");
     expect(skinLabel("skin_type_03", TONES.senna)).toBe("senna, skin type 3");
