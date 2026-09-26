@@ -8,7 +8,7 @@
  *    so neither reaches a report as written. A known account name (`word`) is replaced wherever it stands as a whole word, except in
  *    a structured value's keys that are plain identifiers, which are the code's own names (DIAG-21).
  * 2. **Save names.** Cyberpunk 2077 save folders (`ManualSave-12`, `AutoSave-3`…) and the folder holding a `sav.dat` become `<save>`.
- * 3. **Profile folders, whole.** Any other user-profile folder (`C:\Users\…`, `/mnt/c/Users/…`, `/Users/…`, `/home/…`, in any
+ * 3. **Profile folders, whole.** Any other user-profile folder (`C:\Users\<name>`, `/mnt/c/Users/<name>`, `/Users/<name>`, `/home/<name>`, in any
  *    escaping or percent-encoding) loses its whole name up to the next separator, quote or line end, however many words it has and
  *    whatever it holds, parentheses included (DIAG-20). Redaction may take a little more than the name; it never leaves part of one.
  *    The shared patterns below are detectors, which must not flag ordinary prose, so they stop sooner.

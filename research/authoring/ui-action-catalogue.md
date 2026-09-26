@@ -208,7 +208,7 @@ These results are private host metadata. Detection changes no setting: a setup v
 | `diagnostics.setDescription` | `{text}` (at most 4,000 characters) | The person's own description, placed first in the report |
 | `diagnostics.saveReport` | none | The host makes one ZIP of the ticked parts (`POST /api/diagnostics/bundle`, carrying the sharing confirmation, which the host checks for mod files); the page saves it through the file device. When the host no longer holds the report, the report turns `failed` with `expired` set, and the review offers **Prepare again** |
 | `diagnostics.copySummary` | none | Copies the readable summary |
-| `diagnostics.openIssue` | none | Opens a pre-filled GitHub issue: the title and a short summary only. The desktop host opens it in the person's browser; a browser opens a new tab |
+| `diagnostics.openIssue` | none | Opens a pre-filled GitHub issue: the title and a short summary only. The host builds the link, redacted with the configured folders; the desktop host opens it in the person's browser, and on the dev server the page opens the host's link in a new tab (never one of its own) |
 | `diagnostics.setMode` | `{mode: "normal" \| "deep"}` | Diagnostic mode: a wider rolling window with every resource read, for 24 hours |
 | `diagnostics.closeReport` | none | Forgets the prepared report on the page |
 

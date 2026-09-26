@@ -281,7 +281,7 @@ test("a newer backup is read when the database is incomplete, even though the da
 }));
 
 test("a staging folder that isn't on a local drive is never opened (VORTEX-06)", () => withFolderAsync(async base => {
-  expect([String.raw`C:\Vortex\mods`, "d:/mods", "/home/x/mods"].map(isLocalFolder)).toEqual([true, true, true]);
+  expect([String.raw`C:\Vortex\mods`, "d:/mods", "/opt/xfs-mods"].map(isLocalFolder)).toEqual([true, true, true]);
   expect([String.raw`\\server\share\mods`, "//server/share/mods", String.raw`\\?\UNC\server\x`, String.raw`\\.\pipe\x`, "mods", ""]
     .map(isLocalFolder)).toEqual([false, false, false, false, false, false]);
   const game = join(base, "game"), share = String.raw`\\xfs-test.invalid\share\mods`;

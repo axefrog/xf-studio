@@ -727,7 +727,7 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 - **The scene port** (`platform/api/scene.ts`, types and one helper; not re-exported from the api index, so a feature's core never sees Three). `SceneHostPort` gives a renderer:
   - `renderer`, for its offscreen passes and capabilities (the host alone draws the scene);
   - `anchors()`: the head and the core record's surfaces by node key (`plate` is the expanded eye plate), read-only to a feature: the surfaces are anchors the platform never draws, which a feature copies for its own meshes;
-  - `attach(object, { beside, morphs, rig })`: onto the head rig; with `morphs` its meshes (meshes added later included) follow the V's facial shapes; with `rig` its bones join the idle and blink; the detach also runs on disposal;
+  - `attach(object, { beside, morphs, rig })`: onto the head rig; with `morphs` its meshes (meshes added later included) follow the V's facial shapes; with `rig` its bones join the idle and blink, bones added under it later (a GLB that loads after the attach) included, and removed ones leave; the detach also runs on disposal;
   - `renderBand`: the feature's own draw-order slots (its factory's `renderSlots`, allocated in composition order from 10);
   - `supersede(parts)`: the resolved parts the feature replaces from now on, whole slots or only named creator options' components;
   - `skin`: the drawn skin's `light()`, `underlay(surface)` read on the drawn head, and a change subscription (once per change);
