@@ -1,4 +1,7 @@
 import type { CameraState, PreviewState } from "./workspace-state";
+import { MAIN_VIEW, type ViewGraphChange, type ViewId } from "./platform/api/view-graph";
+import type { ViewGraph } from "./platform/core/view-graph";
+import { createStudioViewGraph, LEGACY_TOOL_FIELDS, previewFields, previewMirror, type DisplayState, type LightsState, type SceneState } from "./preview-view-graph";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 import type { FaceMorphChoice } from "./face-morphs";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
@@ -11,13 +14,16 @@ import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" |
   "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
-export type PreviewAction =
+/** Every camera and preview action may name the view it acts on; without one it acts on the focused view (design §3.8). */
+export type PreviewAction = PreviewActionBody & { view?: ViewId };
+type PreviewActionBody =
   | { kind: "camera.front" }
   | { kind: "camera.body" }
   | { kind: "camera.setFov"; degrees: number }
   | { kind: "camera.endFovGesture" }
   | { kind: "camera.restore"; camera: CameraState }
   | { kind: "camera.navigate"; command: CameraNavigation }
+  | { kind: "camera.back" | "camera.forward" }
   | { kind: "camera.creatorFraming"; page: CreatorCameraPage }
   | { kind: "preview.setLightingPreset"; preset: LightingPreset }
   | { kind: "preview.setCreatorLighting"; key: "intensity"; value: IntensityForm }
@@ -77,21 +83,74 @@ const STUDIO_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setExposure", "p
 const STUDIO_LIGHT_LABELS: Record<StudioLightKey, string> = { environment: "Environment strength", key: "Key light strength",
   elevation: "Key light height", fill: "Fill light strength", rim: "Rim light strength" };
 
-/** Preview preferences and camera commands are independent of the DOM and the Three scene type. */
+
+/** Undo labels in the View and lighting history (design §3.6). */
+const shown = (enabled: boolean, what: string) => `${enabled ? "Show" : "Hide"} ${what}`;
+type Shown = ReturnType<typeof previewFields>;
+
+/**
+ * Camera, light, display, scene and tool commands, independent of the DOM and the Three scene type. Their state lives in the view
+ * graph (the one owner, design §3.3): each action edits the node its view references, and the device follows the graph for the view
+ * it draws (`shown`, the main view while there is one visible view). Camera jumps are computed by the device, then recorded.
+ */
 export class PreviewActions {
-  private state: PreviewConfig;
   private listeners = new Set<() => void>();
-  constructor(initial: PreviewState, private port: PreviewPort) {
-    this.state = { surface: initial.surface, wire: initial.wire, brows: initial.brows,
-      lashes: initial.lashes, hair: initial.hair, normals: initial.normals,
-      ...(initial.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: initial.eyeOwnRoughness }),
-      eyeShape: initial.eyeShape, piercings: initial.piercings, ...(initial.body === undefined ? {} : { body: initial.body }),
-      ...(initial.uncensored === undefined ? {} : { uncensored: initial.uncensored }),
-      exposure: initial.exposure, lightAngle: initial.lightAngle,
-      lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting }, studioLights: { ...initial.studioLights } };
+  private readonly graph: ViewGraph;
+  /** What the device shows now, per graph field: a graph change applies only the difference. */
+  private applied: Shown;
+  private dispatching = false;
+  private readonly unsubscribe: () => void;
+  /**
+   * @param initial the workspace's preview, used to build a private one-view graph when `graph` is not given (fixtures)
+   * @param graph the workspace's view graph (the composition root's); the device must already show its `shown` view's state
+   * @param shown the view this device draws
+   */
+  constructor(initial: PreviewState, private port: PreviewPort, graph?: ViewGraph, private readonly shown: ViewId = MAIN_VIEW) {
+    this.graph = graph ?? createStudioViewGraph(initial);
+    this.applied = previewFields(this.graph, shown);
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
-    port.onLightingStatus?.(() => { for (const listener of this.listeners) listener(); });
+    port.onLightingStatus?.(() => this.notify());
+    this.unsubscribe = this.graph.subscribe(change => this.follow(change));
   }
+  /** Stop following the graph (the head this device draws was released). */
+  dispose() { this.unsubscribe(); this.listeners.clear(); }
+  private notify() { for (const listener of this.listeners) listener(); }
+  /** The graph changed: the device applies what changed for the view it draws (Undo, Redo, a shared node edited elsewhere). */
+  private follow(change: ViewGraphChange) {
+    if (!change.views.includes(this.shown) && !change.structure) return;
+    if (change.applied) this.applied = previewFields(this.graph, this.shown);
+    else this.apply(change.origin === "history");
+    if (!this.dispatching) this.notify();
+  }
+  /** Push the shown view's graph state to the device, field by field, in the order the controls always set them. */
+  private apply(camera: boolean) {
+    const next = previewFields(this.graph, this.shown), was = this.applied, port = this.port;
+    const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+    this.applied = next;
+    if (next.rig !== was.rig) port.setLightingPreset?.(next.rig);
+    if (changed(next.lights.creatorLighting, was.lights.creatorLighting)) port.setCreatorLighting?.(next.lights.creatorLighting);
+    if (changed(next.lights.studioLights, was.lights.studioLights)) port.setStudioLights?.(next.lights.studioLights);
+    if (next.lights.exposure !== was.lights.exposure) port.setExposure(next.lights.exposure);
+    if (next.lights.lightAngle !== was.lights.lightAngle) port.setLightAngle(next.lights.lightAngle);
+    if (next.scene.eyeShape !== was.scene.eyeShape) port.setEyeShape(next.scene.eyeShape);
+    if (next.scene.normals !== was.scene.normals) port.setNormals(next.scene.normals);
+    if (next.scene.eyeOwnRoughness !== was.scene.eyeOwnRoughness) port.setEyeOptics(next.scene.eyeOwnRoughness ?? true);
+    for (const detail of ["brows", "lashes"] as const) if (next.display[detail] !== was.display[detail]) port.setDetail(detail, next.display[detail]);
+    if (next.display.hair !== was.display.hair) port.setHair(next.display.hair);
+    if (next.display.piercings !== was.display.piercings) port.setPiercings(next.display.piercings);
+    if (next.display.body !== was.display.body) port.setBody?.(next.display.body ?? true);
+    if (next.surface !== was.surface) port.setSurfaceControls(next.surface);
+    if (next.wire !== was.wire) port.setWire(next.wire);
+    if (camera && next.camera && changed(next.camera, was.camera)) port.restoreCamera(next.camera);
+  }
+  /** The view graph this device follows. */
+  views(): ViewGraph { return this.graph; }
+  /** The view an action acts on: the one it names, else the focused one (the shown one when that is gone). */
+  private target(view?: ViewId): ViewId {
+    const id = view ?? this.graph.focused();
+    return this.graph.has(id) ? id : this.shown;
+  }
+  private fields(view?: ViewId) { return previewFields(this.graph, this.target(view)); }
   eyeShapeOptions(): Readonly<EyeShapeOptions> {
     return structuredClone(this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null });
   }
@@ -99,8 +158,10 @@ export class PreviewActions {
     const choices = this.port.eyeShapeOptions?.().choices;
     return Number.isInteger(index) && index >= 0 && (choices ? index < choices.length : index <= MAX_EYE_SHAPE_INDEX);
   }
+  /** The shown view's settings in the workspace's `preview` shape (the legacy mirror), with the device's live camera. */
   snapshot(): Readonly<PreviewConfig & { camera: CameraState }> {
-    return structuredClone({ ...this.state, camera: this.port.cameraState() });
+    const { camera: _pose, ...mirror } = previewMirror(this.graph, this.shown);
+    return structuredClone({ ...mirror, camera: this.port.cameraState() });
   }
   /** What the lighting device shows now (null on a preview without the creator rig). Not persisted. */
   lightingStatus(): Readonly<LightingStatus> | null {
@@ -115,6 +176,12 @@ export class PreviewActions {
   }
   /** Capability with the reason code chosen at each refusal. */
   check(action: PreviewAction): PreviewCapability & { code?: ReasonCode } {
+    if (action.view !== undefined && !this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
+    // The device computes framing for the view it draws; other views get cameras of their own with more than one visible view (P4).
+    if (action.kind.startsWith("camera.") && this.target(action.view) !== this.shown) return refusal("unavailable", "That view isn't shown.");
+    const state = this.fields(action.view);
+    if ((action.kind === "camera.back" || action.kind === "camera.forward") && !this.graph.cameraTrail(this.target(action.view))[action.kind === "camera.back" ? "back" : "forward"])
+      return refusal("invalid_value", action.kind === "camera.back" ? "The camera hasn't jumped anywhere yet." : "There is no later camera position to go forward to.");
     if (action.kind === "camera.setFov" && (!Number.isFinite(action.degrees) || action.degrees < 10 || action.degrees > 90))
       return refusal("invalid_value", "Field of view must be between 10° and 90°.");
     if (action.kind === "camera.navigate") {
@@ -141,10 +208,10 @@ export class PreviewActions {
     }
     if (action.kind === "preview.resetStudioLighting") {
       if (!this.port.setStudioLights) return refusal("unavailable", NO_STUDIO_RIG);
-      if (isDefaultStudioStage(this.studioStage())) return refusal("unavailable", "The studio lighting is already at its defaults.");
+      if (isDefaultStudioStage(this.studioStage(action.view))) return refusal("unavailable", "The studio lighting is already at its defaults.");
     }
     // Under the creator preset these studio controls are not wrong, they belong to the other mode (UI-56).
-    if (STUDIO_ACTIONS.has(action.kind) && this.state.lightingPreset === "creator")
+    if (STUDIO_ACTIONS.has(action.kind) && state.rig === "creator")
       return refusal("incompatible_mode", CREATOR_FIXED);
     if (action.kind === "preview.setLightingPreset") {
       if (!LIGHTING_PRESETS.includes(action.preset)) return refusal("invalid_value", "That lighting preset does not exist.");
@@ -160,14 +227,14 @@ export class PreviewActions {
     }
     if (action.kind === "preview.resetCreatorLighting") {
       if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
-      const current = this.state.creatorLighting;
+      const current = state.lights.creatorLighting;
       if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
         && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure) return refusal("unavailable", "The calibration is already at its defaults.");
     }
     if ((action.kind === "camera.body" && !this.port.frameBody) || ((action.kind === "preview.setBody" || action.kind === "preview.setUncensored") && !this.port.setBody))
       return refusal("unavailable", NO_BODY);
     // Framing a body that isn't shown frames nothing (UI-79).
-    if (action.kind === "camera.body" && this.state.body === false) return refusal("incompatible_mode", "Turn the body on to see the whole body.");
+    if (action.kind === "camera.body" && state.display.body === false) return refusal("incompatible_mode", "Turn the body on to see the whole body.");
     if ((action.kind === "preview.setBody" || action.kind === "preview.setUncensored") && typeof action.enabled !== "boolean")
       return refusal("invalid_value", "Choose on or off.");
     if (action.kind === "camera.creatorFraming") {
@@ -185,48 +252,71 @@ export class PreviewActions {
   dispatch(action: PreviewAction): PreviewActionResult {
     const capability = this.capability(action);
     if (!capability.available) throw Error(capability.reason);
+    const view = this.target(action.view), state = this.fields(view);
+    const lights = (next: Partial<LightsState>, label: string, coalesce?: string) => this.graph.edit(view, "lights", { state: next }, { label, coalesce });
+    const scene = (next: Partial<SceneState>, label: string) => this.graph.edit(view, "scene", { state: next }, { label });
+    const display = (next: Partial<DisplayState>, label: string) => this.graph.edit(view, "display", { state: next }, { label });
+    // View tools are affordances, not settings: they record nothing (design §3.6).
+    const tool = (id: string, enabled: boolean) => this.graph.edit(view, "tools", { state: { on: { ...state.tools, [id]: enabled } } });
     let limited: boolean | undefined;
-    switch (action.kind) {
-      case "camera.front": limited = this.port.front(); break;
-      case "camera.body": limited = this.port.frameBody!(); break;
-      case "camera.setFov": limited = this.port.setFov(action.degrees); break;
-      case "camera.endFovGesture": this.port.endFovGesture(); break;
-      case "camera.restore": this.port.restoreCamera(action.camera); break;
-      case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command)); break;
-      case "camera.creatorFraming": this.port.restoreCamera(this.port.creatorCamera!(action.page)); break;
-      case "preview.setLightingPreset":
-        this.port.setLightingPreset?.(action.preset);
-        this.state.lightingPreset = action.preset; break;
-      case "preview.setCreatorLighting":
-        this.state.creatorLighting = { ...this.state.creatorLighting, [action.key]: action.value };
-        this.port.setCreatorLighting!(this.state.creatorLighting); break;
-      case "preview.resetCreatorLighting":
-        this.state.creatorLighting = { ...DEFAULT_CREATOR_LIGHTING };
-        this.port.setCreatorLighting!(this.state.creatorLighting); break;
-      case "preview.setExposure": this.port.setExposure(action.value); this.state.exposure = action.value; break;
-      case "preview.setKeyAngle": this.port.setLightAngle(action.degrees); this.state.lightAngle = action.degrees; break;
-      case "preview.setStudioLight":
-        this.state.studioLights = { ...this.state.studioLights, [action.key]: action.value };
-        this.port.setStudioLights!(this.state.studioLights); break;
-      case "preview.setStudioNeutral":
-        this.state.studioLights = { ...this.state.studioLights, neutral: action.enabled };
-        this.port.setStudioLights!(this.state.studioLights); break;
-      case "preview.applyStudioSetup": this.applyStudioStage(STUDIO_SETUPS[action.setup]); break;
-      case "preview.resetStudioLighting": this.applyStudioStage(DEFAULT_STUDIO_STAGE); break;
-      case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;
-      case "preview.setPiercings": this.port.setPiercings(action.enabled); this.state.piercings = action.enabled; break;
-      case "preview.setBody": this.port.setBody!(action.enabled); this.state.body = action.enabled; break;
-      // Only the character context's request follows it (the host prepares the V in that mode); the scene draws what arrives.
-      case "preview.setUncensored": this.state.uncensored = action.enabled; break;
-      case "preview.setSurfaceControls": this.port.setSurfaceControls(action.enabled); this.state.surface = action.enabled; break;
-      case "preview.setWire": this.port.setWire(action.enabled); this.state.wire = action.enabled; break;
-      case "preview.setNormals": this.port.setNormals(action.enabled); this.state.normals = action.enabled; break;
-      case "preview.setEyeOptics": this.port.setEyeOptics(action.enabled); this.state.eyeOwnRoughness = action.enabled; break;
-      case "preview.setHair": this.port.setHair(action.enabled); this.state.hair = action.enabled; break;
-      case "preview.setDetail": this.port.setDetail(action.detail, action.enabled); this.state[action.detail] = action.enabled; break;
-    }
-    for (const listener of this.listeners) listener();
+    this.dispatching = true;
+    try {
+      switch (action.kind) {
+        case "camera.front": limited = this.jump(view, "Front view", () => this.port.front()); break;
+        case "camera.body": limited = this.jump(view, "Whole body view", () => this.port.frameBody!()); break;
+        case "camera.setFov": limited = this.port.setFov(action.degrees); this.moved(view); break;
+        case "camera.endFovGesture": this.port.endFovGesture(); break;
+        case "camera.restore": this.jump(view, "Saved camera", () => { this.port.restoreCamera(action.camera); }); break;
+        case "camera.back": case "camera.forward": this.cameraStep(action.kind === "camera.back" ? "back" : "forward", view); break;
+        case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command)); this.moved(view); break;
+        case "camera.creatorFraming":
+          this.jump(view, action.page === "face" ? "Creator face camera" : "Creator hair camera",
+            () => { this.port.restoreCamera(this.port.creatorCamera!(action.page)); });
+          break;
+        case "preview.setLightingPreset":
+          this.graph.edit(view, "lights", { kind: action.preset }, { label: action.preset === "creator" ? "Creator lighting" : "Studio lighting" }); break;
+        case "preview.setCreatorLighting":
+          lights({ creatorLighting: { ...state.lights.creatorLighting, [action.key]: action.value } }, "Creator lighting calibration",
+            `creator.${action.key}`); break;
+        case "preview.resetCreatorLighting": lights({ creatorLighting: { ...DEFAULT_CREATOR_LIGHTING } }, "Restore creator calibration"); break;
+        case "preview.setExposure": lights({ exposure: action.value }, "Exposure", "exposure"); break;
+        case "preview.setKeyAngle": lights({ lightAngle: action.degrees }, "Key light direction", "angle"); break;
+        case "preview.setStudioLight":
+          lights({ studioLights: { ...state.lights.studioLights, [action.key]: action.value } }, STUDIO_LIGHT_LABELS[action.key], `studio.${action.key}`); break;
+        case "preview.setStudioNeutral": lights({ studioLights: { ...state.lights.studioLights, neutral: action.enabled } }, "Untinted lights"); break;
+        case "preview.applyStudioSetup":
+          this.applyStudioStage(view, STUDIO_SETUPS[action.setup], `Studio lighting: ${STUDIO_SETUPS[action.setup].label}`); break;
+        case "preview.resetStudioLighting": this.applyStudioStage(view, DEFAULT_STUDIO_STAGE, "Restore studio lighting"); break;
+        case "preview.setEyeShape": scene({ eyeShape: action.index }, "Eye shape"); break;
+        case "preview.setPiercings": display({ piercings: action.enabled }, shown(action.enabled, "piercings")); break;
+        case "preview.setBody": display({ body: action.enabled }, shown(action.enabled, "the body")); break;
+        // Only the character context's request follows it (the host prepares the V in that mode); the scene draws what arrives.
+        case "preview.setUncensored": scene({ uncensored: action.enabled }, action.enabled ? "Show the V uncensored" : "Show the V censored"); break;
+        case "preview.setSurfaceControls": tool(LEGACY_TOOL_FIELDS.surface, action.enabled); break;
+        case "preview.setWire": tool(LEGACY_TOOL_FIELDS.wire, action.enabled); break;
+        case "preview.setNormals": scene({ normals: action.enabled }, "Normal map preview"); break;
+        case "preview.setEyeOptics": scene({ eyeOwnRoughness: action.enabled }, "Eye's own roughness"); break;
+        case "preview.setHair": display({ hair: action.enabled }, shown(action.enabled, "hair")); break;
+        case "preview.setDetail":
+          display({ [action.detail]: action.enabled }, shown(action.enabled, action.detail === "brows" ? "eyebrows" : "eyelashes")); break;
+      }
+    } finally { this.dispatching = false; }
+    this.notify();
     return limited === undefined ? {} : { limited };
+  }
+  /** A camera jump the device computes: record where it went from and to (a View and lighting step and a Back trail entry). */
+  private jump(view: ViewId, label: string, move: () => boolean | void): boolean | undefined {
+    const before = this.port.cameraState(), limited = move();
+    this.graph.cameraJump(view, { pose: before }, { pose: this.port.cameraState() }, label);
+    return typeof limited === "boolean" ? limited : undefined;
+  }
+  /** Navigation the device did: the camera node keeps it, unrecorded. */
+  private moved(view: ViewId) { this.graph.cameraMoved(view, { pose: this.port.cameraState() }); }
+  /** Restore a saved camera without recording a step or a trail entry (workspace restore). */
+  restoreSavedCamera(camera: CameraState) { this.port.restoreCamera(camera); this.moved(this.shown); }
+  /** Move the view's camera Back or Forward along its trail (design §3.6); false when there is nowhere to go. */
+  cameraStep(direction: "back" | "forward", view?: ViewId): boolean {
+    return this.graph.cameraStep(this.target(view), direction, { pose: this.port.cameraState() });
   }
   /** The named studio setups for the presentation, and which one the stage matches. */
   studioSetups(): StudioSetupsView {
@@ -234,21 +324,17 @@ export class PreviewActions {
       setups: STUDIO_SETUP_IDS.map(id => ({ id, label: STUDIO_SETUPS[id].label, title: STUDIO_SETUPS[id].title })) };
   }
   /** The studio stage as the controls set it: the rig, exposure and key angle. */
-  studioStage() {
-    return { lights: { ...this.state.studioLights }, exposure: this.state.exposure, angle: this.state.lightAngle };
+  studioStage(view?: ViewId) {
+    const lights = this.fields(view).lights;
+    return { lights: { ...lights.studioLights }, exposure: lights.exposure, angle: lights.lightAngle };
   }
-  private applyStudioStage(stage: { lights: Readonly<StudioLights>; exposure: number; angle: number }) {
-    this.state.studioLights = { ...stage.lights };
-    this.state.exposure = stage.exposure;
-    this.state.lightAngle = stage.angle;
-    this.port.setStudioLights!(this.state.studioLights);
-    this.port.setExposure(stage.exposure);
-    this.port.setLightAngle(stage.angle);
+  private applyStudioStage(view: ViewId, stage: { lights: Readonly<StudioLights>; exposure: number; angle: number }, label: string) {
+    this.graph.edit(view, "lights", { state: { studioLights: { ...stage.lights }, exposure: stage.exposure, lightAngle: stage.angle } }, { label });
   }
   /** Saved facial morph application already changed the renderer; only update the persisted selector. */
   rememberEyeShape(index: number) {
     if (!this.validEyeShape(index)) return;
-    this.state.eyeShape = index;
-    for (const listener of this.listeners) listener();
+    this.graph.edit(this.shown, "scene", { state: { eyeShape: index } }, { applied: true, seed: true });
+    this.notify();
   }
 }

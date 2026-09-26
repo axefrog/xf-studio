@@ -18,6 +18,8 @@ export type WorkspaceCapturePorts = {
    */
   character?(): WorkspaceState["preview"]["character"] | null | undefined;
   uiPreferences?(): WorkspaceState["uiPreferences"];
+  /** The view graph's stored form: undefined for the default one-view graph (whose state is the mirrored `preview`). */
+  views?(): WorkspaceState["views"];
   previewSetup?(): WorkspaceState["previewSetup"];
 };
 
@@ -33,7 +35,13 @@ export class WorkspaceComposer {
       uiPreferences: parseUIPreferences(this.ports.uiPreferences?.() ?? this.initial.uiPreferences),
       ...(this.ports.previewSetup ? { previewSetup: this.ports.previewSetup() } : {}) };
     const quality = this.ports.quality();
-    if (!this.previewReady) return structuredClone({ ...this.initial, ...editing,
+    if (this.ports.views) {
+      const views = this.ports.views();
+      if (views) (editing as Partial<WorkspaceState>).views = views;
+    }
+    const base: WorkspaceState = { ...this.initial };
+    if (this.ports.views) delete base.views;
+    if (!this.previewReady) return structuredClone({ ...base, ...editing,
       preview: { ...this.initial.preview, textureSize: quality } });
     const config = this.ports.preview(), motion = this.ports.motion(), original = this.initial.preview;
     const preview: WorkspaceState["preview"] = { ...original, ...config, textureSize: quality,
@@ -48,6 +56,6 @@ export class WorkspaceComposer {
     if (character !== undefined) {
       if (character) { preview.character = character; preview.piercingStyle = ""; preview.piercingDefinition = ""; } else delete preview.character;
     }
-    return structuredClone({ ...this.initial, ...editing, preview });
+    return structuredClone({ ...base, ...editing, preview });
   }
 }

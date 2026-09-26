@@ -48,6 +48,8 @@
   "camera.endFovGesture",
   "camera.restore",
   "camera.navigate",
+  "camera.back",
+  "camera.forward",
   "camera.creatorFraming",
   "preview.setLightingPreset",
   "preview.setCreatorLighting",
@@ -94,7 +96,10 @@
   "character.setClothing",
   "character.setClothingArea",
   "character.undoClothing",
-  "character.redoClothing"
+  "character.redoClothing",
+  "view.setTool",
+  "view.undo",
+  "view.redo"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -1442,7 +1447,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "camera.body": {
    "scope": [
@@ -1450,7 +1461,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "camera.setFov": {
    "scope": [
@@ -1465,6 +1482,11 @@
      "from": "input",
      "min": 10,
      "max": 90
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1474,7 +1496,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "camera.restore": {
    "scope": [
@@ -1487,6 +1515,11 @@
      "type": "object",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1501,6 +1534,11 @@
      "type": "object",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    },
    "variants": {
@@ -1552,6 +1590,34 @@
     }
    }
   },
+  "camera.back": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
+  "camera.forward": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "camera.creatorFraming": {
    "scope": [
     "viewport"
@@ -1567,6 +1633,11 @@
       "face",
       "hair"
      ]
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1585,6 +1656,11 @@
       "studio",
       "creator"
      ]
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1609,6 +1685,11 @@
      "type": "number|string",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    },
    "variants": {
@@ -1660,7 +1741,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "preview.setExposure": {
    "scope": [
@@ -1675,6 +1762,11 @@
      "from": "input",
      "min": 0.125,
      "max": 8
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1691,6 +1783,11 @@
      "from": "input",
      "min": 0,
      "max": 360
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1717,6 +1814,11 @@
      "type": "number",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    },
    "variants": {
@@ -1793,6 +1895,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1814,6 +1921,11 @@
       "rim",
       "mirror"
      ]
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1823,7 +1935,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "preview.setEyeShape": {
    "scope": [
@@ -1838,6 +1956,11 @@
      "from": "input",
      "min": 0,
      "max": 21
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1852,6 +1975,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1866,6 +1994,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1880,6 +2013,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1894,6 +2032,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1908,6 +2051,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1922,6 +2070,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1936,6 +2089,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1950,6 +2108,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1973,6 +2136,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1987,6 +2155,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2001,6 +2174,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2020,6 +2198,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2036,6 +2219,11 @@
      "from": "input",
      "min": 0,
      "max": 1
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2050,6 +2238,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2365,6 +2558,46 @@
   "character.redoClothing": {
    "scope": [
     "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "view.setTool": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    },
+    "tool": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "view.undo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "view.redo": {
+   "scope": [
+    "workspace"
    ],
    "effect": "workspace",
    "undo": "none",
@@ -2810,6 +3043,24 @@
    "async": false
   },
   {
+   "id": "camera.back",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.forward",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "camera.creatorFraming",
    "family": "action",
    "scope": [
@@ -3228,6 +3479,33 @@
    "family": "action",
    "scope": [
     "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.setTool",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.undo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.redo",
+   "family": "action",
+   "scope": [
+    "workspace"
    ],
    "undo": "none",
    "async": false

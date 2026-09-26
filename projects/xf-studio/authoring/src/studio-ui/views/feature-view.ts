@@ -91,7 +91,14 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   /** The sections `targetMenu` shows (for tests and the style guide). */
   targetSections(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>>, anchor: MenuAnchor): MenuSection[];
   readonly uv: UvViewportSlot;
+  /** The makeup preview's readiness in the shell's one wording (UI-92), for a view's readiness badge. */
+  readiness(): ViewBadge;
 };
+
+/** A view's corner badge (the readiness a module contributes, view-graph-design.md §3.9). */
+export type ViewBadge = { phase: string; label: string; detail: string };
+/** A module's crumb in a view after the preset: its `text`, or `empty` when neither the preset nor any module names anything. */
+export type ViewSummary = { text?: string; empty: string };
 
 /** A feature panel's factory: it gets the feature's context, nothing else. */
 export type FeatureViewFactory<F extends FeatureFacade> = (ctx: FeatureViewContext<F>) => PanelController;
@@ -103,6 +110,10 @@ export type FeatureViewBinding = {
   readonly owner: string;
   readonly panels: Readonly<Record<string, (ctx: never) => PanelController>>;
   readonly commands?: (ctx: never) => readonly FeatureCommand<{ kind: string }>[];
+  /** The module's crumb in a view of a scene its summary contribution names (eye makeup: the selected layer). */
+  readonly summary?: (ctx: never) => ViewSummary;
+  /** The module's readiness badge in a view (eye makeup: its layer textures). */
+  readonly readiness?: (ctx: never) => ViewBadge | undefined;
 };
 
 /**
@@ -113,6 +124,9 @@ export function featureView<V extends ViewContribution,
   P extends { readonly [Id in V["panels"][number]["id"]]: FeatureViewFactory<FacadeOf<V["owner"]>> }>(view: V, parts: {
   panels: P;
   commands?: (ctx: FeatureViewContext<FacadeOf<V["owner"]>>) => FeatureCommand<FacadeAction<FacadeOf<V["owner"]>>>[];
+  summary?: (ctx: FeatureViewContext<FacadeOf<V["owner"]>>) => ViewSummary;
+  readiness?: (ctx: FeatureViewContext<FacadeOf<V["owner"]>>) => ViewBadge | undefined;
 }): FeatureViewBinding & { readonly owner: V["owner"]; readonly panels: P } {
-  return Object.freeze({ owner: view.owner, panels: parts.panels, ...(parts.commands ? { commands: parts.commands } : {}) });
+  return Object.freeze({ owner: view.owner, panels: parts.panels, ...(parts.commands ? { commands: parts.commands } : {}),
+    ...(parts.summary ? { summary: parts.summary } : {}), ...(parts.readiness ? { readiness: parts.readiness } : {}) });
 }

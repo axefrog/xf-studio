@@ -21,6 +21,7 @@ import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import { bindStageTheme, type SystemColourScheme } from "./stage-theme-binding";
 import { createTrustedPreviewServices } from "./trusted-preview-services";
 import type { WorkspaceState } from "./workspace-state";
+import type { ViewGraph } from "./platform/core/view-graph";
 import type { LayeredMakeupSurface } from "./engines/layered-makeup/render/makeup-stack";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
@@ -48,6 +49,8 @@ export type LayeredSurfaceWiring = {
 
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
+  /** The workspace's view graph (it outlives any one head): the head restores its main view and follows it. */
+  graph?: ViewGraph;
   viewport: Pick<ViewportDevice, "loadHead" | "unloadHead" | "mountSurface">;
   /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
   layered: readonly LayeredSurfaceWiring[];
@@ -102,7 +105,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => surface?.setEnabled(enabled),
-    }));
+    }), ports.graph);
     savedAppearance = services.savedAppearance;
     ports.attach({ savedV: savedAppearance });
     releases.push(() => ports.attach({ savedV: undefined }));
@@ -116,6 +119,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
       if (wiring.editor) surface = ports.viewport.mountSurface(makeup.surface, wiring.editor);
     }
     const { preview, motion } = services.finish();
+    releases.push(() => preview.dispose());
     ports.attach({ preview, motion });
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));

@@ -66,9 +66,6 @@ export interface SkinUnderlayPort {
  */
 export type CharacterView = { readonly identity: string | null; readonly drawn: readonly CharacterSlot[] };
 
-/** Which lighting setup draws the viewport now. */
-export type LightingView = { readonly preset: "studio" | "creator" };
-
 export interface SceneHostPort {
   /** The feature this port was made for. */
   readonly feature: FeatureId;
@@ -105,9 +102,6 @@ export interface SceneHostPort {
   /** The V drawn now, and a change subscription (returns the unsubscribe; it also ends with disposal). */
   character(): CharacterView;
   subscribeCharacter(listener: () => void): () => void;
-  /** The lighting setup, and a change subscription (returns the unsubscribe; it also ends with disposal). */
-  lighting(): LightingView;
-  subscribeLighting(listener: () => void): () => void;
   /** Something the feature draws changed: draw a frame (render on demand; coalesced). */
   requestFrame(): void;
   /** Run before each drawn frame, after the rig moved (returns the unsubscribe). Registering or removing requests a frame. */

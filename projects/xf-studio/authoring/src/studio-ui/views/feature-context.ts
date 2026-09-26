@@ -8,7 +8,8 @@ import type { StudioAction } from "../../studio-application";
 import type { Command } from "../commands";
 import { ViewportInputHints } from "../input-hints";
 import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../menu";
-import type { StudioRuntime } from "../runtime";
+import { Frame, type StudioRuntime } from "../runtime";
+import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
 import type { FacadeOf, FeatureMenuItem, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget } from "./feature-view";
 
@@ -64,6 +65,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       menu: (anchor: Parameters<typeof openMenu>[1], at?: { x: number; y: number }, invoker?: Element) => viewportMenu(rt, "uv", anchor, at, invoker),
       hints: (slot: HTMLElement, host: HTMLElement) => new ViewportInputHints(port.viewport, "uv", slot, host),
     }),
+    readiness: () => readinessText(new Frame(port)),
   } satisfies FeatureViewContext);
 }
 

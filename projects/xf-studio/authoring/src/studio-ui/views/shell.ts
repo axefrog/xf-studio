@@ -38,5 +38,6 @@ export const SHELL_VIEW = {
     { pattern: /^motion\./, label: "Motion" }, { pattern: /^quality\./, label: "Preview quality" },
     { pattern: /^collection\./, label: "Library" }, { pattern: /^package\./, label: "Mod package" }, { pattern: /^savedV\./, label: "Saved V" }, { pattern: /^character\./, label: "Character" },
     { pattern: /^previewSetup\./, label: "3D preview" },
+    { pattern: /^view\.(undo|redo)$/, label: "View and lighting" }, { pattern: /^view\./, label: "View" },
   ],
 } as const satisfies ViewContribution;

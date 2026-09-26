@@ -23,7 +23,7 @@ import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-w
 import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import type { LocalSetupActions } from "./local-setup-actions";
-import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
+import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage } from "./presentation-status";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
@@ -37,6 +37,7 @@ import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { UIPreferenceActions } from "./ui-preferences";
+import { storedViewGraph } from "./preview-view-graph";
 import { DiagnosticsActions } from "./diagnostics/actions";
 import { createBrowserDiagnostics } from "./diagnostics/browser-device";
 import { pageFailure, setPageDiagnostics } from "./diagnostics/page-sink";
@@ -137,7 +138,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
 
   let messageId = 0;
-  const adapterMessage = (source: "uv" | "surface" | "preview", text: string) => {
+  const adapterMessage = (source: AdapterMessage["source"], text: string) => {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   const core = createTrustedAuthoringCore(workspace, {
@@ -145,6 +146,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
+  // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
+  const views = core.views;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS,
     onContext: event => event === "lost" ? diagnostics.contextLost("3D head view") : diagnostics.contextRestored("3D head view") });
@@ -156,7 +159,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
       collections: () => bootstrap?.collection.workspaceSnapshot() ?? workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
+      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => storedViewGraph(views),
       character: () => head ? head.characterContext.stored() ?? null : undefined,
       uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart }),
@@ -275,7 +278,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     let attached: AttachedHead | undefined;
     try {
       attached = await attachBrowserHead({
-        workspace, viewport: viewportDevice, preferences,
+        workspace, graph: views, viewport: viewportDevice, preferences,
         // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
         // surfaces have no layer source until the core edits more than one live feature.
         layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,

@@ -73,6 +73,8 @@ const ICONS = {
   dot: [f("M5.5 5.5h5v5h-5z")],
 } satisfies Record<string, Shape[]>;
 export type IconName = keyof typeof ICONS;
+/** Whether a name (a module contribution's) is one of the shell's icons. */
+export const isIconName = (name: string): name is IconName => Object.hasOwn(ICONS, name);
 
 const NS = "http://www.w3.org/2000/svg";
 export function icon(name: IconName, label?: string): SVGSVGElement {

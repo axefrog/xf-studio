@@ -5,7 +5,24 @@ import { gestureHistoryLabel, type HistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
 import { GESTURE_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";
 
-export type GestureSource = "uv" | "surface";
+import { MAIN_VIEW, type ViewId } from "./platform/api/view-graph";
+
+/**
+ * The view a gesture comes from (view-graph-design.md §3.8): a 3D view (`main`) or the flat editor's view (`uv`, eye makeup's UV
+ * map, a module-registered flat view kind from P6). Callers may pass a bare view ID; the on-head editor's earlier name `surface`
+ * means the main 3D view.
+ */
+export type GestureSource = { readonly view: ViewId };
+export type GestureOrigin = GestureSource | ViewId;
+/** The flat UV editor's view ID. */
+export const FLAT_EDITOR_VIEW: ViewId = "uv";
+export function gestureSource(origin: GestureOrigin): GestureSource {
+  const view = typeof origin === "string" ? origin : origin.view;
+  return { view: view === "surface" ? MAIN_VIEW : view };
+}
+/** Whether a gesture comes from a 3D view (it needs the 3D preview), rather than the flat editor. */
+export const fromView3d = (origin: GestureOrigin) => gestureSource(origin).view !== FLAT_EDITOR_VIEW;
+const sameSource = (a: GestureSource | undefined, b: GestureOrigin) => !!a && a.view === gestureSource(b).view;
 
 /**
  * Owns a pointer gesture's Undo transaction through the platform's `HistoryTransaction` (one step,
@@ -20,32 +37,33 @@ export class AuthoringGestures {
     private restoreUndo: (step: HistoryEntryId | undefined) => void,
     /** The Undo step's name from a frame: the trusted core passes the registered gestures' `label`. */
     private label: (edit: GestureEdit) => HistoryLabel = gestureHistoryLabel) {}
-  begin(source: GestureSource, layer: Layer | undefined) {
+  begin(origin: GestureOrigin, layer: Layer | undefined) {
     if (!layer || !this.document.recipe.layers.includes(layer)) return false;
-    this.active = { source, layer, transaction: HistoryTransaction.open(this.document.transactionHost(this.restoreUndo),
+    this.active = { source: gestureSource(origin), layer, transaction: HistoryTransaction.open(this.document.transactionHost(this.restoreUndo),
       GESTURE_TRANSACTION, () => this.document.recipe.layers.includes(layer)) };
     return true;
   }
-  apply(source: GestureSource, action: GestureEdit) {
+  apply(source: GestureOrigin, action: GestureEdit) {
     const active = this.active;
-    if (!active || active.source !== source || active.layer !== action.expectedLayer ||
+    if (!active || !sameSource(active.source, source) || active.layer !== action.expectedLayer ||
       !this.document.recipe.layers.includes(active.layer)) return false;
     const changed = this.actions.applyGesture(action);
     active.transaction.applied(changed, () => this.label(action));
     return changed;
   }
-  commit(source: GestureSource) {
-    if (this.active?.source === source) {
-      const active = this.active; this.active = undefined;
+  commit(source: GestureOrigin) {
+    const active = this.active;
+    if (active && sameSource(active.source, source)) {
+      this.active = undefined;
       active.transaction.commit();
     }
   }
-  cancel(source: GestureSource) {
+  cancel(source: GestureOrigin) {
     const active = this.active;
-    if (!active || active.source !== source) return;
+    if (!active || !sameSource(active.source, source)) return;
     this.active = undefined;
     active.transaction.cancel();
   }
-  snapshot() { return this.active ? { source: this.active.source, layerId: this.active.layer.id,
+  snapshot() { return this.active ? { source: this.active.source.view, layerId: this.active.layer.id,
     changed: this.active.transaction.changed } : undefined; }
 }

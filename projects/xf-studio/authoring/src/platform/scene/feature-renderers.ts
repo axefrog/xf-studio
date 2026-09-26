@@ -7,7 +7,7 @@
  */
 import * as THREE from "three";
 import type { FeatureId } from "../api/feature";
-import { renderBand, RENDER_ORDER, type CharacterSlot, type CharacterView, type FeatureRenderer, type FeatureRendererFactory, type LightingView,
+import { renderBand, RENDER_ORDER, type CharacterSlot, type CharacterView, type FeatureRenderer, type FeatureRendererFactory,
   type RenderBand, type SceneHostPort, type SkinUnderlayPort, type SupersededPart } from "../api/scene";
 
 /** What the host lends the ports it makes. */
@@ -19,8 +19,6 @@ export type FeatureRendererContext = {
   skin: SkinUnderlayPort;
   character(): CharacterView;
   subscribeCharacter(listener: () => void): () => void;
-  lighting(): LightingView;
-  subscribeLighting(listener: () => void): () => void;
   requestFrame(): void;
   onFrame(listener: (dt: number) => void): () => void;
   /** The rig motion (idle and blink): bones join and leave it by name, as the V's details do. */
@@ -138,8 +136,6 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       skin,
       character: context.character,
       subscribeCharacter: (listener: () => void) => tracked(entry, context.subscribeCharacter(listener)),
-      lighting: context.lighting,
-      subscribeLighting: (listener: () => void) => tracked(entry, context.subscribeLighting(listener)),
       requestFrame: context.requestFrame,
       onFrame: (listener: (dt: number) => void) => tracked(entry, context.onFrame(listener)),
       onContextRestored: (listener: () => void) => {
