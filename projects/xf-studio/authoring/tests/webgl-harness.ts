@@ -20,7 +20,8 @@ export async function runProbePage<T>(entry: string, query = "", timeout = 60_00
     server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => new URL(request.url).pathname === "/probe.js"
       ? new Response(Bun.file(join(out, "probe.js")), { headers: { "content-type": "text/javascript" } })
       : new Response(`<!doctype html><meta charset="utf-8"><body><script type="module" src="/probe.js"></script>`, { headers: { "content-type": "text/html" } }) });
-    page = await launch(`http://127.0.0.1:${server.port}/${query}`, { width: 200, height: 200, debugPort: 9200 + (server.port! % 500) });
+    // Chrome picks its own debugging port and a slow start is waited for and retried (tools/cdp.ts `launch`).
+    page = await launch(`http://127.0.0.1:${server.port}/${query}`, { width: 200, height: 200 });
     try { await page.waitFor("window.probe", timeout); }
     catch (error) { throw Error([(error as Error).message, ...page.console.map(line => `${line.type}: ${line.text}`)].join("\n")); }
     return await page.evaluate("window.probe") as T;
