@@ -15,7 +15,7 @@ import { basename, relative, resolve, sep } from "node:path";
 import {
   ExportRefusal, PACKAGE_BUILD_2, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
 } from "../api/export";
-import { checkProducts } from "./product-check";
+import { checkProducts, type ProductsCheck } from "./product-check";
 import { runWorkerCheck, type CheckOutcome, type CheckRequest } from "./check-runner";
 import { LOCAL_PACKAGE_2, readPackageManifest } from "./manifest";
 
@@ -71,6 +71,7 @@ export type PackageHostOutcome =
 
 const STATUS: Readonly<Record<string, number>> = {
   invalid_collection: 422, no_exportable_content: 422, namespace_duplicated: 422, package_conflict: 422,
+  package_plan_newer: 422, package_plan_damaged: 422,
   package_check_busy: 409, package_build_busy: 409, package_restart_pending: 409,
   package_check_timeout: 504, package_build_timeout: 504, package_check_cancelled: 499, package_build_cancelled: 499,
   package_check_worker_unavailable: 503, package_check_worker_failed: 503, package_build_unavailable: 503,
@@ -102,7 +103,8 @@ export function builderError(stderr: string): { code: string | null; message?: s
   } catch { return { code: null }; }
 }
 /** Refusals of the collection itself, whose plain message the person sees as the builder gave it. */
-const REFUSALS = new Set(["no_exportable_content", "invalid_collection", "namespace_duplicated", "package_conflict"]);
+const REFUSALS = new Set(["no_exportable_content", "invalid_collection", "namespace_duplicated", "package_conflict", "package_plan_newer",
+  "package_plan_damaged"]);
 
 function fileSha256(path: string): string {
   const digest = createHash("sha256"), buffer = Buffer.alloc(1024 * 1024), handle = openSync(path, "r");
@@ -113,10 +115,12 @@ function fileSha256(path: string): string {
 
 /**
  * The result gate: a Build's answer must describe exactly the products the host planned itself (same features,
- * looks, omissions, hashes and prerequisite provenance), and each candidate folder below `root` must hold exactly
- * its manifest and the two files it names, with their lengths and hashes. Throws on the first difference.
+ * looks, omissions, hashes, each feature's plan hash and prerequisite provenance), and each candidate folder below
+ * `root` must hold exactly its manifest and the two files it names, with their lengths and hashes. Throws on the first
+ * difference.
  */
-export function verifyProductBuildResult(built: PackageBuildResult, expected: PackageCheckResult, root: string): void {
+export function verifyProductBuildResult(built: PackageBuildResult, planned: ProductsCheck, root: string): void {
+  const expected = planned.result;
   const mismatch = () => Error("Package manifest does not match this collection snapshot.");
   const outside = () => Error("Package result is outside the local dist directory.");
   if (built?.schema !== PACKAGE_BUILD_2 || built.installed !== false || built.gameRenderingVerified !== false ||
@@ -163,10 +167,14 @@ export function verifyProductBuildResult(built: PackageBuildResult, expected: Pa
       namespace: feature.namespace, brand: feature.brand, selectorLabel: feature.selectorLabel, selector: feature.selector, presets: feature.presets,
       omissions: feature.omissions, experimental: feature.experimental, requirements: feature.requirements, packagedSha256: feature.packagedSha256,
       details: feature.details }));
+    // Each feature's plan hash is the host's own plan's (PIPE-95); the verification record is the builder's alone.
     const recorded = (raw.features as Record<string, unknown>[]).map(({ planSha256: _plan, verification: _verified, ...rest }) => rest);
+    const plans = planned.products[index].features.map(({ outcome }) => sha256(JSON.stringify(outcome.plan)));
+    if (JSON.stringify((raw.features as { planSha256?: unknown }[]).map(feature => feature.planSha256)) !== JSON.stringify(plans)) throw mismatch();
+    // The manifest records only this product's own omissions (PIPE-88).
     if (raw.schema !== LOCAL_PACKAGE_2 || raw.productId !== check.productId || raw.modName !== check.modName || raw.nameSource !== check.nameSource ||
         raw.archive !== check.archive || raw.collectionId !== expected.collectionId || raw.collectionSha256 !== expected.collectionSha256 ||
-        raw.originalPresetCount !== expected.originalPresetCount || JSON.stringify(raw.omissions) !== JSON.stringify(expected.omissions) ||
+        raw.originalPresetCount !== expected.originalPresetCount || JSON.stringify(raw.omissions) !== JSON.stringify(check.omissions) ||
         JSON.stringify(raw.requirements) !== JSON.stringify(check.requirements) || JSON.stringify(recorded) !== JSON.stringify(features) ||
         archiveSha256 !== manifest.files[0].sha256 || xlSha256 !== manifest.files[1].sha256 ||
         verifiedUnpackedFiles !== manifest.verifiedUnpackedFiles || raw.installed !== false || raw.gameRenderingVerified !== false)
@@ -214,7 +222,9 @@ export class PackageHostService {
     const request: CheckRequest = { collection, prerequisites, collectionSha256: sha256(JSON.stringify(collection)) };
     const outcome: CheckOutcome = await runWorkerCheck(request, adapter.checkWorker, timeoutMs, signal);
     if (outcome.kind === "failure") {
-      if (outcome.code !== "package_check_cancelled" && outcome.code !== "no_exportable_content") adapter.log("check", outcome.code, outcome.message);
+      // The log gets the technical detail (a namespace, a depot path); the page gets the plain message (PIPE-93).
+      if (outcome.code !== "package_check_cancelled" && outcome.code !== "no_exportable_content")
+        adapter.log("check", outcome.code, outcome.message, outcome.detail);
       return failure(outcome.code, outcome.message);
     }
     // The worker's answer must be the host's own plan of the same snapshot (the preflight's compile aside).
@@ -292,10 +302,10 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
       }
     }
     // The host's own plan, on the prepared prerequisites: what the builder's answer must equal.
-    let expected: PackageCheckResult;
+    let expected: ProductsCheck;
     try {
       expected = checkProducts({ collection, exporters: adapter.exporters, collectionSha256, diagnostics: false, preflight: false,
-        prerequisites: Object.fromEntries(Object.entries(prepared).map(([id, item]) => [id, item.plan])) }).result;
+        prerequisites: Object.fromEntries(Object.entries(prepared).map(([id, item]) => [id, item.plan])) });
     } catch (error) {
       const refused = refusalOf(error);
       if (refused) return refused;
@@ -332,18 +342,27 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
     try {
       const built = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageBuildResult;
       verifyProductBuildResult(built, expected, setup.stage);
-      // Move each verified candidate into the store, then gate it there again.
+      // Move every verified candidate into the store, then gate them there again: all or nothing (PIPE-92). Every
+      // destination is checked before the first move, and a failure takes back the ones already moved.
       setup.ensurePrivate?.(setup.candidates);
       mkdirSync(setup.candidates, { recursive: true, mode: 0o700 });
-      const products: ProductBuild[] = built.products.map(product => {
-        const promoted = resolve(setup!.candidates, basename(product.package));
-        if (existsSync(promoted)) throw Error("A candidate with this name already exists.");
-        renameSync(product.package, promoted);
-        return { ...product, package: promoted, manifest: resolve(promoted, "manifest.json") };
-      });
-      const result: PackageBuildResult = { ...built, products };
-      verifyProductBuildResult(result, expected, setup.candidates);
-      return { ok: true, result };
+      const targets = built.products.map(product => resolve(setup!.candidates, basename(product.package)));
+      if (new Set(targets.map(target => target.toLowerCase())).size !== targets.length || targets.some(target => existsSync(target)))
+        throw Error("A candidate with this name already exists.");
+      const moved: string[] = [];
+      try {
+        const products: ProductBuild[] = built.products.map((product, index) => {
+          renameSync(product.package, targets[index]);
+          moved.push(targets[index]);
+          return { ...product, package: targets[index], manifest: resolve(targets[index], "manifest.json") };
+        });
+        const result: PackageBuildResult = { ...built, products };
+        verifyProductBuildResult(result, expected, setup.candidates);
+        return { ok: true, result };
+      } catch (error) {
+        for (const target of moved) rmSync(target, { recursive: true, force: true });
+        throw error;
+      }
     } catch (error) {
       adapter.log("build", "package_build_failed", `The package result failed verification: ${(error as Error).message}`, error);
       return failure("package_build_failed", "Package Build could not verify its result. No candidate was published.");

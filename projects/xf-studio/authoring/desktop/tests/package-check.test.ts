@@ -80,11 +80,13 @@ test("PIPE-33: the worker plans on the prepared plate the host passes, and omits
   expect(planned.kind).toBe("success");
   if (planned.kind !== "success") return;
   const eyes = planned.result.products[0].features[0];
-  expect(eyes.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
+  // The look that misses the plate is left out whole, in the result (PIPE-88).
+  expect(planned.result.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
     reason: OFF_PLATE_REASON }]);
+  expect(eyes.omissions).toEqual([]);
   expect((eyes.details.plateUv as { footprintSha256: string }).footprintSha256).toBe(plate.sha256);
   const unplanned = await runWorkerCheck({ collection, prerequisites: {}, collectionSha256: "" }, worker, 15_000);
-  expect(unplanned.kind === "success" && unplanned.result.products[0].features[0].omissions).toEqual([]);
+  expect(unplanned.kind === "success" && unplanned.result.omissions).toEqual([]);
 }, 30_000);
 
 test("PIPE-70: a posted collection's glitter knob gives no glitter route and no diagnostics in the desktop Check", async () => {

@@ -325,7 +325,9 @@ test("desktop Check matches localhost preflight for a partial export and rejects
   expect(local.status).toBe(200);
   const checked = await desktop.json();
   expect(checked).toEqual(await local.json());
-  expect(checked.products[0].features[0].omissions.map((item: { kind: string }) => item.kind)).toEqual(["layer", "preset", "layer", "preset"]);
+  // Layers are eye makeup's own; the looks nothing is packaged of are left out whole, in the result (PIPE-88).
+  expect(checked.products[0].features[0].omissions.map((item: { kind: string }) => item.kind)).toEqual(["layer", "layer"]);
+  expect(checked.omissions.map((item: { kind: string }) => item.kind)).toEqual(["preset", "preset"]);
   expect(checked.products[0].features[0].presets).toHaveLength(2);
   expect((await fetch(base + "/api/package", { method: "POST", headers: { ...headers,
     Origin: "https://attacker.example" }, body })).status).toBe(403);

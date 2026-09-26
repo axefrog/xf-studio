@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, type PackageTools } from "../src/package-server";
+import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
+  type PackageTools } from "../src/package-server";
 import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import type { PackageCheckResult } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
@@ -78,9 +79,10 @@ test("real local Check omits unsupported active layers and identifies them, from
   const partial = structuredClone(fixture);
   partial.presets[0].recipe.layers[0].finish = "glitter";
   partial.presets[1].recipe.layers[0].finish = "shimmer";
-  const result = eyes(await (await handler(request({ action: "check", collection: partial }))).json());
+  const whole = await (await handler(request({ action: "check", collection: partial }))).json() as PackageCheckResult, result = eyes(whole);
   expect(result.omissions.filter(item => item.kind === "layer")).toHaveLength(2);
-  expect(result.omissions.filter(item => item.kind === "preset")).toHaveLength(2);
+  // Looks nothing is packaged of are left out whole, in the result (PIPE-88).
+  expect(whole.omissions.filter(item => item.kind === "preset")).toHaveLength(2);
   expect(result.presets.map(preset => preset.id)).toEqual(partial.presets.slice(2).map((preset: { id: string }) => preset.id));
   expect(partial.presets[0].recipe.layers[0].finish).toBe("glitter");
 });
@@ -146,11 +148,14 @@ test("PIPE-33: Check plans on the plate the cache last prepared for this game, r
       cacheName: name, routeKey: localPlateRouteKey(tools) });
     const collection = structuredClone(fixture);
     for (const layer of collection.presets[1].recipe.layers) layer.points = layer.points.map((p: { v: number }) => ({ ...p, v: p.v + .4 }));
-    const check = async (current: PackageTools) => eyes(await (await createPackageHandler(() =>
-      adapter({ tools: current, prerequisites: t => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(t) }) }))(request({ action: "check", collection }))).json());
-    const result = await check(tools);
-    expect(result.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
+    const checked = async (current: PackageTools) => await (await createPackageHandler(() =>
+      adapter({ tools: current, prerequisites: t => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(t) }) }))(request({ action: "check", collection }))).json() as PackageCheckResult;
+    const check = async (current: PackageTools) => eyes(await checked(current));
+    // The look that misses the plate is left out whole, in the result (PIPE-88).
+    expect((await checked(tools)).omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
       reason: OFF_PLATE_REASON }]);
+    const result = await check(tools);
+    expect(result.omissions).toEqual([]);
     expect((result.details.plateUv as { footprintSha256: string }).footprintSha256).toBe(plateReachInput(FOOTPRINT).sha256);
     expect(result.notes).toEqual([]);
     // Another game folder, an MO2 route or the other head choice has no prepared plate yet: Check plans on none and says so.
@@ -187,4 +192,27 @@ test("PIPE-70: a posted collection's glitter knob gives no glitter route and no 
   expect(snapshot && Object.keys(snapshot)).not.toContain("diagnostics");
   expect(args).not.toContain("--diagnostics");
   expect(readFileSync(resolve(import.meta.dir, "../src/package-server.ts"), "utf8")).not.toContain("--diagnostics");
+});
+
+test("unreadable Local setup: Check still answers with the defaults, Build answers a plain JSON refusal (PIPE-94)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "xfs-package-settings-"));
+  try {
+    const store = new LocalSettingsStore(dir);
+    writeFileSync(store.file, "{ damaged");
+    writeFileSync(store.backup, "{ damaged too");
+    expect(() => store.load()).toThrow("unreadable");
+    // As server.ts makes it: the adapter reads the settings for each request.
+    const handler = createPackageHandler(action => adapter({ tools: localPackageTools(packageRequestSettings(() => store.load().settings, action), {}) }));
+    const check = await handler(request({ action: "check", collection: fixture }));
+    expect(check.status).toBe(200);
+    expect((await check.json() as PackageCheckResult).products[0].modName).toBe("XF Eye Artistry");
+    const build = await handler(request({ action: "build", collection: fixture }));
+    expect(build.status).toBe(503);
+    expect(build.headers.get("Content-Type")).toContain("application/json");
+    expect(await build.json()).toEqual({ code: "package_setup_unreadable", error: SETUP_UNREADABLE_MESSAGE });
+    // Any other failure to make the adapter is a JSON refusal too, never a bare server error.
+    const broken = await createPackageHandler(() => { throw Error("boom"); })(request({ action: "check", collection: fixture }));
+    expect(broken.status).toBe(503);
+    expect(await broken.json()).toMatchObject({ code: "package_setup_unavailable" });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

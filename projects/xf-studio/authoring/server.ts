@@ -4,7 +4,7 @@ import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
-import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot } from "./src/package-server";
+import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
 import { STUDIO_EXPORTERS } from "./src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "./src/features/eye-makeup";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
@@ -51,8 +51,9 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
 } });
 // Mod export: the shared package host service with localhost's adapter; each exporting feature's host prerequisites
 // are bound here by ID (eye makeup: the built-in eye plate). Settings are read for every request.
-const packageRequest = createPackageHandler(() => localPackageAdapter({ exporters: STUDIO_EXPORTERS,
-  tools: localPackageTools(localSettings.load().settings, process.env, wolvenKit.managedExecutable()),
+// Unreadable settings: Check plans with the defaults and Build answers a plain JSON refusal, as on desktop (PIPE-94).
+const packageRequest = createPackageHandler(action => localPackageAdapter({ exporters: STUDIO_EXPORTERS,
+  tools: localPackageTools(packageRequestSettings(() => localSettings.load().settings, action), process.env, wolvenKit.managedExecutable()),
   prerequisites: tools => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(tools) }) }));
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.

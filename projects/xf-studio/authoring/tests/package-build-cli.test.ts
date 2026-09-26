@@ -32,11 +32,10 @@ test("package preflight reports partial export and keeps the source collection u
     writeFileSync(file, JSON.stringify(collection));
     const result = run(file);
     expect(result.exitCode).toBe(0);
-    const summary = JSON.parse(result.stdout.toString()).products[0].features[0];
-    expect(summary.omissions).toEqual([
-      expect.objectContaining({ kind: "layer", finish: "glitter", layerName: "Petal wash" }),
-      expect.objectContaining({ kind: "preset", presetName: "Verification — metallic copy" }),
-    ]);
+    const answer = JSON.parse(result.stdout.toString()), summary = answer.products[0].features[0];
+    // The layer is eye makeup's own omission; the look nothing is packaged of is left out whole, in the result (PIPE-88).
+    expect(summary.omissions).toEqual([expect.objectContaining({ kind: "layer", finish: "glitter", layerName: "Petal wash" })]);
+    expect(answer.omissions).toEqual([expect.objectContaining({ kind: "preset", presetName: "Verification — metallic copy" })]);
     expect(summary.presets).toHaveLength(3);
     expect(JSON.parse(readFileSync(file, "utf8")).presets[0].recipe.layers[0].finish).toBe("glitter");
   } finally { rmSync(dir, { recursive: true, force: true }); }

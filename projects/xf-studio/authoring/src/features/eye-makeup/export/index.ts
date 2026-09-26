@@ -19,7 +19,7 @@ import { expectedPaths } from "../../../archive-inventory";
 import { eyeMakeupXl } from "../../../package-resources";
 import { buildEyeMakeupResources, PlateFootprintChangedError, type BuildRecord } from "../../../package-resource-builder";
 import { PackageToolError } from "../../../package-build-wolvenkit";
-import type { planCollection } from "../../../preset-collection";
+import { NO_EYE_MAKEUP_REASON, type planCollection } from "../../../preset-collection";
 import type { PlateReachInput } from "../../../plate-reach";
 import type { PackagePlate } from "../../../package-action";
 import { EYE_MAKEUP_REGION } from "../region";
@@ -57,12 +57,18 @@ function plan(input: { collection: unknown; prerequisites: Readonly<Record<strin
       ? "no_exportable_content" : "invalid_collection", message);
   }
   const planned = prepared.plan, packaged = JSON.stringify(prepared.packaged);
+  // Whole looks are the export host's to decide once, across every feature (PIPE-88): a look without eye makeup is not
+  // eye makeup's omission, and neither is a look an older request's collection-1 view already left out (the host reads
+  // those itself). What stays is eye makeup's own: its layers, and looks whose eye makeup it packages nothing of.
+  const collection2 = (value as { schema?: unknown } | null)?.schema === COLLECTION_2;
+  const notOurs = new Set((prepared.source.omitted ?? []).filter(item => item.feature === undefined &&
+    (!collection2 || item.reason === NO_EYE_MAKEUP_REASON)).map(item => item.presetId));
   const check: FeatureCheck = {
     feature: EYE_MAKEUP_FEATURE, label: "Eye makeup", exporter: EYE_MAKEUP_EXPORTER_ID, exporterVersion: EYE_MAKEUP_EXPORTER_VERSION,
     namespace: planned.namespace, brand: planned.modName, selectorLabel: planned.selectorLabel, selector: EYE_MAKEUP_EXPORT.selector,
     presets: packagePresetIdentities(planned),
     // Another feature's part of a look is the export host's to report (it knows which features have exporters).
-    omissions: prepared.omissions.filter(item => item.kind !== "part"),
+    omissions: prepared.omissions.filter(item => item.kind !== "part" && !(item.kind === "preset" && notOurs.has(item.presetId))),
     experimental: prepared.experimental,
     // Before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does (PIPE-36).
     notes: prepared.plateUv ? [] : [PLATE_REACH_UNCHECKED_NOTE],

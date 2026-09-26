@@ -5,7 +5,8 @@ import type { StoredCollection } from "./collection-store";
 import type { Look, LookCollection } from "./platform/api";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./validation-issues";
-import { refusal, type ModPackagePlan, type ReasonCode } from "./platform/api";
+import { isKeptPackagePlan, PLAN_ISSUE_MESSAGE, refusal, type KeptPackagePlan, type ModPackagePlan, type PackagePlanIssue,
+  type ReasonCode } from "./platform/api";
 import { collectionProducts, packagePlanEditIssue, type PackagePlanEdit, type PlannedProduct } from "./platform/core/package-plan";
 
 /** The package-plan actions' kinds. */
@@ -126,7 +127,12 @@ export class CollectionActions {
     return this.session.state.collection.presets;
   }
   /** The draft's package plan, uncloned (for the service's own comparisons); undefined for the default. */
-  packagePlan(): Readonly<ModPackagePlan> | undefined { return this.session.state.collection.packagePlan; }
+  packagePlan(): Readonly<ModPackagePlan | KeptPackagePlan> | undefined { return this.session.state.collection.packagePlan; }
+  /** Why the draft's package plan can't be used, with its plain message, or undefined when it can (CORE-91). */
+  packagePlanIssue(): { issue: PackagePlanIssue; message: string } | undefined {
+    const plan = this.session.state.collection.packagePlan;
+    return isKeptPackagePlan(plan) ? { issue: plan.issue, message: PLAN_ISSUE_MESSAGE[plan.issue] } : undefined;
+  }
   /** Selected preset ID without cloning; undefined when the collection has no selected preset. */
   selected(): string | undefined { return this.session.state.selected; }
   /** Draft identity without cloning (CORE-05): the collection ID and the selected preset. */
@@ -173,6 +179,9 @@ export class CollectionActions {
     if (action.kind === "preset.select" && !state.collection.presets.some(p => p.id === action.id))
       return refusal("missing_target", "Preset not found.");
     if (isPackagePlanAction(action)) {
+      // A plan made by a newer version (or damaged) is kept exactly as it came; this build never edits it (CORE-91).
+      const planIssue = this.packagePlanIssue();
+      if (planIssue) return refusal("unavailable", planIssue.message);
       const products = this.products();
       if (!products.length) return refusal("unavailable", "No look in this collection has anything XF Studio can make into mod files yet.");
       const issue = packagePlanEditIssue(packagePlanEdit(action, "00000000-0000-4000-8000-000000000000"), products, state.collection.id, this.labels());

@@ -17,7 +17,7 @@ import { canonicalJson, COLLECTION_1, COLLECTION_2, isNewerData, KEPT_MEMORY, LO
 import type { AnyFeatureModule } from "../api/feature";
 import { HISTORY_LIMIT, LOOK_HISTORY_1, type HistoryParts, type LookHistoryData, type StoredLookEntry } from "../api/history";
 import { emptyLookHistory, isEmptyLookHistory, LookHistory, lookHistoryBodies, pruneLookHistory } from "./look-history";
-import { parsePackagePlan, type ModPackagePlan } from "../api/export";
+import { isKeptPackagePlan, readPackagePlan, storedPackagePlan, type KeptPackagePlan, type ModPackagePlan } from "../api/export";
 import { normalizePackagePlan } from "./package-plan";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -28,7 +28,8 @@ export const PRESET_MESSAGE = "Preset identities must be unique UUIDs with a nam
 
 /** A collection-1 preset as older builds stored it. */
 export type LegacyPreset = { id: string; name: string; revision: number; [field: string]: unknown };
-export type LegacyCollection = { schema: typeof COLLECTION_1; id: string; name: string; presets: LegacyPreset[]; packagePlan?: ModPackagePlan };
+/** `packagePlan` is the stored form: a plan, or a kept plan's value exactly as it came (CORE-91). */
+export type LegacyCollection = { schema: typeof COLLECTION_1; id: string; name: string; presets: LegacyPreset[]; packagePlan?: unknown };
 /** Stored per-feature memory: the editor, the part schema of its history entries and those entries. */
 export type StoredPartMemory = { editor?: unknown; partSchema?: string; history?: unknown[]; historyTrimmed?: true };
 /**
@@ -215,7 +216,14 @@ export class PartRegistry implements HistoryParts {
         !title(input.name) || !Array.isArray(input.presets) || (!allowEmpty && !input.presets.length))
       throw Error(COLLECTION_MESSAGE);
     // The package plan (which features ship in which mod) rides with either schema; only a non-default plan is kept.
-    const packagePlan = input.packagePlan === undefined ? undefined : normalizePackagePlan(parsePackagePlan(input.packagePlan), input.id!);
+    // One this build can't use (a newer build's, or damaged) is kept opaque and written back unchanged, so the
+    // collection still opens and saves (CORE-91); an in-memory kept plan stays as it is.
+    let packagePlan: ModPackagePlan | KeptPackagePlan | undefined;
+    if (input.packagePlan !== undefined) {
+      const read = trusted && isKeptPackagePlan(input.packagePlan) ? input.packagePlan : readPackagePlan(input.packagePlan);
+      packagePlan = "plan" in read ? normalizePackagePlan(read.plan, input.id!)
+        : { kept: structuredClone("kept" in read ? read.kept : input.packagePlan), issue: read.issue };
+    }
     const seen = new Set<string>();
     const presets = input.presets.map(preset => {
       // Only an in-memory look this session locked is read again from its kept parts.
@@ -294,7 +302,8 @@ export class PartRegistry implements HistoryParts {
   writeMinimal(collection: LookCollection): LegacyCollection | LookCollection {
     const presets = collection.presets.map(look => this.legacyPreset(look));
     // A package plan is an optional field either schema carries (0.1.0-alpha.1 reads collection-1 and ignores it).
-    const plan = collection.packagePlan ? { packagePlan: structuredClone(collection.packagePlan) } : {};
+    // A kept plan (CORE-91) goes back exactly as it came.
+    const plan = collection.packagePlan ? { packagePlan: storedPackagePlan(collection.packagePlan) as ModPackagePlan } : {};
     return presets.every((preset): preset is LegacyPreset => preset !== undefined)
       ? { schema: COLLECTION_1, id: collection.id, name: collection.name, presets, ...plan }
       : { schema: COLLECTION_2, id: collection.id, name: collection.name,
@@ -306,7 +315,7 @@ export class PartRegistry implements HistoryParts {
       presets: collection.presets.map(look => ({ id: look.id, name: look.name, revision: look.revision,
         parts: look.locked ? structuredClone(look.parts)
           : Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.readPart(feature, part)])) })),
-      ...(collection.packagePlan ? { packagePlan: structuredClone(collection.packagePlan) } : {}) };
+      ...(collection.packagePlan ? { packagePlan: storedPackagePlan(collection.packagePlan) as ModPackagePlan } : {}) };
   }
 
   /**

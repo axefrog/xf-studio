@@ -11,6 +11,7 @@ import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { readConfiguredMo2Instance } from "./install-detection-host";
 import { duplicatedNamespaces, readPackageManifest, type PackageManifestView } from "./platform/export/manifest";
 import { EYE_MAKEUP_FEATURE } from "./recipe-schema";
+import { modNameIssue } from "./platform/api";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
@@ -26,7 +27,10 @@ export type InstallReceipt = { schema: typeof schema; targetId: string; route: I
 type Journal = { schema: "xfs/install-journal-1"; targetId: string; target: string;
   names: string[]; next: FileEntry[]; prior: InstallReceipt | null; backup: string | null };
 export type InstallTransportConfig = { candidateStore: string; receiptsRoot: string; settings: LocalSettings;
-  /** The mod this transport places (its MO2 folder); defaults to eye makeup's. A candidate of another mod is refused. */
+  /**
+   * The mod this transport places (its MO2 folder): the product's mod name as its manifest records it, so a renamed mod
+   * can be placed (PIPE-90); defaults to eye makeup's brand. A candidate of another mod is refused.
+   */
   modName?: string };
 export type InstallPreview = { route: InstallRoute; target: string; candidateId: string;
   files: FileEntry[]; replacingOwned: boolean; activation: string };
@@ -116,7 +120,9 @@ function atomicJson(path: string, value: unknown) {
   finally { closeSync(fd); }
   renameSync(temp, path);
 }
-type Target = { route: InstallRoute; target: string; activation: string; legacyInstall: string | null };
+type Target = { route: InstallRoute; target: string; activation: string; legacyInstall: string | null;
+  /** The mod's own MO2 folder (`mods/<mod name>`), or null on the direct route. */
+  modFolder: string | null };
 function targetFor(settings: LocalSettings, modName: string): Target {
   const route = settings.installMode;
   assert(route !== "none" && route === settings.launchRoute, "Select a matching install and launch route.");
@@ -129,7 +135,7 @@ function targetFor(settings: LocalSettings, modName: string): Target {
     const target = join(settings.gameRoot, "archive", "pc", "mod");
     noLinks(target);
     return { route, target, activation: "Files are staged in the game's archive/pc/mod folder; game loading is unverified.",
-      legacyInstall: null };
+      legacyInstall: null, modFolder: null };
   }
   assert(settings.mo2Root && isAbsolute(settings.mo2Root) && settings.mo2ProfileId && profileSegment(settings.mo2ProfileId),
     "Configured MO2 instance and profile are missing.");
@@ -146,8 +152,58 @@ function targetFor(settings: LocalSettings, modName: string): Target {
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
   const target = join(paths.mods, modName, "archive", "pc", "mod");
   noLinks(target);
-  return { route, target, legacyInstall,
+  return { route, target, legacyInstall, modFolder: join(paths.mods, modName),
     activation: `Enable the dedicated ${modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
+}
+
+/** Whether a folder holds any file below it (links are not followed). */
+function holdsFiles(folder: string): boolean {
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) return true;
+    if (holdsFiles(join(folder, entry.name))) return true;
+  }
+  return false;
+}
+
+/**
+ * The resources an ArchiveXL declaration registers (its customization files and resource-scope members), as
+ * normalised depot paths. A feature's namespace is its resources: two archives declaring one of them hold the same
+ * feature of the same collection. Text that isn't a declaration registers nothing.
+ */
+export function declaredResources(text: string): string[] {
+  let value: unknown;
+  try { value = Bun.YAML.parse(text.replace(/^\uFEFF/, "")); } catch { return []; }
+  const list = (item: unknown): unknown[] => item === undefined || item === null ? [] : Array.isArray(item) ? item : [item];
+  const root = value as { customizations?: { female?: unknown; male?: unknown }; resource?: { scope?: Record<string, unknown> } } | null;
+  if (!root || typeof root !== "object") return [];
+  const entries = [...list(root.customizations?.female), ...list(root.customizations?.male),
+    ...Object.values(root.resource?.scope && typeof root.resource.scope === "object" ? root.resource.scope : {}).flatMap(list)];
+  return [...new Set(entries.filter((entry): entry is string => typeof entry === "string").map(entry => entry.replaceAll("\\", "/").toLowerCase()))];
+}
+
+/**
+ * Installed mods already holding part of a candidate (PIPE-90): each folder of `places` (an `archive/pc/mod` folder,
+ * with a plain label such as the MO2 mod's name) whose `.archive.xl` files declare a resource the candidate's own
+ * declaration declares. This sees every installed copy, however and from whichever stage it was installed, where the
+ * receipts of one stage see only that stage.
+ */
+export function installedDuplicates(candidateXl: string, places: readonly { label: string; folder: string }[]): string[] {
+  const ours = new Set(declaredResources(candidateXl));
+  if (!ours.size) return [];
+  const found: string[] = [];
+  for (const { label, folder } of places) {
+    let names: string[];
+    try { names = readdirSync(folder).filter(name => name.toLowerCase().endsWith(".xl")); } catch { continue; }
+    for (const name of names) {
+      const file = join(folder, name);
+      try {
+        const stat = lstatSync(file);
+        if (!stat.isFile() || stat.size > 1_000_000) continue;
+        if (declaredResources(readFileSync(file, "utf8")).some(entry => ours.has(entry))) { found.push(label); break; }
+      } catch { /* An unreadable file of another mod is not ours to judge. */ }
+    }
+  }
+  return found;
 }
 
 /** The host owns this object; never expose its root paths as renderer-editable options. */
@@ -159,6 +215,8 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   noLinks(store); noLinks(receipts);
   mkdirSync(receipts, { recursive: true });
   const modName = config.modName ?? EYE_MAKEUP_MOD.modName;
+  // The name becomes a folder in the mod manager: it must be one Windows can hold, and never a path (PIPE-90).
+  assert(modName === modName.trim() && modNameIssue(modName) === undefined, "This mod's name can't be used as a mod folder. Rename it in Mod package, then try again.");
   const target = targetFor(config.settings, modName);
   assert(target.target !== store && target.target !== receipts &&
     !inside(target.target, store) && !inside(target.target, receipts) &&
@@ -233,9 +291,17 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       } else assert(!old, `Owned installed file is missing: ${file}`);
     }
   };
+  /**
+   * An MO2 folder of this name that XF Studio didn't create (no receipt of ours, and files in it): never written into,
+   * whatever it holds (PIPE-90). An empty tree an interrupted first install left is ours to reuse.
+   */
+  const foreignFolder = () => !!target.modFolder && existsSync(target.modFolder) && !existsSync(receiptFile) && !existsSync(journalFile) &&
+    holdsFiles(target.modFolder);
   const preflight = (candidateId: string): InstallPreview => {
     noLinks(journalFile);
     assert(!existsSync(journalFile), "An interrupted install needs recovery before another action.");
+    assert(!foreignFolder(), `Mod Organizer 2 already has a mod called “${modName}” that XF Studio didn't put there, so nothing was ` +
+      "installed. Rename your mod in Mod package, or rename that mod in Mod Organizer 2, then try again.");
     assert(!target.legacyInstall, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} install under the legacy ` +
       `folder "${target.legacyInstall}". Roll back or remove that diagnostic mod before installing "${EYE_MAKEUP_MOD.modName}".`);
     const { manifest } = candidate(candidateId), prior = owned();

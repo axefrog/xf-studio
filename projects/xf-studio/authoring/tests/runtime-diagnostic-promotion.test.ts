@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stageRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
+import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
 import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
   rollbackRuntimePromotion } from "../src/runtime-diagnostic-promotion";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
@@ -234,5 +234,69 @@ test("a stage prepared under the legacy folder name must be staged again", () =>
     writeFileSync(planFile, JSON.stringify(plan, null, 2) + "\n");
     expect(() => planRuntimePromotion(f.options)).toThrow(`Stage again so the promoted mod is named "${EYE_MAKEUP_MOD.modName}"`);
     expect(existsSync(join(f.options.mo2Root, "profiles", f.options.newProfileId))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+/** A version-2 candidate of a renamed mod, with a real declaration (as a product Build writes it). */
+function renamedFixture(modName = "XF Night Looks") {
+  const root = mkdtempSync(join(tmpdir(), "xfs-promotion-renamed-"));
+  const gameRoot = join(root, "game"), mo2Root = join(root, "real-mo2"), candidateStore = join(root, "candidates"), candidateId = "build_2";
+  const profileId = "Existing Profile", sourceProfile = join(mo2Root, "profiles", profileId);
+  mkdirSync(join(gameRoot, "bin", "x64"), { recursive: true });
+  mkdirSync(join(gameRoot, "archive", "pc", "mod"), { recursive: true });
+  writeFileSync(join(gameRoot, "bin", "x64", "Cyberpunk2077.exe"), "fixture");
+  mkdirSync(join(mo2Root, "mods"), { recursive: true });
+  mkdirSync(sourceProfile, { recursive: true });
+  writeFileSync(join(sourceProfile, "modlist.txt"), "+Other Mod\r\n");
+  const archive = "xfs_c0ec3546e3fac43e78c19a65d20383d41", payload = join(candidateStore, candidateId, "archive", "pc", "mod");
+  const xl = "customizations:\r\n  female: axefrog\\looks\\xfs_collection.inkcharcustomization\r\n";
+  mkdirSync(payload, { recursive: true });
+  const files = [[`${archive}.archive`, "archive bytes"], [`${archive}.archive.xl`, xl]].map(([name, content]) => {
+    writeFileSync(join(payload, name), content);
+    return { path: `archive/pc/mod/${name}`, sha256: hash(content), bytes: Buffer.byteLength(content) };
+  });
+  writeFileSync(join(candidateStore, candidateId, "manifest.json"), JSON.stringify({ schema: "xfs/local-package-2",
+    productId: "0ec3546e-3fac-43e7-8c19-a65d20383d41", modName, nameSource: "plan", archive, omissions: [],
+    features: [{ feature: "eye-makeup", namespace: archive, omissions: [], verification: { presetCount: 2 } }],
+    files, verifiedUnpackedFiles: 5, installed: false, gameRenderingVerified: false }));
+  const options = { gameRoot, mo2Root, candidateStore, candidateId, profileId, newProfileId: "Night diagnostic", stagingRoot: join(root, "stage") };
+  return { root, options, xl, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test("a renamed mod stages and promotes under its own name (PIPE-90)", () => {
+  const f = renamedFixture();
+  try {
+    const staged = stageRuntimeDiagnostic(f.options);
+    expect(staged.plan.modName).toBe("XF Night Looks");
+    expect(readdirSync(join(staged.stagedMo2, "mods"))).toEqual(["XF Night Looks"]);
+    expect(readFileSync(join(staged.stagedProfile, "modlist.txt"), "utf8")).toContain("+XF Night Looks");
+    const preview = promoteRuntimeDiagnostic(f.options);
+    expect(preview).toMatchObject({ modName: "XF Night Looks", dedicatedMod: join(f.options.mo2Root, "mods", "XF Night Looks") });
+    expect(readFileSync(join(preview.dedicatedMod, "archive", "pc", "mod", "xfs_c0ec3546e3fac43e78c19a65d20383d41.archive.xl"), "utf8")).toBe(f.xl);
+    rollbackRuntimePromotion(f.options);
+    expect(existsSync(preview.dedicatedMod)).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("a build already installed in another mod is refused at staging and at promotion, whichever stage installed it (PIPE-90)", () => {
+  const f = renamedFixture();
+  try {
+    stageRuntimeDiagnostic(f.options);
+    // Another stage promoted the same looks as "XF Looks" (a merged mod of the same collection) meanwhile.
+    const other = join(f.options.mo2Root, "mods", "XF Looks", "archive", "pc", "mod");
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "xfs_mffff.archive.xl"), "customizations:\r\n  female:\r\n    - axefrog\\looks\\xfs_collection.inkcharcustomization\r\n" +
+      "    - axefrog\\looks\\lips.inkcharcustomization\r\n");
+    expect(() => planRuntimePromotion(f.options)).toThrow("already installed in the Mod Organizer 2 mod “XF Looks”");
+    expect(() => promoteRuntimeDiagnostic(f.options)).toThrow("already installed");
+    expect(existsSync(join(f.options.mo2Root, "mods", "XF Night Looks"))).toBe(false);
+    // A new stage sees it before anything is staged.
+    const again = { ...f.options, stagingRoot: join(f.root, "stage-2") };
+    expect(planRuntimeDiagnostic(again).duplicateInstalls).toEqual(["the Mod Organizer 2 mod “XF Looks”"]);
+    expect(() => stageRuntimeDiagnostic(again)).toThrow("already installed");
+    expect(existsSync(again.stagingRoot)).toBe(false);
+    // A mod declaring other resources is not a duplicate.
+    writeFileSync(join(other, "xfs_mffff.archive.xl"), "customizations:\r\n  female: axefrog\\other\\xfs_collection.inkcharcustomization\r\n");
+    expect(planRuntimeDiagnostic(again).duplicateInstalls).toEqual([]);
   } finally { f.cleanup(); }
 });

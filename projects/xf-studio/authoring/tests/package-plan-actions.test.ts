@@ -8,11 +8,11 @@ import { expect, test } from "bun:test";
 import { CollectionActions } from "../src/collection-actions";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import type { EditorSnapshot } from "../src/collection-session";
-import { collectionDraft, type DocumentModel } from "../src/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { PartRegistry } from "../src/platform/core/document";
-import { COLLECTION_1, COLLECTION_2, PACKAGE_PLAN_1, type LookCollection } from "../src/platform/api";
+import { COLLECTION_1, COLLECTION_2, DAMAGED_PLAN_MESSAGE, NEWER_PLAN_MESSAGE, PACKAGE_PLAN_1, type LookCollection, type ModPackagePlan } from "../src/platform/api";
 import { recipeFile, readRecipe } from "../src/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
 import { HAIR } from "./fixtures/hair-feature";
@@ -58,7 +58,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(stored.schema).toBe(COLLECTION_1);
   expect(stored.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: ID, name: "My looks", features: [] }] });
   expect(alphaParseCollection(JSON.parse(JSON.stringify(stored)), false, value => value as never).presets).toHaveLength(1);
-  expect(STUDIO_PARTS.readCollection(JSON.parse(JSON.stringify(stored))).packagePlan).toEqual(stored.packagePlan);
+  expect(STUDIO_PARTS.readCollection(JSON.parse(JSON.stringify(stored))).packagePlan).toEqual(stored.packagePlan as never);
   // An empty name goes back to the default: the plan disappears again.
   f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "" });
   expect(f.svc.snapshot()!.collection.packagePlan).toBeUndefined();
@@ -72,8 +72,59 @@ test("a collection without a plan stores exactly what it stored before", () => {
   // A default-only plan is dropped on read, so it never makes a collection look different.
   const defaulted = STUDIO_PARTS.readCollection({ ...collection(), packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: ID, features: [] }] } });
   expect(defaulted).not.toHaveProperty("packagePlan");
-  expect(() => STUDIO_PARTS.readCollection({ ...collection(), packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: "x", features: [] }] } }))
-    .toThrow("damaged");
+  // A damaged plan no longer stops the collection opening (CORE-91): it is kept as it came.
+  expect(STUDIO_PARTS.readCollection({ ...collection(), packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: "x", features: [] }] } }).packagePlan)
+    .toEqual({ kept: { schema: PACKAGE_PLAN_1, products: [{ id: "x", features: [] }] }, issue: "damaged" });
+});
+
+test("a newer or damaged plan opens, saves back verbatim, and refuses package actions, Check and Build with its reason (CORE-91)", async () => {
+  // A newer build's plan: a later schema, and a plan-1 plan with the per-feature selector labels this build doesn't know.
+  const newer = [{ schema: "xfs/package-plan-2", products: [{ id: ID, name: "Mine", features: [], labels: { x: 1 } }] },
+    { schema: PACKAGE_PLAN_1, products: [{ id: NEW, features: ["eye-makeup"], selectorLabels: { "eye-makeup": "XF Lids" } }] }];
+  for (const plan of newer) {
+    const stored = { ...collection(), packagePlan: plan };
+    const read = STUDIO_PARTS.readCollection(structuredClone(stored));
+    expect(read.packagePlan).toEqual({ kept: plan, issue: "newer" });
+    // Written back exactly as it came, in the library form and in the workspace draft, and read back the same.
+    expect(STUDIO_PARTS.writeMinimal(read).packagePlan).toEqual(plan);
+    expect(STUDIO_PARTS.readCollection(JSON.parse(JSON.stringify(STUDIO_PARTS.writeMinimal(read)))).packagePlan).toEqual(read.packagePlan);
+    const draft = collectionDraft(structuredClone(stored), STUDIO_DOCUMENTS, 1);
+    const written = JSON.parse(JSON.stringify(writeCollectionWorkspace(draft, STUDIO_DOCUMENTS)));
+    expect(written.collection.packagePlan).toEqual(plan);
+    expect(parseCollectionWorkspace(written, STUDIO_DOCUMENTS).collection.packagePlan).toEqual(read.packagePlan);
+
+    const f = service(stored);
+    await f.svc.execute({ kind: "initialize" });
+    expect(f.svc.summary()).toMatchObject({ products: [], packagePlanIssue: NEWER_PLAN_MESSAGE });
+    for (const action of [{ kind: "package.rename", productId: ID, modName: "Other" }, { kind: "package.split", feature: "eye-makeup" }] as const)
+      expect(f.svc.actionCapability(action)).toEqual({ available: false, code: "unavailable", reason: NEWER_PLAN_MESSAGE });
+    for (const action of ["check", "build"] as const)
+      expect(f.svc.capability({ kind: "package", action })).toEqual({ available: false, code: "unavailable", reason: NEWER_PLAN_MESSAGE });
+    // Editing the looks and renaming the collection still work, and saving keeps the plan byte for byte.
+    f.svc.dispatch({ kind: "collection.rename", name: "Looks again" });
+    expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
+    expect(STUDIO_PARTS.writeMinimal(f.saved()!).packagePlan).toEqual(plan);
+  }
+  const damaged = service({ ...collection(), packagePlan: "not a plan" });
+  await damaged.svc.execute({ kind: "initialize" });
+  expect(damaged.svc.summary().packagePlanIssue).toBe(DAMAGED_PLAN_MESSAGE);
+  expect(damaged.svc.capability({ kind: "package", action: "check" })).toMatchObject({ available: false, code: "unavailable" });
+});
+
+test("Save as copy gives every mod of the copy a fresh ID, so no split-off mod shares an archive with the original's (PIPE-89)", async () => {
+  const hair = { ...HAIR, exports: { exporterId: "hair/stub", brand: "XF Hair Artistry", selectorLabel: "XF Hair", selector: "vanilla" as const } };
+  const model: DocumentModel = { parts: new PartRegistry([EYE_MAKEUP, hair]), live: STUDIO_DOCUMENTS.live };
+  const value = { schema: COLLECTION_2, id: ID, name: "Looks", packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: NEW, name: "XF Hair Only", features: ["hair"] }] },
+    presets: [{ id: "f25f8eb1-8a83-4f65-a111-b83086382c18", name: "One", revision: 1,
+      parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: recipeFile(recipe())! }, hair: { schema: "xfs/hair-part-1", body: { colour: "#112233", strands: [1] } } } }] };
+  const f = service(value, model);
+  await f.svc.execute({ kind: "initialize" });
+  expect((await f.svc.execute({ kind: "saveCopy" })).ok).toBe(true);
+  const copy = f.saved()!, plan = copy.packagePlan as ModPackagePlan;
+  expect(copy.id).not.toBe(ID);
+  expect(plan.products).toHaveLength(1);
+  expect(plan.products[0]).toMatchObject({ name: "XF Hair Only", features: ["hair"] });
+  expect([ID, NEW, copy.id]).not.toContain(plan.products[0].id);
 });
 
 test("with two exporting features: split into its own mod, rename, assign back and merge, as collection actions", () => {

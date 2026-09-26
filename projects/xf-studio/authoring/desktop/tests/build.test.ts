@@ -218,18 +218,19 @@ test("a matching staged result is promoted with partial-export identities and no
   collection.presets[0].recipe.layers[0].finish = "glitter";
   // The host's own plan of the snapshot it hands the builder, on the prepared plate.
   const snapshot = JSON.stringify(hostCollection(collection));
-  const expected = checkProducts({ collection: JSON.parse(snapshot), exporters: STUDIO_EXPORTERS, diagnostics: false, preflight: false,
-    prerequisites: { [EYE_PLATE_PREREQUISITE]: platePlan }, collectionSha256: createHash("sha256").update(snapshot).digest("hex") }).result;
+  const planned = checkProducts({ collection: JSON.parse(snapshot), exporters: STUDIO_EXPORTERS, diagnostics: false, preflight: false,
+    prerequisites: { [EYE_PLATE_PREREQUISITE]: platePlan }, collectionSha256: createHash("sha256").update(snapshot).digest("hex") });
+  const expected = planned.result;
   const [product] = expected.products;
   const archive = Buffer.from("archive fixture"), xl = Buffer.from("xl fixture");
   const files = [[`${product.archive}.archive`, archive], [`${product.archive}.archive.xl`, xl]] as const;
   const fileEntries = files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }));
   const manifest = { schema: "xfs/local-package-2", productId: product.productId, modName: product.modName, nameSource: product.nameSource,
     archive: product.archive, collectionId: expected.collectionId, collectionSha256: expected.collectionSha256, originalPresetCount: expected.originalPresetCount,
-    omissions: expected.omissions, requirements: product.requirements,
-    features: product.features.map(f => ({ feature: f.feature, exporter: f.exporter, exporterVersion: f.exporterVersion, namespace: f.namespace,
+    omissions: product.omissions, requirements: product.requirements,
+    features: product.features.map((f, i) => ({ feature: f.feature, exporter: f.exporter, exporterVersion: f.exporterVersion, namespace: f.namespace,
       brand: f.brand, selectorLabel: f.selectorLabel, selector: f.selector, presets: f.presets, omissions: f.omissions, experimental: f.experimental,
-      requirements: f.requirements, packagedSha256: f.packagedSha256, details: f.details, planSha256: "0".repeat(64),
+      requirements: f.requirements, packagedSha256: f.packagedSha256, details: f.details, planSha256: createHash("sha256").update(JSON.stringify(planned.products[0].features[i].outcome.plan)).digest("hex"),
       verification: { presetCount: f.presets.length, verifiedFiles: 13, limits: [] } })),
     files: fileEntries, verifiedUnpackedFiles: 13, installed: false, gameRenderingVerified: false };
   const { schema: _schema, ready: _ready, products: _products, ...common } = expected;
