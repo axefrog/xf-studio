@@ -1,5 +1,5 @@
 /**
- * Eye makeup's mod exporter (feature-module platform §6), XF Eye Artistry. It wraps the existing package
+ * Eye makeup's mod exporter (feature-module platform §6), branded by mod-branding. It wraps the existing package
  * pipeline unchanged: the partial-export filter and plan (`package-filter`, `preset-collection`), the
  * 32-pixel compiler preflight, the resource builder (`package-resource-builder`) and the plate input. The
  * export host (platform/export) packs its resources with any other feature's into one archive and runs the
@@ -73,7 +73,7 @@ function plan(input: { collection: unknown; prerequisites: Readonly<Record<strin
   return { check, plan: planned, packaged, inventory: [...expectedPaths(planned)].sort(), xl: eyeMakeupXl(planned) };
 }
 
-/** Eye makeup's exporter: XF Eye Artistry, one selector with an Off choice and one choice per packaged look. */
+/** Eye makeup's exporter: one selector with an Off choice and one choice per packaged look. */
 export const EYE_MAKEUP_EXPORTER: FeatureExporter<EyeMakeupPlan> = Object.freeze<FeatureExporter<EyeMakeupPlan>>({
   id: EYE_MAKEUP_EXPORTER_ID, version: EYE_MAKEUP_EXPORTER_VERSION, feature: EYE_MAKEUP_FEATURE, label: "Eye makeup",
   info: EYE_MAKEUP_EXPORT, prerequisites: [EYE_PLATE_PREREQUISITE],

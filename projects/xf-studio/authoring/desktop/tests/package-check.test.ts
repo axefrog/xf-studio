@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { runDesktopCheck } from "../check-runner";
+import { runWorkerCheck } from "../../src/platform/export/check-runner";
 import { desktopPackageRequest } from "../package";
 import { derivePlateDocuments } from "../../src/eye-plate-cut";
 import { OFF_PLATE_REASON } from "../../src/package-filter";
@@ -39,7 +39,7 @@ test("pathological Check is stopped at its deadline without blocking loopback", 
 test("worker failure and malformed replies publish no Check result", async () => {
   const malformed = resolve(directory, "malformed-worker.js");
   writeFileSync(malformed, "self.onmessage = () => self.postMessage({ kind: 'success', result: null });\n");
-  const result = await runDesktopCheck({}, malformed, 1000);
+  const result = await runWorkerCheck({ collection: {}, prerequisites: {}, collectionSha256: "" }, malformed, 1000);
   expect(result).toMatchObject({ kind: "failure", code: "package_check_worker_failed" });
   const missing = await desktopPackageRequest(request({}), resolve(directory, "missing-worker.js"), 1000);
   expect(missing.status).toBe(503);
@@ -50,7 +50,7 @@ test("aborting an in-flight Check discards its worker result", async () => {
   const path = resolve(directory, "abort-worker.js");
   writeFileSync(path, "self.onmessage = () => { while (true) {} };\n");
   const controller = new AbortController();
-  const pending = runDesktopCheck({}, path, 1000, controller.signal);
+  const pending = runWorkerCheck({ collection: {}, prerequisites: {}, collectionSha256: "" }, path, 1000, controller.signal);
   controller.abort();
   expect(await pending).toMatchObject({ kind: "failure", code: "package_check_cancelled" });
 });
@@ -65,7 +65,7 @@ test("the standalone packaged Bun worker runs the shared preflight", async () =>
       "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
     const response = await desktopPackageRequest(request(collection), resolve(output, "check-worker.js"));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ready: true, originalPresetCount: 4 });
+    expect(await response.json()).toMatchObject({ schema: "xfs/package-check-2", ready: true, originalPresetCount: 4 });
   } finally { rmSync(output, { recursive: true, force: true }); }
 });
 
@@ -76,24 +76,26 @@ test("PIPE-33: the worker plans on the prepared plate the host passes, and omits
   const plate = plateReachInput(plateUvFootprint(withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(),
     "a\b.mesh"), plateLikeUv).mesh.Data.RootChunk));
   const worker = resolve(import.meta.dir, "../check-worker.ts");
-  const planned = await runDesktopCheck(collection, worker, 15_000, undefined, plate);
+  const planned = await runWorkerCheck({ collection, prerequisites: { "eye-makeup/plate": plate }, collectionSha256: "" }, worker, 15_000);
   expect(planned.kind).toBe("success");
   if (planned.kind !== "success") return;
-  expect(planned.result.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
+  const eyes = planned.result.products[0].features[0];
+  expect(eyes.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
     reason: OFF_PLATE_REASON }]);
-  expect(planned.result.plateUv?.footprintSha256).toBe(plate.sha256);
-  const unplanned = await runDesktopCheck(collection, worker, 15_000);
-  expect(unplanned.kind === "success" && unplanned.result.omissions).toEqual([]);
+  expect((eyes.details.plateUv as { footprintSha256: string }).footprintSha256).toBe(plate.sha256);
+  const unplanned = await runWorkerCheck({ collection, prerequisites: {}, collectionSha256: "" }, worker, 15_000);
+  expect(unplanned.kind === "success" && unplanned.result.products[0].features[0].omissions).toEqual([]);
 }, 30_000);
 
 test("PIPE-70: a posted collection's glitter knob gives no glitter route and no diagnostics in the desktop Check", async () => {
   const knob = withGlitterKnob(JSON.parse(readFileSync(resolve(import.meta.dir,
     "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8")));
   expect(preparePackageCollection(knob).plan.presets.some(p => p.route === "glitter")).toBe(true);
-  const checked = await runDesktopCheck(knob, resolve(import.meta.dir, "../check-worker.ts"), 15_000);
-  expect(checked.kind).toBe("success");
-  if (checked.kind !== "success") return;
-  expect(checked.result.presets.map(p => p.route)).not.toContain("glitter");
-  expect(checked.result.presets.every(p => !("diagnostics" in p))).toBe(true);
-  expect(checked.result.plateLiftsMm).toEqual([.4]);
+  // Through the desktop's own package route: the host drops the knob before the worker plans.
+  const response = await desktopPackageRequest(request(knob), resolve(import.meta.dir, "../check-worker.ts"), 15_000);
+  expect(response.status).toBe(200);
+  const eyes = (await response.json()).products[0].features[0];
+  expect(eyes.presets.map((p: { route: string }) => p.route)).not.toContain("glitter");
+  expect(eyes.presets.every((p: object) => !("diagnostics" in p))).toBe(true);
+  expect(eyes.details.plateLiftsMm).toEqual([.4]);
 }, 30_000);

@@ -71,7 +71,7 @@ test("by default two features merge into one XF Looks mod: one pack, one merged 
     .toEqual([["eye-makeup", `xfs_c${key(fixture.id)}`], [LIPS, `xfs_c${key(fixture.id)}_lips`]]);
   expect(manifest.verifiedUnpackedFiles).toBe(21);
   const xl = readFileSync(join(product.package, "archive", "pc", "mod", `${product.archive}.archive.xl`), "utf8");
-  expect(Bun.YAML.parse(xl).resource.scope["player_customization.app"]).toHaveLength(2);
+  expect((Bun.YAML.parse(xl) as { resource: { scope: Record<string, string[]> } }).resource.scope["player_customization.app"]).toHaveLength(2);
   expect(readPackageManifest(manifest, "eye-makeup").features.map(feature => feature.feature)).toEqual(["eye-makeup", LIPS]);
 }, 60_000);
 

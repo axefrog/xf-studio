@@ -9,7 +9,7 @@
  * - the default product's ID is the collection's ID and its archive is `xfs_c<collection>` (the name
  *   every eye-makeup build has had); any other product's archive is `xfs_m<product>`. Archive names are
  *   ID-based, never shown or edited, so a rename never changes load order;
- * - a product with one feature is named after that feature's brand ("XF Eye Artistry"), one with several
+ * - a product with one feature is named after that feature's brand (eye makeup's, from mod-branding), one with several
  *   is "XF Looks", until the person names it; two products of one collection with the same name get the
  *   collection's name added to the later one;
  * - a feature is in exactly one product: a plan putting it into two is refused (`PackagePlanConflict`).

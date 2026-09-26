@@ -522,6 +522,8 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   const build = readJson(join(out, "build.json")), plan: VerifierPlan = build.plan;
   const work = resolve(options.workDir ?? join(out, "verify"));
   ensure(!existsSync(work) || readdirSync(work).length === 0, `Verifier work directory is not empty: ${work}`);
+  // Alone in its archive, the whole generated tree before packing must still equal the recorded inventory.
+  ensure(sameJson(resourceRecords(listFiles(join(out, "archive")), plan), build.artifacts), "Generated resource inventory changed after pack");
   const archiveDir = join(work, "archive"), unpacked = join(work, "unpacked"), logs = join(work, "logs");
   for (const dir of [archiveDir, unpacked, logs]) mkdirSync(dir, { recursive: true });
   // Archive and declaration: hash exactly the bytes that are unbundled and parsed.

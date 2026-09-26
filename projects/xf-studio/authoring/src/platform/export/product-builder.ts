@@ -205,12 +205,12 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
     ["Bun tools", dirname(process.execPath)], ...present.flatMap(entry => entry.exporter.protectedInputs?.(given) ?? [])] as const;
   const roots = guardPrivateRoots(options, protectedInputs, collection);
   if (!same(roots.output, outputRoot)) fail("package_root_unsafe", "Private output roots changed during the build.");
-  mkdirSync(roots.build, { recursive: true });
   const tools = options.tools(wolvenkit, roots.build, options.signal);
   // One yield first, so an immediate cancel stops before any conversion.
   await new Promise(done => setImmediate(done));
   cancelled();
-  // What each feature's plan needs from its prerequisites (eye makeup: the packaged plate and its UV footprint).
+  // What each feature's plan needs from its prerequisites (eye makeup: the packaged plate and its UV footprint); a
+  // WolvenKit read, when one is needed, works in its own folder below the build root.
   const prerequisites: Record<string, unknown> = { ...given };
   for (const { exporter } of present) {
     if (!exporter.buildInputs) continue;
@@ -221,6 +221,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
   }
   const planned = check(prerequisites, false);
   stable();
+  // Nothing is written before the inputs are known good (a prerequisite's provenance, the plan).
+  mkdirSync(roots.build, { recursive: true });
 
   const built: Built[] = [];
   try {

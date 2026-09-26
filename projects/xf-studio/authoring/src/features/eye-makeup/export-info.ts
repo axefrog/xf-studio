@@ -11,7 +11,7 @@ import { EYE_MAKEUP_MOD } from "../../mod-branding";
  * one plate, one selector and one plan per collection.
  */
 export const EYE_MAKEUP_EXPORTER_ID = "eye-makeup/mesh-decal";
-/** Its own selector, because of the custom face plate; branded XF Eye Artistry. */
+/** Its own selector, because of the custom face plate; branded by mod-branding. */
 export const EYE_MAKEUP_EXPORT: ExportInfo = Object.freeze({ exporterId: EYE_MAKEUP_EXPORTER_ID,
   brand: EYE_MAKEUP_MOD.modName, selectorLabel: EYE_MAKEUP_MOD.selectorLabel, selector: "own" });
 /** The host prerequisite a Build needs: the built-in eye plate, cut from the head the game loads. */

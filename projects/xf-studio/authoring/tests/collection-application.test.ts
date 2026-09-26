@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/authoring-control-edits";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringGestures } from "../src/authoring-gestures";
@@ -36,9 +37,8 @@ function fixture() {
     list: async () => [collection, other].map(c => ({ id: c.id, name: c.name, count: 1, revision: 1, updatedAt: "now" })),
     get: async id => ({ collection: looks(id === other.id ? other : collection), revision: 1, updatedAt: "now" }),
     save: async c => { saves++; return { collection: structuredClone(c), revision: 2, updatedAt: "now" }; },
-    package: async (_action, c) => { packageInput = c; return { ready: true, collectionId: c.id,
-      namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "hash",
-      presets: [{ id: c.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
+    package: async (_action, input) => { const c = input as PresetCollection; packageInput = c;
+      return eyeCheck(c, { presets: [{ id: c.presets[0].id, revision: 1, appearance: "xfs_test" }] }); },
   };
   let bootstrap!: CollectionApplication;
   const files = new StudioFileOperations({ pick: async () => undefined, download: () => {},

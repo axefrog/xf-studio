@@ -104,11 +104,11 @@ test("core modules never import presentation modules or browser entry points", (
 
 test("the package builder keeps resource definitions pure and external processes in its adapters", () => {
   // Pure definitions: no file, process or compiler access.
-  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./engines/layered-makeup/plate-uv-window"]);
+  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./engines/layered-makeup/plate-uv-window", "./platform/api"]);
   // The plate-local UV window is pure arithmetic over WolvenKit JSON.
   expect(imports(source("engines/layered-makeup/plate-uv-window"))).toEqual([]);
   // Orchestration reaches WolvenKit only through the PackageResourceTools port.
-  for (const name of ["package-resource-builder", "package-build-service", "package-bake"])
+  for (const name of ["package-resource-builder", "platform/export/product-builder", "features/eye-makeup/export/index", "package-bake"])
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(/^(node:child_process|\.\/process-tree)$/);
   // Every WolvenKit command runs through the one shared runner, which alone starts the process.
@@ -228,8 +228,12 @@ const valueImportsOf = (tree: Tree, name: string, specifier: RegExp) =>
  */
 function platformViolations(tree: Tree): string[] {
   const pure = tree.names.filter(name => name.startsWith("platform/") && !name.startsWith("platform/scene/"));
+  // The export host (platform/export, host only) alone uses Node; the api and core never import it (§7 rule 6).
+  const host = (name: string) => name.startsWith("platform/export/");
   return pure.flatMap(name => [
-    ...resolvedIn(tree, name).filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/"))
+    ...resolvedIn(tree, name).filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/") ||
+      !host(name) && host(path))
+      .filter(path => !(host(name) && /^node:(?:crypto|fs|path)$/.test(path)))
       .filter(path => !(name === "platform/api/scene" && path === "three")).map(path => `${name} -> ${path}`),
     ...valueImportsOf(tree, name, /^three(?:\/|$)/).map(path => `${name} -> ${path} (value)`),
     ...(name === "platform/api/index" && /["']\.\/scene["']/.test(tree.text(name)) ? [`${name} re-exports platform/api/scene`] : []),
@@ -314,6 +318,27 @@ const rendererMayReach = (path: string) => path.startsWith("platform/api/") || p
   path.startsWith("three/addons/") || PURE_HELPERS.has(path) || SCENE_MATERIALS.has(path) || SCENE_MATERIAL_SUPPORT.has(path);
 const isRenderer = (name: string) => /^(?:engines|features)\/[\w-]+\/render\//.test(name);
 const isView = (name: string) => /^features\/[\w-]+\/view\//.test(name);
+/** A feature's host-only folders: its exporter and its independent verifier (feature-module platform §6, §7 rules 2, 3). */
+const isExporter = (name: string) => /^features\/[\w-]+\/export\//.test(name);
+const isVerifier = (name: string) => /^features\/[\w-]+\/verify\//.test(name);
+/**
+ * Legacy src modules a feature's exporter may still import: the eye-makeup package pipeline it wraps, each with the
+ * condition that removes it (the list only shrinks; a test fails when an entry is no longer imported). They move into
+ * features/eye-makeup/export once nothing outside the composition reaches them (the CORE-29 rule).
+ */
+const EXPORTER_LEGACY = new Map([
+  ["recipe-schema", "eye makeup's recipe-file lineage: moves into the feature once the library store and file operations read its part through the codec"],
+  ["package-filter", "the partial-export filter: moves once the collection service stops describing results with it"],
+  ["package-resources", "resource definitions: move with the resource builder"],
+  ["package-resource-builder", "the resource builder: moves once the plate prerequisite no longer reads its plate stems"],
+  ["package-build-wolvenkit", "the builder's WolvenKit adapter: moves with the resource builder (the CLI composes it)"],
+  ["package-action", "the preset identity and plate record types: move once the collection panel reads them through the facade"],
+  ["preset-collection", "the collection view and plan: move once the collection service and store stop reading them"],
+  ["archive-inventory", "the pre-pack path gate: moves with the resource builder"],
+  ["eye-plate-service", "the plate cache manifest and record: moves with the plate prerequisite (host-side eye-plate modules, step 9)"],
+  ["plate-uv-footprint-io", "the plate footprint file reader: moves with the plate prerequisite"],
+  ["plate-reach", "the plate reach record type: moves with the partial-export filter"],
+]);
 /** Platform internals no feature reaches, even through other modules: only `platform/api` is a feature's. */
 const PLATFORM_INTERNALS = /^platform\/(?:core|scene|export)(?:\/|$)/;
 
@@ -346,11 +371,13 @@ const FEATURE_CORE_LEGACY = new Map([
     "the registered specs (step 9)"],
   ["eye-makeup-model", "eye makeup's action and state types: move into features/eye-makeup once StudioApplication and the " +
     "presentation port take them from the registry (step 9)"],
+  ["mod-branding", "XF Eye Artistry's names (its export info's brand and selector label): move into features/eye-makeup once install " +
+    "detection, the framework check and the collection panel read them through the export info (step 9)"],
   ["eye-makeup-descriptors", "eye makeup's descriptors: move into features/eye-makeup once the application and presentation " +
     "read descriptors only from the registry (step 9)"],
 ]);
 /** What a feature's core must never reach, directly or through other modules: devices, presentation, composition, Node, Three. */
-const CORE_UNREACHABLE = /^(?:three(?:\/|$)|node:|bun:|studio-(?:main|startup)$|browser-|scene$|studio-ui\/|compose\/|features\/[\w-]+\/(?:view|render|export)\/)/;
+const CORE_UNREACHABLE = /^(?:three(?:\/|$)|node:|bun:|studio-(?:main|startup)$|browser-|scene$|studio-ui\/|compose\/|features\/[\w-]+\/(?:view|render|export|verify)\/)/;
 
 /**
  * The feature rules (§7 rules 1, 2 and 4, CORE-77): a feature imports no other feature, no platform internals, no
@@ -363,6 +390,7 @@ function featureViolations(tree: Tree): string[] {
   const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$)/.test(path);
   return tree.names.filter(name => name.startsWith("features/")).flatMap(name => {
     const own = name.split("/").slice(0, 2).join("/"), view = isView(name), render = isRenderer(name);
+    if (isExporter(name) || isVerifier(name)) return hostFeatureViolations(tree, name, own);
     const direct = resolvedIn(tree, name).filter(path =>
       path.startsWith("platform/") && !path.startsWith("platform/api") ||
       path.startsWith("features/") && !path.startsWith(`${own}/`) && path !== own ||
@@ -383,6 +411,29 @@ function featureViolations(tree: Tree): string[] {
   });
 }
 
+/** A feature's own core module (not its view, renderer, exporter or verifier). */
+const ownCoreModule = (own: string, path: string) => (path === own || path.startsWith(`${own}/`)) &&
+  !isView(path) && !isRenderer(path) && !isExporter(path) && !isVerifier(path);
+/**
+ * The host folders' rules (§7 rules 2 and 3): a feature's exporter imports only `platform/api`, engines (not their
+ * renderers), its own core and exporter, Node and its legacy list; its verifier imports only `platform/api`, Node, its
+ * own verifier folder and its core's export info, and reaches no exporter, engine or legacy pipeline module, even
+ * through other modules. Neither reaches platform internals, devices, the UI or the composition.
+ */
+function hostFeatureViolations(tree: Tree, name: string, own: string): string[] {
+  const exporter = isExporter(name);
+  const direct = resolvedIn(tree, name).filter(path => !(path.startsWith("platform/api") || /^node:(?:crypto|fs|path|os)$/.test(path) ||
+    (exporter ? path.startsWith(`${own}/export/`) || ownCoreModule(own, path) || path.startsWith("engines/") && !isRenderer(path) ||
+      EXPORTER_LEGACY.has(path) || PURE_HELPERS.has(path)
+      : path.startsWith(`${own}/verify/`) || path === `${own}/export-info`))).map(path => `${name} -> ${path}`);
+  const reached = [...reachIn(tree, name)].filter(path => PLATFORM_INTERNALS.test(path) ||
+    /^(?:three(?:\/|$)|studio-(?:main|startup)$|browser-|studio-ui\/|compose\/)/.test(path) ||
+    path.startsWith("features/") && !path.startsWith(`${own}/`) ||
+    (exporter ? isVerifier(path) || isView(path) || isRenderer(path)
+      : isExporter(path) || path.startsWith("engines/") || EXPORTER_LEGACY.has(path))).map(path => `${name} ->* ${path}`);
+  return [...direct, ...reached];
+}
+
 test("feature modules import the platform only through platform/api and never another feature, the UI or compose", () => {
   const features = walk("features");
   expect(features).toContain("features/eye-makeup/index");
@@ -391,8 +442,33 @@ test("feature modules import the platform only through platform/api and never an
   expect(featureViolations(DISK)).toEqual([]);
 });
 
+test("a feature's exporter and verifier keep to their folders' rules, and the exporter's legacy list only shrinks (§7 rules 2, 3)", () => {
+  expect(walk("features")).toContain("features/eye-makeup/export/index");
+  expect(walk("features")).toContain("features/eye-makeup/verify/index");
+  const used = new Set(DISK.names.filter(isExporter).flatMap(name => resolved(name)));
+  expect([...EXPORTER_LEGACY.keys()].filter(name => !used.has(name))).toEqual([]);
+  // The rules fail on the violations they name: a verifier reaching its exporter or an engine compiler, an exporter reaching the UI.
+  const probes = hostFeatureViolations(probed({ "features/eye-makeup/verify/index": `import { EYE_MAKEUP_EXPORTER as __probe } from "../export";` }),
+    "features/eye-makeup/verify/index", "features/eye-makeup");
+  expect(probes).toContain("features/eye-makeup/verify/index ->* features/eye-makeup/export/index");
+  expect(probes).toContain("features/eye-makeup/verify/index ->* engines/layered-makeup/preset-compiler");
+  const compiler = hostFeatureViolations(probed({ "features/eye-makeup/verify/texture-checks":
+    `import { compilePreset as __probe } from "../../../engines/layered-makeup/preset-compiler";` }), "features/eye-makeup/verify/texture-checks", "features/eye-makeup");
+  expect(compiler).toContain("features/eye-makeup/verify/texture-checks -> engines/layered-makeup/preset-compiler");
+  const ui = hostFeatureViolations(probed({ "features/eye-makeup/export/index": `import { h as __probe } from "../../../studio-ui/dom";` }),
+    "features/eye-makeup/export/index", "features/eye-makeup");
+  expect(ui).toContain("features/eye-makeup/export/index -> studio-ui/dom");
+});
+
+test("the browser bundle reaches no exporter, verifier or export host (§7 rule 6)", () => {
+  const browser = [...reach("studio-startup"), ...reach("studio-main")];
+  expect(browser.filter(path => isExporter(path) || isVerifier(path) || path.startsWith("platform/export/") || path === "compose/exporters")).toEqual([]);
+  // Only the host composition lists exporters; the browser composition lists none.
+  expect(reach("compose/exporters")).toContain("features/eye-makeup/export/index");
+});
+
 test("a feature's core imports only its allowlist, and the legacy list only shrinks (CORE-77)", () => {
-  const core = DISK.names.filter(name => name.startsWith("features/") && !isView(name) && !isRenderer(name));
+  const core = DISK.names.filter(name => name.startsWith("features/") && !isView(name) && !isRenderer(name) && !isExporter(name) && !isVerifier(name));
   const used = new Set(core.flatMap(name => resolved(name)));
   expect([...FEATURE_CORE_LEGACY.keys()].filter(name => !used.has(name))).toEqual([]);
   // What the legacy modules pull in stays inside the rules too: they reach no platform internals, devices or globals.

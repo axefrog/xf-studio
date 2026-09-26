@@ -5,10 +5,14 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { parseCollection } from "../../src/preset-collection";
-import { packagePresetIdentities } from "../../src/package-filter";
-import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, probeBun, runDesktopBuild, useBuilderBun, type DesktopPlatePreparer } from "../build";
-import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
+import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, desktopPackageAdapter, probeBun, useBuilderBun, type WolvenKitProbe } from "../build";
+import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
+import { runProductBuild, hostCollection, type HostPrerequisite, type PackageHostOutcome } from "../../src/platform/export/product-host";
+import { checkProducts } from "../../src/platform/export/product-check";
+import { STUDIO_EXPORTERS } from "../../src/compose/exporters";
+import { EYE_PLATE_PREREQUISITE } from "../../src/features/eye-makeup";
+import { PACKAGE_BUILD_2, type PackageBuildResult } from "../../src/platform/api";
+import type { LocalSettings } from "../../src/local-settings";
 import { createDesktopServer } from "../server";
 import { derivePlateDocuments } from "../../src/eye-plate-cut";
 import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
@@ -31,17 +35,32 @@ const plateManifest = { schema: "xfs/eye-plate-cache-1", recipeId: "xfs-expanded
     meshSha256: "3".repeat(64), morphSha256: "4".repeat(64) },
   files: { mesh: { name: "xfs_eye_plate.mesh", sha256: "5".repeat(64), bytes: 1 }, morph: { name: "xfs_eye_plate.morphtarget", sha256: "6".repeat(64), bytes: 1 } },
   uv: plateUvManifestRecord(FOOTPRINT), verification: {}, limits: [] } as unknown as EyePlateManifest;
-/** Stands in for WolvenKit derivation; records the cache root the host chose. */
-const fixturePlate = (seen: string[] = []): DesktopPlatePreparer => async (_settings, cacheRoot) => {
-  seen.push(cacheRoot);
-  const directory = resolve(cacheRoot, "fixture", "resources");
-  mkdirSync(directory, { recursive: true });
-  const manifestFile = resolve(cacheRoot, "fixture", "plate-manifest.json");
-  writeFileSync(manifestFile, JSON.stringify(plateManifest));
-  writeFileSync(resolve(cacheRoot, "fixture", PLATE_UV_FILE), JSON.stringify(FOOTPRINT));
-  return { directory, meshFile: resolve(directory, "xfs_eye_plate.mesh"), morphFile: resolve(directory, "xfs_eye_plate.morphtarget"),
-    manifestFile, manifest: plateManifest, reused: false };
-};
+/** The plate as the host plans on it: its footprint and provenance record. */
+const platePlan = { ...plateReachInput(FOOTPRINT), record: packagePlateRecord(plateManifest) };
+/** Stands in for the built-in plate: writes a cache entry as a derived plate has one, and records the cache root the host chose. */
+const fixturePlate = (seen: string[] = [], cacheRoot = ""): HostPrerequisite => ({
+  cached: () => null,
+  async prepare() {
+    seen.push(cacheRoot);
+    const directory = resolve(cacheRoot, "fixture", "resources");
+    mkdirSync(directory, { recursive: true });
+    const manifestFile = resolve(cacheRoot, "fixture", "plate-manifest.json");
+    writeFileSync(manifestFile, JSON.stringify(plateManifest));
+    writeFileSync(resolve(cacheRoot, "fixture", PLATE_UV_FILE), JSON.stringify(FOOTPRINT));
+    return { builder: { directory, manifest: manifestFile }, plan: platePlan };
+  },
+  discard(prepared) { discardCachedPlate(cacheRoot, (prepared.builder as { manifest: string }).manifest); },
+});
+type Outcome = { kind: "success"; result: PackageBuildResult } | { kind: "failure"; code: string; message: string };
+/** One desktop Build through the shared host service with the desktop's adapter and a stand-in plate. */
+async function runDesktopBuild(value: unknown, settings: LocalSettings, data: string, tools: string, timeoutMs: number, signal: AbortSignal | undefined,
+  probe: WolvenKitProbe, plate: (cacheRoot: string) => HostPrerequisite, log: (message: string) => void = () => {}): Promise<Outcome> {
+  const adapter = desktopPackageAdapter({ exporters: STUDIO_EXPORTERS, settings, dataRoot: data, toolsRoot: tools, checkWorker: "",
+    wolvenKitProbe: probe, log, prerequisites: () => ({ [EYE_PLATE_PREREQUISITE]: plate(resolve(data, "plate-cache")) }) });
+  const outcome: PackageHostOutcome = await runProductBuild(adapter, value, signal ?? new AbortController().signal, timeoutMs);
+  return outcome.ok ? { kind: "success", result: outcome.result as PackageBuildResult } : { kind: "failure", code: outcome.code, message: outcome.message };
+}
+const withPlate = (seen: string[] = []) => (cacheRoot: string) => fixturePlate(seen, cacheRoot);
 
 /** The packaged builder is one Bun script; each test supplies a small stand-in for it. */
 function host(builder = "await Bun.sleep(30_000);\n", toolPlacement: "sibling" | "installed" | "work" = "sibling") {
@@ -133,7 +152,7 @@ test("a desktop Build deadline stops the process tree and publishes no candidate
   // The builder starts a grandchild (as it starts WolvenKit); stopping the tree must stop both.
   const childCode = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "survived"), 1000);`;
   const h = host(`Bun.spawn([process.execPath, "-e", ${JSON.stringify(childCode)}]);\nawait Bun.sleep(30_000);\n`);
-  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 400, undefined, fixtureWolvenKit, fixturePlate());
+  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 400, undefined, fixtureWolvenKit, withPlate());
   expect(result).toMatchObject({ kind: "failure", code: "package_build_timeout" });
   await Bun.sleep(1200);
   expect(existsSync(marker)).toBe(false);
@@ -145,28 +164,31 @@ test("PIPE-37: a stale cached plate footprint discards that plate and builds onc
   const h = host([
     `const fs = require("node:fs");`,
     `fs.appendFileSync(${JSON.stringify(runs)}, "run ");`,
-    `console.error("XFS_PACKAGE_ERROR=" + JSON.stringify({ code: "package_plate_stale", message: "The eye plate's recorded UV footprint differs from the plate itself." }));`,
+    `console.error("XFS_PACKAGE_ERROR=" + JSON.stringify({ code: "package_prerequisite_stale", prerequisite: "eye-makeup/plate", message: "The eye plate's recorded UV footprint differs from the plate itself." }));`,
     `process.exit(1);`,
   ].join("\n"));
   const seen: string[] = [], logs: string[] = [];
   const discarded: boolean[] = [];
-  const preparer: DesktopPlatePreparer = async (settings, cacheRoot, signal) => {
+  const plate = (cacheRoot: string): HostPrerequisite => {
+    const inner = fixturePlate(seen, cacheRoot);
     // The second preparation finds the first plate's entry gone, as ensureEyePlate would, and derives it again.
-    discarded.push(seen.length > 0 && !existsSync(resolve(cacheRoot, "fixture", "plate-manifest.json")));
-    return fixturePlate(seen)(settings, cacheRoot, signal);
+    return { ...inner, async prepare(signal) {
+      discarded.push(seen.length > 0 && !existsSync(resolve(cacheRoot, "fixture", "plate-manifest.json")));
+      return inner.prepare(signal);
+    } };
   };
-  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 10_000, undefined, fixtureWolvenKit, preparer, message => logs.push(message));
+  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 10_000, undefined, fixtureWolvenKit, plate, message => logs.push(message));
   expect(result).toMatchObject({ kind: "failure", code: "package_build_failed" });
   expect(readFileSync(runs, "utf8").trim().split(/\s+/)).toEqual(["run", "run"]);
   expect(discarded).toEqual([false, true]);
-  expect(logs.join(" | ")).toContain("stale; preparing the plate again");
+  expect(logs.join(" | ")).toContain("stale; preparing it again");
 }, 30_000);
 
 test("an invalid collection is refused before starting the builder", async () => {
   const h = host();
   const seen: string[] = [];
   const result = await runDesktopBuild({ collectionPath: h.game }, h.settings, h.data, h.tools, 100,
-    undefined, fixtureWolvenKit, fixturePlate(seen));
+    undefined, fixtureWolvenKit, withPlate(seen));
   expect(result).toMatchObject({ kind: "failure", code: "invalid_collection" });
   expect(seen).toEqual([]);
 });
@@ -174,14 +196,15 @@ test("an invalid collection is refused before starting the builder", async () =>
 test("an unsupported game head stops Build with its explanation before the builder starts", async () => {
   const marker = resolve(root, `wrapper-${crypto.randomUUID()}`);
   const h = host(`require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
-  const unsupported: DesktopPlatePreparer = async () => {
+  const failing = (prepare: HostPrerequisite["prepare"]) => () => ({ cached: () => null, discard() {}, prepare });
+  const unsupported = failing(async () => {
     throw new EyePlateError("plate_source_unsupported", "Update XF Studio to a version that supports your game.");
-  };
+  });
   const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 3000, undefined, fixtureWolvenKit, unsupported);
   expect(result).toEqual({ kind: "failure", code: "plate_source_unsupported", message: "Update XF Studio to a version that supports your game." });
   expect(existsSync(marker)).toBe(false);
-  const slow: DesktopPlatePreparer = (_settings, _cache, signal) => new Promise((_, reject) =>
-    signal.addEventListener("abort", () => reject(new EyePlateError("plate_cancelled", "cancelled"))));
+  const slow = failing(signal => new Promise((_, reject) =>
+    signal.addEventListener("abort", () => reject(new EyePlateError("plate_cancelled", "cancelled")))));
   expect(await runDesktopBuild(fixture, h.settings, h.data, h.tools, 200, undefined, fixtureWolvenKit, slow))
     .toMatchObject({ kind: "failure", code: "package_build_timeout" });
   const cancel = new AbortController();
@@ -193,42 +216,41 @@ test("an unsupported game head stops Build with its explanation before the build
 test("a matching staged result is promoted with partial-export identities and no install", async () => {
   const collection = structuredClone(fixture);
   collection.presets[0].recipe.layers[0].finish = "glitter";
-  const parsed = parseCollection(collection);
-  const prepared = preparePackageCollection(parsed, plateReachInput(FOOTPRINT));
-  const namespace = prepared.plan.namespace;
-  const archive = Buffer.from("archive fixture");
-  const xl = Buffer.from("xl fixture");
-  const files = [[`${namespace}.archive`, archive], [`${namespace}.archive.xl`, xl]] as const;
-  const manifest = { schema: "xfs/local-package-1", collectionId: parsed.id,
-    packagedCollectionSha256: createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex"),
-    originalPresetCount: parsed.presets.length, omissions: prepared.omissions, namespace,
-    modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
-    presets: packagePresetIdentities(prepared.plan), plateLiftsMm: prepared.plan.plate.liftsMm, plateUv: prepared.plateUv,
-    verifiedPresetCount: prepared.packaged.presets.length,
-    files: files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length,
-      sha256: createHash("sha256").update(bytes).digest("hex") })),
-    plate: { source: "derived", recipeId: plateManifest.recipeId, recipeRevision: plateManifest.recipeRevision,
-      sourceRevision: plateManifest.source.revisionId, cacheKey: plateManifest.cacheKey,
-      meshSha256: plateManifest.files.mesh.sha256, morphSha256: plateManifest.files.morph.sha256 },
-    installed: false, gameRenderingVerified: false };
+  // The host's own plan of the snapshot it hands the builder, on the prepared plate.
+  const snapshot = JSON.stringify(hostCollection(collection));
+  const expected = checkProducts({ collection: JSON.parse(snapshot), exporters: STUDIO_EXPORTERS, diagnostics: false, preflight: false,
+    prerequisites: { [EYE_PLATE_PREREQUISITE]: platePlan }, collectionSha256: createHash("sha256").update(snapshot).digest("hex") }).result;
+  const [product] = expected.products;
+  const archive = Buffer.from("archive fixture"), xl = Buffer.from("xl fixture");
+  const files = [[`${product.archive}.archive`, archive], [`${product.archive}.archive.xl`, xl]] as const;
+  const fileEntries = files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }));
+  const manifest = { schema: "xfs/local-package-2", productId: product.productId, modName: product.modName, nameSource: product.nameSource,
+    archive: product.archive, collectionId: expected.collectionId, collectionSha256: expected.collectionSha256, originalPresetCount: expected.originalPresetCount,
+    omissions: expected.omissions, requirements: product.requirements,
+    features: product.features.map(f => ({ feature: f.feature, exporter: f.exporter, exporterVersion: f.exporterVersion, namespace: f.namespace,
+      brand: f.brand, selectorLabel: f.selectorLabel, selector: f.selector, presets: f.presets, omissions: f.omissions, experimental: f.experimental,
+      requirements: f.requirements, packagedSha256: f.packagedSha256, details: f.details, planSha256: "0".repeat(64),
+      verification: { presetCount: f.presets.length, verifiedFiles: 13, limits: [] } })),
+    files: fileEntries, verifiedUnpackedFiles: 13, installed: false, gameRenderingVerified: false };
+  const { schema: _schema, ready: _ready, products: _products, ...common } = expected;
+  const built = { ...common, schema: PACKAGE_BUILD_2, installed: false, gameRenderingVerified: false, products: [{ ...product,
+    package: "PACKAGE", manifest: "MANIFEST", archiveSha256: fileEntries[0].sha256, xlSha256: fileEntries[1].sha256, verifiedUnpackedFiles: 13,
+    installed: false, gameRenderingVerified: false }] };
   // A stand-in builder that writes a matching staged candidate, as the real one does after verification.
   const builder = [
-    `const fs = require("node:fs"), path = require("node:path"), { createHash } = require("node:crypto");`,
+    `const fs = require("node:fs"), path = require("node:path");`,
     `const arg = name => process.argv[process.argv.indexOf(name) + 1];`,
-    `if (JSON.parse(fs.readFileSync(arg("--plate-manifest"), "utf8")).cacheKey !== ${JSON.stringify("2".repeat(64))} ||`,
-    `  !fs.statSync(arg("--plate")).isDirectory() || arg("--app-root") !== ${JSON.stringify("TOOLS")}) process.exit(3);`,
+    `const plate = JSON.parse(fs.readFileSync(arg("--prerequisites"), "utf8"))[${JSON.stringify(EYE_PLATE_PREREQUISITE)}];`,
+    `if (JSON.parse(fs.readFileSync(plate.manifest, "utf8")).cacheKey !== ${JSON.stringify("2".repeat(64))} ||`,
+    `  !fs.statSync(plate.directory).isDirectory() || arg("--app-root") !== ${JSON.stringify("TOOLS")}) process.exit(3);`,
     `fs.mkdirSync(arg("--build-root"), { recursive: true });`,
     `fs.writeFileSync(path.join(arg("--build-root"), "private-intermediate"), "fixture");`,
     `const final = path.join(arg("--dist-root"), "candidate-fixture"), payload = path.join(final, "archive", "pc", "mod");`,
     `fs.mkdirSync(payload, { recursive: true });`,
-    `const m = ${JSON.stringify(manifest)};`,
-    `m.collectionSha256 = createHash("sha256").update(fs.readFileSync(arg("--collection"))).digest("hex");`,
     ...files.map(([name, bytes]) => `fs.writeFileSync(path.join(payload, ${JSON.stringify(name)}), Buffer.from(${JSON.stringify(bytes.toString("hex"))}, "hex"));`),
-    `fs.writeFileSync(path.join(final, "manifest.json"), JSON.stringify(m));`,
-    `console.log("XFS_PACKAGE_RESULT=" + JSON.stringify({ package: final, manifest: path.join(final, "manifest.json"),`,
-    `  modName: m.modName, selectorLabel: m.selectorLabel, archiveSha256: m.files[0].sha256, presetCount: m.verifiedPresetCount,`,
-    `  originalPresetCount: m.originalPresetCount, omissions: m.omissions, packagedCollectionSha256: m.packagedCollectionSha256,`,
-    `  plate: m.plate, plateLiftsMm: m.plateLiftsMm, plateUv: m.plateUv, installed: false, gameRenderingVerified: false }));`,
+    `fs.writeFileSync(path.join(final, "manifest.json"), JSON.stringify(${JSON.stringify(manifest)}));`,
+    `const r = ${JSON.stringify(built)}; r.products[0].package = final; r.products[0].manifest = path.join(final, "manifest.json");`,
+    `console.log("XFS_PACKAGE_RESULT=" + JSON.stringify(r));`,
   ].join("\n");
   // The tools root is only known once the host exists; substitute it into the builder afterwards.
   const h = host("// placeholder\n");
@@ -237,14 +259,13 @@ test("a matching staged result is promoted with partial-export identities and no
   writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: BUILD_TOOLS_SCHEMA,
     files: { [builderEntry]: createHash("sha256").update(readFileSync(entry)).digest("hex") } }));
   const seen: string[] = [];
-  const result = await runDesktopBuild(collection, h.settings, h.data, h.tools, 3000,
-    undefined, fixtureWolvenKit, fixturePlate(seen));
+  const result = await runDesktopBuild(collection, h.settings, h.data, h.tools, 3000, undefined, fixtureWolvenKit, withPlate(seen));
   expect(seen).toEqual([resolve(h.data, "plate-cache")]);
   expect(result.kind).toBe("success");
   if (result.kind !== "success") return;
-  expect(result.result.omissions).toEqual(prepared.omissions);
-  expect(result.result.package).toStartWith(resolve(h.data, "package-candidates"));
-  expect(existsSync(result.result.manifest)).toBe(true);
+  expect(result.result.products[0].features[0].omissions).toEqual(product.features[0].omissions);
+  expect(result.result.products[0].package).toStartWith(resolve(h.data, "package-candidates"));
+  expect(existsSync(result.result.products[0].manifest)).toBe(true);
   expect(result.result.installed).toBe(false);
   expect(readdirSync(resolve(h.data, "package-work"))).toEqual([]);
 });
@@ -314,7 +335,7 @@ test("PIPE-70: a posted collection's glitter knob never reaches the desktop buil
     `fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ keys: Object.keys(collection), argv: process.argv.slice(2) }));`,
     `process.exit(3);`,
   ].join("\n"));
-  const result = await runDesktopBuild(knob, h.settings, h.data, h.tools, 15_000, undefined, fixtureWolvenKit, fixturePlate());
+  const result = await runDesktopBuild(knob, h.settings, h.data, h.tools, 15_000, undefined, fixtureWolvenKit, withPlate());
   expect(result.kind).toBe("failure");
   const record = JSON.parse(readFileSync(seen, "utf8"));
   expect(record.keys).not.toContain("diagnostics");

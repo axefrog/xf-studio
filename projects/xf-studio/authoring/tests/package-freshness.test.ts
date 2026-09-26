@@ -4,10 +4,10 @@
  * editor revision): no snapshot, no copy, and never a write of the live editor into the draft.
  */
 import { expect, test } from "bun:test";
+import { eyeCheck } from "./fixtures/package-results";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import type { EditorSnapshot } from "../src/collection-session";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import type { PackageCheck } from "../src/package-action";
 import { eyeMakeupCollection, parseCollection } from "../src/preset-collection";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { restore } from "./fixtures/workspace-observable";
@@ -24,10 +24,8 @@ function fixture() {
   let editor: EditorSnapshot = { recipe: state.recipe, active: state.active, selected: state.selected, history: state.history,
     fieldSelection: state.fieldSelection };
   let revision = 0;
-  const check = (collection: { id: string; presets: { id: string; revision: number }[] }): PackageCheck => ({ ready: true,
-    collectionId: collection.id, namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry",
-    originalPresetCount: collection.presets.length, omissions: [], packagedCollectionSha256: "hash",
-    presets: collection.presets.map(p => ({ id: p.id, revision: p.revision, appearance: "xfs_test" })) });
+  const check = (input: unknown) => { const collection = input as { id: string; presets: { id: string; revision: number }[] };
+    return eyeCheck(collection, { presets: collection.presets.map(p => ({ id: p.id, revision: p.revision, appearance: "xfs_test" })) }); };
   const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("unused"); },
     save: async () => { throw Error("unused"); }, package: async (_action, collection) => check(collection) };
   const service = new CollectionService(STUDIO_DOCUMENTS, state.collections, state.library, () => editor,
