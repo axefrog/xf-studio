@@ -286,7 +286,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- None.
+- **Choices prepared ahead** (claude/choice-prefetch): `src/choice-prefetch.ts` (host application service: one job per open Character panel row, batches, a person's own change first, time and disk bounds, per-choice states), `src/choice-manifest.ts` (what a prepared request depended on, so a later session knows it is ready; invalidated by archive identity, winner, ArchiveXL files and WolvenKit), `src/prepared-files.ts` (the prepared files' size, least-recently-used budget and Clear), `warmCharacters` in `src/character-detail-service.ts`, the exporter's `exportAll` (several archives and kinds in one launch) and the fetcher's foreground and background lanes (`src/resolver-host.ts`). Host endpoint: `POST /api/preview-character/creator {kind:"prefetch" | "prefetchStop" | "prepared" | "clearPrepared"}`; action `character.clearPreparedFiles`.
 
 ## Fixed in claude/platform-step7
 

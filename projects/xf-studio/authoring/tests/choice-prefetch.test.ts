@@ -26,7 +26,7 @@ const settle = async () => { for (let i = 0; i < 20; i++) await sleep(1); };
 // ---- The prefetcher over fakes ----
 
 const withChoice = (position: number): CharacterRequest => ({ ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "hair", choice: `c${position}` }] });
-function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; timeMs: number; bytes: number }>; bytes?: () => number; now?: () => number } = {}) {
+function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; maxBatch: number; timeMs: number; bytes: number }>; bytes?: () => number; now?: () => number } = {}) {
   const warmed: number[][] = [];
   let foreground: Promise<void> = Promise.resolve();
   const deps: PrefetchDeps = {
@@ -37,7 +37,7 @@ function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"];
     preparedBytes: async () => options.bytes?.() ?? 0,
     now: options.now,
   };
-  const service = new ChoicePrefetcher(deps, { batch: 2, timeMs: 60_000, bytes: 1e12, ...options.limits });
+  const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12, ...options.limits });
   return { service, warmed, hold: (until: Promise<void>) => { foreground = until; } };
 }
 const ask = (service: ChoicePrefetcher, positions: number[], focus: number | null = null) =>
@@ -48,6 +48,7 @@ describe("preparing a row's choices ahead", () => {
     const { service, warmed } = prefetcher({ ready: new Set([1]) });
     expect(ask(service, [0, 1, 2, 3, 4]).states).toBe("?????");
     await settle();
+    // A batch of 2 first, then doubling.
     expect(warmed).toEqual([[0, 2], [3, 4]]);
     expect(ask(service, [0, 1, 2, 3, 4])).toMatchObject({ states: "rrrrr", busy: false, stopped: null });
 
@@ -59,6 +60,13 @@ describe("preparing a row's choices ahead", () => {
     expect(ask(hinted.service, [0, 150]).states).toBe("r?");
     await settle();
     expect(ask(hinted.service, [0, 150]).states).toBe("rn");
+  });
+
+  test("later batches grow: a small first batch, then doubling up to the most", async () => {
+    const { service, warmed } = prefetcher({ limits: { batch: 2, maxBatch: 8 } });
+    ask(service, Array.from({ length: 16 }, (_, index) => index));
+    await settle();
+    expect(warmed.map(batch => batch.length)).toEqual([2, 4, 8, 2]);
   });
 
   test("a person's own change comes first: the batch in WolvenKit stops and is queued again, the queue waits, the change's choice shows as prepared", async () => {
@@ -291,6 +299,19 @@ describe("exports in as few launches as possible", () => {
     expect(launches.at(-1)).toMatchObject({ withMaterials: true, paths: ["x\\a.mesh"] });
     expect(core.get("x\\a.mesh")).toMatchObject({ complete: true });
     expect(core.get("x\\a.mesh")!.materials).toBeTruthy();
+  });
+
+  test("a resource clean launches export nothing for settles: from the PARTIAL_RUNSth it isn't asked for again, and counts as prepared", async () => {
+    const root = temporary(), a = join(root, "a.archive");
+    // WolvenKit exports nothing for it, with or without the game folder (a CCXL mesh it can't uncook).
+    let launches = 0;
+    const gone = createGameAssetExporter(join(root, "exports"), async () => { launches++; }, { tool: { key: "fake", label: "Fake" } });
+    const ask = () => gone.exportAll!([{ source: archiveExportSource(a, root), geometry: ["x\gone.mesh"], textures: [], masks: [] }]);
+    for (let run = 0; run < PARTIAL_RUNS; run++) expect((await ask())[0]!.geometry.size).toBe(0);
+    expect(launches).toBe(PARTIAL_RUNS * 2);
+    expect(gone.has!("geometry", "x\gone.mesh", archiveExportSource(a, root))).toBe(true);
+    await ask();
+    expect(launches).toBe(PARTIAL_RUNS * 2);
   });
 
   test("a partial export (no materials file) is kept from its first clean run and served from the cache from the PARTIAL_RUNSth", async () => {

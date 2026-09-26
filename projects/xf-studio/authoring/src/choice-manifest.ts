@@ -85,17 +85,22 @@ export type ManifestCheck = {
   tool: string;
   xl: string;
 };
-/** Whether a manifest holds on the installation opened now (see the module comment). Reads no resource; checks only that files exist. */
-export function manifestHolds(manifest: ChoiceManifest, check: ManifestCheck): boolean {
-  if (manifest.tool !== check.tool || manifest.xl !== check.xl || !check.exporter.has) return false;
+/** Why a manifest doesn't hold on the installation opened now (see the module comment), or null when it does. Reads no resource. */
+export function manifestProblem(manifest: ChoiceManifest, check: ManifestCheck): string | null {
+  if (manifest.tool !== check.tool) return "another WolvenKit";
+  if (manifest.xl !== check.xl) return "the ArchiveXL files changed";
+  if (!check.exporter.has) return "the exporter can't be asked";
   for (const [hash, entryHash, archive] of manifest.reads) {
     const { entry, lookup } = check.graph.locate(refFromHash(hash));
-    if ((lookup.winner?.id ?? null) !== archive || entry.hash !== entryHash) return false;
-    if (lookup.winner && !check.fetcher.isCached(lookup.winner, entry.hash)) return false;
+    if ((lookup.winner?.id ?? null) !== archive || entry.hash !== entryHash) return `another archive provides ${hash}`;
+    if (lookup.winner && !check.fetcher.isCached(lookup.winner, entry.hash)) return `${hash} isn't in the resolver's cache for ${lookup.winner.name}`;
   }
   for (const [kind, path, archive] of manifest.exports) {
     const winner = check.graph.locate(refFromPath(path)).lookup.winner;
-    if (winner?.id !== archive || !check.exporter.has(kind, path, archiveExportSource(archive, check.gameRoot))) return false;
+    if (winner?.id !== archive) return `another archive provides ${path}`;
+    if (!check.exporter.has(kind, path, archiveExportSource(archive, check.gameRoot))) return `${path} isn't in the export cache for ${winner.name}`;
   }
-  return true;
+  return null;
 }
+/** Whether a manifest holds on the installation opened now. */
+export const manifestHolds = (manifest: ChoiceManifest, check: ManifestCheck): boolean => manifestProblem(manifest, check) === null;

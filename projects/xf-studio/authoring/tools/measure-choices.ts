@@ -4,11 +4,12 @@
  * the caches are the ones this checkout's server uses (`data/preview-cache`, `data/resolver-cache`, or XFS_PREVIEW_CORE_CACHE and
  * XFS_RESOLVER_CACHE), so point those at copies when a measurement must start from a known state.
  *
- *   bun tools/measure-choices.ts [--save <file.dat>] [--prefetch] <part/option>=<choice> ...
+ *   bun tools/measure-choices.ts [--save <file.dat>] [--prefetch <part/option>:<first>-<last>] <step> ...
  *
- * Each `<part/option>=<choice>` is one step, set on top of the steps before it (a switcher choice's activated options are looked up
- * in the catalogue). `--prefetch <part/option>` prefetches that option's choices first and reports what it cost. Game folder,
- * launch route and WolvenKit come from the Studio's saved setup.
+ * A step `<part/option>=<choice>` is a click, set on top of the steps before it (a switcher choice's activated options are looked up
+ * in the catalogue). A step `+<part/option>:<first>-<last>` (or `--prefetch`, first) prepares those positions of the option ahead on
+ * the V as the steps so far left it, as an open Character panel row does, and reports its launches, time and added disk. Game
+ * folder, launch route and WolvenKit come from the Studio's saved setup.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -76,20 +77,24 @@ async function choiceOf(spec: string): Promise<CharacterChoice> {
     if (offset + page.choices.length >= page.total) throw Error(`No choice ${key} in ${id}`);
   }
 }
-if (prefetchOption) {
-  // `--prefetch <part/option>:<first>-<last>`: prepare those positions of the option ahead, as an open row does, and report the cost.
-  const [option, range = "0-7"] = prefetchOption.split(":") as [string, string?];
+/** Prepare positions of an option ahead on the V as the steps so far left it, as an open row does, and report the cost. */
+async function prefetch(spec: string) {
+  const [option, range = "0-7"] = spec.split(":") as [string, string?];
   const [first, last] = range.split("-").map(Number) as [number, number];
   const positions = Array.from({ length: last - first + 1 }, (_, index) => first + index);
-  const before = launches(), at = performance.now(), bytes = (await host.preparedFiles()).bytes;
-  let answer = host.prefetchRow({ base: requestOf([]), option, positions });
-  while (answer.busy) { await Bun.sleep(250); answer = host.prefetchRow({ base: requestOf([]), option, positions }); }
+  const before = launches(), at = performance.now(), bytes = (await host.preparedFiles()).bytes, base = requestOf([...choices]);
+  let answer = host.prefetchRow({ base, option, positions });
+  const firstStates = answer.states;
+  while (answer.busy) { await Bun.sleep(250); answer = host.prefetchRow({ base, option, positions }); }
   const added = (await host.preparedFiles()).bytes - bytes, used = since(before);
   console.log(`prefetch ${option} ${range}: ${((performance.now() - at) / 1000).toFixed(1)} s, ${used.count} launch(es): ${used.text}; ` +
-    `states ${answer.states}${answer.stopped ? ` (stopped: ${answer.stopped})` : ""}; +${(added / 1024 ** 2).toFixed(1)} MB prepared files ` +
-    `(${(added / 1024 ** 2 / positions.length).toFixed(1)} MB per choice)`);
+    `states ${firstStates} -> ${answer.states}${answer.stopped ? ` (stopped: ${answer.stopped})` : ""}; +${(added / 1024 ** 2).toFixed(1)} MB prepared files ` +
+    `(${(added / 1024 ** 2 / positions.length).toFixed(2)} MB per choice)`);
 }
+if (prefetchOption) await prefetch(prefetchOption);
 for (const spec of args) {
+  // `+<part/option>:<first>-<last>` prepares ahead on the V as it is now; `<part/option>=<choice>` is a click.
+  if (spec.startsWith("+")) { await prefetch(spec.slice(1)); continue; }
   choices.push(await choiceOf(spec));
   await prepare(spec, [...choices]);
 }

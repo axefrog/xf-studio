@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, utimesSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { DerivedCache, fileSha256 } from "./derived-cache";
+import { DerivedCache, fileSha256, writeFileAtomic } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
 
 /**
@@ -223,10 +223,30 @@ export class GameAssetExportCache extends DerivedCache {
   }
   /** Whether `read` would find the entry with `required` files (present at their recorded sizes, not re-hashed): a cheap readiness check. */
   present(depotPath: string, source: ExportSource, required: readonly string[] = []): boolean {
+    if (this.settledNone(depotPath, source)) return true;
     const meta = this.meta(depotPath, source);
     if (!meta || (meta.partialRuns ?? PARTIAL_RUNS) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
     const directory = this.entryDirectory(depotPath, source);
     return Object.entries(meta.files).every(([name, file]) => { try { return statSync(join(directory, name)).size === file.bytes; } catch { return false; } });
+  }
+  private noneFile(depotPath: string, source: ExportSource) { return `${this.entryDirectory(depotPath, source)}.none.json`; }
+  /**
+   * Clean launches so far that exported nothing for this resource (WolvenKit can't uncook it: a CCXL mesh it fails on). From the
+   * `PARTIAL_RUNS`th it is settled: not asked for again until the archive or WolvenKit changes (both are in the key), as the
+   * resolver's `not-written` markers are.
+   */
+  noneRuns(depotPath: string, source: ExportSource): number {
+    try { const runs = Number((this.readJson(this.noneFile(depotPath, source)) as { runs?: unknown }).runs); return Number.isInteger(runs) ? runs : 0; }
+    catch { return 0; }
+  }
+  settledNone(depotPath: string, source: ExportSource): boolean { return this.noneRuns(depotPath, source) >= PARTIAL_RUNS; }
+  /** Count one more clean launch that exported nothing for this resource (advisory). */
+  markNone(depotPath: string, source: ExportSource): void {
+    try {
+      this.ensure();
+      mkdirSync(join(this.root, "resources"), { recursive: true });
+      writeFileAtomic(this.noneFile(depotPath, source), JSON.stringify({ depotPath, runs: this.noneRuns(depotPath, source) + 1, at: new Date().toISOString() }));
+    } catch { /* Tried again next time. */ }
   }
   /** Clean runs so far that exported this resource only partly (0 when none). */
   partialRuns(depotPath: string, source: ExportSource): number { return this.meta(depotPath, source)?.partialRuns ?? 0; }
@@ -297,8 +317,11 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
   /** What the cache already answers for a request; the rest is returned as needed. Only a complete (or lasting partial) entry is a hit. */
   const fromCache = (request: ExportRequest, answer: ExportAnswer, decoded: string | null = null): Needed => {
     const needed: Needed = { geometry: [], textures: [], masks: [] }, materials = request.materials ?? false;
+    // A resource WolvenKit settled on exporting nothing for is not asked for again (absent from the answer, as a missing one is).
+    const settled = (depotPath: string) => cache.settledNone(depotPath, request.source);
     for (const depotPath of new Set(request.geometry)) {
       checkDepotPath(depotPath);
+      if (settled(depotPath)) continue;
       const cached = cache.read(depotPath, request.source);
       // A lasting partial entry answers too (its GLB is served; `complete` says what is missing).
       const lasting = !!cached && cache.partialRuns(depotPath, request.source) >= PARTIAL_RUNS;
@@ -308,6 +331,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
     }
     for (const depotPath of new Set(request.textures)) {
       checkDepotPath(depotPath);
+      if (settled(depotPath)) continue;
       const cached = cache.read(depotPath, request.source)?.["texture.png"];
       // Textures WolvenKit decoded while resolving this session's materials are reused before a second launch.
       const already = decoded && depotFile(decoded, pngFor(depotPath));
@@ -317,6 +341,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
     }
     for (const depotPath of new Set(request.masks)) {
       checkDepotPath(depotPath);
+      if (settled(depotPath)) continue;
       const cached = cachedLayers(cache.read(depotPath, request.source));
       if (cached) storeMask(answer, request.source, depotPath, cached, false); else needed.masks.push(depotPath);
     }
@@ -436,8 +461,17 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
         }
         if (again.length) await launch(again, true);
       };
-      try { for (const group of launches) await launch(group); }
-      finally { try { cache.remove(work); } catch { /* Best effort. */ } }
+      try {
+        for (const group of launches) await launch(group);
+        // What clean launches (and the retries) exported nothing for is counted, so it settles instead of launching every time.
+        for (const item of pending) {
+          const answer = answers[item.index]!;
+          if (answer.failed) continue;
+          for (const path of item.needed.geometry) if (!answer.geometry.get(path)?.glb) cache.markNone(path, item.request.source);
+          for (const path of item.needed.textures) if (!answer.textures.has(path)) cache.markNone(path, item.request.source);
+          for (const path of item.needed.masks) if (!answer.masks.has(path)) cache.markNone(path, item.request.source);
+        }
+      } finally { try { cache.remove(work); } catch { /* Best effort. */ } }
       return answers;
     },
     open(source, signal) {

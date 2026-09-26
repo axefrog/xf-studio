@@ -219,10 +219,10 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     if (controls.prefetching !== option.id) { stopPrefetch(controls); controls.prefetching = option.id; }
     return port.authoring.characterPrefetch(option.id, controls.positions);
   }
-  // Scrolling brings other choices into view: they are prepared first.
+  // Scrolling brings other choices into view: they are prepared first. The panel scrolls in its dock, so the page's scrolls are heard.
   let scrollFrame = 0;
-  element.addEventListener("scroll", () => {
-    if (scrollFrame || typeof requestAnimationFrame !== "function") return;
+  if (typeof document !== "undefined" && typeof requestAnimationFrame === "function") document.addEventListener("scroll", () => {
+    if (scrollFrame || !element.isConnected) return;
     scrollFrame = requestAnimationFrame(() => {
       scrollFrame = 0;
       for (const controls of built?.rows ?? []) if (controls.open && controls.prefetching) {

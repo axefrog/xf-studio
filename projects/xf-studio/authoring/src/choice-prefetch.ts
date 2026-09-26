@@ -8,8 +8,8 @@
  * - **States** per choice, as one compact string (one character each, `ChoiceFetchState`): not known yet, not prepared, queued, being
  *   prepared, ready, or failed. A choice whose manifest holds (choice-manifest.ts) is ready at once, in this session or a later one;
  *   the rest are queued in the panel's order.
- * - **Batches.** Up to `batch` queued choices are prepared together (`warm`: each level of all their resource chains in one WolvenKit
- *   batch, their parts exported in one launch), at low priority.
+ * - **Batches.** Queued choices are prepared together (`warm`: each level of all their resource chains in one WolvenKit batch, their
+ *   parts exported in one launch), at low priority: a small first batch, so the choices in view come back soon, then larger ones.
  * - **A person's own change comes first.** While the host prepares a person's change the queue waits (`foregroundIdle`); a batch in
  *   WolvenKit when it starts is stopped (`pause`: its export launch is ended, reads already in WolvenKit finish and are kept), and its
  *   choices are queued again. A hover or focus hint (`focus`) moves a choice to the front of the queue; a click on it is the person's
@@ -54,12 +54,16 @@ export type PrefetchDeps = {
   log?(message: string): void;
   now?(): number;
 };
-export type PrefetchLimits = { batch: number; timeMs: number; bytes: number };
-export const PREFETCH_LIMITS: PrefetchLimits = { batch: 8, timeMs: 10 * 60_000, bytes: 2 * 1024 ** 3 };
+/**
+ * `batch`: choices in a job's first batch (the ones in view come back soonest); each later batch doubles, up to `maxBatch`, since every
+ * batch costs its chain's depth in launches whatever its size (51 vanilla hairstyles took 70 launches in batches of 8).
+ */
+export type PrefetchLimits = { batch: number; maxBatch?: number; timeMs: number; bytes: number };
+export const PREFETCH_LIMITS: PrefetchLimits = { batch: 8, maxBatch: 32, timeMs: 10 * 60_000, bytes: 2 * 1024 ** 3 };
 
 type Item = { position: number; state: ChoiceFetchState; request: CharacterRequest | null; key: string | null; order: number };
 type Job = { key: string; base: CharacterRequest; option: string; items: Map<number, Item>; controller: AbortController; startedAt: number;
-  stopped: PrefetchStop; running: boolean; serial: number };
+  stopped: PrefetchStop; running: boolean; serial: number; batches: number };
 
 export const requestKey = (request: CharacterRequest) => canonicalJson(request);
 
@@ -83,7 +87,7 @@ export class ChoicePrefetcher {
     if (this.job?.key !== key) {
       this.cancel();
       this.job = { key, base: input.base, option: input.option, items: new Map(), controller: new AbortController(), startedAt: this.now(),
-        stopped: this.spent ? "disk" : null, running: false, serial: 0 };
+        stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0 };
     }
     const job = this.job!;
     for (const position of input.positions) {
@@ -160,14 +164,15 @@ export class ChoicePrefetcher {
         if (!live()) return;
         if (this.now() - job.startedAt > this.limits.timeMs) { job.stopped = "time"; break; }
         if (this.startBytes === null) this.startBytes = await this.deps.preparedBytes();
-        const batch = this.queued(job, "q").slice(0, this.limits.batch);
+        const size = Math.min(this.limits.maxBatch ?? this.limits.batch, this.limits.batch * 2 ** job.batches);
+        const batch = this.queued(job, "q").slice(0, size);
         if (!batch.length) break;
         const controller = new AbortController();
         const stop = () => controller.abort();
         job.controller.signal.addEventListener("abort", stop, { once: true });
         this.batch = controller;
         for (const item of batch) item.state = "f";
-        this.stats.batches++;
+        this.stats.batches++; job.batches++;
         let outcomes: readonly { ready: boolean }[] | null = null;
         try { outcomes = await this.deps.warm(batch.map(item => item.request!), controller.signal); }
         catch (error) {
