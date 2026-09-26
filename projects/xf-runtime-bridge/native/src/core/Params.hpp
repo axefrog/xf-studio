@@ -94,6 +94,36 @@ LightRequest ParseLight(const json& aParams);
 // photo.expression.set: {faceId}.
 int32_t ParseExpression(const json& aParams);
 
+// Which photo-mode entity a face method works on: V's stand-in, or the head item photo mode gives it
+// (the face graph is expected on the head; research/animation/expression-editor-design.md R1/R2).
+enum class FaceTarget : int32_t
+{
+    Puppet = 0,
+    Head = 1,
+};
+const char* FaceTargetName(FaceTarget aTarget);
+
+// face.rig.read: {target: "head" (default) | "puppet", components: [names]}. components lists the
+// components to look up by name (letters, digits and '_', 1-64 characters, at most 16, no
+// repeats); without it the photo-mode head's known face components (DefaultFaceComponents).
+struct FaceRigRequest
+{
+    FaceTarget target = FaceTarget::Head;
+    std::vector<std::string> components;
+};
+std::vector<std::string> DefaultFaceComponents();
+FaceRigRequest ParseFaceRig(const json& aParams);
+
+// photo.expression.index: {index: 0-100000, target: "puppet" (default) | "head", unlisted}. Without
+// unlisted = true the redscript layer refuses an index the photo-mode expression list doesn't offer.
+struct ExpressionIndexRequest
+{
+    int32_t index = 0;
+    FaceTarget target = FaceTarget::Puppet;
+    bool unlisted = false;
+};
+ExpressionIndexRequest ParseExpressionIndex(const json& aParams);
+
 // photo.hud.hide: {hidden (default true), cursor (default true)}. cursor = true makes the call hide
 // or show the menu's mouse cursor together with the photo-mode interface; false leaves the cursor
 // as it is.
@@ -118,8 +148,9 @@ enum class PhotoEnterRoute
 PhotoEnterRoute ParsePhotoEnter(const json& aParams);
 
 // cc.confirm and cc.back take no parameters. Both are refused unless [bridge] allow_creator_leave =
-// true (default false, in every package, until the maintainer decides whether the bridge may
-// confirm the creator on a test save).
+// true: false by default and in the default and -diagnostic packages; the -writes package (the
+// dedicated test profile only) sets it, as approved on 26 September 2026 for sessions that end by
+// loading the safety save.
 bool CreatorLeaveAllowed(bool aConfigFlag); // throws creator_leave_disabled when the flag is off
 
 // photo.subject: {up, forward, right} in metres: the point to report, relative to V's head slot, along

@@ -14,6 +14,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <string>
 #include <vector>
 
 namespace xfb::script
@@ -38,4 +40,20 @@ size_t CodeSize(const std::vector<Arg>& aArgs);
 // Writes the parameter code into aCode. Returns the number of bytes written, or 0 when it does
 // not fit into aCapacity or an argument that isn't omitted has no type or value.
 size_t BuildParamCode(const std::vector<Arg>& aArgs, uint8_t* aCode, size_t aCapacity);
+
+// An engine address a script call needs, by RED4ext.SDK address hash (Detail/AddressHashes.hpp).
+struct Address
+{
+    const char* name;
+    uint32_t hash;
+};
+
+// Resolves every address through aResolve (at load, RED4ext's own RED4ext_ResolveAddress, which
+// answers 0 for a hash the game's address library lacks) and writes each result into aResolved, in
+// order. Returns the names that resolved to 0; empty means script calls may go ahead. The SDK
+// resolves the same hashes lazily and, on a 0, shows a modal error and ends the game, so the
+// plugin checks them all before the first call and refuses script calls instead (RB-32).
+std::vector<std::string> MissingAddresses(const std::vector<Address>& aAddresses,
+                                          const std::function<uintptr_t(uint32_t aHash)>& aResolve,
+                                          std::vector<uintptr_t>& aResolved);
 } // namespace xfb::script

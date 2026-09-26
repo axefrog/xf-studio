@@ -8,7 +8,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { frame, frameByCapture, readingProblem, screenSpace, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
 import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
-import { INPUT_SIZE, keyboardInput, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
+import { INPUT_SIZE, isExtendedKey, isGameImage, keyboardInput, keyMessageParam, KeySendError, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
 import { runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
 import { openSyntheticWindow, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
@@ -187,11 +187,53 @@ describe("photo.open's key", () => {
   test("the binding comes from UserSettings.json's key bindings, else IK_N", () => {
     const dir = tempDir("xfb-keys-");
     const file = join(dir, "UserSettings.json");
-    writeFileSync(file, JSON.stringify({ version: 1, data: [{ group_name: "/key_bindings/SettingsLocomotion", options: [{ name: "photoMode", type: "name", value: "IK_F9", default_value: "IK_N" }] }] }));
+    const settings = (value: unknown) => JSON.stringify({ version: 1, data: [{ group_name: "/key_bindings/SettingsLocomotion", options: [{ name: "photoMode", type: "name", value, default_value: "IK_N" }] }] });
+    writeFileSync(file, settings("IK_F9"));
     expect(readPhotoModeBinding(file)).toEqual({ name: "IK_F9", source: "user_settings" });
     expect(readPhotoModeBinding(join(dir, "missing.json"))).toEqual({ name: "IK_N", source: "default" });
+    writeFileSync(file, JSON.stringify({ version: 1, data: [{ group_name: "/key_bindings/SettingsLocomotion", options: [{ name: "sprint", value: "IK_LShift" }] }] }));
+    expect(readPhotoModeBinding(file)).toEqual({ name: "IK_N", source: "default" });
+  });
+
+  test("RB-38: an unbound or malformed binding, or an unreadable settings file, is refused rather than guessed", () => {
+    const dir = tempDir("xfb-keys-bad-");
+    const file = join(dir, "UserSettings.json");
+    const settings = (value: unknown) => JSON.stringify({ version: 1, data: [{ group_name: "/key_bindings/SettingsLocomotion", options: [{ name: "photoMode", value }] }] });
+    for (const value of ["IK_None", "", "N", 42, null, "IK_N; rm"]) {
+      writeFileSync(file, settings(value));
+      expect(() => readPhotoModeBinding(file), String(value)).toThrow(KeySendError);
+      try {
+        readPhotoModeBinding(file);
+      } catch (error) {
+        expect((error as KeySendError).code).toBe("key_unbound");
+      }
+    }
     writeFileSync(file, "not json");
-    expect(readPhotoModeBinding(file).source).toBe("default");
+    expect(() => readPhotoModeBinding(file)).toThrow(/couldn't be read/);
+  });
+
+  test("RB-39: navigation keys are sent as extended keys; layout-dependent keys are refused", () => {
+    for (const name of ["IK_Home", "IK_End", "IK_Insert", "IK_Delete", "IK_PageUp", "IK_PageDown", "IK_Up", "IK_Left"]) {
+      const vk = virtualKey(name);
+      expect(vk, name).not.toBeNull();
+      expect(isExtendedKey(vk!), name).toBe(true);
+    }
+    for (const name of ["IK_N", "IK_F9", "IK_7", "IK_NumPad0", "IK_Space"]) expect(isExtendedKey(virtualKey(name)!), name).toBe(false);
+    for (const name of ["IK_Tilde", "IK_Minus", "IK_Equals", "IK_LeftBracket", "IK_Semicolon", "IK_Comma", "IK_Slash", "IK_Backslash", "IK_SingleQuote", "IK_Period"]) {
+      expect(virtualKey(name), name).toBeNull();
+    }
+    expect(virtualKey("constructor")).toBeNull();
+    const home = new DataView(keyboardInput(0x47, false, true).buffer);
+    expect(home.getUint32(12, true)).toBe(0x0008 | 0x0001); // scan code, extended
+    expect(keyMessageParam(0x47, false, true) & (1n << 24n)).toBe(1n << 24n);
+    expect(keyMessageParam(0x31, true, false)).toBe(1n | (0x31n << 16n) | (1n << 30n) | (1n << 31n));
+  });
+
+  test("RB-35: only the game's own process image may receive the key", () => {
+    expect(isGameImage("Cyberpunk2077.exe")).toBe(true);
+    expect(isGameImage("cyberpunk2077.EXE")).toBe(true);
+    expect(isGameImage("pwsh.exe")).toBe(false);
+    expect(isGameImage(null)).toBe(false);
   });
 
   test("key names map to virtual keys; the INPUT record is a scan-code press", () => {
@@ -211,6 +253,41 @@ describe("photo.open's key", () => {
 
   test("tests can't press keys: the real sender refuses while XFB_NO_INPUT is set", async () => {
     await expect(sendKeyToWindow({ hwnd: 1n, pid: 1 }, 0x4e, "sendinput")).rejects.toThrow(/switched off/);
+  });
+});
+
+describe("photo.open's gates without a host", () => {
+  const fakeRuntime = (status: Record<string, unknown>) => {
+    const dir = tempDir("xfb-open-fake-");
+    writeFileSync(join(dir, "session.json"), JSON.stringify({ protocol: 1, sid: "fake", pid: process.pid, pipe: "none", token: "t", started_at: "", plugin_version: "0.0.0", allow_writes: true }));
+    return new CommandApi({
+      runtimeDir: dir,
+      captureRoot: join(dir, "captures"),
+      transport: async () => ({ call: async () => ({ v: 1, id: 1, ok: true, result: status }) as never, close: () => {} }),
+      keySender: async () => {
+        throw new Error("must not send");
+      },
+    });
+  };
+
+  test("RB-36: photo mode must be explicitly allowed; a missing answer sends nothing", async () => {
+    const api = fakeRuntime({ phase: "gameplay", allow_writes: true, write_classes: ["photo"] });
+    const outcome = await api.run("photo.open", {});
+    expect(!outcome.ok && outcome.error.code).toBe("photo_not_allowed");
+    api.close();
+  });
+
+  test("RB-35: the test-only window override never aims the key unless key input is off", () => {
+    const api = new CommandApi({ runtimeDir: tempDir("xfb-open-target-"), captureTarget: { hwnd: 1n } });
+    const before = process.env.XFB_NO_INPUT;
+    try {
+      delete process.env.XFB_NO_INPUT;
+      // No session and the override ignored: no target at all (nothing is sent in this test either way).
+      expect(api.keyTarget()).toBeNull();
+    } finally {
+      process.env.XFB_NO_INPUT = before;
+    }
+    expect(process.env.XFB_NO_INPUT).toBe("1");
   });
 });
 
@@ -238,7 +315,7 @@ describe("photo.open and the session runner, against the self-test host", () => 
         sent.push(vk);
         // The "game" reacts to the key: photo mode opens.
         await api.callBridge("selftest.phase", { phase: "photo_mode" }, "t-key");
-        return { route, focused_by_bridge: false, scan_code: 0x31 };
+        return { route, focused_by_bridge: false, scan_code: 0x31, extended: false };
       },
     });
     // Refused without the write gate (a read-only host), outside gameplay (nothing sent), a no-op in
@@ -263,6 +340,30 @@ describe("photo.open and the session runner, against the self-test host", () => 
     expect(outcome.ok && (outcome.result as { changed: boolean }).changed).toBe(false);
     expect(sent).toHaveLength(1);
     await api.run("photo.exit", {});
+    api.close();
+  }, 20000);
+
+  test("RB-37: the game is checked again right before the key goes; a change stops the send", async () => {
+    const sent: number[] = [];
+    let api: CommandApi;
+    api = new CommandApi({
+      runtimeDir: host.dir,
+      captureRoot: join(tempDir("xfb-open-recheck-"), "captures"),
+      captureTarget: { hwnd: synthetic.hwnd },
+      idleCloseMs: 300,
+      keySender: async (_target, vk, route, options) => {
+        // While the window "comes to the front", the player opens a menu.
+        await api.callBridge("selftest.phase", { phase: "menu" }, "t-recheck");
+        await options?.beforeSend?.();
+        sent.push(vk);
+        return { route, focused_by_bridge: true, scan_code: 0x31, extended: false };
+      },
+    });
+    await api.callBridge("selftest.phase", { phase: "gameplay" }, "t-recheck");
+    const outcome = await api.run("photo.open", {});
+    expect(!outcome.ok && outcome.error.code).toBe("photo_not_allowed");
+    expect(sent).toEqual([]);
+    await api.callBridge("selftest.phase", { phase: "gameplay" }, "t-recheck");
     api.close();
   }, 20000);
 

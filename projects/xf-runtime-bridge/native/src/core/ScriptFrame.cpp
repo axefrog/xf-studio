@@ -47,4 +47,22 @@ size_t BuildParamCode(const std::vector<Arg>& aArgs, uint8_t* aCode, size_t aCap
     aCode[at++] = kParamEnd;
     return at;
 }
+
+std::vector<std::string> MissingAddresses(const std::vector<Address>& aAddresses,
+                                          const std::function<uintptr_t(uint32_t aHash)>& aResolve,
+                                          std::vector<uintptr_t>& aResolved)
+{
+    std::vector<std::string> missing;
+    aResolved.clear();
+    for (const auto& address : aAddresses)
+    {
+        const uintptr_t resolved = aResolve ? aResolve(address.hash) : 0;
+        aResolved.push_back(resolved);
+        if (resolved == 0)
+        {
+            missing.emplace_back(address.name);
+        }
+    }
+    return missing;
+}
 } // namespace xfb::script

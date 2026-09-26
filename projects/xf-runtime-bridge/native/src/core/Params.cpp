@@ -325,6 +325,105 @@ int32_t ParseExpression(const json& aParams)
     return static_cast<int32_t>(*face);
 }
 
+const char* FaceTargetName(FaceTarget aTarget)
+{
+    return aTarget == FaceTarget::Puppet ? "puppet" : "head";
+}
+
+namespace
+{
+FaceTarget ParseFaceTarget(const json& aParams, FaceTarget aDefault)
+{
+    const auto target = Text(aParams, "target", 16);
+    if (!target)
+    {
+        return aDefault;
+    }
+    if (*target == "puppet")
+    {
+        return FaceTarget::Puppet;
+    }
+    if (*target == "head")
+    {
+        return FaceTarget::Head;
+    }
+    Bad("'target' must be \"puppet\" (V's photo-mode stand-in) or \"head\" (its head item)");
+}
+
+bool ComponentNameOk(const std::string& aName)
+{
+    if (aName.empty() || aName.size() > 64)
+    {
+        return false;
+    }
+    for (const auto c : aName)
+    {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+        if (!ok)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
+std::vector<std::string> DefaultFaceComponents()
+{
+    // The photo-mode head's face rig and its two sibling animation-setup components
+    // (knowledge/facial-expressions.md, research/animation/expressions-evidence.md).
+    return {"face_rig", "man_face_base_animations", "PhotomodeAnimations"};
+}
+
+FaceRigRequest ParseFaceRig(const json& aParams)
+{
+    RequireOnly(aParams, {"target", "components"});
+    FaceRigRequest request;
+    request.target = ParseFaceTarget(aParams, FaceTarget::Head);
+    const auto it = aParams.find("components");
+    if (it == aParams.end() || it->is_null())
+    {
+        request.components = DefaultFaceComponents();
+        return request;
+    }
+    if (!it->is_array() || it->empty() || it->size() > 16)
+    {
+        Bad("'components' must be a list of 1 to 16 component names");
+    }
+    for (const auto& entry : *it)
+    {
+        if (!entry.is_string() || !ComponentNameOk(entry.get<std::string>()))
+        {
+            Bad("each component name is 1 to 64 letters, digits or '_'");
+        }
+        const auto name = entry.get<std::string>();
+        for (const auto& seen : request.components)
+        {
+            if (seen == name)
+            {
+                Bad("component '" + name + "' is listed twice");
+            }
+        }
+        request.components.push_back(name);
+    }
+    return request;
+}
+
+ExpressionIndexRequest ParseExpressionIndex(const json& aParams)
+{
+    RequireOnly(aParams, {"index", "target", "unlisted"});
+    ExpressionIndexRequest request;
+    const auto index = Integer(aParams, "index", 0, 100000);
+    if (!index)
+    {
+        Bad("'index' (the photo-mode face index, 0-100000) is required");
+    }
+    request.index = static_cast<int32_t>(*index);
+    request.target = ParseFaceTarget(aParams, FaceTarget::Puppet);
+    request.unlisted = Boolean(aParams, "unlisted").value_or(false);
+    return request;
+}
+
 HudRequest ParseHud(const json& aParams)
 {
     RequireOnly(aParams, {"hidden", "cursor"});
@@ -363,7 +462,8 @@ bool CreatorLeaveAllowed(bool aConfigFlag)
     {
         throw MethodError("creator_leave_disabled",
                           "confirming or backing out of the character creator is switched off ([bridge] "
-                          "allow_creator_leave = false) until that is decided; the player presses Confirm or Back");
+                          "allow_creator_leave = false; only the test profile's -writes package allows it); the "
+                          "player presses Confirm or Back");
     }
     return true;
 }

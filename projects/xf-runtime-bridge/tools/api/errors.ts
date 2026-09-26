@@ -30,6 +30,8 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   rtti_signature:
     "A game function this action uses has changed shape in this game version, so the bridge refused to call it and nothing was changed. The bridge needs updating for this game version.",
   call_failed: "The game refused the call, and nothing is known to have changed.",
+  script_calls_unavailable:
+    "The bridge can't call into this game version (an engine address it needs is missing from RED4ext's address library), so it refuses every game action this session and nothing changed. Update RED4ext, or rebuild the bridge for this game version.",
   script_layer_missing:
     "The bridge's script part isn't loaded (redscript didn't compile it). Check that redscript is installed and look for a script error at game start.",
   not_in_photo_mode: "This only works in photo mode. Open it with photo_open (or ask the player to press the photo mode key), then try again.",

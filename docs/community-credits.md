@@ -318,6 +318,10 @@ Thomas Deliot and Laurent Belcour, [anisotropic-grid glint paper](https://arxiv.
 
 Jakob, Hašan, Yan, Lawrence, Ramamoorthi and Marschner, [Discrete Stochastic Microfacet Models](https://research.cs.cornell.edu/stochastic-sg14/). Framed the aliasing and temporal-coherence problem of tiny normal-mapped glitter.
 
+### Karis (2013)
+
+Brian Karis (Epic Games), "Real Shading in Unreal Engine 4" (SIGGRAPH 2013 course notes). Its spherical-Gaussian approximation of Schlick's Fresnel let us recognise the Fresnel term of the game's eye lighting when reading the compiled light program.
+
 ### Karis (2016)
 
 Brian Karis (Epic Games), "Physically Based Hair Shading in Unreal" (SIGGRAPH 2016 course notes). The published hair lighting model that the game's decoded hair light matches, which let us read the compiled program term by term.
@@ -328,7 +332,19 @@ Kneiphof and Klein, [Real-time Image-based Lighting of Glints](https://arxiv.org
 
 ### Barré-Brisebois and Hill (2012)
 
-Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfshadow.com/publications/blending-in-detail/). Their reoriented normal mapping formula let us recognise how the game's decal composes a makeup normal map with the skin normal, which decided the Shimmer export design.
+Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfshadow.com/publications/blending-in-detail/). Their reoriented normal mapping formula let us recognise how the game's decal composes a makeup normal map with the skin normal, which decided the Shimmer export design. Their survey of detail-normal blends also let us name the partial-derivative blend the game's skin shader uses for its detail and micro-detail normals.
+
+### Jimenez et al. (2015)
+
+Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger, Xian-Chun Wu, Javier von der Pahlen, Michael Wimmer and Diego Gutierrez, [Separable Subsurface Scattering](https://www.iryoku.com/separable-sss/) (Computer Graphics Forum, 2015). Its per-profile separable kernel, scaled by depth and applied horizontally then vertically, let us recognise the game's skin subsurface-scattering passes when reading their compiled programs.
+
+### Cigolle et al. (2014)
+
+Zina H. Cigolle, Sam Donow, Daniel Evangelakos, Michael Mara, Morgan McGuire and Quirin Meyer, [A Survey of Efficient Representations for Independent Unit Vectors](https://jcgt.org/published/0003/02/01/) (Journal of Computer Graphics Techniques, 2014). Its octahedral encoding let us recognise how the game's eye shader packs the iris normal into spare G-buffer bits.
+
+### Policarpo, Oliveira and Comba (2005)
+
+Fábio Policarpo, Manuel M. Oliveira and João L. D. Comba, "Real-Time Relief Mapping on Arbitrary Polygonal Surfaces" (ACM Symposium on Interactive 3D Graphics and Games, 2005). Its linear search followed by a binary refinement along the view ray let us recognise how the game's parallax decal template offsets its texture lookups.
 
 ### Toksvig (2005) and Olano and Baker (2010)
 

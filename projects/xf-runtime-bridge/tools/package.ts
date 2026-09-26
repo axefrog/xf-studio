@@ -6,24 +6,15 @@
 //                                      dist/xf-runtime-bridge-<version>-writes.zip      (bridge on, writes allowed;
 //                                                                                        the XF test profile only)
 //
-// Layout inside each zip (paths relative to the game folder, i.e. an MO2 mod root):
-//   red4ext/plugins/XFRuntimeBridge/XFRuntimeBridge.dll
-//   red4ext/plugins/XFRuntimeBridge/config.ini
-//   red4ext/plugins/XFRuntimeBridge/Scripts/*.reds       (added to redscript by the plugin)
-//   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
-//   r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only)
-//   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
-//   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json and RED4ext.SDK, MIT)
-//   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
-//
-// It refuses to package unless the project tree is clean and the DLL was built from HEAD with a
-// clean tree: the build writes "XFB_BUILD=<commit>;dirty=<0|1>" into the DLL
-// (native/cmake/BuildInfo.cmake), and the manifest records that commit.
+// What each package holds is tools/packaging.ts (tested by tools/test/package.test.ts). This file adds
+// the provenance gate and the zips: it refuses to package unless the project tree is clean and the DLL
+// was built from HEAD with a clean tree: the build writes "XFB_BUILD=<commit>;dirty=<0|1>" into the
+// DLL (native/cmake/BuildInfo.cmake), and the manifest records that commit.
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { DESCRIBE, SUFFIX, VARIANTS, sha256, stageVariant, type Variant } from "./packaging.ts";
 
 const projectDir = resolve(import.meta.dir, "..");
 const cmake = readFileSync(join(projectDir, "native", "CMakeLists.txt"), "utf8");
@@ -36,7 +27,6 @@ if (!existsSync(dll)) {
   process.exit(2);
 }
 
-const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 const git = (...args: string[]) => {
   const result = spawnSync("git", args, { cwd: projectDir, encoding: "utf8" });
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
@@ -63,102 +53,10 @@ if (builtDirty !== "0" || builtCommit !== head) {
   );
   process.exit(3);
 }
-const notices = join(projectDir, "native", "THIRD_PARTY_NOTICES.txt");
 
-function listFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) out.push(...listFiles(path));
-    else out.push(path);
-  }
-  return out;
-}
-
-type Variant = "default" | "diagnostic" | "writes";
-const SUFFIX: Record<Variant, string> = { default: "", diagnostic: "-diagnostic", writes: "-writes" };
-const DESCRIBE: Record<Variant, string> = {
-  default: "bridge OFF",
-  diagnostic: "bridge ON, read-only",
-  writes: "bridge ON, WRITES ALLOWED (dedicated test profile only)",
-};
-
-function stage(variant: Variant) {
+function build(variant: Variant) {
   const stageDir = join(projectDir, "dist", "stage", variant);
-  rmSync(stageDir, { recursive: true, force: true });
-  const put = (from: string, to: string) => {
-    const target = join(stageDir, to);
-    mkdirSync(dirname(target), { recursive: true });
-    cpSync(from, target);
-  };
-
-  const plugin = "red4ext/plugins/XFRuntimeBridge";
-  put(dll, `${plugin}/XFRuntimeBridge.dll`);
-  put(notices, `${plugin}/THIRD_PARTY_NOTICES.txt`);
-  let config = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8");
-  if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
-  if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
-  if (variant !== "default") {
-    config = config.replace(/^enabled = false$/m, "enabled = true");
-    if (!/^enabled = true$/m.test(config)) throw new Error(`${variant} config did not enable the bridge`);
-  }
-  if (variant === "writes") {
-    config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
-    if (!/^allow_writes = true$/m.test(config)) throw new Error("writes config did not allow writes");
-    if (!/^allow_write_classes = photo, world, character$/m.test(config)) throw new Error("writes config must allow all three write classes");
-    // Approved for the test profile (26 September 2026): the bridge may press Confirm and Back in the
-    // character creator, in sessions that end by loading the safety save.
-    config = config.replace(/^allow_creator_leave = false$/m, "allow_creator_leave = true");
-    if (!/^allow_creator_leave = true$/m.test(config)) throw new Error("writes config did not allow leaving the creator");
-    const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
-    config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
-    if (!config.includes(warning)) throw new Error("writes config lost its warning");
-  }
-  mkdirSync(join(stageDir, plugin), { recursive: true });
-  writeFileSync(join(stageDir, plugin, "config.ini"), config);
-  for (const name of readdirSync(join(projectDir, "redscript"))) {
-    if (name.endsWith(".reds")) put(join(projectDir, "redscript", name), `${plugin}/Scripts/${name}`);
-  }
-  put(join(projectDir, "tweaks", "xf_runtime_bridge.yaml"), "r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml");
-  // XF photo-mode camera presets (photo_mode.std_preset_7..9) for repeatable framing: approved for the
-  // test profile only (26 September 2026), so only the diagnostic and writes packages carry them;
-  // the distribution package must not, since they replace three of the player's presets.
-  if (variant !== "default") {
-    put(join(projectDir, "tweaks", "test-profile", "xf_photo_mode_presets.yaml"), "r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml");
-  }
-  put(
-    join(projectDir, "cet", "xf_runtime_bridge", "init.lua"),
-    "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua",
-  );
-
-  const files = listFiles(stageDir).map((path) => ({
-    path: relative(stageDir, path).replaceAll("\\", "/"),
-    bytes: statSync(path).size,
-    sha256: sha256(path),
-  }));
-  const manifest = {
-    name: "XF Runtime Bridge",
-    version,
-    variant,
-    bridge_enabled: variant !== "default",
-    allow_writes: variant === "writes",
-    write_classes: variant === "writes" ? ["photo", "world", "character"] : [],
-    allow_creator_leave: variant === "writes",
-    photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_7..9 (XF face, eyes, head and shoulders)" : null,
-    commit: builtCommit, // read from the DLL's build marker; equals HEAD at packaging time
-    source_tree_clean: true,
-    built_for: {
-      game: "2.31 (3.0.80.51928)",
-      red4ext: "1.30.0 (SDK 1.0.0)",
-      redscript: "0.5.31",
-      cet: "1.37.1",
-      tweakxl: "1.11.4 (optional; only the data marker needs it)",
-      codeware: "1.20.5 (optional; only photo.enter's research route needs it)",
-    },
-    files,
-  };
-  writeFileSync(join(stageDir, plugin, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-
+  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit });
   const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${SUFFIX[variant]}.zip`);
   rmSync(zip, { force: true });
   // Windows' own bsdtar (not Git's GNU tar) writes a zip when the name ends in .zip and -a is given.
@@ -166,11 +64,9 @@ function stage(variant: Variant) {
   // Name the top-level folders explicitly so entries carry no "./" prefix.
   const tar = spawnSync(tarExe, ["-a", "-c", "-f", zip, "-C", stageDir, "bin", "r6", "red4ext"], { encoding: "utf8" });
   if (tar.status !== 0) throw new Error(`tar failed: ${tar.stderr}`);
-  console.log(`${zip}\n  sha256 ${sha256(zip)}  (${files.length} files, ${DESCRIBE[variant]})`);
-  for (const file of files) console.log(`  ${file.sha256.slice(0, 16)}  ${file.path}`);
+  console.log(`${zip}\n  sha256 ${sha256(zip)}  (${manifest.files.length} files, ${DESCRIBE[variant]})`);
+  for (const file of manifest.files) console.log(`  ${file.sha256.slice(0, 16)}  ${file.path}`);
 }
 
-stage("default");
-stage("diagnostic");
-stage("writes");
+for (const variant of VARIANTS) build(variant);
 console.log("\nNothing was installed. Stage a zip into a dedicated MO2 profile only when a session is prepared; the -writes zip only into the XF test profile.");

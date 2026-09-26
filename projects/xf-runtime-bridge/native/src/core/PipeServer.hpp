@@ -52,6 +52,10 @@ public:
     // Safe from any thread, including while Stop() runs.
     void DropClient();
 
+    // Called on the server thread when a client is dropped for sending nothing for
+    // aIdleDisconnectSeconds (not when a client closes its end). Set before Start.
+    void SetIdleCallback(std::function<void()> aOnIdle);
+
     bool IsRunning() const;
     bool HasClient() const;
     uint64_t ConnectionsAccepted() const;
@@ -77,6 +81,7 @@ private:
     std::wstring m_pipeName;
     uint32_t m_idleDisconnectSeconds = 120;
     Handler m_handler;
+    std::function<void()> m_onIdle;
     std::thread m_thread;
     void* m_pipe = nullptr;      // HANDLE
     void* m_stopEvent = nullptr; // HANDLE, manual reset

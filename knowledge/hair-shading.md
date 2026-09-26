@@ -2,7 +2,7 @@
 
 **Maturity: Draft.** The colour, coverage and G-buffer arithmetic of `base\materials\hair.mt` and the deferred hair light are decoded from compiled 2.31 programs. The CPU bake of `.hp` profiles is not in any resource and is still a hypothesis. The lighting constants are runtime GameOptions; their vanilla values come from a third-party list, not yet from our own dump. So far the preview has been compared only with an uncontrolled in-game portrait ([calibration note](../research/eye-artistry/hair-calibration-2026-09-25.md)). That portrait was taken with a colour-grading ReShade preset active and a replacement grading LUT installed, so its colours are not raw game output. The fixed, repeatable light for future comparisons is the creator and mirror screen ([creator lighting](creator-lighting.md)). For what is still open, see the [open questions](#open-questions) and the [capture request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request).
 
-This page covers hair cards, and lashes that use hair materials. Brows in the reference save use a post-G-buffer decal (`mesh_decal_double_diffuse.mt`), not `hair.mt`. The last section covers that decal's colour blend. For material resources, G-buffer layout and other templates, see [materials and shaders](materials-and-shaders.md).
+This page covers hair cards, and lashes that use hair materials. Brows in the reference save use a post-G-buffer decal (`mesh_decal_double_diffuse.mt`), not `hair.mt`. The last section covers that decal's colour blend. For material resources, G-buffer layout and other templates, see [materials and shaders](materials-and-shaders.md); the evidence-level [hair reference](../research/materials/shader-hair.md) lists every parameter, pass and program hash, the lash and cap specifics, and what still blocks correct hair and lash colour.
 
 **Grades:** [source] compiled programs or tool/engine source; [resource] installed game or mod resources; [wiki] Cyberpunk Modding Docs at `be2f44ee`; [runtime] observed in game; [hypothesis] not established.
 
@@ -25,7 +25,7 @@ Template defaults [resource]: `AlphaCutoff` 0.33, `RoughnessScale` 1, `Roughness
 
 | Pass | What it does | Grade |
 |---|---|---|
-| `hair_alpha_accum` | Remaps `a = saturate(max(Strand_Alpha.r − AlphaCutoff, 0)/(1 − AlphaCutoff))`, times 1.33 when a global flag is set. Keeps the fragment when `a` exceeds the dither threshold below. Inserts `depth \| round(saturate(Strand_Alpha.r)·63)` into a 3-deep k-buffer (atomic max, reverse-Z). The colour target keeps transmittance `Π(1−Strand_Alpha.r)`. | [source] |
+| `hair_alpha_accum` | Remaps `a = saturate(max(Strand_Alpha.r − AlphaCutoff, 0)/(1 − AlphaCutoff))`, times 1.33 when a global flag is set. Keeps the fragment when `a` exceeds the dither threshold below, and drops it behind the depth held in a fourth slice (the opaque scene, most plausibly). Inserts `depth \| round(saturate(Strand_Alpha.r)·63)` into a 3-deep k-buffer (atomic max, reverse-Z); a fragment with `Strand_Alpha.r` above 0.98 writes its key into all three slots, evicting the layers behind it. The colour target keeps transmittance `Π(1−Strand_Alpha.r)`. | [source] |
 | `hair_basecolor_blend` | For fragments in the k-buffer, adds `(\|colour\|·w, w)` with `w = stored alpha/63` (additive blend). | [source] |
 | `hair_gbuffer_solid` | Writes the G-buffer for the most opaque of the two front k-buffer layers, with the same dithered test. GBuffer0 = `sqrt(Σwc/Σw)`. GBuffer1 = packed strand tangent frame. GBuffer2 = `(0, roughness, 1/3 + 2/3·transmittance·thickness/Scattering, Strand_ID)`. | [source] |
 
@@ -64,7 +64,7 @@ c   = DebugHairColor ≥ 0.5 ? 1 : c;   c ·= wetness factor (1 when dry)
 
 - **Roughness** = `saturate(RoughnessScale·Strand_ID.r + RoughnessBias)`, pulled toward `ShadowRoughness` by `(1−s)·ShadowStrength`. Each strand therefore gets its own roughness [source].
 - **Strand direction** = `max(FlowStrength·(2·flow.g − 2) + 1, 0.01)·bitangent + max(FlowStrength·(2·flow.r − 1), 0.01)·tangent`, where bitangent is `cross(N, T)·w` from the mesh [source]. `Flow` textures are `isGamma=1` [resource], which the Blender add-on also notes. For the MELUMINARY flow (163, 255, 105), the decoded red term clamps to 0.01, so the strand follows the bitangent. On those cards the bitangent runs along UV V, the long axis [resource geometry measurement].
-- **Scattering** scales a depth-difference thickness term written to GBuffer2.z [source]. Its effect in the light is still to be traced.
+- **Scattering** scales a depth-difference thickness term written to GBuffer2.z [source]. Neither the sun nor the local-light hair path reads GBuffer2.z (the all-class light uses it only for Foliage), and the SSS passes skip Hair pixels, so `Scattering` has no effect on rasterised direct light [source] ([hair reference §6.3](../research/materials/shader-hair.md#63-what-the-light-does-not-read)). Ray-traced paths are not parsed.
 
 ## 5. Deferred hair light
 
@@ -95,7 +95,9 @@ The `cb0` hair registers are runtime GameOptions [source strings in the 2.31 exe
 | cb0[20].x, .y | `TRT_Params/EXP_SCALE`, `/EXP_BIAS` | 1, 1.5 |
 | (environment path) | `EnvProbe/MultiScatter`, `/R`, `/TRT` | 0.47, 0.3, 0.8 |
 
-`LocalLight` has the same three intensities (R 0.35). CET mods can change these options at runtime. The reference install runs the Character Rendering Editor's "Arkhe Balanced" preset: AlbedoMultiplier 0.8091, RoughnessFactor 1.1968, Wrap 0.4364, EXP_BIAS 2.5795 [installed state]. The Studio uses the vanilla values as `HAIR_LIGHTING_VANILLA`. Karis's published defaults, used before, are kept as `HAIR_LIGHTING_KARIS`. The local-light and environment-probe hair paths were not decoded.
+`LocalLight` has the same three intensities (R 0.35). CET mods can change these options at runtime. The reference install runs the Character Rendering Editor's "Arkhe Balanced" preset: AlbedoMultiplier 0.8091, RoughnessFactor 1.1968, Wrap 0.4364, EXP_BIAS 2.5795 [installed state]. The Studio uses the vanilla values as `HAIR_LIGHTING_VANILLA`. Karis's published defaults, used before, are kept as `HAIR_LIGHTING_KARIS`.
+
+**Local lights.** The tiled local-light loop of the all-class program `m_shaderLightsComputeGlobalLocalShadows_Clustered_11111111` (`6606735909222169407`) has its own Hair branch, and it is the model above evaluated per light: the same frame, per-strand shift, R and TRT lobes, gates and wrapped diffuse, from the same `cb0[16..20]` registers. Only the intensity triple differs: **`cb0[13].x` (R), `.z` (TRT), `.w` (diffuse)** instead of `cb0[12]`. Two small differences: local lights do not apply the per-light roughness shift that Standard and Subsurface local lights have, and when `cb0[15].w` is set a light's colour is scaled by a half-float from its data, of unknown meaning [source] ([hair reference §6.2](../research/materials/shader-hair.md#62-local-lights-decoded-here)). Pairing `cb0[13]` with the `LocalLight` options is by analogy [hypothesis]. Every light of the creator and mirror screen is local, so this is the path that shades hair and lashes there. The environment-probe hair path is not located.
 
 **Consequence.** Hair albedo is dark: the reference save's alpha-weighted mean under §3 is sRGB ≈ (74, 61, 54). The hair light is dim as well: its diffuse is 0.47 × a squared, tightly wrapped N·L, and its white R lobe is 0.3. Hair gets no card-normal dielectric specular or grazing Fresnel. A flat-card PBR material, or the published defaults, light the same albedo much brighter and greyer than the game.
 
@@ -122,7 +124,7 @@ Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/
 | Profile bake, truncated lookup, overlay, shadow term, `\|c\|` | Float profile texture (ID row, root-to-tip row), `texelFetch` | Faithful to §3; bake grade [hypothesis] |
 | Coverage | Remapped `Strand_Alpha.r`, stretched over the dither range (`hairResolvedCoverage`); strands and lashes are unblended, depth-writing, MSAA alpha-to-coverage with no alpha test (lashes still draw after the makeup layers) | Coverage fraction and its nesting faithful to §2 (see below); colour mixing within a pixel approximate (no 3-layer k-buffer) |
 | Hair cap (`mesh_decal_gradientmap_recolor.mt`) | Mask-blended decal over the scalp (no depth write, no alpha test); gradient indexed by the mask | Linear "over" blend, lighter at partial coverage than the engine's sqrt-space blend |
-| Lighting | Hair-class direct light (§5, gates and per-strand shift included) for key and fill lights on the skinned bitangent; card specular off; Three's ambient diffuse scaled by `EnvProbe/MultiScatter`. Under the Character creator lighting preset, the same model per spot light with `LocalLight` intensities (R 0.35; TRT and MultiScatter as `GlobalLight`) ([creator lighting §9](creator-lighting.md#9-the-studios-creator-lighting-preset)) | Structure [source], constants [community]; environment path approximated, no environment R/TRT; local-light path not decoded |
+| Lighting | Hair-class direct light (§5, gates and per-strand shift included) for key and fill lights on the skinned bitangent; card specular off; Three's ambient diffuse scaled by `EnvProbe/MultiScatter`. Under the Character creator lighting preset, the same model per spot light with `LocalLight` intensities (R 0.35; TRT and MultiScatter as `GlobalLight`) ([creator lighting §9](creator-lighting.md#9-the-studios-creator-lighting-preset)) | Structure [source] for the sun and, since the local-light decode, for local lights; constants [community] (local TRT and MultiScatter [hypothesis]); environment path approximated, no environment R/TRT |
 | Brow decal | Per-vertex skin albedo under each brow vertex; solves an equivalent linear "over" blend | Faithful where the sampled skin albedo is right; the brow's normal and roughness writes are not drawn (fixed roughness 0.8) |
 
 ### Preview coverage
@@ -141,11 +143,11 @@ Alpha-to-coverage is deterministic, so there is no grain to accumulate over fram
 1. Our own runtime dump of the `Editor/Characters/Hair/*` options, to confirm the third-party vanilla values and the register pairing.
 2. Profile bake: colour space, sample positions and interpolation. A character-editor ladder of colours from one pack, shot in one frame, would separate the curve from lighting ([request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request)).
 3. Which `brown_liquorice.hp` the game binds for the saved lashes. NPC hair in game weakly favours the mod copy (§7); a controlled with/without comparison is [head CC rendering test ask 7](head-cc-rendering.md).
-4. The hair local-light and environment-probe paths, and the Scattering/thickness term.
+4. The hair environment-probe path. (The local-light path is decoded, §5; `Scattering` does not reach direct light, §4.)
 5. The global flag that multiplies coverage by 1.33, and whether the dither's per-frame register is a plain frame counter.
 6. Sign of the strand direction (root→tip) as stored in GBuffer1, which sets the direction of the R/TRT shifts.
 7. How much self-shadowing, contact shadows, rain wetness and tone mapping darken hair in typical scenes. The base-colour pass alone scales colour by down to 0.25 when the character is wet. The game's SDR display transform (LogC3 into a 3D grading LUT) is decoded in [creator lighting §5](creator-lighting.md#5-tone-mapping-and-grading).
-8. The local-light hair path (`LocalLight` options). Every light on the creator and mirror screen is local, so that screen's hair uses it, not the global path in §5.
+8. The values behind `cb0[13]` (the local-light intensities, presumably `LocalLight/R`, `/TRT`, `/MultiScatter`) and the per-light factor enabled by `cb0[15].w`: one GameOptions dump and a light-data read.
 
 ## Sources
 

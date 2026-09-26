@@ -34,9 +34,10 @@
 #include <Windows.h>
 
 #include <atomic>
+#include <string>
+#include <vector>
 
 #include <RED4ext/Detail/AddressHashes.hpp>
-#include <RED4ext/Relocation.hpp>
 #include <RED4ext/Scripting/Functions.hpp>
 #include <RED4ext/Scripting/Stack.hpp>
 
@@ -49,6 +50,10 @@ namespace xfb::plugin
 namespace
 {
 std::atomic<DWORD> gGameThread{0};
+
+// Filled once at load by ResolveScriptCallAddresses (RB-32), before any call can run.
+std::atomic<bool> gAddressesResolved{false};
+std::atomic<uintptr_t> gInternalExecute{0};
 
 using InternalExecute_t = bool (*)(RED4ext::CBaseFunction* aFunction, RED4ext::IScriptable* aContext,
                                    RED4ext::CStackFrame* aCallerFrame, void* aResult, void* aResultType);
@@ -116,12 +121,64 @@ void NoteGameThread()
     gGameThread.store(GetCurrentThreadId());
 }
 
+bool ResolveScriptCallAddresses()
+{
+    // Every engine address the call path below reaches through the SDK: the internal execute itself,
+    // and what making the dummy caller ($XFBridge) and the static context (an entEntity held by a
+    // handle) resolve on first use.
+    namespace hashes = RED4ext::Detail::AddressHashes;
+    const std::vector<script::Address> addresses{
+        {"CBaseFunction_InternalExecute", hashes::CBaseFunction_InternalExecute},
+        {"CGlobalFunction_ctor", hashes::CGlobalFunction_ctor},
+        {"CClass_CreateInstance", hashes::CClass_CreateInstance},
+        {"Handle_ctor", hashes::Handle_ctor},
+    };
+    using Resolve_t = uintptr_t (*)(uint32_t);
+    Resolve_t resolve = nullptr;
+    if (const auto red4ext = GetModuleHandleW(L"RED4ext.dll"))
+    {
+        resolve = reinterpret_cast<Resolve_t>(GetProcAddress(red4ext, "RED4ext_ResolveAddress"));
+    }
+    std::vector<uintptr_t> resolved;
+    const auto missing = script::MissingAddresses(
+        addresses, [resolve](uint32_t aHash) -> uintptr_t { return resolve ? resolve(aHash) : 0; }, resolved);
+    if (!resolve || !missing.empty())
+    {
+        std::string names;
+        for (const auto& name : missing)
+        {
+            names += (names.empty() ? "" : ",") + name;
+        }
+        log::Error("script.addresses_missing",
+                   std::string("resolver=") + (resolve ? "RED4ext_ResolveAddress" : "<not found>") + " missing=" + names +
+                       " script_calls=off (every game method is refused; update RED4ext or the bridge for this game)");
+        gAddressesResolved.store(false);
+        return false;
+    }
+    gInternalExecute.store(resolved[0]);
+    gAddressesResolved.store(true);
+    log::Info("script.addresses_resolved", "resolver=RED4ext_ResolveAddress count=" + std::to_string(resolved.size()) +
+                                               " script_calls=on");
+    return true;
+}
+
+bool ScriptCallsAvailable()
+{
+    return gAddressesResolved.load();
+}
+
 void CallFunction(RED4ext::CBaseFunction* aFn, RED4ext::IScriptable* aContext, const std::vector<void*>& aValues,
                   void* aOut, const std::string& aWhat, const std::string& aCid)
 {
     if (!aFn)
     {
         throw MethodError("failed", "no function to call: " + aWhat);
+    }
+    if (!gAddressesResolved.load())
+    {
+        throw MethodError("script_calls_unavailable",
+                          "an engine address the bridge needs to call the game is missing from this game version's "
+                          "address library, so game calls are off this session: " + aWhat);
     }
     const auto gameThread = gGameThread.load();
     if (gameThread == 0 || gameThread != GetCurrentThreadId())
@@ -165,8 +222,8 @@ void CallFunction(RED4ext::CBaseFunction* aFn, RED4ext::IScriptable* aContext, c
     RED4ext::CStackFrame caller(nullptr, reinterpret_cast<char*>(code));
     caller.func = Caller();
 
-    static RED4ext::UniversalRelocFunc<InternalExecute_t> execute(
-        RED4ext::Detail::AddressHashes::CBaseFunction_InternalExecute);
+    // Resolved at load (ResolveScriptCallAddresses), never lazily: a lazy miss would end the game.
+    const auto execute = reinterpret_cast<InternalExecute_t>(gInternalExecute.load());
 
     // Flushed as written, so after a crash the last script.call line names the call.
     log::Debug("script.call", "fn=" + aWhat + (aContext ? " on=instance" : " on=static"), aCid);

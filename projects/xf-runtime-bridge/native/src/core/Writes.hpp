@@ -55,6 +55,11 @@ json PauseResult(json aScript);
 // photo.expression.set: the attribute result with an undo to the earlier expression, if known.
 json ExpressionResult(json aScript);
 
+// photo.expression.index: the script's {target, index, menu_value, menu_value_known}. The face index
+// bypasses the menu, so the undo selects the menu's own expression again (photo.expression.set with
+// the menu's value, which re-applies it through the menu); no undo when the menu's value is unknown.
+json ExpressionIndexResult(json aScript);
+
 // What LightSet needs from the game.
 struct LightOps
 {
