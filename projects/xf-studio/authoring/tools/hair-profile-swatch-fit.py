@@ -44,6 +44,29 @@ def samp(stops, t):
             return [a[1][k] + (b[1][k] - a[1][k]) * f for k in range(3)]
 
 
+def rescaled(stops):
+    """The stops as the game holds them after loading (shader-hair.md §7): sorted, first at 0 and last at 1 (even spacing under 0.001)."""
+    s = sorted(stops, key=lambda e: e[0])
+    if len(s) == 1:
+        return [(0.0, s[0][1])]
+    first, span = s[0][0], s[-1][0] - s[0][0]
+    return [((i / (len(s) - 1)) if span < 0.001 else (v - first) / span, c) for i, (v, c) in enumerate(s)]
+
+
+def bake_samp(stops, x, n):
+    """The texel the shader fetches for a texture value x under the decoded bake: index uint((N-1)x), sample t = k/N of the rescaled
+    stops, 8-bit interpolation truncated to a byte [observed, shader-hair.md §7]. Returns stored bytes (the hypothesis decodes them)."""
+    k = min(n - 1, max(0, int((n - 1) * x)))
+    t, s = k / n, rescaled(stops)
+    i = 0
+    while i + 1 < len(s) and s[i + 1][0] <= t:
+        i += 1
+    if i + 1 >= len(s) or t <= s[i][0]:
+        return [int(min(255, max(0, c))) for c in s[i][1]]
+    f = (t - s[i][0]) / (s[i + 1][0] - s[i][0])
+    return [int(min(255, max(0, a * (1 - f) + b * f))) for a, b in zip(s[i][1], s[i + 1][1])]
+
+
 def overlay(rt, idc):
     luma = 0.3 * rt[0] + 0.59 * rt[1] + 0.11 * rt[2]
     return [abs(2 * i * r if luma < 0.5 else 1 - 2 * (1 - i) * (1 - r)) for i, r in zip(idc, rt)]
@@ -53,8 +76,11 @@ def power(g):
     return lambda c: (c / 255) ** g
 
 
+# Hypotheses sample the raw stop positions with `samp`, except those listed in BAKED, which read the decoded bake's texels.
+BAKED = {"overlay, decoded bake (executable: rescale, k/N, truncate, sRGB)"}
 HYPOTHESES = {
-    "overlay, stops decoded from sRGB (preview model)": lambda rt, i: overlay([dec(x) for x in rt], [dec(x) for x in i]),
+    "overlay, decoded bake (executable: rescale, k/N, truncate, sRGB)": lambda rt, i: overlay([dec(x) for x in rt], [dec(x) for x in i]),
+    "overlay, stops decoded from sRGB (earlier preview model)": lambda rt, i: overlay([dec(x) for x in rt], [dec(x) for x in i]),
     "overlay, stops used raw": lambda rt, i: overlay([x / 255 for x in rt], [x / 255 for x in i]),
     "overlay, stops^3": lambda rt, i: overlay([power(3)(x) for x in rt], [power(3)(x) for x in i]),
     "overlay decoded, result squared": lambda rt, i: [v * v for v in overlay([dec(x) for x in rt], [dec(x) for x in i])],
@@ -71,7 +97,7 @@ def load_profiles(directory):
     for path in Path(directory).glob("*.hp.json"):
         root = json.loads(path.read_text(encoding="utf-8"))["Data"]["RootChunk"]
         grab = lambda k: [(e["value"], (e["color"]["Red"], e["color"]["Green"], e["color"]["Blue"])) for e in root[k]]
-        profiles[path.name[:-len(".hp.json")]] = (grab("gradientEntriesID"), grab("gradientEntriesRootToTip"))
+        profiles[path.name[:-len(".hp.json")]] = (grab("gradientEntriesID"), grab("gradientEntriesRootToTip"), int(root.get("sampleCount", 127)))
     return profiles
 
 
@@ -135,11 +161,12 @@ def main():
     for label, fn in HYPOTHESES.items():
         angles, exposures = [], []
         for name in names:
-            ids, root = profiles[name]
+            ids, root, n = profiles[name]
+            sample = (lambda stops, x: bake_samp(stops, x, n)) if label in BAKED else samp
             acc = [0.0, 0.0, 0.0]
             for a in range(args.grid):
                 for b in range(args.grid):
-                    o = fn(samp(root, (a + .5) / args.grid), samp(ids, (b + .5) / args.grid))
+                    o = fn(sample(root, (a + .5) / args.grid), sample(ids, (b + .5) / args.grid))
                     acc = [x + y for x, y in zip(acc, o)]
             p = [x / args.grid ** 2 for x in acc]
             s = references[name]

@@ -2,11 +2,14 @@ import * as THREE from "three";
 import { bakeHairProfile, HAIR_DITHER, HAIR_LIGHTING_VANILLA, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
   type ProfileEncoding, type ProfileStop } from "./hair-colour-model";
 
-/** Renderer adapter for the hair.mt colour model in hair-colour-model.ts.
- * Three keeps its own lighting; only base colour, coverage and roughness inputs
- * follow the compiled 2.31 programs. The deferred hair BRDF is not reproduced. */
+/** Renderer adapter for the hair.mt colour model in hair-colour-model.ts: base colour, coverage and roughness
+ * follow the compiled 2.31 programs, and the hair light (sun, local lights and the environment path) replaces
+ * Three's own lighting on strands (HAIR_LIGHT_GLSL). */
 
-/** Encoded-space sample of the source stops (kept for callers that display raw profile colours). */
+/**
+ * A raw profile colour for display, in stored 8-bit values: the stops at the positions the game rescales them to (sorted, first at 0,
+ * last at 1), so a swatch shows the same place along the strand the bake samples (hair-colour-model.ts `sampleStopsEncoded`).
+ */
 export function sampleHairGradient(stops: readonly ProfileStop[], value: number): [number, number, number] {
   return sampleStopsEncoded(stops, value).map(Math.round) as [number, number, number];
 }
@@ -99,18 +102,24 @@ export const HAIR_CAP_DECAL_MATERIAL = Object.freeze({
 } satisfies Partial<THREE.MeshStandardMaterialParameters>);
 
 /**
- * Direct light for strands, mirroring hairDirectLight (hair-colour-model.ts): the
- * 2.31 deferred hair light is a Marschner-style model (white shifted R lobe,
- * albedo-tinted TRT lobe, wrapped Kajiya multiple-scatter diffuse) evaluated on
- * the strand direction. The card's own dielectric specular is disabled
- * (specularIntensity 0) and Three's direct terms are replaced. Strand direction
- * is the skinned bitangent, as the game's G-buffer pass uses it for these cards.
- * Option-driven constants default to HAIR_LIGHTING_VANILLA ([community] values, register
- * pairing [hypothesis]). The environment-probe hair path is not decoded; the ambient
- * diffuse Three computes is scaled by the EnvProbe MultiScatter option instead.
+ * The hair light for strands, mirroring hair-colour-model.ts: the 2.31 deferred hair light is a Marschner-style
+ * model (white shifted R lobe, albedo-tinted TRT lobe, wrapped Kajiya multiple-scatter diffuse) evaluated on the
+ * strand direction, with the `GlobalLight` intensities for directional lights and the `LocalLight` intensities
+ * for spot lights (`hairDirectLight`). The card's own dielectric specular is disabled (specularIntensity 0) and
+ * Three's direct terms are replaced. Strand direction is the skinned bitangent, as the game's G-buffer pass uses
+ * it for these cards. Option-driven constants default to HAIR_LIGHTING_VANILLA, the executable's defaults [observed].
+ *
+ * Environment (`hairEnvironmentLight`, shader-hair.md §6.5) [observed]: the same model once for the virtual light
+ * `L_e = normalize(V − (V·T)T)` with the `EnvProbe` intensities and both lobes widened by `AdditionalAreaRoughness`,
+ * × 2π·E, where E is the diffuse irradiance along `L_e` (the game reads its global ambient cube there; creator lighting
+ * §10.3). A Standard surface gets `irradiance · albedo/π` in Three, so the game's `E` is Three's `irradiance/π`, and the
+ * model × 2π·E is the model × 2·irradiance: the ambient diffuse becomes the game's `2·E·EnvMS·C·w²·albedo` (albedo twice)
+ * and the R and TRT lobes, lit by the irradiance, replace the indirect specular (hair reads no reflection). Both replace
+ * Three's own indirect terms. With no ambient, probe, hemisphere or environment (the creator preset) the path is zero.
+ * Without a tangent frame there is no strand direction, and the ambient diffuse is only scaled by `EnvProbe/MultiScatter`.
  */
 const HAIR_LIGHT_GLSL = `
-        #if ( NUM_DIR_LIGHTS > 0 || NUM_SPOT_LIGHTS > 0 ) && defined( USE_TANGENT )
+        #if defined( USE_TANGENT )
         {
           vec3 hairT = normalize(tbn[1]);
           vec3 hairC = clamp(material.diffuseColor * xfsHairScatter.w, vec3(1e-5), vec3(1.0));
@@ -118,8 +127,10 @@ const HAIR_LIGHT_GLSL = `
           // Per-strand highlight shift hashed from Strand_ID, as the light reads it from the G-buffer.
           float hairRandom = mix(xfsHairRandom.x, xfsHairRandom.y,
             fract(fract(xfsHairLightId * 0.06711056 + xfsHairLightId * 0.00583715) * 52.982918));
+          #if ( NUM_DIR_LIGHTS > 0 || NUM_SPOT_LIGHTS > 0 )
           reflectedLight.directDiffuse = vec3(0.0);
           reflectedLight.directSpecular = vec3(0.0);
+          #endif
           #if NUM_DIR_LIGHTS > 0
           vec3 hairGlobal = vec3(xfsHairLobes.z, xfsHairLobes.w, xfsHairScatter.z);
           DirectionalLight hairLight;
@@ -127,7 +138,7 @@ const HAIR_LIGHT_GLSL = `
           for (int i = 0; i < NUM_DIR_LIGHTS; i++) {{
             hairLight = directionalLights[i];
             vec3 specular, diffuse;
-            xfsHairDirect(hairLight.direction, geometryViewDir, hairT, normal, hairC, hairR, hairRandom, hairGlobal, specular, diffuse);
+            xfsHairDirect(hairLight.direction, geometryViewDir, hairT, normal, hairC, hairR, hairRandom, hairGlobal, 0.0, specular, diffuse);
             reflectedLight.directSpecular += hairLight.color * specular;
             reflectedLight.directDiffuse += hairLight.color * diffuse;
           }}
@@ -142,21 +153,47 @@ const HAIR_LIGHT_GLSL = `
             hairSpot = spotLights[i];
             getSpotLightInfo(hairSpot, geometryPosition, hairSpotLight);
             vec3 specular, diffuse;
-            xfsHairDirect(hairSpotLight.direction, geometryViewDir, hairT, normal, hairC, hairR, hairRandom, xfsHairLocal, specular, diffuse);
+            xfsHairDirect(hairSpotLight.direction, geometryViewDir, hairT, normal, hairC, hairR, hairRandom, xfsHairLocal, 0.0, specular, diffuse);
             reflectedLight.directSpecular += hairSpotLight.color * specular;
             reflectedLight.directDiffuse += hairSpotLight.color * diffuse;
           }}
           #pragma unroll_loop_end
           #endif
+          // The environment path: one virtual light along the view, less its along-strand part.
+          vec3 hairVp = geometryViewDir - dot(geometryViewDir, hairT) * hairT;
+          vec3 hairLe = hairVp * inversesqrt(max(dot(hairVp, hairVp), 1e-8));
+          // Its irradiance is taken along L_e, as the game reads its ambient cube there: Three's ambient, light probe, hemisphere
+          // and image-based irradiance (zero under the creator preset, which has none, so the path adds nothing there).
+          vec3 hairE = getAmbientLightIrradiance(ambientLightColor);
+          #if defined( USE_LIGHT_PROBES )
+          hairE += getLightProbeIrradiance(lightProbe, hairLe);
+          #endif
+          #if ( NUM_HEMI_LIGHTS > 0 )
+          #pragma unroll_loop_start
+          for (int i = 0; i < NUM_HEMI_LIGHTS; i++) {{
+            hairE += getHemisphereLightIrradiance(hemisphereLights[i], hairLe);
+          }}
+          #pragma unroll_loop_end
+          #endif
+          #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+          hairE += getIBLIrradiance(hairLe);
+          #endif
+          vec3 envSpecular, envDiffuse;
+          xfsHairDirect(hairLe, geometryViewDir, hairT, normal, hairC, hairR, hairRandom, xfsHairEnv.xyz, xfsHairEnv.w, envSpecular, envDiffuse);
+          // envDiffuse = C·mix(w, 1, kajiyaMix)·gate·EnvMS/π; × 2·E_three × the albedo again (Three's E is π × the game's).
+          reflectedLight.indirectDiffuse = 2.0 * hairE * envDiffuse * material.diffuseColor;
+          reflectedLight.indirectSpecular = 2.0 * hairE * envSpecular;
         }
-        #endif
-        reflectedLight.indirectDiffuse *= xfsHairRandom.z;`;
+        #else
+        reflectedLight.indirectDiffuse *= xfsHairEnv.z;
+        #endif`;
 
 const HAIR_BSDF_GLSL = `
         float xfsGaussian(float b, float x) { return exp(-0.5 * x * x / (b * b)) / (2.5066283 * b); }
         float xfsSchlick(float c) { return 0.0466 + 0.9535 * pow(1.0 - c, 5.0); }
         float xfsWrapped(float nDotL, float w) { return clamp((nDotL + w) / ((1.0 + w) * (1.0 + w)), 0.0, 1.0); }
-        void xfsHairDirect(vec3 L, vec3 V, vec3 T, vec3 N, vec3 C, float r, float rnd, vec3 I, out vec3 specular, out vec3 diffuse) {
+        // I = (R, TRT, MultiScatter) intensities of the path; area widens both lobes (AdditionalAreaRoughness, environment only).
+        void xfsHairDirect(vec3 L, vec3 V, vec3 T, vec3 N, vec3 C, float r, float rnd, vec3 I, float area, out vec3 specular, out vec3 diffuse) {
           float sinL = dot(T, L), sinV = dot(T, V), nDotL = dot(N, L);
           float cosThetaD = cos(abs(asin(clamp(sinV, -1.0, 1.0)) - asin(clamp(sinL, -1.0, 1.0))) * 0.5);
           vec3 lp = L - sinL * T, vp = V - sinV * T;
@@ -165,10 +202,10 @@ const HAIR_BSDF_GLSL = `
           float sR = xfsHairLobes.x + rnd, rr = r / xfsHairGates.w;
           float shift = 2.0 * sin(sR) * (cos(sR) * cosHalfPhi * sqrt(max(0.0, 1.0 - sinV * sinV)) + sin(sR) * sinV);
           float specularGate = clamp(xfsWrapped(nDotL, xfsHairGates.y) + 1.0 - xfsHairGates.z, 0.0, 1.0);
-          float specR = specularGate * xfsGaussian(rr * rr * 1.4142136 * cosHalfPhi, sinL + sinV - shift) * 0.25 * cosHalfPhi *
+          float specR = specularGate * xfsGaussian(1.4142136 * (rr * rr * cosHalfPhi + area), sinL + sinV - shift) * 0.25 * cosHalfPhi *
             xfsSchlick(sqrt(clamp(0.5 + 0.5 * dot(L, V), 0.0, 1.0))) * I.x;
           float f = xfsSchlick(0.5 * cosThetaD);
-          float trt = xfsGaussian(2.0 * r * r, sinL + sinV - rnd - xfsHairLobes.y) * (1.0 - f) * (1.0 - f) * f *
+          float trt = xfsGaussian(2.0 * r * r + area, sinL + sinV - rnd - xfsHairLobes.y) * (1.0 - f) * (1.0 - f) * f *
             exp(xfsHairTrt.x * cosPhi - xfsHairTrt.y) * I.y;
           specular = vec3(specR) + trt * pow(C, vec3(0.8 / max(cosThetaD, 1e-3)));
           float wrapped = xfsWrapped(nDotL, xfsHairScatter.x);
@@ -177,12 +214,12 @@ const HAIR_BSDF_GLSL = `
         }`;
 
 /**
- * Hair light intensities for local lights (the `LocalLight` options): R 0.35 per the Character Rendering
- * Editor's vanilla list [community]; TRT and MultiScatter are taken equal to the `GlobalLight` values
- * [hypothesis]. The local-light hair path itself is not decoded; the global model is evaluated per spot
- * light with these intensities (knowledge/creator-lighting.md §6).
+ * Hair light intensities for local lights: the executable defaults of the `LocalLight/R`, `/TRT` and `/MultiScatter` options, which
+ * the copy into the light's constants stores in `cb0[13].x`, `.z` and `.w` [observed, shader-hair.md §6.2 and §6.4]. The tiled
+ * local-light loop evaluates the sun's hair model per light with them. A runtime preset carries its own in `HairLighting`.
  */
-export const HAIR_LOCAL_LIGHT = Object.freeze({ intensityR: 0.35, intensityTRT: 0.8, scatter: 0.47 });
+export const HAIR_LOCAL_LIGHT = Object.freeze({ intensityR: HAIR_LIGHTING_VANILLA.localR, intensityTRT: HAIR_LIGHTING_VANILLA.localTRT,
+  scatter: HAIR_LIGHTING_VANILLA.localScatter });
 
 /** Uniforms shared by the strand and lash hair lights (see HairLighting for the register mapping). */
 function hairLightUniforms(l: HairLighting) {
@@ -191,13 +228,14 @@ function hairLightUniforms(l: HairLighting) {
     xfsHairTrt: { value: new THREE.Vector2(l.trtNpScale, l.trtNpBias) },
     xfsHairScatter: { value: new THREE.Vector4(l.wrap, l.kajiyaMix, l.scatter, l.albedoMultiplier) },
     xfsHairGates: { value: new THREE.Vector4(l.scatterMask, l.specularWrap, l.specularMask, l.roughnessFactor) },
-    xfsHairRandom: { value: new THREE.Vector3(l.specularRandomMin, l.specularRandomMax, l.envMultiScatter) },
-    xfsHairLocal: { value: new THREE.Vector3(HAIR_LOCAL_LIGHT.intensityR, HAIR_LOCAL_LIGHT.intensityTRT, HAIR_LOCAL_LIGHT.scatter) },
+    xfsHairRandom: { value: new THREE.Vector2(l.specularRandomMin, l.specularRandomMax) },
+    xfsHairLocal: { value: new THREE.Vector3(l.localR, l.localTRT, l.localScatter) },
+    xfsHairEnv: { value: new THREE.Vector4(l.envR, l.envTRT, l.envMultiScatter, l.additionalAreaRoughness) },
   };
 }
-const HAIR_LIGHT_UNIFORMS_GLSL = `uniform vec4 xfsHairLobes, xfsHairScatter, xfsHairGates;
-        uniform vec3 xfsHairRandom, xfsHairLocal;
-        uniform vec2 xfsHairTrt;`;
+const HAIR_LIGHT_UNIFORMS_GLSL = `uniform vec4 xfsHairLobes, xfsHairScatter, xfsHairGates, xfsHairEnv;
+        uniform vec3 xfsHairLocal;
+        uniform vec2 xfsHairTrt, xfsHairRandom;`;
 
 /**
  * Hair-class lighting for a flat-coloured strand material (e.g. lashes, whose
@@ -224,7 +262,7 @@ export function attachHairLighting(material: THREE.MeshStandardMaterial, roughne
         ${HAIR_LIGHT_GLSL}`);
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-lighting-3`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-lighting-4`;
 }
 
 type StrandSource = {
@@ -302,5 +340,5 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
     }
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-7`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-8`;
 }

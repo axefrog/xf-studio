@@ -7,13 +7,20 @@
  * - [source] compiled 2.31 pixel programs: profile lookup by truncated index,
  *   luminance-switched overlay, vertex-red shadow term, cutoff remap, roughness
  *   and sqrt(albedo) G-buffer writes.
- * - [hypothesis] the CPU bake of CHairProfile stops into the per-profile rows:
- *   sample k at t = k/(N-1), stops interpolated in stored 8-bit space and then
- *   decoded from sRGB. The encoding is an explicit option, not a silent choice.
+ * - [observed] the CPU bake of CHairProfile stops into the per-profile rows, read
+ *   from the 2.31 executable (research/materials/shader-hair.md §7): stops sorted
+ *   and rescaled to span 0 to 1, sample k at t = k/N, stored 8-bit colours
+ *   interpolated and truncated to a byte, then decoded with the exact sRGB EOTF.
+ * - [observed] the hair option defaults (`HAIR_LIGHTING_VANILLA`), read from the
+ *   executable's option table (shader-hair.md §6.4).
  */
 
 export type Rgb = [number, number, number];
 export type ProfileStop = { value: number; color: readonly [number, number, number] };
+/**
+ * How a baked byte becomes the texel the shader reads. The game decodes it with the sRGB EOTF [observed]; `stored-linear`
+ * (byte / 255) is no longer a live hypothesis and is kept only so evidence captures can name the encoding they used.
+ */
 export type ProfileEncoding = "srgb-decoded" | "stored-linear";
 
 /** Rec.601 weights used by the compiled base-colour pass to choose the overlay branch. */
@@ -86,38 +93,66 @@ export function sortStops(stops: readonly ProfileStop[]): ProfileStop[] {
     .sort((a, b) => a.stop.value - b.stop.value || a.index - b.index).map(entry => entry.stop);
 }
 
-/** Interpolate stored 8-bit stop colours at t; clamps outside the first/last stop. */
-export function sampleStopsEncoded(stops: readonly ProfileStop[], t: number): Rgb {
+/**
+ * The stops as the game holds them after loading a profile [observed, shader-hair.md §7]: sorted by position, then rescaled so the
+ * first sits at 0 and the last at 1 (`v' = (v − v_first) / (v_last − v_first)`), or spaced evenly (`i/(n−1)`) when the stored range is
+ * under 0.001. The game's sort is not stable; among equal positions this keeps the source order, so the later entry wins. A single stop
+ * (a zero range the game would divide by) sits at 0 and colours the whole row.
+ */
+export function rescaledStops(stops: readonly ProfileStop[]): ProfileStop[] {
   const sorted = sortStops(stops);
   if (!sorted.length) throw Error("A hair gradient needs at least one stop");
-  const first = sorted[0]!, last = sorted.at(-1)!;
-  if (t < first.value) return [...first.color] as Rgb;
-  if (t >= last.value) return [...last.color] as Rgb;
-  for (let i = 1; i < sorted.length; i++) {
-    const a = sorted[i - 1]!, b = sorted[i]!;
-    if (t > b.value) continue;
-    if (t === b.value) {
-      // Duplicate positions: the last entry at this position wins.
-      let j = i; while (j + 1 < sorted.length && sorted[j + 1]!.value === t) j++;
-      return [...sorted[j]!.color] as Rgb;
-    }
-    const f = (t - a.value) / (b.value - a.value);
-    return a.color.map((c, k) => c + (b.color[k]! - c) * f) as Rgb;
-  }
-  return [...last.color] as Rgb;
+  if (sorted.length === 1) return [{ value: 0, color: sorted[0]!.color }];
+  const first = sorted[0]!.value, range = sorted.at(-1)!.value - first;
+  return sorted.map((stop, i) => ({ value: range < 0.001 ? i / (sorted.length - 1) : (stop.value - first) / range, color: stop.color }));
 }
 
-/** Bake N linear samples (N×3 floats), mirroring the per-profile row read by the compiled shader. */
-export function bakeHairProfile(stops: readonly ProfileStop[], sampleCount: number,
-                                encoding: ProfileEncoding = "srgb-decoded"): Float32Array {
+/**
+ * The segment the bake interpolates at `t` over rescaled stops: the last stop `i` with `v'_i ≤ t` and the fraction toward the next one
+ * (`f = 0` at or past the last stop, and before the first). A zero-width segment is never chosen, so the later of two equal stops wins.
+ */
+function segmentAt(stops: readonly ProfileStop[], t: number): { a: ProfileStop; b: ProfileStop; f: number } {
+  let i = 0;
+  while (i + 1 < stops.length && stops[i + 1]!.value <= t) i++;
+  const a = stops[i]!, b = stops[i + 1];
+  if (!b || t <= a.value) return { a, b: a, f: 0 };
+  return { a, b, f: (t - a.value) / (b.value - a.value) };
+}
+
+/**
+ * Stored 8-bit stop colours interpolated at `t` along the profile as the game rescales it (`rescaledStops`), without the bake's
+ * truncation: for display (a raw profile colour). Clamps outside 0 to 1.
+ */
+export function sampleStopsEncoded(stops: readonly ProfileStop[], t: number): Rgb {
+  const { a, b, f } = segmentAt(rescaledStops(stops), Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0)));
+  return a.color.map((c, k) => c + (b.color[k]! - c) * f) as Rgb;
+}
+
+/**
+ * The profile's stored bytes as the game bakes them [observed, shader-hair.md §7]: sample `k` at `t = k/N` (not `k/(N−1)`: the last
+ * sample sits at `(N−1)/N`, just short of a stop at 1), interpolate the stored 8-bit colours, clamp to 0–255 and truncate to a byte.
+ */
+export function bakeHairProfileBytes(stops: readonly ProfileStop[], sampleCount: number): Uint8Array {
   if (!Number.isInteger(sampleCount) || sampleCount < 2 || sampleCount > 1024)
     throw Error("Hair profile sampleCount must be an integer from 2 to 1024");
-  const out = new Float32Array(sampleCount * 3);
+  const rescaled = rescaledStops(stops);
+  const out = new Uint8Array(sampleCount * 3);
   for (let k = 0; k < sampleCount; k++) {
-    const encoded = sampleStopsEncoded(stops, k / (sampleCount - 1));
-    for (let c = 0; c < 3; c++)
-      out[k * 3 + c] = encoding === "srgb-decoded" ? srgbToLinear(encoded[c]!) : encoded[c]! / 255;
+    const { a, b, f } = segmentAt(rescaled, k / sampleCount);
+    for (let c = 0; c < 3; c++) out[k * 3 + c] = Math.trunc(Math.min(255, Math.max(0, a.color[c]! * (1 - f) + b.color[c]! * f)));
   }
+  return out;
+}
+
+/**
+ * Bake N linear samples (N×3 floats), the per-profile row the compiled shader reads: `bakeHairProfileBytes`, then each byte decoded
+ * with the sRGB EOTF (the game's 256-entry table) [observed].
+ */
+export function bakeHairProfile(stops: readonly ProfileStop[], sampleCount: number,
+                                encoding: ProfileEncoding = "srgb-decoded"): Float32Array {
+  const bytes = bakeHairProfileBytes(stops, sampleCount);
+  const out = new Float32Array(sampleCount * 3);
+  for (let i = 0; i < bytes.length; i++) out[i] = encoding === "srgb-decoded" ? srgbToLinear(bytes[i]!) : bytes[i]! / 255;
   return out;
 }
 
@@ -239,35 +274,40 @@ export function linearEquivalentDecal(decal: Readonly<Rgb>, coverage: number, un
 
 /**
  * Registers of the 2.31 deferred hair light (`m_shaderLightsComputeGlobal*_Clustered_*1****` compute
- * programs) whose values come from engine options at runtime (GameOptions `Editor/Characters/Hair/...`).
- * They are NOT in any resource. Field → register → option (the option names are strings in the 2.31
- * executable; the register pairing follows each register's role in the program [hypothesis]):
+ * programs) and of the ambient composite's Hair branch, whose values come from engine options at runtime
+ * (GameOptions `Editor/Characters/Hair/...`). They are NOT in any resource, and no shipped
+ * `config_override.ini` changes them. Field → register → option, read from the executable's option table
+ * and the copy into `cb0` [observed, shader-hair.md §6.4]:
  *   shiftR cb0[16].x AlphaShifts/R · shiftTRT cb0[16].z AlphaShifts/TRT ·
  *   specularRandomMin/Max cb0[17].z/w SpecularRandom_Min/Max · roughnessFactor cb0[17].x RoughnessFactor ·
  *   albedoMultiplier cb0[17].y AlbedoMultiplier · intensityR/intensityTRT/scatter cb0[12].x/z/w
- *   GlobalLight/{R,TRT,MultiScatter} · wrap/kajiyaMix/scatterMask cb0[18].x/y/w
- *   MultiScatter/{Wrap,DiffuseScatterFactor,Mask_Intensity} · specularWrap/specularMask cb0[19].y/z
- *   Specular/{Wrap,Mask_Intensity} · trtNpScale/trtNpBias cb0[20].x/y TRT_Params/{EXP_SCALE,EXP_BIAS} ·
- *   envMultiScatter EnvProbe/MultiScatter (environment path not decoded; the preview scales its ambient
- *   diffuse by it).
+ *   GlobalLight/{R,TRT,MultiScatter} · localR/localTRT/localScatter cb0[13].x/z/w LocalLight/{R,TRT,MultiScatter} ·
+ *   envR/envTRT/envMultiScatter cb0[14].x/z/w EnvProbe/{R,TRT,MultiScatter} (the environment path, §6.5) ·
+ *   wrap/kajiyaMix/scatterMask cb0[18].x/y/w MultiScatter/{Wrap,DiffuseScatterFactor,Mask_Intensity} ·
+ *   specularWrap/specularMask cb0[19].y/z Specular/{Wrap,Mask_Intensity} · additionalAreaRoughness cb0[19].x
+ *   AdditionalAreaRoughness (widens both environment lobes) · trtNpScale/trtNpBias cb0[20].x/y TRT_Params/{EXP_SCALE,EXP_BIAS}.
  */
 export interface HairLighting {
   readonly shiftR: number; readonly shiftTRT: number; readonly intensityR: number; readonly intensityTRT: number;
   readonly trtNpScale: number; readonly trtNpBias: number; readonly wrap: number; readonly kajiyaMix: number;
   readonly scatter: number; readonly albedoMultiplier: number; readonly scatterMask: number;
   readonly specularWrap: number; readonly specularMask: number; readonly roughnessFactor: number;
-  readonly specularRandomMin: number; readonly specularRandomMax: number; readonly envMultiScatter: number;
+  readonly specularRandomMin: number; readonly specularRandomMax: number;
+  readonly localR: number; readonly localTRT: number; readonly localScatter: number;
+  readonly envR: number; readonly envTRT: number; readonly envMultiScatter: number; readonly additionalAreaRoughness: number;
 }
 /**
- * The 2.31 defaults of those options as listed by the "Vanilla" preset of Arkhe's Character Rendering
- * Editor (a CET tool targeting 2.31 that reads and writes these GameOptions) [community]; not yet
- * confirmed by our own runtime dump. Default for the preview.
+ * The 2.31 executable's defaults of those options [observed, shader-hair.md §6.4]. They equal the "Vanilla" preset of Arkhe's
+ * Character Rendering Editor for every option it lists. A CET preset can still change them in a session (a capture must record them).
+ * Default for the preview.
  */
 export const HAIR_LIGHTING_VANILLA: HairLighting = Object.freeze({
   shiftR: -0.083, shiftTRT: -0.5, intensityR: 0.3, intensityTRT: 0.8,
   trtNpScale: 1, trtNpBias: 1.5, wrap: 0.35, kajiyaMix: 0, scatter: 0.47, albedoMultiplier: 1,
   scatterMask: 1, specularWrap: 0.3, specularMask: 1, roughnessFactor: 1,
-  specularRandomMin: -0.2, specularRandomMax: 0.2, envMultiScatter: 0.47,
+  specularRandomMin: -0.2, specularRandomMax: 0.2,
+  localR: 0.35, localTRT: 0.8, localScatter: 0.47,
+  envR: 0.3, envTRT: 0.8, envMultiScatter: 0.47, additionalAreaRoughness: 0.1,
 });
 /**
  * The published model's defaults (Karis, "Physically Based Hair Shading in Unreal", 2016), used before
@@ -277,7 +317,9 @@ export const HAIR_LIGHTING_KARIS: HairLighting = Object.freeze({
   shiftR: -0.07, shiftTRT: 0.14, intensityR: 1, intensityTRT: 1,
   trtNpScale: 17, trtNpBias: 16.78, wrap: 1, kajiyaMix: 0.33, scatter: 1, albedoMultiplier: 1,
   scatterMask: 0, specularWrap: 1, specularMask: 0, roughnessFactor: 1,
-  specularRandomMin: 0, specularRandomMax: 0, envMultiScatter: 1,
+  specularRandomMin: 0, specularRandomMax: 0,
+  localR: 1, localTRT: 1, localScatter: 1,
+  envR: 1, envTRT: 1, envMultiScatter: 1, additionalAreaRoughness: 0,
 });
 
 /** Per-strand random value the light hashes from the stored Strand_ID (G-buffer 2.w, in 0..1). */
@@ -291,15 +333,21 @@ const unit = (a: Readonly<Rgb>): Rgb => { const l = Math.hypot(...a) || 1; retur
 const gaussian = (b: number, x: number) => Math.exp(-0.5 * x * x / (b * b)) / (Math.sqrt(2 * Math.PI) * b);
 const schlick = (cos: number) => 0.0466 + 0.9535 * (1 - cos) ** 5;
 
+/** The three intensities one hair light path scales its lobes by (R, TRT, multiple-scatter diffuse). */
+export type HairIntensities = { readonly r: number; readonly trt: number; readonly scatter: number };
+/** The intensities of each path: the sun (`GlobalLight`), local lights (`LocalLight`) and the environment (`EnvProbe`) [observed, §6.4]. */
+export const hairIntensities = (lighting: HairLighting, path: "global" | "local" | "env"): HairIntensities =>
+  path === "global" ? { r: lighting.intensityR, trt: lighting.intensityTRT, scatter: lighting.scatter }
+    : path === "local" ? { r: lighting.localR, trt: lighting.localTRT, scatter: lighting.localScatter }
+    : { r: lighting.envR, trt: lighting.envTRT, scatter: lighting.envMultiScatter };
+
 /**
- * One directional light's response for a hair fibre, as the 2.31 deferred hair light computes it:
- * white R lobe + albedo-tinted TRT lobe (no TT in this path) + wrapped Kajiya "multiple scatter"
- * diffuse. T is the strand direction, N the stored normal, L/V unit vectors toward light/eye.
- * strandId (0..1) seeds the per-strand highlight shift; the fully lit case (shadow 1) is modelled.
+ * The hair model for one light direction, as both light programs and the ambient composite evaluate it: white R lobe +
+ * albedo-tinted TRT lobe (no TT) + wrapped Kajiya "multiple scatter" diffuse. `area` widens both lobes (the composite's
+ * `AdditionalAreaRoughness`; 0 for real lights).
  */
-export function hairDirectLight(L: Readonly<Rgb>, V: Readonly<Rgb>, T: Readonly<Rgb>, N: Readonly<Rgb>,
-                                albedo: Readonly<Rgb>, roughness: number,
-                                lighting: HairLighting = HAIR_LIGHTING_VANILLA, strandId = 0): { specular: Rgb; diffuse: Rgb } {
+function hairLobes(L: Readonly<Rgb>, V: Readonly<Rgb>, T: Readonly<Rgb>, N: Readonly<Rgb>, albedo: Readonly<Rgb>, roughness: number,
+                   lighting: HairLighting, strandId: number, intensity: HairIntensities, area: number): { specular: Rgb; diffuse: Rgb } {
   const r = Math.min(1, Math.max(0.04, roughness));
   const C = albedo.map(c => Math.min(1, Math.max(1e-5, c * lighting.albedoMultiplier))) as Rgb;
   const sinL = dot3(T, L), sinV = dot3(T, V), NdotL = dot3(N, L);
@@ -310,21 +358,48 @@ export function hairDirectLight(L: Readonly<Rgb>, V: Readonly<Rgb>, T: Readonly<
   // Wrapped N.L terms, each gated by clamp(wrapped + 1 - Mask_Intensity).
   const wrapTerm = (w: number) => saturate((NdotL + w) / (1 + w) ** 2);
   const specularGate = saturate(wrapTerm(lighting.specularWrap) + 1 - lighting.specularMask);
-  // R: shifted by angle (shiftR + random), width (r/RoughnessFactor)^2 * sqrt(2) * cosHalfPhi,
+  // R: shifted by angle (shiftR + random), width sqrt(2) * ((r/RoughnessFactor)^2 * cosHalfPhi + area),
   // Np = cosHalfPhi / 4, Fresnel at sqrt(0.5 + 0.5 V.L).
   const alpha = lighting.shiftR + random, rr = r / lighting.roughnessFactor;
   const shift = 2 * Math.sin(alpha) * (Math.cos(alpha) * cosHalfPhi * Math.sqrt(Math.max(0, 1 - sinV * sinV)) + Math.sin(alpha) * sinV);
-  const mpR = gaussian(rr * rr * Math.SQRT2 * cosHalfPhi, sinL + sinV - shift);
-  const specR = specularGate * lighting.intensityR * mpR * 0.25 * cosHalfPhi * schlick(Math.sqrt(saturate(0.5 + 0.5 * dot3(L, V))));
-  // TRT: width 2r^2 at (sinL + sinV - random - shiftTRT), Fp = (1-f)^2 f with f at cosThetaD/2,
+  const mpR = gaussian(Math.SQRT2 * (rr * rr * cosHalfPhi + area), sinL + sinV - shift);
+  const specR = specularGate * intensity.r * mpR * 0.25 * cosHalfPhi * schlick(Math.sqrt(saturate(0.5 + 0.5 * dot3(L, V))));
+  // TRT: width 2r^2 + area at (sinL + sinV - random - shiftTRT), Fp = (1-f)^2 f with f at cosThetaD/2,
   // Tp = C^(0.8/cosThetaD), Np = exp(EXP_SCALE cosPhi - EXP_BIAS).
-  const mpTRT = gaussian(2 * r * r, sinL + sinV - random - lighting.shiftTRT);
+  const mpTRT = gaussian(2 * r * r + area, sinL + sinV - random - lighting.shiftTRT);
   const f = schlick(0.5 * cosThetaD), fp = (1 - f) ** 2 * f;
   const np = Math.exp(lighting.trtNpScale * cosPhi - lighting.trtNpBias);
-  const specular = C.map(c => specR + mpTRT * fp * np * c ** (0.8 / cosThetaD) * lighting.intensityTRT) as Rgb;
+  const specular = C.map(c => specR + mpTRT * fp * np * c ** (0.8 / cosThetaD) * intensity.trt) as Rgb;
   // Multiple-scatter diffuse: (1/pi) * lerp(wrapped, 1 - |sinL|, DiffuseScatterFactor)
   //   * clamp(wrapped + 1 - Mask_Intensity) * MultiScatter * C   (fully lit: tint term = 1).
   const wrapped = wrapTerm(lighting.wrap), scatterGate = saturate(wrapped + 1 - lighting.scatterMask);
-  const scatter = (wrapped + ((1 - Math.abs(sinL)) - wrapped) * lighting.kajiyaMix) / Math.PI * scatterGate * lighting.scatter;
+  const scatter = (wrapped + ((1 - Math.abs(sinL)) - wrapped) * lighting.kajiyaMix) / Math.PI * scatterGate * intensity.scatter;
   return { specular, diffuse: C.map(c => c * scatter) as Rgb };
+}
+
+/**
+ * One light's response for a hair fibre, as the 2.31 deferred hair light computes it (the sun path's `GlobalLight`
+ * intensities by default; `path: "local"` for the tiled local-light loop, which evaluates the same model with `LocalLight`).
+ * T is the strand direction, N the stored normal, L/V unit vectors toward light/eye. strandId (0..1) seeds the per-strand
+ * highlight shift; the fully lit case (shadow 1) is modelled.
+ */
+export function hairDirectLight(L: Readonly<Rgb>, V: Readonly<Rgb>, T: Readonly<Rgb>, N: Readonly<Rgb>,
+                                albedo: Readonly<Rgb>, roughness: number,
+                                lighting: HairLighting = HAIR_LIGHTING_VANILLA, strandId = 0, path: "global" | "local" = "global"): { specular: Rgb; diffuse: Rgb } {
+  return hairLobes(L, V, T, N, albedo, roughness, lighting, strandId, hairIntensities(lighting, path), 0);
+}
+
+/**
+ * The ambient composite's Hair branch [observed, shader-hair.md §6.5], per unit of the diffuse irradiance `E` (the value that lights a
+ * Standard pixel as `albedo × E`; in the `NoEnvProbes` lighting-integrate program, the global six-colour ambient cube taken along `L_e`). It evaluates the hair model once for a virtual light along the view with its along-strand
+ * part removed, `L_e = normalize(V − (V·T)T)` (so `sinθL = 0`, `cosφ = 1`), with the `EnvProbe` intensities and both lobes widened by
+ * `AdditionalAreaRoughness`, and scales it by `2π·E`. The composite multiplies the diffuse by the albedo once more, so ambient diffuse
+ * carries the albedo twice (`2·E·EnvMS·C·w²·albedo`); the R and TRT lobes are coloured by the irradiance, not by a reflection.
+ */
+export function hairEnvironmentLight(V: Readonly<Rgb>, T: Readonly<Rgb>, N: Readonly<Rgb>, albedo: Readonly<Rgb>, roughness: number,
+                                     lighting: HairLighting = HAIR_LIGHTING_VANILLA, strandId = 0): { specular: Rgb; diffuse: Rgb } {
+  const sinV = dot3(T, V);
+  const Le = unit(V.map((v, k) => v - sinV * T[k]!) as Rgb);
+  const model = hairLobes(Le, V, T, N, albedo, roughness, lighting, strandId, hairIntensities(lighting, "env"), lighting.additionalAreaRoughness);
+  return { specular: model.specular.map(c => 2 * Math.PI * c) as Rgb, diffuse: model.diffuse.map((c, k) => 2 * Math.PI * c * albedo[k]!) as Rgb };
 }
