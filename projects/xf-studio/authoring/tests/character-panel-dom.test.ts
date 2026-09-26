@@ -128,12 +128,18 @@ describe("the Character panel's DOM", () => {
     h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
     h.paint(); await settle(); h.paint();
     const hide = h.root.querySelectorAll("button").find(button => button.textContent === "Hide my V's own makeup")!;
-    expect(hide.disabled).toBe(false);
+    expect(hide.getAttribute("aria-disabled")).toBeNull();
     hide.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.hideOwnMakeup" });
     expect(h.context.request().choices).toEqual([{ part: "head", option: "scars", choice: "" }]);
     h.paint(); await settle(); h.paint();
-    expect(hide.disabled).toBe(true);
+    // Unavailable, it stays focusable and says why (UI-84); a click runs nothing.
+    expect(hide.disabled).toBe(false);
+    expect(hide.getAttribute("aria-disabled")).toBe("true");
+    expect(hide.getAttribute("aria-description")).toBeTruthy();
+    const before = h.dispatched.length;
+    hide.click();
+    expect(h.dispatched.length).toBe(before);
     const resetAll = h.root.querySelectorAll("button").find(button => button.textContent === "Reset all")!;
     resetAll.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.resetAll" });

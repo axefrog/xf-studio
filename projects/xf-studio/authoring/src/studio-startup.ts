@@ -13,6 +13,8 @@ import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from
 import { PROJECT_LINKS, type ProjectLink } from "./project-links";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
+import { createBrowserModInstall } from "./browser-mod-install-device";
+import { builtModsOf } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
 import { rasterRegion } from "./engines/layered-makeup/region";
@@ -56,6 +58,10 @@ export type StudioHost = {
   setupPlace: string;
   /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Game & tools is shown. */
   openSetup?: () => void;
+  /** The host's About view (version, licences, updates); the Studio offers it in Help and the command palette (UI-87). */
+  about?: () => void;
+  /** Called once the Studio is mounted, with what the host may ask of it (the desktop's welcome and About open Game & tools). */
+  onMounted?: (studio: { openGameSetup(): void }) => void;
   /** Lets the host ask for an immediate workspace save (the desktop does before closing). */
   onFlushRequest?: (flush: () => void) => void;
   /** Called once the 3D head is interactive. */
@@ -100,6 +106,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const localSetup = host.localSetup ?? createBrowserLocalSetup();
   const installDetection = createBrowserInstallDetection();
+  // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
+  const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]));
   // Whether the 3D preview may start preparing by itself; a workspace preference (per verification scope).
   let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
@@ -196,12 +204,12 @@ async function start(host: StudioHost, root: HTMLElement) {
     loadHead: () => attachHead(),
   });
   bootstrap = createTrustedStudioBootstrap({
-    workspace, core, preferences, localSetup, installDetection, previewSetup, viewport: viewportDevice.attachment,
+    workspace, core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
     } },
-    previewReadiness: previewDevice.coordinator, status: statusSource,
+    previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about,
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
     onRecipeImported: persist,
@@ -216,6 +224,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, STUDIO_VIEW_COMPOSITION); });
+  host.onMounted?.({ openGameSetup: () => void previewSetup.dispatch({ kind: "previewSetup.openSetup" }) });
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),

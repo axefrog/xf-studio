@@ -125,20 +125,26 @@ span.category { border-color: transparent; background: transparent; padding-left
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3); height: var(--control-h); padding: 0 var(--sp-5);
   border: 1px solid var(--line-strong); background: var(--bg-raised); color: var(--text); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm);
   font-weight: 550; white-space: nowrap; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
-.btn:hover:not(:disabled) { background: var(--bg-hover); }
-.btn:active:not(:disabled) { background: var(--bg-active); }
+.btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); }
+.btn:active:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-active); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent-edge); font-weight: 650; }
-.btn.primary:hover:not(:disabled) { background: oklch(.93 .15 100); }
+.btn.primary:hover:not(:disabled):not([aria-disabled="true"]) { background: oklch(.93 .15 100); }
 .btn.quiet { border-color: var(--line); background: transparent; }
-.btn.quiet:hover:not(:disabled) { background: var(--bg-hover); }
+.btn.quiet:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
-.btn.ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.btn.ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); color: var(--text); }
 .btn.ghost[aria-pressed="true"] { color: var(--signal); background: var(--signal-bg); }
 .btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
 .btn.small { height: var(--control-h-sm); padding: 0 var(--sp-4); font-size: var(--fs-sm); }
 .btn.icon-only { width: var(--control-h); padding: 0; }
 .btn.icon-only.small { width: var(--control-h-sm); }
 .btn:disabled, .icon-btn:disabled { opacity: .45; cursor: not-allowed; }
+/* A main action that is unavailable stays focusable and says why (UI-84; reason-tip.ts). */
+.btn[aria-disabled="true"], .chip-button[aria-disabled="true"], .cc-row button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.reason-tip { position: fixed; z-index: 1100; max-width: min(320px, calc(100vw - 12px)); padding: var(--sp-3) var(--sp-4); pointer-events: none;
+  background: var(--bg-overlay); color: var(--text); border: 1px solid var(--line-strong); border-left: 3px solid var(--warning);
+  box-shadow: var(--shadow); font-size: var(--fs-sm); line-height: 1.35; }
+.reason-tip[hidden] { display: none; }
 .icon-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--text-muted); border-radius: var(--radius); padding: 0; }
 .icon-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .icon-btn.small { width: 22px; height: 22px; }
@@ -408,8 +414,27 @@ span.category { border-color: transparent; background: transparent; padding-left
 .progress-fill { display: block; height: 100%; width: 0; background: var(--signal); transition: width var(--dur) var(--ease); }
 .progress.indeterminate .progress-fill { display: none; }
 @keyframes sweep { from { left: -35%; } to { left: 100%; } }
-.package-progress { display: flex; flex-direction: column; gap: var(--sp-3); }
+.package-progress { display: flex; flex-direction: column; gap: var(--sp-3); min-height: calc(3px + var(--sp-3) + 2.8em); }
+/* Idle, the progress keeps its place (UI-90): starting or finishing a Check or Build never moves the panel. */
+.package-progress.idle { visibility: hidden; }
 .progress-text { margin: 0; font-size: var(--fs-sm); }
+/* After Build: add to the mod manager, show the folder, and what happened (UI-82). */
+.install-row { display: grid; gap: var(--sp-3); }
+.install-line { margin: 0; min-height: 1.4em; color: var(--text-muted); }
+.install-line.done { color: var(--success); } .install-line.warning { color: var(--warning); }
+.install-sheet .install-where { margin: 0 0 var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }
+.install-changes { margin: 0 0 var(--sp-4); }
+.install-changes li { align-items: flex-start; overflow-wrap: anywhere; }
+.install-notes { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.install-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); min-height: 24px; }
+.install-status { margin: 0; flex: 1 1 240px; font-size: var(--fs-sm); }
+.install-status.warning { color: var(--warning); }
+/* Game & tools: one form saved as it changes (UI-83). */
+.setup-section > .control, .setup-section > .row, .setup-section .setup-mo2, .setup-section .setup-direct { margin-top: var(--sp-4); }
+.setup-status { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); padding: var(--sp-3) var(--sp-4); border-left: 2px solid var(--line-strong); background: var(--bg-raised); }
+.setup-status.warning { border-color: var(--warning); } .setup-status.ready { border-color: var(--success); }
+.setup-typed { margin-top: var(--sp-2); } .setup-typed .field { flex: 1; min-width: 0; }
+.setup-typed[hidden], .setup-section .select-wrap[hidden] { display: none; }
 .result-card { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-strong); background: var(--bg-raised); border-radius: 0 var(--bevel) 0 0; }
 .result-card.ok { border-left: 3px solid var(--success); }
 .result-card.stale { border-left: 3px solid var(--warning); }

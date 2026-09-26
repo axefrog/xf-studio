@@ -2,6 +2,7 @@ import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { FrameworkVersionCheck } from "./framework-versions";
 import type { LocalSettings } from "./local-settings";
+import { readConfiguredMo2Instance } from "./install-detection-host";
 
 export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" |
   "frameworks" | "install" | "updates";
@@ -48,65 +49,67 @@ function frameworkReadiness(check: FrameworkVersionCheck | undefined): Capabilit
     [...route.frameworks.flatMap(row => row.notes), ...check.limitations]);
 }
 
-/** Advisory host readiness. Operations must revalidate paths and versions immediately before acting. */
+/**
+ * Advisory host readiness, in plain words a person can act on (UI-83): what is missing or wrong, and the one next step. The
+ * reasons are shown as they are in Game & tools, the preview setup and Build's refusals. Operations revalidate paths and
+ * versions immediately before acting.
+ */
 export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatures = { updater: false, installer: false }): LocalReadiness {
   const game = settings.gameRoot;
   const gameIssues: ReadinessIssue[] = [];
-  if (!game) gameIssues.push(issue("game_root_unset", "Select the Cyberpunk 2077 game folder."));
+  if (!game) gameIssues.push(issue("game_root_unset", "Choose your Cyberpunk 2077 folder."));
   else {
     if (!available(join(game, "bin", "x64", "Cyberpunk2077.exe"), "file"))
-      gameIssues.push(issue("game_executable_missing", "The selected game folder has no bin/x64/Cyberpunk2077.exe."));
-    if (!available(join(game, "archive", "pc"), "directory"))
-      gameIssues.push(issue("game_archives_missing", "The selected game folder has no archive/pc directory."));
+      gameIssues.push(issue("game_executable_missing", "That folder isn't your Cyberpunk 2077 folder (it has no bin\\x64\\Cyberpunk2077.exe). Choose the folder the game is installed in."));
+    else if (!available(join(game, "archive", "pc"), "directory"))
+      gameIssues.push(issue("game_archives_missing", "Your Cyberpunk 2077 folder is missing its archive\\pc folder. Repair the game in its launcher, then check again."));
   }
 
   const sourceIssues = [...gameIssues];
   if (settings.launchRoute === "mo2") {
-    if (!settings.mo2Root) sourceIssues.push(issue("mo2_root_unset", "Select the Mod Organizer 2 instance folder."));
-    else {
-      if (!available(join(settings.mo2Root, "mods"), "directory"))
-        sourceIssues.push(issue("mo2_mods_missing", "The selected MO2 instance has no mods directory."));
-      if (!available(join(settings.mo2Root, "profiles"), "directory"))
-        sourceIssues.push(issue("mo2_profiles_missing", "The selected MO2 instance has no profiles directory."));
-    }
-    if (!settings.mo2ProfileId) sourceIssues.push(issue("mo2_profile_unset", "Select an MO2 profile."));
-    else if (settings.mo2Root && !available(join(settings.mo2Root, "profiles", settings.mo2ProfileId, "modlist.txt"), "file"))
-      sourceIssues.push(issue("mo2_profile_missing", "The selected MO2 profile has no modlist.txt."));
+    // The instance's own folders (ModOrganizer.ini can move mods and profiles elsewhere).
+    let paths: { mods: string; profiles: string } | null = null;
+    if (settings.mo2Root) try { paths = readConfiguredMo2Instance(settings.mo2Root).paths; } catch { paths = null; }
+    if (!settings.mo2Root) sourceIssues.push(issue("mo2_root_unset", "Choose your Mod Organizer 2 instance."));
+    else if (!paths || !available(paths.mods, "directory") || !available(paths.profiles, "directory"))
+      sourceIssues.push(issue(!paths || !available(paths.mods, "directory") ? "mo2_mods_missing" : "mo2_profiles_missing",
+        "That folder isn't a Mod Organizer 2 instance. Choose the folder that has ModOrganizer.ini in it."));
+    if (!settings.mo2ProfileId) sourceIssues.push(issue("mo2_profile_unset", "Choose the Mod Organizer 2 profile you play with."));
+    else if (paths && available(paths.profiles, "directory") && !available(join(paths.profiles, settings.mo2ProfileId, "modlist.txt"), "file"))
+      sourceIssues.push(issue("mo2_profile_missing", "That profile isn't in this Mod Organizer 2 instance any more. Choose the profile you play with."));
   } else if (settings.manualModRoot && !available(settings.manualModRoot, "directory")) {
-    sourceIssues.push(issue("manual_root_missing", "The optional direct-install mod folder is unavailable."));
+    sourceIssues.push(issue("manual_root_missing", "The extra mod folder can't be found. Choose it again, or leave it empty."));
   }
 
   const buildIssues: ReadinessIssue[] = [];
   if (host.wolvenKit !== undefined) { if (host.wolvenKit) buildIssues.push(host.wolvenKit); }
   else if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", WOLVENKIT_UNSET));
-  else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The selected WolvenKit CLI executable is unavailable."));
+  else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The WolvenKit you chose can't be found. Choose it again, or leave it empty and XF Studio sets it up for you."));
   buildIssues.push(...gameIssues);
   // The expanded eye plate is built in: Build derives it from the installed game, so it needs no path.
   if (host.eyePlate?.issue && gameIssues.length === 0) buildIssues.push(host.eyePlate.issue);
   // The host's own Build gate (tool probes, bundled builder, storage) has the last word.
   if (host.packageBuild === false && buildIssues.length === 0)
-    buildIssues.push(issue("package_host_unavailable", host.packageBuildIssue ?? "This host does not provide mod package builds."));
+    buildIssues.push(issue("package_host_unavailable", host.packageBuildIssue ?? "This version of XF Studio can't build mod files."));
 
   const cacheIssues: ReadinessIssue[] = [];
   if (settings.sourceCache.directory && !writableDirectory(settings.sourceCache.directory))
-    cacheIssues.push(issue("source_cache_unavailable", "The source cache directory or its parent is unavailable for writing."));
+    cacheIssues.push(issue("source_cache_unavailable", "XF Studio can't write to the folder chosen for its game-file cache. Choose another folder."));
   const previewIssues: ReadinessIssue[] = [];
   if (settings.preview.cacheDirectory && !writableDirectory(settings.preview.cacheDirectory))
-    previewIssues.push(issue("preview_cache_unavailable", "The preview cache directory or its parent is unavailable for writing."));
+    previewIssues.push(issue("preview_cache_unavailable", "XF Studio can't write to the folder chosen for its 3D preview files. Choose another folder."));
   if (settings.preview.outputDirectory && !writableDirectory(settings.preview.outputDirectory))
-    previewIssues.push(issue("preview_output_unavailable", "The preview output directory or its parent is unavailable for writing."));
+    previewIssues.push(issue("preview_output_unavailable", "XF Studio can't write to the folder chosen for its 3D preview output. Choose another folder."));
 
+  // "Add to my mod manager" installs on the route the person launches with (UI-82), with their consent to each plan.
   const installIssues: ReadinessIssue[] = [];
-  if (!host.installer) installIssues.push(issue("install_host_unavailable", "This host does not provide installation."));
-  if (settings.installMode === "none") installIssues.push(issue("install_mode_unset", "Choose an installation target."));
-  else if (settings.installMode !== settings.launchRoute)
-    installIssues.push(issue("install_route_mismatch", "Installation target must match the selected launch route."));
+  if (!host.installer) installIssues.push(issue("install_host_unavailable", "This version of XF Studio can't add mods for you. Show the mod's folder and copy it by hand."));
   installIssues.push(...sourceIssues);
   // A verified immutable candidate and collision/receipt check are separate operation-time requirements.
   return {
     author: item(),
     check: item(host.packageCheck === false
-      ? [issue("package_check_host_unavailable", "This host does not provide mod export checks.")] : [],
+      ? [issue("package_check_host_unavailable", "This version of XF Studio can't check mod exports.")] : [],
       ["Collection eligibility checks require no game or build tool path when the host provides them."]),
     sourceDiscovery: item(sourceIssues, [settings.launchRoute === "mo2"
       ? "MO2 modlist '+' is activation evidence only; physical candidates do not prove a runtime winner."
@@ -117,7 +120,7 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
       ...(host.eyePlate ? [host.eyePlate.limit] : [])]),
     frameworks: frameworkReadiness(host.frameworks),
     install: item(installIssues, ["A verified package and conflict/receipt validation are still required."]),
-    updates: item(host.updater ? [] : [issue("updater_unavailable", "This host does not provide desktop updates.")]),
+    updates: item(host.updater ? [] : [issue("updater_unavailable", "This version of XF Studio can't update itself.")]),
   };
 }
 

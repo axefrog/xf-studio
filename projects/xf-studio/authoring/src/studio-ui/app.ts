@@ -5,7 +5,8 @@ import { effectiveTheme, type ThemePreference } from "../ui-preferences";
 import { shortcutLabel } from "../input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
-import { button } from "./controls";
+import { applyCapability, button } from "./controls";
+import { installReasonTips } from "./reason-tip";
 import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
 import { restoreDockPreference, serializeDockState } from "./dock/persist";
@@ -33,7 +34,9 @@ import { openReportDialog } from "./diagnostics/report-dialog";
  */
 export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition) {
   // Error notices carry a reference and "Report this problem" (docs/diagnostics.md).
-  const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref) });
+  const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref),
+    expected: code => port.diagnostics.expected(code) });
+  installReasonTips(document);
   const catalogue = views.catalogue;
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
@@ -282,12 +285,12 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const history = port.authoring.history();
       // Name what each would change, and keep the shortcut visible even while unavailable.
-      undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
-      redo.disabled = !redoCap.available; redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo);
+      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
+      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo);
       setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
       setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });
-      save.disabled = !saveCap.available; save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
+      applyCapability(save, saveCap); save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);

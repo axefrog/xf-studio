@@ -1,4 +1,4 @@
-import { h, setAttr, setDisabled, setText, setValue, uid } from "./dom";
+import { h, isUnavailable, setAttr, setDisabled, setText, setUnavailable, setValue, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 
 /**
@@ -182,13 +182,18 @@ export function button(options: { label: string; icon?: IconName; variant?: "pri
   onClick(event: MouseEvent): void; title?: string; iconOnly?: boolean; small?: boolean }) {
   const element = h("button", { class: `btn${options.variant ? ` ${options.variant}` : ""}${options.iconOnly ? " icon-only" : ""}${options.small ? " small" : ""}`,
     type: "button", title: options.title ?? (options.iconOnly ? options.label : undefined), "data-title": options.title ?? (options.iconOnly ? options.label : ""),
-    "aria-label": options.iconOnly ? options.label : undefined, onclick: options.onClick },
+    "aria-label": options.iconOnly ? options.label : undefined,
+    // An unavailable action runs nothing (the page's reason tip answers the click instead; reason-tip.ts).
+    onclick: (event: MouseEvent) => { if (!isUnavailable(element)) options.onClick(event); } },
     options.icon ? icon(options.icon) : null, options.iconOnly ? null : h("span", { text: options.label }));
   return element;
 }
-/** Enable a button from a capability, keeping the reason discoverable as a tooltip and description. */
-export function applyCapability(control: HTMLButtonElement, capability: { available: boolean; reason?: string }) {
-  setDisabled(control, !capability.available, capability.reason);
+/**
+ * A main action's availability from a capability (UI-84): unavailable, it stays focusable with `aria-disabled` and its
+ * reason as its description and a visible tip (the menu pattern; dom.ts `setUnavailable`, reason-tip.ts).
+ */
+export function applyCapability(control: HTMLElement, capability: { available: boolean; reason?: string }) {
+  setUnavailable(control, !capability.available, capability.reason);
 }
 
 export function section(title: string, ...children: (Node | null | undefined | false)[]) {
