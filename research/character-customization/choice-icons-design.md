@@ -1,6 +1,6 @@
 # Creator choice icons in the Character panel: design
 
-**Status: design proposal, 27 September 2026. Nothing is built.** How the character creator's per-choice icons (the round swatches for skin tones, eye colours, hair and makeup colours, and the thumbnails CCXL mods add) can be resolved from the player's own game and mods and drawn in the Studio's Character panel. It is item 1 of *Next* in the [CC controls and presets backlog](../backlog/cc-controls-and-presets.md), and it closes the icon gap the [creator catalogue](../../knowledge/cc-file-chain.md#presentation-order-rows-sections-labels-and-swatches) and the [clothing render plan](../backlog/clothing-render.md) (phase 5, R11) both record: icons that mods declare in TweakXL YAML.
+**Status: built, 27 September 2026** (branch `claude/character-panel-v2`): both steps, as designed except where noted in §7. How the character creator's per-choice icons (the round swatches for skin tones, eye colours, hair and makeup colours, and the thumbnails CCXL mods add) can be resolved from the player's own game and mods and drawn in the Studio's Character panel. It is item 1 of *Next* in the [CC controls and presets backlog](../backlog/cc-controls-and-presets.md), and it closes the icon gap the [creator catalogue](../../knowledge/cc-file-chain.md#presentation-order-rows-sections-labels-and-swatches) and the [clothing render plan](../backlog/clothing-render.md) (phase 5, R11) both record: icons that mods declare in TweakXL YAML.
 
 Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** engine, framework or tool source or decompiled scripts; **[resource]** extracted game or mod resources, including the Studio's own catalogue report of the reference installation; **[wiki]** Modding Docs; **[runtime]** seen in the running game; **[hypothesis]** not yet established.
 
@@ -101,6 +101,15 @@ A generic, data-driven overlay that follows TweakXL's own rules [source: TweakXL
 1. Which slot does the game pick, and does any vanilla creator icon differ between slots?
 2. Does any installed mod register tweak directories from script, or ship `.tweak` files for icons?
 3. Is directory iteration order under MO2's virtual file system the same as on disk?
+
+## 7. As built
+
+- **Modules**: `src/cc-icons.ts` (pure: `readAtlas`, `buildSheet`), `src/cc-icon-host.ts` (the sheets, and the panel's swatch source that serves them with the colour swatches of `src/cc-swatch-host.ts`), `src/tweakxl-overlay.ts` (the shared YAML reader: bands, `$type`/`$base`, flats, `$instances`, `$dlc`; `$game` read with a gap; list operations kept whole with a gap; `.tweak` files a gap), `cc-presentation.ts` looking the overlay up first. `r6/tweaks` files are a source kind of their own in source discovery (the game folder's is optional; MO2's merged view as for `.xl` files), and the installation lists them (`Installation.tweaks`), so a changed tweak file changes the installation fingerprint.
+- **Delivery differs from §4.1 step 6**: the panel asks per colour row (`GET ?gender=&swatches=<option>`, `CcSwatches` in `xfs/cc-panel-4`: `<sheet>:<cell>` by position and the sheets' table), not in the first paint, and fetches a sheet by its content key (`GET ?gender=&sheet=<id>&key=<key>`, cached by the browser). A sheet's key covers the atlas's and texture's winning archives (path, size, time), the parts and the sheet rules.
+- **Texture**: the native texture reader's mip at or under 2,048 px; the vanilla creator atlas keeps its parts in slot 0 (the top level has none). Rows as the native reader writes them read top-down for these UVs (checked visually: text in mod icons reads the right way round).
+- **Atlases need WolvenKit** until the native reader verifies `inkTextureAtlas`; all of a catalogue's atlases are read together, in one launch. Without WolvenKit (or without a native texture reader) the choices keep their swatch or colour, as §4.2 says.
+- **With the colour swatches**: a choice whose colour resource was replaced by a mod other than its own supplier (a hair-tone pack over the vanilla profiles) shows its derived colour instead of the icon, which would show the replaced colour.
+- **Reference installation** (27 September, MO2 route): 11 atlases (1 vanilla, 10 from mods), 551 parts used by colour rows; every eye colour (254) and the skin tones have icons, 164 of the first hairstyle's 185 colours. Sheets made in 34 s cold (one WolvenKit launch per atlas at the time; now batched), 0.3 s from the cache.
 
 ## Related
 
