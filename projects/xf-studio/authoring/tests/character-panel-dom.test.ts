@@ -128,17 +128,53 @@ describe("the Character panel's DOM", () => {
     h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
     h.paint(); await settle(); h.paint();
     const hide = h.root.querySelectorAll("button").find(button => button.textContent === "Hide my V's own makeup")!;
-    expect(hide.disabled).toBe(false);
+    expect(hide.getAttribute("aria-disabled")).toBeNull();
     hide.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.hideOwnMakeup" });
     expect(h.context.request().choices).toEqual([{ part: "head", option: "scars", choice: "" }]);
     h.paint(); await settle(); h.paint();
-    expect(hide.disabled).toBe(true);
+    // Unavailable, it stays focusable and says why (UI-84); a click runs nothing.
+    expect(hide.disabled).toBe(false);
+    expect(hide.getAttribute("aria-disabled")).toBe("true");
+    expect(hide.getAttribute("aria-description")).toBeTruthy();
+    const before = h.dispatched.length;
+    hide.click();
+    expect(h.dispatched.length).toBe(before);
     const resetAll = h.root.querySelectorAll("button").find(button => button.textContent === "Reset all")!;
     resetAll.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.resetAll" });
     // The fixture's piercing colour depends on the style switcher, so its row keeps a detail line; the eye colour has none.
     expect(row(h.root, "Eye Color").querySelector(".cc-row-detail")).toBeNull();
+  });
+});
+
+describe("one Undo rule in the Character panel (UI-81)", () => {
+  test("Ctrl+Z and Ctrl+Y step the panel's own changes whatever has focus there, except a text box", async () => {
+    const h = await harness();
+    h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
+    h.paint(); await settle(); h.paint();
+    const key = (target: LightElement, extra: Record<string, unknown>) => {
+      const event = lightEvent("keydown", { key: "z", ctrlKey: true, target, ...extra });
+      target.dispatchEvent(event);
+      return event;
+    };
+    // A switch (a checkbox) and a list (a select) follow the panel's rule, not the makeup's.
+    const eyebrows = h.root.querySelectorAll("input").find(input => input.getAttribute("role") === "switch")!;
+    const undone = key(eyebrows, {});
+    expect(undone.defaultPrevented).toBe(true);
+    expect(h.dispatched.at(-1)).toEqual({ kind: "character.undo" });
+    const select = h.root.querySelector("select")!;
+    key(select, { key: "y" });
+    expect(h.dispatched.at(-1)).toEqual({ kind: "character.redo" });
+    // The search box keeps its own text Undo.
+    const search = h.root.querySelector(".cc-search")!;
+    const count = h.dispatched.length;
+    expect(key(search, {}).defaultPrevented).toBeFalsy();
+    expect(h.dispatched.length).toBe(count);
+    // The panel's Undo button names what it covers; Clothing has no Undo of its own.
+    const undo = h.root.querySelectorAll("button").find(button => (button.getAttribute("aria-label") ?? "").startsWith("Undo in the Character panel"))!;
+    expect(undo.title).toContain("Covers creator options and Clothing");
+    expect(h.root.querySelectorAll("button").some(button => button.getAttribute("aria-label") === "Undo clothing change")).toBe(false);
   });
 });
 

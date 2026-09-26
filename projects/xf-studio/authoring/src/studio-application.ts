@@ -238,7 +238,7 @@ export class StudioApplication {
     if (target.kind === "point" && !recipe.layers.find(layer => layer.id === target.layerId)?.points[target.index])
       return missingTarget("That control point no longer exists.");
     if (target.kind === "field" && !recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
-      return missingTarget("That warp control no longer exists.");
+      return missingTarget("That warp no longer exists.");
     // Cheap reads: target checks never clone the draft (CORE-05).
     if (target.kind === "preset" && !s.collection?.hasPreset(target.id))
       return s.collection ? missingTarget("That preset no longer exists.") : missing("Collection is still loading.");

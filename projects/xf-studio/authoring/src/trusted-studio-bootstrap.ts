@@ -12,6 +12,7 @@ import type { ViewportAttachment } from "./viewport-attachment";
 import type { WorkspaceState } from "./workspace-state";
 import type { LocalSetupActions } from "./local-setup-actions";
 import type { InstallDetectionActions } from "./install-detection-actions";
+import type { ModInstallActions } from "./mod-install-actions";
 import type { PreviewSetupActions } from "./preview-setup";
 import type { DiagnosticsActions } from "./diagnostics/actions";
 
@@ -31,10 +32,14 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  /** "Add to my mod manager" after Build (UI-82). */
+  modInstall?: ModInstallActions;
   /** The 3D preview setup service the presentation drives (card, consent, head pane). */
   previewSetup?: PreviewSetupActions;
   /** Opens XF Studio's own public pages for the Help view. */
   links?: ProjectLinkPort;
+  /** The host's About view (the desktop app's). */
+  about?: () => void;
   /** Problem reports, diagnostic mode and error references (docs/diagnostics.md). */
   diagnostics?: DiagnosticsActions;
   onRecipeImported(): void;
@@ -84,8 +89,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection, previewSetup: options.previewSetup,
-    links: options.links, diagnostics: options.diagnostics });
+    localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
+    links: options.links, about: options.about, diagnostics: options.diagnostics });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

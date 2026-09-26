@@ -1,5 +1,4 @@
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
-import type { LocalSetupFields } from "../../local-settings-server";
 import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, emptyState, note, section } from "../controls";
@@ -13,11 +12,14 @@ type PackageProductSummary = ReadonlyDeep<ProductSummary>;
 import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
+import { openReportDialog } from "../diagnostics/report-dialog";
+import { gameSetupSection } from "./game-setup";
+import { openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
 
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
-  /** Mod package only: open Game & tools and put focus on the first field to fill in. */
+  /** Mod package only: open Game & tools, find the game and mod manager, and put focus on the first thing to choose. */
   showSetup?(): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -52,7 +54,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   const commitName = () => {
     const current = port.library.summary().draft?.name;
     if (!current || nameInput.value.trim() === current) { nameInput.value = current ?? ""; return; }
-    if (!nameInput.value.trim()) { rt.feedback.toast("warning", "Presets", "A collection needs a name; the previous name was kept."); nameInput.value = current; return; }
+    // The naming rules (a name can't be blank or too long) are the application's; a refusal says why and keeps the old name (UI-93).
     if (!rt.dispatch({ kind: "collection.rename", name: nameInput.value })) nameInput.value = current;
   };
   nameInput.addEventListener("change", commitName);
@@ -200,14 +202,17 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     exportMask: button({ label: "Export layer mask", icon: "export", small: true, onClick: () => void rt.file({ kind: "mask.export" }) }),
   };
   let savedSignature = "";
+  // A research tool (UI-85): the compiler plan is input for the offline compiler, not a mod.
+  const researchNote = note("Research: a compiler plan is input for the offline compiler, not a mod. Exporting one saves a version first.");
   const element = h("div", { class: "panel-content" },
     section("Local library", stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy),
-      note("Saving records an immutable revision in the local SQLite library. Edits made while a save runs stay in your draft.")),
+      note("Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.")),
     section("Saved collections", h("div", { class: "row between" }, h("span", { class: "muted small", text: "Opening keeps your current draft recoverable." }), refresh),
       savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
     section("Files", h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection, fileButtons.exportPlan,
       fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask),
-    note("Collection and recipe files keep editable work. Exporting a collection or compiler plan saves a library revision first. A compiler plan is input for the offline compiler, not a mod. Masks are 2048² white + alpha PNGs of the selected layer.")));
+    note("Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first. A layer mask is a picture of the selected layer's shape."),
+    researchNote));
   return {
     spec: { id: "library", ...PANEL_META["library"], element },
     update(frame) {
@@ -240,6 +245,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         }));
       }
       savedEmpty.hidden = library.summaries.length > 0;
+      const research = !!frame.preferences?.researchTools;
+      fileButtons.exportPlan.hidden = !research; researchNote.hidden = !research;
       for (const [key, action] of [["importCollection", "collection.import"], ["exportCollection", "collection.export"], ["exportPlan", "collection.plan"],
         ["importRecipe", "recipe.import"], ["exportRecipe", "recipe.export"], ["exportMask", "mask.export"]] as const)
         applyCapability(fileButtons[key], port.files.capability({ kind: action }));
@@ -249,64 +256,15 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // Paths a person may need to type. The Bun runtime is XF Studio's own and has no field.
-  const setupFields = [
-    ["gameRoot", "Cyberpunk 2077 folder"],
-    ["wolvenKitCli", "Your own WolvenKit (optional)"],
-    ["mo2Root", "MO2 instance folder"],
-    ["mo2ProfileId", "MO2 profile name"], ["manualModRoot", "Additional direct mod folder (optional)"],
-  ] as const;
-  type SetupField = typeof setupFields[number][0];
-  const hints: Partial<Record<SetupField, string>> = {
-    wolvenKitCli: "Leave this empty and XF Studio can download WolvenKit for you.",
-  };
-  const inputs = Object.fromEntries(setupFields.map(([key, label]) => [key,
-    h("input", { class: "field", type: "text", "aria-label": label, spellcheck: "false", oninput: () => { dirty = true; } })])) as Record<SetupField, HTMLInputElement>;
-  const field = (key: SetupField) => h("label", { class: "control" },
-    h("span", { class: "control-label", text: setupFields.find(([name]) => name === key)![1] }), inputs[key],
-    hints[key] ? h("span", { class: "control-help", text: hints[key] }) : null);
-  const route = h("select", { class: "field", "aria-label": "How you install mods", onchange: () => { dirty = true; showRoute(); } },
-    h("option", { value: "direct", text: "Game folder (Vortex or manual)" }), h("option", { value: "mo2", text: "Mod Organizer 2" }));
-  // Build normally cuts the eye plate from the head your mods load; this is the way round an unsupported head mod.
-  // The host's setup view names the choice and its options, so this form and Build's messages agree.
-  const plateHead = h("select", { class: "field", onchange: () => { dirty = true; } });
-  const plateHeadLabel = h("span", { class: "control-label" });
-  let dirty = false, loadedRevision = -1;
-  const mo2Fields = h("div", {}, field("mo2Root"), field("mo2ProfileId"));
-  const directFields = h("div", {}, field("manualModRoot"));
-  const showRoute = () => { mo2Fields.hidden = route.value !== "mo2"; directFields.hidden = route.value !== "direct"; };
-  const setupState = note("Loading your settings…");
-  const setupReadiness = note("");
-  const saveSetup = button({ label: "Save settings", icon: "check", onClick: () => void (async () => {
-    const fields: Partial<LocalSetupFields> = { launchRoute: route.value as LocalSetupFields["launchRoute"],
-      eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] };
-    for (const [key] of setupFields) fields[key] = inputs[key].value.trim() || null;
-    const result = await port.localSetup.dispatch({ kind: "setup.update", fields });
-    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Settings saved on this computer."); }
-    else rt.feedback.toast("error", "Game & tools", result.message);
-  })() });
-  const restoreSetup = button({ label: "Restore previous settings", onClick: () => void (async () => {
-    const result = await port.localSetup.dispatch({ kind: "setup.restorePrevious" });
-    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Previous settings restored."); }
-    else rt.feedback.toast("error", "Game & tools", result.message);
-  })() });
-  const refreshSetup = button({ label: "Reload settings", onClick: event => {
-    const reload = () => void (async () => {
-      const result = await port.localSetup.dispatch({ kind: "setup.refresh" });
-      if (result.ok) { dirty = false; loadedRevision = -1; }
-      else rt.feedback.toast("error", "Game & tools", result.message);
-    })();
-    if (!dirty) { reload(); return; }
-    const anchor = event.currentTarget as Element;
-    openMenu([{ kind: "heading", label: "Discard unsaved changes to these settings?" },
-      { kind: "action", label: "Reload saved settings", run: reload }], anchor,
-    { label: "Reload saved settings", invoker: anchor });
-  } });
+  // Game & tools: the one setup form, saved as each choice is made (UI-83, UI-03).
+  const setup = gameSetupSection(rt);
+  const showSetup = () => { rt.dock.reveal("package", false); setup.show(); };
   const check = button({ label: "Check mod export", icon: "check", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
-  const progress = h("div", { class: "package-progress", hidden: true },
-    h("div", { class: "progress indeterminate", role: "progressbar", "aria-label": "Package request in progress" }),
-    h("p", { class: "progress-text" }), note("A started build cannot be cancelled here. Closing the page does not stop it.", "warning"));
+  // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
+  const progressText = h("p", { class: "progress-text" });
+  const progressBar = h("div", { class: "progress indeterminate", role: "progressbar", "aria-label": "Package request in progress" });
+  const progress = h("div", { class: "package-progress idle" }, progressBar, progressText);
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   let resultSignature = "";
   // Which XF mods the draft builds: one by default, named after its feature; the person may rename a mod and, once the
@@ -345,85 +303,92 @@ export function packagePanel(rt: StudioRuntime): PanelController {
         onClick: event => modMenu(product, products, event.currentTarget as Element) }))));
     mods.hidden = !products.length && !planIssue;
   };
+  // After Build, each mod offers "Add to my mod manager…" (a reviewed plan, then consent) and "Show in folder" (UI-82). The rows
+  // live outside the result card, so a repaint updates them in place.
+  const installRows = new Map<string, { element: HTMLElement; add: HTMLButtonElement; show: HTMLButtonElement; line: HTMLElement }>();
+  const installRow = (product: string) => {
+    let row = installRows.get(product);
+    if (!row) {
+      const add = button({ label: "Add to my mod manager…", icon: "package", small: true, variant: "primary",
+        onClick: () => { openModInstallSheet(rt, product, { openSetup: showSetup }); } });
+      const show = button({ label: "Show in folder", icon: "folder", small: true, onClick: () => void port.modInstall.dispatch({ kind: "modInstall.reveal", product })
+        .then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Mod package", outcome.message, [], { code: outcome.code }); }) });
+      const line = h("p", { class: "install-line small", role: "status" });
+      row = { element: h("div", { class: "install-row" }, h("div", { class: "row wrap gap-s" }, add, show), line), add, show, line };
+      installRows.set(product, row);
+    }
+    return row;
+  };
   async function runPackage(action: "check" | "build") {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
   }
   function confirmBuild(anchor: Element) {
-    openMenu([{ kind: "heading", label: "Build local mod files?", detail: "Uses the current draft, including unsaved edits. Several minutes; cannot be cancelled once started. Nothing is installed." },
+    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses the current draft, including unsaved edits. Takes a few minutes and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
       { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });
   }
   // Build readiness (including the host's Build setup) is part of the file capability.
   const buildCapability = () => port.files.capability({ kind: "package.build" });
-  const setupSection = h("details", { class: "section" }, h("summary", { text: "Game & tools" }),
-    note("Saved on this computer only. XF Studio finds your game and sets up WolvenKit for you; fill these in only to change what it chose."),
-    h("label", { class: "control" }, h("span", { class: "control-label", text: "How you install mods" }), route),
-    field("gameRoot"), field("wolvenKitCli"), mo2Fields, directFields,
-    h("label", { class: "control" }, plateHeadLabel, plateHead),
-    setupState, setupReadiness,
-    h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup));
+  const finishList = h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
+    h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
+      finish.exportAdapter === "flat-provisional" ? "success" : "warning"))));
   const element = h("div", { class: "panel-content" },
     section("Mod package", note(`Builds your own copy of your XF mods from the current draft (including unsaved edits), ready for your mod manager. Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
       mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
-    setupSection,
-    section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
-        finish.exportAdapter === "flat-provisional" ? "success" : "warning")))),
-    note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Experimental finishes are built from the game's own decal materials in their game-matched model, but nobody has seen them in game yet. Check decides — this list is a guide.")));
+    setup.element,
+    section("What can be packaged", finishList,
+      note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Experimental finishes are built from the game's own decal materials, but they may look different in game: nobody has checked them there yet. Check decides; this list is a guide.")));
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
-    showSetup() {
-      setupSection.open = true;
-      setupSection.scrollIntoView({ block: "nearest" });
-      const empty = [inputs.gameRoot, inputs.wolvenKitCli].find(input => !input.value) ?? inputs.gameRoot;
-      requestAnimationFrame(() => empty.focus());
-    },
+    showSetup: () => setup.show(),
     update(frame) {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
-      const setup = frame.localSetup;
-      if (setup.view && !dirty && setup.view.revision !== loadedRevision) {
-        loadedRevision = setup.view.revision;
-        route.value = setup.view.fields.launchRoute;
-        const choice = setup.view.eyePlateHead;
-        setText(plateHeadLabel, choice.label);
-        setAttr(plateHead, "aria-label", choice.label);
-        if (plateHead.options.length !== choice.options.length)
-          plateHead.replaceChildren(...choice.options.map(option => h("option", { value: option.value, text: option.label })));
-        plateHead.value = setup.view.fields.eyePlateHead;
-        for (const [key] of setupFields) setValue(inputs[key], setup.view.fields[key] ?? "");
-        showRoute();
-      }
-      setText(setupState, setup.error ?? (setup.view?.source === "backup" ?
-        "The current settings file is damaged. Restore its previous copy before editing." : setup.view ? "" : "Loading your settings…"));
-      setupState.hidden = !setupState.textContent;
-      setText(setupReadiness, setup.view?.readiness.build.ready ? "Ready to build your mod files." :
-        setup.view?.readiness.build.issues.map(issue => issue.reason).join(" ") ?? "");
-      applyCapability(saveSetup, port.localSetup.capability({ kind: "setup.save", fields: setup.view?.fields ?? {} as LocalSetupFields }));
-      applyCapability(refreshSetup, port.localSetup.capability({ kind: "setup.refresh" }));
-      applyCapability(restoreSetup, port.localSetup.capability({ kind: "setup.restorePrevious" }));
+      setup.update(frame);
       const working = library.busy && library.progress?.code === "package";
-      progress.hidden = !working;
-      if (working) setText(progress.querySelector(".progress-text")!, library.progress!.message);
+      progress.classList.toggle("idle", !working);
+      setText(progressText, working ? `${library.progress!.message} A started build can't be cancelled, and closing XF Studio doesn't stop it.` : "");
       const lastError = files.last && !files.last.ok && (files.last.kind === "package.check" || files.last.kind === "package.build") ? files.last : undefined;
       const signature = JSON.stringify([files.package, lastError, library.draft?.presets.map(p => [p.id, p.name])]);
-      if (signature === resultSignature) return;
-      resultSignature = signature;
-      const pkg = files.package;
-      if (!pkg && !lastError) { result.replaceChildren(emptyState("No check yet", "Run Check to see which presets and layers can become mod files. Check creates no files.")); return; }
-      if (lastError && !pkg) { result.replaceChildren(h("div", { class: "result-card error" }, icon("error"),
-        h("div", {}, h("strong", { text: lastError.kind === "package.build" ? "Build failed" : "Check failed" }), h("p", { text: lastError.message }),
-          h("p", { class: "muted small", text: "Your collection is unchanged." }),
-          technicalDetails([["Code", lastError.code], ["Message", lastError.message], ["Time", new Date(lastError.at).toLocaleString()]],
-            "The desktop app also keeps a log in its data folder (About shows where).")))); return; }
-      result.replaceChildren(renderResult(pkg!, library.draft?.presets ?? []));
+      if (signature !== resultSignature) {
+        resultSignature = signature;
+        const pkg = files.package;
+        result.replaceChildren(pkg ? renderResult(pkg, library.draft?.presets ?? [], installRow) : lastError ? failureCard(rt, lastError)
+          : emptyState("No check yet", "Run Check to see which presets and layers can become mod files. Check creates no files."));
+      }
+      // The install rows follow every paint: availability, and what happened last.
+      const installs = frame.modInstall, route = frame.localSetup.view?.fields.launchRoute;
+      for (const [product, row] of installRows) {
+        setText(row.add.querySelector("span")!, route === "mo2" ? "Add to Mod Organizer 2…" : route === "direct" ? "Add to the game folder…" : "Add to my mod manager…");
+        applyCapability(row.add, port.modInstall.capability({ kind: "modInstall.review", product }));
+        applyCapability(row.show, port.modInstall.capability({ kind: "modInstall.reveal", product }));
+        const outcome = installs.outcomes[product];
+        setText(row.line, outcome?.message ?? "");
+        row.line.className = `install-line small${outcome ? outcome.ok ? " done" : " warning" : ""}`;
+      }
     },
   };
+}
+
+/**
+ * A failed Check or Build (UI-94): what failed in plain words, that the collection is unchanged, and "Report this problem" with
+ * the failure's reference when it wasn't an ordinary refusal. The code and time stay in Details for the report.
+ */
+function failureCard(rt: StudioRuntime, failed: ReadonlyDeep<{ kind: string; code: string; message: string; at: number }>) {
+  const build = failed.kind === "package.build";
+  const expected = rt.port.diagnostics.expected(failed.code);
+  const report = button({ label: "Report this problem", icon: "warning", small: true, onClick: () => { openReportDialog(rt, null); } });
+  applyCapability(report, rt.port.diagnostics.capability({ kind: "diagnostics.prepareReport" }));
+  return h("div", { class: "result-card error" }, icon(expected ? "warning" : "error"),
+    h("div", {}, h("strong", { text: build ? "Build didn't finish" : "Check didn't finish" }), h("p", { text: failed.message }),
+      h("p", { class: "muted small", text: "Your collection is unchanged." }),
+      expected ? null : h("div", { class: "row wrap gap-s" }, report),
+      technicalDetails([["Code", failed.code], ["Time", new Date(failed.at).toLocaleString()]])));
 }
 
 /** A collapsed "Details" block with a Copy button: codes, hashes and paths for bug reports. */
@@ -439,7 +404,8 @@ function technicalDetails(rows: [string, string][], footnote?: string) {
 
 type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheckResult; freshness: "current" | "stale" } |
   { kind: "packageBuild"; result: PackageBuildResult; freshness: "current" | "stale" }>;
-function renderResult(pkg: PackageResultView, presets: readonly { id: string; name: string }[]) {
+function renderResult(pkg: PackageResultView, presets: readonly { id: string; name: string }[],
+  installRow: (product: string) => { element: HTMLElement }) {
   const name = (id: string) => presets.find(preset => preset.id === id)?.name ?? "Preset no longer in draft";
   const isBuild = pkg.kind === "packageBuild";
   const r = pkg.result;
@@ -452,10 +418,11 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
   for (const product of r.products) {
     const block = h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: product.modName }),
       product.features.map(feature => ` · ${feature.label} in the “${feature.selectorLabel}” selector`).join("")));
+    // The game's own names for the looks (appearance IDs) are in Details, not the list (UI-85).
     if (!isBuild) block.append(h("ul", { class: "result-list" }, product.features.flatMap(feature => feature.presets.map(preset =>
-      h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: String(preset.appearance ?? "") }))))));
-    if (isBuild && "package" in product) block.append(h("dl", { class: "facts" },
-      h("dt", { text: "Mod files" }), h("dd", {}, h("code", { text: product.package }))));
+      h("li", {}, icon("check"), h("span", { text: name(preset.id) }))))));
+    // A built mod is added to the mod manager, or its folder shown, from here; its path is in Details (UI-82).
+    if (isBuild) block.append(installRow(product.productId).element);
     card.append(block);
   }
   // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
@@ -472,12 +439,15 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
         item.kind === "feature" ? `${item.label} — ${item.reason}` :
         label ? `${label} of “${item.presetName}” — ${item.reason}` :
         `Whole preset “${item.presetName}” — ${item.reason}` }))))));
-  if (isBuild) card.append(note(r.products.length === 1 ? "Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed."
-    : "Your mods were built and checked. They haven't been tested in game yet, and nothing was installed.", "info"));
+  if (isBuild) card.append(note(`${r.products.length === 1 ? "Your mod was built and checked" : "Your mods were built and checked"}. Nothing is in your game yet: ` +
+    "add it to your mod manager, or show its folder to copy it by hand. How it looks in game hasn't been checked yet.", "info"));
   // Technical facts stay available for bug reports without crowding the result.
   card.append(technicalDetails([
-    ...(isBuild ? (r as ReadonlyDeep<PackageBuildResult>).products.flatMap(product => [[`${product.modName} manifest`, product.manifest],
+    ...(isBuild ? (r as ReadonlyDeep<PackageBuildResult>).products.flatMap(product => [[`${product.modName} files`, product.package],
+      [`${product.modName} manifest`, product.manifest],
       [`${product.modName} archive SHA-256`, product.archiveSha256]] as [string, string][]) : []),
+    ...(!isBuild ? r.products.flatMap(product => product.features.flatMap(feature => feature.presets.map(preset =>
+      [`“${name(preset.id)}” in game`, String(preset.appearance ?? "")] as [string, string]))) : []),
     ["Collection fingerprint (SHA-256)", r.collectionSha256],
     ...r.products.flatMap(product => product.features.map(feature => [`${feature.label} fingerprint (SHA-256)`, feature.packagedSha256] as [string, string]))]));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));

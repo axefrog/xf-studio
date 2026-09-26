@@ -14,9 +14,11 @@ import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
+import { ModInstallActions } from "./mod-install-actions";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
 import type { ProjectLink } from "./project-links";
 import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnapshot } from "./diagnostics/actions";
+import { isExpectedFailure } from "./diagnostics/model";
 
 /**
  * "Report a problem", diagnostic mode and the references error notices carry (docs/diagnostics.md). `notice` logs a failure a
@@ -24,8 +26,18 @@ import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnaps
  */
 export type DiagnosticsPort = Pick<DiagnosticsActions, "capability" | "dispatch" | "descriptors" | "notice" | "fullText"> & {
   snapshot(): ReadonlyDeep<DiagnosticsSnapshot>;
+  /**
+   * Whether a failure code is an ordinary refusal that explains itself (busy, nothing to undo, out of range, cancelled): a
+   * presentation shows it as a notice that fades, with no reference (UI-80). The same rule `notice` applies.
+   */
+  expected(code: string | undefined): boolean;
 };
 
+/**
+ * The host's About view (version, licences, updates), when the host has one (the desktop app): a presentation offers it in its
+ * Help panel and command palette, never as a control of its own over the panels (UI-87).
+ */
+export type AboutPort = { capability(): { available: boolean; reason?: string }; open(): void };
 /** Opens one of XF Studio's own public pages; the host resolves the name, the view never sends a URL. */
 export type ProjectLinkPort = { open(link: ProjectLink): Promise<{ ok: true } | { ok: false; message: string }> };
 
@@ -126,6 +138,13 @@ export type StudioPresentationPort<Slot> = {
   readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
     snapshot(): ReadonlyDeep<ReturnType<LocalSetupActions["snapshot"]>>;
   };
+  /**
+   * "Add to my mod manager" and "Show in folder" for the latest Build (UI-82): review the host's plan, then consent to it.
+   * Without a host installer every action says so.
+   */
+  readonly modInstall: Pick<ModInstallActions, "capability" | "dispatch" | "descriptors"> & {
+    snapshot(): ReadonlyDeep<ReturnType<ModInstallActions["snapshot"]>>;
+  };
   /** Read-only discovery of game installs and MO2 instances for setup suggestions. */
   readonly installDetection: Pick<InstallDetectionActions, "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<ReturnType<InstallDetectionActions["snapshot"]>>;
@@ -139,6 +158,8 @@ export type StudioPresentationPort<Slot> = {
   };
   /** XF Studio's public pages (knowledge pages, issue tracker) for the Help view. */
   readonly links: ProjectLinkPort;
+  /** The host's About view, where it has one. */
+  readonly about: AboutPort;
   /** Problem reports, diagnostic mode and error references. */
   readonly diagnostics: DiagnosticsPort;
   snapshot(): ReadonlyDeep<{
@@ -151,6 +172,7 @@ export type StudioPresentationPort<Slot> = {
     status: PresentationStatus;
     localSetup: ReturnType<LocalSetupActions["snapshot"]>;
     installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
+    modInstall: ReturnType<ModInstallActions["snapshot"]>;
     previewSetup: PreviewSetupSnapshot;
   }>;
   subscribe(listener: () => void): () => void;
@@ -175,10 +197,14 @@ export function createStudioPresentation<Slot>(sources: {
   status?: StatusSource;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  /** Optional for fixtures; without it every install action says it isn't available here. */
+  modInstall?: ModInstallActions;
   /** Optional for fixtures; without it the port reports a head that needs no setup. */
   previewSetup?: PreviewSetupActions;
   /** Optional for fixtures; without it the Help view says the page can't be opened here. */
   links?: ProjectLinkPort;
+  /** The host's About view; without it About is refused as not part of this host. */
+  about?: () => void;
   /** Optional for fixtures; without it reporting says it isn't available here and notices carry no reference. */
   diagnostics?: DiagnosticsActions;
 }): StudioPresentationPort<Slot> {
@@ -289,13 +315,18 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),
     dispatch: action => sources.localSetup!.dispatch(action),
   } : {
-    snapshot: () => ({ busy: false }), capability: () => ({ available: false, reason: "Settings aren't available here." }),
+    snapshot: () => ({ busy: false, canPickFolder: false }), capability: () => ({ available: false, reason: "Settings aren't available here." }),
     dispatch: async () => ({ ok: false, code: "unavailable", message: "Settings aren't available here." }),
   };
   const detection = sources.installDetection ?? new InstallDetectionActions(null);
   const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
     snapshot: () => detection.snapshot(), capability: action => detection.capability(action),
     dispatch: action => detection.dispatch(action), descriptors: () => detection.descriptors(),
+  };
+  const install = sources.modInstall ?? new ModInstallActions(null, () => []);
+  const modInstall: StudioPresentationPort<Slot>["modInstall"] = {
+    snapshot: () => install.snapshot(), capability: action => install.capability(action),
+    dispatch: action => install.dispatch(action), descriptors: () => install.descriptors(),
   };
   const setup = sources.previewSetup;
   const previewSetup: StudioPresentationPort<Slot>["previewSetup"] = setup ? {
@@ -310,10 +341,11 @@ export function createStudioPresentation<Slot>(sources: {
   const diagnostics: DiagnosticsPort = d ? {
     snapshot: () => d.snapshot(), capability: action => d.capability(action), dispatch: action => d.dispatch(action),
     descriptors: () => d.descriptors(), notice: failure => d.notice(failure), fullText: item => d.fullText(item),
+    expected: code => isExpectedFailure(code),
   } : {
     snapshot: () => ({ mode: null, report: null, opens: 0, notice: null }), capability: () => noReports,
     dispatch: async () => ({ ok: false, code: noReports.code, message: noReports.reason }), descriptors: () => structuredClone(DIAGNOSTICS_DESCRIPTORS),
-    notice: () => null, fullText: async () => null,
+    notice: () => null, fullText: async () => null, expected: code => isExpectedFailure(code),
   };
   // The view settings a problem report names: what the 3D head and the preview were doing (DIAG-17).
   d?.setViewState(() => {
@@ -321,23 +353,28 @@ export function createStudioPresentation<Slot>(sources: {
     return { "3D head": head?.phase ?? "unknown", "preview quality": String(preview?.quality?.size ?? "unknown"),
       "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
   });
+  const openAbout = sources.about;
+  const about: AboutPort = Object.freeze({
+    capability: () => openAbout ? { available: true } : { available: false, reason: "About is part of the XF Studio desktop app." },
+    open: () => { openAbout?.(); } });
   const linkSource = sources.links;
   const links: ProjectLinkPort = Object.freeze({ open: (link: ProjectLink) => linkSource ? linkSource.open(link)
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, features: () => infos, feature, localSetup: Object.freeze(localSetup),
-    installDetection: Object.freeze(installDetection), previewSetup: Object.freeze(previewSetup),
-    status: Object.freeze({ snapshot: () => s.snapshot() }), links, diagnostics: Object.freeze(diagnostics),
+    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup),
+    status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
-      installDetection: installDetection.snapshot(), previewSetup: previewSetup.snapshot() }),
+      installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
         ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
         ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
+        ...(sources.modInstall ? [sources.modInstall.subscribe(listener)] : []),
         ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },

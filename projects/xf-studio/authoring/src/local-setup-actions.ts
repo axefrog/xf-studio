@@ -6,18 +6,33 @@ import type { LocalSetupFields, LocalSetupView } from "./local-settings-server";
  * folder or WolvenKit never overwrites another view's unrelated field).
  */
 export type LocalSetupAction = { kind: "setup.refresh" } | { kind: "setup.save"; fields: LocalSetupFields } |
-  { kind: "setup.update"; fields: Partial<LocalSetupFields> } | { kind: "setup.restorePrevious" };
-export type LocalSetupState = { view?: LocalSetupView; busy: boolean; error?: string };
+  { kind: "setup.update"; fields: Partial<LocalSetupFields> } | { kind: "setup.restorePrevious" } |
+  { kind: "setup.pickFolder"; field: FolderField };
+/** The folders a person may choose with the host's own folder picker (UI-83). */
+export type FolderField = "gameRoot" | "mo2Root" | "manualModRoot";
+export const FOLDER_FIELDS: readonly FolderField[] = ["gameRoot", "mo2Root", "manualModRoot"];
+/** The host's native folder picker: the folder chosen, or null when the person cancelled. */
+export type FolderPicker = (field: FolderField) => Promise<string | null>;
+export type LocalSetupState = { view?: LocalSetupView; busy: boolean; error?: string;
+  /** Whether this host has a native folder picker (`setup.pickFolder`); a view offers Browse… only then. */
+  canPickFolder: boolean };
 export type LocalSetupOutcome = { ok: true } | { ok: false; code: string; message: string };
+const CANCELLED: LocalSetupOutcome = { ok: false, code: "cancelled", message: "No folder was chosen, so nothing changed." };
 export type LocalSetupTransport = (method: "GET" | "PATCH" | "POST", body?: unknown) => Promise<{
   ok: boolean; status: number; data: LocalSetupView | { code: string; error: string };
 }>;
 
 export class LocalSetupActions {
-  private state: LocalSetupState = { busy: false };
+  private state: LocalSetupState;
   private listeners = new Set<() => void>();
   private refreshQueued = false;
-  constructor(private transport: LocalSetupTransport) {}
+  /**
+   * @param pickFolder the host's native folder picker (the desktop app's); without one, `setup.pickFolder` says to choose a
+   *   folder XF Studio found or type it.
+   */
+  constructor(private transport: LocalSetupTransport, private readonly pickFolder: FolderPicker | null = null) {
+    this.state = { busy: false, canPickFolder: !!pickFolder };
+  }
   snapshot(): Readonly<LocalSetupState> { return structuredClone(this.state); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   /**
@@ -47,7 +62,11 @@ export class LocalSetupActions {
     if (this.refreshQueued && !this.state.busy) this.requestRefresh();
   }
   capability(action: LocalSetupAction): { available: boolean; reason?: string } {
-    if (action.kind === "setup.update") return this.state.view?.source === "backup"
+    if (action.kind === "setup.pickFolder") {
+      if (!FOLDER_FIELDS.includes(action.field)) return { available: false, reason: "That setting isn't a folder." };
+      if (!this.pickFolder) return { available: false, reason: "Choose a folder XF Studio found, or type the folder." };
+    }
+    if (action.kind === "setup.update" || action.kind === "setup.pickFolder") return this.state.view?.source === "backup"
       ? { available: false, reason: "Restore the previous settings copy before editing." } : { available: true };
     if (this.state.busy) return { available: false, reason: "Your settings are being saved or loaded. Try again in a moment." };
     if (action.kind === "setup.refresh") return { available: true };
@@ -60,6 +79,15 @@ export class LocalSetupActions {
   }
   async dispatch(action: LocalSetupAction): Promise<LocalSetupOutcome> {
     if (action.kind === "setup.update") return this.update(action.fields);
+    if (action.kind === "setup.pickFolder") {
+      // The picked folder is saved at once, like a folder chosen from the ones XF Studio found (one setup form, UI-03).
+      const allowed = this.capability(action);
+      if (!allowed.available) return { ok: false, code: "unavailable", message: allowed.reason! };
+      let chosen: string | null;
+      try { chosen = await this.pickFolder!(action.field); }
+      catch { return { ok: false, code: "picker_failed", message: "The folder picker couldn't open. Type the folder instead." }; }
+      return chosen ? this.update({ [action.field]: chosen }) : CANCELLED;
+    }
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: "unavailable", message: allowed.reason! };
     this.publish({ ...this.state, busy: true, error: undefined });
@@ -73,7 +101,7 @@ export class LocalSetupActions {
         this.publish({ ...this.state, busy: false, error: failure.error });
         return { ok: false, code: failure.code, message: failure.error };
       }
-      this.publish({ view: response.data as LocalSetupView, busy: false });
+      this.publish({ view: response.data as LocalSetupView, busy: false, canPickFolder: this.state.canPickFolder });
       return { ok: true };
     } catch {
       const message = "XF Studio couldn't reach your saved settings. Restart XF Studio and try again.";

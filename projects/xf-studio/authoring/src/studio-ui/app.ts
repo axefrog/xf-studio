@@ -5,7 +5,8 @@ import { effectiveTheme, type ThemePreference } from "../ui-preferences";
 import { shortcutLabel } from "../input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
-import { button } from "./controls";
+import { applyCapability, button } from "./controls";
+import { installReasonTips } from "./reason-tip";
 import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
 import { restoreDockPreference, serializeDockState } from "./dock/persist";
@@ -15,7 +16,7 @@ import { icon } from "./icons";
 import { defaultCompact, defaultWide, sizeClassFor } from "./layout-defaults";
 import { closeMenus, openMenu, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
-import { historyCommandLabel, historyCommandTitle } from "./history-model";
+import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
 import { panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
@@ -24,6 +25,7 @@ import { featureCommands, featureViewContext } from "./views/feature-context";
 import type { FeatureViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 import { openReportDialog } from "./diagnostics/report-dialog";
+import { readinessText } from "./readiness-text";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -33,7 +35,9 @@ import { openReportDialog } from "./diagnostics/report-dialog";
  */
 export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition) {
   // Error notices carry a reference and "Report this problem" (docs/diagnostics.md).
-  const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref) });
+  const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref),
+    expected: code => port.diagnostics.expected(code) });
+  installReasonTips(document);
   const catalogue = views.catalogue;
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
@@ -194,31 +198,41 @@ function themeController(port: Port, feedback: Feedback) {
     get preference() { return preference; },
     get system() { return media.matches ? "dark" : "light"; },
     set(next: ThemePreference) {
-      port.preferences.dispatch({ kind: "theme.set", theme: next });
+      if (!setPreference(port, feedback, { kind: "theme.set", theme: next },
+        next === "system" ? `Theme follows the system (${media.matches ? "dark" : "light"})` : `${next === "dark" ? "Dark" : "Light"} theme`)) return;
       preference = next; apply();
-      feedback.announce(next === "system" ? `Theme follows the system (${media.matches ? "dark" : "light"})` : `${next === "dark" ? "Dark" : "Light"} theme`);
     },
   };
 }
 type Theme = ReturnType<typeof themeController>;
 
-/** View preferences beyond the theme: viewport input hints (persisted, on by default). */
+/** A preference change through its capability; a refusal or failure is said plainly, never swallowed (UI-15). */
+function setPreference(port: Port, feedback: Feedback, action: Parameters<Port["preferences"]["dispatch"]>[0], announce: string) {
+  const allowed = port.preferences.capability(action);
+  if (!allowed.available) { feedback.toast("warning", "View", allowed.reason ?? "This preference could not be saved."); return false; }
+  try { port.preferences.dispatch(action); }
+  catch (error) { feedback.toast("warning", "View", error instanceof Error ? error.message : "This preference could not be saved."); return false; }
+  feedback.announce(announce);
+  return true;
+}
+
+/** View preferences beyond the theme: viewport input hints (persisted, on by default) and research tools (off by default, UI-85). */
 function viewPreferences(port: Port, feedback: Feedback) {
   const hints = () => port.preferences.snapshot().inputHints;
-  const setHints = (enabled: boolean) => {
-    const action = { kind: "inputHints.set" as const, enabled }, allowed = port.preferences.capability(action);
-    if (!allowed.available) { feedback.toast("warning", "View", allowed.reason ?? "This preference could not be saved."); return; }
-    port.preferences.dispatch(action);
-    feedback.announce(enabled ? "Viewport input hints shown" : "Viewport input hints hidden");
-  };
+  const setHints = (enabled: boolean) => { setPreference(port, feedback, { kind: "inputHints.set", enabled }, enabled ? "Viewport input hints shown" : "Viewport input hints hidden"); };
+  const research = () => !!port.preferences.snapshot().researchTools;
+  const setResearch = (enabled: boolean) => { setPreference(port, feedback, { kind: "researchTools.set", enabled }, enabled ? "Research tools shown" : "Research tools hidden"); };
   const openReference = () => openInputReference({ hints: { enabled: hints(), set: setHints } });
   return {
-    hints, setHints, openReference,
+    hints, setHints, research, setResearch, openReference,
     items(): MenuItem[] {
       return [{ kind: "heading", label: "Viewports", detail: "Stored with your workspace" },
         { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Corner strip and target tooltips that follow the pointer and held keys",
           run: () => setHints(!hints()) },
-        { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference }];
+        { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference },
+        { kind: "separator" },
+        { kind: "action", label: "Show research tools", icon: "activity", checked: research(),
+          hint: "Lighting calibration, glitter model studies, compiler plans and developer IDs", run: () => setResearch(!research()) }];
     },
   };
 }
@@ -242,7 +256,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
   const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "history.undo" }) });
   const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
-  const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: "History: every recent change to this preset",
+  const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: `History: every recent change to this preset\n${HISTORY_SCOPE}`,
     onClick: () => rt.dock.reveal("history") });
   const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
@@ -282,12 +296,12 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const history = port.authoring.history();
       // Name what each would change, and keep the shortcut visible even while unavailable.
-      undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
-      redo.disabled = !redoCap.available; redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo);
+      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
+      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo);
       setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
       setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });
-      save.disabled = !saveCap.available; save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
+      applyCapability(save, saveCap); save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
@@ -303,22 +317,23 @@ function statusBar(rt: StudioRuntime) {
   return {
     element,
     update(frame: Frame) {
-      const save = frame.status.workspace;
+      // One save status (UI-89): the header's library chip says whether your work is saved; the draft's own autosave shows here
+      // only when it has a problem to tell you about.
+      const save = frame.status.workspace, problem = save.kind !== "saved" && save.kind !== "idle";
       workspace.dataset.tone = save.kind;
-      setText(workspace, save.kind === "saved" ? "● Draft autosaved" : save.kind === "idle" ? "○ Draft autosave starting" : `▲ ${save.message}`);
-      workspace.title = save.kind === "protected" ? save.message : "Your draft autosaves on this computer between sessions; the library keeps the versions you save.";
+      workspace.hidden = !problem;
+      setText(workspace, problem ? `▲ ${save.message}` : "");
+      workspace.title = problem ? save.message : "";
       const library = frame.library;
       const last = rt.feedback.log.at(-1);
       const message = library.busy && library.progress?.phase === "working" ? library.progress.message : last?.message ?? "Ready";
       setText(activity, message); activity.dataset.tone = library.busy ? "progress" : last?.tone ?? "info";
       const preview = frame.preview;
       setText(gesture, preview.gesture ? "Gesture in progress · Esc cancels" : preview.control ? "Adjusting · Esc restores" : "");
-      const r = frame.readiness, label = r.size >= 1024 ? `${r.size / 1024}K` : String(r.size);
-      ready.dataset.phase = r.phase;
-      const labelPrefix = frame.viewport.head.phase === "ready" ? "Preview" : "UV masks";
-      setText(ready, r.phase === "ready" ? `${labelPrefix} ${label} · ready` : r.phase === "updating"
-        ? `${labelPrefix} ${label} · updating` : `${labelPrefix} blocked`);
-      ready.title = r.error ?? (frame.viewport.head.error ?? frame.viewport.head.message) ?? "";
+      const readiness = readinessText(frame);
+      ready.dataset.phase = readiness.phase;
+      setText(ready, readiness.label);
+      ready.title = frame.readiness.error ?? frame.viewport.head.error ?? readiness.detail;
     },
   };
 }
@@ -353,7 +368,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
   const request = (id: string, title: string, group: string, value: Parameters<StudioRuntime["request"]>[0], extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.authoring.requestCapability(value), run: () => void rt.request(value) });
   const always = { capability: () => ({ available: true }) };
-  const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history();
+  const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history(), character = preview.character;
+  // Research tools (UI-85) are offered only once the person turns them on.
+  const research = (commands: Command[]) => view.research() ? commands : [];
   return [
     act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "history.undo" }), history.undo?.label), "Edit", { kind: "history.undo" },
       { icon: "undo", shortcut: shortcutLabel("shell.undo"), keywords: "undo back" }),
@@ -371,26 +388,42 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
-    file("collection.plan", "Export compiler plan (saves first; not a mod)", "Files", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" }),
+    ...research([file("collection.plan", "Export compiler plan (saves first; not a mod)", "Research", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" })]),
     file("recipe.import", "Import recipe as preset…", "Files", { kind: "recipe.import" }, { icon: "import" }),
     file("recipe.export", "Export preset recipe", "Files", { kind: "recipe.export" }, { icon: "export" }),
     file("mask.export", "Export selected layer mask (2048²)", "Files", { kind: "mask.export" }, { icon: "export" }),
     file("package.check", "Check mod export", "Mod package", { kind: "package.check" }, { icon: "check" }),
     file("package.build", "Build mod files", "Mod package", { kind: "package.build" }, { icon: "package", keywords: "archive build" }),
     file("savedV.import", "Load V from a save…", "Character", { kind: "savedV.import" }, { icon: "character" }),
+    file("characterPreset.import", "Load a character preset…", "Character", { kind: "characterPreset.import" }, { icon: "import", keywords: "creator preset v load" }),
+    file("characterPreset.export", "Save a character preset…", "Character", { kind: "characterPreset.export" }, { icon: "export", keywords: "creator preset v save" }),
+    act("character.useDefault", "Show the default V", "Character", { kind: "character.useDefault", bodyGender: "female" }, { icon: "character", keywords: "default v creator" }),
     file("savedV.export", "Export appearance data", "Character", { kind: "savedV.export" }, { icon: "export" }),
     act("character.hideOwnMakeup", "Hide my V's own makeup", "Character", { kind: "character.hideOwnMakeup" }, { icon: "eye", keywords: "makeup off creator options" }),
     act("character.resetAll", "Reset every creator change", "Character", { kind: "character.resetAll" }, { icon: "reset", keywords: "creator options undo back to my v" }),
+    act("character.undo", character?.undo ? `Undo in the Character panel: ${character.undo}` : "Undo in the Character panel", "Character", { kind: "character.undo" },
+      { icon: "undo", keywords: "character creator clothing undo" }),
+    act("character.redo", character?.redo ? `Redo in the Character panel: ${character.redo}` : "Redo in the Character panel", "Character", { kind: "character.redo" },
+      { icon: "redo", keywords: "character creator clothing redo" }),
+    ...(character?.clothing?.states ?? []).map(state => act(`character.clothing.${state.value}`, `Clothes in the 3D view: ${state.label}`, "Character",
+      { kind: "character.setClothing", state: state.value }, { icon: "body", keywords: "clothing clothes outfit underwear headwear" })),
+    act("character.clearPreparedFiles", "Clear prepared game files", "Character", { kind: "character.clearPreparedFiles" }, { icon: "trash", keywords: "cache disk space prepared files" }),
     // Viewport keys work while that viewport has focus; the palette names the scope.
     act("camera.front", "Front view", "View", { kind: "camera.front" }, { icon: "front", shortcut: `${shortcutLabel("head.front")} in Head` }),
     act("camera.body", "Whole body view", "View", { kind: "camera.body" }, { icon: "body", keywords: "full body camera frame arms legs feet nails" }),
     act("preview.body", preview.preview?.body === false ? "Show the body" : "Hide the body", "View", { kind: "preview.setBody", enabled: preview.preview?.body === false },
-      { icon: "body", keywords: "body arms hands feet nails tattoos visibility" }),
+      { icon: "body", keywords: "body arms hands feet nails tattoos visibility 3d view" }),
+    // The 3D view's switches (UI-91): the same actions as the Character panel's.
+    ...(["brows", "lashes"] as const).map(detail => act(`preview.${detail}`, `${preview.preview?.[detail] ? "Hide" : "Show"} ${detail === "brows" ? "eyebrows" : "eyelashes"}`,
+      "View", { kind: "preview.setDetail", detail, enabled: !preview.preview?.[detail] }, { icon: "eye", keywords: "3d view visibility brows lashes" })),
+    act("preview.hair", preview.preview?.hair ? "Hide hair" : "Show hair", "View", { kind: "preview.setHair", enabled: !preview.preview?.hair }, { icon: "eye", keywords: "3d view visibility hair" }),
+    act("preview.piercings", preview.preview?.piercings ? "Hide piercings" : "Show piercings", "View", { kind: "preview.setPiercings", enabled: !preview.preview?.piercings },
+      { icon: "eye", keywords: "3d view visibility piercings earrings" }),
     ...(["both", "single", "other", "fit"] as const).map(command => ({ id: `uv.${command}`, title: `UV: ${{ both: "Both eyes", single: "Single eye", other: "Other eye", fit: "Fit shape" }[command]}`,
       group: "View", icon: "uv" as const, shortcut: `${shortcutLabel(`uv.${command}`)} in UV`,
       capability: () => port.viewport.uvCommandCapability(command), run: () => { port.viewport.uvCommand(command); } })),
     act("surface", preview.preview?.surface ? "Hide surface controls" : "Show surface controls", "View", { kind: "preview.setSurfaceControls", enabled: !preview.preview?.surface }, { icon: "handles" }),
-    act("wire", preview.preview?.wire ? "Hide plate wireframe" : "Show plate wireframe", "View", { kind: "preview.setWire", enabled: !preview.preview?.wire }, { icon: "wire" }),
+    ...research([act("wire", preview.preview?.wire ? "Hide plate wireframe" : "Show plate wireframe", "Research", { kind: "preview.setWire", enabled: !preview.preview?.wire }, { icon: "wire" })]),
     act("lighting.preset", preview.preview?.lightingPreset === "creator" ? "Lighting: studio" : "Lighting: character creator (game)", "View",
       { kind: "preview.setLightingPreset", preset: preview.preview?.lightingPreset === "creator" ? "studio" : "creator" },
       { icon: "lighting", keywords: "creator mirror game lights lut grade compare calibration" }),
@@ -400,18 +433,20 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       { kind: "preview.resetStudioLighting" }, { icon: "lighting", keywords: "studio light reset default exposure key ambient soft" }),
     act("camera.creatorFace", "Camera: character-creator face page", "View", { kind: "camera.creatorFraming", page: "face" }, { icon: "front", keywords: "creator 15 fov eyes brows lashes" }),
     act("camera.creatorHair", "Camera: character-creator hair page", "View", { kind: "camera.creatorFraming", page: "hair" }, { icon: "front", keywords: "creator 15 fov hair skin" }),
-    ...([["isotropic", "lumens ÷ 4π"], ["cone", "spread over the cone"]] as const).map(([value, label]) =>
-      act(`lighting.creator.intensity.${value}`, `Creator lighting diagnostic: intensity ${label}`, "Diagnostics",
+    // Research tools (UI-85): the creator lighting calibration, only when asked for.
+    ...research([...([["isotropic", "lumens ÷ 4π"], ["cone", "spread over the cone"]] as const).map(([value, label]) =>
+      act(`lighting.creator.intensity.${value}`, `Creator lighting calibration: intensity ${label}`, "Research",
         { kind: "preview.setCreatorLighting", key: "intensity", value }, { icon: "lighting", keywords: "creator calibration lumen candela" })),
     ...([["full", "full cone angles"], ["half", "half cone angles"]] as const).map(([value, label]) =>
-      act(`lighting.creator.cone.${value}`, `Creator lighting diagnostic: ${label}`, "Diagnostics",
+      act(`lighting.creator.cone.${value}`, `Creator lighting calibration: ${label}`, "Research",
         { kind: "preview.setCreatorLighting", key: "cone", value }, { icon: "lighting", keywords: "creator calibration spot angle" })),
-    act("lighting.creator.reset", "Creator lighting diagnostic: restore defaults", "Diagnostics",
-      { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" }),
+    act("lighting.creator.reset", "Creator lighting calibration: restore defaults", "Research",
+      { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" })]),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
     act("idle", motion?.idle ? "Stop character-creator idle" : "Play character-creator idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
     act("idle.pause", motion?.idlePaused ? "Resume idle" : "Pause idle", "Motion", { kind: "motion.setPaused", paused: !motion?.idlePaused }, { icon: "pause" }),
+    act("blink.play", motion?.blinkPlaying ? "Stop blink" : "Play blink", "Motion", { kind: "motion.playBlink", playing: !motion?.blinkPlaying }, { icon: "play", keywords: "blink eyes lids" }),
     ...[...panels.values()].map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
       icon: panel.spec.icon, keywords: panel.spec.description, ...always, run: () => rt.dock.reveal(panel.spec.id) })),
     ...[...panels.values()].filter(panel => rt.dock.isOpen(panel.spec.id)).map(panel => ({ id: `panel.float.${panel.spec.id}`, title: `Float ${panel.spec.title}`,
@@ -422,6 +457,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     { id: "theme.dark", title: "Theme: dark", group: "Appearance", icon: "moon", ...always, run: () => theme.set("dark") },
     { id: "view.hints", title: view.hints() ? "Hide viewport input hints" : "Show viewport input hints", group: "View", icon: "keyboard",
       keywords: "shortcut hints tooltips status", ...always, run: () => view.setHints(!view.hints()) },
+    { id: "view.research", title: view.research() ? "Hide research tools" : "Show research tools", group: "View", icon: "activity",
+      keywords: "research calibration glitter model study compiler plan developer ids advanced", ...always, run: () => view.setResearch(!view.research()) },
+    { id: "help.about", title: "About XF Studio", group: "Help", icon: "info", keywords: "version licence license update data folder",
+      capability: () => port.about.capability(), run: () => port.about.open() },
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
     { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",

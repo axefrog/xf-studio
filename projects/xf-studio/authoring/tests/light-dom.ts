@@ -38,6 +38,13 @@ export class LightElement extends LightNode {
     });
   }
   get children(): LightElement[] { return this.childNodes.filter((node): node is LightElement => node instanceof LightElement); }
+  get childElementCount() { return this.children.length; }
+  /** A select's options. */
+  get options(): LightElement[] { return this.children.filter(child => child.tagName === "option"); }
+  /** A dialog's open state (`showModal` and `close`). */
+  open = false;
+  showModal() { this.open = true; }
+  close() { this.open = false; }
   setAttribute(name: string, value: string) { this.attributes.set(name, String(value)); }
   getAttribute(name: string) { return this.attributes.get(name) ?? null; }
   hasAttribute(name: string) { return this.attributes.has(name); }
@@ -88,6 +95,14 @@ export class LightElement extends LightNode {
   descendants(): LightElement[] { return this.children.flatMap(child => [child, ...child.descendants()]); }
   querySelectorAll(selector: string): LightElement[] { return this.descendants().filter(element => matches(element, selector)); }
   querySelector(selector: string): LightElement | null { return this.querySelectorAll(selector)[0] ?? null; }
+  /** A comma list of simple selectors, each optionally with `:not(simple)` clauses. */
+  matches(selector: string): boolean { return selector.split(",").some(part => matchesWithNot(this, part.trim())); }
+  closest(selector: string): LightElement | null { for (let at: LightElement | null = this; at; at = at.parentNode) if (at.matches(selector)) return at; return null; }
+}
+function matchesWithNot(element: LightElement, selector: string): boolean {
+  const nots = [...selector.matchAll(/:not\(([^)]*)\)/g)].map(match => match[1]!);
+  const base = selector.replace(/:not\(([^)]*)\)/g, "");
+  return (!base || matches(element, base)) && nots.every(not => !matches(element, not));
 }
 export class LightInput extends LightElement {}
 
@@ -116,7 +131,8 @@ export const lightDocument = {
 };
 
 const saved: Record<string, unknown> = {};
-const GLOBALS = { document: lightDocument, HTMLElement: LightElement, HTMLInputElement: LightInput, HTMLButtonElement: LightElement, Node: LightNode } as const;
+const GLOBALS = { document: lightDocument, HTMLElement: LightElement, HTMLInputElement: LightInput, HTMLButtonElement: LightElement, Node: LightNode,
+  Element: LightElement, HTMLSelectElement: LightElement, HTMLDialogElement: LightElement } as const;
 export function installLightDom() {
   lightDocument.body = new LightElement("body");
   lightDocument.activeElement = null;

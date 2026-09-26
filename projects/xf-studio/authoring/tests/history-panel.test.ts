@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { HISTORY_START_ID, type HistorySnapshot } from "../src/authoring-history";
 import { shortcutLabel } from "../src/input-bindings";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { historyCommandLabel, historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable,
+import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable,
   jumpAnnouncement } from "../src/studio-ui/history-model";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { PANEL_IDS, STUDIO_CATALOGUE } from "../src/compose/views";
@@ -42,11 +42,13 @@ test("history wording: summary, announcements and Undo/Redo titles that name the
   expect(jumpAnnouncement(rows[1])).toBe("Went back to: Colour");
   expect(jumpAnnouncement(rows[3])).toBe("Redid up to: Opacity");
   const redo = shortcutLabel("shell.redo"), undo = shortcutLabel("shell.undo");
-  expect(historyCommandTitle("redo", { available: true }, "Move point", redo)).toBe(`Redo: Move point (${redo})`);
-  expect(historyCommandTitle("undo", { available: true }, "Opacity", undo)).toBe(`Undo: Opacity (${undo})`);
+  // Each title also says what the header's Undo covers: the makeup, not the Character panel's changes (UI-81).
+  expect(historyCommandTitle("redo", { available: true }, "Move point", redo)).toBe(`Redo: Move point (${redo})\n${HISTORY_SCOPE}`);
+  expect(historyCommandTitle("undo", { available: true }, "Opacity", undo)).toBe(`Undo: Opacity (${undo})\n${HISTORY_SCOPE}`);
+  expect(HISTORY_SCOPE).toContain("Character panel");
   // Unavailable commands still show their shortcut, so Redo is discoverable before it can be used.
   expect(historyCommandTitle("redo", { available: false, reason: "There is no undone change to redo." }, undefined, redo))
-    .toBe(`Redo (${redo}) — There is no undone change to redo.`);
+    .toBe(`Redo (${redo}) — There is no undone change to redo.\n${HISTORY_SCOPE}`);
   expect(historyCommandLabel("redo", { available: true }, "Move point")).toBe("Redo: Move point");
   expect(historyCommandLabel("redo", { available: false }, "Move point")).toBe("Redo");
 });

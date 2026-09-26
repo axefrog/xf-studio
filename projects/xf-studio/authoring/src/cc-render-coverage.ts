@@ -62,6 +62,7 @@ const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face deta
 export const NOT_HEAD = "The preview doesn't draw this part of the body, so changing it shows nothing.";
 export const UNDER_COVER = "Covered by the game's underwear in the 3D view, so it isn't drawn.";
 export const NO_MALE_HEAD = "The preview has no masculine head yet, so this isn't drawn.";
+export const NO_MALE_BODY = "The preview has no masculine body yet, so this isn't drawn.";
 const NOT_CONSUMED = "The head the preview draws doesn't use this option, so changing it shows nothing.";
 const CONDITIONAL = "Shown when its parts are face decals (makeup, tattoos, scars, face cyberware); other parts, such as teeth, aren't drawn yet.";
 
@@ -70,7 +71,8 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
   const result = new Map<string, RenderCoverage>();
   const byPart = (part: CcoPart) => options.filter(option => option.part === part);
   const direct = (option: CoverageInput): RenderCoverage => {
-    if (bodyGender === "male") return { status: "not-rendered", detail: null, note: NO_MALE_HEAD };
+    // A body row names the body, never the head (UI-92).
+    if (bodyGender === "male") return { status: "not-rendered", detail: null, note: option.part === "head" ? NO_MALE_HEAD : NO_MALE_BODY };
     if (option.part !== "head") {
       const consumed = option.groups.some(group => bodyGroups(option.part as "body" | "arms").includes(group));
       if (option.type === "morph") return { status: "rendered", detail: "body", note: "Shapes the body." };
@@ -104,7 +106,8 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
     if (bodyGender === "male") continue;
     const followers = options.filter(other => other !== option && other.link?.key === option.link!.key).map(other => result.get(other.id)!);
     const shown = best(followers);
-    if (shown.status !== "not-rendered") result.set(option.id, { ...shown, note: `Changes ${shown.detail && shown.detail !== "morph" ? WORDS[shown.detail] : "the head"} through the options that follow it.` });
+    if (shown.status !== "not-rendered") result.set(option.id, { ...shown,
+      note: `Changes ${shown.detail && shown.detail !== "morph" ? WORDS[shown.detail] : option.part === "head" ? "the head" : "the body"} through the options that follow it.` });
   }
   // Switchers show what their targets show (nested switchers settle in a few passes).
   const byName = new Map(options.map(option => [`${option.part}/${option.name}`, option]));

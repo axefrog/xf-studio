@@ -21,9 +21,9 @@ export function eyeMakeupCommands(ctx: EyeMakeupViewContext): FeatureCommand<Eye
     act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: view.selected() }, { icon: "trash" }),
     act("path.bezier", "Enable Bézier handles", "Shape", layer && { kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } }, { icon: "shape" }),
     act("layer.mirror", layer?.symmetry ? "Stop mirroring across the face" : "Mirror across the face", "Shape", layer && { kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }, { icon: "mirror" }),
-    act("field.add", "Add warp control", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
+    act("field.add", "Add warp", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
     act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" },
-      layer ? "Select a warp control first." : "Select a layer first."),
+      layer ? "Select a warp first." : "Select a layer first."),
     ...finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : finish.exportAdapter === "experimental" ? " (experimental export)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
       { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview only study" : "exports" })),
   ];

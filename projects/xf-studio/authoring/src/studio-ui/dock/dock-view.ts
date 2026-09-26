@@ -109,7 +109,7 @@ export class DockView {
     if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   }
 
-  /** Inactive tabs collapse to icons when a strip overflows; the active label stays readable. */
+  /** Inactive tabs shorten their labels when a strip overflows (never to bare icons, UI-96); the active label stays whole. */
   condenseTabs() {
     for (const strip of this.element.querySelectorAll<HTMLElement>(".dock-tabs")) {
       strip.classList.remove("condensed");

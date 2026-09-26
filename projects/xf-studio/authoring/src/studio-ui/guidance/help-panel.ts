@@ -29,7 +29,11 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   const tours = h("ul", { class: "help-tours", "aria-label": "Guided tours" });
   const topics = h("div", { class: "help-topics" });
   const reference = h("div", { class: "help-reference" });
-  const links = h("ul", { class: "help-links" }, h("li", {},
+  // About sits with the other help, only where the host has one (the desktop app; UI-87).
+  const about = rt.port.about.capability().available ? h("li", {},
+    h("button", { class: "link-button help-about", type: "button", text: "About XF Studio", onclick: () => rt.port.about.open() }),
+    h("small", { class: "muted", text: "Version, licences, updates and where your library is kept." })) : null;
+  const links = h("ul", { class: "help-links" }, about, h("li", {},
     h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
     h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
     h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),

@@ -1,8 +1,9 @@
 // This device bootstrap is intentionally outside shared Studio presentation.
-// It adds the desktop first-run welcome, About (version, licences, build setup),
-// the host-owned workspace storage, and then starts the shared Studio composition
-// root (`src/studio-startup.ts`) with those desktop host services.
-import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
+// It adds the desktop first-run welcome, About (version, licences, updates; opened
+// from the Studio's Help panel and command palette), the host-owned workspace storage,
+// and then starts the shared Studio composition root (`src/studio-startup.ts`) with
+// those desktop host services. Settings have one form, the Studio's Game & tools (UI-03).
+import { createBrowserLocalSetup, desktopFolderPicker } from "../src/browser-local-setup-device";
 import { createBrowserPreviewPreparation } from "../src/preview-preparation";
 import { createBrowserWolvenKitSetup } from "../src/wolvenkit-setup";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
@@ -119,14 +120,11 @@ const stylesheet = document.createElement("link");
 stylesheet.rel = "stylesheet";
 stylesheet.href = "/about.css";
 document.head.append(stylesheet);
-const aboutButton = document.createElement("button");
-aboutButton.id = "desktop-about-open";
-aboutButton.type = "button";
-aboutButton.textContent = "About";
-aboutButton.setAttribute("aria-label", "About XF Studio");
+// About has no button of its own over the panels (UI-87): the Studio offers it in its Help panel and command palette.
 const about = document.createElement("dialog");
 about.id = "desktop-about";
-about.innerHTML = '<h2>About XF Studio</h2><p>Customise Cyberpunk 2077. Eye makeup is the first supported feature.</p><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-wolvenkit-note"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Build setup</button><button id="desktop-licences-open" type="button">Licences</button><button id="desktop-wolvenkit-licence" type="button">WolvenKit licence</button></div><form method="dialog"><button type="submit">Close</button></form>';
+about.setAttribute("aria-labelledby", "desktop-about-title");
+about.innerHTML = '<h2 id="desktop-about-title">About XF Studio</h2><p>Customise Cyberpunk 2077. Eye makeup is the first supported feature.</p><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-wolvenkit-note"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for an update</button><button type="button" data-update-action="download">Download the update</button><button type="button" data-update-action="applyAndRestart">Restart to update…</button></div><div id="desktop-update-confirm" class="desktop-update-confirm" role="group" aria-labelledby="desktop-update-confirm-text" hidden><p id="desktop-update-confirm-text">Restart XF Studio now to finish updating? Your work is saved first.</p><button type="button" id="desktop-update-restart">Restart now</button><button type="button" id="desktop-update-later">Not now</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Game &amp; tools</button><button id="desktop-licences-open" type="button">Licences</button><button id="desktop-wolvenkit-licence" type="button">WolvenKit licence</button></div><form method="dialog"><button type="submit">Close</button></form>';
 about.querySelector("#desktop-version").textContent = capabilities.metadataStatus === "ready" ?
   `Version ${capabilities.version}` : "Installed version unavailable";
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
@@ -154,29 +152,41 @@ about.querySelector("#desktop-wolvenkit-licence").addEventListener("click", () =
   wolvenKitNote.textContent = error.message; }));
 const updateStatus = about.querySelector("#desktop-update");
 const updateActions = about.querySelector("#desktop-update-actions");
+const updateConfirm = about.querySelector("#desktop-update-confirm");
 async function refreshUpdate() {
   try {
     const response = await fetch("/api/desktop/update");
     if (!response.ok) throw Error("Update state unavailable.");
     showUpdate(await response.json());
-  } catch { updateStatus.textContent = "Update state unavailable. Restart XF Studio and retry."; }
+  } catch { updateStatus.textContent = "XF Studio couldn't check its update state. Restart XF Studio and try again."; }
+}
+/** The update state in plain words (UI-97): what it is, and what to do next. Build hashes and phase names stay out of it. */
+function updateLine(state) {
+  const next = state.available?.version;
+  switch (state.phase) {
+    case "unavailable": return state.reason || "Automatic updates are off. Download new versions from the XF Studio releases page on GitHub.";
+    case "idle": return `You have XF Studio ${state.installed.version}. Check for an update whenever you like.`;
+    case "checking": return "Checking for an update…";
+    case "available": return `XF Studio ${next} is available. Download it when you're ready; nothing changes until you restart.`;
+    case "downloading": return `Downloading XF Studio ${next}…`;
+    case "ready": return `XF Studio ${next} is downloaded. Restart to finish updating; your work is saved first.`;
+    case "applying": return "Restarting to finish the update…";
+    default: return "The update didn't work, and nothing changed. Try again later, or download it from the XF Studio releases page on GitHub.";
+  }
 }
 function showUpdate(state) {
-  updateStatus.textContent = state.phase === "unavailable" ? state.reason :
-    state.available ? `${state.phase}: ${state.available.version} (${state.available.buildHash})` :
-    state.phase === "idle" ? "No update is currently selected. Check only when you choose to." :
-    state.reason || `Update ${state.phase}.`;
+  updateStatus.textContent = updateLine(state);
   updateActions.hidden = state.phase === "unavailable";
+  if (state.phase !== "ready") updateConfirm.hidden = true;
   for (const button of updateActions.querySelectorAll("button")) {
     button.disabled = button.dataset.updateAction === "check" ? !state.canCheck :
       button.dataset.updateAction === "download" ? !state.canDownload : !state.canApplyAndRestart;
   }
 }
-for (const button of updateActions.querySelectorAll("button")) button.addEventListener("click", async () => {
-  const action = button.dataset.updateAction;
-  if (action === "applyAndRestart" && !confirm("Apply the downloaded XF Studio update and restart now?")) return;
+async function updateAction(action) {
+  updateConfirm.hidden = true;
   updateStatus.textContent = action === "check" ? "Checking for an update…" :
-    action === "download" ? "Downloading update…" : "Applying update and restarting…";
+    action === "download" ? "Downloading the update…" : "Saving your work and restarting…";
   for (const item of updateActions.querySelectorAll("button")) item.disabled = true;
   try {
     const response = await fetch("/api/desktop/update", { method: "POST",
@@ -185,6 +195,16 @@ for (const button of updateActions.querySelectorAll("button")) button.addEventLi
     if (!response.ok) throw Error("Update action was refused.");
     showUpdate(await response.json());
   } catch { await refreshUpdate(); }
+}
+// Restarting asks first, inside About itself (no browser prompt; UI-97).
+for (const button of updateActions.querySelectorAll("button")) button.addEventListener("click", () => {
+  const action = button.dataset.updateAction;
+  if (action === "applyAndRestart") { updateConfirm.hidden = false; about.querySelector("#desktop-update-restart").focus(); return; }
+  void updateAction(action);
+});
+about.querySelector("#desktop-update-restart").addEventListener("click", () => void updateAction("applyAndRestart"));
+about.querySelector("#desktop-update-later").addEventListener("click", () => {
+  updateConfirm.hidden = true; updateActions.querySelector('[data-update-action="applyAndRestart"]').focus();
 });
 const licences = document.createElement("dialog");
 licences.id = "desktop-licences";
@@ -205,82 +225,28 @@ for (const item of licences.querySelectorAll("[data-licence-doc]"))
 about.querySelector("#desktop-licences-open").addEventListener("click", () => {
   about.close(); licences.showModal(); void showLicence("LICENSE.txt");
 });
-document.body.append(aboutButton, about, licences);
-aboutButton.addEventListener("click", () => {
-  about.showModal(); void refreshUpdate(); void refreshWolvenKitNote();
+document.body.append(about, licences);
+function openAbout() {
+  if (!about.open) about.showModal();
+  void refreshUpdate(); void refreshWolvenKitNote();
   void setupAction({ kind: "setup.refresh" }).catch(() => {});
-});
-const setup = document.createElement("dialog");
-setup.id = "desktop-setup";
-setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files uses your Cyberpunk 2077 game folder and WolvenKit. XF Studio finds the game and downloads WolvenKit for you from the 3D preview card; fill these in only to use your own. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
+}
+// Developer and review tools reach About the way the Studio does.
+window.xfDesktopOpenAbout = openAbout;
 const welcome = document.createElement("dialog");
 welcome.id = "desktop-welcome";
-welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Once the 3D preview is set up, you can also build your ' + EYE_MAKEUP_MOD.modName + ' mod files. XF Studio asks before it downloads anything.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
-document.body.append(setup, welcome);
-const descriptors = [
-  ["gameRoot", "Cyberpunk 2077 game folder"],
-  ["launchRoute", "How you install mods"],
-  ["manualModRoot", "Optional direct mod folder"],
-  ["mo2Root", "Mod Organizer 2 instance folder"],
-  ["mo2ProfileId", "Mod Organizer 2 profile"],
-  ["wolvenKitCli", "Your own WolvenKit (optional)"],
-];
-// Only the fields a person may need; XF Studio runs its own Bun, so there is no field for it.
-const hints = { wolvenKitCli: "Leave this empty and XF Studio can download WolvenKit for you." };
-const fieldsRoot = setup.querySelector("#desktop-setup-fields");
-const controls = new Map();
-for (const [name, labelText] of descriptors) {
-  const label = document.createElement("label");
-  label.textContent = labelText;
-  label.dataset.field = name;
-  const control = name === "launchRoute" ? document.createElement("select") : document.createElement("input");
-  control.name = name;
-  if (name === "launchRoute") {
-    for (const [value, text] of [["direct", "Game folder"], ["mo2", "Mod Organizer 2"]]) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = text;
-      control.append(option);
-    }
-  } else {
-    control.type = "text";
-    control.autocomplete = "off";
-  }
-  label.append(control);
-  if (hints[name]) label.append(Object.assign(document.createElement("small"), { textContent: hints[name] }));
-  fieldsRoot.append(label);
-  controls.set(name, control);
-}
-const setupStatus = setup.querySelector("#desktop-setup-status");
-const saveSetup = setup.querySelector("#desktop-setup-save");
-const restoreSetup = setup.querySelector("#desktop-setup-restore");
-const deferSetup = setup.querySelector("#desktop-setup-defer");
-saveSetup.disabled = true;
+welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Once the 3D preview is set up, you can also build your ' + EYE_MAKEUP_MOD.modName + ' mod files and add them to your mod manager. XF Studio asks before it downloads or installs anything.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Game &amp; tools</button></div></div>';
+document.body.append(welcome);
 const aboutReadiness = about.querySelector("#desktop-setup-readiness");
-const setupActions = createBrowserLocalSetup();
+// One settings service and one form (the Studio's Game & tools, UI-03), with the desktop's own folder picker (UI-83).
+const setupActions = createBrowserLocalSetup({ pickFolder: desktopFolderPicker });
 let setupView;
-function showRoute() {
-  const mo2 = controls.get("launchRoute").value === "mo2";
-  for (const name of ["mo2Root", "mo2ProfileId"]) fieldsRoot.querySelector(`[data-field="${name}"]`).hidden = !mo2;
-  fieldsRoot.querySelector('[data-field="manualModRoot"]').hidden = mo2;
-}
-controls.get("launchRoute").addEventListener("change", showRoute);
 function showSetup(view) {
   setupView = view;
-  for (const [name, control] of controls) control.value = view.fields[name] ?? "";
-  showRoute();
   const recovery = view.source === "backup";
-  restoreSetup.hidden = !recovery;
-  deferSetup.hidden = view.source !== "new";
-  saveSetup.disabled = recovery;
-  const pathIssues = view.readiness.sourceDiscovery.issues.map(issue => issue.reason);
-  const buildReady = view.readiness.build.ready;
-  const pathStatus = pathIssues.length ? pathIssues.join(" ") : "The game folder was found.";
-  setupStatus.textContent = recovery ? "Your settings file is damaged. Restore the previous copy before editing." :
-    `${pathStatus} Check works without any of these. Build ${buildReady ? "is ready." :
-      `isn't ready yet: ${view.readiness.build.issues.find(issue => !pathIssues.includes(issue.reason))?.reason ?? "see above."}`}`;
-  aboutReadiness.textContent = recovery ? "Build settings need repair: open Build setup." :
-    `Check is ready. Build ${buildReady ? "is set up." : `isn't set up yet: ${view.readiness.build.issues[0]?.reason ?? "open Build setup."}`}`;
+  aboutReadiness.textContent = recovery ? "Your settings file is damaged: open Game & tools to restore the previous copy." :
+    view.readiness.build.ready ? "Check is ready, and Build is set up." :
+      `Check is ready. To build your mod files: ${view.readiness.build.issues[0]?.reason ?? "open Game & tools."}`;
 }
 async function setupAction(action) {
   // The Studio shares this settings service; wait for its own refresh rather than being refused as busy.
@@ -289,28 +255,19 @@ async function setupAction(action) {
   if (!result.ok) throw Error(result.message);
   showSetup(setupActions.snapshot().view);
 }
-async function openSetup() {
-  setupStatus.textContent = "Loading build setup…";
-  saveSetup.disabled = true;
-  setup.showModal();
-  await initialSetup.catch(() => {});
-  try { await setupAction({ kind: "setup.refresh" }); }
-  catch { setupStatus.textContent = "Build setup couldn't be loaded. Restart XF Studio and try again."; }
+// Game & tools lives in the Studio's Mod package panel; asked for before the Studio is up, it opens as soon as it is.
+let studio = null, setupWanted = false;
+function openGameSetup() {
+  if (about.open) about.close();
+  if (studio) studio.openGameSetup(); else setupWanted = true;
 }
-about.querySelector("#desktop-setup-open").addEventListener("click", () => { about.close(); void openSetup(); });
-setup.querySelector("#desktop-setup-close").addEventListener("click", () => setup.close());
-// Skipping stores the untouched defaults through the same validated action, so
+about.querySelector("#desktop-setup-open").addEventListener("click", openGameSetup);
+// Starting to design stores the untouched defaults through the same validated action, so
 // the welcome does not return on every launch; Check never needs these paths.
 async function deferBuildSetup() {
   if (setupView?.source !== "new") return;
   await setupAction({ kind: "setup.save", fields: setupView.fields });
 }
-deferSetup.addEventListener("click", async () => {
-  deferSetup.disabled = true;
-  try { await deferBuildSetup(); setup.close(); }
-  catch (error) { setupStatus.textContent = error.message; }
-  finally { deferSetup.disabled = false; }
-});
 const welcomeStart = welcome.querySelector("#desktop-welcome-start");
 welcomeStart.addEventListener("click", async () => {
   welcomeStart.disabled = true;
@@ -318,32 +275,20 @@ welcomeStart.addEventListener("click", async () => {
   catch (error) { welcome.querySelector("#desktop-welcome-status").textContent = error.message; }
   finally { welcomeStart.disabled = false; }
 });
-welcome.querySelector("#desktop-welcome-setup").addEventListener("click", () => { welcome.close(); void openSetup(); });
-setup.querySelector("#desktop-setup-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  if (!setupView || setupView.source === "backup") return;
-  saveSetup.disabled = true;
-  const fields = { ...setupView.fields };
-  for (const [name, control] of controls) fields[name] = name === "launchRoute" ? control.value : control.value.trim() || null;
-  try { await setupAction({ kind: "setup.save", fields }); }
-  catch (error) { setupStatus.textContent = error.message; }
-  finally { saveSetup.disabled = setupView?.source === "backup"; }
-});
-restoreSetup.addEventListener("click", async () => {
-  restoreSetup.disabled = true;
-  try { await setupAction({ kind: "setup.restorePrevious" }); }
-  catch (error) { setupStatus.textContent = error.message; }
-  finally { restoreSetup.disabled = false; }
+welcome.querySelector("#desktop-welcome-setup").addEventListener("click", async () => {
+  await initialSetup.catch(() => {});
+  try { await deferBuildSetup(); } catch { /* Game & tools says what is wrong. */ }
+  welcome.close(); openGameSetup();
 });
 const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.then(() => {
-  // A fresh install gets the plain-language welcome; damaged settings open
-  // Build setup for recovery. Existing users reach Build setup from About.
+  // A fresh install gets the plain-language welcome; damaged settings open Game & tools, which
+  // offers to restore them. Everyone else reaches Game & tools from Mod package or About.
   if (setupView?.source === "new") welcome.showModal();
-  else if (setupView?.source === "backup") setup.showModal();
-}).catch(() => { aboutReadiness.textContent = "Build setup couldn't be loaded. Check still works."; });
-// Once any settings form saves, the Build setup dialog shows the saved view.
-setupActions.subscribe(() => { const view = setupActions.snapshot().view; if (view && !setup.open) showSetup(view); });
+  else if (setupView?.source === "backup") openGameSetup();
+}).catch(() => { aboutReadiness.textContent = "Your settings couldn't be loaded. Check still works; restart XF Studio to try again."; });
+// About's readiness line follows every change Game & tools saves.
+setupActions.subscribe(() => { const view = setupActions.snapshot().view; if (view) showSetup(view); });
 let previewReady = false;
 let flushRequest = null;
 window.addEventListener("xfs-desktop-close-flush", () => flushRequest?.());
@@ -355,8 +300,9 @@ void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   wolvenKitSetup: createBrowserWolvenKitSetup("/api/desktop/wolvenkit"),
   localSetup: setupActions,
   openLink,
-  setupPlace: "Build setup",
-  openSetup: () => void openSetup(),
+  setupPlace: "Game & tools",
+  about: openAbout,
+  onMounted: shell => { studio = shell; if (setupWanted) { setupWanted = false; shell.openGameSetup(); } },
   onFlushRequest: flush => { flushRequest = flush; },
   onPreviewReady: () => { previewReady = true; },
 })).catch(() => {

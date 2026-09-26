@@ -42,6 +42,8 @@ export class Frame {
   get status() { return this.once("status", () => this.port.status.snapshot()); }
   get localSetup() { return this.once("localSetup", () => this.port.localSetup.snapshot()); }
   get previewSetup() { return this.once("previewSetup", () => this.port.previewSetup.snapshot()); }
+  get installDetection() { return this.once("installDetection", () => this.port.installDetection.snapshot()); }
+  get modInstall() { return this.once("modInstall", () => this.port.modInstall.snapshot()); }
   get preferences() { return this.once("preferences", () => this.port.preferences.snapshot()); }
   get history() { return this.once("history", () => this.port.authoring.historyTimeline()); }
 }
@@ -96,9 +98,10 @@ export class StudioRuntime {
    */
   report(kind: string, result: StudioDispatchResult, options: DispatchFeedback = {}) {
     if (!result.ok) {
-      // Something not available yet is information, not an error.
-      if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : result.code === "asset_unavailable" ? "info" : "error", this.sourceLabel(kind),
-        options.failure ?? result.message, [], { code: result.code });
+      // Something not available yet is information, not an error; an ordinary refusal (nothing to undo, out of range) is a
+      // warning that fades (the feedback downgrades every expected code, UI-80); only a real failure stays as an error.
+      if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : result.code === "asset_unavailable" || result.code === "not_ready" ? "info" : "error",
+        this.sourceLabel(kind), options.failure ?? result.message, [], { code: result.code });
       return false;
     }
     if (options.success) this.feedback.record("success", this.sourceLabel(kind), options.success);

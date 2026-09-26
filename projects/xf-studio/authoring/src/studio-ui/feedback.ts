@@ -9,7 +9,9 @@ export type ActivityEntry = { id: number; time: Date; tone: Tone; source: string
  * Error references for notices (docs/diagnostics.md): `notice` logs an error notice about to be shown and returns its reference
  * (null for an expected refusal); `report` opens "Report a problem" for a reference.
  */
-export type FeedbackDiagnostics = { notice(failure: { source: string; message: string; code?: string }): string | null; report(ref: string | null): void };
+export type FeedbackDiagnostics = { notice(failure: { source: string; message: string; code?: string }): string | null; report(ref: string | null): void;
+  /** Whether a failure code is an ordinary refusal (nothing to undo, busy, out of range): shown as a notice that fades, never an error. */
+  expected?(code: string | undefined): boolean };
 export type ToastOptions = { sticky?: boolean;
   /** The failure's code, when the notice is for a failed action or request (an expected refusal gets no reference). */
   code?: string;
@@ -39,15 +41,21 @@ export class Feedback {
     for (const listener of this.listeners) listener();
   }
   /**
-   * Visible, dismissible toast. Errors stay until dismissed; others fade after a while. An error that isn't an expected refusal
-   * carries its reference and a "Report this problem" button.
+   * Visible, dismissible toast. Errors stay until dismissed; others fade after a while, but not while the pointer or keyboard
+   * focus is on them. An error that isn't an expected refusal carries its reference and a "Report this problem" button; an
+   * ordinary refusal (UI-80: nothing to undo, busy, out of range) is a warning that fades, whoever raised it.
    */
   toast(tone: Tone, source: string, message: string, actions: FeedbackAction[] = [], options: ToastOptions = {}) {
+    // The same notice already on screen isn't shown (or logged) again: a repeated refusal during a drag says it once (UI-15).
+    const key = `${tone}\u0000${source}\u0000${message}`;
+    const shown = [...this.toasts.children].find(child => (child as HTMLElement).dataset?.key === key && !child.classList.contains("leaving"));
+    if (shown && !options.ref) return () => { shown.classList.add("leaving"); setTimeout(() => shown.remove(), 160); };
+    if (tone === "error" && options.ref === undefined && options.code !== undefined && this.diagnostics?.expected?.(options.code)) tone = "warning";
     const ref = options.ref !== undefined ? options.ref : tone === "error" ? this.diagnostics?.notice({ source, message, code: options.code }) ?? null : null;
     this.record(tone, source, message, ref ?? undefined);
     const all = ref && this.diagnostics ? [...actions, { label: "Report this problem", run: () => this.diagnostics!.report(ref) }] : actions;
     const close = () => { element.classList.add("leaving"); setTimeout(() => element.remove(), 160); };
-    const element = h("div", { class: `toast ${tone}`, role: tone === "error" ? "alert" : "status" },
+    const element = h("div", { class: `toast ${tone}`, role: tone === "error" ? "alert" : "status", "data-key": key },
       h("span", { class: "toast-icon" }, icon(toneIcon[tone])),
       h("div", { class: "toast-body" }, h("strong", { text: source }), h("p", { text: message }),
         ref ? h("p", { class: "toast-ref", text: `Reference ${ref}` }) : null,
@@ -59,7 +67,15 @@ export class Feedback {
       const transient = [...this.toasts.children].find(child => !child.classList.contains("error") && child !== element);
       (transient ?? this.toasts.firstElementChild)?.remove();
     }
-    if (!options.sticky && tone !== "error" && !ref) setTimeout(close, all.length ? 9000 : 5200);
+    if (!options.sticky && tone !== "error" && !ref) {
+      // Fades after a while; reading it (pointer over it, or focus in it) holds it until the reader moves on.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const arm = () => { clearTimeout(timer); timer = setTimeout(close, all.length ? 9000 : 5200); };
+      const hold = () => clearTimeout(timer);
+      element.addEventListener("pointerenter", hold); element.addEventListener("focusin", hold);
+      element.addEventListener("pointerleave", arm); element.addEventListener("focusout", arm);
+      arm();
+    }
     return close;
   }
 }

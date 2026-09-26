@@ -4,7 +4,8 @@ import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
-import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
+import { createPackageHandler, localCandidateStore, localEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
+import { createModInstallHandler, explorerReveal, installReceiptsRoot, ModInstallHost, windowsProcessRunning } from "./src/mod-install-host";
 import { STUDIO_EXPORTERS } from "./src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "./src/features/eye-makeup";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
@@ -12,7 +13,7 @@ import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
 import { eyePlateReadiness } from "./src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
-import { createInstallDetectionHandler, hostFrameworkCheck } from "./src/install-detection-server";
+import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
 import { buildBrowser } from "./browser-build";
@@ -23,7 +24,7 @@ import { CharacterDetailHost } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
-import { consoleEcho, hostDiagnosticsAt, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
+import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
@@ -40,7 +41,7 @@ const localSettings = new LocalSettingsStore();
 // WolvenKit: XFS_PACKAGE_WOLVENKIT, then Local setup, then XF Studio's own copy (downloaded only with consent).
 const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
   configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: diagnostics.log.logger("wolvenkit") });
-const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: false,
+const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: true,
   wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
   eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) }),
   () => wolvenKit.managedExecutable());
@@ -55,6 +56,13 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
 const packageRequest = createPackageHandler(action => localPackageAdapter({ exporters: STUDIO_EXPORTERS,
   tools: localPackageTools(packageRequestSettings(() => localSettings.load().settings, action), process.env, wolvenKit.managedExecutable()),
   prerequisites: tools => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(tools) }) }));
+// "Add to my mod manager" (UI-82): a verified build from dist/ into the MO2 profile or game folder Local setup names, only after
+// the person accepted its plan. Receipts and the previous mod list stay in the private data folder.
+const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ candidateStore: localCandidateStore(),
+  receiptsRoot: installReceiptsRoot(dataRoot),
+  settings: () => { const settings = localSettings.load().settings; return { ...settings, gameRoot: packageToolPaths(settings).gamepath }; },
+  mo2Running: () => windowsProcessRunning("ModOrganizer.exe"), frameworkMods: settings => profileFrameworkMods(settings), reveal: explorerReveal }),
+(code, message, error) => { hostFailure("install", code, message, error); });
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
 const previewCacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache"));
@@ -121,6 +129,7 @@ const server = Bun.serve({
     if (url.hostname === "localhost") { url.hostname = "127.0.0.1"; return Response.redirect(url.toString(), 308); }
     if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(request);
     if (url.pathname === "/api/package") return packageRequest(request);
+    if (url.pathname === "/api/mod-install") return modInstallRequest(request);
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);

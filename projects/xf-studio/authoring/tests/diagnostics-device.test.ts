@@ -6,7 +6,7 @@ import { createBrowserDiagnostics, PAGE_QUEUE } from "../src/diagnostics/browser
 import { DiagnosticsActions, type DiagnosticsDevice } from "../src/diagnostics/actions";
 import { diagnosticEntry, type DiagnosticEntry } from "../src/diagnostics/model";
 import { PREVIEW_CHARS, type ReportManifest } from "../src/diagnostics/report";
-import { installLightDom, lightDocument, lightEvent, LightElement, type LightElement as Element, uninstallLightDom } from "./light-dom";
+import { installLightDom, lightDocument, lightEvent, type LightElement as Element, uninstallLightDom } from "./light-dom";
 
 const settle = (ms = 20) => new Promise(resolve => setTimeout(resolve, ms));
 const entry = (message: string, level: "error" | "info" = "error") => diagnosticEntry({ level, area: "page", code: "x", message, origin: "page" });
@@ -115,11 +115,8 @@ test("while the host prepares, its progress line shows, and it clears when the r
 });
 
 describe("the report review (DIAG-01, DIAG-09, DIAG-13, DIAG-14)", () => {
-  beforeAll(() => {
-    installLightDom();
-    const proto = LightElement.prototype as unknown as Record<string, unknown>;
-    proto.showModal = function () {}; proto.close = function () {};
-  });
+  // The light DOM's dialogs open and close themselves; nothing here patches its prototype (that leaked into later files).
+  beforeAll(() => installLightDom());
   afterAll(() => uninstallLightDom());
 
   const long = "x".repeat(PREVIEW_CHARS + 100);

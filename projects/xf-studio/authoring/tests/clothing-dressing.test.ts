@@ -43,7 +43,7 @@ describe("Clothing setting", () => {
     expect(clothingSettingOf({ state: "naked" })).toBe(DEFAULT_CLOTHING);
   });
 
-  test("the context's clothing actions change the request, have their own Undo and survive storage", () => {
+  test("the context's clothing actions change the request, share the panel's one Undo and survive storage", () => {
     const context = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: save(), stored: { origin: "save", choices: [] } });
     const first = context.detailRequest();
     expect(first.clothing?.shown).not.toContain("Head");
@@ -57,7 +57,8 @@ describe("Clothing setting", () => {
     context.dispatch({ kind: "character.setClothingArea", area: "Legs", shown: false });
     expect(context.snapshot().clothing.state).toBe("custom");
     expect(context.detailRequest().clothing?.shown).not.toContain("Legs");
-    expect(context.snapshot().undo).toBeNull(); // the creator's history is untouched
+    // The panel's one Undo (UI-81) covers Clothing too: it names the newest change.
+    expect(context.snapshot().undo).toBe("Hide legs");
     const stored = context.stored()!;
     expect(stored.clothing?.state).toBe("custom");
     expect(storedCharacterOf(JSON.parse(JSON.stringify(stored)))?.clothing).toEqual(stored.clothing);
@@ -67,6 +68,15 @@ describe("Clothing setting", () => {
     expect(context.snapshot().clothing).toMatchObject({ state: "no-headwear", undo: null, redo: "Clothing: As saved" });
     context.dispatch({ kind: "character.redoClothing" });
     expect(context.snapshot().clothing.state).toBe("saved");
+    // The panel's Undo and Redo step creator choices and Clothing in the order they were made.
+    context.dispatch({ kind: "character.undo" });
+    expect(context.snapshot().clothing.state).toBe("no-headwear");
+    expect(context.snapshot()).toMatchObject({ undo: null, redo: "Clothing: As saved" });
+    context.dispatch({ kind: "character.redo" });
+    expect(context.snapshot().clothing.state).toBe("saved");
+    context.dispatch({ kind: "character.redo" });
+    expect(context.snapshot().clothing.state).toBe("custom");
+    expect(context.capability({ kind: "character.redo" })).toMatchObject({ available: false });
     // A V read before clothes were read, or whose clothes couldn't be read, says so.
     const { loadout: _none, ...before } = save();
     const older = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: before as SavedV, stored: { origin: "save", choices: [] } });

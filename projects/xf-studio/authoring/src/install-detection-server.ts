@@ -1,7 +1,7 @@
 /** Host endpoint for read-only install detection and the framework version check. GET only; the
  * browser chooses a fixed target, never a path, registry key or command. The framework check reads
  * the host's own local settings. */
-import { checkFrameworkVersions, type FrameworkCheckInput, type FrameworkHostPort } from "./framework-versions";
+import { checkFrameworkVersions, frameworkModNames, type FrameworkCheckInput, type FrameworkHostPort } from "./framework-versions";
 import { detectGameInstalls, detectMo2Instances, type DetectionHostPort } from "./install-detection";
 import { createWindowsDetectionHost } from "./install-detection-host";
 
@@ -11,6 +11,12 @@ const targets = ["games", "mo2", "frameworks"];
 /** The framework check for host readiness; undefined (reported as unavailable) if the host can't read it. */
 export function hostFrameworkCheck(settings: FrameworkCheckInput, port: () => FrameworkHostPort = createWindowsDetectionHost) {
   try { return checkFrameworkVersions(port(), settings); } catch { return undefined; }
+}
+
+/** The MO2 profile's framework mod folders (the placement keeps a new mod out of their section); none when they can't be read. */
+export function profileFrameworkMods(settings: FrameworkCheckInput, port?: () => FrameworkHostPort): string[] {
+  const route = hostFrameworkCheck(settings, port)?.routes.find(item => item.route === "mo2");
+  return route?.available ? frameworkModNames(route) : [];
 }
 
 export type FrameworkCheckSource = { settings: () => FrameworkCheckInput; port?: () => FrameworkHostPort };
@@ -32,7 +38,10 @@ export function createInstallDetectionHandler(host: () => DetectionHostPort = ()
     }
     try {
       const port = host();
-      const mo2 = await detectMo2Instances(port);
+      // The instance the settings name is offered too, so a portable copy chosen by hand keeps its profiles as choices.
+      let configured: string | null = null;
+      try { configured = frameworks?.settings().mo2Root ?? null; } catch { /* Unreadable settings: detection alone. */ }
+      const mo2 = await detectMo2Instances(port, configured);
       return json(target === "mo2" ? mo2 : await detectGameInstalls(port, mo2));
     } catch { return json({ code: "detection_failed", error: "Install detection failed on this host." }, 500); }
   };
