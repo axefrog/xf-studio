@@ -111,7 +111,7 @@ The **teeth** are `skin.mt` too (`teeth_base.mi`) with their own maps and `SkinP
 
 ### 3.2 Body: one skin model
 
-The body track's inventory (its knowledge page, `knowledge/body-rendering.md`, lands with that track) records [observed, resource]:
+The body track's inventory ([body rendering](../../knowledge/body-rendering.md)) records [observed, resource]:
 
 - every body skin part (torso `t0_000_pwa_base__full`, feet, arms and hands, genitals, plain nail colours) is `skin.mt` with a local material per tone over **the same four-level tone chain**, so a tone is again only `TintColor`, `TintScale` and the tint mask;
 - the tone reaches the body through the creator's `skin color` link, which the body, arms, feet, nipples and genitals follow;
