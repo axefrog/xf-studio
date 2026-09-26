@@ -427,7 +427,7 @@ test("the desktop serves Add to my mod manager and its folder picker behind its 
   const pickRoot = mkdtempSync(resolve(tmpdir(), "xfs-desktop-pick-"));
   const picked: (string | null)[] = [];
   const host = createDesktopServer(staticRoot, resolve(pickRoot, "data"), { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" },
-    undefined, undefined, undefined, undefined, undefined, { pickFolder: async start => { picked.push(start); return "E:\Games\Cyberpunk 2077"; } });
+    undefined, undefined, undefined, undefined, undefined, { pickFolder: async start => { picked.push(start); return "E:\\Games\\Cyberpunk 2077"; } });
   try {
     const base = `http://127.0.0.1:${host.port}`;
     const cookie = (await fetch(host.url)).headers.get("set-cookie")!.split(";")[0]!;
@@ -435,7 +435,7 @@ test("the desktop serves Add to my mod manager and its folder picker behind its 
       fetch(base + path, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     expect((await post("/api/desktop/pick-folder", { field: "gameRoot" }, { Origin: base })).status).toBe(403);
     expect((await post("/api/desktop/pick-folder", { field: "wolvenKitCli" })).status).toBe(400);
-    expect(await (await post("/api/desktop/pick-folder", { field: "gameRoot" })).json()).toEqual({ path: "E:\Games\Cyberpunk 2077" });
+    expect(await (await post("/api/desktop/pick-folder", { field: "gameRoot" })).json()).toEqual({ path: "E:\\Games\\Cyberpunk 2077" });
     expect(picked).toEqual([null]);
     // No build yet: the host says so in plain words, and never takes a path from the page.
     const missing = await post("/api/mod-install", { action: "plan", candidateId: "a1b2" });
