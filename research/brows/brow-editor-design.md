@@ -7,10 +7,10 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[sour
 ## Summary
 
 - **The earlier editor** authored brows as **fields rather than strokes**. A brow is an outline polygon on a flattened skin chart, any number of density centres (each with directional falloff "spokes"), and a separate set of flow controls. Each flow control carries direction, length, curvature, lift, how closely hairs follow the flow, variation, thickness and taper, and these blend smoothly across the brow. Individual hairs are *generated*, never drawn: a seeded, stratified set of candidate roots is accepted against the density field, and each root grows a curve by tracing the flow field across the skin. Hairs were drawn as 3D ribbons with an exact per-pixel coverage filter. There was no texture output: a planned "baked far view" was never built.
-- **Here the output is the game's brow texture set**, not 3D hair: `_d` (hair coverage and tone), `_ds` (soft underlay) and `_n` (hair relief) on the one shared vanilla brow strip, tinted in game by the creator's colour gradient. That makes the earlier model a better fit than it was in its own project. The vanilla brow UV is already a flat, nearly isometric chart shared by both brows, so the hardest parts of the earlier work (surface charts, tracing across 3D triangles, depth and contact filtering) fall away. What remains is a deterministic 2D groom rasterised into textures.
+- **Here the output is the game's brow texture set**, not 3D hair: `_d` (hair coverage and tone), `_ds` (soft underlay) and `_n` (hair relief) on the one shared vanilla brow strip, tinted in game by the creator's colour gradient. That makes the earlier model a better fit than it was in its own project. The vanilla brow UV is already a flat chart shared by both brows (not isometric: phase 0 measured a median worst-case length error of 22 % per triangle, so a per-triangle metric is needed, §3.3), so the hardest parts of the earlier work (surface charts, tracing across 3D triangles, depth and contact filtering) fall away. What remains is a deterministic 2D groom rasterised into textures.
 - **Proposed shape:** a new pure engine, `engines/strand-field/` (fields, root sampling, curve tracing, texture rasterisation). It is reusable later for lashes, stubble, body hair and hairlines. The feature module `features/eyebrows/` supplies the part, actions, chart editor, preview renderer and a CCXL exporter that joins the vanilla `eyebrows` row. It does not reuse the layered-makeup engine, whose shapes-and-finishes model does not describe hair; brow *makeup* (tint, gel, brow-bone highlight) stays in eye makeup, which already reaches the brow region.
 - **Colour:** the authored `_d` RGB is **greyscale tone** (per-hair and root-to-tip lightness around vanilla's level, linear 0.30), so every creator colour and installed hair-colour pack applies unchanged. Lightness variation, including a lightness ombre along the brow, survives the gradient. Only hue changes need the opt-in "authored colours" mode, which gives up the colour row.
-- **Effort:** about 3½ to 4½ weeks of agent work for the symmetric first version (six phases, §5). Phase 0 is a day of offline fact-finding that should run before anything else.
+- **Effort:** about 3½ to 4½ weeks of agent work for the symmetric first version (six phases, §5). Phase 0, a day of offline fact-finding, is done (27 September, [experiment 025](../../experiments/025-brow-facts/README.md)).
 
 ## 1. The earlier editor
 
@@ -270,9 +270,9 @@ Runtime, batched into the session that tests the first build (these extend the b
 
 ## 8. Questions for the maintainer
 
-Sensible defaults are chosen above; these are the choices that are genuinely his:
+**All three were decided on 26 September (§7a).** They are kept here for the reasoning behind the defaults.
 
-1. **Row labels.** How XF styles are labelled in the creator's brow row: the look's name as authored, or "XF 1, XF 2, …" (the brief's question 6, still open). Default proposal: the look's name, prefixed "XF".
+1. **Row labels.** How XF styles are labelled in the creator's brow row: the look's name as authored, or "XF 1, XF 2, …" (the brief's question 6; decided in §7a). Default proposal: the look's name, prefixed "XF".
 2. **Comb brush in v1**, or handles only, as in the earlier editor, with the brush as a follow-up. Default proposal: include it; it is small and it is what makes flow editing approachable.
 3. **Starter styles.** Is a small built-in set (about six) wanted, or should every brow start from one default? Default proposal: six.
 

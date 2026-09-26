@@ -1,6 +1,6 @@
 # Piercings as character-creator (CCXL) choices: feasibility
 
-Research snapshot, 26 September 2026. This is feasibility research, not a game-tested route. **Status:** the design decisions are recorded [below](#decisions-26-september-2026), and the scripted test fixture of [§6](#6-in-game-test-plan) is built and verified offline as [experiment 024](../../experiments/024-ccxl-piercings/README.md) ("XF Piercings Probe"). It is not staged or seen in game yet; its twelve checks are the next in-game session's piercing block. Authoring UI waits for those results.
+Research snapshot, 26 September 2026. This is feasibility research, not a game-tested route. **Status:** the design decisions are recorded [below](#decisions-26-september-2026), and the scripted test fixture of [§6](#6-in-game-test-plan) is built and verified offline as [experiment 024](../../experiments/024-ccxl-piercings/README.md) ("XF Piercings Probe"). It is staged (26 September, not yet enabled) but not seen in game; its twelve checks are the next in-game session's piercing block. Authoring UI waits for those results.
 
 **Direction.** The preferred route is piercings as character-creator choices added through ArchiveXL's character-customization feature (CCXL), with a version of the [jewellery construction set](construction-set-design.md) as the design kit behind them. No existing mod offers this: PRC works by replacing a vanilla `.app` file, and other jewellery mods are inventory items.
 

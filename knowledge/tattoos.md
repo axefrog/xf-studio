@@ -76,7 +76,7 @@ What that does [source: [decal reference §4.3–4.4](../research/materials/shad
 
 | Layer | Where it lands | Evidence |
 |---|---|---|
-| Skin albedo, tone tint and any `SecondaryAlbedo` overlay (texture-framework tattoos, §7) | Written by the skin shader itself, in the skin's own UV | [source] ([materials §4.1](materials-and-shaders.md#41-basematerialsskinmt-and-skin_blendable-skin_morph)) |
+| Skin albedo, tone tint and any `SecondaryAlbedo` overlay (texture-framework tattoos, §8) | Written by the skin shader itself, in the skin's own UV | [source] ([materials §4.1](materials-and-shaders.md#41-basematerialsskinmt-and-skin_blendable-skin_morph)) |
 | Face and body decals: makeup, blemishes, scars, tattoos, face cyberware | Each a separate `post_gbuffer` draw that blends into the G-buffer after the skin | [source] [resource] ([face makeup §3](face-makeup.md#3-how-face-decals-combine)) |
 
 - **Decals draw over framework overlays** [source]: an overlay tattoo is part of the skin; a decal tattoo, makeup or scar blends on top of it.
@@ -104,7 +104,7 @@ The seams: the head meets the body at the collar (the head mesh ends at y ≈ 1.
 ## 7. Clothing, cyberware and camera
 
 - **Clothing covers tattoos by depth** [hypothesis]: a garment is drawn over the skin, so a decal a millimetre above the skin is hidden where the garment is.
-- **Tags hide whole tattoo components** [source: ArchiveXL `VisualTags.xl`]: `hide_Torso` hides every `tx_` component, so a garment that hides the torso also hides the body tattoo's leg and arm parts, which share the one chunk; `hide_Chest`, `hide_Legs`, `hide_Arms` and the other partial tags do not touch `tx_`. `hide_Head` hides every `hx_` component, face tattoos included. A mod can add its own components to any tag through its `.xl` ([clothing §4.3](clothing.md#43-masking-the-body-resource-source-wiki)).
+- **Tags hide whole tattoo components** [source: ArchiveXL `VisualTags.xl`]: `hide_Torso` hides every `tx_` component, so a garment that hides the torso also hides the body tattoo's leg and arm parts, which share the one chunk; `hide_Chest`, `hide_Legs`, `hide_Arms` and the other partial tags do not touch `tx_`. `hide_Head` hides every `hx_` component, face tattoos included. A mod can add its own components to any tag through its `.xl` ([clothing §4.3](clothing.md#43-masking-the-body-resource-source-wiki)). These rules register only from an item `.app` definition's own `visualTags`; vanilla items' definitions carry none, so vanilla clothing hides no tattoo this way and relies on the garment assembler ([clothing §4.3](clothing.md#43-masking-the-body-resource-source-wiki)).
 - **Arm cyberware** [hypothesis]: the arm parts change with the holster state ([body rendering §1](body-rendering.md#1-which-parts-make-the-third-person-body)); no rule we have read hides the body tattoo's arm vertices when a cyberarm replaces the forearm (test ask 3).
 - **First person** [resource]: the FPP twin draws a separate tattoo resource with the first-person body.
 
@@ -158,7 +158,7 @@ Batch into one prepared session; record game, ArchiveXL and the texture framewor
 1. **Order.** Female V, creator face tattoo 08 (`facial_tattoo_02`, the large design), eye makeup 5 (black) and blush 10: a close-up where the tattoo meets the cheek and lower lid. Which draws on top?
 2. **Overlay under decal.** With the enabled KS UV overlay, choose body tattoo 01: the vanilla decal should draw over the overlay where they overlap (torso, thighs).
 3. **Cyberarm.** Body tattoo 01, then equip Gorilla Arms or Mantis Blades: does the forearm ink stay on the cyberarm, float or vanish?
-4. **Tags.** Body tattoo 01 with a garment that hides only the chest (`hide_Chest`), then one with `hide_Torso`: in the first the leg and arm ink should stay; in the second all of it should vanish.
+4. **Tags.** Use garments whose `.app` definitions carry the tags (mod items; vanilla definitions carry none). Body tattoo 01 with a garment that hides only the chest (`hide_Chest`), then one with `hide_Torso`: in the first the leg and arm ink should stay; in the second all of it should vanish.
 5. **Strength.** Creator face tattoo 09 (`facial_tattoo_03`, tone instance, alpha 0.6) and 02 (`facial_tattoo_07`, local alpha 0.7) on a pale and a dark V under one light: the ink should read as partly transparent on both, slightly stronger for 02.
 
 ## Related pages

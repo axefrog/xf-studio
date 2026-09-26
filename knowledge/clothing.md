@@ -234,7 +234,7 @@ The [clothing render plan](../research/backlog/clothing-render.md)'s phases 1–
 
 ## In-game test asks
 
-Batch these into one session once the save reader and resolver exist (see the [backlog](../research/backlog/clothing-render.md#in-game-checks)):
+Batch these into one prepared session; the save reader and resolver they compare against are built (phases 1–4, §6; see the [backlog](../research/backlog/clothing-render.md#in-game-checks)):
 
 1. A reference outfit per layer (inner shirt, jacket, trousers tucked into boots, a hat) in third person and photo mode, captured from fixed camera presets, against the Studio's render of the same save.
 2. The same V with a vanilla wardrobe set active and one area set to empty, to check the hide path.
@@ -244,4 +244,4 @@ Batch these into one session once the save reader and resolver exist (see the [b
 
 ## Related pages
 
-[CC file chain](cc-file-chain.md) · [Head CC rendering](head-cc-rendering.md) · [Body rendering](body-rendering.md) · [Mod loading](mod-loading.md) · [Materials and shaders](materials-and-shaders.md) · [Archive and resource formats](archive-format.md) · [Piercings and jewellery](jewellery-resources.md) · [Runtime access](runtime-access.md) · [Save import](../research/eye-artistry/save-import.md) · [Clothing render backlog](../research/backlog/clothing-render.md)
+[CC file chain](cc-file-chain.md) · [Head CC rendering](head-cc-rendering.md) · [Body rendering](body-rendering.md) · [Mod loading](mod-loading.md) · [Materials and shaders](materials-and-shaders.md) · [Archive and resource formats](archive-format.md) · [Piercings and jewellery](jewellery-resources.md) · [Tattoos](tattoos.md) · [Runtime access](runtime-access.md) · [Save import](../research/eye-artistry/save-import.md) · [Clothing render backlog](../research/backlog/clothing-render.md)
