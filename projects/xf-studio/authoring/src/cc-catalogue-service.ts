@@ -84,14 +84,14 @@ function derive(source: CharacterSource, cache: Map<string, ReturnType<typeof re
   const saved = savedOfRequest(request);
   return deriveCharacter(source, saved ? { kind: "save", saved } : { kind: "default" }, request.choices ?? [], saved ? recovered(cache, source, saved) : undefined);
 }
-const headInput = (request: CharacterRequest, derived: ReturnType<typeof deriveCharacter>["request"]): CharacterInput => ({ bodyGender: request.bodyGender,
-  origin: request.source === "save" ? "save" : "ui-state", appearances: derived.appearances.filter(item => item.part === "head"),
-  morphs: derived.morphs.filter(item => item.part === "head") });
+/** The V's descriptors of every part (the preparation keeps what the preview draws: character-detail-plan.ts `previewInput`). */
+const characterInput = (request: CharacterRequest, derived: ReturnType<typeof deriveCharacter>["request"]): CharacterInput => ({ bodyGender: request.bodyGender,
+  origin: request.source === "save" ? "save" : "ui-state", appearances: [...derived.appearances], morphs: [...derived.morphs] });
 
 type MergedCreator = Pick<Awaited<ReturnType<typeof loadMergedCco>>, "merged" | "customs">;
 const structural = new WeakMap<object, { source: CharacterSource & { index: CatalogueIndex }; recovered: Map<string, ReturnType<typeof recoverSave>> }>();
 /**
- * The head descriptors of a request with creator choices, derived from the merged creator resource the preparation already loaded
+ * The descriptors of a request with creator choices, derived from the merged creator resource the preparation already loaded
  * (PIPE-80): a structural catalogue (options, choices, links, activation; no texts, no TweakDB, memoised per merged resource) is all
  * `deriveCharacter` reads. Throws when the choices can't be interpreted; the preparation then shows the V without them.
  */
@@ -103,7 +103,7 @@ export function structuralInput(request: CharacterRequest, loaded: MergedCreator
     known = { source: { catalogue, cco: loaded.merged.cco, index: new CatalogueIndex(catalogue) }, recovered: new Map() };
     structural.set(loaded.merged, known);
   }
-  return headInput(request, derive(known.source, known.recovered, request).request);
+  return characterInput(request, derive(known.source, known.recovered, request).request);
 }
 
 export class CreatorCatalogueHost {
@@ -192,10 +192,10 @@ export class CreatorCatalogueHost {
     return { ...view, identity: loaded.panel.identity, values, faceMorphs: faceGroup(derived.morphs) };
   }
 
-  /** The head descriptors of a request with creator choices, from the full catalogue (tests and tools; the preparation uses `structuralInput`). */
+  /** The descriptors of a request with creator choices, from the full catalogue (tests and tools; the preparation uses `structuralInput`). */
   async inputFor(request: CharacterRequest): Promise<CharacterInput> {
     const loaded = await this.ensure(request.bodyGender);
-    return headInput(request, derive(loaded.source, loaded.recovered, request).request);
+    return characterInput(request, derive(loaded.source, loaded.recovered, request).request);
   }
 
   /**

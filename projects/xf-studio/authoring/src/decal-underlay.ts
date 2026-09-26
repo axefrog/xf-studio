@@ -79,3 +79,23 @@ export function sampleAtVertices(nearest: NearestVertices, sourceUvs: ArrayLike<
 
 /** sRGB byte → linear. */
 export const decodeSrgbByte = (byte: number) => { const c = byte / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+
+/**
+ * Per-vertex shape deltas carried over from a surface to a mesh lying on it: each target vertex takes the delta (3 per vertex) of its
+ * nearest source vertex within `maxDistance`, zero where none is that close. A garment drawn over the body (the underwear cover) follows
+ * the body's shape this way where the body's own shape keys move the surface under it (the breast size), as the game's garment system
+ * keeps a garment over the body [hypothesis: an approximation of garment support; knowledge/body-rendering.md].
+ */
+export function transferDeltas(targetPositions: ArrayLike<number>, sourcePositions: ArrayLike<number>, sourceDeltas: ArrayLike<number>,
+  maxDistance = 0.02): { deltas: Float32Array; moved: number } {
+  const nearest = nearestVertices(targetPositions, sourcePositions, maxDistance);
+  const deltas = new Float32Array(nearest.index.length * 3);
+  let moved = 0;
+  nearest.index.forEach((source, t) => {
+    if (source < 0) return;
+    const x = sourceDeltas[source * 3]!, y = sourceDeltas[source * 3 + 1]!, z = sourceDeltas[source * 3 + 2]!;
+    deltas[t * 3] = x; deltas[t * 3 + 1] = y; deltas[t * 3 + 2] = z;
+    if (x || y || z) moved++;
+  });
+  return { deltas, moved };
+}

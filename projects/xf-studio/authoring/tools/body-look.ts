@@ -3,16 +3,18 @@
  * data and a throwaway Chrome profile: the default V, or a save, framed as the head view and the whole-body view under both lighting
  * presets, with the idle paused at a fixed phase and with the body hidden, plus the scene's body evidence and GPU memory.
  *
- *   bun tools/body-look.ts <out dir under evidence/screenshots> [port] [save copy] [ui-state.json]
+ *   bun tools/body-look.ts <out dir under evidence/screenshots> [port] [save copy|-] [choices.json]
  *
- * `ui-state.json` holds creator choices to set on the V (`{ "<option>": "<choice>" }`, character context `character.setChoice` keys).
+ * `choices.json` holds creator choices to set on the V: `[{ "part": "body", "option": "body_tattoo", "choice": "01" }, …]` (the
+ * character context's `character.setOptions` changes).
  * Outputs are private renders of local game assets: keep them in the ignored evidence/screenshots tree.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { launch, startServer } from "./cdp";
 
-const [outArg, portArg = "4393", save, choicesFile] = process.argv.slice(2);
+const [outArg, portArg = "4393", saveArg, choicesFile] = process.argv.slice(2);
+const save = saveArg && saveArg !== "-" ? saveArg : undefined;
 if (!outArg) throw Error("Usage: bun tools/body-look.ts <out dir> [port] [save copy] [ui-state.json]");
 const out = resolve(outArg), port = +portArg;
 mkdirSync(out, { recursive: true });
@@ -20,7 +22,7 @@ const views: Record<string, object | "body"> = {
   head: { position: [0, 1.62, -0.75], target: [0, 1.6, 0], fov: 30 },
   body: "body",
   side: { position: [-3.2, 1.05, -1.6], target: [0, 0.93, 0], fov: 30 },
-  hands: { position: [0.55, 0.95, -0.9], target: [0.25, 0.85, 0], fov: 30 },
+  hands: { position: [-0.95, 1.2, -0.75], target: [-0.42, 1.08, -0.05], fov: 30 },
 };
 const { server } = await startServer(port);
 const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1400, height: 1000, scheme: "dark", debugPort: port + 5000 });
@@ -33,9 +35,14 @@ try {
     await page.send("Runtime.evaluate", { expression: `window.xfStudioShell.runtime.file({ kind: "savedV.import" })`, awaitPromise: true, userGesture: true });
   }
   if (choicesFile) {
-    const choices = JSON.parse(readFileSync(resolve(choicesFile), "utf8")) as Record<string, string>;
-    await page.waitFor("!!window.xfStudioPresentation?.authoring.previewState().character", 240000);
-    for (const [option, choice] of Object.entries(choices)) console.log(option, await run({ kind: "character.setChoice", option, choice }));
+    const changes = JSON.parse(readFileSync(resolve(choicesFile), "utf8")) as { part: string; option: string; choice: string }[];
+    await page.waitFor(`window.xfStudioPresentation.authoring.capability({ kind: "character.setOptions", changes: ${JSON.stringify(changes)} }).available`, 240000);
+    await page.waitFor(bodyReady, 900000);
+    const before = await page.evaluate(`window.xfStudioSceneEvidence().characterDetails.identity`);
+    console.log(JSON.stringify(await run({ kind: "character.setOptions", changes })));
+    // The V with the choices set: a new record, with its body.
+    await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence()?.characterDetails; return !!e && e.identity !== ${JSON.stringify(before)} &&
+      e.components.some(c => c.slot === "body"); })()`, 900000);
   }
   await page.waitFor(bodyReady, 900000);
   await page.wait(4000);

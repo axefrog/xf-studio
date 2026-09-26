@@ -178,29 +178,43 @@ export function createHeadSkinPlacement(core: THREE.Mesh, options: { coreAlbedo(
 }
 
 /**
- * The skin colour, roughness and metalness under each vertex of a decal over a resolved skin that is not the head (the body's tattoos,
- * scars and underwear cover over the body skin), read on that skin's own chunks by the nearest vertex, as the face decals read the head.
- * Throws when the skin's colour can't be read or the decal is not over it.
+ * The skin colour, roughness and metalness under each vertex of a decal over resolved skins that are not the head (the body's tattoos,
+ * scars and underwear cover over the body, its feet and arms), read by the nearest vertex of any of their chunks on that skin's own
+ * maps, as the face decals read the head. Throws when a skin's colour can't be read or the decal is not over them.
  */
-export function skinSurfaceUnderlay(decal: THREE.Mesh, skin: ResolvedSkinSurface): DecalSurfaceUnderlay {
-  const texels = skin.base();
-  if (!texels) throw Error("the skin colour under this decal is unavailable");
-  const uvArrays = skin.chunks.map(mesh => mesh.geometry.getAttribute("uv")?.array);
-  if (!uvArrays.length || uvArrays.some(uv => !uv)) throw Error("the skin under this decal has no UVs");
+export function skinSurfaceUnderlay(decal: THREE.Mesh, skins: readonly ResolvedSkinSurface[]): DecalSurfaceUnderlay {
+  if (!skins.length) throw Error("no skin lies under this decal");
+  const chunks = skins.flatMap(skin => skin.chunks);
+  const uvArrays = chunks.map(mesh => mesh.geometry.getAttribute("uv")?.array);
+  if (uvArrays.some(uv => !uv)) throw Error("the skin under this decal has no UVs");
+  // Which skin each source vertex belongs to.
+  const owner: number[] = [];
+  skins.forEach((skin, s) => { for (const mesh of skin.chunks) for (let i = mesh.geometry.getAttribute("position").count; i > 0; i--) owner.push(s); });
   const uvs = concatenate(uvArrays as ArrayLike<number>[]);
-  const nearest = nearestVertices(worldPositions(decal), concatenate(skin.chunks.map(worldPositions)));
+  const nearest = nearestVertices(worldPositions(decal), concatenate(chunks.map(worldPositions)));
   if (nearest.unmatched) throw Error(`${nearest.unmatched} decal vertices are not over the skin`);
-  const colour = sampleAtVertices(nearest, uvs, texels, 3, decodeSrgbByte);
-  const roughTexels = skin.roughness?.() ?? null;
-  const count = nearest.index.length, roughness = new Float32Array(count).fill(FLAT_SKIN_ROUGHNESS), metalness = new Float32Array(count);
-  if (roughTexels) {
-    const surface = sampleAtVertices(nearest, uvs, roughTexels, 2, byte => byte / 255);
-    for (let i = 0; i < count; i++) { roughness[i] = surface[i * 2]!; metalness[i] = surface[i * 2 + 1]!; }
-  }
+  const count = nearest.index.length, colour = new Float32Array(count * 3);
+  const roughness = new Float32Array(count).fill(FLAT_SKIN_ROUGHNESS), metalness = new Float32Array(count);
+  let rough = "flat" as "flat" | "resolved-skin";
+  skins.forEach((skin, s) => {
+    const own = { ...nearest, index: nearest.index.map(source => source >= 0 && owner[source] === s ? source : -1) };
+    if (!own.index.some(source => source >= 0)) return;
+    const texels = skin.base();
+    if (!texels) throw Error("the skin colour under this decal is unavailable");
+    const sampled = sampleAtVertices(own, uvs, texels, 3, decodeSrgbByte);
+    const roughTexels = skin.roughness?.() ?? null;
+    const surface = roughTexels ? sampleAtVertices(own, uvs, roughTexels, 2, byte => byte / 255) : null;
+    if (surface) rough = "resolved-skin";
+    own.index.forEach((source, t) => {
+      if (source < 0) return;
+      colour.set(sampled.subarray(t * 3, t * 3 + 3), t * 3);
+      if (surface) { roughness[t] = surface[t * 2]!; metalness[t] = surface[t * 2 + 1]!; }
+    });
+  });
   return { colour: new THREE.BufferAttribute(colour, 3), roughness: new THREE.BufferAttribute(roughness, 1),
     metalness: new THREE.BufferAttribute(metalness, 1),
     evidence: { maxMatchedDistance: nearest.maxMatchedDistance, unmatched: nearest.unmatched, source: "resolved-skin", surface: "resolved-head",
-      roughness: roughTexels ? "resolved-skin" : "flat" } };
+      roughness: rough } };
 }
 
 /**

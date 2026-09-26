@@ -64,6 +64,8 @@ export const appearanceOption = (name: string, resource: string | null, definiti
   $type: "gameuiAppearanceInfo", name: cn(name), resource: rp(resource, "Soft"), uiSlot: cn(extra.uiSlot as string ?? "None"),
   link: cn(extra.link as string ?? "None"), linkController: extra.linkController ?? 0, enabled: extra.enabled ?? 1, hidden: extra.hidden ?? 0,
   index: 0, defaultIndex: extra.defaultIndex ?? 0, localizedName: "", editTags: [],
+  // The creator's censorship rule, as the vanilla body options carry it (`Censor_Nudity` with `Activate` or `Deactivate`).
+  ...(extra.censorFlag ? { censorFlag: extra.censorFlag, censorFlagAction: extra.censorFlagAction ?? "Activate" } : {}),
   definitions: definitions.map((definition, index) => ({ $type: "gameuiIndexedAppearanceDefinition", name: cn(definition), index, localizedName: "", tags: { $type: "redTagList", tags: [] } })),
 });
 export const switcherOption = (name: string, choices: [string, string[]][], extra: Option = {}) => handle({
@@ -71,13 +73,19 @@ export const switcherOption = (name: string, choices: [string, string[]][], extr
   index: 0, defaultIndex: extra.defaultIndex ?? 0, localizedName: "", editTags: [], uiSlots: [],
   options: choices.map(([localizedName, names], index) => ({ $type: "gameuiSwitcherOption", index, localizedName, names: names.map(cn) })),
 });
-export const morphOption = (name: string, targets: string[]) => handle({
-  $type: "gameuiMorphInfo", name: cn(name), uiSlot: cn(name), link: cn("None"), linkController: 0, enabled: 1, hidden: 0, index: 0, defaultIndex: 0,
+export const morphOption = (name: string, targets: string[], extra: Option = {}) => handle({
+  $type: "gameuiMorphInfo", name: cn(name), uiSlot: cn(name), link: cn(extra.link as string ?? "None"), linkController: extra.linkController ?? 0, enabled: 1,
+  hidden: extra.hidden ?? 0, index: 0, defaultIndex: extra.defaultIndex ?? 0,
   localizedName: "", editTags: [], morphNames: ["None", ...targets].map((morphName, index) => ({ $type: "gameuiIndexedMorphName", index, localizedName: String(index + 1).padStart(2, "0"), morphName: cn(morphName) })),
 });
-export const cco = (head: object[], groups: Record<string, string[]>) => cr2w({ $type: "gameuiCharacterCustomizationInfoResource", version: 12,
-  headCustomizationOptions: head, headGroups: Object.entries(groups).map(([name, options]) => ({ $type: "gameuiOptionsGroup", name: cn(name), options: options.map(cn) })),
-  bodyCustomizationOptions: [], bodyGroups: [], armsCustomizationOptions: [], armsGroups: [] });
+const optionGroups = (groups: Record<string, string[]>) => Object.entries(groups).map(([name, options]) => ({ $type: "gameuiOptionsGroup", name: cn(name), options: options.map(cn) }));
+/** A creator resource: head options and groups, and optionally the body's and the arms'. */
+export const cco = (head: object[], groups: Record<string, string[]>,
+  parts: { body?: { options: object[]; groups: Record<string, string[]> }; arms?: { options: object[]; groups: Record<string, string[]> } } = {}) =>
+  cr2w({ $type: "gameuiCharacterCustomizationInfoResource", version: 12,
+    headCustomizationOptions: head, headGroups: optionGroups(groups),
+    bodyCustomizationOptions: parts.body?.options ?? [], bodyGroups: optionGroups(parts.body?.groups ?? {}),
+    armsCustomizationOptions: parts.arms?.options ?? [], armsGroups: optionGroups(parts.arms?.groups ?? {}) });
 
 /** A synthetic installation: archives (by virtual path) holding path-keyed JSON resources, plus `.xl` documents. */
 export interface FixtureArchive { virtualPath: string; provider?: ArchiveFile["provider"]; providerName?: string; priority?: number | null; active?: boolean; files: Record<string, object> }

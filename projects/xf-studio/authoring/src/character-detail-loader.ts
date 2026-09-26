@@ -10,6 +10,7 @@ import type { DetailLimit } from "./detail-limits";
 import type { EyeballHandle, EyeShellHandle } from "./eye-material";
 import type { FaceDecalHandle } from "./face-decal-material";
 import type { LayeredHandle } from "./layered-material";
+import { transferDeltas } from "./decal-underlay";
 
 /**
  * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
@@ -85,6 +86,57 @@ export function releaseDetailObject(root: THREE.Object3D, keep?: ReadonlySet<THR
     if (object instanceof THREE.SkinnedMesh) object.skeleton?.dispose();
   });
 }
+/**
+ * The shape key a body decal without shape keys of its own (the underwear cover, a garment decal) gets from the body skin under it: the
+ * sum of the shapes the body's record applied (breast size), carried over by the nearest body vertex (decal-underlay.ts `transferDeltas`).
+ * The renderer keeps it at full weight.
+ */
+export const BODY_SHAPE_KEY = "xfs_body_shape";
+/** A loaded body skin part's applied shapes, for decals over it that have none (`followBodyShape`). */
+type BodyShape = { meshes: readonly THREE.SkinnedMesh[]; names: readonly string[] };
+/** World-space rest positions and applied shape deltas of the body's skin parts. */
+function bodyShapeField(shapes: readonly BodyShape[]): { positions: Float32Array; deltas: Float32Array } | null {
+  const positions: number[] = [], deltas: number[] = [];
+  const v = new THREE.Vector3(), moved = new THREE.Vector3();
+  for (const { meshes, names } of shapes) for (const mesh of meshes) {
+    mesh.updateWorldMatrix(true, false);
+    const position = mesh.geometry.getAttribute("position"), targets = mesh.geometry.morphAttributes.position ?? [];
+    const indices = names.map(name => mesh.morphTargetDictionary?.[name]).filter((index): index is number => index !== undefined && !!targets[index]);
+    for (let i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i); moved.copy(v);
+      for (const index of indices) {
+        const target = targets[index]!;
+        moved.x += target.getX(i); moved.y += target.getY(i); moved.z += target.getZ(i);
+      }
+      v.applyMatrix4(mesh.matrixWorld); moved.applyMatrix4(mesh.matrixWorld);
+      positions.push(v.x, v.y, v.z); deltas.push(moved.x - v.x, moved.y - v.y, moved.z - v.z);
+    }
+  }
+  return positions.length && deltas.some(value => value !== 0) ? { positions: Float32Array.from(positions), deltas: Float32Array.from(deltas) } : null;
+}
+/** Give a body decal the body's applied shape as one shape key (`BODY_SHAPE_KEY`); returns the vertices it moves. */
+function followBodyShape(mesh: THREE.SkinnedMesh, field: { positions: Float32Array; deltas: Float32Array }): number {
+  mesh.updateWorldMatrix(true, false);
+  const position = mesh.geometry.getAttribute("position"), world = new Float32Array(position.count * 3), v = new THREE.Vector3();
+  for (let i = 0; i < position.count; i++) v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld).toArray(world, i * 3);
+  const { deltas, moved } = transferDeltas(world, field.positions, field.deltas);
+  if (!moved) return 0;
+  // Into the mesh's own space (a direction: the inverse of the world matrix's linear part).
+  const inverse = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld).invert();
+  for (let i = 0; i < position.count; i++) v.fromArray(deltas, i * 3).applyMatrix3(inverse).toArray(deltas, i * 3);
+  const geometry = mesh.geometry;
+  const existing = geometry.morphAttributes.position ?? [];
+  // A mesh with shape keys of its own keeps them (relative deltas, as glTF stores them); the body's shape joins as one more.
+  if (existing.length && !geometry.morphTargetsRelative) return 0;
+  geometry.morphTargetsRelative = true;
+  geometry.morphAttributes.position = [...existing, new THREE.Float32BufferAttribute(deltas, 3)];
+  if (geometry.morphAttributes.normal) geometry.morphAttributes.normal = [...geometry.morphAttributes.normal,
+    new THREE.Float32BufferAttribute(new Float32Array(deltas.length), 3)];
+  mesh.morphTargetDictionary = { ...(mesh.morphTargetDictionary ?? {}), [BODY_SHAPE_KEY]: existing.length };
+  mesh.morphTargetInfluences = [...(mesh.morphTargetInfluences ?? []), 1];
+  return moved;
+}
+
 const geometriesOf = (roots: readonly THREE.Object3D[]) => {
   const out = new Set<THREE.BufferGeometry>();
   for (const root of roots) root.traverse(object => { if (object instanceof THREE.Mesh) out.add(object.geometry); });
@@ -97,24 +149,38 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 }
 
 /**
- * Bind an unskinned chunk whole to one bone at the root, as a skinned mesh (so it draws, morphs and is released like every other
- * chunk). It stays where the export placed it: the idle rig never moves that bone, and the loader reports the part with the limit
- * `rigid-part`. The component's `parentTransform` and `skinning` bindings both name the entity's `root` animated component, not a head
- * bone (every vanilla and framework piercing `.app` on the reference installation) [resource], so the data gives no bone to follow;
- * how the engine moves an unskinned mesh in a skinned component is unread [hypothesis] (PREV-64).
+ * Bind an unskinned chunk whole to one bone, as a skinned mesh (so it draws, morphs and is released like every other chunk). By default
+ * the bone sits at the root and stays where the export placed it: the idle rig never moves it (`userData.xfsStill`), and the loader
+ * reports the part with the limit `rigid-part`. The component's `parentTransform` and `skinning` bindings both name the entity's `root`
+ * animated component, not a head bone (every vanilla and framework piercing `.app` on the reference installation) [resource], so the data
+ * gives no bone to follow; how the engine moves an unskinned mesh in a skinned component is unread [hypothesis] (PREV-64).
+ *
+ * With `follow` (a body part: a nails mesh exported without its skin) the bone sits at the chunk's centre, and the idle moves it with the
+ * rig segment nearest that centre (idle-animation.ts), so the part keeps to its hand as one piece (limit `rigid-body-part`).
  */
-export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D): THREE.SkinnedMesh {
+export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D, options: { follow?: boolean } = {}): THREE.SkinnedMesh {
   const geometry = mesh.geometry, count = geometry.getAttribute("position").count;
   geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Float32Array.from({ length: count * 4 }, (_, i) => i % 4 ? 0 : 1), 4));
   const skinned = new THREE.SkinnedMesh(geometry, mesh.material);
   skinned.name = mesh.name;
+  // The shape keys keep their names (the loader matched them by `<target>_<region>`), which a new mesh would number instead.
+  if (mesh.morphTargetDictionary) {
+    skinned.morphTargetDictionary = { ...mesh.morphTargetDictionary };
+    skinned.morphTargetInfluences = [...(mesh.morphTargetInfluences ?? [])];
+  }
   skinned.position.copy(mesh.position); skinned.quaternion.copy(mesh.quaternion); skinned.scale.copy(mesh.scale);
   const parent = mesh.parent ?? root;
   parent.add(skinned);
   mesh.removeFromParent();
   const bone = new THREE.Bone();
   bone.name = `xfs_rigid_${mesh.name}`;
+  if (options.follow) {
+    root.updateMatrixWorld(true);
+    geometry.computeBoundingBox();
+    const centre = geometry.boundingBox!.getCenter(new THREE.Vector3()).applyMatrix4(skinned.matrixWorld);
+    bone.position.copy(root.worldToLocal(centre));
+  } else bone.userData.xfsStill = true;
   root.add(bone);
   root.updateMatrixWorld(true);
   skinned.bind(new THREE.Skeleton([bone]));
@@ -164,7 +230,7 @@ const contentKey = (component: RenderComponent) => JSON.stringify(component);
 const READS_SKIN: ReadonlySet<DetailSlot> = new Set(["face", "brows"]);
 /** Whether a component draws with the skin adapter (the head's skin, or the body's: its skin, arms, feet, nails). */
 const drawsSkin = (component: RenderComponent) => component.materials.some(material => renderTemplate(material.template, material.templateName)?.adapter === "skin");
-/** Whether a body component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover). */
+/** Whether a body component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover), and its shape. */
 const readsBodySkin = (component: RenderComponent) => component.slot === "body" &&
   component.materials.some(material => !!renderTemplate(material.template, material.templateName)?.decal);
 
@@ -257,21 +323,26 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   // head the scene will draw (the skin's own chunks or the core head; head-skin-placement.ts).
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
   let resolvedSkin: AdapterContext["skin"];
-  /** The body's loaded skin (its first skin-drawing part), which body decals blend against and are lit by (knowledge/body-rendering.md). */
-  let bodySkin: AdapterContext["skin"];
-  const skinFor = (slot: DetailSlot) => slot === "body" ? bodySkin : resolvedSkin;
+  /**
+   * The body's loaded skin parts (the body, its feet, arms and nails), which body decals blend against, lit by the first one's light, and
+   * the shapes those parts carry (knowledge/body-rendering.md).
+   */
+  const bodySkins: NonNullable<AdapterContext["skins"]>[number][] = [], bodyShapes: BodyShape[] = [];
+  const skinFor = (slot: DetailSlot) => slot === "body" ? bodySkins[0] : resolvedSkin;
   const keepSkin = (component: RenderComponent, skin: NonNullable<LoadedCharacterComponent["skin"]>, meshes: THREE.SkinnedMesh[]) => {
     const surface = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
-    if (component.slot === "body") bodySkin ??= surface;
-    else resolvedSkin ??= surface;
+    if (component.slot !== "body") { resolvedSkin ??= surface; return; }
+    bodySkins.push(surface);
+    if (component.morphs?.length) bodyShapes.push({ meshes, names: component.morphs });
   };
   /** Decoded texels of the distinct textures this record draws, against the record's budget (PIPE-43). */
   const texels = new Map<string, number>();
+  /** Texels a component adds: each distinct texture it names once (several chunks of one part share maps: the body's five skin chunks). */
   const texelsOf = (component: RenderComponent) => {
-    let added = 0;
+    const added = new Map<string, number>();
     for (const material of component.materials) for (const texture of chunkTextureFiles(material))
-      if (!texels.has(texture.file)) added += texture.width * texture.height;
-    return added;
+      if (!texels.has(texture.file)) added.set(texture.file, texture.width * texture.height);
+    return [...added.values()].reduce((sum, n) => sum + n, 0);
   };
   const spendTexels = (component: RenderComponent) => {
     for (const material of component.materials) for (const texture of chunkTextureFiles(material))
@@ -297,7 +368,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
       }
       spendTexels(component);
       const skinUnder = skinFor(component.slot);
-      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(skinUnder ? { skin: skinUnder } : {}) };
+      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(skinUnder ? { skin: skinUnder } : {}),
+        ...(component.slot === "body" ? { skins: [...bodySkins] } : {}) };
       const part: PartResources = { materials: [], owned: [], textureKeys: [] };
       // Two components may share a name (two face choices drawing one mesh); a failure releases this one's root only.
       let componentRoot: THREE.Object3D | undefined;
@@ -323,7 +395,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         // it does not follow the head (limit `rigid-part`).
         const rigid: THREE.Mesh[] = [];
         root.traverse(object => { if (object instanceof THREE.Mesh && !(object instanceof THREE.SkinnedMesh) && chunkOfMesh(object.name) !== null) rigid.push(object); });
-        for (const mesh of rigid) bindRigid(mesh, root);
+        for (const mesh of rigid) bindRigid(mesh, root, { follow: component.slot === "body" });
         const rigidNames = new Set(rigid.map(mesh => mesh.name));
         root.traverse(object => {
           if (object instanceof THREE.Bone) { bones.push(object); return; }
@@ -335,7 +407,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const raw = source.weights.get(object.name);
           if (!raw && !rigidNames.has(object.name)) throw Error(`missing skin weights for ${object.name}`);
           if (raw) object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
-          if (rigidNames.has(object.name) && !partLimits.includes("rigid-part")) partLimits.push("rigid-part");
+          const rigidLimit = component.slot === "body" ? "rigid-body-part" : "rigid-part";
+          if (rigidNames.has(object.name) && !partLimits.includes(rigidLimit)) partLimits.push(rigidLimit);
           object.frustumCulled = false;
           const chunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
             const source = typeof parameter === "string" ? material.textures[parameter] : parameter;
@@ -379,6 +452,11 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         for (const object of unwanted) object.removeFromParent();
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
+        // A body decal with no shapes of its own (the underwear cover) follows the body's applied shape, so it stays over the skin.
+        if (component.slot === "body" && decals.length && !component.morphs?.length) {
+          const field = bodyShapeField(bodyShapes);
+          if (field) for (const mesh of meshes) followBodyShape(mesh, field);
+        }
         const item: LoadedCharacterComponent = { component, root, meshes, bones, ...(skin ? { skin } : {}),
           ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}),
           ...(partLimits.length ? { limits: partLimits } : {}) };

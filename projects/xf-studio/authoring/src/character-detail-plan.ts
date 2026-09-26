@@ -46,7 +46,7 @@
  *   switcher activates belongs to that slot even when its own `uiSlot` is another (`detailSlotOf`).
  */
 import { switcherReach, type CcoOption, type CcoResource } from "./cco-model";
-import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
+import type { CharacterInput, ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
 import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
 import { clampedList, decalFamilySlot, DETAIL_SLOTS, isChoiceLabel, SLOT_WORDS } from "./render-detail";
@@ -279,14 +279,27 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
 /**
  * Groups the third-person body's consumers read [resource: the creator resources' `perspectiveInfo` and groups]:
  * - body part: `TPP_Body` (the third-person half of the `FPP_Body` perspective pair: the body skin, nipples, body tattoos and scars, the
- *   censorship underwear), `genitals` (the genitals controller's lower group) and `flat_feet` (the feet controller's group for a V with
- *   no footwear: female feet are `flat` when nothing is equipped and `lifted` in shoes [wiki: ArchiveXL suffix table]);
+ *   censorship underwear) and `genitals` (the genitals controller's lower group), plus the feet controller's group for the feet state
+ *   (`FEET_GROUPS`);
  * - arms part: the default holster state's third-person group, `holstered_default_tpp` (feminine; the masculine creator resource does
  *   not split it: `holstered_default`). The other states belong to equipped arm cyberware, which a creator V never has.
  * The breast size (group `breast`) and nail length (`nails`) are morphs, applied to every body component that carries the pair.
  */
 export const BODY_GROUPS: Readonly<Record<"body" | "arms", readonly string[]>> = Object.freeze({
-  body: ["TPP_Body", "genitals", "flat_feet"], arms: ["holstered_default_tpp", "holstered_default"] });
+  body: ["TPP_Body", "genitals"], arms: ["holstered_default_tpp", "holstered_default"] });
+/**
+ * The feet state (female V; the masculine creator resource has no feet groups): `flat` with no footwear, `lifted` in ordinary shoes
+ * [wiki: ArchiveXL's `{feet}` substitution table]. Worn footwear (a later step) sets it; the V without clothing stands on flat feet. The
+ * `HighHeels` and `FlatShoes` states are garment tags that mask body chunks instead of choosing a creator group (knowledge/clothing.md §4.3).
+ */
+export type FeetState = "flat" | "lifted";
+export const FEET_GROUPS: Readonly<Record<FeetState, string>> = Object.freeze({ flat: "flat_feet", lifted: "lifted_feet" });
+/** The body's state as worn items would set it; the default is the V with no clothing. */
+export type BodyState = { readonly feet: FeetState };
+export const DEFAULT_BODY_STATE: BodyState = Object.freeze({ feet: "flat" });
+/** The groups the third-person body reads in one part for a body state. */
+export const bodyGroups = (part: "body" | "arms", state: BodyState = DEFAULT_BODY_STATE): readonly string[] =>
+  part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : BODY_GROUPS.arms;
 /** Plain words for the body's parts, by creator slot, for the label only (selection never uses them); others read "arms" or "body detail". */
 export const BODY_DETAIL_WORDS: Readonly<Record<string, string>> = Object.freeze({
   body_color: "body", flat_feet: "feet", lifted_feet: "feet", underpants: "underwear", body_tattoo: "tattoo", body_scars: "scars",
@@ -311,6 +324,16 @@ export function bodyOptionDraws(options: readonly CensorOption[], name: string):
   return rule.action === "activate" ? !twin : twin;
 }
 
+/**
+ * The V's descriptors the preview resolves: every head descriptor and morph, and of the body and arms only the appearances their
+ * third-person consumers read for the body state (a save and the default V list every perspective and holster state, whose first-person
+ * and arm-cyberware parts the preview never draws) plus their morphs (breast size, nail length).
+ */
+export function previewInput(input: CharacterInput, body: BodyState = DEFAULT_BODY_STATE): CharacterInput {
+  const appearances = input.appearances.filter(item => item.part === "head" || bodyGroups(item.part, body).includes(item.group));
+  return appearances.length === input.appearances.length ? input : { ...input, appearances };
+}
+
 type BodyEntry = ResolvedAppearance & { part: "body" | "arms" };
 const isBodyEntry = (entry: ResolvedAppearance): entry is BodyEntry => entry.part === "body" || entry.part === "arms";
 
@@ -321,18 +344,21 @@ const isBodyEntry = (entry: ResolvedAppearance): entry is BodyEntry => entry.par
  * skin's components come first, so decals over the body (tattoos, scars, the underwear) blend against the loaded body skin, then in the
  * creator's option order (body before arms), which is also the decals' draw order (knowledge/body-rendering.md).
  */
-function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults, identities: TemplateIdentities):
+function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults, identities: TemplateIdentities, body: BodyState):
   { components: PlannedComponent[]; state: DetailSlotState } {
   const index = new Map((["body", "arms"] as const).flatMap((part, p) =>
     cco.parts[part].options.map((option, i) => [`${part}|${option.name}`, p * 100_000 + i] as const)));
-  const entries = resolved.appearances.filter(isBodyEntry).filter(entry => entry.groups.some(group => BODY_GROUPS[entry.part].includes(group)));
+  const entries = resolved.appearances.filter(isBodyEntry).filter(entry => entry.groups.some(group => bodyGroups(entry.part, body).includes(group)));
   const planned: { component: PlannedComponent; order: number; skin: boolean; label: string }[] = [];
   const seen = new Set<string>();
   const unshown: string[] = [];
   const label = (entry: BodyEntry) => {
     const option = cco.parts[entry.part].options.find(item => item.name === entry.option);
     const word = BODY_DETAIL_WORDS[option?.uiSlot ?? ""] ?? (entry.part === "arms" ? "arms" : "body detail");
-    return word === "nails" ? `nails (${choiceLabel(entry.definition).replace(/^nails /, "")})` : word;
+    // A nail design's definition ends in its template kind (`…__nails_01_red_heart__multilayer`): the design's own words name it.
+    if (word !== "nails") return word;
+    const design = choiceLabel(entry.definition.replace(/__multilayer$/i, "")).replace(/^nails\s+/, "").replace(/^[0-9]+\s+/, "");
+    return `nails (${design || "nails"})`;
   };
   for (const entry of entries) {
     if (!bodyOptionDraws(cco.parts[entry.part].options, entry.option)) continue;
@@ -357,9 +383,11 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   const components = planned.map(item => item.component);
   const { noun, not, pronoun } = SLOT_WORDS.body;
   const names = [...new Set(unshown)], missing = clampedList(names, 160);
-  if (!components.length) return { components, state: { slot: "body", state: "unavailable", label: clampedList(names) || "body",
+  // A V whose creator choices bring no body part at all (a creator resource without body options) has none to show.
+  if (!components.length && !entries.length) return { components, state: { slot: "body", state: "none", label: "None" } };
+  if (!components.length) return { components, state: { slot: "body", state: "unavailable", label: clampedList(names) || noun,
     message: names.length ? `Your V's ${noun} (${missing}) couldn't be read from your game files, so ${pronoun} ${not} shown.`
-      : `XF Studio couldn't find your V's ${noun} in your game files, so ${pronoun} ${not} shown.` } };
+      : `XF Studio can't draw your V's ${noun} yet, so ${pronoun} ${not} shown.` } };
   return { components, state: { slot: "body", state: "shown", label: clampedList([...new Set(planned.map(item => item.label))]),
     ...(names.length ? { message: `Some parts of your V's ${noun} (${missing}) couldn't be read from your game files, so they aren't shown.` } : {}) } };
 }
@@ -369,14 +397,14 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
  * shown, none (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map(),
-  identities: TemplateIdentities = new Map()): CharacterPlan {
+  identities: TemplateIdentities = new Map(), body: BodyState = DEFAULT_BODY_STATE): CharacterPlan {
   const slotOf = detailSlotOf(cco);
   const components: PlannedComponent[] = [];
   const slots: DetailSlotState[] = [];
   const skinDecals: { entry: ResolvedAppearance; component: ResolvedComponent }[] = [];
   for (const slot of DETAIL_SLOTS) {
     if (slot === "face" || slot === "body") {
-      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals) : planBody(resolved, cco, defaults, identities);
+      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals) : planBody(resolved, cco, defaults, identities, body);
       components.push(...planned.components);
       slots.push(planned.state);
       continue;

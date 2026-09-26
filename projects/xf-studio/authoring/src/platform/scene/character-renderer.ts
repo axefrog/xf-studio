@@ -3,7 +3,7 @@ import { extendSkin } from "../../skin";
 import { EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
-import { loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
+import { BODY_SHAPE_KEY, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
 import { priorityRank } from "../../render-templates";
@@ -118,9 +118,10 @@ export function createCharacterRenderer(input: {
     return { overMakeup: slot === "lashes", profileEncoding,
       ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => skinPlacement.surfaceUnderlay(mesh, skin ?? null) } : {}),
       // The body's decals (tattoos, scars, the underwear cover) blend against the body's own skin, read on its chunks (knowledge/body-rendering.md).
-      ...(slot === "body" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
-        if (!skin) throw Error("the body's skin didn't load");
-        return skinSurfaceUnderlay(mesh, skin);
+      ...(slot === "body" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null, skins?: readonly ResolvedSkinSurface[]) => {
+        const under = skins?.length ? skins : skin ? [skin] : [];
+        if (!under.length) throw Error("the body's skin didn't load");
+        return skinSurfaceUnderlay(mesh, under);
       } } : {}),
       ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
         const result = skinPlacement.underlay(mesh, skin ?? null);
@@ -259,7 +260,7 @@ export function createCharacterRenderer(input: {
         // resolver applied to that component, each at full weight.
         const applied = item.component.slot === "body" ? new Set(item.component.morphs ?? []) : null;
         for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
-          mesh.morphTargetInfluences![index] = applied ? (applied.has(key) ? 1 : 0)
+          mesh.morphTargetInfluences![index] = applied ? (applied.has(key) || key === BODY_SHAPE_KEY ? 1 : 0)
             : head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
       }
       scene.add(item.root);

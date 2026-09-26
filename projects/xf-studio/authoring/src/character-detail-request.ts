@@ -35,8 +35,8 @@ export const DEFAULT_CHARACTER: CharacterRequest = Object.freeze({ schema: CHARA
 const MAX_APPEARANCES = CREATOR_LIMITS.appearances, MAX_MORPHS = CREATOR_LIMITS.morphs, MAX_CHOICES = CREATOR_LIMITS.choices;
 const PARTS: readonly string[] = ["head", "body", "arms"];
 
-/** The descriptors of a decoded save, in stored order (the save repeats a choice per consumer group); `parts` limits them (default: the head). */
-export function characterRequestFromSave(v: SavedV, parts: readonly CcoPart[] = ["head"]): CharacterRequest {
+/** The descriptors of a decoded save, in stored order (the save repeats a choice per consumer group); `parts` limits them (default: every part). */
+export function characterRequestFromSave(v: SavedV, parts: readonly CcoPart[] = ["head", "body", "arms"]): CharacterRequest {
   return { schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: v.isMale ? "male" : "female",
     appearances: parts.flatMap(part => (v.groups[part] ?? []).flatMap(group => group.appearances.map(item =>
       ({ part, group: group.name, option: item.name, app: item.resourceHash, definition: item.definition })))).slice(0, MAX_APPEARANCES),
@@ -105,7 +105,7 @@ export function parseCharacterRequest(value: unknown): CharacterRequest {
   return { schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: doc.bodyGender as BodyGender, appearances, morphs, ...choices };
 }
 
-/** The creator's default V, or a loaded save's V (its head descriptors), with no choices on top. */
+/** The creator's default V, or a loaded save's V (its descriptors of every part), with no choices on top. */
 export function characterRequestFor(v: SavedV | undefined): CharacterRequest {
   return v && !v.isMale ? characterRequestFromSave(v) : DEFAULT_CHARACTER;
 }
@@ -121,11 +121,11 @@ export function savedOfRequest(request: CharacterRequest): SavedDescriptors | nu
   return request.source === "save" ? { appearances: request.appearances, morphs: request.morphs } : null;
 }
 
-/** Resolver input for a saved request's head (the default V is derived from the effective creator resource instead). */
+/** Resolver input for a saved request, every part (the default V is derived from the effective creator resource instead). */
 export function inputFromCharacterRequest(request: Extract<CharacterRequest, { source: "save" }>): CharacterInput {
-  const appearances: AppearanceDescriptor[] = request.appearances.filter(item => item.part === "head").map(item =>
-    ({ part: "head", group: item.group, option: item.option, app: refFromHash(item.app), definition: item.definition }));
-  const morphs: MorphDescriptor[] = request.morphs.filter(item => item.part === "head").map(item =>
-    ({ part: "head", group: item.group, region: item.region, target: item.target }));
+  const appearances: AppearanceDescriptor[] = request.appearances.map(item =>
+    ({ part: item.part, group: item.group, option: item.option, app: refFromHash(item.app), definition: item.definition }));
+  const morphs: MorphDescriptor[] = request.morphs.map(item =>
+    ({ part: item.part, group: item.group, region: item.region, target: item.target }));
   return { bodyGender: request.bodyGender, origin: "save", appearances, morphs };
 }

@@ -24,6 +24,7 @@ export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
   "layered-base": "The base finish of some of your V's piercings or layered parts couldn't be read, so a plain grey stands in for it.",
   "decal-template": "Some of your V's face details use materials the preview can't draw yet, so those parts aren't shown.",
   "rigid-part": "A piercing part stays in place while your V's head moves in the idle, because its shape carries no skinning.",
+  "rigid-body-part": "Part of your V's body, such as the nails, moves as one piece with the hand in the idle, because its shape carries no skinning.",
   "part-unread": "Some parts of your V's details couldn't be prepared from your game files, so they aren't shown. Report a problem from Help to see which.",
 };
 /** Why none of the V's details are shown, when a code says so (detail-limits.ts). */

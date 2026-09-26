@@ -40,10 +40,15 @@ export type AdapterContext = {
    * the colour is read on whichever head the scene draws (head-skin-placement.ts).
    */
   underlay?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => THREE.BufferAttribute;
-  /** Face details: the skin colour and roughness under each vertex of a decal mesh, read on the drawn head; throws when unavailable. */
-  surface?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => DecalSurfaceUnderlay;
-  /** The resolved skin, when the skin was loaded first. */
+  /**
+   * Face and body details: the skin colour and roughness under each vertex of a decal mesh, read on the drawn head (or the body's skins,
+   * `skins`); throws when unavailable.
+   */
+  surface?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null, skins?: readonly ResolvedSkinSurface[]) => DecalSurfaceUnderlay;
+  /** The resolved skin, when the skin was loaded first (for the body: its first skin part, whose light the body's decals take). */
   skin?: ResolvedSkinSurface;
+  /** The body: every skin part loaded before its decals (the body, its feet and arms), which the decals read the skin under them on. */
+  skins?: readonly ResolvedSkinSurface[];
   /** How hair profile stops are decoded (knowledge/hair-shading.md §3). */
   profileEncoding: ProfileEncoding;
 };
@@ -248,7 +253,7 @@ const faceDecal: MaterialAdapter = {
     let underlay = false, surface: DecalSurfaceUnderlay["evidence"] | undefined;
     if (context.surface) {
       try {
-        const under = context.surface(mesh, context.skin ?? null);
+        const under = context.surface(mesh, context.skin ?? null, context.skins);
         mesh.geometry.setAttribute("xfsUnderlay", under.colour);
         mesh.geometry.setAttribute("xfsUnderRoughness", under.roughness);
         mesh.geometry.setAttribute("xfsUnderMetalness", under.metalness);

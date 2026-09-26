@@ -3,7 +3,7 @@
  * from the option's own data with the preview plan's rules (character-detail-plan.ts), never from option names:
  *
  * - The preview draws a **female V** only: every option of a masculine V is not drawn.
- * - **Body and arm** options the third-person body's consumers read (`BODY_GROUPS`) are drawn as the body, except those the game's
+ * - **Body and arm** options the third-person body's consumers read (`bodyGroups`, the V with no clothing) are drawn as the body, except those the game's
  *   censorship rule leaves under the underwear cover the preview draws (`bodyOptionDraws`: nipples, genitals); body and arm morphs
  *   (breast size, nail length) shape the body. Other body and arm options (first-person twins, arm cyberware states) are not drawn.
  * - **Morph** options on the head shape the head and every drawn part carrying the same `(target, region)` pair
@@ -23,7 +23,7 @@
  * Coverage is the preview's projection of a catalogue (`catalogueCoverage`), computed when it is asked for, never stored in
  * the catalogue: a host-cached catalogue stays right when the preview learns to draw more (CORE-60).
  */
-import { BODY_GROUPS, bodyOptionDraws, DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups, type CensorOption } from "./character-detail-plan";
+import { bodyGroups, bodyOptionDraws, DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups, type CensorOption } from "./character-detail-plan";
 import type { CcoPart } from "./cco-model";
 import type { CcCatalogue } from "./cc-catalogue";
 import type { DetailSlot } from "./render-detail";
@@ -72,7 +72,7 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
   const direct = (option: CoverageInput): RenderCoverage => {
     if (bodyGender === "male") return { status: "not-rendered", detail: null, note: NO_MALE_HEAD };
     if (option.part !== "head") {
-      const consumed = option.groups.some(group => BODY_GROUPS[option.part as "body" | "arms"].includes(group));
+      const consumed = option.groups.some(group => bodyGroups(option.part as "body" | "arms").includes(group));
       if (option.type === "morph") return { status: "rendered", detail: "body", note: "Shapes the body." };
       if (option.type !== "appearance" || !option.hasResource || !consumed) return { status: "not-rendered", detail: null, note: NOT_HEAD };
       return bodyOptionDraws(byPart(option.part), option.name) ? { status: "rendered", detail: "body", note: "Drawn as part of the body." }
