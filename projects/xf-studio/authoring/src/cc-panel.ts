@@ -190,7 +190,12 @@ export function searchChoices(index: CatalogueIndex, query: string, identity = "
 
 /** The host's catalogue state for the panel (`GET ?gender=`). */
 export type CreatorPhase = "preparing" | "ready" | "failed";
-export interface CreatorState { readonly phase: CreatorPhase; readonly message: string; readonly panel?: CcPanel }
+/**
+ * `next` (ready only): the one next step for labels the catalogue couldn't read, which `message` explains (NATIVE-46): `retry` (Try again)
+ * or `wolvenkit` (set WolvenKit up).
+ */
+export type CreatorNext = "retry" | "wolvenkit";
+export interface CreatorState { readonly phase: CreatorPhase; readonly message: string; readonly next?: CreatorNext; readonly panel?: CcPanel }
 /** One option's value as the panel shows it: the view's value, with the current and own choices' labels and swatch colours. */
 export interface CreatorValue {
   readonly choice: string; readonly own: string; readonly set: boolean; readonly active: boolean;

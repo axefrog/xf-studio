@@ -33,7 +33,8 @@ function hostState(value: unknown): HostCharacterState {
   return { key: state.key, phase: state.phase, message: typeof state.message === "string" ? state.message : "",
     progress: state.progress && Number.isInteger(state.progress.index) && Number.isInteger(state.progress.total) && typeof state.progress.label === "string"
       ? { index: state.progress.index, total: state.progress.total, label: state.progress.label } : null,
-    record: typeof state.record === "string" && /^[a-f0-9]{64}\.json$/.test(state.record) ? state.record : null };
+    record: typeof state.record === "string" && /^[a-f0-9]{64}\.json$/.test(state.record) ? state.record : null,
+    ...(state.phase === "failed" && state.need === "wolvenkit" ? { need: "wolvenkit" as const } : {}) };
 }
 
 export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init)): CharacterDetailPort {

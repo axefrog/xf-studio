@@ -705,3 +705,31 @@ describe("launch priority is decided as each launch starts (PIPE-96)", () => {
     expect(launches).toEqual([{ byHash: false, lowPriority: true }, { byHash: true, lowPriority: true }]);
   });
 });
+
+describe("preparing ahead without WolvenKit (NATIVE-48)", () => {
+  test("choices already prepared are ready; the rest stop as 'setup' before any batch, with no failure reported; set up, a new job prepares them", async () => {
+    let needsSetup = true;
+    const warmed: number[][] = [], failures: unknown[] = [];
+    const deps: PrefetchDeps = {
+      requestFor: async (_base, _option, position) => withChoice(position),
+      readiness: async () => request => request.choices![0]!.choice === "c0",
+      warm: async requests => { warmed.push(requests.map(request => Number(request.choices![0]!.choice.slice(1)))); return requests.map(() => ({ ready: true })); },
+      foregroundIdle: async () => {},
+      preparedBytes: async () => 0,
+      needsSetup: () => needsSetup,
+      failed: error => { failures.push(error); },
+    };
+    const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12 });
+    ask(service, [0, 1, 2]);
+    await settle();
+    expect(ask(service, [0, 1, 2])).toMatchObject({ states: "rnn", stopped: "setup", busy: false });
+    expect(warmed).toEqual([]);
+    expect(failures).toEqual([]);
+    needsSetup = false;
+    service.cancel();
+    ask(service, [0, 1, 2]);
+    await settle();
+    expect(ask(service, [0, 1, 2])).toMatchObject({ states: "rrr", stopped: null });
+    expect(warmed).toEqual([[1, 2]]);
+  });
+});

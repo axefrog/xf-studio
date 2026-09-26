@@ -470,3 +470,34 @@ test("the head pane's next step reports busy while the last step runs (UI-35)", 
   await running;
   expect(h.setup.capability({ kind: "previewSetup.refresh" }).available).toBe(true);
 });
+
+test("with the head ready, the next step towards WolvenKit is still offered and works while the card is hidden (NATIVE-47)", async () => {
+  const h = harness({ wolvenKit: wolvenKitState("available", { message: "XF Studio needs WolvenKit.", canInstall: true }) });
+  h.ready();
+  await h.setup.start();
+  await until(() => h.setup.snapshot().head.phase === "ready");
+  const snapshot = h.setup.snapshot();
+  expect(snapshot.card.open).toBe(false);
+  expect(snapshot.wolvenKitStep).toEqual({ label: "Set up WolvenKit…", action: { kind: "previewSetup.consent" } });
+  expect(h.setup.capability(snapshot.wolvenKitStep!.action)).toEqual({ available: true });
+  expect(await h.setup.dispatch(snapshot.wolvenKitStep!.action)).toEqual({ ok: true });
+  expect(h.setup.snapshot().consent?.confirm.action).toEqual({ kind: "previewSetup.installWolvenKit", version: "9.0.1" });
+  // "I already have WolvenKit" opens where it is set, and changes nothing there.
+  expect(await h.setup.dispatch({ kind: "previewSetup.openSetup" })).toEqual({ ok: true });
+  expect(h.setup.snapshot().setupRequests).toBe(1);
+  expect(h.saved).toEqual([]);
+});
+
+test("the WolvenKit step follows WolvenKit's own state: its runtime, its download, and where it is set when it thinks it is ready", async () => {
+  const step = async (wolvenKit: WolvenKitSetupState) => {
+    const h = harness({ wolvenKit });
+    h.ready();
+    await h.setup.start();
+    return h.setup.snapshot().wolvenKitStep;
+  };
+  expect(await step(wolvenKitState("needs-runtime", { message: "WolvenKit needs .NET.", runtime: { name: ".NET 8.0 Runtime", installed: false } as never })))
+    .toMatchObject({ action: { kind: "previewSetup.openLink", link: "runtime-installer" } });
+  expect(await step(wolvenKitState("downloading", { canCancel: true, progress: { receivedBytes: 1, totalBytes: 4 } }))).toBeNull();
+  expect(await step(wolvenKitState("ready"))).toEqual({ label: "Open Game & tools", action: { kind: "previewSetup.openSetup" } });
+  expect(await step(wolvenKitState("custom-missing", { message: "WolvenKit isn't where it was set." }))).toEqual({ label: "Open Game & tools", action: { kind: "previewSetup.openSetup" } });
+});

@@ -152,7 +152,8 @@ async function presetDocument(outcome: NativeDecodeOutcome, gameRoot: string, ar
 /**
  * The preset the installation's game reads (Phantom Liberty's when installed), decoded natively from its winning archive (`decode`: the
  * worker by default) and cached by that archive's identity. Null, with the reason logged, when it can't be read (the resolver then goes
- * without the cooked tags); a failure is not kept, so the next call tries again.
+ * without the cooked tags). A failure is remembered per archive identity: one that would repeat for the session stays, one that may pass
+ * is tried again after `PRESET_RETRY_MS` (NATIVE-31, NATIVE-53).
  */
 export async function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir: string, log: (message: string) => void = () => {},
   decode: PresetDecoder = workerPresetDecoder(gameRoot)): Promise<PresetTable | null> {

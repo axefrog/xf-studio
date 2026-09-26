@@ -10,7 +10,9 @@
  * (PREV-68). When a change can't be prepared, the V stays as it was shown and `updateError` says so in one plain line, until the next
  * change (CORE-63). The full "preparing" status is for a V's first preparation only.
  *
- * The same request asked again is never prepared again, even after a failure (PREV-86): trying again is the explicit `retry`.
+ * The same request asked again is never prepared again, even after a failure (PREV-86): trying again is the explicit `retry`. A request
+ * the host can't prepare until WolvenKit is set up is not a failure: the status names the need (`need`), which the presentation offers
+ * as its one next step, and the service asks the host again now and then, so the V is prepared once WolvenKit is set up (NATIVE-47).
  */
 import { sameCharacter, type CharacterRequest } from "./character-detail-request";
 import type { DetailSlot, DetailSlotState } from "./render-detail";
@@ -22,6 +24,8 @@ import { pageFailure } from "./diagnostics/page-sink";
 export type HostCharacterState = {
   key: string; phase: "preparing" | "ready" | "failed" | "unknown"; message: string;
   progress: { index: number; total: number; label: string } | null; record: string | null;
+  /** Failed: what must be set up first (character-detail-host.ts). */
+  need?: "wolvenkit";
 };
 export type CharacterDetailPort = {
   /** Ask the host to prepare a character; returns its current state. */
@@ -61,16 +65,23 @@ export type CharacterDetailStatus = {
   choices: number;
   /** The head options whose parts the shown V draws (settles a `conditional` coverage: drawn, or not shown yet). */
   drawn: string[];
+  /**
+   * What must be set up before the V (or the change: `updateError`) can be prepared, as the presentation's next step: `wolvenkit`.
+   * Null otherwise.
+   */
+  need: "wolvenkit" | null;
 };
 
 const POLL_MS = 600;
+/** How often a V waiting for WolvenKit asks the host again (a cheap answer until WolvenKit is set up). */
+const SETUP_POLL_MS = 4_000;
 const FAILED = "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body couldn't be prepared, so they aren't shown. The head still works.";
 const UPDATE_FAILED = "That change couldn't be shown in the 3D view, so your V is shown as before it.";
 const pending = (): CharacterSlotStatus[] => DETAIL_SLOTS.map(slot => ({ slot, state: "pending", label: "" }));
 
 export class CharacterDetailActions {
   private status: CharacterDetailStatus = { phase: "idle", source: null, message: "", notice: null, progress: null, slots: pending(),
-    updating: false, updateError: null, choices: 0, drawn: [] };
+    updating: false, updateError: null, choices: 0, drawn: [], need: null };
   private listeners = new Set<() => void>();
   private current: { key: string; request: CharacterRequest; controller: AbortController } | null = null;
   /** The last request asked for (kept after a failure, so asking for it again changes nothing until `retry`). */
@@ -114,13 +125,13 @@ export class CharacterDetailActions {
     this.current?.controller.abort();
     const controller = new AbortController();
     this.current = { key, request, controller };
-    if (sameV) this.publish({ ...this.status, updating: true, updateError: null });
+    if (sameV) this.publish({ ...this.status, updating: true, updateError: null, need: null });
     else {
       // Nothing of the previous V may linger while the new one prepares.
       this.port.clear();
       this.shown = null;
       this.publish({ phase: "preparing", source: request.source, message: "", notice: null, progress: null, slots: pending(),
-        updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: [] });
+        updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: [], need: null });
     }
     return this.follow(request, controller.signal, sameV).catch(error => {
       if (controller.signal.aborted || this.disposed) return;
@@ -130,27 +141,42 @@ export class CharacterDetailActions {
       if (sameV && !notice) {
         // The shown V stays as it was; the change is explained, not silently reverted (CORE-63). `retry` tries it again.
         if (this.current?.controller === controller) this.current = null;
-        this.publish({ ...this.status, updating: false, updateError: (error as { plain?: string })?.plain ?? UPDATE_FAILED });
+        this.publish({ ...this.status, updating: false, updateError: (error as { plain?: string })?.plain ?? UPDATE_FAILED, need: null });
         return;
       }
       this.port.clear();
       this.shown = null;
       this.publish({ phase: "failed", source: request.source, message: notice ? "" : FAILED, notice, progress: null,
-        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [] });
+        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: null });
     });
   }
 
   private async follow(request: CharacterRequest, signal: AbortSignal, updating: boolean) {
     let state = await this.port.request(request, signal);
-    for (let attempts = 0; state.phase === "preparing" || state.phase === "unknown"; attempts++) {
+    for (let waiting = false; ; waiting = true) {
+      for (let attempts = 0; state.phase === "preparing" || state.phase === "unknown"; attempts++) {
+        if (signal.aborted) return;
+        if (state.phase === "preparing") {
+          // Setting WolvenKit up let the host start: the V (or the change) is being prepared now.
+          if (waiting) this.publish(updating ? { ...this.status, updating: true, updateError: null, need: null }
+            : { phase: "preparing", source: request.source, message: "", notice: null, progress: state.progress, slots: pending(), updating: false,
+              updateError: null, choices: request.choices?.length ?? 0, drawn: [], need: null });
+          else if (!updating) this.publish({ ...this.status, progress: state.progress });
+          waiting = false;
+        }
+        await this.port.wait(POLL_MS, signal);
+        if (signal.aborted) return;
+        // The host forgets a request it cancelled or never saw (a restart): ask again.
+        state = state.phase === "unknown" || attempts % 50 === 49 ? await this.port.request(request, signal) : await this.port.poll(state.key, signal);
+      }
       if (signal.aborted) return;
-      if (state.phase === "preparing" && !updating) this.publish({ ...this.status, progress: state.progress });
-      await this.port.wait(POLL_MS, signal);
+      if (state.phase !== "failed" || state.need !== "wolvenkit") break;
+      // Waiting for WolvenKit: said with its next step, not reported as a failure; asked again now and then (NATIVE-47).
+      this.waitForSetup(request, state.message, updating);
+      await this.port.wait(SETUP_POLL_MS, signal);
       if (signal.aborted) return;
-      // The host forgets a request it cancelled or never saw (a restart): ask again.
-      state = state.phase === "unknown" || attempts % 50 === 49 ? await this.port.request(request, signal) : await this.port.poll(state.key, signal);
+      state = await this.port.request(request, signal);
     }
-    if (signal.aborted) return;
     if (state.phase === "failed" || !state.record) {
       // The host logged its failure with the details; this links the notice to it (docs/diagnostics.md).
       if (!updating) pageFailure("character", "details_not_prepared", state.message || FAILED, undefined, { notify: true, source: "Your V" });
@@ -158,7 +184,7 @@ export class CharacterDetailActions {
       this.port.clear();
       this.shown = null;
       this.publish({ phase: "failed", source: request.source, message: state.message || FAILED, notice: null, progress: null,
-        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [] });
+        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: null });
       return;
     }
     const shown = await this.port.show(state.record, signal);
@@ -169,7 +195,22 @@ export class CharacterDetailActions {
     const lines = [...(state.message ? [state.message] : []), ...[...slots.filter(slot => slot.state === "unavailable" && slot.message),
       ...slots.filter(slot => slot.state === "shown" && slot.message)].map(slot => slot.message!)];
     this.publish({ phase: "ready", source: request.source, message: lines.join(" "), notice: null, progress: null, slots,
-      updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: shown.drawn ?? [] });
+      updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: shown.drawn ?? [], need: null });
+  }
+
+  /** The V (or a change on it) waits for WolvenKit: published once, not again on every question to the host. */
+  private waitForSetup(request: CharacterRequest, message: string, updating: boolean) {
+    if (updating) {
+      const updateError = `${UPDATE_FAILED} ${message}`;
+      if (this.status.updateError !== updateError || this.status.need !== "wolvenkit" || this.status.updating)
+        this.publish({ ...this.status, updating: false, updateError, need: "wolvenkit" });
+      return;
+    }
+    if (this.status.phase === "failed" && this.status.need === "wolvenkit" && this.status.message === message) return;
+    this.port.clear();
+    this.shown = null;
+    this.publish({ phase: "failed", source: request.source, message, notice: null, progress: null,
+      slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: "wolvenkit" });
   }
 
   /** Stop following and remove the details (the head is being released). */
