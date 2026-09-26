@@ -24,20 +24,18 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Build record** (26 September 2026, branch `claude/bridge-script-context` at `d217fd1d9c97`, clean tree: the script-call fix, RB-29..31, and every earlier review fix; `xfb_selftest --unit` OK, self-test 157 of 157 and `bun test tools` 65 of 65 passed on that code). The zip to stage is the `-writes` one:
+   **Build record** (26 September 2026, `main` at `c31156aaf29b`, clean tree: the script-call fix, RB-29..31, and every earlier review fix; `xfb_selftest --unit` OK, self-test 157 of 157, `bun test tools` 65 of 65, redscript and Lua lint passed on that build). The zip to stage is the `-writes` one:
 
    | Zip | SHA-256 |
    |---|---|
-   | `-writes` | `9c4e7c2933c962c06181609787340a8c3bdb3914da69a4eeb3d29bef1db117e9` |
-   | `-diagnostic` | `6c326b21963148096df917215b4fd2060d31ed8447df96a94166dd3ce41f5da4` |
-   | default | `c92415cf346a50e6b80d3436cc5e339df148ae71b07c493fd47f490a83cafe69` |
-   | (`XFRuntimeBridge.dll` inside each) | `75ff1119726e0c70e5d04ea8c098372fb105f8678d5921de35adc7d834ec057b` |
-
-   If the branch is merged and rebuilt on `main`, the commit and hashes change; record the new ones here.
+   | `-writes` | `56cea1a0a50a67b79515b8951e59a6a07c46a664ce639e0bf2f3069cb5673fc9` |
+   | `-diagnostic` | `31abda27640d916a3836b43875546bf8c92fcce678b07dd4b4d107b15e3342c2` |
+   | default | `aa20435b83d9834e3c2f6a942b7b1e77c9b366414d666b49e71517d2993d2c3b` |
+   | (`XFRuntimeBridge.dll` inside each) | `b7b9ef32eb51ef95602904d6c4f86697ae5ee9edce1f3c845e7d76e461e3f824` |
 
    **New in this build, watch in the first session:** a photo-mode write whose value the menu then reports differently fails with `write_mismatch` and is put back (RB-19). If camera writes fail that way at step 11, note the requested and reported values; the comparison tolerance is one slider step. A light change waits three game ticks between selecting and setting (RB-20). Every game and script call now carries a caller frame and a context (the crash fix; the [script-call check](#script-call-check-first) proves it first), and `photo_camera_set {reset: true}` may answer `partial: true` with `errors` and an undo when a key fails (RB-29).
 
-   **Staged** on 26 September 2026 (an earlier build): the `-writes` zip unpacked into the MO2 mod `XF Runtime Bridge`, enabled as the first row of the test profile's `modlist.txt`; nothing else changed. Baseline capture `bridge-phase2-pre`. The build above is not staged yet: restaging replaces that mod's files only.
+   **Staged** on 26 September 2026: the build above, unpacked into the MO2 mod `XF Runtime Bridge` (first row of the test profile's `modlist.txt`; nothing else changed), with `%LOCALAPPDATA%\XFStudiountime-bridge\` emptied. Baseline capture `bridge-phase2-pre`.
 
    A rebuild after merging gives new hashes (the DLL embeds the commit); record them here if the staged zip is rebuilt. Check the zip's SHA-256 against the build record, and that its `red4ext/plugins/XFRuntimeBridge/manifest.json` says `"variant": "writes"`, `"allow_writes": true` and the expected `commit`. The self-test (`bun tools/selftest.ts`) and `bun test tools` must pass on that commit.
 
