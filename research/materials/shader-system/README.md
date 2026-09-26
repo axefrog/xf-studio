@@ -150,19 +150,20 @@ These values match the templates' `materialType` enum (`ERenderMaterialType`: St
 
 - Standard writers store exactly 1/3 (metal_base target 2 `.z`, decal target 2 `.z`), so the term is zero.
 - Skin stores `0.4 + 0.6 × TEXCOORD3.w` (`%1142`/`%1143`). Its vertex program `7494393843130164436` writes `TEXCOORD3.w = COLOR.y`, so the input is the **vertex colour's green channel** ([annotation results](annotation-results.md#basematerialsskinmt)). The deferred light ignores it for skin.
-- A decal blending `.z` toward 1/3 therefore changes nothing for skin pixels. (This section previously said the term applied to every class except Eye.)
+- A decal blending `.z` toward 1/3 therefore changes nothing in the deferred light for skin pixels. The SSS translucency setup below does read `.z`. (This section previously said the term applied to every class except Eye.)
 
 ### Screen-space SSS passes (static cache)
 
-Decompiled for [experiment 017](../../../experiments/017-plate-depth/README.md); the index attributes names heuristically, and these three were confirmed by content:
+Decompiled for [experiment 017](../../../experiments/017-plate-depth/README.md) and the [skin reference](../shader-skin.md#6-lighting-the-subsurface-class-and-the-sss-pipeline); the index attributes names heuristically, and these were confirmed by content:
 
 | Program | Role |
 |---|---|
 | Setup `18323727242039837728` | For class 1, copies the global light's diffuse output and writes linear depth. No GBuffer2 read. |
-| Blur_Horizontal `13638945895069409584` | Reads GBuffer2 `.x` (skips pixels with metalness > 0.1) and `.w` (profile bit) only. |
+| Setup_UseTranslucency `11387959167119825062` (DXBC SHA-256 `5760e2dc1add793974e950f1df773c1969793e4a2b41e2dc498f0fe62b425901`) | The Setup plus a sun transmission term: thickness falloff `saturate(1.0111 − 15.128·d − 0.9598·d²)` from the scene depth minus a back-face depth target, × `saturate((GBuffer2.z − 1/3)·1.5)`, × sun colour and a camera-vector term. **Reads GBuffer2.z.** |
+| Blur_Horizontal `13638945895069409584` / Blur_Vertical `1061893983243070248` | Identical but for the axis. Reads GBuffer2 `.x` (skips pixels with metalness > 0.1) and `.w` (profile bit) only. A per-slot kernel row (centre weight, then RGB weight + offset per tap) is applied symmetrically at an offset scaled by 1/linear depth; taps only on class-1 pixels; normalised per channel. |
 | Combine `7703933925853799832` | Class 1 only. Metalness > 0.1: exposure × (specular + unblurred diffuse), no SSS. Otherwise (unblurred + profile colour × (blurred − unblurred)) × lerp(albedo², `cb6[0].rgb`, `cb6[0].w`) + specular + an ambient term. Specular is added unchanged; `.y` and `.z` are never read. |
 
-The two programs indexed as `Setup_UseTranslucency` hold a sun-only light that uses GBuffer2.w bits, not `.z`.
+The static index lists two GUIDs under `Setup_UseTranslucency`. The second, `2220067148481019988`, is a full sun-light program (class switch, GBuffer2.w profile bits, skin kernel fetch) attributed to that name by the index's heuristic; the earlier note that both were sun lights missed `11387959167119825062`.
 
 ### What writers put in the `.w` channels
 
@@ -195,5 +196,5 @@ The two programs indexed as `Setup_UseTranslucency` hold a sun-only light that u
 ## Limits
 
 - **One variant per pass.** Only the listed variants were read. Other vertex factories, `Discarded`/`Dismembered` variants, ray-traced and path-traced paths, and screen-space SSS passes may differ.
-- **SSS and lighting details not traced.** The SSS pipeline (`m_postfx_SubsurfaceScattering_Setup/Blur/Combine`) and the local-light variants were identified by name only. G-buffer render-target formats were not recovered.
+- **Partly traced SSS and lighting.** The SSS setup, blur and combine programs and the Hair and Subsurface local-light loops are read ([skin reference](../shader-skin.md), [hair reference](../shader-hair.md)); the stochastic blur and the RTXDI combine variants are not. G-buffer render-target formats were not recovered.
 - **Offline evidence only.** No runtime capture confirms which variant draws a given frame.
