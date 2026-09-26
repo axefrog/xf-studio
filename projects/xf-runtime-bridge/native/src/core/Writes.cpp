@@ -329,6 +329,52 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
     return out;
 }
 
+json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOps& aOps)
+{
+    const auto mode = std::string(params::CreatorModeName(aRequest.mode));
+    auto prepared = aOps.prepare();
+    if (prepared.value("already_open", false))
+    {
+        return json{{"changed", false},
+                    {"opened", true},
+                    {"note", "the appearance screen was already open"},
+                    {"undo", nullptr},
+                    {"undo_note", "nothing was opened by this call"}};
+    }
+    aOps.settle();
+    auto requested = aOps.open();
+    constexpr auto kStep = std::chrono::milliseconds(100);
+    int32_t waited = 0;
+    for (;;)
+    {
+        if (aOps.phase() == "character_menu")
+        {
+            json out{{"changed", true}, {"opened", true}, {"mode", mode}, {"waited_ms", waited}};
+            for (const char* key : {"edit_mode", "saving_locked", "route"})
+            {
+                if (requested.contains(key))
+                {
+                    out[key] = requested[key];
+                }
+            }
+            out["undo"] = {{"method", "cc.back"}, {"params", json::object()}};
+            out["undo_note"] = "cc.back (or Back in the appearance screen) discards every change made there and closes it";
+            return out;
+        }
+        if (waited >= aRequest.timeoutMs)
+        {
+            break;
+        }
+        aOps.sleep(kStep);
+        waited += static_cast<int32_t>(kStep.count());
+    }
+    aOps.cancel();
+    throw MethodError("creator_open_timeout",
+                      "asked the game to open the appearance screen, but it wasn't open after " +
+                          std::to_string(aRequest.timeoutMs) + " ms; the request was withdrawn and nothing opened (a menu "
+                          "or the pause screen may have been open). Saving stays locked until a save is loaded");
+}
+
 bool WaitTicks(const GameThreadQueue& aQueue, uint64_t aTicks, std::chrono::milliseconds aTimeout)
 {
     const auto target = aQueue.TicksSeen() + aTicks;

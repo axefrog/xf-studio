@@ -20,6 +20,7 @@ import { frame, FramingError, FRAMINGS, type CameraApplied, type FramingAdapter,
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
 import { KeySendError, readPhotoModeBinding, virtualKey, type KeyRoute } from "../input/photo-key.ts";
 import { plainBridgeError } from "./errors.ts";
+import { summarizeSettings, type SettingsGroups } from "./options.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
@@ -34,7 +35,10 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     description: "Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode.",
   },
   "write-world": { label: "Change the world", description: "Changes the in-game time of day or stops time. Undo by setting it back." },
-  "write-character": { label: "Change V's appearance", description: "Changes a character-creator option while the appearance screen is open." },
+  "write-character": {
+    label: "Change V's appearance",
+    description: "Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile).",
+  },
   control: { label: "Stop the bridge", description: "Switches the game bridge off until the game restarts. Always allowed." },
 };
 
@@ -293,6 +297,20 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   }
 }
 
+/** cc.apply: exactly one of index and value (the schema can't say "one of", so the tools check it too). */
+function characterApplyParams(input: Record<string, unknown>): Record<string, unknown> {
+  const given = ["index", "value"].filter((key) => input[key] !== undefined);
+  if (given.length !== 1) throw planError("bad_input", given.length ? "Give index or value, not both." : "Give index (counting from 0) or value (the value's name or on-screen label).");
+  return input;
+}
+
+/** game.options.read: the bridge's raw answer plus a plain summary of the settings a capture depends on. */
+async function runOptionsRead(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const raw = await bridgeCall(context, "game.options.read", input);
+  const settings = raw.settings as { groups?: SettingsGroups } | undefined;
+  return { value: settings ? { summary: summarizeSettings(settings.groups), ...raw } : raw };
+}
+
 // --- the catalogue -------------------------------------------------------------------------------
 
 export const CATALOGUE: readonly CommandDef[] = [
@@ -466,6 +484,32 @@ export const CATALOGUE: readonly CommandDef[] = [
     bridge: { method: "player.appearance" },
   },
   {
+    name: "game.options.read",
+    title: "Graphics and render settings",
+    description:
+      "Reads the settings that change how V looks in a screenshot, without changing any: the upscaler and its mode (DLAA among them), frame generation, ray and path tracing, subsurface-scattering quality, HDR and the camera effects (film grain, chromatic aberration, depth of field, lens flares, motion blur, vignette), as a short summary plus every setting of those graphics and display groups. With Cyber Engine Tweaks loaded it also reads the game's hidden character render options (hair, skin, rim light and eyes; for example what a rendering preset mod changed), or names given in names.",
+    permission: "read",
+    input: obj({
+      settings: bool("Read the graphics and display settings. Default true."),
+      render_options: bool("Read the hidden character render options through Cyber Engine Tweaks. Default true."),
+      groups: {
+        type: "array",
+        description: "Only these settings groups (default all of them).",
+        items: oneOf("A settings group.", ["/graphics/presets", "/graphics/advanced", "/graphics/raytracing", "/graphics/basic", "/graphics/performance", "/video/display"]),
+        minItems: 1,
+        maxItems: 6,
+      },
+      names: {
+        type: "array",
+        description: "Render options to read instead of the default character set, as Category/Name (for example Editor/Characters/Hair/GlobalLight/R).",
+        items: str("A render option, Category/Name.", { pattern: "^[A-Za-z0-9_]+(/[A-Za-z0-9_]+)+$", maxLength: 128 }),
+        minItems: 1,
+        maxItems: 128,
+      },
+    }),
+    local: runOptionsRead,
+  },
+  {
     name: "photo.state",
     title: "Photo mode state",
     description:
@@ -519,7 +563,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     permission: "write-photo",
     input: obj({
       preset: oneOf("A named framing; explicit values override it.", Object.keys(CAMERA_PRESETS)),
-      camera_preset: int("Photo mode's own camera preset: 0 Customization, 1-9 its presets (in the XF test profile 7 face, 8 eyes, 9 head and shoulders). Applied before the other values.", 0, 9),
+      camera_preset: int("Photo mode's own camera preset: 0 Customization, 1-9 its presets (in the XF test profile 6 full body, 7 face, 8 eyes, 9 head and shoulders). Applied before the other values.", 0, 9),
       fov: num("Field of view in degrees (photo mode allows 5 to 90).", 1, 180),
       roll: num("Camera roll in degrees.", -360, 360),
       focal_distance: num("Focus distance in metres.", 0, 1000),
@@ -649,7 +693,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     permission: "write-photo",
     input: obj({
       target: oneOf("What to frame. Default face.", Object.keys(FRAMINGS)),
-      span_m: num("World height in metres that fills the window height (default: 0.2 eyes, 0.36 face, 0.8 head-and-shoulders).", 0.02, 5),
+      span_m: num("World height in metres that fills the window height (default: 0.2 eyes, 0.36 face, 0.8 head-and-shoulders, 2 full-body).", 0.02, 5),
       offset: {
         description: "The target point relative to V's head joint, in metres (overrides the framing's own).",
         ...obj({ up: num("Metres up.", -2, 2), forward: num("Metres forward (V's facing).", -2, 2), right: num("Metres to V's right.", -2, 2) }),
@@ -658,7 +702,7 @@ export const CATALOGUE: readonly CommandDef[] = [
         description: "Where the target should sit, as fractions of the window (default the centre).",
         ...obj({ x: num("0 left edge, 1 right edge.", 0, 1), y: num("0 top edge, 1 bottom edge.", 0, 1) }),
       },
-      xf_preset: bool("First select the framing's XF camera preset (7 face, 8 eyes, 9 head and shoulders; needs the test profile's preset file), then fine-tune."),
+      xf_preset: bool("First select the framing's XF camera preset (6 full body, 7 face, 8 eyes, 9 head and shoulders; needs the test profile's preset file), then fine-tune."),
       camera_preset: int("First select this photo-mode camera preset (0-9), then fine-tune.", 0, 9),
       face_camera: bool("Turn V to face the camera first. Default true."),
       yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps.", -90, 90),
@@ -673,14 +717,47 @@ export const CATALOGUE: readonly CommandDef[] = [
 
   // Character
   {
+    name: "cc.open",
+    title: "Open the appearance screen",
+    description:
+      "Opens the appearance screen (the mirror's character creator) from normal play, the way a mirror does, and waits until it is open. mode mirror (the default) allows the rows a mirror allows (hair, make-up, eye colour, piercings and the XF rows); ripperdoc also allows the face-shape, skin and cyberware rows. Refused in combat, a scene, a vehicle or a menu, and unless saving is locked first (it locks saving itself, until a save is loaded). Only in the XF test profile.",
+    permission: "write-character",
+    input: obj({
+      mode: oneOf("Which rows can be changed: mirror (default) or ripperdoc (adds the eye shape, nose, skin and cyberware rows).", ["mirror", "ripperdoc"]),
+      timeout_ms: int("How long to wait for the screen, in milliseconds (default 5000).", 500, 15000),
+    }),
+    undo: "cc.back (or Back in the appearance screen) discards every change made there and closes it.",
+    bridge: { method: "cc.open" },
+  },
+  {
     name: "cc.apply",
     title: "Change one appearance option",
     description:
-      "While the appearance screen is open (at a mirror or ripperdoc), sets one character-creator option to a value, exactly as clicking it does: option is the option's internal name or on-screen label (for example XF), index counts from 0. It never confirms: the player keeps the look by confirming, or backs out to discard every change. Refused anywhere else.",
+      "While the appearance screen is open (at a mirror or ripperdoc), sets one character-creator option to a value, exactly as clicking it does. option is the option's internal name, its on-screen label (for example XF) or its slot (for example piercings_color, the colour row of whichever piercing style is chosen). Give index (counting from 0) or value: a value's internal name or on-screen label, where 5 and 05 are the same position; a word such as gold also finds the one value whose name contains it. It never confirms: the player keeps the look by confirming, or backs out to discard every change. Refused anywhere else.",
     permission: "write-character",
-    input: obj({ option: str("The option's internal name or on-screen label.", { maxLength: 128 }), index: int("The value, counting from 0.", 0, 100000) }, ["option", "index"]),
+    input: obj(
+      {
+        option: str("The option's internal name, on-screen label or slot.", { maxLength: 128 }),
+        index: int("The value, counting from 0.", 0, 100000),
+        value: str("The value's internal name or on-screen label, instead of index.", { maxLength: 128 }),
+      },
+      ["option"],
+    ),
     undo: "cc.apply with the previous index (in the result's undo), or Back in the appearance screen, which discards every change made there.",
-    bridge: { method: "cc.apply" },
+    bridge: { method: "cc.apply", params: characterApplyParams },
+  },
+  {
+    name: "cc.page",
+    title: "Point the appearance screen's camera",
+    description:
+      "Moves the open appearance screen's camera to one part of V, as hovering over a row does: skin, hair, eyes, teeth, nose, lips, jaw, head, nails, body, or default (where the screen started). Changing an option through cc_apply already moves it to that option's part; this is for looking without changing anything.",
+    permission: "write-character",
+    input: obj(
+      { page: oneOf("The part of V to look at.", ["skin", "hair", "eyes", "teeth", "nose", "lips", "jaw", "head", "nails", "body", "default"]) },
+      ["page"],
+    ),
+    undo: "cc.page with page default (the camera's earlier part can't be read).",
+    bridge: { method: "cc.page" },
   },
   {
     name: "cc.confirm",
@@ -707,7 +784,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "world.time.set",
     title: "Set the time of day",
     description:
-      "Sets the in-game clock (hours, minutes, seconds) while V is in the world, or restores an exact earlier time with total_seconds. Changing the clock can trigger timed events in quests, so use a disposable save.",
+      "Sets the in-game clock (hours, minutes, seconds) while V is in the world or the appearance screen is open (to compare the screen's light at different times of day without leaving it), or restores an exact earlier time with total_seconds. Changing the clock can trigger timed events in quests, so use a disposable save.",
     permission: "write-world",
     input: obj({
       hours: int("Hour, 0 to 23.", 0, 23),

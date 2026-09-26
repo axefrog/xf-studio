@@ -68,22 +68,45 @@ describe("planScript", () => {
       expect(exits, file).toBe(enters);
       expect(plan.some((p) => p.phase === "restore" && p.command === "photo.exit")).toBe(true);
       // The very first thing the player is asked is to make a safety save, before any write.
-      const firstWrite = plan.findIndex((p) => p.command && !["bridge.info", "game.status", "game.wait", "player.appearance", "photo.state", "photo.subject", "capture.screenshot", "capture.burst"].includes(p.command));
+      const firstWrite = plan.findIndex((p) => p.command && !["bridge.info", "game.status", "game.options.read", "game.wait", "player.appearance", "photo.state", "photo.subject", "capture.screenshot", "capture.burst"].includes(p.command));
       const firstAsk = plan.findIndex((p) => p.kind === "ask");
       expect(firstAsk).toBeLessThan(firstWrite);
       expect(plan[firstAsk].text).toContain("manual save");
     }
     const s2 = planScript(JSON.parse(readFileSync(join(dir, "session-2.json"), "utf8"))).plan;
-    const indices = s2.filter((p) => p.command === "cc.apply").map((p) => p.input!.index as number);
+    const indices = s2.filter((p) => p.command === "cc.apply" && p.input!.option === "XF").map((p) => p.input!.index as number);
     // Every index is one of the card's presets (Off plus 12), and the steps still open after 26
     // September are all covered: Gloss A-D, Shimmer and Metal (5-10), Depth C and D, Lines new and old.
     expect(indices.every((i) => i >= 0 && i <= 12)).toBe(true);
     for (const i of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) expect(indices, `preset ${i}`).toContain(i);
+    expect(s2.some((p) => p.command === "cc.apply" && p.input!.option === "piercings_color" && p.input!.value === "gold")).toBe(true);
+    expect(s2.some((p) => p.command === "cc.apply" && p.input!.option === "eyes_color" && p.input!.value === "24")).toBe(true);
+    // Eye shapes and face cyberware need the ripperdoc's edit mode: session 3 opens it before them.
+    const s3 = planScript(JSON.parse(readFileSync(join(dir, "session-3.json"), "utf8"))).plan;
+    const firstShape = s3.findIndex((p) => p.command === "cc.apply" && p.input!.option === "eyes");
+    const ripperdoc = s3.findIndex((p) => p.command === "cc.open" && (p.input as { mode?: string } | undefined)?.mode === "ripperdoc");
+    expect(ripperdoc).toBeGreaterThan(-1);
+    expect(ripperdoc).toBeLessThan(firstShape);
+    expect(s3.slice(ripperdoc, firstShape).some((p) => p.command === "cc.back")).toBe(false);
     for (const file of files) {
       const plan = planScript(JSON.parse(readFileSync(join(dir, file), "utf8"))).plan;
-      // Every ask that opens the creator is marked for the later cc.open, every photo excursion hides
+      // The bridge opens the creator itself (cc.open, batch 3): no ask opens it, and every cc.open may
+      // fail over to the player (a note, then game.wait for the creator). Every photo excursion hides
       // the cursor before its first capture, and every photo-mode capture follows a frame step.
-      for (const p of plan.filter((p) => p.kind === "ask" && /Open the character creator/.test(p.text ?? ""))) expect(p.step.replaced_by, `${file} ${p.label}`).toBe("cc.open");
+      expect(plan.some((p) => p.kind === "ask" && /Open the character creator/i.test(p.text ?? "")), file).toBe(false);
+      const opens = plan.filter((p) => p.command === "cc.open");
+      expect(opens.length, file).toBeGreaterThan(3);
+      for (const open of opens) {
+        expect(open.step.continue_on_error, `${file} ${open.label}`).toBe(true);
+        const next = plan[plan.indexOf(open) + 2];
+        expect(next.command === "game.wait" && (next.input as { phase: string[] }).phase.includes("character_menu"), `${file} ${open.label}`).toBe(true);
+      }
+      // Vanilla rows are set by the bridge (cc.apply by label or colour name), never asked for by hand.
+      expect(plan.some((p) => p.kind === "ask" && /set (piercing|eye colour|eye shape)|pick hairstyle/i.test(p.text ?? "")), file).toBe(false);
+      for (const p of plan.filter((p) => p.command === "cc.apply" && p.input!.option !== "XF")) {
+        expect(typeof p.input!.value, `${file} ${p.label}`).toBe("string");
+        expect(p.step.continue_on_error, `${file} ${p.label}`).toBe(true);
+      }
       expect(plan.filter((p) => p.command === "photo.hud.hide" && (p.input as { hidden?: boolean }).hidden === true).every((p) => (p.input as { cursor?: boolean }).cursor === true)).toBe(true);
       expect(plan.some((p) => p.command === "photo.frame")).toBe(true);
       expect(plan.some((p) => p.command === "photo.light.set" && (p.input as { on?: boolean }).on === true)).toBe(true);

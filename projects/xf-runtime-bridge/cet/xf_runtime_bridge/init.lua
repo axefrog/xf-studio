@@ -12,12 +12,14 @@
 
 local MOD = "xf_runtime_bridge"
 local REFRESH_SECONDS = 2.0
+local OPTIONS_POLL_SECONDS = 0.25
 
 local state = {
   initialized = false,
   pluginPresent = nil, -- nil = unknown yet, true/false after the first native call
   info = nil,          -- decoded XFBridge_Info()
   sinceRefresh = 0,
+  sinceOptionsPoll = 0,
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
@@ -99,11 +101,50 @@ registerForEvent("onInit", function()
   refreshInfo()
 end)
 
+-- game.options.read: the engine's render options (GameOptions, e.g. Editor/Characters/Hair/GlobalLight/R)
+-- can't be read from game scripts, but CET reads them (GameOptions.Get). The plugin names the options
+-- it waits for (XFBridge_OptionsWanted: {"seq":n,"names":["Category/Name",...]} or ""), and this layer
+-- answers once with their current values as text (XFBridge_OptionsReport). Read-only: nothing here
+-- sets an option. Polled four times a second, and only while the bridge is on and not killed.
+local function answerOptions()
+  local bridge = state.info and state.info.bridge
+  if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then return end
+  local ok, wanted = pcall(function() return Game.XFBridge_OptionsWanted() end)
+  if not ok or type(wanted) ~= "string" or wanted == "" then return end
+  local decoded, request = pcall(json.decode, wanted)
+  if not decoded or type(request) ~= "table" or type(request.names) ~= "table" or type(request.seq) ~= "number" then return end
+  local values = {}
+  local found = 0
+  for _, full in ipairs(request.names) do
+    local category, name = string.match(tostring(full), "^(.+)/([^/]+)$")
+    if category and name then
+      local got, text = pcall(function() return GameOptions.Get(category, name) end)
+      if got and type(text) == "string" and text ~= "" then
+        values[full] = text
+        found = found + 1
+      end
+    end
+  end
+  local encoded, body = pcall(json.encode, { seq = request.seq, values = values })
+  if not encoded then
+    log("warn", "-", "render options: could not encode the answer: " .. tostring(body))
+    return
+  end
+  local sent, stored = pcall(function() return Game.XFBridge_OptionsReport(body) end)
+  log("debug", "-", string.format("render options answered: seq=%s found=%d of %d stored=%s", tostring(request.seq), found,
+    #request.names, tostring(sent and stored)))
+end
+
 registerForEvent("onUpdate", function(deltaTime)
   state.sinceRefresh = state.sinceRefresh + deltaTime
   if state.sinceRefresh >= REFRESH_SECONDS then
     state.sinceRefresh = 0
     refreshInfo()
+  end
+  state.sinceOptionsPoll = state.sinceOptionsPoll + deltaTime
+  if state.sinceOptionsPoll >= OPTIONS_POLL_SECONDS then
+    state.sinceOptionsPoll = 0
+    answerOptions()
   end
 end)
 

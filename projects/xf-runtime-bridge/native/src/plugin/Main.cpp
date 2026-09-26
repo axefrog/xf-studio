@@ -128,6 +128,10 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
         // write can run after this undo; RestoreOnce runs it here directly, once, after a write.
+        if (state.bridge && state.bridge->RestoreReady())
+        {
+            state.options.Cancel(); // no render-option request survives the kill switch
+        }
         state.restore.Tick(state.bridge && state.bridge->RestoreReady(), &RestoreAfterKill, [](const std::string& aWhat) {
             log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
         });

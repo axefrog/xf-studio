@@ -938,7 +938,8 @@ json CharacterApply(const MethodContext& aContext)
     const auto request = params::ParseCharacterApply(aContext.params);
     RED4ext::CString option(request.option.c_str());
     int32_t index = request.index;
-    auto result = CallScript("XFCharacter", "Apply", {"String", "Int32"}, {&option, &index}, aContext.cid);
+    RED4ext::CString value(request.value.c_str());
+    auto result = CallScript("XFCharacter", "Apply", {"String", "Int32", "String"}, {&option, &index, &value}, aContext.cid);
     result["undo"] = {{"method", "cc.apply"},
                       {"params", {{"option", result.value("option", request.option)}, {"index", result.value("before", 0)}}},
                       {"note", "or press Back in the appearance screen and confirm, which discards every change made there"}};
@@ -957,6 +958,137 @@ json CreatorLeave(const MethodContext& aContext, bool aKeep)
     result["undo_note"] = aKeep ? "the look is kept in the running game; load the safety save to undo it"
                                 : "every change made on the appearance screen was discarded; nothing to undo";
     return result;
+}
+
+// cc.open: opens the appearance screen from normal play (research/runtime/runtime-bridge-design.md §3.6,
+// knowledge/photo-mode.md §3.1). The redscript layer checks the moment (V in the world; no combat,
+// scene, vehicle or menu), requests the save lock, and after a few ticks refuses unless the game
+// reports saving locked; then it asks the idle menu scenario, through the game's own menu-event
+// blackboard, to switch to the mirror's scenario with that scenario's own menu data. The vanilla
+// scenario does the rest. Behind allow_creator_leave, like Confirm and Back; the sequence and its
+// undo are core/Writes.cpp (unit-tested).
+constexpr uint64_t kCreatorSettleTicks = 3;
+
+json CreatorOpenMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseCreatorOpen(aContext.params);
+    params::CreatorLeaveAllowed(Get().config.allowCreatorLeave);
+    const auto cid = aContext.cid;
+    const int32_t mode = static_cast<int32_t>(request.mode);
+    auto& queue = Get().queue;
+    writes::CreatorOpenOps ops;
+    ops.prepare = [&queue, cid, mode] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, mode] {
+                int32_t m = mode;
+                return CallScript("XFCharacter", "OpenPrepare", {"Int32"}, {&m}, cid);
+            },
+            "cc.open.prepare");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, kCreatorSettleTicks, Timeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick after the save-lock request; nothing was opened");
+        }
+    };
+    ops.open = [&queue, cid, mode] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, mode] {
+                int32_t m = mode;
+                return CallScript("XFCharacter", "Open", {"Int32"}, {&m}, cid);
+            },
+            "cc.open.request");
+    };
+    ops.phase = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFBridgeActions", "Status", {}, {}, cid); }, "cc.open.wait")
+            .value("phase", std::string());
+    };
+    ops.cancel = [&queue, cid] {
+        try
+        {
+            RunGameTask(queue, Timeout(), [cid] { return CallScript("XFCharacter", "CancelOpen", {}, {}, cid); }, "cc.open.cancel");
+        }
+        catch (const MethodError& e)
+        {
+            log::Warn("cc.open_cancel_failed", std::string("what=") + e.what(), cid);
+        }
+    };
+    ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+    return writes::CreatorOpen(request, ops);
+}
+
+// cc.page: the open appearance screen's preview camera to one body region, as hovering a row does.
+json CreatorPage(const MethodContext& aContext)
+{
+    const auto request = params::ParseCreatorPage(aContext.params);
+    RED4ext::CString slot(request.slot.c_str());
+    auto result = CallScript("XFCharacter", "Page", {"String"}, {&slot}, aContext.cid);
+    result["page"] = request.page;
+    result["undo"] = {{"method", "cc.page"}, {"params", {{"page", "default"}}}};
+    result["undo_note"] = "the camera's earlier region isn't readable, so the undo returns it to the screen's starting view";
+    return result;
+}
+
+// game.options.read: the user settings (graphics, display) from the redscript layer, and the engine's
+// render options from the CET layer through core/OptionsExchange (only CET can read those).
+constexpr auto kRenderOptionsWait = std::chrono::milliseconds(3000);
+
+json RenderOptions(const std::vector<std::string>& aNames, const std::string& aCid)
+{
+    auto& state = Get();
+    if (!state.layers.Has("cet"))
+    {
+        return json{{"available", false},
+                    {"reason", "the bridge's CET layer hasn't announced itself (Cyber Engine Tweaks reads these options)"}};
+    }
+    const auto seq = state.options.Request(aNames);
+    const auto values = state.options.WaitFor(seq, kRenderOptionsWait);
+    if (!values)
+    {
+        state.options.Withdraw(seq);
+        log::Warn("options.no_answer", "seq=" + std::to_string(seq), aCid);
+        return json{{"available", false},
+                    {"reason", "the CET layer didn't answer within 3 s (its overlay or a loading screen may be holding it)"}};
+    }
+    json missing = json::array();
+    for (const auto& name : aNames)
+    {
+        const auto it = values->find(name);
+        if (it == values->end() || it->is_null() || (it->is_string() && it->get<std::string>().empty()))
+        {
+            missing.push_back(name);
+        }
+    }
+    return json{{"available", true}, {"source", "Cyber Engine Tweaks GameOptions.Get"}, {"values", *values}, {"missing", missing}};
+}
+
+json GameOptionsRead(const MethodContext& aContext)
+{
+    const auto request = params::ParseGameOptions(aContext.params);
+    const auto cid = aContext.cid;
+    json out = json::object();
+    if (request.settings)
+    {
+        std::string groups;
+        for (const auto& group : request.groups)
+        {
+            groups += (groups.empty() ? "" : ",") + group;
+        }
+        out["settings"] = RunGameTask(
+            Get().queue, Timeout(),
+            [cid, groups] {
+                RED4ext::CString text(groups.c_str());
+                return CallScript("XFSettings", "Read", {"String"}, {&text}, cid);
+            },
+            "game.options.settings");
+    }
+    if (request.renderOptions)
+    {
+        out["render_options"] = RenderOptions(request.names, cid);
+    }
+    return out;
 }
 
 json CreatorConfirm(const MethodContext& aContext)
@@ -1066,6 +1198,10 @@ void RegisterMethods(Dispatcher& aDispatcher)
                           "V's head (plus an offset) in the world and on screen, and the photo-mode camera's transform and "
                           "field of view.",
                           &PhotoSubject});
+    aDispatcher.Register({"game.options.read", Access::Read, RunOn::BridgeThread,
+                          "Graphics and display settings (upscaler, ray and path tracing, SSS quality, HDR) and, through "
+                          "the CET layer, the engine's character render options.",
+                          &GameOptionsRead});
     aDispatcher.Register({"face.rig.read", Access::Read, RunOn::GameThread,
                           "The photo-mode stand-in's or head item's face components: facial setup, graph, rig and "
                           "animation sets (path hashes).",
@@ -1089,11 +1225,17 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register(WriteMethod("cc.apply", Access::WriteCharacter, RunOn::GameThread,
                                      "Sets one character-creator option on the open appearance screen (never confirms).",
                                      &CharacterApply));
+    aDispatcher.Register(WriteMethod("cc.open", Access::WriteCharacter, RunOn::BridgeThread,
+                                     "Opens the appearance screen from normal play (save lock first); off unless allow_creator_leave.",
+                                     &CreatorOpenMethod));
+    aDispatcher.Register(WriteMethod("cc.page", Access::WriteCharacter, RunOn::GameThread,
+                                     "Points the open appearance screen's camera at one body region.", &CreatorPage));
     aDispatcher.Register(WriteMethod("cc.confirm", Access::WriteCharacter, RunOn::GameThread,
                                      "Confirms the appearance screen (keeps the look); off unless allow_creator_leave.", &CreatorConfirm));
     aDispatcher.Register(WriteMethod("cc.back", Access::WriteCharacter, RunOn::GameThread,
                                      "Backs out of the appearance screen, discarding its changes; off unless allow_creator_leave.", &CreatorBack));
-    aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
+    aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread,
+                                     "Sets the in-game clock (normal play, or with the appearance screen open).", &WorldTimeSet));
     aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
 
     // A write-class probe with no game effect: proves the write gate and audit log in game.

@@ -73,6 +73,11 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_cursorHidden: Bool;
   private let m_cursors: array<wref<CursorGameController>>;
   private let m_photoPuppet: wref<GameObject>;
+  // cc.open's request, picked up by the idle menu scenario (OnXFBridgeOpenCreator below).
+  private let m_ccOpenRequested: Bool;
+  private let m_ccOpenMode: Int32;
+  private let m_ccOpenAt: Float;
+  private let m_ccOpenCid: String;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -214,6 +219,39 @@ public class XFBridgeRegistry extends ScriptableSystem {
 
   public func GetCharacterMenu() -> wref<characterCreationBodyMorphMenu> {
     return this.m_ccMenu;
+  }
+
+  // cc.open: one pending request at a time, valid for three seconds of engine time. Only a request
+  // made here lets the idle menu scenario open the appearance screen; any other event of that name
+  // does nothing.
+  public func RequestCreatorOpen(mode: Int32, now: Float, cid: String) -> Void {
+    this.m_ccOpenRequested = true;
+    this.m_ccOpenMode = mode;
+    this.m_ccOpenAt = now;
+    this.m_ccOpenCid = cid;
+  }
+
+  // The requested edit mode, once, or -1 when there is no fresh request.
+  public func TakeCreatorOpen(now: Float) -> Int32 {
+    if !this.m_ccOpenRequested {
+      return -1;
+    }
+    this.m_ccOpenRequested = false;
+    if now - this.m_ccOpenAt > 3.0 || now < this.m_ccOpenAt {
+      XFBridgeLog.Warn(this.m_ccOpenCid, "cc.open request expired before the menu picked it up; nothing opened");
+      return -1;
+    }
+    return this.m_ccOpenMode;
+  }
+
+  public func CreatorOpenCid() -> String {
+    return this.m_ccOpenCid;
+  }
+
+  public func CancelCreatorOpen() -> Bool {
+    let was = this.m_ccOpenRequested;
+    this.m_ccOpenRequested = false;
+    return was;
   }
 
   // Safety state -------------------------------------------------------------------------------
@@ -382,8 +420,56 @@ protected cb func OnInitialize() -> Bool {
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
     registry.SetCharacterMenu(this);
+    registry.CancelCreatorOpen();
   }
   return result;
+}
+
+// cc.page: points the creator's preview camera at one region, as hovering a row does (the base
+// menu's own RequestCameraChange, characterCreationMenu.script:73; the slot names are the menu's
+// GetSlotName ones). None returns it to the menu's starting view (m_defaultPreviewSlot).
+@addMethod(characterCreationBodyMorphMenu)
+public func XFBridgeCameraTo(slot: CName) -> Void {
+  if Equals(slot, n"None") {
+    this.RequestCameraChange(this.m_defaultPreviewSlot);
+  } else {
+    this.RequestCameraChange(slot);
+  }
+}
+
+// cc.open: the idle menu scenario (normal play, no menu) switches to the mirror's own scenario when
+// the bridge asked for it. Reached through the game's menu-event blackboard, which the in-game menu
+// controller turns into this scenario event (GameObject.TriggerMenuEvent, gameObject.script:2480;
+// inGameMenuGameController.script:294). The vanilla mirror scenario then marks the data as an edit of
+// V's finalized look and opens the creator (inGameScenarios.script:217-247). Adding an event to a
+// menu scenario is how Mod Settings adds its pause-menu entry; the route to the mirror scenario was
+// learned from Character Customization Anywhere (knowledge/photo-mode.md §3.1). Our own code.
+@addMethod(MenuScenario_Idle)
+protected cb func OnXFBridgeOpenCreator() -> Bool {
+  let registry = XFBridgeRegistry.Get();
+  if !IsDefined(registry) {
+    return false;
+  }
+  let game = GetGameInstance();
+  let mode = registry.TakeCreatorOpen(EngineTime.ToFloat(GameInstance.GetEngineTime(game)));
+  if mode < 0 {
+    return false;
+  }
+  let cid = registry.CreatorOpenCid();
+  let refusal = XFCharacter.OpenRefusal();
+  if StrLen(refusal) > 0 {
+    XFBridgeLog.Warn(cid, "cc.open: the moment passed before the menu picked the request up; nothing opened: " + refusal);
+    return false;
+  }
+  let data = new MorphMenuUserData();
+  if mode == 2 {
+    data.m_editMode = gameuiCharacterCustomizationEditTag.Ripperdoc;
+  } else {
+    data.m_editMode = gameuiCharacterCustomizationEditTag.HairDresser;
+  }
+  this.SwitchToScenario(n"MenuScenario_CharacterCustomizationMirror", data);
+  XFBridgeLog.Info(cid, "cc.open: switched to MenuScenario_CharacterCustomizationMirror (edit mode " + XFCharacter.ModeName(mode) + "); undo: cc.back");
+  return true;
 }
 
 @wrapMethod(characterCreationBodyMorphMenu)
@@ -525,7 +611,11 @@ public abstract class XFBridgeActions {
       registry.SetCursorHidden(false);
       out += ",\"cursor_shown\":true";
     }
-    // The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
+    if registry.CancelCreatorOpen() {
+      out += ",\"creator_open_withdrawn\":true";
+    }
+    // An appearance screen the bridge opened stays open: Back discards its changes, and the player
+    // decides. The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
     // still be live, and a save now would keep it. The lock is not persistent; loading a save
     // clears it.
     if registry.IsSaveLockHeld() {
@@ -1071,6 +1161,15 @@ public abstract class XFCharacter {
         out += XFJson.Str(XFCharacter.ValueLabel(option, i));
         i += 1;
       }
+      out += "],\"labels\":[";
+      i = 0;
+      while i < count {
+        if i > 0 {
+          out += ",";
+        }
+        out += XFJson.Str(XFCharacter.ValueText(option, i));
+        i += 1;
+      }
       out += "]";
     }
     return out + "}";
@@ -1099,7 +1198,110 @@ public abstract class XFCharacter {
     if matches == 1 {
       return found;
     }
+    // Then by UI slot: the one active option in that slot (a slot holds one active option at a time),
+    // so a colour row can be named by its slot, e.g. piercings_color, whichever style is chosen.
+    matches = 0;
+    i = 0;
+    while i < ArraySize(options) {
+      if IsDefined(options[i]) && IsDefined(options[i].info) && options[i].isActive && Equals(NameToString(options[i].info.uiSlot), wanted) {
+        found = options[i];
+        matches += 1;
+      }
+      i += 1;
+    }
+    if matches == 1 {
+      return found;
+    }
     return null;
+  }
+
+  // A value's on-screen text (its localised name), where ValueLabel gives the internal name.
+  public static func ValueText(option: ref<CharacterCustomizationOption>, index: Int32) -> String {
+    let appearance = option.info as gameuiAppearanceInfo;
+    if IsDefined(appearance) && index >= 0 && index < ArraySize(appearance.definitions) {
+      return GetLocalizedText(appearance.definitions[index].localizedName);
+    }
+    let morph = option.info as gameuiMorphInfo;
+    if IsDefined(morph) && index >= 0 && index < ArraySize(morph.morphNames) {
+      return GetLocalizedText(morph.morphNames[index].localizedName);
+    }
+    let switcher = option.info as gameuiSwitcherInfo;
+    if IsDefined(switcher) && index >= 0 && index < ArraySize(switcher.options) {
+      return GetLocalizedText(switcher.options[index].localizedName);
+    }
+    return "";
+  }
+
+  // Whole numbers compare as numbers ("5" is "05", as the creator writes positions), other text
+  // without regard to case.
+  public static func SameText(a: String, b: String) -> Bool {
+    if StrLen(a) == 0 || StrLen(b) == 0 {
+      return false;
+    }
+    if Equals(StrLower(a), StrLower(b)) {
+      return true;
+    }
+    return IsStringNumber(a) && IsStringNumber(b) && StrFindFirst(a, ".") < 0 && StrFindFirst(b, ".") < 0 && StringToInt(a) == StringToInt(b);
+  }
+
+  // The index of the value named or labelled `wanted`: an exact match of the internal name or the
+  // on-screen text first, else the one value whose name or text contains it. -1: none; -2: several.
+  public static func FindValue(option: ref<CharacterCustomizationOption>, wanted: String) -> Int32 {
+    let count = XFCharacter.Count(option);
+    let found = -1;
+    let matches = 0;
+    let i = 0;
+    while i < count {
+      if XFCharacter.SameText(XFCharacter.ValueLabel(option, i), wanted) || XFCharacter.SameText(XFCharacter.ValueText(option, i), wanted) {
+        found = i;
+        matches += 1;
+      }
+      i += 1;
+    }
+    if matches == 1 {
+      return found;
+    }
+    if matches > 1 {
+      return -2;
+    }
+    let lower = StrLower(wanted);
+    i = 0;
+    while i < count {
+      if StrContains(StrLower(XFCharacter.ValueLabel(option, i)), lower) || StrContains(StrLower(XFCharacter.ValueText(option, i)), lower) {
+        found = i;
+        matches += 1;
+      }
+      i += 1;
+    }
+    if matches == 1 {
+      return found;
+    }
+    if matches > 1 {
+      return -2;
+    }
+    return -1;
+  }
+
+  // Up to eight values as "index name (text)", for refusals.
+  public static func SomeValues(option: ref<CharacterCustomizationOption>) -> String {
+    let count = XFCharacter.Count(option);
+    let out = "";
+    let i = 0;
+    while i < count && i < 8 {
+      if i > 0 {
+        out += ", ";
+      }
+      out += IntToString(i) + " " + XFCharacter.ValueLabel(option, i);
+      let text = XFCharacter.ValueText(option, i);
+      if StrLen(text) > 0 {
+        out += " (" + text + ")";
+      }
+      i += 1;
+    }
+    if count > 8 {
+      out += ", ...";
+    }
+    return out;
   }
 
   // Read-only. Outside the appearance screen the option list is not trusted (the game rebuilds it
@@ -1215,6 +1417,132 @@ public abstract class XFCharacter {
     return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + "}";
   }
 
+  public static func ModeName(mode: Int32) -> String {
+    if mode == 2 {
+      return "Ripperdoc";
+    }
+    return "HairDresser";
+  }
+
+  // Why the appearance screen can't be opened now, as a failure answer, or "" when it can: V in
+  // the world with no menu open (phase gameplay), not in combat, not in a vehicle, no scene playing,
+  // the game allowing photo mode (the same "safe moment" check), and no combat, scene, tier or
+  // moving-platform save lock from the game.
+  public static func OpenRefusal() -> String {
+    let game = GetGameInstance();
+    let phase = XFBridgeActions.Phase();
+    if NotEquals(phase, "gameplay") {
+      return XFJson.Fail("not_in_gameplay", "the appearance screen opens only from normal play; the game is in '" + phase + "'");
+    }
+    let player = GetPlayer(game);
+    if !IsDefined(player) {
+      return XFJson.Fail("not_in_gameplay", "V isn't in the world");
+    }
+    if player.IsInCombat() {
+      return XFJson.Fail("not_safe_now", "V is in combat");
+    }
+    if VehicleComponent.IsMountedToVehicle(game, player) {
+      return XFJson.Fail("not_safe_now", "V is in a vehicle");
+    }
+    let psm = player.GetPlayerStateMachineBlackboard();
+    if IsDefined(psm) {
+      let tier = psm.GetInt(GetAllBlackboardDefs().PlayerStateMachine.SceneTier);
+      if tier > 1 {
+        return XFJson.Fail("not_safe_now", "a scene is playing (scene tier " + IntToString(tier) + ")");
+      }
+    }
+    if !GameInstance.GetPhotoModeSystem(game).CanPhotoModeBeEnabled() {
+      return XFJson.Fail("not_safe_now", "the game doesn't allow photo mode here right now, which the bridge takes as not a safe moment");
+    }
+    let locks: array<gameSaveLock>;
+    if GameInstance.IsSavingLocked(game, locks) {
+      let i = 0;
+      while i < ArraySize(locks) {
+        let reason = locks[i].reason;
+        if Equals(reason, gameSaveLockReason.Combat) || Equals(reason, gameSaveLockReason.Scene) || Equals(reason, gameSaveLockReason.Tier) || Equals(reason, gameSaveLockReason.PlayerOnMovingPlatform) {
+          return XFJson.Fail("not_safe_now", "the game has locked saving for a combat, scene or moving-platform reason (" + IntToString(EnumInt(reason)) + ")");
+        }
+        i += 1;
+      }
+    }
+    return "";
+  }
+
+  // cc.open, step 1: checks the moment and requests the bridge's save lock.
+  public static func OpenPrepare(cid: String, mode: Int32) -> String {
+    if XFBridgeActions.CharacterMenuOpen() {
+      return "{\"ok\":true,\"already_open\":true}";
+    }
+    if mode != 1 && mode != 2 {
+      return XFJson.Fail("bad_params", "unknown edit mode " + IntToString(mode));
+    }
+    let refusal = XFCharacter.OpenRefusal();
+    if StrLen(refusal) > 0 {
+      return refusal;
+    }
+    if !IsDefined(XFBridgeRegistry.Get()) {
+      return XFJson.Fail("game_not_ready", "no game session yet");
+    }
+    XFBridgeActions.EnsureSaveLock(cid);
+    return "{\"ok\":true,\"save_lock_requested\":true}";
+  }
+
+  // cc.open, step 2 (a few ticks later): checks again, refuses unless saving is locked, then asks the
+  // idle menu scenario to open the appearance screen through the menu-event blackboard (the way
+  // GameObject.TriggerMenuEvent does: back to None first, so the same event can fire again).
+  public static func Open(cid: String, mode: Int32) -> String {
+    let game = GetGameInstance();
+    if XFBridgeActions.CharacterMenuOpen() {
+      return "{\"ok\":true,\"requested\":false,\"note\":\"the appearance screen is already open\"}";
+    }
+    let refusal = XFCharacter.OpenRefusal();
+    if StrLen(refusal) > 0 {
+      return refusal;
+    }
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) || !registry.IsSaveLockHeld() {
+      return XFJson.Fail("save_lock_not_held", "the bridge hasn't taken its save lock, so the appearance screen wasn't opened");
+    }
+    let locks: array<gameSaveLock>;
+    if !GameInstance.IsSavingLocked(game, locks) {
+      return XFJson.Fail("save_lock_not_held", "the game doesn't report saving as locked yet, so the appearance screen wasn't opened; try again in a moment");
+    }
+    let board = GameInstance.GetBlackboardSystem(game).Get(GetAllBlackboardDefs().MenuEventBlackboard);
+    if !IsDefined(board) {
+      return XFJson.Fail("unavailable", "the game's menu-event board isn't available");
+    }
+    registry.RequestCreatorOpen(mode, EngineTime.ToFloat(GameInstance.GetEngineTime(game)), cid);
+    if IsNameValid(board.GetName(GetAllBlackboardDefs().MenuEventBlackboard.MenuEventToTrigger)) {
+      board.SetName(GetAllBlackboardDefs().MenuEventBlackboard.MenuEventToTrigger, n"None");
+    }
+    board.SetName(GetAllBlackboardDefs().MenuEventBlackboard.MenuEventToTrigger, n"OnXFBridgeOpenCreator");
+    XFBridgeLog.Info(cid, "cc.open requested (edit mode " + XFCharacter.ModeName(mode) + ", saving locked); the idle menu scenario opens the mirror's scenario");
+    return "{\"ok\":true,\"requested\":true,\"edit_mode\":" + XFJson.Str(XFCharacter.ModeName(mode)) + ",\"saving_locked\":true,\"route\":\"menu_event\"}";
+  }
+
+  // cc.open gave up waiting: withdraw the request so a late menu event opens nothing.
+  public static func CancelOpen(cid: String) -> String {
+    let registry = XFBridgeRegistry.Get();
+    let cancelled = IsDefined(registry) && registry.CancelCreatorOpen();
+    XFBridgeLog.Info(cid, "cc.open request withdrawn=" + XFJson.Flag(cancelled));
+    return "{\"ok\":true,\"withdrawn\":" + XFJson.Flag(cancelled) + "}";
+  }
+
+  // cc.page: the preview camera to a region (slot "" = the menu's starting view).
+  public static func Page(cid: String, slot: String) -> String {
+    if !XFBridgeActions.CharacterMenuOpen() {
+      return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open");
+    }
+    let menu = XFBridgeRegistry.Get().GetCharacterMenu();
+    if StrLen(slot) == 0 {
+      menu.XFBridgeCameraTo(n"None");
+    } else {
+      menu.XFBridgeCameraTo(StringToName(slot));
+    }
+    XFBridgeLog.Info(cid, "cc.page camera slot '" + slot + "'; undo: cc.page default");
+    return "{\"ok\":true,\"slot\":" + XFJson.Str(slot) + "}";
+  }
+
   public static func HasOption(group: String, option: String, fpp: Bool) -> Bool {
     let state = GameInstance.GetCharacterCustomizationSystem(GetGameInstance()).GetState();
     return IsDefined(state) && state.HasOption(StringToName(group), StringToName(option), fpp);
@@ -1223,7 +1551,7 @@ public abstract class XFCharacter {
   // Sets one option on the open appearance screen, exactly as the menu's own controls do
   // (ApplyChangeToOption; characterCreationBodyMorphMenu.script:481, 814, 828). Never confirms:
   // the change stays a preview until the player confirms or backs out of the screen.
-  public static func Apply(cid: String, option: String, index: Int32) -> String {
+  public static func Apply(cid: String, option: String, index: Int32, value: String) -> String {
     let game = GetGameInstance();
     if !XFBridgeActions.CharacterMenuOpen() {
       return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open");
@@ -1241,6 +1569,18 @@ public abstract class XFCharacter {
       return XFJson.Fail("bad_params", "option '" + option + "' can't be changed on this screen");
     }
     let count = XFCharacter.Count(match);
+    let matchedBy = "index";
+    if index < 0 {
+      // By the value's name or on-screen label (the plugin passes index -1 with a value).
+      index = XFCharacter.FindValue(match, value);
+      matchedBy = "value";
+      if index == -2 {
+        return XFJson.Fail("bad_params", "more than one value of '" + option + "' matches '" + value + "'; use its index (" + XFCharacter.SomeValues(match) + ")");
+      }
+      if index < 0 {
+        return XFJson.Fail("bad_params", "no value of '" + option + "' is named or labelled '" + value + "' (" + XFCharacter.SomeValues(match) + ")");
+      }
+    }
     if index < 0 || index >= count {
       return XFJson.Fail("bad_params", "option '" + option + "' has values 0 to " + IntToString(count - 1) + ", not " + IntToString(index));
     }
@@ -1256,7 +1596,7 @@ public abstract class XFCharacter {
       route = "system";
     }
     XFBridgeLog.Info(cid, "cc.apply " + NameToString(match.info.name) + " " + IntToString(before) + " -> " + IntToString(index) + " via " + route + "; undo: cc.apply index " + IntToString(before) + ", or Back in the mirror (discards every change)");
-    return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + ",\"route\":" + XFJson.Str(route) + ",\"row_updated\":" + XFJson.Flag(Equals(route, "row")) + "}";
+    return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + ",\"value_label\":" + XFJson.Str(XFCharacter.ValueText(match, index)) + ",\"matched_by\":" + XFJson.Str(matchedBy) + ",\"route\":" + XFJson.Str(route) + ",\"row_updated\":" + XFJson.Flag(Equals(route, "row")) + "}";
   }
 
   // Selects index on the menu row that shows this option (matched by UI slot, as the menu's own
@@ -1325,11 +1665,14 @@ public abstract class XFWorld {
   }
 
   // Sets the clock (SetGameTimeByHMS), or restores an exact earlier time including the day
-  // (SetGameTimeBySeconds) when totalSeconds >= 0.
+  // (SetGameTimeBySeconds) when totalSeconds >= 0. In normal play, and with the appearance screen
+  // open (edit mode): the game's own time-skip menu sets the clock while its full-screen menu is open
+  // (timeSkipPopup.script:274), and the appearance screen only freezes the world with time dilation.
+  // Not in photo mode (its own time slider) or any other menu.
   public static func SetTime(cid: String, hours: Int32, minutes: Int32, seconds: Int32, totalSeconds: Int32) -> String {
-    let refusal = XFWorld.RequireGameplay();
-    if StrLen(refusal) > 0 {
-      return refusal;
+    let phase = XFBridgeActions.Phase();
+    if NotEquals(phase, "gameplay") && NotEquals(phase, "character_menu") {
+      return XFJson.Fail("not_in_gameplay", "the clock can be set in normal play or with the appearance screen open; the game is in '" + phase + "'");
     }
     XFBridgeActions.EnsureSaveLock(cid);
     let time = GameInstance.GetTimeSystem(GetGameInstance());
@@ -1341,7 +1684,7 @@ public abstract class XFWorld {
     }
     let after = GameTime.GetSeconds(time.GetGameTime());
     XFBridgeLog.Info(cid, "world time " + IntToString(before) + " -> " + IntToString(after) + " s; undo: world.time.set total_seconds=" + IntToString(before));
-    return "{\"ok\":true,\"before_total_seconds\":" + IntToString(before) + ",\"after_total_seconds\":" + IntToString(after) + "}";
+    return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"before_total_seconds\":" + IntToString(before) + ",\"after_total_seconds\":" + IntToString(after) + "}";
   }
 
   // Freezes the world the way the appearance screen does (time dilation 0 on the world and on V,
@@ -1371,5 +1714,94 @@ public abstract class XFWorld {
     registry.SetWorldFrozen(true);
     XFBridgeLog.Info(cid, "world frozen (time dilation 0, reason XFBridgeFreeze); undo: world.pause paused=" + XFJson.Flag(wasFrozen) + ", or the kill switch");
     return "{\"ok\":true,\"frozen\":true,\"was_frozen\":" + XFJson.Flag(wasFrozen) + "}";
+  }
+}
+
+// --- Settings (game.options.read) ---------------------------------------------------------------
+//
+// The player's graphics and display settings, read through the game's own user-settings API
+// (UserSettings, ConfigGroup and the ConfigVar types; orphans.script and userSettingsData.script)
+// from the groups the plugin names. Read-only: no setter is called.
+
+public abstract class XFSettings {
+  public static func Var(v: ref<ConfigVar>) -> String {
+    let t = v.GetType();
+    if Equals(t, ConfigVarType.Bool) {
+      let b = v as ConfigVarBool;
+      return "{\"type\":\"bool\",\"value\":" + XFJson.Flag(b.GetValue()) + "}";
+    }
+    if Equals(t, ConfigVarType.Int) {
+      let i = v as ConfigVarInt;
+      return "{\"type\":\"int\",\"value\":" + IntToString(i.GetValue()) + "}";
+    }
+    if Equals(t, ConfigVarType.Float) {
+      let f = v as ConfigVarFloat;
+      return "{\"type\":\"float\",\"value\":" + XFJson.Num(f.GetValue()) + "}";
+    }
+    if Equals(t, ConfigVarType.Name) {
+      let n = v as ConfigVarName;
+      return "{\"type\":\"name\",\"value\":" + XFJson.Name(n.GetValue()) + "}";
+    }
+    if Equals(t, ConfigVarType.IntList) {
+      let il = v as ConfigVarListInt;
+      return "{\"type\":\"int_list\",\"value\":" + IntToString(il.GetValue()) + ",\"index\":" + IntToString(il.GetIndex()) + "}";
+    }
+    if Equals(t, ConfigVarType.FloatList) {
+      let fl = v as ConfigVarListFloat;
+      return "{\"type\":\"float_list\",\"value\":" + XFJson.Num(fl.GetValue()) + ",\"index\":" + IntToString(fl.GetIndex()) + "}";
+    }
+    if Equals(t, ConfigVarType.StringList) {
+      let sl = v as ConfigVarListString;
+      return "{\"type\":\"string_list\",\"value\":" + XFJson.Str(sl.GetValue()) + ",\"index\":" + IntToString(sl.GetIndex()) + "}";
+    }
+    if Equals(t, ConfigVarType.NameList) {
+      let nl = v as ConfigVarListName;
+      return "{\"type\":\"name_list\",\"value\":" + XFJson.Name(nl.GetValue()) + ",\"index\":" + IntToString(nl.GetIndex()) + "}";
+    }
+    return "{\"type\":\"unknown\"}";
+  }
+
+  // groups: comma-separated group paths (the plugin allowlists them).
+  public static func Read(cid: String, groups: String) -> String {
+    let handler = new inkMenuScenario().GetSystemRequestsHandler();
+    if !IsDefined(handler) {
+      return XFJson.Fail("unavailable", "the game's settings aren't available yet");
+    }
+    let settings = handler.GetUserSettings();
+    if !IsDefined(settings) {
+      return XFJson.Fail("unavailable", "the game's settings aren't available yet");
+    }
+    let names = StrSplit(groups, ",");
+    let out = "{\"ok\":true,\"groups\":{";
+    let g = 0;
+    while g < ArraySize(names) {
+      if g > 0 {
+        out += ",";
+      }
+      out += XFJson.Str(names[g]) + ":";
+      let group = settings.GetGroup(StringToName(names[g]));
+      if !IsDefined(group) {
+        out += "null";
+      } else {
+        let vars = group.GetVars(false);
+        out += "{";
+        let i = 0;
+        let n = 0;
+        while i < ArraySize(vars) {
+          if IsDefined(vars[i]) {
+            if n > 0 {
+              out += ",";
+            }
+            out += XFJson.Name(vars[i].GetName()) + ":" + XFSettings.Var(vars[i]);
+            n += 1;
+          }
+          i += 1;
+        }
+        out += "}";
+      }
+      g += 1;
+    }
+    XFBridgeLog.Debug(cid, "settings read: " + groups);
+    return out + "}}";
   }
 }

@@ -26,6 +26,12 @@ public:
         entry.count += 1;
     }
 
+    bool Has(const std::string& aLayer) const
+    {
+        std::scoped_lock _(m_mutex);
+        return m_layers.find(aLayer) != m_layers.end();
+    }
+
     nlohmann::json Snapshot() const
     {
         std::scoped_lock _(m_mutex);

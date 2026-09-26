@@ -4,7 +4,7 @@
   "title": "Session 2 (continued): gloss, shimmer and metal under a light sweep; depth in motion; lines sharpness",
   "card": "experiments/020-session-2/README.md",
   "requires": [
-    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (session 2 build) and XF Runtime Bridge (-writes build of this commit, with its XF camera presets)",
+    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (session 2 build) and XF Runtime Bridge (-writes build of this commit, with its XF camera presets; cc.open, cc.page and game.options.read are new in it)",
     "a loaded save with V in the world, in an open spot",
     "a fresh manual safety save (step p0-ready)",
     "the game window in front (photo.open presses the photo-mode key in it)"
@@ -21,15 +21,26 @@
       "command": "game.status"
     },
     {
-      "do": "ask",
-      "label": "p0-ready",
-      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the game version, the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Stand V in an open, quiet spot with room in front of her (photo mode's camera needs a few metres); keep the game window in front."
+      "do": "run",
+      "label": "p0-options",
+      "command": "game.options.read",
+      "continue_on_error": true
     },
     {
       "do": "ask",
+      "label": "p0-ready",
+      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the resolution (the bridge has read the graphics settings; p0-options). (3) Stand V in an open, quiet spot with room in front of her (photo mode's camera needs a few metres); keep the game window in front."
+    },
+    {
+      "do": "run",
       "label": "p1-gloss-a-open-creator",
-      "text": "Open the character creator (a mirror's appearance screen, or F12 with Character Customization Anywhere) and go to the page with the XF row. Leave its camera on the eyes zoom.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-a-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -70,6 +81,20 @@
       "do": "wait",
       "label": "p1-gloss-a-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -265,10 +290,15 @@
       "text": "Coordinator check before going on: in p1-gloss-a-face the face is centred and fills the face crop, no mouse cursor is visible, and the sweep captures show the light moving across the face. If not, stop and note what's wrong. Maintainer: nothing to do."
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p1-gloss-b-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-b-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -291,6 +321,20 @@
       "do": "wait",
       "label": "p1-gloss-b-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -481,10 +525,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p1-gloss-c-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-c-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -507,6 +556,20 @@
       "do": "wait",
       "label": "p1-gloss-c-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -697,10 +760,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p1-gloss-d-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-d-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -723,6 +791,20 @@
       "do": "wait",
       "label": "p1-gloss-d-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -913,10 +995,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p1-shimmer-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-shimmer-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -939,6 +1026,20 @@
       "do": "wait",
       "label": "p1-shimmer-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1162,10 +1263,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p1-metal-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-metal-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1188,6 +1294,20 @@
       "do": "wait",
       "label": "p1-metal-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p1-metal-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-metal-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1378,10 +1498,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p2-depth-c-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p2-depth-c-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1404,6 +1529,20 @@
       "do": "wait",
       "label": "p2-depth-c-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p2-depth-c-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p2-depth-c-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1542,10 +1681,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p2-depth-d-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p2-depth-d-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1568,6 +1712,20 @@
       "do": "wait",
       "label": "p2-depth-d-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p2-depth-d-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p2-depth-d-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1596,6 +1754,20 @@
       "do": "wait",
       "label": "p2-lines-new-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-new-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p2-lines-new-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1732,10 +1904,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p2-lines-old-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p2-lines-old-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1758,6 +1935,20 @@
       "do": "wait",
       "label": "p2-lines-old-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-old-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p2-lines-old-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1899,10 +2090,15 @@
       "text": "Quick verdicts for the coordinator: which Gloss reads most like four distinct finishes; does Shimmer flash as V turns and still differ from Satin at face distance; are the Metal ramp's angular highlights gone, and is there a seam along the lid; is Lines · new sharper than Lines · old close up?"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "p3-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p3-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1927,9 +2123,50 @@
       "ms": 1500
     },
     {
-      "do": "ask",
-      "label": "p3-piercing-9-black",
-      "text": "Optional (card step 9): set piercing style 9 in black; the bridge photographs the creator's eyes zoom."
+      "do": "run",
+      "label": "p3-read-piercings",
+      "command": "player.appearance",
+      "input": {
+        "option": "piercings"
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "p3-piercing-9-black-set0",
+      "option": "piercings",
+      "value": "09",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-9-black-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "p3-piercing-9-black-set1",
+      "option": "piercings_color",
+      "value": "black",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-9-black-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p3-piercing-9-black-page",
+      "command": "cc.page",
+      "input": {
+        "page": "head"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-9-black-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1941,9 +2178,42 @@
       "label": "p3-piercing-9-black-shot-full"
     },
     {
-      "do": "ask",
-      "label": "p3-piercing-1-silver",
-      "text": "Set piercing style 1 in silver."
+      "do": "apply cc",
+      "label": "p3-piercing-1-silver-set0",
+      "option": "piercings",
+      "value": "01",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-1-silver-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "p3-piercing-1-silver-set1",
+      "option": "piercings_color",
+      "value": "silver",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-1-silver-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p3-piercing-1-silver-page",
+      "command": "cc.page",
+      "input": {
+        "page": "head"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-1-silver-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1955,9 +2225,42 @@
       "label": "p3-piercing-1-silver-shot-full"
     },
     {
-      "do": "ask",
-      "label": "p3-piercing-1-gold",
-      "text": "Set piercing style 1 in gold."
+      "do": "apply cc",
+      "label": "p3-piercing-1-gold-set0",
+      "option": "piercings",
+      "value": "01",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-1-gold-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "p3-piercing-1-gold-set1",
+      "option": "piercings_color",
+      "value": "gold",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-1-gold-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p3-piercing-1-gold-page",
+      "command": "cc.page",
+      "input": {
+        "page": "head"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-piercing-1-gold-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1969,9 +2272,30 @@
       "label": "p3-piercing-1-gold-shot-full"
     },
     {
-      "do": "ask",
-      "label": "p3-eye-24",
-      "text": "Set eye colour 24 (the heart design)."
+      "do": "apply cc",
+      "label": "p3-eye-24-set0",
+      "option": "eyes_color",
+      "value": "24",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-eye-24-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "p3-eye-24-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "p3-eye-24-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1981,6 +2305,19 @@
     {
       "do": "capture",
       "label": "p3-eye-24-shot-full"
+    },
+    {
+      "do": "run",
+      "label": "p3-read-colours",
+      "command": "player.appearance",
+      "input": {
+        "option": "piercings_color"
+      }
+    },
+    {
+      "do": "note",
+      "label": "p3-check",
+      "text": "Coordinator: if a colour step failed (the value's name didn't contain black, silver or gold), read p3-read-colours and repeat that step with its index."
     },
     {
       "do": "run",

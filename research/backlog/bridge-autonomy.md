@@ -1,6 +1,6 @@
 # Runtime bridge autonomy
 
-**Status: ranks 1, 2, 3, 5, 6 and 9 built and tested offline (claude/bridge-autonomy, 26 September 2026); none seen in game yet. The rest are queued.** In the first bridge session the player still had to open photo mode, open the character creator, press Confirm there, switch photo-mode light 1 on, move the mouse cursor out of shot, and stand V where the drone camera had room ([test card results](../runtime/runtime-bridge-test-card.md#first-session-bridge-checks)). This page ranks the bridge features that remove those steps, from the photo-mode and creator study in [knowledge/photo-mode.md](../../knowledge/photo-mode.md), which holds the evidence and citations. It is a queue for the [runtime bridge](../../projects/xf-runtime-bridge/README.md) track under [runtime access](../../knowledge/runtime-access.md).
+**Status: ranks 1, 2, 3, 4, 5, 6 and 9 built and tested offline (ranks 1-3, 5, 6 and 9 on 26 September; rank 4, `cc.open`, in batch 3 on 27 September with the sessions plan's B2, B3, B6, B8 and B9); none seen in game yet. The rest are queued.** In the first bridge session the player still had to open photo mode, open the character creator, press Confirm there, switch photo-mode light 1 on, move the mouse cursor out of shot, and stand V where the drone camera had room ([test card results](../runtime/runtime-bridge-test-card.md#first-session-bridge-checks)). This page ranks the bridge features that remove those steps, from the photo-mode and creator study in [knowledge/photo-mode.md](../../knowledge/photo-mode.md), which holds the evidence and citations. It is a queue for the [runtime bridge](../../projects/xf-runtime-bridge/README.md) track under [runtime access](../../knowledge/runtime-access.md).
 
 Effort is rough agent effort once the bridge's redscript actions layer is in place: **S** is under half a day, **M** one to two days, **L** longer or research-heavy. Every write keeps the bridge's rules: behind `allow_writes` and its class, reversible with an `undo`, cleared by the kill switch, logged ([design §4](../runtime/runtime-bridge-design.md#4-safety-model)).
 
@@ -32,8 +32,9 @@ Effort is rough agent effort once the bridge's redscript actions layer is in pla
 | 5 | `cc.confirm` and `cc.back` (the menu's own `ConfirmCustomizedCharacter()` / `ConfirmBackConfirmation()`), refused unless `[bridge] allow_creator_leave = true`, which only the -writes build sets; refused in the new-game mode. `player.appearance` reports `menu.updating_finalized_state` and `edit_mode` (question 1 below) |
 | 6 | `cc.apply` goes through the row (`SetSelected…(info, index, true)`), falling back to the bare call when no row shows the option; the result names the route |
 | 9 | `photo.open` in the tools (`tools/input/photo-key.ts`): the player's binding from `UserSettings.json` or `IK_N`, sent only to the game's own window after the write gate, the phase and `photo_mode_can_open` pass; `sendinput` refuses unless the game window is in front. `photo.enter` now refuses without `route: "quest"` |
+| 4 | `cc.open` (batch 3, claude/bridge-batch3): no pause menu and no wrapped vanilla function. The bridge's own event on the idle menu scenario, raised through the game's menu-event blackboard, switches to the mirror's scenario with a `MorphMenuUserData` carrying the edit tag (`mode` mirror = `HairDresser`, ripperdoc = `Ripperdoc`; the vanilla scenario sets `m_updatingFinalizedState`). Refused outside normal play, in combat, a vehicle or a scene, where photo mode isn't allowed or under a combat, scene, tier or moving-platform save lock; takes the save lock and asks only once the game reports saving locked; behind `allow_creator_leave` with Confirm and Back ([photo mode §3.1](../../knowledge/photo-mode.md#31-how-character-customization-anywhere-opens-it)) |
 
-Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. Batch 2 (claude/bridge-batch2, offline) hardened these for the session: the key is sent only to `Cyberpunk2077.exe`, only on an explicit "photo mode allowed", re-checked after the window comes forward, never on an unbound or layout-dependent binding; the cursor hide works only in photo mode ([code-health ledger](../authoring/code-health.md#fixed-in-claudebridge-batch2), RB-34..41). **Next:** rank 4 (`cc.open`, after question 1), rank 7 (scene attributes), rank 8 (studio spot), then ranks 10–13.
+Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. Batch 2 (claude/bridge-batch2, offline) hardened these for the session: the key is sent only to `Cyberpunk2077.exe`, only on an explicit "photo mode allowed", re-checked after the window comes forward, never on an unbound or layout-dependent binding; the cursor hide works only in photo mode ([code-health ledger](../authoring/code-health.md#fixed-in-claudebridge-batch2), RB-34..41). **Next:** rank 7 (scene attributes; also B10), rank 8 (studio spot), B7 (worn items), then ranks 10–13 (B5 is rank 10). Question 1 below still matters for sessions that use F12; `cc.open` doesn't depend on it.
 
 ## Questions for the next session
 
@@ -46,17 +47,20 @@ Batch these into the next bridge session's test card:
 
 ## Suggestions from the sessions plan
 
-The [next-sessions plan](../runtime/next-sessions-plan.md#bridge-suggestions-for-the-autonomy-backlog) lists the player steps its ten sittings still need, as B1–B10 (unranked here until the autonomy checks have run):
-- `cc.open` (rank 4) removes about 30 creator-opening asks.
-- `world.time.set` in the appearance screen.
-- `cc_apply` in the session scripts for the vanilla rows still asked by hand; a script generator change only.
-- A read, then a write, of graphics settings (upscaler, RT/PT, SSS quality).
-- A spawned light that moves in elevation (rank 10).
-- A read-only GameOptions dump.
-- A worn-item read, then equip and unequip.
-- A full-body camera preset.
-- `cc.page`, if `cc_apply` doesn't move the creator camera.
-- Photo-mode NPC hiding (rank 7).
+The [next-sessions plan](../runtime/next-sessions-plan.md#bridge-suggestions-for-the-autonomy-backlog) lists the player steps its ten sittings still need, as B1–B10. Batch 3 (claude/bridge-batch3, 27 September, offline; [checks](../runtime/runtime-bridge-test-card.md#batch-3-checks-the-creator-from-gameplay-and-the-settings-record)):
+
+| # | Suggestion | Status |
+|---|---|---|
+| B1 | `cc.open` (rank 4), about 30 creator-opening asks | **Built** (rank 4 above); the session scripts open the creator through it |
+| B2 | `world.time.set` in the appearance screen | **Built:** allowed with the screen open (the game's own time-skip menu sets the clock under a full-screen menu); `world.pause` stays refused there |
+| B3 | `cc_apply` for the vanilla rows in the session scripts | **Built:** `cc.apply` takes a value by on-screen label or name and an option by slot; the scripts set piercings and their colours, eye colour, eye shape (ripperdoc mode), hairstyle and face cyberware through it. Asks: session 2 from 19 to 5, session 3 from 28 to 11 |
+| B4 | A read, then a write, of graphics settings | **Read built** as part of B6 (the summary: upscaler and mode, frame generation, RT, PT, SSS quality, HDR, camera effects). Writing the player's settings stays out: it would change the player's own profile |
+| B5 | A spawned light that moves in elevation (rank 10) | Queued |
+| B6 | A read-only GameOptions dump | **Built** as `game.options.read`: user settings in script, the engine's render options through the CET layer |
+| B7 | A worn-item read, then equip and unequip | Queued |
+| B8 | A full-body camera preset | **Built:** XF preset 6 (test profile only), the `full-body` framing and capture region |
+| B9 | `cc.page` | **Built:** the creator's camera by body region (the menu's own `RequestCameraChange`); cheap and camera-only. `cc.apply` through a row already moves the camera to that option's region |
+| B10 | Photo-mode NPC hiding (rank 7) | Queued |
 
 ## Decisions for the maintainer
 

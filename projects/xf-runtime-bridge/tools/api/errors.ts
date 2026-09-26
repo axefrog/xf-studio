@@ -38,8 +38,14 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   photo_key_needed:
     "The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens.",
   creator_leave_disabled:
-    "Confirming or backing out of the appearance screen is switched off in this bridge's config.ini (allow_creator_leave). Ask the player to press Confirm or Back.",
-  not_in_gameplay: "This needs V in the world: load a save and close any menus first.",
+    "Opening, confirming or backing out of the appearance screen is switched off in this bridge's config.ini (allow_creator_leave; only the XF test profile's build allows it). Ask the player to open it, or to press Confirm or Back.",
+  not_safe_now:
+    "The game isn't at a safe moment for the appearance screen (combat, a scene, a vehicle, or somewhere photo mode isn't allowed). Nothing was opened. Walk V somewhere quiet and try again.",
+  save_lock_not_held:
+    "The appearance screen wasn't opened because the game hasn't confirmed that saving is locked yet. Try again in a moment.",
+  creator_open_timeout:
+    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and nothing opened. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
+  not_in_gameplay: "This needs V in the world (or, for the clock, the appearance screen): load a save and close any other menus first.",
   not_in_character_menu:
     "Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first.",
   unsupported: "This game doesn't offer a safe way to do that yet.",

@@ -10,3 +10,6 @@ public static native func XFBridge_Info() -> String
 public static native func XFBridge_Log(layer: String, level: String, cid: String, message: String) -> Void
 public static native func XFBridge_Announce(layer: String, detail: String) -> Void
 public static native func XFBridge_Kill(reason: String) -> Bool
+// The CET layer answers game.options.read's render options through these two (core/OptionsExchange.hpp).
+public static native func XFBridge_OptionsWanted() -> String
+public static native func XFBridge_OptionsReport(values: String) -> Bool

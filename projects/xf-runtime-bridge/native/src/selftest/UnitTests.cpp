@@ -22,6 +22,7 @@
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
 #include "core/Log.hpp"
+#include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/ScriptFrame.hpp"
 #include "core/Session.hpp"
@@ -864,6 +865,173 @@ void FaceTests()
     Check("no undo when the menu's expression is unknown, and a note says what to do",
           unknown["undo"].is_null() && unknown.contains("undo_note"), unknown.dump());
 }
+// Batch 3: cc.open's parameters and sequence, cc.page, cc.apply by value, game.options.read's
+// parameters and the render-option exchange with the CET layer.
+void CreatorAndOptionsTests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+
+    // cc.apply: index or value, not both.
+    const auto byValue = p::ParseCharacterApply(json::parse(R"({"option":"piercings_color","value":"gold"})"));
+    Check("cc.apply takes a value instead of an index (index -1)", byValue.index == -1 && byValue.value == "gold");
+    Check("cc.apply keeps index requests as they were",
+          p::ParseCharacterApply(json::parse(R"({"option":"XF","index":4})")).index == 4 &&
+              p::ParseCharacterApply(json::parse(R"({"option":"XF","index":4})")).value.empty());
+    Check("cc.apply refuses index with value, and neither",
+          ParamsCode([] { p::ParseCharacterApply(json::parse(R"({"option":"XF","index":1,"value":"01"})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseCharacterApply(json::parse(R"({"option":"XF"})")); }) == "bad_params");
+
+    // cc.open parameters.
+    const auto open = p::ParseCreatorOpen(json::object());
+    Check("cc.open defaults to the mirror's edit mode and a 5 s wait", open.mode == p::CreatorMode::Mirror && open.timeoutMs == 5000);
+    Check("cc.open takes the ripperdoc mode (edit tag 2)",
+          static_cast<int32_t>(p::ParseCreatorOpen(json::parse(R"({"mode":"ripperdoc"})")).mode) == 2 &&
+              static_cast<int32_t>(p::CreatorMode::Mirror) == 1);
+    Check("cc.open refuses the new-game mode and waits outside 0.5-15 s",
+          ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"mode":"new_game"})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"timeout_ms":100})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"timeout_ms":20000})")); }) == "bad_params");
+    Check("the creator gate's refusal names opening too",
+          [] {
+              try
+              {
+                  p::CreatorLeaveAllowed(false);
+              }
+              catch (const xfb::MethodError& e)
+              {
+                  return std::string(e.what()).find("opening") != std::string::npos;
+              }
+              return false;
+          }());
+
+    // cc.page.
+    const auto page = p::ParseCreatorPage(json::parse(R"({"page":"eyes"})"));
+    Check("cc.page maps eyes to the creator's UI_Eyes slot and default to the starting view",
+          page.slot == "UI_Eyes" && p::ParseCreatorPage(json::parse(R"({"page":"default"})")).slot.empty());
+    Check("cc.page refuses unknown pages and raw slot names",
+          ParamsCode([] { p::ParseCreatorPage(json::parse(R"({"page":"UI_Eyes"})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseCreatorPage(json::object()); }) == "bad_params");
+
+    // cc.open's sequence.
+    {
+        std::vector<std::string> calls;
+        int polls = 0;
+        bool cancelled = false;
+        w::CreatorOpenOps ops;
+        ops.prepare = [&] {
+            calls.push_back("prepare");
+            return json{{"save_lock_requested", true}};
+        };
+        ops.settle = [&] { calls.push_back("settle"); };
+        ops.open = [&] {
+            calls.push_back("open");
+            return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "menu_event"}};
+        };
+        ops.phase = [&] { return ++polls >= 3 ? std::string("character_menu") : std::string("gameplay"); };
+        ops.cancel = [&] { cancelled = true; };
+        ops.sleep = [](std::chrono::milliseconds) {};
+        const auto out = w::CreatorOpen(p::ParseCreatorOpen(json::object()), ops);
+        Check("cc.open prepares, settles, then asks, and waits for the appearance screen",
+              calls == std::vector<std::string>{"prepare", "settle", "open"} && out["opened"] == true && out["changed"] == true &&
+                  out["edit_mode"] == "HairDresser" && out["waited_ms"] == 200 && !cancelled,
+              out.dump());
+        Check("cc.open's undo is cc.back", out["undo"] == json{{"method", "cc.back"}, {"params", json::object()}}, out.dump());
+
+        polls = 0;
+        calls.clear();
+        ops.phase = [&] {
+            ++polls;
+            return std::string("gameplay");
+        };
+        const auto timedOut = ParamsCode([&] { w::CreatorOpen(p::ParseCreatorOpen(json::parse(R"({"timeout_ms":500})")), ops); });
+        Check("cc.open that never sees the screen withdraws the request and says so",
+              timedOut == "creator_open_timeout" && cancelled && polls == 6, timedOut + " polls=" + std::to_string(polls));
+
+        calls.clear();
+        ops.prepare = [&] {
+            calls.push_back("prepare");
+            return json{{"already_open", true}};
+        };
+        const auto already = w::CreatorOpen(p::ParseCreatorOpen(json::object()), ops);
+        Check("cc.open with the screen already open changes nothing and has no undo",
+              already["changed"] == false && already["undo"].is_null() && calls == std::vector<std::string>{"prepare"}, already.dump());
+
+        calls.clear();
+        ops.prepare = [&]() -> json { throw xfb::MethodError("not_safe_now", "V is in combat"); };
+        Check("a refused moment stops cc.open before the save lock settles or anything is asked",
+              ParamsCode([&] { w::CreatorOpen(p::ParseCreatorOpen(json::object()), ops); }) == "not_safe_now" && calls.empty());
+    }
+
+    // game.options.read parameters.
+    const auto options = p::ParseGameOptions(json::object());
+    Check("game.options.read reads every settings group and the default render options",
+          options.settings && options.renderOptions && options.groups == p::SettingsGroups() &&
+              options.names == p::DefaultRenderOptions() && options.names.size() > 40 &&
+              options.names.front() == "Editor/Characters/Hair/GlobalLight/R");
+    Check("game.options.read takes a subset of the allowlisted settings groups",
+          p::ParseGameOptions(json::parse(R"({"groups":["/graphics/raytracing"],"render_options":false})")).groups ==
+              std::vector<std::string>{"/graphics/raytracing"} &&
+              ParamsCode([] { p::ParseGameOptions(json::parse(R"({"groups":["/gameplay/hud"]})")); }) == "bad_params");
+    Check("render option names are Category/Name with letters, digits and _ only",
+          p::ParseGameOptions(json::parse(R"({"names":["Editor/Characters/Eyes/DiffuseBoost"]})")).names.size() == 1 &&
+              ParamsCode([] { p::ParseGameOptions(json::parse(R"({"names":["NoCategory"]})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameOptions(json::parse(R"({"names":["A/B;rm"]})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameOptions(json::parse(R"({"names":["/A/B"]})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameOptions(json::parse(R"({"names":["A/B","A/B"]})")); }) == "bad_params");
+    Check("game.options.read refuses reading nothing",
+          ParamsCode([] { p::ParseGameOptions(json::parse(R"({"settings":false,"render_options":false})")); }) == "bad_params");
+
+    // The render-option exchange with the CET layer.
+    {
+        xfb::OptionsExchange exchange;
+        Check("nothing is pending before a request", exchange.Pending().empty());
+        const auto seq = exchange.Request({"A/B", "C/D"});
+        const auto pending = json::parse(exchange.Pending());
+        Check("a request is pending with its seq and names", pending["seq"] == seq && pending["names"].size() == 2, pending.dump());
+        std::string why;
+        Check("an answer for another seq is refused",
+              !exchange.Report(json{{"seq", seq + 1}, {"values", json::object()}}.dump(), &why) && !why.empty(), why);
+        Check("an answer naming an option that wasn't asked for is refused",
+              !exchange.Report(json{{"seq", seq}, {"values", {{"X/Y", "1"}}}}.dump()));
+        Check("an answer with a long or non-text value is refused",
+              !exchange.Report(json{{"seq", seq}, {"values", {{"A/B", std::string(300, 'x')}}}}.dump()) &&
+                  !exchange.Report(json{{"seq", seq}, {"values", {{"A/B", 1}}}}.dump()));
+        Check("an answer that isn't JSON or is too large is refused",
+              !exchange.Report("{") && !exchange.Report(std::string(xfb::OptionsExchange::kMaxReportBytes + 1, ' ')));
+        std::thread cet([&] {
+            std::this_thread::sleep_for(20ms);
+            exchange.Report(json{{"seq", seq}, {"values", {{"A/B", "0.300000"}}}}.dump());
+        });
+        const auto answer = exchange.WaitFor(seq, 2000ms);
+        cet.join();
+        Check("the waiter gets the CET layer's answer, and nothing is pending after it",
+              answer && (*answer)["A/B"] == "0.300000" && !answer->contains("C/D") && exchange.Pending().empty());
+
+        const auto empty = exchange.Request({"A/B"});
+        Check("an empty Lua table (an empty list) counts as no values",
+              exchange.Report(json{{"seq", empty}, {"values", json::array()}}.dump()) && exchange.WaitFor(empty, 10ms)->empty());
+
+        const auto unanswered = exchange.Request({"A/B"});
+        const auto start = std::chrono::steady_clock::now();
+        Check("an unanswered request times out", !exchange.WaitFor(unanswered, 50ms) && MsSince(start) >= 45);
+        exchange.Withdraw(unanswered);
+        Check("a withdrawn request is no longer pending, and a late answer is refused",
+              exchange.Pending().empty() && !exchange.Report(json{{"seq", unanswered}, {"values", json::object()}}.dump()));
+
+        const auto last = exchange.Request({"A/B"});
+        std::thread killer([&] {
+            std::this_thread::sleep_for(20ms);
+            exchange.Cancel();
+        });
+        const auto killedAt = std::chrono::steady_clock::now();
+        const auto afterKill = exchange.WaitFor(last, 2000ms);
+        killer.join();
+        Check("the kill switch releases a waiter at once and refuses later requests",
+              !afterKill && MsSince(killedAt) < 1000 && exchange.Pending().empty() &&
+                  (exchange.Request({"A/B"}), exchange.Pending().empty()));
+    }
+}
 } // namespace
 
 int RunUnitTests()
@@ -881,6 +1049,7 @@ int RunUnitTests()
     ParamsTests();
     ScriptFrameTests();
     FaceTests();
+    CreatorAndOptionsTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

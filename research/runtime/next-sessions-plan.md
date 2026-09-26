@@ -206,7 +206,7 @@ This sitting needs the most player time. It needs a save whose V has Gorilla Arm
 
 ## Bridge suggestions (for the [autonomy backlog](../backlog/bridge-autonomy.md#suggestions-from-the-sessions-plan))
 
-Player steps this plan still needs, and what would remove them:
+Player steps this plan still needs, and what would remove them. B1, B2, B3, B6, B8 and B9 are built (bridge batch 3, offline only, B4 as a read; [status](../backlog/bridge-autonomy.md#suggestions-from-the-sessions-plan)); with that build staged, the rows below that ask M to open the creator or set a vanilla row become bridge steps, and the [batch 3 checks](runtime-bridge-test-card.md#batch-3-checks-the-creator-from-gameplay-and-the-settings-record) come first:
 
 | # | Capability | Removes | Plan rows |
 |---|---|---|---|

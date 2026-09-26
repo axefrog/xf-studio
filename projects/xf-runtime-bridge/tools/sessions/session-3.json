@@ -4,7 +4,7 @@
   "title": "Session 3: Glitter board, blink and creator checks",
   "card": "experiments/022-session-3/README.md",
   "requires": [
-    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build, with its XF camera presets)",
+    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build of batch 3 or later, with its XF camera presets)",
     "a loaded save with V in the world, in an open spot",
     "a fresh manual safety save (step p0-ready)",
     "the game window in front (photo.open presses the photo-mode key in it)"
@@ -21,15 +21,26 @@
       "command": "game.status"
     },
     {
-      "do": "ask",
-      "label": "p0-ready",
-      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the game version, the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Check that the XF selector lists Off plus six Glitter presets. Stand V in an open, quiet spot with room in front of her (photo mode's camera needs a few metres); keep the game window in front."
+      "do": "run",
+      "label": "p0-options",
+      "command": "game.options.read",
+      "continue_on_error": true
     },
     {
       "do": "ask",
+      "label": "p0-ready",
+      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the resolution (the bridge has read the graphics settings; p0-options). (3) Check that the XF selector lists Off plus six Glitter presets. Stand V in an open, quiet spot with room in front of her (photo mode's camera needs a few metres); keep the game window in front."
+    },
+    {
+      "do": "run",
       "label": "a-first-open-creator",
-      "text": "Open the character creator (a mirror's appearance screen, or F12 with Character Customization Anywhere) and go to the page with the XF row. Leave its camera on the eyes zoom.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-first-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -67,6 +78,20 @@
       "ms": 1500
     },
     {
+      "do": "run",
+      "label": "a-creator-a-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-creator-a-cc-page-settle",
+      "ms": 1000
+    },
+    {
       "do": "capture",
       "label": "a-creator-a-creator",
       "region": "cc-eyes"
@@ -81,6 +106,20 @@
       "do": "wait",
       "label": "a-creator-b-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-creator-b-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-creator-b-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -99,6 +138,20 @@
       "ms": 1500
     },
     {
+      "do": "run",
+      "label": "a-creator-c-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-creator-c-cc-page-settle",
+      "ms": 1000
+    },
+    {
       "do": "capture",
       "label": "a-creator-c-creator",
       "region": "cc-eyes"
@@ -113,6 +166,20 @@
       "do": "wait",
       "label": "a-creator-d-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-creator-d-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-creator-d-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -131,6 +198,20 @@
       "ms": 1500
     },
     {
+      "do": "run",
+      "label": "a-creator-e-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-creator-e-cc-page-settle",
+      "ms": 1000
+    },
+    {
       "do": "capture",
       "label": "a-creator-e-creator",
       "region": "cc-eyes"
@@ -147,6 +228,20 @@
       "ms": 1500
     },
     {
+      "do": "run",
+      "label": "a-creator-f-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-creator-f-cc-page-settle",
+      "ms": 1000
+    },
+    {
       "do": "capture",
       "label": "a-creator-f-creator",
       "region": "cc-eyes"
@@ -161,6 +256,20 @@
       "do": "wait",
       "label": "a-a-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-a-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-a-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -383,10 +492,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-b-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-b-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -409,6 +523,20 @@
       "do": "wait",
       "label": "a-b-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-b-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-b-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -625,10 +753,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-c-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-c-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -651,6 +784,20 @@
       "do": "wait",
       "label": "a-c-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-c-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-c-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -794,6 +941,15 @@
     },
     {
       "do": "run",
+      "label": "a-c-dlaa-options",
+      "command": "game.options.read",
+      "input": {
+        "render_options": false
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
       "label": "a-c-dlaa-photo",
       "command": "photo.open",
       "continue_on_error": true
@@ -905,10 +1061,15 @@
       "text": "Set the upscaler back to how it was."
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-d-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-d-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -931,6 +1092,20 @@
       "do": "wait",
       "label": "a-d-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-d-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-d-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1121,10 +1296,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-f-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-f-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1147,6 +1327,20 @@
       "do": "wait",
       "label": "a-f-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-f-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-f-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1354,10 +1548,15 @@
       "command": "photo.exit"
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-e-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-e-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1380,6 +1579,20 @@
       "do": "wait",
       "label": "a-e-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-e-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-e-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1524,10 +1737,15 @@
       "continue_on_error": true
     },
     {
-      "do": "ask",
+      "do": "run",
       "label": "a-clear-open-creator",
-      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
-      "replaced_by": "cc.open"
+      "command": "cc.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-clear-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
     },
     {
       "do": "run",
@@ -1552,6 +1770,20 @@
       "ms": 1500
     },
     {
+      "do": "run",
+      "label": "a-clear-e-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-clear-e-cc-page-settle",
+      "ms": 1000
+    },
+    {
       "do": "capture",
       "label": "a-clear-e-creator",
       "region": "cc-eyes"
@@ -1568,6 +1800,20 @@
       "ms": 1500
     },
     {
+      "do": "run",
+      "label": "a-clear-a-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-clear-a-cc-page-settle",
+      "ms": 1000
+    },
+    {
       "do": "capture",
       "label": "a-clear-a-creator",
       "region": "cc-eyes"
@@ -1582,6 +1828,20 @@
       "do": "wait",
       "label": "a-clear-off-settle",
       "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "a-clear-off-cc-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "a-clear-off-cc-page-settle",
+      "ms": 1000
     },
     {
       "do": "capture",
@@ -1611,64 +1871,215 @@
       "region": "cc-eyes"
     },
     {
-      "do": "ask",
-      "label": "b-shape-01",
-      "text": "Part B: set eye shape 01 and catch V's eyes closed in a blink (the bridge takes a burst next)."
+      "do": "run",
+      "label": "b-back",
+      "command": "cc.back",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "b-back-fallback",
+      "text": "If the creator is still open, press Back and confirm."
+    },
+    {
+      "do": "run",
+      "label": "b-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "b-open-creator",
+      "command": "cc.open",
+      "input": {
+        "mode": "ripperdoc"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "b-open-fallback",
+      "text": "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere). The eye-shape and cyberware rows need the ripperdoc's screen or F12; a mirror doesn't offer them."
+    },
+    {
+      "do": "run",
+      "label": "b-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "b-read-shapes",
+      "command": "player.appearance",
+      "input": {
+        "option": "eyes"
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "b-shape-01-set",
+      "option": "eyes",
+      "value": "01",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-01-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "b-shape-01-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-01-page-settle",
+      "ms": 800
     },
     {
       "do": "burst",
       "label": "b-shape-01-burst",
       "region": "cc-eyes",
-      "frames": 12,
-      "interval_ms": 120
+      "frames": 40,
+      "interval_ms": 100
     },
     {
-      "do": "ask",
-      "label": "b-shape-10",
-      "text": "Eye shape 10."
+      "do": "apply cc",
+      "label": "b-shape-10-set",
+      "option": "eyes",
+      "value": "10",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-10-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "b-shape-10-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-10-page-settle",
+      "ms": 800
     },
     {
       "do": "burst",
       "label": "b-shape-10-burst",
       "region": "cc-eyes",
-      "frames": 12,
-      "interval_ms": 120
+      "frames": 40,
+      "interval_ms": 100
     },
     {
-      "do": "ask",
-      "label": "b-shape-12",
-      "text": "Eye shape 12."
+      "do": "apply cc",
+      "label": "b-shape-12-set",
+      "option": "eyes",
+      "value": "12",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-12-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "b-shape-12-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-12-page-settle",
+      "ms": 800
     },
     {
       "do": "burst",
       "label": "b-shape-12-burst",
       "region": "cc-eyes",
-      "frames": 12,
-      "interval_ms": 120
+      "frames": 40,
+      "interval_ms": 100
     },
     {
-      "do": "ask",
-      "label": "b-shape-h011",
-      "text": "The eye shape that uses morph h011."
+      "do": "apply cc",
+      "label": "b-shape-h011-set",
+      "option": "eyes",
+      "value": "h011",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-h011-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "b-shape-h011-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-shape-h011-page-settle",
+      "ms": 800
     },
     {
       "do": "burst",
       "label": "b-shape-h011-burst",
       "region": "cc-eyes",
-      "frames": 12,
-      "interval_ms": 120
+      "frames": 40,
+      "interval_ms": 100
+    },
+    {
+      "do": "apply cc",
+      "label": "b-makeup-closed-shape",
+      "option": "eyes",
+      "value": "12",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "b-makeup-closed-settle",
+      "ms": 1500
     },
     {
       "do": "ask",
       "label": "b-makeup-closed",
-      "text": "Eye shape 12 with an XF look covering the upper lid: does bare skin show between the crease and the lashes when the eyes close?"
+      "text": "Eye shape 12 is set. Pick an XF look covering the upper lid (the coordinator can name one), then watch a blink: does bare skin show between the crease and the lashes when the eyes close?"
     },
     {
       "do": "burst",
       "label": "b-makeup-closed-burst",
       "region": "cc-eyes",
-      "frames": 12,
-      "interval_ms": 120
+      "frames": 40,
+      "interval_ms": 100
     },
     {
       "do": "ask",
@@ -1685,9 +2096,42 @@
       "label": "c-legacy-off-shot-full"
     },
     {
-      "do": "ask",
-      "label": "c-hair-5",
-      "text": "Step 5: pick hairstyle 5 without face cyberware."
+      "do": "apply cc",
+      "label": "c-hair-5-set0",
+      "option": "cyberware",
+      "value": "Off",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-hair-5-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "c-hair-5-set1",
+      "option": "hairstyle",
+      "value": "05",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-hair-5-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "c-hair-5-page",
+      "command": "cc.page",
+      "input": {
+        "page": "hair"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-hair-5-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1699,9 +2143,30 @@
       "label": "c-hair-5-shot-full"
     },
     {
-      "do": "ask",
-      "label": "c-hair-cyberware",
-      "text": "Now pick a face cyberware that swaps the hairstyle row to its cyberware variant. Is it the same hair?"
+      "do": "apply cc",
+      "label": "c-hair-cyberware-set0",
+      "option": "cyberware",
+      "value": "01",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-hair-cyberware-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "c-hair-cyberware-page",
+      "command": "cc.page",
+      "input": {
+        "page": "hair"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-hair-cyberware-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1713,9 +2178,54 @@
       "label": "c-hair-cyberware-shot-full"
     },
     {
-      "do": "ask",
-      "label": "c-piercing-9-black",
-      "text": "Step 7 (if not done in session 2): piercing style 9 in black."
+      "do": "apply cc",
+      "label": "c-piercing-9-black-set0",
+      "option": "cyberware",
+      "value": "Off",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-9-black-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "c-piercing-9-black-set1",
+      "option": "piercings",
+      "value": "09",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-9-black-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "c-piercing-9-black-set2",
+      "option": "piercings_color",
+      "value": "black",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-9-black-set2-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "c-piercing-9-black-page",
+      "command": "cc.page",
+      "input": {
+        "page": "head"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-9-black-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1727,9 +2237,42 @@
       "label": "c-piercing-9-black-shot-full"
     },
     {
-      "do": "ask",
-      "label": "c-piercing-1-silver",
-      "text": "Piercing style 1 in silver."
+      "do": "apply cc",
+      "label": "c-piercing-1-silver-set0",
+      "option": "piercings",
+      "value": "01",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-1-silver-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "c-piercing-1-silver-set1",
+      "option": "piercings_color",
+      "value": "silver",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-1-silver-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "c-piercing-1-silver-page",
+      "command": "cc.page",
+      "input": {
+        "page": "head"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-1-silver-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1741,9 +2284,42 @@
       "label": "c-piercing-1-silver-shot-full"
     },
     {
-      "do": "ask",
-      "label": "c-piercing-1-gold",
-      "text": "Piercing style 1 in gold."
+      "do": "apply cc",
+      "label": "c-piercing-1-gold-set0",
+      "option": "piercings",
+      "value": "01",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-1-gold-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "apply cc",
+      "label": "c-piercing-1-gold-set1",
+      "option": "piercings_color",
+      "value": "gold",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-1-gold-set1-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "c-piercing-1-gold-page",
+      "command": "cc.page",
+      "input": {
+        "page": "head"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-piercing-1-gold-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1755,9 +2331,30 @@
       "label": "c-piercing-1-gold-shot-full"
     },
     {
-      "do": "ask",
-      "label": "c-eye-24",
-      "text": "Eye colour 24."
+      "do": "apply cc",
+      "label": "c-eye-24-set0",
+      "option": "eyes_color",
+      "value": "24",
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-eye-24-set0-settle",
+      "ms": 1500
+    },
+    {
+      "do": "run",
+      "label": "c-eye-24-page",
+      "command": "cc.page",
+      "input": {
+        "page": "eyes"
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "c-eye-24-page-settle",
+      "ms": 800
     },
     {
       "do": "capture",
@@ -1767,6 +2364,19 @@
     {
       "do": "capture",
       "label": "c-eye-24-shot-full"
+    },
+    {
+      "do": "run",
+      "label": "c-read-hair",
+      "command": "player.appearance",
+      "input": {
+        "option": "hairstyle_cyberware"
+      }
+    },
+    {
+      "do": "note",
+      "label": "c-hair-check",
+      "text": "Coordinator (card step 5, CC file chain 11): compare c-hair-5-shot with c-hair-cyberware-shot; the same hair means the Studio's switcher rule holds, the same position with different hair means it changes. If a colour step failed, read the row and repeat it with its index."
     },
     {
       "do": "ask",

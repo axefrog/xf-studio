@@ -5,7 +5,7 @@
 // clearly marked simulated values; nothing here proves anything about the game itself.
 //
 // Usage: xfb_selftest --runtime-dir <dir> [--seconds N] [--allow-writes] [--write-classes <list>] [--no-pump]
-//                    [--allow-creator-leave] [--idle-seconds N]
+//                    [--allow-creator-leave] [--idle-seconds N] [--no-cet]
 //        xfb_selftest --unit        (in-process checks only; no pipe)
 
 #include <Windows.h>
@@ -22,6 +22,7 @@
 #include "core/BuildInfo.hpp"
 #include "core/Layers.hpp"
 #include "core/Log.hpp"
+#include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
@@ -64,6 +65,7 @@ int wmain(int argc, wchar_t** argv)
     bool pump = true;
     bool allowCreatorLeave = false;
     uint32_t idleSeconds = 120;
+    bool cet = true;
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
@@ -94,6 +96,10 @@ int wmain(int argc, wchar_t** argv)
         else if (arg == L"--allow-creator-leave")
         {
             allowCreatorLeave = true;
+        }
+        else if (arg == L"--no-cet")
+        {
+            cet = false; // game.options.read then answers that the CET layer isn't there
         }
         else if (arg == L"--idle-seconds" && i + 1 < argc)
         {
@@ -144,6 +150,11 @@ int wmain(int argc, wchar_t** argv)
     xfb::GameThreadQueue queue;
     xfb::LayerRegistry layers;
     layers.Announce("selftest", "simulated host; no game");
+    if (cet)
+    {
+        layers.Announce("cet", "simulated CET layer (answers render options from the pump loop)");
+    }
+    static xfb::OptionsExchange options;
     xfb::Bridge bridge(config, session, queue);
     auto& dispatcher = bridge.GetDispatcher();
 
@@ -217,6 +228,10 @@ int wmain(int argc, wchar_t** argv)
         bool frozen = false;
         int32_t faceIndex = -1; // the last photo.expression.index applied (-1: none)
         int32_t clock = 12 * 3600;
+        bool creatorOpens = true;   // selftest.phase {creator_opens: false} simulates a request the menu never picks up
+        int creatorOpenTicks = -1;  // >= 0: the simulated menu opens the screen after this many more ticks
+        std::string creatorMode;
+        bool saveLock = false;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
     };
     static Simulated sim;
@@ -256,7 +271,8 @@ int wmain(int argc, wchar_t** argv)
                          "Sets the simulated game phase (self-test only).", [](const xfb::MethodContext& aContext) {
                              std::scoped_lock _(sim.mutex);
                              sim.phase = aContext.params.value("phase", std::string("gameplay"));
-                             return json{{"phase", sim.phase}};
+                             sim.creatorOpens = aContext.params.value("creator_opens", true);
+                             return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}};
                          }});
     dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
                          [phase, &config](const xfb::MethodContext& aContext) {
@@ -516,11 +532,36 @@ int wmain(int argc, wchar_t** argv)
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseCharacterApply(aContext.params);
                                      requirePhase("character_menu", "not_in_character_menu");
-                                     if (request.index >= 13)
+                                     // The simulated option has 13 values, internal names xfs_value_00..12 and on-screen
+                                     // labels 01..13, like the creator's two-digit positions.
+                                     int32_t index = request.index;
+                                     std::string matchedBy = "index";
+                                     if (index < 0)
+                                     {
+                                         matchedBy = "value";
+                                         for (int32_t i = 0; i < 13; ++i)
+                                         {
+                                             char name[16];
+                                             std::snprintf(name, sizeof(name), "xfs_value_%02d", i);
+                                             const bool numeric = !request.value.empty() &&
+                                                                  request.value.find_first_not_of("0123456789") == std::string::npos &&
+                                                                  request.value.size() < 6;
+                                             if (request.value == name || (numeric && std::stoi(request.value) == i + 1))
+                                             {
+                                                 index = i;
+                                             }
+                                         }
+                                         if (index < 0)
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: no value of '" + request.option + "' is named or labelled '" +
+                                                                                      request.value + "'");
+                                         }
+                                     }
+                                     if (index >= 13)
                                      {
                                          throw xfb::MethodError("bad_params", "simulated: option has values 0 to 12");
                                      }
-                                     return json{{"simulated", true}, {"option", request.option}, {"before", 0}, {"after", request.index},
+                                     return json{{"simulated", true}, {"option", request.option}, {"before", 0}, {"after", index}, {"matched_by", matchedBy},
                                                  {"undo", {{"method", "cc.apply"}, {"params", {{"option", request.option}, {"index", 0}}}}}};
                                  }));
     // The creator's Confirm and Back, simulated: gated like the plugin, then the appearance screen closes.
@@ -537,17 +578,136 @@ int wmain(int argc, wchar_t** argv)
             return json{{"simulated", true}, {"kept", aKeep}, {"undo", nullptr}};
         };
     };
+    // cc.open, simulated with the plugin's own sequence (core/Writes.cpp): the simulated menu opens the
+    // screen a few ticks after the request, unless selftest.phase said creator_opens: false.
+    dispatcher.Register(simWrite("cc.open", xfb::Access::WriteCharacter, xfb::RunOn::BridgeThread, "Creator open (simulated).",
+                                 [&config, &queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseCreatorOpen(aContext.params);
+                                     p::CreatorLeaveAllowed(config.allowCreatorLeave);
+                                     w::CreatorOpenOps ops;
+                                     ops.prepare = [] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.phase == "character_menu")
+                                         {
+                                             return json{{"already_open", true}};
+                                         }
+                                         if (sim.phase != "gameplay")
+                                         {
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
+                                         sim.saveLock = true;
+                                         return json{{"save_lock_requested", true}};
+                                     };
+                                     ops.settle = [&queue] {
+                                         if (!w::WaitTicks(queue, 3, std::chrono::milliseconds(1000)))
+                                         {
+                                             throw xfb::MethodError("timeout", "simulated: no game ticks");
+                                         }
+                                     };
+                                     ops.open = [&request] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (!sim.saveLock)
+                                         {
+                                             throw xfb::MethodError("save_lock_not_held", "simulated: no save lock");
+                                         }
+                                         sim.creatorMode = p::CreatorModeName(request.mode);
+                                         sim.creatorOpenTicks = sim.creatorOpens ? 2 : -1;
+                                         return json{{"requested", true}, {"edit_mode", request.mode == p::CreatorMode::Ripperdoc ? "Ripperdoc" : "HairDresser"},
+                                                     {"saving_locked", true}, {"route", "menu_event"}};
+                                     };
+                                     ops.phase = [] {
+                                         std::scoped_lock _(sim.mutex);
+                                         return sim.phase;
+                                     };
+                                     ops.cancel = [] {
+                                         std::scoped_lock _(sim.mutex);
+                                         sim.creatorOpenTicks = -1;
+                                     };
+                                     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+                                     auto out = w::CreatorOpen(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("cc.page", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator camera (simulated).",
+                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseCreatorPage(aContext.params);
+                                     requirePhase("character_menu", "not_in_character_menu");
+                                     return json{{"simulated", true}, {"page", request.page}, {"slot", request.slot},
+                                                 {"undo", {{"method", "cc.page"}, {"params", {{"page", "default"}}}}}};
+                                 }));
+    // game.options.read, simulated: a few settings like the game's user settings, and the render options
+    // through the same OptionsExchange the plugin uses, answered by a simulated CET layer in the pump loop.
+    dispatcher.Register({"game.options.read", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game options (simulated).",
+                         [&layers](const xfb::MethodContext& aContext) {
+                             const auto request = p::ParseGameOptions(aContext.params);
+                             json out{{"simulated", true}};
+                             if (request.settings)
+                             {
+                                 const std::map<std::string, json> all{
+                                     {"/graphics/presets",
+                                      {{"ResolutionScaling", {{"type", "string_list"}, {"value", "DLSS"}, {"index", 1}}},
+                                       {"DLSS", {{"type", "string_list"}, {"value", "DLAA"}, {"index", 6}}}}},
+                                     {"/graphics/advanced", {{"SubsurfaceScatteringQuality", {{"type", "string_list"}, {"value", "High"}, {"index", 2}}}}},
+                                     {"/graphics/raytracing",
+                                      {{"RayTracing", {{"type", "bool"}, {"value", true}}},
+                                       {"RayTracedPathTracing", {{"type", "bool"}, {"value", false}}},
+                                       {"RayTracedLighting", {{"type", "string_list"}, {"value", "Ultra"}, {"index", 2}}}}},
+                                     {"/graphics/basic", {{"FilmGrain", {{"type", "bool"}, {"value", false}}}}},
+                                     {"/graphics/performance", {{"CrowdDensity", {{"type", "name_list"}, {"value", "High"}, {"index", 2}}}}},
+                                     {"/video/display", {{"HDRModes", {{"type", "string_list"}, {"value", "SDR"}, {"index", 0}}}}}};
+                                 json groups = json::object();
+                                 for (const auto& group : request.groups)
+                                 {
+                                     groups[group] = all.at(group);
+                                 }
+                                 out["settings"] = {{"groups", groups}};
+                             }
+                             if (request.renderOptions)
+                             {
+                                 if (!layers.Has("cet"))
+                                 {
+                                     out["render_options"] = {{"available", false}, {"reason", "simulated: no CET layer"}};
+                                 }
+                                 else
+                                 {
+                                     const auto seq = options.Request(request.names);
+                                     const auto values = options.WaitFor(seq, std::chrono::milliseconds(3000));
+                                     if (!values)
+                                     {
+                                         options.Withdraw(seq);
+                                         out["render_options"] = {{"available", false}, {"reason", "simulated: no answer"}};
+                                     }
+                                     else
+                                     {
+                                         json missing = json::array();
+                                         for (const auto& name : request.names)
+                                         {
+                                             if (!values->contains(name))
+                                             {
+                                                 missing.push_back(name);
+                                             }
+                                         }
+                                         out["render_options"] = {{"available", true}, {"values", *values}, {"missing", missing}};
+                                     }
+                                 }
+                             }
+                             return out;
+                         }});
     dispatcher.Register(simWrite("cc.confirm", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator confirm (simulated).", simLeave(true)));
     dispatcher.Register(simWrite("cc.back", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator back (simulated).", simLeave(false)));
     dispatcher.Register(simWrite("world.time.set", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Clock (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseTime(aContext.params);
-                                     requirePhase("gameplay", "not_in_gameplay");
                                      std::scoped_lock _(sim.mutex);
+                                     // Normal play, or with the appearance screen open (as XFWorld.SetTime).
+                                     if (sim.phase != "gameplay" && sim.phase != "character_menu")
+                                     {
+                                         throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                     }
                                      const auto before = sim.clock;
                                      sim.clock = request.totalSeconds >= 0 ? request.totalSeconds
                                                                            : request.hours * 3600 + request.minutes * 60 + request.seconds;
-                                     return json{{"simulated", true}, {"before_total_seconds", before}, {"after_total_seconds", sim.clock},
+                                     return json{{"simulated", true}, {"phase", sim.phase}, {"before_total_seconds", before}, {"after_total_seconds", sim.clock},
                                                  {"undo", {{"method", "world.time.set"}, {"params", {{"total_seconds", before}}}}}};
                                  }));
     dispatcher.Register(simWrite("world.pause", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "World freeze (simulated).",
@@ -567,6 +727,11 @@ int wmain(int argc, wchar_t** argv)
     const auto simulatedRestore = [] {
         std::scoped_lock _(sim.mutex);
         json out{{"simulated", true}, {"world_unfrozen", sim.frozen}, {"photo_ui_shown", sim.hudHidden}, {"cursor_shown", sim.cursorHidden}};
+        if (sim.creatorOpenTicks >= 0)
+        {
+            out["creator_open_withdrawn"] = true;
+        }
+        sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
         sim.cursorHidden = false;
@@ -589,6 +754,52 @@ int wmain(int argc, wchar_t** argv)
         if (pump)
         {
             queue.Drain(4); // the plugin does this once per engine tick
+            {
+                // The simulated menu picks up a cc.open request a couple of ticks later.
+                std::scoped_lock _(sim.mutex);
+                if (sim.creatorOpenTicks > 0)
+                {
+                    --sim.creatorOpenTicks;
+                }
+                else if (sim.creatorOpenTicks == 0)
+                {
+                    sim.creatorOpenTicks = -1;
+                    if (sim.phase == "gameplay")
+                    {
+                        sim.phase = "character_menu";
+                    }
+                }
+            }
+            // The simulated CET layer answers a render-option request as init.lua does: known names
+            // get their value as text, unknown ones are left out.
+            if (cet)
+            {
+                const auto pending = options.Pending();
+                if (!pending.empty())
+                {
+                    const auto request = json::parse(pending);
+                    json values = json::object();
+                    for (const auto& name : request["names"])
+                    {
+                        const auto text = name.get<std::string>();
+                        if (text.rfind("Editor/Characters/", 0) == 0 || text.rfind("Developer/FeatureToggles/", 0) == 0)
+                        {
+                            values[text] = text.find("Use") != std::string::npos || text.find("FeatureToggles") != std::string::npos
+                                               ? "true"
+                                               : "0.500000";
+                        }
+                    }
+                    std::string why;
+                    if (!options.Report(json{{"seq", request["seq"]}, {"values", values}}.dump(), &why))
+                    {
+                        xfb::log::Warn("selftest.options_report_refused", "why=" + why);
+                    }
+                }
+            }
+            if (bridge.RestoreReady())
+            {
+                options.Cancel();
+            }
             restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
             // As the plugin's tick: a client dropped for idleness gives the cursor back (RB-34).
             if (bridge.TakeIdleDisconnect() && restore.WritesUsed() && !restore.Done())

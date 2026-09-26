@@ -15,6 +15,7 @@
 #include "core/GameThreadQueue.hpp"
 #include "core/Layers.hpp"
 #include "core/Log.hpp"
+#include "core/OptionsExchange.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
 
@@ -57,6 +58,10 @@ struct State
     // Marked by every write; after the kill switch it undoes what the bridge left on (world
     // freeze, hidden photo UI; not the save lock) once, from a game-thread tick (core/Writes.hpp).
     writes::RestoreOnce restore;
+
+    // game.options.read's render options: requested by the bridge, answered by the CET layer
+    // (XFBridge_OptionsWanted / XFBridge_OptionsReport). Cancelled by the kill switch.
+    OptionsExchange options;
 };
 
 State& Get();
