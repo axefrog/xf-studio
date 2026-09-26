@@ -318,10 +318,10 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **DIAG-22:** the host's 60 s repeat key ignores the reference, dropping notices the page promises to keep (`host-endpoint.ts:91-92`).
   - **DIAG-23:** mod-file ZIP entry names are built from unredacted mod and archive names (`host-endpoint.ts:138`).
   - **DIAG-24:** the hashing budget is soft: a hash started at 9.9 s runs to completion (up to 2 GB).
-- **RB-29..31, CORE-90, PREV-99..100** (step 7 cleanup and bridge fixes review at `8857137`), Open (RB-29..31 in claude/bridge-script-context):
-  - **RB-29:** `photo.camera.set {reset: true}` stops at the first non-`unavailable` error after earlier keys were reset, with no undo for them (`GameHandlers.cpp`).
-  - **RB-30:** the session lock judges liveness by PID alone (reuse keeps MCP refusing), a stale-lock delete can race a new runner, and the message suggests `bridge_kill`, which fails while the runner holds the pipe (`tools/session-lock.ts`).
-  - **RB-31:** the test card's step 13 still says 150 ms (RB-20 made it three game ticks).
+- **RB-29..31, CORE-90, PREV-99..100** (step 7 cleanup and bridge fixes review at `8857137`), Open except RB-29..31 (fixed in claude/bridge-script-context):
+  - **RB-29 (fixed):** `photo.camera.set {reset: true}` stopped at the first non-`unavailable` error after earlier keys were reset, with no undo for them. Now `writes::CameraReset` resets every key, returns `partial` and `errors` with an undo for what was reset, and throws only when nothing was reset (unit-tested).
+  - **RB-30 (fixed):** the session lock judged liveness by PID alone, a stale-lock delete could race a new runner, and the message suggested `bridge_kill`, which failed while the runner held the pipe. Now the lock records the runner's process start time, a stale lock is moved aside and checked before it is removed, the refusal names the lock file, and `bridge.kill` falls back to the `KILL` file when the pipe is busy (tests in `tools/test/mcp.test.ts`).
+  - **RB-31 (fixed):** the test card's step 13 said 150 ms; it now says three game ticks.
   - **CORE-90:** the import scan doesn't resolve `./x.js` specifiers or scan `new Worker(new URL(…, import.meta.url))`, so feature-core and view transitive rules don't see behind them (`tests/fixtures/import-scan.ts:34-39`).
   - **PREV-99:** `attach(obj, {rig: true})` collects bones once; bones added later (a GLB loading after attach) never join the idle or blink (`platform/scene/feature-renderers.ts:97-102`).
   - **PREV-100:** the makeup stack's shared geometry is never disposed; harmless while the renderer dies only with the scene host (`engines/layered-makeup/render/makeup-stack.ts:83,355-362`).

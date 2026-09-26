@@ -1,6 +1,6 @@
 # Runtime access: RED4ext, redscript, CET and the XF bridge
 
-**Maturity: Draft.** This page covers how each Cyberpunk 2077 mod type gets code into the running game, where each one logs, and how XF Studio's local bridge reaches the game. It is consolidated from source reading of RED4ext 1.30.0, RED4ext.SDK 1.0.0, redscript 0.5.31, CET 1.37.1, TweakXL 1.11.4 and psiberx's plugins, plus the decompiled 2.31 scripts and the offline build, self-test and tests of [`projects/xf-runtime-bridge`](../projects/xf-runtime-bridge/README.md). **No claim here has runtime evidence yet**; the [first-session test card](../research/runtime/runtime-bridge-test-card.md) collects it. The full citations, capability matrix and phase-2 plan are in the [runtime bridge design](../research/runtime/runtime-bridge-design.md).
+**Maturity: Draft.** This page covers how each Cyberpunk 2077 mod type gets code into the running game, where each one logs, and how XF Studio's local bridge reaches the game. It is consolidated from source reading of RED4ext 1.30.0, RED4ext.SDK 1.0.0, redscript 0.5.31, CET 1.37.1, TweakXL 1.11.4 and psiberx's plugins, plus the decompiled 2.31 scripts and the offline build, self-test and tests of [`projects/xf-runtime-bridge`](../projects/xf-runtime-bridge/README.md). Claims seen in the game (the bridge's first in-game run, 26 September 2026) are marked [runtime]; the rest wait for the [test card](../research/runtime/runtime-bridge-test-card.md). The full citations, capability matrix and phase-2 plan are in the [runtime bridge design](../research/runtime/runtime-bridge-design.md).
 
 ## 1. Load order and entry points
 
@@ -16,6 +16,8 @@
 
 - **Declare natives outside a module.** Redscript prefixes the module onto global natives (`XFRuntimeBridge.XFBridge_Ping`), but the plugin registers the plain name. Declare them in a module-less file, as Codeware does [source] redscript `unit.rs:1023`, `symbol.rs:222-246`.
 - **Ship `.reds` that declare natives through the plugin (`scripts->Add`), not `r6/scripts`.** A redscript compile error blocks every mod's scripts behind a message box, and a declared native without its DLL is such an error [source] `scc/lib/src/lib.rs:86-94`.
+- **Call game and script functions from a plugin the way script code does: with a context and a caller frame.** Script calls some natives as statics that the engine registers as member functions (every `TweakDBInterface` function, `TDBID.ToStringDEBUG`); the VM hands them the calling script's context, and with none the game dereferences null in `rtti::Function::InternalCallNative` and crashes (`exe+0x1e28769` on 2.31). `RED4ext::ExecuteFunction(nullptr, …)` starts a script with no context. Use Cyber Engine Tweaks' and RedLib's recipe instead: the engine's internal execute (SDK hash `CBaseFunction_InternalExecute`) with a caller frame passing the arguments as `ExternalVar` instructions, a dummy caller function, and a dummy `entEntity` context for statics [runtime] crash and probe, first in-game run; [source] CET `RTTIHelper.cpp:765-812`, Codeware `lib/Red/TypeInfo/Invocation.hpp:9-107`, SDK `Functions-inl.hpp` `ExecuteNative`; the fix itself [offline] ([design §3.5](../research/runtime/runtime-bridge-design.md#35-calling-game-and-script-functions-from-native-code)).
+- **A redscript class's static functions are global functions,** named `<Class>::<Name>;<ParamTypes>`; `CClass::GetFunction` on the class finds nothing, so look them up among `CRTTISystem::GetGlobalFunctions` [runtime].
 - **Return `false` from a Running `OnUpdate`.** RED4ext removes a state callback that returns `true`, even though the SDK comment says the Running result does not matter [source] `StateSystem.cpp:128-160`.
 - **Include `RED4ext/RED4ext.hpp` before any `RED4ext/Api` header.** The SDK becomes header-only only when `Common.hpp` is included first; otherwise `CreateSemVer`/`CreateFileVer` fail to link [offline].
 - **CET cannot open network connections.** Its sandbox exposes no sockets, HTTP, `ffi` or process spawning, and file access is confined to the mod folder [source] CET `LuaSandbox.cpp:10-79, 152-161, 695-719`. Any external link must be native.
@@ -54,14 +56,14 @@
   - A kill switch covers the CET hotkey, `bridge.kill` and a `KILL` file. Stopping is bounded and never waits for a client to read.
   - Every request is logged with a correlation ID. No C++ exception can unwind into the game.
   - A named pipe was chosen over loopback HTTP because browsers and other network clients cannot reach it ([design §3.1](../research/runtime/runtime-bridge-design.md#31-choosing-the-external-transport)).
-- **Threading:** the pipe thread never touches the game. Game work is queued and drained from the plugin's Running `OnUpdate` (at most four tasks per tick).
+- **Threading:** the pipe thread never touches the game. Game work is queued and drained from the plugin's Running `OnUpdate` (at most four tasks per tick), which runs on the game's main thread, in the same state tick as CET's Lua `onUpdate` [runtime; source CET `GameHooks.cpp:93-104`].
   - A task not started before its timeout is cancelled and never runs.
   - A task already running at the timeout gets a 1 s grace. If it still hasn't finished, the client gets `timeout_after_start` and the late completion is logged.
 - **Game access:** by RTTI name at run time, plus a check of the static flag, parameter types and return type before each call. A missing function fails with `rtti_missing` and a changed signature with `rtti_signature`. A function whose signature is unchanged but whose behaviour changed is not caught; the runtime pin is the main guard. Two routes are in use:
   - `GetPlayer;GameInstance` → `entEntity.GetWorldPosition`;
   - `ScriptGameInstance.GetPhotoModeSystem` → `gamePhotoModeSystem.IsPhotoModeActive`.
 
-  These names and signatures come from the pre-2.3 `red-dump-json`, so they are [source] for existence and [unverified] on 2.31. Phase-2 game access goes through our redscript actions layer instead (plugin → redscript statics by name), which lints against the installed 2.31 bundle.
+  Both worked in the game [runtime]. Phase-2 game access goes through our redscript actions layer instead (plugin → redscript statics by name), which lints against the installed 2.31 bundle. Every call, native or script, goes through one routine (`plugin/ScriptCall.cpp`) that calls with a caller frame and a context (rule above).
 - **Clients:** Bun (`bun:ffi` calls kernel32, [offline] Bun 1.4.2) and PowerShell 7 (`NamedPipeClientStream`). Both open the pipe at the Identification impersonation level. Both check the server PID against `session.json` before sending the token. `node:net` can do neither, which is why the Bun client doesn't use it.
 
 ## 5. Phase 2: commands, writes and captures
@@ -108,8 +110,8 @@ Details and citations: [design §7](../research/runtime/runtime-bridge-design.md
 
 ## Open questions
 
-1. Is running scripts from RED4ext's Running `OnUpdate` safe at the main menu, while loading and in photo mode?
-2. Can CET call a redscript class that a plugin added with `scripts->Add`, as the Lua global `Module_Class`?
+1. Are script calls from RED4ext's Running `OnUpdate`, made with a context, safe while loading and in photo mode? (Main menu and gameplay: yes for calls that avoid member natives, even without a context [runtime].)
+2. ~~Can CET call a redscript class that a plugin added with `scripts->Add`, as the Lua global `Module_Class`?~~ Yes (`XFRuntimeBridge_XFBridgeQuery`) [runtime].
 3. When does a `ScriptableSystem`'s `OnAttach` first run: at the main menu or on the first save load?
 4. Do the RTTI names from the pre-2.3 dump still match on 2.31? Settle this with a fresh RTTIDumper run.
 5. Does window capture return the game image in its fullscreen mode, or only in borderless windowed mode?

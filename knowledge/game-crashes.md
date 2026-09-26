@@ -19,7 +19,7 @@
 
 | Fingerprint (game 2.31) | Message | Trigger | Grade |
 |---|---|---|---|
-| `Cyberpunk2077.exe+0x1e28769` | read at `0x0` | A native plugin calling a redscript function with `RED4ext::ExecuteFunction` (null script instance) from a RED4ext game-state `OnUpdate` task, when that script then calls certain game natives: `TweakDBInterface.GetInt` crashed it; `CharacterCustomizationSystem.GetState` is suspected. The same script function completed every step when CET called it. Script code that uses only `GetGameInstance`, `GetPlayer`, the photo-mode, time, blackboard and scriptable-systems lookups ran fine from the same native context. Seen three times (reports `…-20260926-181257-…`, `…-181813-…`, `…-182825-…`). | [runtime] |
+| `Cyberpunk2077.exe+0x1e28769` | read at `0x0` | A native member function called with no context, inside `rtti::Function::InternalCallNative`. Met when a plugin called a redscript function with `RED4ext::ExecuteFunction(nullptr, …)` and that script called `TweakDBInterface.GetInt` (probe) or `TDBID.ToStringDEBUG`: script calls them as statics, but they are native members and receive the script's (null) context (§2.1). The same script function completed when CET called it. Seen three times (reports `…-20260926-181257-…`, `…-181813-…`, `…-182825-…`). | [runtime]; cause [runtime] disassembly + [source] |
 | `Cyberpunk2077.exe+0xe6abad` / `+0xe6abb0` | read at `0x0` / `0xFFFFFFFFFFFFFFFF` | The launch right after a crash, before the main menu (reports `…-171210-…`, `…-181531-…`). The next launch after that usually works. | [runtime]; cause [hypothesis] |
 | `Codeware.dll+0x36a59` | read at a heap address | A launch after a crash (report `…-182616-…`), in Codeware | [runtime]; cause unknown |
 | `Cyberpunk2077.exe+0x2a52f36`, code `0x80000003` | *Watchdog timeout! (120 seconds)* | The engine's watchdog: the main loop didn't report for 120 s (report `…-20260913-195258-…`) | [runtime]; trigger unknown |
@@ -27,7 +27,11 @@
 
 ### 2.1 Calling scripts from native code
 
-What is established [runtime]: RED4ext's `CClass::GetFunction` finds nothing on a redscript class with only static functions: the class is in RTTI with **no functions registered on it**, and its static functions are registered as **global functions** named `<Class>::<Name>;<ParamTypes>` (reachable through `CRTTISystem::GetGlobalFunctions`). Calling them with `ExecuteFunction(nullptr, fn, &out, args)` from a game-state `OnUpdate` task works for some game natives and crashes at `exe+0x1e28769` on others, while CET's own call path runs the same function cleanly. Why those natives fault from this context, and the safe way to call scripts from a plugin, is being researched (see the [runtime bridge design](../research/runtime/runtime-bridge-design.md) and [runtime access](runtime-access.md)). Until then, **a native plugin should not call redscript functions that touch TweakDB or the character-customisation system from a state-update task.**
+What is established [runtime]: RED4ext's `CClass::GetFunction` finds nothing on a redscript class with only static functions: the class is in RTTI with **no functions registered on it**, and its static functions are registered as **global functions** named `<Class>::<Name>;<ParamTypes>` (reachable through `CRTTISystem::GetGlobalFunctions`).
+
+Why `exe+0x1e28769` happens (confidence high): the game's address library (`bin/x64/cyberpunk2077_addresses.json`) names the faulting function `rtti::Function::InternalCallNative`; its disassembly shows that a native **member** function called with no context falls back to the function's "invokable" (virtual `+0x20`), which is null for ordinary natives, and the crash is the read through it [runtime]. RED4ext.SDK reconstructs the branch in `CBaseFunction::ExecuteNative` [source]. `TweakDBInterface.*` and `TDBID.ToStringDEBUG` look static in script but are native members (RedLib calls `gamedataTDBIDHelper` "fake static") [source], so they receive the calling script's context, and `ExecuteFunction(nullptr, …)` gives the script none. Thread and phase were not the problem. **A plugin must call scripts with a caller frame and a context, as CET and RedLib do**; the XF bridge's `plugin/ScriptCall.cpp` does ([runtime access](runtime-access.md), [design §3.5](../research/runtime/runtime-bridge-design.md#35-calling-game-and-script-functions-from-native-code)).
+
+**Reading a game crash offset:** the address library lists symbol names for a few engine functions (84 of its entries, including `rtti::Function::InternalCall` and `InternalCallNative`) with `section:offset` addresses; with the section base (`.text` at RVA `0x1000`) it turns a crash offset into "inside function X". `dumpbin /disasm /range:` on the installed executable (read only) then shows the faulting instruction's context.
 
 ### 2.2 The crash after a crash
 
@@ -46,6 +50,5 @@ Restore the committed files after the probe; a probe is never committed.
 
 ## Open questions
 
-- Which engine state do TweakDB and character-customisation natives need that a native `ExecuteFunction` from a state-update task doesn't provide, and what is the supported way for a plugin to call scripts? (Being researched for the XF bridge.)
 - What does the launch after a crash read that makes it fail (§2.2)?
 - Does `Codeware.dll+0x36a59` recur, and under what conditions?
