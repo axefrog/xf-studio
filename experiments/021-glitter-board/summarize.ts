@@ -1,7 +1,8 @@
 // Summarises one verified glitter-board build into asset-free numbers (result.json): per preset, the nested
 // flake counts per level from the compiler's record, and the independent verifier's offline checks (plate
 // mapping and V sign, BC5 error on flake normals, BC4 error on flake edges, whether WolvenKit kept the supplied
-// nested chain, resolved/nested flake components, BOX and sheen rules, the accent chunk).
+// nested chain, resolved/nested flake components, BOX and sheen rules, flake contents and pigment, the accent chunk
+// with its stored rows and placement at the plate's UVs).
 //
 //   bun experiments/021-glitter-board/summarize.ts <build-dir> [--json experiments/021-glitter-board/result.json]
 import { readFileSync, writeFileSync } from "node:fs";
@@ -31,9 +32,11 @@ const presets = record.plan.presets.map((preset: { name: string; appearance: str
     decodedLevelErrorMax: round(pixel.decoded.levels.slice(0, 6).map((row: Record<string, number>) =>
       Math.max(...["diffuse", "alpha", "roughness", "metalness", "flakes", "normal"].map(k => row[k])))),
     chains: round({ levels: pixel.chains.levels.slice(0, 6), regionCover: pixel.chains.regionCover, boxTexelsChecked: pixel.chains.boxTexelsChecked,
-      sheenTexelsChecked: pixel.chains.sheenTexelsChecked, maxTiltSine: pixel.chains.maxTiltSine }),
-    ...(pixel.accent ? { accent: round({ levels: pixel.accent.levels.slice(0, 3), onFlakes: pixel.accent.onFlakes, components: pixel.accent.components,
-      flakeComponents: pixel.accent.flakeComponents, decodedError: pixel.accent.decodedError }) } : {}),
+      sheenTexelsChecked: pixel.chains.sheenTexelsChecked, maxTiltSine: pixel.chains.maxTiltSine, flakeTexelsChecked: pixel.chains.flakeTexelsChecked,
+      minNormalMatch: pixel.chains.minNormalMatch, minTiltedShare: pixel.chains.minTiltedShare, pigmentTexelsChecked: pixel.chains.pigmentTexelsChecked }),
+    ...(pixel.accent ? { accent: round({ levels: pixel.accent.levels.slice(0, 3), onFlakes: pixel.accent.onFlakes, components: pixel.accent.components, judged: pixel.accent.judged,
+      flakeComponents: pixel.accent.flakeComponents, decodedError: pixel.accent.decodedError, storedRows: pixel.accent.storedRows,
+      placement: pixel.accent.placement }) } : {}),
   };
 });
 const result = {

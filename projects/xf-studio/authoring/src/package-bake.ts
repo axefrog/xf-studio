@@ -36,7 +36,10 @@ export interface BakedRecord {
   id: string; revision: number; route: ExportRoute;
   /** `plate-window`: maps cover `window`; `head`: maps cover the whole head atlas (`size` square). */
   uvSpace: "plate-window" | "head"; width: number; height: number; size?: number; window?: UvWindow;
-  maps: BakedMap[]; reference?: BakedReference; metadata: unknown; recipeSha256: string;
+  maps: BakedMap[]; reference?: BakedReference;
+  /** A diagnostic glitter accent's layer alone, on the same crop: the verifier samples the accent mask against it at the plate's UVs. */
+  accentReference?: BakedReference;
+  metadata: unknown; recipeSha256: string;
 }
 /** Side of head-UV maps (the Fresnel route, head-UV diagnostics and the oracle layout). */
 export const PACKAGE_MAP_SIZE = HEAD_TEXTURE_SIZE;
@@ -61,7 +64,8 @@ export interface BakeOptions {
 
 /**
  * One diagnostic glitter preset (glitter-route.ts): every channel's whole chain in one raw file, the accent's head-UV
- * chain when it has one, and the head-UV coverage reference of its pigment layers for the verifier's mapping gate.
+ * chain when it has one, and the head-UV coverage reference of its pigment layers for the verifier's mapping gate (and of
+ * the accent's layer alone, for its placement at the plate's UVs).
  */
 function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, window: UvWindow): BakedRecord {
   const knob = preset.diagnostics?.glitter;
@@ -77,8 +81,15 @@ function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, win
   }
   const crop = referenceCrop(window), reference = presetCoverage(preset.recipe, crop), referenceFile = `${preset.appearance}_reference.raw`;
   writeFileSync(resolve(out, referenceFile), reference);
+  let accentReference: BakedReference | undefined;
+  if (knob.accent) {
+    const layers = preset.recipe.layers.filter(layer => layer.id === knob.accent!.layer);
+    const data = presetCoverage({ ...preset.recipe, layers }, crop), file = `${preset.appearance}_accent_reference.raw`;
+    writeFileSync(resolve(out, file), data);
+    accentReference = { file, bytes: data.byteLength, sha256: sha256(data), ...crop };
+  }
   return { id: preset.id, revision: preset.revision, route: "glitter", uvSpace: "plate-window", ...GLITTER_WINDOW_TEXTURE, window, maps,
-    reference: { file: referenceFile, bytes: reference.byteLength, sha256: sha256(reference), ...crop },
+    reference: { file: referenceFile, bytes: reference.byteLength, sha256: sha256(reference), ...crop }, ...(accentReference ? { accentReference } : {}),
     metadata: { adapter: "mesh-decal-glitter-diagnostic-v1", diagnostic: true, levels: chains.stats, ...(chains.accentStats ? { accent: chains.accentStats } : {}),
       limitations: ["Diagnostic only: flakes come from the preset's glitter knob; the Glitter finish itself has no export route.",
         "Nested flake mips are drawn per level; how the game's filtering, TAA and upscalers treat them needs in-game evidence."] },

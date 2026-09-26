@@ -12,7 +12,9 @@
 //   with an emissive accent on a second plate chunk. This is the only way into that route: the Glitter
 //   finish itself still has no export route, so Glitter layers are still omitted with a reason.
 // The Studio never writes or shows these knobs, and the library does not keep them: only the package
-// filter reads them from an exported file. Every packaged use is restated by the independent verifier.
+// filter reads them from an exported file. Both hosts' collection parsers drop them, and the builder CLI
+// honours them only with an explicit `--diagnostics` (PIPE-70). Every packaged use is restated by the
+// independent verifier.
 import { MAX_PLATE_LIFT_MM } from "./plate-lift";
 
 export const EXPORT_DIAGNOSTICS_SCHEMA = "xfs/export-diagnostics-1";

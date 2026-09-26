@@ -45,7 +45,7 @@ import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigm
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, normalInputOf, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
 import { checkAccentChain, checkGlitterChains, splitChain, type AccentReport, type GlitterChainReport } from "./glitter-checks";
-import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
+import { DENSE_INSIDE, expectedUvConstants, expectedWindow, headMaskPlacement, mappingOffset, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
   type MappingStats, type PlateUvSamples, type ReferenceCrop, type VerifierWindow } from "./uv-window";
 
 export { VerificationError } from "./resource-checks";
@@ -85,7 +85,7 @@ export const VERIFICATION_LIMITS: readonly string[] = [
   "Flat, faceted and Fresnel decal routes are checked as resources and pixels; the faceted normal sign, the Fresnel colour-parameter encoding and every finish's lit appearance need in-game evidence.",
   "The plate-local UV window is re-derived from the packaged plate's UVs; window maps are compared with the authored head-UV coverage at plate sample points through the restated mesh_decal UV transform and WolvenKit's stored row order (checked on each build). The game's own sampling of the window is untested.",
   "The Glitter finish has no export route; only Matte, Satin, Metallic and the experimental game-matched Glossy, Shimmer and Colour-shifting finishes are packaged from authored layers.",
-  "A diagnostic glitter knob's nested flake chains are checked for their published properties (coverage, resolved and nested flakes, tilt, density, BOX and sheen rules) and against the decoded XBMs, not re-drawn from the flake catalogue; the accent chunk's glow, and every glint in game, need in-game evidence.",
+  "A diagnostic glitter knob's nested flake chains are checked for their published properties (coverage, resolved and nested flakes, tilt, density, BOX and sheen rules), the flakes' material, colour and tangents against the restated catalogue, the pigment between them, and against the decoded XBMs, not re-drawn texel by texel; the accent is checked at the plate's UVs against its layer; the accent chunk's glow, and every glint in game, need in-game evidence.",
 ];
 
 type MipRow = { level: number; width: number; height: number; partialTexels: number; coverage?: ErrorStats; premultipliedDestination?: ErrorStats; widenedRoughness?: ErrorStats };
@@ -164,7 +164,9 @@ function readBaked(build: string, record: Node): Record<string, Uint8Array> {
 }
 
 /** The context each preset's texture check needs: its space, the plate samples and window, and converted XBMs. */
-type TextureContext = { exported: Exported; xbm: (depotPath: string) => Node; samples: PlateUvSamples; window: VerifierWindow; uv: Record<string, number> };
+type TextureContext = { exported: Exported; xbm: (depotPath: string) => Node; samples: PlateUvSamples; window: VerifierWindow; uv: Record<string, number>;
+  /** The plate's UVs on a dense barycentric grid, for glitter accent placement (computed when first needed). */
+  denseSamples: () => PlateUvSamples };
 
 /**
  * Texture space of one preset. Its compiled record must name the re-derived space and grid (and the verifier's window
@@ -218,6 +220,8 @@ export function checkMapping(name: string, coverage: Float64Array, dims: { width
     `Window map for ${name} is shifted from its authored head-UV content by ${JSON.stringify(offsetTexels)} texels (limit ${MAPPING_LIMITS.offsetTexels})`);
   return { ...stats, offsetTexels };
 }
+/** Share of a glitter accent's mask, sampled at the plate's UVs, that may fall where its layer has no coverage. */
+export const ACCENT_OUTSIDE_SHARE = .02;
 /** The reference must sample the head atlas at least this finely, so it is as sharp as the window map. */
 export const VERIFIER_REFERENCE_GRID = 4096;
 
@@ -361,13 +365,31 @@ function checkGlitterTextures(build: string, record: Node, preset: VerifierPlan[
     ensure(row.toSupplied < row.toBox, `Decoded flake level ${L} of ${name} looks regenerated rather than the supplied nested chain: ${JSON.stringify(row)}`);
     keptChain.push(row);
   }
-  let accent: (AccentReport & { decodedError: ErrorStats }) | undefined;
+  let accent: (AccentReport & { decodedError: ErrorStats; storedRows: "reversed"; placement: ReturnType<typeof headMaskPlacement> }) | undefined;
   if (glitter.accent) {
     const side = textureDims(preset, "accent").width;
     const accentReport = checkAccentChain(preset.name, preset.recipe, glitter, context.window, chains.accent, side, chains.flakes[0], dims);
     const decodedError = errorStats(byteErrors(decoded.accent[0], chains.accent[0], 1, Uint8Array.from(chains.accent[0], v => (v ? 1 : 0))));
     ensure(decodedError.mean < .03, `Decoded accent mask of ${name} differs from its supplied chain: ${JSON.stringify(decodedError)}`);
-    accent = { ...accentReport, decodedError };
+    // Its stored rows (PIPE-74): the head-UV mask relies on the same import flip as every window map.
+    const stored = storedBc4Level0(context.xbm(preset.textures.accent!), `${name} accent`);
+    ensure(stored.width === side && stored.height === side, `${name} accent stored level 0 has unexpected dimensions`);
+    let worst = 0;
+    for (let y = 0; y < side; y++) for (let x = 0; x < side; x++)
+      worst = Math.max(worst, Math.abs(stored.data[(side - 1 - y) * side + x] - decoded.accent[0][y * side + x]));
+    ensure(worst <= 1, `${name} accent is not stored with reversed rows (largest difference ${worst}); its placement assumes WolvenKit's import flip`);
+    // Where the game draws it: sampled at the plate's own UVs against the accent layer's authored head-UV coverage.
+    const reference = record.accentReference;
+    ensure(reference && [reference.grid, reference.x0, reference.y0, reference.width, reference.height].every(Number.isInteger) &&
+      reference.grid >= VERIFIER_REFERENCE_GRID, `Glitter preset ${name} has no head-UV coverage reference for its accent layer`);
+    const referenceData = bytes(join(build, "baked", reference.file));
+    ensure(sha256(referenceData) === reference.sha256 && referenceData.length === reference.width * reference.height,
+      `Accent coverage reference for ${name} differs from the build record`);
+    const placement = headMaskPlacement(decoded.accent[0], side, referenceData, reference, context.denseSamples());
+    ensure(placement.mass > 0, `The glitter accent of ${name} draws nothing at the plate's UVs`);
+    ensure(placement.outsideShare <= ACCENT_OUTSIDE_SHARE, `The glitter accent of ${name} lies outside its layer at the plate's UVs ` +
+      `(${(100 * placement.outsideShare).toFixed(1)} % of its drawn mass)`);
+    accent = { ...accentReport, decodedError, storedRows: "reversed", placement };
   }
   // Placement: the stored rows and the window mapping, as for every window preset.
   const coverage = Float64Array.from({ length: width * height }, (_, t) => (decoded.diffuse[0][4 * t + 3] / 255) ** 2);
@@ -600,7 +622,8 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk, root(plan.mesh), root(plan.morph), liftsMm);
 
   const pixelResults: VerificationReport["decodedPixelChecks"] = [], mipResults: VerificationReport["decodedMipChecks"] = [];
-  const context: TextureContext = { exported, xbm: path => root(path), samples, window, uv };
+  let dense: PlateUvSamples | undefined;
+  const context: TextureContext = { exported, xbm: path => root(path), samples, window, uv, denseSamples: () => (dense ??= plateUvSamples(root(plan.mesh), DENSE_INSIDE)) };
   plan.presets.forEach((preset, i) => {
     const { pixel, mips } = checkTextures(out, records[i], preset, context);
     pixelResults.push(pixel);

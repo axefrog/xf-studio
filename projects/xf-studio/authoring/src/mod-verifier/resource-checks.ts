@@ -11,8 +11,9 @@ export class VerificationError extends Error {
   constructor(message: string) { super(message); this.name = "VerificationError"; }
 }
 
-export function ensure(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new VerificationError(message);
+/** Fail with `message` unless `condition` holds; hot loops pass a function so the text is built only on failure (PIPE-75). */
+export function ensure(condition: unknown, message: string | (() => string)): asserts condition {
+  if (!condition) throw new VerificationError(typeof message === "function" ? message() : message);
 }
 
 export type VerifierRoute = "flat" | "faceted" | "fresnel" | "glitter";
@@ -69,10 +70,51 @@ export const ROUTE_SPEC: Record<VerifierRoute, { template: string; textures: rea
 export const ACCENT_SPEC = { template: "base/materials/mesh_decal_emissive_subsurface.mt", textures: [["EmissiveMask", "accent"]] } as const;
 export const ACCENT_PREFIX = "@accent_";
 
-// ---- The diagnostic glitter knob, restated (src/export-diagnostics.ts) ----
+// ---- The diagnostic glitter knob, restated (src/export-diagnostics.ts, src/glitter-region.ts) ----
 const FLAKE_FIELDS: Readonly<Record<string, readonly [number, number]>> = {
   sizeMm: [.05, 1.2], sizeSigma: [0, 1], cover: [.01, .6], tiltSigmaDeg: [0, 90], tiltMaxDeg: [1, 89], roughness: [0, 1], metalness: [0, 1], seed: [0, 2147483647],
 };
+/** The most flakes one glitter region's catalogue may hold, and the plate's millimetres per unit UV (restated). */
+export const GLITTER_REGION_RULES = Object.freeze({ maxFlakes: 200_000, mmPerU: 569, mmPerV: 405 });
+export type UvRect = { u0: number; v0: number; u1: number; v1: number };
+
+/**
+ * A glitter region layer's outline bounds, restated: where its coverage can be non-zero. The drawn curve lies in the
+ * convex hull of its control polygon (each knot and both tangent endpoints when every knot has handles; otherwise each
+ * Catmull–Rom knot b with the segment's Bézier controls b + (c − a)/6 and c − (d − b)/6), coverage reaches half the
+ * widest softness width (layer or knot feather) beyond the curve, and warp fields move it by at most Σ|du|, Σ|dv|.
+ * `padU`/`padV` are those margins and `width` the widest softness width. A symmetry layer has none.
+ */
+export function restatedOutline(layer: Node, where: string): UvRect & { padU: number; padV: number; width: number } {
+  ensure(layer && Array.isArray(layer.points) && layer.points.length > 0, `${where} names a layer without an outline`);
+  ensure(!layer.symmetry, `${where} names layer ${layer.id}, which is mirrored by symmetry`);
+  const points: Node[] = layer.points, n = points.length, hull: [number, number][] = [];
+  if (points.every(p => p.handles)) for (const p of points)
+    hull.push([p.u, p.v], [p.u + p.handles.in.u, p.v + p.handles.in.v], [p.u + p.handles.out.u, p.v + p.handles.out.v]);
+  else for (let i = 0; i < n; i++) {
+    const a = points[(i + n - 1) % n], b = points[i], c = points[(i + 1) % n], d = points[(i + 2) % n];
+    hull.push([b.u, b.v], [b.u + (c.u - a.u) / 6, b.v + (c.v - a.v) / 6], [c.u - (d.u - b.u) / 6, c.v - (d.v - b.v) / 6]);
+  }
+  let width = Number(layer.feather), warpU = 0, warpV = 0, u0 = Infinity, v0 = Infinity, u1 = -Infinity, v1 = -Infinity;
+  for (const p of points) if (typeof p.feather === "number" && p.feather > width) width = p.feather;
+  for (const f of Array.isArray(layer.fields) ? layer.fields : []) { warpU += Math.abs(f.du); warpV += Math.abs(f.dv); }
+  for (const [u, v] of hull) { u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+  const padU = width / 2 + warpU, padV = width / 2 + warpV;
+  ensure([u0, v0, u1, v1, padU, padV].every(Number.isFinite), `${where} names layer ${layer.id} with a non-finite outline`);
+  return { u0: u0 - padU, v0: v0 - padV, u1: u1 + padU, v1: v1 + padV, padU, padV, width };
+}
+/** `rect` clipped to `bounds`, or null when nothing is left (restated). */
+export function clipUvRect(rect: UvRect, bounds: UvRect): UvRect | null {
+  const out = { u0: Math.max(rect.u0, bounds.u0), v0: Math.max(rect.v0, bounds.v0), u1: Math.min(rect.u1, bounds.u1), v1: Math.min(rect.v1, bounds.v1) };
+  return out.u1 > out.u0 && out.v1 > out.v0 ? out : null;
+}
+/** A region's catalogue size over `rect` (window millimetres from `window`'s origin), restated. */
+export function restatedFlakeCount(rect: UvRect, window: UvRect, f: { sizeMm: number; sizeSigma: number; cover: number }): number {
+  const x0 = (rect.u0 - window.u0) * GLITTER_REGION_RULES.mmPerU, x1 = (rect.u1 - window.u0) * GLITTER_REGION_RULES.mmPerU;
+  const y0 = (rect.v0 - window.v0) * GLITTER_REGION_RULES.mmPerV, y1 = (rect.v1 - window.v0) * GLITTER_REGION_RULES.mmPerV;
+  const meanArea = 3 * Math.sqrt(3) / 8 * f.sizeMm ** 2 * Math.exp(2 * f.sizeSigma ** 2) * 1.2;
+  return Math.round(f.cover * ((x1 - x0) * (y1 - y0)) / meanArea);
+}
 const within = (v: unknown, [lo, hi]: readonly [number, number]) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
 export interface VerifierFlakes { sizeMm: number; sizeSigma: number; cover: number; tiltSigmaDeg: number; tiltMaxDeg: number; roughness: number; metalness: number; color: string; seed: number }
 export interface VerifierGlitter {
@@ -92,8 +134,12 @@ export function glitterOf(preset: VerifierPreset): VerifierGlitter | undefined {
     const f = region.flakes;
     ensure(Object.entries(FLAKE_FIELDS).every(([key, range]) => within(f[key], range)) && Number.isInteger(f.seed) && /^#[0-9a-f]{6}$/.test(f.color),
       `${where} has flakes outside the diagnostic rules`);
+    ensure(f.tiltMaxDeg >= f.tiltSigmaDeg / 4, `${where} region ${region.layer} has a tilt maximum too small for its spread`);
     own.set(region.layer, f);
   }
+  // Glitter is its own texture layout: never with a surface override or head UV.
+  ensure(preset.diagnostics?.surface === undefined && preset.diagnostics?.uvSpace === undefined,
+    `${where} is combined with a surface override or head UV`);
   const regions = knob.regions.map((region: Node) => {
     ensure(typeof region?.layer === "string" && (region.mips === "nested" || region.mips === "box"), `${where} has an invalid region`);
     ensure((region.flakes === undefined) !== (region.mirrorOf === undefined), `${where} region ${region.layer} must set flakes or mirror another region`);
@@ -102,6 +148,17 @@ export function glitterOf(preset: VerifierPreset): VerifierGlitter | undefined {
     return { layer: region.layer, mips: region.mips, flakes, ...(region.mirrorOf !== undefined ? { mirrorOf: region.mirrorOf } : {}) };
   });
   ensure(new Set(regions.map((r: { layer: string }) => r.layer)).size === regions.length, `${where} names a layer twice`);
+  // Region geometry and the flake budget over the head's UV square (the window's count is never larger).
+  for (const region of regions) {
+    const layer = (preset.recipe?.layers ?? []).find((l: Node) => l?.id === region.layer);
+    if (!layer) continue; // expectedRoute names a missing or inactive layer.
+    const rect = clipUvRect(restatedOutline(layer, where), { u0: 0, v0: 0, u1: 1, v1: 1 });
+    ensure(rect, `${where} region ${region.layer} lies outside the head's UV square`);
+    if (region.mirrorOf === undefined) {
+      const count = restatedFlakeCount(rect, { u0: 0, v0: 0, u1: 1, v1: 1 }, region.flakes);
+      ensure(count <= GLITTER_REGION_RULES.maxFlakes, `${where} region ${region.layer} would hold about ${count} flakes, more than ${GLITTER_REGION_RULES.maxFlakes}`);
+    }
+  }
   const accent = knob.accent;
   ensure(accent === undefined || (regions.some((r: { layer: string }) => r.layer === accent.layer) && within(accent.share, [.01, 1]) && within(accent.ev, [-10, 10])),
     `${where} has an invalid accent`);

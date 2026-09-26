@@ -9,6 +9,8 @@ import { OFF_PLATE_REASON } from "../../src/package-filter";
 import { plateReachInput } from "../../src/plate-uv-footprint-io";
 import { plateUvFootprint } from "../../src/plate-uv-window";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
+import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
+import { preparePackageCollection } from "../../src/package-filter";
 
 const directory = mkdtempSync(resolve(tmpdir(), "xfs-check-worker-"));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -82,4 +84,16 @@ test("PIPE-33: the worker plans on the prepared plate the host passes, and omits
   expect(planned.result.plateUv?.footprintSha256).toBe(plate.sha256);
   const unplanned = await runDesktopCheck(collection, worker, 15_000);
   expect(unplanned.kind === "success" && unplanned.result.omissions).toEqual([]);
+}, 30_000);
+
+test("PIPE-70: a posted collection's glitter knob gives no glitter route and no diagnostics in the desktop Check", async () => {
+  const knob = withGlitterKnob(JSON.parse(readFileSync(resolve(import.meta.dir,
+    "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8")));
+  expect(preparePackageCollection(knob).plan.presets.some(p => p.route === "glitter")).toBe(true);
+  const checked = await runDesktopCheck(knob, resolve(import.meta.dir, "../check-worker.ts"), 15_000);
+  expect(checked.kind).toBe("success");
+  if (checked.kind !== "success") return;
+  expect(checked.result.presets.map(p => p.route)).not.toContain("glitter");
+  expect(checked.result.presets.every(p => !("diagnostics" in p))).toBe(true);
+  expect(checked.result.plateLiftsMm).toEqual([.4]);
 }, 30_000);

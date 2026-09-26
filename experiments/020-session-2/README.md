@@ -36,7 +36,7 @@ Built with `bun tools/build_collection_package.ts` from the authoring directory,
 | `.archive.xl` | 286 bytes, SHA-256 begins `f261ddc2af33e8f8` |
 | Packaged collection | SHA-256 `3f5e0b3440e2e6165f319fa546bf3b4442da626463c7a47bf95377c2315c9d8b` |
 
-Rebuilt 26 September after the host and verifier cleanup (claude/cleanup-hosts2) with the same CLI, WolvenKit and plate: the packaged collection hash and `.archive.xl` are unchanged, the archive is again 1,286,144 bytes, and all 41 unbundled members are byte-identical to this build (the archive file hash differs only because its index records build times). Every window preset's offset estimate is still 0, except the sharpest line pattern at 0.0625 texel in V.
+Rebuilt 26 September after the host and verifier cleanup (claude/cleanup-hosts2) with the same CLI, WolvenKit and plate: the packaged collection hash and `.archive.xl` are unchanged, the archive is again 1,286,144 bytes, and all 41 unbundled members are byte-identical to this build (the archive file hash differs only because its index records build times). Every window preset's offset estimate is still 0, except the sharpest line pattern at 0.0625 texel in V. Rebuilt again after the diagnostic Glitter route's cleanup (claude/cleanup-glitter): the CLI now needs `--diagnostics` to honour this collection's knobs (without it the file is refused), and with it all 41 members, the `.archive.xl`, the packaged collection hash and the 1,286,144-byte size are again identical to the staged build.
 
 ## Test card
 

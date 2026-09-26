@@ -9,7 +9,8 @@ import { parseExportDiagnostics } from "../src/export-diagnostics";
 import { FINISH_EXPORT, layerExport } from "../src/finish-export";
 import { encodeDds } from "../src/flat-mip-chain";
 import { compileGlitterPreset, flakeCatalogue, mirrorCatalogue, randomStream, tiltVariance } from "../src/glitter-route";
-import { bakeCollection } from "../src/package-bake";
+import { bakeCollection, referenceCrop } from "../src/package-bake";
+import { presetCoverage } from "../src/preset-compiler";
 import { preparePackageCollection } from "../src/package-filter";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
 import { liftPlate } from "../src/plate-lift";
@@ -22,7 +23,7 @@ import { componentId, glitterOf } from "../src/mod-verifier/resource-checks";
 import { expectedChain } from "../src/mod-verifier/texture-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
-import { plateWindow, storedBc4 } from "./window-fixture";
+import { encodedBc4, plateWindow, storedBc4 } from "./window-fixture";
 
 // Asset-free: a synthetic plate with plate-like UVs, Satin pigment rectangles and generated flakes.
 const CUT = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
@@ -276,12 +277,16 @@ async function makeBuild(mutate?: (d: { mesh: any; plan: Plan }) => void, tamper
       const group = format === "rgba8-srgb" ? "dds-colour" : format === "r8" ? "dds-scalar" : "dds-normal";
       const supplied = channel === "normal" ? levels.map(normalRgba) : levels;
       write(join(build, "input", group, `${preset.appearance}_${channel}.dds`), encodeDds(supplied, dims, format));
-      // The fake export "decodes" losslessly, except that roughness level 0 is block-uniform like its stored BC4 level.
-      const decoded = channel === "roughness" ? [blockUniform(levels[0], map.width, map.height), ...levels.slice(1)] : supplied;
+      // The fake export "decodes" losslessly, except that roughness level 0 is block-uniform like its stored BC4 level and
+      // the accent's level 0 is its BC4 encoding decoded (both stored with reversed rows, as the verifier checks).
+      const accentBc4 = channel === "accent" ? encodedBc4(levels[0], map.width, map.height) : undefined;
+      const decoded = channel === "roughness" ? [blockUniform(levels[0], map.width, map.height), ...levels.slice(1)]
+        : accentBc4 ? [accentBc4.decoded, ...levels.slice(1)] : supplied;
       dds.set(`${preset.appearance}_${channel}.dds`, channel === "normal" ? rg8(supplied, dims) : encodeDds(decoded, dims, format));
       const setup = channel === "diffuse" ? [1, "TCM_QualityColor"] : channel === "normal" ? [0, "TCM_Normalmap"] : [0, "TCM_QualityR"];
       xbm[preset.textures[channel]!] = { ...dims, setup: { hasMipchain: 1, isGamma: setup[0], compression: setup[1] },
-        ...(channel === "roughness" ? { renderTextureResource: storedBc4(decoded[0], map.width, map.height) } : {}) };
+        ...(channel === "roughness" ? { renderTextureResource: storedBc4(decoded[0], map.width, map.height) } : {}),
+        ...(accentBc4 ? { renderTextureResource: accentBc4.renderTextureResource } : {}) };
     }
   });
   mutate?.({ mesh, plan });
@@ -320,6 +325,22 @@ const editBuild = (build: string, edit: (record: any) => void) => { // eslint-di
   edit(record);
   writeFileSync(join(build, "build.json"), JSON.stringify(record));
 };
+/** Edit one archive member's RootChunk and record its new hash, as a builder that wrote it that way would. */
+const editMember = (build: string, path: string, edit: (root: any) => void) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const file = join(build, "archive", path), document = JSON.parse(readFileSync(file, "utf8"));
+  edit(document.Data.RootChunk);
+  const data = JSON.stringify(document);
+  writeFileSync(file, data);
+  editBuild(build, r => { Object.assign(r.artifacts.find((a: { path: string }) => a.path === path), { bytes: data.length, sha256: sha(data) }); });
+};
+/** Level 0 of a baked chain file. */
+const readBakedLevel = (build: string, file: string, width: number, height: number, bytes: number) =>
+  new Uint8Array(readFileSync(join(build, "baked", file))).slice(0, width * height * bytes);
+const flipLevelRows = (level: Uint8Array, width: number, height: number) => {
+  const out = new Uint8Array(level.length);
+  for (let y = 0; y < height; y++) out.set(level.subarray((height - 1 - y) * width, (height - y) * width), y * width);
+  return out;
+};
 
 test("a glitter build with an accent chunk passes the independent verifier", async () => {
   const fixture = await makeBuild();
@@ -331,6 +352,13 @@ test("a glitter build with an accent chunk passes the independent verifier", asy
     expect(pixel.route).toBe("glitter");
     expect(pixel.chains.boxTexelsChecked).toBeGreaterThan(0);
     expect(pixel.accent.onFlakes).toBeGreaterThanOrEqual(.75);
+    // PIPE-74: the accent's stored rows and its placement at the plate's UVs, on its own layer.
+    expect(pixel.accent.storedRows).toBe("reversed");
+    expect(pixel.accent.placement.drawn).toBeGreaterThan(20);
+    expect(pixel.accent.placement.outsideShare).toBeLessThanOrEqual(.02);
+    // PIPE-68: the chains' contents were read.
+    expect(pixel.chains.minNormalMatch).toBe(1);
+    expect(pixel.chains.pigmentTexelsChecked).toBeGreaterThan(0);
     expect(pixel.decoded.keptChain.every((row: any) => row.toSupplied < row.toBox)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(report.resolvedDynamicPaths[0].textures.accent).toBe((await BAKED.result).plan.presets[0].textures.accent);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
@@ -358,6 +386,18 @@ test("glitter tampering fails: accent constants and binding, supplied chains, BO
     [/diagnostics for preset Accent and BOX differ from the packaged collection/, undefined, undefined,
       (() => { const c = structuredClone(BAKED.packaged); c.diagnostics.presets[ID(1)].glitter.accent.ev = 1; return c; })()],
     [/Plan accent chunk undefined differs from the expected 1/, undefined, b => editBuild(b, r => { delete r.plan.plate.accentChunk; })],
+    // PIPE-74: an accent stored in natural row order, and an accent sampled at the plate against another layer's coverage.
+    [/accent is not stored with reversed rows/, undefined, (b, p) => editMember(b, p.presets[0].textures.accent!, xbm => {
+      const level = readBakedLevel(b, `${p.presets[0].appearance}_accent.raw`, 2048, 2048, 1);
+      xbm.renderTextureResource = encodedBc4(flipLevelRows(encodedBc4(level, 2048, 2048).decoded, 2048, 2048), 2048, 2048).renderTextureResource;
+    })],
+    [/accent of .* lies outside its layer at the plate's UVs/, undefined, (b, p) => {
+      const packagedPreset = BAKED.packaged.presets[0], crop = referenceCrop(WINDOW.window);
+      const data = presetCoverage({ ...packagedPreset.recipe, layers: packagedPreset.recipe.layers.filter((l: { id: string }) => l.id === "right") }, crop);
+      const file = `${p.presets[0].appearance}_accent_reference.raw`;
+      writeFileSync(join(b, "baked", file), data);
+      editBuild(b, r => { r.compiled[0].accentReference.sha256 = sha(data); });
+    }],
   ];
   for (const [message, mutate, tamper, source] of cases) {
     const fixture = await makeBuild(mutate, tamper);
@@ -365,6 +405,22 @@ test("glitter tampering fails: accent constants and binding, supplied chains, BO
     finally { rmSync(fixture.build, { recursive: true, force: true }); }
   }
 }, 600_000);
+
+test("PIPE-76: two bakes of the same collection are identical in every channel, the references and the records", async () => {
+  const first = await BAKED.result, dir = mkdtempSync(resolve(tmpdir(), "xfs-glitter-rebake-"));
+  try {
+    const second = await bakeCollection(JSON.parse(JSON.stringify(BAKED.packaged)), dir, undefined, { window: WINDOW.window });
+    const files = (records: typeof first.records) => records.flatMap(r => [...r.maps.map(m => [m.file, m.sha256]),
+      ...[r.reference, r.accentReference].filter(x => x).map(x => [x!.file, x!.sha256])]);
+    expect(files(second.records)).toEqual(files(first.records));
+    expect(files(first.records).map(([file]) => file)).toEqual(expect.arrayContaining([
+      `${first.plan.presets[0].appearance}_accent.raw`, `${first.plan.presets[0].appearance}_accent_reference.raw`,
+      ...["diffuse", "roughness", "metalness", "normal", "flakes"].map(channel => `${first.plan.presets[1].appearance}_${channel}.raw`)]));
+    for (const [file, hash] of files(second.records)) expect(sha(readFileSync(join(dir, file))), file).toBe(hash!);
+    expect(readFileSync(join(dir, "compiled.json"), "utf8")).toBe(readFileSync(join(BAKED.dir, "baked", "compiled.json"), "utf8"));
+    expect(readFileSync(join(dir, "plan.json"), "utf8")).toBe(readFileSync(join(BAKED.dir, "baked", "plan.json"), "utf8"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}, 300_000);
 
 test("cleanup of the shared bake", async () => {
   await BAKED.result;

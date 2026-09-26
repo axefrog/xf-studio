@@ -2,13 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { withGlitterKnob } from "./glitter-knob-fixture";
 
 const hq = resolve(import.meta.dir, "../../../..");
 const script = resolve(import.meta.dir, "../tools/build_collection_package.ts");
 const fixture = resolve(hq, "experiments/005-preset-collection/editor-collection.json");
-const run = (collection: string, outputRoot?: string) => Bun.spawnSync([
+const run = (collection: string, outputRoot?: string, extra: string[] = []) => Bun.spawnSync([
   process.execPath, script, "--collection", collection, "--check",
-  ...(outputRoot ? ["--output-root", outputRoot] : []),
+  ...(outputRoot ? ["--output-root", outputRoot] : []), ...extra,
 ], { cwd: hq, stdout: "pipe", stderr: "pipe" });
 
 test("package preflight accepts a Studio collection without writing a package", () => {
@@ -59,4 +60,20 @@ test("package output cannot target a game/mod directory outside project dist", (
   expect(result.exitCode).not.toBe(0);
   expect(result.stderr.toString()).toContain("inside");
   expect(result.stderr.toString()).toContain("No package was installed or promoted");
+});
+
+test("PIPE-70: the CLI honours diagnostic knobs only with an explicit --diagnostics", () => {
+  const dir = mkdtempSync(resolve(tmpdir(), "xfs-package-diagnostics-"));
+  try {
+    const file = resolve(dir, "knob.json");
+    writeFileSync(file, JSON.stringify(withGlitterKnob(JSON.parse(readFileSync(fixture, "utf8")))));
+    const refused = run(file);
+    expect(refused.exitCode).not.toBe(0);
+    expect(refused.stderr.toString()).toContain("Pass --diagnostics to build one on purpose");
+    const accepted = run(file, undefined, ["--diagnostics"]);
+    expect(accepted.exitCode).toBe(0);
+    const summary = JSON.parse(accepted.stdout.toString());
+    expect(summary.presets.map((p: { route: string }) => p.route)).toContain("glitter");
+    expect(summary.presets.some((p: { diagnostics?: { glitter?: unknown } }) => p.diagnostics?.glitter)).toBe(true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -14,6 +14,7 @@ import { derivePlateDocuments } from "../../src/eye-plate-cut";
 import { plateUvFootprint } from "../../src/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
+import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
 
 const root = realpathSync.native(mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"))); // Canonical: CI temp folders use 8.3 short names.
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -299,4 +300,22 @@ test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, 
     expect((await open({ link: "project-issues" })).status).toBe(204);
     expect(opened).toEqual([WOLVENKIT_RELEASE.licence.url, "https://github.com/axefrog/xf-studio/issues"]);
   } finally { app.stop(); feed.stop(true); }
+});
+
+test("PIPE-70: a posted collection's glitter knob never reaches the desktop builder", async () => {
+  const knob = withGlitterKnob(fixture);
+  // Precondition: the knob is valid, so only the host's own parsing keeps it from the route.
+  expect(preparePackageCollection(knob).plan.presets.some(p => p.route === "glitter")).toBe(true);
+  const seen = resolve(root, `seen-${crypto.randomUUID()}.json`);
+  const h = host([
+    `const fs = require("node:fs");`,
+    `const collection = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--collection") + 1], "utf8"));`,
+    `fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ keys: Object.keys(collection), argv: process.argv.slice(2) }));`,
+    `process.exit(3);`,
+  ].join("\n"));
+  const result = await runDesktopBuild(knob, h.settings, h.data, h.tools, 15_000, undefined, fixtureWolvenKit, fixturePlate());
+  expect(result.kind).toBe("failure");
+  const record = JSON.parse(readFileSync(seen, "utf8"));
+  expect(record.keys).not.toContain("diagnostics");
+  expect(record.argv).not.toContain("--diagnostics");
 });
