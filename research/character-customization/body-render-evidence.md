@@ -65,6 +65,26 @@ The lifted-feet `.app` on the reference profile comes from the UV framework's ar
 
 Every holstered item: `entityName` `holstered_arms`, `equipArea` `EquipmentArea.RightArm`, `placementSlots` `[AttachmentSlots.RightArm]`. The weapons' own `appearanceName` is `None`; their `entityName`s are `a0_005__strongarms_ent`, `a0_003__mantisblades_ent`, `a0_002__monowire_whip_ent` and `a0_006__launcher_ent`. Scripts (decompiled, as above): `cyberpunk/systems/equipmentSystem.script` `UpdateArmSlot`, `HandleArmsCWUnequip`, `RetrofixHolsteredArms`; `cyberpunk/managers/rpgManager.script` `ForceEquipStrongArms`. ArchiveXL `5474e34d` `src/App/Extensions/PuppetState/Handler.cpp` (`ResolveArmsState`, `IsWeaponSlot`).
 
+### The left arm's export (PIPE-106)
+
+27 September 2026, from a host trace of the reference V (the `character/resolved` event) and WolvenKit CLI 9.0.1 run by hand under the memory guard. The reference profile's `-KS- UV Texture Framework` (Nexus 3783, UV Framework 4.1, `008_UV_Framework.archive`) wins both arm meshes; its `!!!_UV4.xl` patches only the body, feet, first-person torso, heel and head meshes from its donors, never the arms, so the arms are the framework's own files.
+
+| Copy of `arms_hq\a0_000_pwa_base_hq__l.mesh` | Raw SHA-256 (first 16) | Render chunks (vertices) | Garment flags per vertex | UV0 of the skin chunks |
+|---|---|---|---|---|
+| The framework's (`008_UV_Framework.archive`) | `a585d5bccbc22c7a` | 456, 471, 4214, 738 | 2 bytes | the bottom of the full-body atlas's left column (u 0.03–0.22, v 0.51–1.00) |
+| The base game's (`basegame_4_appearance.archive`) | `441ced0b5a740075` | 456, 471, 4212, 648 | 4 bytes | the vanilla arm texture's own layout (u 0.04–0.98, v 0.01–0.98) |
+| The Studio's cached export before the fix | `441ced0b5a740075` | as the base game's | | as the base game's |
+
+The framework's right arm (`7f7866aea5c734d4`) exports as it is, and its UV0 is the atlas column's top half. Both arms' materials take `Albedo` `base\4k\common\body\wa\textures\d02_naked.xbm` (the right arm's own local material; the left arm's through `…\player_mat_instance\…\default_female_body_<tone>.mi`). That atlas holds the torso, legs and feet in the vanilla body texture's places and both arms in its left column; on the reference profile the winning copy is the Universal Skin Tone BODY FAIR archive's, in the same layout as the framework's own.
+
+What WolvenKit did, reproduced by hand:
+
+- `uncook 008_UV_Framework.archive -r …a0_000_pwa_base_hq__[lr]\.mesh$ -u --mesh-export-type MeshOnly` (no game folder): the right arm exports; the left arm's raw is written (`a585d5…`) but no GLB: "Unable to read beyond the end of the stream" in `MeshTools.WriteGarmentParametersToMesh`, which reads four bytes per vertex from each chunk's `garmentFlags` (WolvenKit commit `11720772`).
+- The same with `-gp <game folder>`: both GLBs are written, but both raws are the base game's (`441ced…`, `1e9c6f8d…`): WolvenKit exported the base game's copies of the paths the framework overrides.
+- The framework's left arm with each short `garmentFlags` buffer emptied (serialize, edit, deserialize, pack, uncook without the game folder): a GLB with the framework's own UVs, above.
+
+The preview drew the base game's arm UVs over the framework's atlas, so the left forearm sampled the atlas's feet and the dark padding around them. The game draws the framework's arm; neither the arms nor their materials carry a censorship rule, so censored and uncensored modes draw the same arms. No VTK framework takes part: the profile's VTK-named mods are all disabled, and the enabled Universal Skin Tone body archive ships the KS UV paths (it supports both frameworks).
+
 ## Preview checks
 
 Captured with `tools/body-look.ts` (headless Chrome, ANGLE D3D11 on an RTX 4070, `?verify=1` with disposable data, the reference MO2 profile, dark theme), frames in `evidence/screenshots/body-render/` (ignored):

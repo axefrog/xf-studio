@@ -248,7 +248,7 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 ### KnowSo team
 
-[-KS- UV Texture Framework](https://www.nexusmods.com/cyberpunk2077/mods/3783), crediting original authors Zosoab70 and AllKnowingLion and named contributors. Its skin template and seam-fix resources showed why each file's effective load-order winner must be resolved before changing preview materials, and its head-mesh appearance patch showed that an ArchiveXL patch can change the effective head material chain. Its player-only skin chain, which sets a tattoo overlay as the skin's secondary albedo with a glow mask and overlay normals, showed how overlay tattoo mods work and why only one can be active. Studied only; its asset-reuse conditions would need separate review.
+[-KS- UV Texture Framework](https://www.nexusmods.com/cyberpunk2077/mods/3783), crediting original authors Zosoab70 and AllKnowingLion and named contributors. Its skin template and seam-fix resources showed why each file's effective load-order winner must be resolved before changing preview materials, and its head-mesh appearance patch showed that an ArchiveXL patch can change the effective head material chain. Its player-only skin chain, which sets a tattoo overlay as the skin's secondary albedo with a glow mask and overlay normals, showed how overlay tattoo mods work and why only one can be active. Its arm meshes, whose UVs place both arms in the full-body texture, showed that a replaced mesh must be exported from the mod's own copy, never the base game's. Studied only; its asset-reuse conditions would need separate review.
 
 ### KOZMETIX
 

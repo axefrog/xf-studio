@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
 import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { bodyOptionDraws, censorRole, choiceLabel, planCharacterDetails, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
+import { bodyOptionDraws, bodyRole, type BodyCensorship, censorRole, choiceLabel, planCharacterDetails, requiredCovers, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
 import { templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
 import { depotHash, refFromPath, refLabel } from "../src/depot-path";
@@ -11,7 +11,7 @@ import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
 import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TEETH, teethRequest, TONES } from "./character-detail-fixtures";
 
-async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}) {
+async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}, censorship: BodyCensorship = "censored") {
   const { graph } = fixture.installation();
   const cco = await loadMergedCco(graph, "female");
   const input = request === "default"
@@ -27,7 +27,7 @@ async function plan(request: typeof REQUEST_A | "default", fixture = detailFixtu
       value: value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "resource" ? value.text ?? "" : value.value,
       ...(value.kind === "resource" && value.ref ? { resource: graph.provenance(value.ref) } : {}) })));
   }
-  return { resolved, plan: planCharacterDetails(resolved, cco.merged.cco, defaults, identities satisfies TemplateIdentities) };
+  return { resolved, plan: planCharacterDetails(resolved, cco.merged.cco, defaults, identities satisfies TemplateIdentities, undefined, null, "drawn", undefined, censorship) };
 }
 
 describe("resolver selection for brows, lashes and hair", () => {
@@ -433,6 +433,45 @@ describe("resolver selection for the body", () => {
     expect(bodyOptionDraws(options, "missing")).toBe(false);
     const twins = [{ ...options[0]!, type: "appearance" }, { ...options[1]!, link: "skin color", type: "appearance" }];
     expect(twins.map(option => censorRole(twins, option.name))).toEqual(["uncensored", "censored"]);
+  });
+
+  // ---- The opt-in uncensored look (knowledge/body-rendering.md §3) ----
+  test("uncensored: the body as the game draws it with nudity allowed: the uncensored skin with no cover, nipples and genitals as chosen, no censored twin", async () => {
+    const { plan: result } = await plan(BODY_REQUEST, undefined, undefined, "nudity");
+    const body = bodyOf(result);
+    expect(body.map(c => [c.option, c.component, c.censor ?? null])).toEqual([["body_color", "t0_body", null], ["nipples_01", "i0_nipples", null],
+      ["genitals_04", "i0_genitals", null], ["flat_feet", "l0_feet_flat", null], ["h_default_arms_colors_tpp", "a0_arms", null], ["nails_color_tpp", "a0_nails_l", null]]);
+    // Neither the censorship underwear nor the censored skin: the game turns both off with nudity allowed, so nothing waits beside the skin.
+    expect(body.some(c => c.option === "underpants" || c.option === "body_color_censored" || c.censor)).toBe(false);
+    expect(result.censoredBody).toEqual([]);
+    expect(bodySlot(result)).toEqual({ slot: "body", state: "shown", label: "body, nipples, genitals, feet, arms, nails (beige)" });
+    // The breast size still shapes the skin; the head is planned exactly as in the censored look.
+    expect(body[0]!.morphs).toEqual(["breast_big_breast"]);
+    const censored = (await plan(BODY_REQUEST)).plan;
+    expect(result.components.filter(c => c.slot !== "body").map(c => c.component)).toEqual(censored.components.filter(c => c.slot !== "body").map(c => c.component));
+  });
+
+  test("uncensored: the default stays the censored look, unchanged (PIPE-97 marks, the cover last, the twin beside it)", async () => {
+    const { plan: result } = await plan(BODY_REQUEST);
+    expect(bodyOf(result).map(c => [c.option, c.censor ?? null])).toEqual([["body_color", "covered"], ["flat_feet", null], ["h_default_arms_colors_tpp", null],
+      ["nails_color_tpp", null], ["underpants", "cover"]]);
+    expect(result.censoredBody.map(c => c.option)).toEqual(["body_color_censored"]);
+  });
+
+  test("uncensored: only the nudity flag is lifted; another rule keeps its censored role, and nothing the creator doesn't define draws", async () => {
+    const nudity = (action: "activate" | "deactivate") => ({ flag: "Censor_Nudity", action }), other = (action: "activate" | "deactivate") => ({ flag: "Censor_Gore", action });
+    const options = [{ name: "skin", uiSlot: "body_color", link: "skin color", censor: nudity("deactivate") },
+      { name: "skin_censored", uiSlot: "body_color", link: "skin color", censor: nudity("activate") },
+      { name: "cover", uiSlot: "underpants", censor: nudity("activate") }, { name: "nipples", uiSlot: "nipples", censor: nudity("deactivate") },
+      { name: "wound", uiSlot: "scars", censor: other("deactivate") }, { name: "bandage", uiSlot: "bandage", censor: other("activate") },
+      { name: "morph", uiSlot: "breast", type: "morph", censor: nudity("deactivate") }, { name: "feet", uiSlot: "flat_feet" }];
+    expect(options.map(option => bodyRole(options, option.name, "nudity"))).toEqual(["plain", "off", "off", "plain", "hidden", "cover", "plain", "plain"]);
+    expect(options.map(option => bodyRole(options, option.name))).toEqual(["uncensored", "censored", "cover", "hidden", "hidden", "cover", "plain", "plain"]);
+    expect(bodyRole(options, "missing", "nudity")).toBe("unknown");
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    expect([...requiredCovers(cco)]).toEqual(["body|underpants"]);
+    expect([...requiredCovers(cco, undefined, "nudity")]).toEqual([]);
   });
 
   test("PIPE-98: a male V's body is refused in plain words; a body turned off is neither planned nor dressed", async () => {

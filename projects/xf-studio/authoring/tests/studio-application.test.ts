@@ -87,7 +87,7 @@ test("saved-V eye suggestion updates application state without applying the morp
   expect(calls).toEqual([]);
   // With the context attached, its actions route to it; its large reads are shared and frozen, its snapshot is a copy.
   const context = new CharacterContextActions({ showSave: () => {}, creator: {
-    panel: async () => ({ phase: "ready", message: "", panel: { schema: "xfs/cc-panel-2", bodyGender: "female", identity: "t", language: null, mods: [], notes: [""],
+    panel: async () => ({ phase: "ready", message: "", panel: { schema: "xfs/cc-panel-3", bodyGender: "female", identity: "t", language: null, mods: [], notes: [""],
       options: [{ id: "head/eyes_color", part: "head", name: "eyes_color", label: "Eye Color", type: "appearance", grid: true, count: 2, off: null, defaultChoice: "a",
         mod: -1, link: null, dependsOn: [], coverage: ["rendered", 0] }], sections: [{ id: "Eyes", label: "Eyes", makeup: false, rows: [{ slot: "eyes_color", part: "head", options: [0] }] }],
       counts: { options: 1, choices: 2, modChoices: 0 } } }),

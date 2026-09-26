@@ -10,7 +10,7 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
 /**
  * Host endpoint for the Character panel's creator options (cc-catalogue-service.ts), shared by localhost and the desktop, mounted
  * behind the caller's own session checks like the character endpoint:
- * - `GET ?gender=female` → the catalogue's state and, once ready, the panel's first-paint projection (`xfs/cc-panel-2`);
+ * - `GET ?gender=female` → the catalogue's state and, once ready, the panel's first-paint projection (`xfs/cc-panel-3`);
  * - `GET ?gender=female&option=<part/name>&offset=<n>[&search=<text>]` → one page of that option's choices (the matching ones);
  * - `GET ?gender=female&search=<text>` → the options with a choice matching a search;
  * - `POST {kind:"view", request}` → the character context's view of a request (`xfs/character-request-4`);

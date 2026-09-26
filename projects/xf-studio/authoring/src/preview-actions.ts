@@ -9,7 +9,7 @@ import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO
   STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioExposure, validStudioLightValue, type StudioLightKey, type StudioLights, type StudioSetupId } from "./studio-lighting";
 
 export type PreviewConfig = Pick<PreviewState,
-  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" |
+  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" |
   "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
 export type PreviewAction =
   | { kind: "camera.front" }
@@ -33,6 +33,7 @@ export type PreviewAction =
   | { kind: "preview.setEyeShape"; index: number }
   | { kind: "preview.setPiercings"; enabled: boolean }
   | { kind: "preview.setBody"; enabled: boolean }
+  | { kind: "preview.setUncensored"; enabled: boolean }
   | { kind: "preview.setSurfaceControls" | "preview.setWire" | "preview.setNormals" | "preview.setEyeOptics" | "preview.setHair"; enabled: boolean }
   | { kind: "preview.setDetail"; detail: "brows" | "lashes"; enabled: boolean };
 export type PreviewActionResult = { limited?: boolean };
@@ -85,6 +86,7 @@ export class PreviewActions {
       lashes: initial.lashes, hair: initial.hair, normals: initial.normals,
       ...(initial.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: initial.eyeOwnRoughness }),
       eyeShape: initial.eyeShape, piercings: initial.piercings, ...(initial.body === undefined ? {} : { body: initial.body }),
+      ...(initial.uncensored === undefined ? {} : { uncensored: initial.uncensored }),
       exposure: initial.exposure, lightAngle: initial.lightAngle,
       lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting }, studioLights: { ...initial.studioLights } };
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
@@ -162,11 +164,12 @@ export class PreviewActions {
       if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
         && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure) return refusal("unavailable", "The calibration is already at its defaults.");
     }
-    if ((action.kind === "camera.body" && !this.port.frameBody) || (action.kind === "preview.setBody" && !this.port.setBody))
+    if ((action.kind === "camera.body" && !this.port.frameBody) || ((action.kind === "preview.setBody" || action.kind === "preview.setUncensored") && !this.port.setBody))
       return refusal("unavailable", NO_BODY);
     // Framing a body that isn't shown frames nothing (UI-79).
     if (action.kind === "camera.body" && this.state.body === false) return refusal("incompatible_mode", "Turn the body on to see the whole body.");
-    if (action.kind === "preview.setBody" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+    if ((action.kind === "preview.setBody" || action.kind === "preview.setUncensored") && typeof action.enabled !== "boolean")
+      return refusal("invalid_value", "Choose on or off.");
     if (action.kind === "camera.creatorFraming") {
       if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
       if (action.page !== "face" && action.page !== "hair") return refusal("invalid_value", "That creator page does not exist.");
@@ -213,6 +216,8 @@ export class PreviewActions {
       case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;
       case "preview.setPiercings": this.port.setPiercings(action.enabled); this.state.piercings = action.enabled; break;
       case "preview.setBody": this.port.setBody!(action.enabled); this.state.body = action.enabled; break;
+      // Only the character context's request follows it (the host prepares the V in that mode); the scene draws what arrives.
+      case "preview.setUncensored": this.state.uncensored = action.enabled; break;
       case "preview.setSurfaceControls": this.port.setSurfaceControls(action.enabled); this.state.surface = action.enabled; break;
       case "preview.setWire": this.port.setWire(action.enabled); this.state.wire = action.enabled; break;
       case "preview.setNormals": this.port.setNormals(action.enabled); this.state.normals = action.enabled; break;

@@ -44,6 +44,12 @@ export type PreviewState = {
    */
   body?: boolean;
   /**
+   * Whether the V's body draws as the game draws it with nudity allowed (`preview.setUncensored`; knowledge/body-rendering.md §3): the
+   * uncensored skin, nipples and genitals as chosen, and no censorship underwear. Absent means off, the game's censored look under its
+   * underwear cover: it is written only once the viewer changes it.
+   */
+  uncensored?: boolean;
+  /**
    * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`): a switcher choice and a definition of the option
    * it activates. Read so an untouched workspace writes it back unchanged, and so the character context can turn it into the matching
    * Piercings choices once the catalogue is ready (CORE-74); nothing writes new values here.
@@ -173,6 +179,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
     if (typeof p.eyeOwnRoughness === "boolean") state.preview.eyeOwnRoughness = p.eyeOwnRoughness;
     if (typeof p.body === "boolean") state.preview.body = p.body;
+    if (typeof p.uncensored === "boolean") state.preview.uncensored = p.uncensored;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;

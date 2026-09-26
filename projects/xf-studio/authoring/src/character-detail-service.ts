@@ -33,7 +33,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, ren
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyCensorship, type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
@@ -875,7 +875,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const templates = [...resolved.appearances.flatMap(entry => entry.components), ...clothingComponents(clothing)].flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template));
   await loadTemplates(graph, templates, cache);
-  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope, readersOf(installation));
+  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope, readersOf(installation),
+    censorshipOf(request));
   time("templates and plan");
   cancelled();
 
@@ -1224,6 +1225,8 @@ async function dress(graph: ResourceGraph, request: CharacterRequest, options: {
 
 /** Whether a request's body is drawn: off by the viewer's Body switch, or a male V's (not drawn yet), else drawn. */
 export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : request.bodyGender === "male" ? "male" : "drawn";
+/** How a request's body is drawn: as the game with nudity allowed only when the viewer chose it (request v7 `nudity`), else censored. */
+export const censorshipOf = (request: CharacterRequest): BodyCensorship => request.nudity === true ? "nudity" : "censored";
 /** A body whose covered skin was replaced by the game's censored skin because its underwear couldn't be served (PIPE-97). */
 export const CENSORED_BODY = "The underwear the game draws on your V couldn't be prepared, so the body is shown in the game's censored look.";
 
@@ -1296,7 +1299,7 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
     await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(worn[index] ?? null)]
       .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
     const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
-      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index]) : null);
+      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
     for (const plan of plans) for (const component of [...plan?.components ?? [], ...plan?.censoredBody ?? []]) {

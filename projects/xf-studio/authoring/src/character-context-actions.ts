@@ -406,7 +406,7 @@ export class CharacterContextActions {
   detailRequest(): CharacterRequest {
     if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing(),
-      this.bodyShown);
+      this.bodyShown, this.uncensored);
   }
   /**
    * Whether the viewer shows V's body (the preview's Body switch): with it off, the request asks for the head alone, so the host neither
@@ -418,6 +418,17 @@ export class CharacterContextActions {
     this.publish();
   }
   private bodyShown = true;
+  /**
+   * Whether the viewer chose to see V as the game draws it with nudity allowed (the Character panel's uncensored setting): the request
+   * says so and the host plans the body without the censorship underwear (knowledge/body-rendering.md §3). A composition root keeps it in
+   * step with the setting; off (the default) is the game's censored look.
+   */
+  setUncensored(uncensored: boolean): void {
+    if (uncensored === this.uncensored) return;
+    this.uncensored = uncensored;
+    this.publish();
+  }
+  private uncensored = false;
   /** The whole state as the host interprets it (every part). */
   request(): CharacterRequest {
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices);

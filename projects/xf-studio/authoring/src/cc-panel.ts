@@ -21,7 +21,7 @@ import type { RenderCoverage, RenderStatus } from "./cc-render-coverage";
 import type { CharacterChange, CharacterView } from "./character-context";
 import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 
-export const CC_PANEL_SCHEMA = "xfs/cc-panel-2" as const;
+export const CC_PANEL_SCHEMA = "xfs/cc-panel-3" as const;
 export const CC_PAGE_SIZE = 240;
 /**
  * The game's creator category (`gamedataCharacterRandomizationCategory`) whose rows are makeup: the section "hide my V's own makeup"
@@ -234,7 +234,7 @@ export function makeupOff(panel: Readonly<CcPanel>, view: Readonly<CreatorView> 
 const fail = (what: string): never => { throw Object.assign(Error(`The creator options from the preview host can't be read (${what}).`), { unreadable: true }); };
 const str = (value: unknown, what: string, max = 512) => typeof value === "string" && value.length <= max ? value : fail(what);
 const int = (value: unknown, what: string, max: number) => Number.isInteger(value) && (value as number) >= -1 && (value as number) <= max ? value as number : fail(what);
-const PARTS = new Set(["head", "body", "arms"]), TYPES = new Set(["appearance", "morph", "switcher"]), STATUS = new Set(["rendered", "conditional", "not-rendered"]);
+const PARTS = new Set(["head", "body", "arms"]), TYPES = new Set(["appearance", "morph", "switcher"]), STATUS = new Set(["rendered", "conditional", "uncensored", "not-rendered"]);
 const name = (value: unknown, what: string, allowEmpty = false) => isCreatorName(value, allowEmpty) ? value : fail(what);
 
 export function readCcPanel(value: unknown): CcPanel {
