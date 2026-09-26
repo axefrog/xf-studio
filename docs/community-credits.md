@@ -56,11 +56,15 @@ By Frans Bouma (Otis Photomode Mods). [GitHub](https://github.com/FransBouma/Igc
 
 ### Mod Organizer 2
 
-By the ModOrganizer2 contributors; the Cyberpunk game plugin credits 6788 and Zash. [GitHub](https://github.com/ModOrganizer2/modorganizer), [Cyberpunk plugin](https://github.com/ModOrganizer2/modorganizer-basic_games). The plugin and its load-order guide taught us to separate MO2's virtual file priority from the game's own archive load order, which shaped how XF Studio discovers installed mods. MO2's own source and its download handler showed us how profiles order mods, how instances configure their folders, and how installs register, which XF Studio follows when it finds and reads an existing MO2 setup.
+By the ModOrganizer2 contributors; the Cyberpunk game plugin credits 6788 and Zash. [GitHub](https://github.com/ModOrganizer2/modorganizer), [Cyberpunk plugin](https://github.com/ModOrganizer2/modorganizer-basic_games). The plugin and its load-order guide taught us to separate MO2's virtual file priority from the game's own archive load order, which shaped how XF Studio discovers installed mods. MO2's own source and its download handler showed us how profiles order mods, how instances configure their folders, and how installs register, which XF Studio follows when it finds and reads an existing MO2 setup. The download details MO2 keeps in each mod's `meta.ini` (mod and file IDs, installation file, repository) are how a problem report names a mod's source without copying it.
 
 ### ReShade
 
 By Patrick Mours (crosire) and contributors. [GitHub](https://github.com/crosire/reshade). Its add-on API and examples showed how to capture frames before post-processing effects, read depth and toggle effects without touching a user's preset, which is the basis of an optional lossless-capture design for in-game tests. Studied only (BSD-3-Clause); nothing is built on it yet.
+
+### Vortex
+
+By Nexus Mods. [GitHub](https://github.com/Nexus-Mods/Vortex). The deployment manifest it writes into a game folder, and its staging folder names that carry the Nexus Mods mod ID, let a problem report say where a Vortex-installed mod came from. Studied only.
 
 ### WolvenKit
 
@@ -111,6 +115,10 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 ### Pillow
 
 By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images.
+
+### PKWARE ZIP specification
+
+By PKWARE. [APPNOTE.TXT](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT). The ZIP file format specification that XF Studio's small report-file writer follows.
 
 ### red4ext-rs
 

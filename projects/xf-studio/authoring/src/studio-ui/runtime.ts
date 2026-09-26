@@ -98,7 +98,7 @@ export class StudioRuntime {
     if (!result.ok) {
       // Something not available yet is information, not an error.
       if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : result.code === "asset_unavailable" ? "info" : "error", this.sourceLabel(kind),
-        options.failure ?? result.message);
+        options.failure ?? result.message, [], { code: result.code });
       return false;
     }
     if (options.success) this.feedback.record("success", this.sourceLabel(kind), options.success);
@@ -110,7 +110,7 @@ export class StudioRuntime {
     if (!outcome.ok) {
       if (outcome.code === "cancelled") this.feedback.record("info", source, outcome.message);
       else this.feedback.toast(outcome.code === "busy" || outcome.code === "unavailable" ? "warning" : "error", source, outcome.message,
-        recoveryFor(outcome.code, this));
+        recoveryFor(outcome.code, this), { code: outcome.code });
     } else if (options.quietSuccess) this.feedback.record("success", source, outcome.message);
     else this.feedback.toast("success", source, outcome.message, options.actions);
     this.changed();
@@ -119,7 +119,7 @@ export class StudioRuntime {
   async request(request: CollectionRequest, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<CollectionOutcome> {
     const outcome = await this.port.library.execute(request);
     const source = request.kind === "package" ? "Mod package" : "Library";
-    if (!outcome.ok) this.feedback.toast(outcome.code === "unavailable" ? "warning" : "error", source, outcome.message, recoveryFor(outcome.code, this));
+    if (!outcome.ok) this.feedback.toast(outcome.code === "unavailable" ? "warning" : "error", source, outcome.message, recoveryFor(outcome.code, this), { code: outcome.code });
     else {
       const message = this.port.library.summary().progress?.message ?? "Done.";
       if (options.quietSuccess) this.feedback.record("success", source, message);

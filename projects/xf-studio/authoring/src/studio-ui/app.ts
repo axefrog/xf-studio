@@ -23,6 +23,7 @@ import type { ViewComposition, ViewContext } from "./views/panels";
 import { featureCommands, featureViewContext } from "./views/feature-context";
 import type { FeatureViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
+import { openReportDialog } from "./diagnostics/report-dialog";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -31,7 +32,8 @@ import { Frame, StudioRuntime, type Port } from "./runtime";
  * panels, `compose/views.ts`); the shell names no feature's panels.
  */
 export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition) {
-  const feedback = new Feedback();
+  // Error notices carry a reference and "Report this problem" (docs/diagnostics.md).
+  const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref) });
   const catalogue = views.catalogue;
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
@@ -90,6 +92,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     feedback.toast("warning", "Layout", "The saved panel layout could not be restored safely, so the default layout is shown.");
 
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
+  let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   const paint = () => {
     queued = false;
@@ -102,6 +105,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
       else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
     }
+    // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
+    const notice = port.diagnostics.snapshot().notice;
+    if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
     header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form.
     if (frame.previewSetup.setupRequests !== setupRequests) {
@@ -415,5 +421,12 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       keywords: "shortcut hints tooltips status", ...always, run: () => view.setHints(!view.hints()) },
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
+    { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",
+      capability: () => port.diagnostics.capability({ kind: "diagnostics.prepareReport" }), run: () => { openReportDialog(rt, null); } },
+    ...(["deep", "normal"] as const).filter(mode => (port.diagnostics.snapshot().mode?.mode ?? "normal") !== mode).map(mode => ({
+      id: `help.diagnosticMode.${mode}`, title: mode === "deep" ? "Turn diagnostic mode on (more detail for a day)" : "Turn diagnostic mode off", group: "Help",
+      icon: "activity" as const, keywords: "diagnostics verbose detail log trace", capability: () => port.diagnostics.capability({ kind: "diagnostics.setMode", mode }),
+      run: () => void port.diagnostics.dispatch({ kind: "diagnostics.setMode", mode }).then(result =>
+        result.ok ? rt.feedback.record("info", "Diagnostics", result.message) : rt.feedback.toast("warning", "Diagnostics", result.message)) })),
   ];
 }

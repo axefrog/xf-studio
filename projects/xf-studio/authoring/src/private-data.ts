@@ -23,3 +23,17 @@ export function personalDataIn(text: string): "user-path" | "email" | null {
   }
   return null;
 }
+
+/**
+ * The text with every personal part replaced: a user-profile folder name becomes `<user>` (the rest of the path stays, so
+ * `C:\Users\<user>\AppData\…` still says where) and an e-mail address becomes `<email>`. Placeholders, role accounts, versions and
+ * file names that the shared rules pass are left as they are. The diagnostics log and report use this (docs/diagnostics.md).
+ */
+export function redactPersonalData(text: string): string {
+  let out = text;
+  for (const pattern of USER_PATHS)
+    out = out.replace(pattern, (match: string, user: string | undefined) =>
+      !user || PLACEHOLDER_USER.test(user) ? match : match.slice(0, match.length - user.length) + "<user>");
+  return out.replace(EMAIL, (match: string, local: string | undefined, domain: string | undefined) =>
+    ROLE_LOCAL.test(local ?? "") || NOT_ADDRESS.some(rule => rule.test(domain ?? "")) ? match : "<email>");
+}

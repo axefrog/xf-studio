@@ -43,6 +43,8 @@ export type SceneHostOptions = {
   loadMotion?: MotionLoader;
   /** The creator preset's grading LUT (default: the host's). */
   loadLut?: GradingLutLoader;
+  /** Told when the WebGL context is lost and when it comes back (the diagnostics log records both; docs/diagnostics.md). */
+  onContext?: (event: "lost" | "restored") => void;
 };
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
@@ -139,11 +141,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the feature
   // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62).
   const restored = () => {
+    options.onContext?.("restored");
     studio.restore(); features?.contextRestored();
     character.contextRestored();
   };
+  const lost = () => options.onContext?.("lost");
   renderer.domElement.addEventListener("webglcontextrestored", restored);
-  releases.push(() => renderer.domElement.removeEventListener("webglcontextrestored", restored));
+  renderer.domElement.addEventListener("webglcontextlost", lost);
+  releases.push(() => { renderer.domElement.removeEventListener("webglcontextrestored", restored); renderer.domElement.removeEventListener("webglcontextlost", lost); });
   function frameIdle() {
     // Stored cameras use neutral space: take the idle's displacement off, then put the current one (zero while it is off) back on.
     camera.position.sub(idleFrameOffset); controls.target.sub(idleFrameOffset);

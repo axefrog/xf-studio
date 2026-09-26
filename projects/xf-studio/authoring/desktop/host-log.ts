@@ -1,27 +1,18 @@
-import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { hostDiagnosticsAt } from "../src/diagnostics/host-log";
 
 /**
- * A small, bounded diagnostics log in the app's own data folder. The packaged
- * app has no console, so startup facts and failures land here for "Copy
- * diagnostics" and for clean-machine trials. It never records collection
- * content, file bytes, cookies or tokens.
+ * The desktop host's view of its structured diagnostics log (docs/diagnostics.md): JSON Lines in the app's data folder
+ * (`diagnostics/log.jsonl`, rotated and size-bounded, redacted as written). The packaged app has no console, so startup facts
+ * and failures land here, for "Report a problem", "Copy diagnostics" and clean-machine trials. It never records collection
+ * content, file bytes, cookies or tokens. The desktop server writes to the same log.
  */
-export const HOST_LOG_NAME = "desktop.log";
-const LIMIT = 256 * 1024;
-
-export type HostLog = { path: string; write(message: string): void };
+export type HostLog = { path: string; write(message: string): void; failure(message: string, error?: unknown): void };
 
 export function createHostLog(dataRoot: string): HostLog {
-  const path = resolve(dataRoot, HOST_LOG_NAME);
+  const { log } = hostDiagnosticsAt(dataRoot);
   return {
-    path,
-    write(message: string) {
-      try {
-        mkdirSync(dirname(path), { recursive: true });
-        try { if (statSync(path).size > LIMIT) renameSync(path, path + ".1"); } catch { /* No log yet. */ }
-        appendFileSync(path, `${new Date().toISOString()} ${message.replace(/[\r\n]+/g, " ")}\n`);
-      } catch { /* Diagnostics must never stop the app. */ }
-    },
+    path: log.path,
+    write(message: string) { log.info("desktop", "event", message); },
+    failure(message: string, error?: unknown) { log.failure("desktop", "startup_failed", message, error); },
   };
 }

@@ -16,6 +16,15 @@ import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
 import type { ProjectLink } from "./project-links";
+import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnapshot } from "./diagnostics/actions";
+
+/**
+ * "Report a problem", diagnostic mode and the references error notices carry (docs/diagnostics.md). `notice` logs a failure a
+ * notice is about to show and returns its reference (null for an expected refusal, which gets none).
+ */
+export type DiagnosticsPort = Pick<DiagnosticsActions, "capability" | "dispatch" | "descriptors" | "notice"> & {
+  snapshot(): ReadonlyDeep<DiagnosticsSnapshot>;
+};
 
 /** Opens one of XF Studio's own public pages; the host resolves the name, the view never sends a URL. */
 export type ProjectLinkPort = { open(link: ProjectLink): Promise<{ ok: true } | { ok: false; message: string }> };
@@ -130,6 +139,8 @@ export type StudioPresentationPort<Slot> = {
   };
   /** XF Studio's public pages (knowledge pages, issue tracker) for the Help view. */
   readonly links: ProjectLinkPort;
+  /** Problem reports, diagnostic mode and error references. */
+  readonly diagnostics: DiagnosticsPort;
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -168,6 +179,8 @@ export function createStudioPresentation<Slot>(sources: {
   previewSetup?: PreviewSetupActions;
   /** Optional for fixtures; without it the Help view says the page can't be opened here. */
   links?: ProjectLinkPort;
+  /** Optional for fixtures; without it reporting says it isn't available here and notices carry no reference. */
+  diagnostics?: DiagnosticsActions;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -291,6 +304,16 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => NO_PREVIEW_SETUP, capability: () => ({ available: false, reason: "The 3D preview isn't set up here." }),
     dispatch: async () => ({ ok: false, message: "The 3D preview isn't set up here." }), descriptors: () => structuredClone(PREVIEW_SETUP_DESCRIPTORS),
   };
+  const d = sources.diagnostics;
+  const noReports = { available: false as const, code: "unavailable" as const, reason: "Reporting a problem isn't available here." };
+  const diagnostics: DiagnosticsPort = d ? {
+    snapshot: () => d.snapshot(), capability: action => d.capability(action), dispatch: action => d.dispatch(action),
+    descriptors: () => d.descriptors(), notice: failure => d.notice(failure),
+  } : {
+    snapshot: () => ({ mode: null, report: null, opens: 0, notice: null }), capability: () => noReports,
+    dispatch: async () => ({ ok: false, code: noReports.code, message: noReports.reason }), descriptors: () => structuredClone(DIAGNOSTICS_DESCRIPTORS),
+    notice: () => null,
+  };
   const linkSource = sources.links;
   const links: ProjectLinkPort = Object.freeze({ open: (link: ProjectLink) => linkSource ? linkSource.open(link)
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
@@ -298,7 +321,7 @@ export function createStudioPresentation<Slot>(sources: {
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, features: () => infos, feature, localSetup: Object.freeze(localSetup),
     installDetection: Object.freeze(installDetection), previewSetup: Object.freeze(previewSetup),
-    status: Object.freeze({ snapshot: () => s.snapshot() }), links,
+    status: Object.freeze({ snapshot: () => s.snapshot() }), links, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
@@ -308,7 +331,7 @@ export function createStudioPresentation<Slot>(sources: {
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
         ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
         ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
-        ...(setup ? [setup.subscribe(listener)] : [])];
+        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

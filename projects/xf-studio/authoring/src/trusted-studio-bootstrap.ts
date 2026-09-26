@@ -13,6 +13,7 @@ import type { WorkspaceState } from "./workspace-state";
 import type { LocalSetupActions } from "./local-setup-actions";
 import type { InstallDetectionActions } from "./install-detection-actions";
 import type { PreviewSetupActions } from "./preview-setup";
+import type { DiagnosticsActions } from "./diagnostics/actions";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -34,6 +35,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   previewSetup?: PreviewSetupActions;
   /** Opens XF Studio's own public pages for the Help view. */
   links?: ProjectLinkPort;
+  /** Problem reports, diagnostic mode and error references (docs/diagnostics.md). */
+  diagnostics?: DiagnosticsActions;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -82,7 +85,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, previewSetup: options.previewSetup,
-    links: options.links });
+    links: options.links, diagnostics: options.diagnostics });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

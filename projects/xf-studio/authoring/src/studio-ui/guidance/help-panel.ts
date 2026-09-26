@@ -9,6 +9,7 @@ import { HELP_LINKS, helpReference, helpTopicsFor, searchTopics, searchTours } f
 import { renderHelp } from "./render";
 import type { Tour } from "./types";
 import type { TourRecord } from "../../ui-preferences";
+import { openReportDialog } from "../diagnostics/report-dialog";
 
 export type HelpGuidance = { tours(): readonly Tour[]; status(tourId: string): TourRecord | undefined; start(tourId: string): boolean };
 const STATUS: Record<TourRecord, [string, "success" | "neutral"]> = {
@@ -28,7 +29,9 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   const tours = h("ul", { class: "help-tours", "aria-label": "Guided tours" });
   const topics = h("div", { class: "help-topics" });
   const reference = h("div", { class: "help-reference" });
-  const links = h("ul", { class: "help-links" }, HELP_LINKS.map(item => h("li", {},
+  const links = h("ul", { class: "help-links" }, h("li", {},
+    h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
+    h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
     h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),
     h("small", { class: "muted", text: item.detail }))));
   const toursSection = section("Guided tours", tours), topicsSection = section("Questions and answers", topics);
