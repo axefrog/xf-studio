@@ -85,10 +85,18 @@ Why it mattered now: rendering is data driven, so the V's own eye makeup (vanill
 
 1. **Choice icons**: draw the TweakDB icon records' inkatlas parts in the swatches (skin tones and eye colours use icons, so their swatches show text today). Needs the atlas textures from the host. Designed: [choice icons design](../character-customization/choice-icons-design.md): the one vanilla atlas first (every vanilla swatch and 17,855 mod choices that reuse vanilla icons), then a shared TweakXL YAML reader for the 105,630 mod choices whose icon records only YAML defines.
 2. **Face shape from the context**: the head's morphs follow the context's view; the preview's own eye-shape control still decides the eyes region. Decide whether the Eyes row and that control become one.
-3. **PIPE-50**: a JSON-resource mode in the resolver's fetcher instead of the catalogue host's own WolvenKit batching for `.json` text resources. Left for the resolver owner (the fetcher lives in `resolver-host.ts`, which the claude/cleanup-hosts3 track owns).
-4. **Masculine head**, body and arms rendering remain their own tracks; their rows already say they aren't drawn.
-5. **Save write-back**, gated as above: [save write-back design](../character-customization/save-writeback-design.md). Phase A applies a look in game through the bridge (`player.appearance`, `cc.apply`) with the player confirming; phase B writes a new save folder with a minimal-diff rewrite of the creator node, shipped only after the batched session in its §14.
-6. **Prepare all choices** (idea, not built): an opt-in action that warms whole rows or sections in the background with progress and its disk and time cost shown first. Row prefetch already makes an opened row's clicks instant within about a minute, so this is only worth building if people want a whole large setup ready offline; measured costs to show: about 11.5 MB and 2.8 s per CCXL hairstyle, so all 285 hairstyles of the reference setup would take roughly 3 GB and 15 minutes.
+3. **Swatches that show what you'll get** (requested 27 September 2026). Colour rows that mods extend show their added choices as wide grey text buttons, unlike the vanilla colour swatches. Every colour choice, vanilla or modded, should draw a narrow swatch whose colour comes from the resource that actually wins for it:
+   - the hair, brow and lash profile's baked gradient (root to tip);
+   - the skin tone;
+   - the eye colour;
+   - the makeup colour.
+
+   This applies whether or not the definition carries a `color`. When a mod replaces a vanilla colour's resource (for example a hair-tone pack replacing `brown_liquorice.hp`), the vanilla swatch follows the replacement. The swatch is derived from the resolved winner the same way the preview draws it, never from a per-mod table. Combine with choice icons (item 1), which keep the game's own atlas icons where a choice has one.
+4. **One Character panel hierarchy** (requested 27 September 2026): merge "In the 3D view" into "Creator options". Each section's show/hide toggle sits on its heading row (Body, Clothing, and so on), under a top-level grouping by what the part is (proposed default: Head, Body, Clothing), so one place shows and edits each part of V. The opt-in uncensored setting (claude/body-uv-uncensored) belongs in the Body heading.
+5. **PIPE-50**: done (catalogue texts read natively through the fetcher, 27 September).
+6. **Masculine head**, body and arms rendering remain their own tracks; their rows already say they aren't drawn.
+7. **Save write-back**, gated as above: [save write-back design](../character-customization/save-writeback-design.md). Phase A applies a look in game through the bridge (`player.appearance`, `cc.apply`) with the player confirming; phase B writes a new save folder with a minimal-diff rewrite of the creator node, shipped only after the batched session in its §14.
+8. **Prepare all choices** (idea, not built): an opt-in action that warms whole rows or sections in the background with progress and its disk and time cost shown first. Row prefetch already makes an opened row's clicks instant within about a minute, so this is only worth building if people want a whole large setup ready offline; measured costs to show: about 11.5 MB and 2.8 s per CCXL hairstyle, so all 285 hairstyles of the reference setup would take roughly 3 GB and 15 minutes.
 
 ## Open questions and test asks
 
