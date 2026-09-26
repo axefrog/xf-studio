@@ -408,9 +408,13 @@ void UndoTests()
     }
     {
         std::vector<std::string> unknown;
-        const auto undo = w::UndoParams(json::array({Attr("on", 0, 1), Attr("type", 2, 1), Attr("brightness", 50, 80)}), &unknown);
+        const auto undo = w::UndoParams(json::array({Attr("on", 0, 1), Attr("type", 2, 1), Attr("shadow", 1, 0), Attr("brightness", 50, 80),
+                                                     Attr("camera_preset", 0, 7)}),
+                                        &unknown);
         Check("light undo turns the switch back into a flag and the type into its name",
-              undo["on"] == false && undo["type"] == "ambient" && undo["brightness"] == 50.0 && unknown.empty(), undo.dump());
+              undo["on"] == false && undo["type"] == "ambient" && undo["shadow"] == true && undo["brightness"] == 50.0 && unknown.empty(),
+              undo.dump());
+        Check("camera_preset undo is the earlier preset number", undo["camera_preset"] == 0, undo.dump());
         std::vector<std::string> unknownType;
         const auto none = w::UndoParams(json::array({Attr("type", -1, 1)}), &unknownType);
         Check("a light type the menu didn't show is left out of the undo and named",
@@ -722,6 +726,17 @@ void ParamsTests()
     Check("photo.enter keeps the quest route for research and refuses unknown routes",
           p::ParsePhotoEnter(json::parse(R"({"route":"quest"})")) == p::PhotoEnterRoute::Quest &&
               ParamsCode([] { p::ParsePhotoEnter(json::parse(R"({"route":"input"})")); }) == "bad_params");
+    const auto preset = p::ParseCamera(json::parse(R"({"fov":20,"camera_preset":7})"));
+    Check("camera_preset is key 23 and comes before the other camera values",
+          preset.attributes.size() == 2 && preset.attributes[0].key == 23 && preset.attributes[0].value == 7.0f &&
+              p::CameraKeys().front() == 23 && p::CameraParamName(23) == "camera_preset");
+    Check("camera_preset is 0 to 9", ParamsCode([] { p::ParseCamera(json::parse(R"({"camera_preset":10})")); }) == "bad_params");
+    Check("light shadow is key 46 after on and type",
+          p::ParseLight(json::parse(R"({"shadow":false,"on":true})")).attributes[1].key == 46);
+    Check("cc.confirm and cc.back are refused while allow_creator_leave is off",
+          ParamsCode([] { p::CreatorLeaveAllowed(false); }) == "creator_leave_disabled" && p::CreatorLeaveAllowed(true));
+    Check("allow_creator_leave defaults to false and parses",
+          !xfb::ParseConfig("").allowCreatorLeave && xfb::ParseConfig("[bridge]\nallow_creator_leave = true\n").allowCreatorLeave);
     const auto hud = p::ParseHud(json::parse(R"({"hidden":true,"cursor":false})"));
     Check("hud takes hidden and cursor (cursor defaults to true)", hud.hidden && !hud.cursor && p::ParseHud(json::object()).cursor);
     Check("subject offsets are metres within 2 of the head",

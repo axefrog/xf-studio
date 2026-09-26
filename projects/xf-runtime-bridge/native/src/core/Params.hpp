@@ -39,6 +39,8 @@ inline constexpr int32_t kSubjectUpDown = 37;
 inline constexpr int32_t kLightSelect = 43;
 inline constexpr int32_t kLightState = 44; // STATE: option data 0 Off, 1 On (first session's photo.state dump)
 inline constexpr int32_t kLightType = 45;  // option data 1 Spot, 2 Ambient (same dump)
+inline constexpr int32_t kLightShadow = 46; // SHADOW: option data 0 Off, 1 On (same dump)
+inline constexpr int32_t kCameraPreset = 23; // PRESET: 0 Customization, 1-9 photo_mode.std_preset_1..9 (same dump)
 inline constexpr int32_t kLightBrightness = 47;
 inline constexpr int32_t kLightRange = 48;
 inline constexpr int32_t kLightInnerAngle = 49;
@@ -56,8 +58,9 @@ struct Attribute
     std::string name; // the parameter it came from, for messages and results
 };
 
-// photo.camera.set: {fov, roll, focal_distance, aperture, dof, autofocus, look_at, look_at_part,
-// subject: {yaw, left_right, near_far, up_down}, reset}. reset = true restores every camera and
+// photo.camera.set: {camera_preset, fov, roll, focal_distance, aperture, dof, autofocus, look_at,
+// look_at_part, subject: {yaw, left_right, near_far, up_down}, reset}. camera_preset (key 23) comes
+// first, so the other values apply to the camera where the preset put it. reset = true restores every camera and
 // subject setting to its value when photo mode opened, and cannot be combined with values.
 struct CameraRequest
 {
@@ -72,9 +75,10 @@ std::string CameraParamName(int32_t aKey);
 // The keys photo.camera.set may reset.
 std::vector<int32_t> CameraKeys();
 
-// photo.light.set: {light: 1-3, on, type, brightness, range, inner_angle, outer_angle, hue, saturation,
-// luminosity, select_after: 1-3}. on switches the light on or off (key 44, data 1 or 0) and type picks
-// "spot" or "ambient" (key 45, data 1 or 2); both are applied first, in that order, then the values.
+// photo.light.set: {light: 1-3, on, type, shadow, brightness, range, inner_angle, outer_angle, hue,
+// saturation, luminosity, select_after: 1-3}. on switches the light on or off (key 44, data 1 or 0),
+// type picks "spot" or "ambient" (key 45, data 1 or 2) and shadow switches its shadow (key 46); these
+// are applied first, in that order, then the values.
 // select_after selects that light in the menu once the values are set (the undo uses it to put the
 // menu's selection back).
 struct LightRequest
@@ -110,6 +114,11 @@ enum class PhotoEnterRoute
     Quest,
 };
 PhotoEnterRoute ParsePhotoEnter(const json& aParams);
+
+// cc.confirm and cc.back take no parameters. Both are refused unless [bridge] allow_creator_leave =
+// true (default false, in every package, until the maintainer decides whether the bridge may
+// confirm the creator on a test save).
+bool CreatorLeaveAllowed(bool aConfigFlag); // throws creator_leave_disabled when the flag is off
 
 // photo.subject: {up, forward, right} in metres: the point to report, relative to V's head slot, along
 // the world's up axis and V's own forward and right directions (each -2 to 2, default 0).

@@ -72,7 +72,6 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_photoUiHidden: Bool;
   private let m_cursorHidden: Bool;
   private let m_cursors: array<wref<CursorGameController>>;
-  private let m_cursorOpacity: array<Float>;
   private let m_photoPuppet: wref<GameObject>;
 
   public static func Get() -> ref<XFBridgeRegistry> {
@@ -102,15 +101,41 @@ public class XFBridgeRegistry extends ScriptableSystem {
     return this.m_photoPuppet;
   }
 
-  // The menu cursor, hidden with the photo-mode interface for clean captures. Two routes: the
-  // vanilla menu-layer event (inkMenuLayer_SetCursorVisibility, as the time-skip and item-preview
-  // menus use it), and, for every cursor controller that event reaches while the bridge keeps the
-  // cursor hidden, its root widget's opacity at 0 (so photo mode showing the cursor again on its own
-  // can't bring it back). Both are undone on show, when photo mode closes and by the kill switch.
+  // The mouse cursor, hidden with the photo-mode interface for clean captures. Every cursor
+  // controller that plays a context is noted (the ProcessCursorContext wrap below); while the flag
+  // is set, the wrap turns every context into Hide, so photo mode can't show the cursor again on its
+  // own. Setting or clearing the flag replays each noted controller's state at once. The technique
+  // (a context override behind a flag) was learned from Appearance Menu Mod's CET override of the
+  // same function (knowledge/photo-mode.md §6); this is our own redscript. Cleared on show, when
+  // photo mode closes, and by the kill switch.
+  public func NoteCursor(controller: wref<CursorGameController>) -> Void {
+    let i = 0;
+    while i < ArraySize(this.m_cursors) {
+      if this.m_cursors[i] == controller {
+        return;
+      }
+      if !IsDefined(this.m_cursors[i]) {
+        ArrayErase(this.m_cursors, i);
+      } else {
+        i += 1;
+      }
+    }
+    ArrayPush(this.m_cursors, controller);
+  }
+
   public func SetCursorHidden(hidden: Bool) -> Void {
+    let changed = NotEquals(this.m_cursorHidden, hidden);
     this.m_cursorHidden = hidden;
-    if !hidden {
-      this.RestoreCursorWidgets();
+    if !changed {
+      return;
+    }
+    let i = 0;
+    while i < ArraySize(this.m_cursors) {
+      let controller = this.m_cursors[i];
+      if IsDefined(controller) {
+        controller.XFBridgeApplyCursor();
+      }
+      i += 1;
     }
   }
 
@@ -118,45 +143,8 @@ public class XFBridgeRegistry extends ScriptableSystem {
     return this.m_cursorHidden;
   }
 
-  public func HideCursorWidget(controller: wref<CursorGameController>) -> Void {
-    if !IsDefined(controller) {
-      return;
-    }
-    let root = controller.GetRootWidget();
-    if !IsDefined(root) {
-      return;
-    }
-    let i = 0;
-    while i < ArraySize(this.m_cursors) {
-      if this.m_cursors[i] == controller {
-        root.SetOpacity(0.0);
-        return;
-      }
-      i += 1;
-    }
-    ArrayPush(this.m_cursors, controller);
-    ArrayPush(this.m_cursorOpacity, root.GetOpacity());
-    root.SetOpacity(0.0);
-  }
-
-  public func CursorWidgetsHidden() -> Int32 {
+  public func CursorControllers() -> Int32 {
     return ArraySize(this.m_cursors);
-  }
-
-  public func RestoreCursorWidgets() -> Void {
-    let i = 0;
-    while i < ArraySize(this.m_cursors) {
-      let controller = this.m_cursors[i];
-      if IsDefined(controller) {
-        let root = controller.GetRootWidget();
-        if IsDefined(root) {
-          root.SetOpacity(this.m_cursorOpacity[i]);
-        }
-      }
-      i += 1;
-    }
-    ArrayClear(this.m_cursors);
-    ArrayClear(this.m_cursorOpacity);
   }
 
   public func GetPhotoController() -> wref<gameuiPhotoModeMenuController> {
@@ -256,12 +244,8 @@ protected cb func OnShow(reversedUI: Bool) -> Bool {
 protected cb func OnHide() -> Bool {
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
-    // Give the menu layer its cursor back before photo mode closes, so no later menu inherits a
-    // hidden cursor.
-    if registry.IsCursorHidden() {
-      this.XFBridgeSetCursorVisible(true);
-      registry.SetCursorHidden(false);
-    }
+    // Give the cursor back before photo mode closes, so no later menu inherits a hidden cursor.
+    registry.SetCursorHidden(false);
     registry.ClearPhotoController(this);
   }
   return wrappedMethod();
@@ -336,32 +320,36 @@ public func XFBridgeSetUiVisible(visible: Bool) -> Void {
   }
 }
 
-// Shows or hides the menu layer's mouse cursor with the vanilla event menus use for it
-// (inkMenuLayer_SetCursorVisibility: hubMenuTimeSkipController.script:87-90,
-// entityPreviewGameController.script:189-218), queued from this menu.
-@addMethod(gameuiPhotoModeMenuController)
-public func XFBridgeSetCursorVisible(visible: Bool) -> Void {
-  let evt = new inkMenuLayer_SetCursorVisibility();
-  evt.Init(visible);
-  this.QueueEvent(evt);
-}
-
 // V's photo-mode stand-in as the controller knows it (native-set; no script assigns it).
 @addMethod(gameuiPhotoModeMenuController)
 public func XFBridgeFakePlayer() -> wref<PlayerPuppet> {
   return this.m_fakePlayer;
 }
 
-// Every cursor controller the bridge's hide event reaches (or that photo mode shows again while the
-// bridge keeps it hidden) gets its root widget's opacity set to 0; RestoreCursorWidgets undoes it.
+// Notes every cursor controller, and plays Hide instead of any context while the bridge hides the
+// cursor (signature from cursorGameController.script:343).
 @wrapMethod(CursorGameController)
-protected cb func OnSetCursorVisibility(isVisible: Bool) -> Bool {
-  let result = wrappedMethod(isVisible);
+private final func ProcessCursorContext(const context: CName, data: ref<inkUserData>, opt force: Bool) -> Void {
   let registry = XFBridgeRegistry.Get();
-  if IsDefined(registry) && registry.IsCursorHidden() {
-    registry.HideCursorWidget(this);
+  if IsDefined(registry) {
+    registry.NoteCursor(this);
+    if registry.IsCursorHidden() {
+      wrappedMethod(n"Hide", null, force);
+      return;
+    }
   }
-  return result;
+  wrappedMethod(context, data, force);
+}
+
+// Replays the cursor's state now: Hide while the bridge hides it, otherwise Show or Hide as the
+// controller's own visibility says.
+@addMethod(CursorGameController)
+public func XFBridgeApplyCursor() -> Void {
+  if this.m_isCursorVisible {
+    this.ProcessCursorContext(n"Show", null, true);
+  } else {
+    this.ProcessCursorContext(n"Hide", null, true);
+  }
 }
 
 // Remembers V's photo-mode stand-in when photo mode sets it up (photoModePlayerEntity.script:378;
@@ -512,9 +500,6 @@ public abstract class XFBridgeActions {
       out += ",\"photo_ui_shown\":true";
     }
     if registry.IsCursorHidden() {
-      if IsDefined(photo) {
-        photo.XFBridgeSetCursorVisible(true);
-      }
       registry.SetCursorHidden(false);
       out += ",\"cursor_shown\":true";
     }
@@ -742,8 +727,8 @@ public abstract class XFPhoto {
     return "{\"ok\":true,\"changed\":true}";
   }
 
-  // Fades the photo-mode interface out or in; with cursor, also hides or shows the menu's mouse
-  // cursor (XFBridgeRegistry.SetCursorHidden has the two routes).
+  // Fades the photo-mode interface out or in; with cursor, also hides or shows the mouse cursor
+  // (XFBridgeRegistry.SetCursorHidden).
   public static func SetUiVisible(cid: String, visible: Bool, cursor: Bool) -> String {
     if !XFPhoto.Active() {
       return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
@@ -758,13 +743,11 @@ public abstract class XFPhoto {
     controller.XFBridgeSetUiVisible(visible);
     registry.SetPhotoUiHidden(!visible);
     if cursor {
-      // The flag goes first: the event reaches the cursor controller later, and its wrap reads it.
       registry.SetCursorHidden(!visible);
-      controller.XFBridgeSetCursorVisible(visible);
     }
     let cursorAfter = registry.IsCursorHidden();
     XFBridgeLog.Info(cid, "photo UI visible " + XFJson.Flag(before) + " -> " + XFJson.Flag(visible) + ", cursor hidden " + XFJson.Flag(cursorBefore) + " -> " + XFJson.Flag(cursorAfter) + "; undo: photo.hud.hide with hidden=" + XFJson.Flag(!before));
-    return "{\"ok\":true,\"hidden\":" + XFJson.Flag(!visible) + ",\"was_hidden\":" + XFJson.Flag(!before) + ",\"cursor_hidden\":" + XFJson.Flag(cursorAfter) + ",\"was_cursor_hidden\":" + XFJson.Flag(cursorBefore) + ",\"cursor_widgets_hidden\":" + IntToString(registry.CursorWidgetsHidden()) + "}";
+    return "{\"ok\":true,\"hidden\":" + XFJson.Flag(!visible) + ",\"was_hidden\":" + XFJson.Flag(!before) + ",\"cursor_hidden\":" + XFJson.Flag(cursorAfter) + ",\"was_cursor_hidden\":" + XFJson.Flag(cursorBefore) + ",\"cursor_controllers\":" + IntToString(registry.CursorControllers()) + "}";
   }
 
   // --- Subject and camera, for framing (photo.subject) ---------------------------------------
@@ -975,6 +958,7 @@ public abstract class XFCharacter {
     let state = system.GetState();
     let menuOpen = XFBridgeActions.CharacterMenuOpen();
     let out = "{\"ok\":true,\"character_menu_open\":" + XFJson.Flag(menuOpen);
+    out += ",\"menu\":" + XFCharacter.MenuMode();
     if IsDefined(state) {
       out += ",\"state\":{\"body_male\":" + XFJson.Flag(state.IsBodyGenderMale()) + ",\"brain_male\":" + XFJson.Flag(state.IsBrainGenderMale());
       XFBridgeLog.Debug(cid, "Appearance step: TDBID.ToStringDEBUG next");
@@ -1024,6 +1008,53 @@ public abstract class XFCharacter {
       }
     }
     return out + "}";
+  }
+
+  // How the captured creator menu was opened: whether it edits V's finalized look (the mirror's mode;
+  // false is the new-game mode, where Confirm moves on instead of keeping the look) and its edit tag
+  // (0 NewGame, 1 HairDresser, 2 Ripperdoc). Answers the Character Customization Anywhere caveat in
+  // knowledge/photo-mode.md §3.1 (open question 2).
+  public static func MenuMode() -> String {
+    let registry = XFBridgeRegistry.Get();
+    let menu: wref<characterCreationBodyMorphMenu>;
+    if IsDefined(registry) {
+      menu = registry.GetCharacterMenu();
+    }
+    if !IsDefined(menu) {
+      return "{\"seen\":false}";
+    }
+    let name = "NewGame";
+    if Equals(menu.m_editMode, gameuiCharacterCustomizationEditTag.HairDresser) {
+      name = "HairDresser";
+    } else {
+      if Equals(menu.m_editMode, gameuiCharacterCustomizationEditTag.Ripperdoc) {
+        name = "Ripperdoc";
+      }
+    }
+    return "{\"seen\":true,\"updating_finalized_state\":" + XFJson.Flag(menu.m_updatingFinalizedState) + ",\"edit_mode\":" + XFJson.Str(name) + ",\"busy\":" + XFJson.Flag(NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE)) + "}";
+  }
+
+  // Leaves the appearance screen through the menu's own functions (characterCreationBodyMorphMenu
+  // .script:688-712; knowledge/photo-mode.md §3.3): keep = ConfirmCustomizedCharacter (ReFinalizeState,
+  // then the menu moves on), otherwise ConfirmBackConfirmation (CancelFinalizedStateUpdate: every
+  // change discarded). The plugin refuses both unless allow_creator_leave = true.
+  public static func Leave(cid: String, keep: Bool) -> String {
+    if !XFBridgeActions.CharacterMenuOpen() {
+      return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open in its edit-V's-look mode");
+    }
+    let menu = XFBridgeRegistry.Get().GetCharacterMenu();
+    if NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+      return XFJson.Fail("busy", "the appearance screen is still applying the previous change");
+    }
+    if keep {
+      XFBridgeActions.EnsureSaveLock(cid);
+      menu.ConfirmCustomizedCharacter();
+      XFBridgeLog.Info(cid, "cc.confirm: the look is kept (ReFinalizeState); undo: load the safety save");
+    } else {
+      menu.ConfirmBackConfirmation();
+      XFBridgeLog.Info(cid, "cc.back: every change on the appearance screen discarded");
+    }
+    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + "}";
   }
 
   public static func HasOption(group: String, option: String, fpp: Bool) -> Bool {

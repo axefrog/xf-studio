@@ -14,6 +14,8 @@ import { DEFAULT_CAPTURE_ROOT, type CaptureTarget } from "../capture/capture.ts"
 import { CATALOGUE, findCommand, type CommandDef, type CommandResult } from "./catalogue.ts";
 import { NO_BRIDGE, connectError, plainBridgeError, type PlainError } from "./errors.ts";
 import { validate } from "./schema.ts";
+import { sendKeyToWindow, type KeySender } from "../input/photo-key.ts";
+import { describeWindow, mainWindowOf } from "../capture/win32.ts";
 
 export type CommandOutcome =
   | { ok: true; command: string; cid: string; result: unknown; images?: ImageRef[]; undo?: string }
@@ -43,6 +45,8 @@ export type CommandApiOptions = {
   /** Close the pipe after this long without a command, so other XF tools can connect. */
   idleCloseMs?: number;
   clientTimeoutMs?: number;
+  /** photo.open's key sender (tests pass a fake: the real one presses a key in the game window). */
+  keySender?: KeySender;
 };
 
 const pipeTransport =
@@ -85,6 +89,22 @@ export class CommandApi {
     if (!session) return null;
     const { token: _token, ...rest } = session;
     return rest;
+  }
+
+  keySender(): KeySender {
+    return this.options.keySender ?? sendKeyToWindow;
+  }
+
+  /** The window photo.open may send its key to: the game's main window (from session.json's pid), or the test override's window. */
+  keyTarget(): { hwnd: bigint; pid: number } | null {
+    const override = this.options.captureTarget;
+    if (override && "hwnd" in override) {
+      const info = describeWindow(override.hwnd);
+      return info ? { hwnd: info.hwnd, pid: info.pid } : null;
+    }
+    const session = readSession(this.runtimeDir);
+    const window = session ? mainWindowOf(session.pid) : null;
+    return window && session ? { hwnd: window.hwnd, pid: session.pid } : null;
   }
 
   captureTarget(): CaptureTarget {

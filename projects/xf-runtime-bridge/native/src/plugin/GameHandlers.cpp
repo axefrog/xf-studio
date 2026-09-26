@@ -675,9 +675,9 @@ json PhotoExit(const MethodContext& aContext)
     {
         result["active"] = !WaitForPhotoMode(false, 3000, cid);
     }
-    // Photo mode can't be reopened by the bridge (photo.enter refuses without a research route).
+    // Reopening is photo.open in the tools (it presses the photo-mode key); the plugin can't.
     result["undo"] = nullptr;
-    result["undo_note"] = "press the photo mode key to open photo mode again; its settings start fresh";
+    result["undo_note"] = "photo.open (or the player's photo mode key) opens photo mode again; its settings start fresh";
     return result;
 }
 
@@ -759,6 +759,30 @@ json CharacterApply(const MethodContext& aContext)
                       {"params", {{"option", result.value("option", request.option)}, {"index", result.value("before", 0)}}},
                       {"note", "or press Back in the appearance screen and confirm, which discards every change made there"}};
     return result;
+}
+
+// cc.confirm / cc.back: the creator menu's own Confirm (keeps the look) and Back-and-confirm (discards
+// every change), refused unless [bridge] allow_creator_leave = true.
+json CreatorLeave(const MethodContext& aContext, bool aKeep)
+{
+    params::RequireOnly(aContext.params, {});
+    params::CreatorLeaveAllowed(Get().config.allowCreatorLeave);
+    bool keep = aKeep;
+    auto result = CallScript("XFCharacter", "Leave", {"Bool"}, {&keep}, aContext.cid);
+    result["undo"] = nullptr;
+    result["undo_note"] = aKeep ? "the look is kept in the running game; load the safety save to undo it"
+                                : "every change made on the appearance screen was discarded; nothing to undo";
+    return result;
+}
+
+json CreatorConfirm(const MethodContext& aContext)
+{
+    return CreatorLeave(aContext, true);
+}
+
+json CreatorBack(const MethodContext& aContext)
+{
+    return CreatorLeave(aContext, false);
 }
 
 json WorldTimeSet(const MethodContext& aContext)
@@ -868,6 +892,10 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register(WriteMethod("cc.apply", Access::WriteCharacter, RunOn::GameThread,
                                      "Sets one character-creator option on the open appearance screen (never confirms).",
                                      &CharacterApply));
+    aDispatcher.Register(WriteMethod("cc.confirm", Access::WriteCharacter, RunOn::GameThread,
+                                     "Confirms the appearance screen (keeps the look); off unless allow_creator_leave.", &CreatorConfirm));
+    aDispatcher.Register(WriteMethod("cc.back", Access::WriteCharacter, RunOn::GameThread,
+                                     "Backs out of the appearance screen, discarding its changes; off unless allow_creator_leave.", &CreatorBack));
     aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
     aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
 

@@ -55,10 +55,10 @@ export type Offset = { up: number; forward: number; right: number };
  * next session checks one capture per framing]
  */
 export const FRAMINGS = {
-  eyes: { description: "Both eyes and brows, filling the eyes region (the window's centre band).", offset: { up: 0.075, forward: 0.09, right: 0 }, span_m: 0.2 },
-  face: { description: "The face from chin to hairline, filling the face region.", offset: { up: 0.045, forward: 0.08, right: 0 }, span_m: 0.36 },
-  "head-and-shoulders": { description: "Head and shoulders.", offset: { up: -0.1, forward: 0.04, right: 0 }, span_m: 0.8 },
-} as const satisfies Record<string, { description: string; offset: Offset; span_m: number }>;
+  eyes: { description: "Both eyes and brows, filling the eyes region (the window's centre band).", offset: { up: 0.075, forward: 0.09, right: 0 }, span_m: 0.2, xf_preset: 8 },
+  face: { description: "The face from chin to hairline, filling the face region.", offset: { up: 0.045, forward: 0.08, right: 0 }, span_m: 0.36, xf_preset: 7 },
+  "head-and-shoulders": { description: "Head and shoulders.", offset: { up: -0.1, forward: 0.04, right: 0 }, span_m: 0.8, xf_preset: 9 },
+} as const satisfies Record<string, { description: string; offset: Offset; span_m: number; xf_preset: number }>;
 export type FramingName = keyof typeof FRAMINGS;
 
 export type FrameOptions = {
@@ -265,22 +265,28 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     return m;
   };
 
-  // 1. Turn V to face the camera (plus yaw_offset).
-  if (options.face_camera !== false) {
-    const facing = () => {
-      const toCamera = { x: reading.camera.position.x - reading.head.x, y: reading.camera.position.y - reading.head.y, z: 0 };
-      return horizontalAngle(reading.subject_forward, toCamera);
-    };
+  // 1. Turn V to face the camera (plus yaw_offset). A probe first tells which way, and how far, V
+  // turns per unit of the rotation slider.
+  const faceCamera = options.face_camera !== false;
+  const facingError = () => {
+    const toCamera = { x: reading.camera.position.x - reading.head.x, y: reading.camera.position.y - reading.head.y, z: 0 };
+    return horizontalAngle(reading.subject_forward, toCamera) - (options.yaw_offset ?? 0);
+  };
+  let turnPerUnit = 1;
+  const turn = async (tries: number) => {
+    for (let i = 0; i < tries; i++) {
+      const error = facingError();
+      if (Math.abs(error) < 1.5) return;
+      await set({ yaw: pose.yaw + error / turnPerUnit }, "yaw");
+    }
+  };
+  if (faceCamera) {
     const before = { forward: reading.subject_forward };
     const probe = 10;
     await set({ yaw: pose.yaw + probe }, "yaw-probe");
     const turned = horizontalAngle(before.forward, reading.subject_forward); // degrees V turned for +10 on the slider
-    const k = Math.abs(turned) > 1 ? turned / probe : 1;
-    for (let i = 0; i < 2; i++) {
-      const error = facing() - (options.yaw_offset ?? 0);
-      if (Math.abs(error) < 1.5) break;
-      await set({ yaw: pose.yaw + error / k }, "yaw");
-    }
+    turnPerUnit = Math.abs(turned) > 1 ? turned / probe : 1;
+    await turn(2);
   }
 
   // 2. Centre, 3. size, 4. centre again.
@@ -334,6 +340,13 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     budget = Math.max(budget, 2);
     await centre("centre-after-zoom");
     if (clamped !== next) break;
+  }
+  // Moving V changes the direction to the camera a little: turn again and re-centre if needed.
+  for (let pass = 0; faceCamera && pass < 2 && Math.abs(facingError()) >= 1.5; pass++) {
+    await turn(1);
+    m = measure(reading);
+    budget = Math.max(budget, 2);
+    await centre("centre-after-yaw");
   }
   const size = (m.scale * span) / 0.1;
   const residual = { x: round(want.x - m.x, 4), y: round(want.y - m.y, 4), size: round(size, 3) };

@@ -32,9 +32,11 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   call_failed: "The game refused the call, and nothing is known to have changed.",
   script_layer_missing:
     "The bridge's script part isn't loaded (redscript didn't compile it). Check that redscript is installed and look for a script error at game start.",
-  not_in_photo_mode: "This only works in photo mode. Ask the player to press the photo mode key (V must be in the world), wait for it with game_wait, then try again.",
+  not_in_photo_mode: "This only works in photo mode. Open it with photo_open (or ask the player to press the photo mode key), then try again.",
   photo_key_needed:
-    "The bridge can't open the full photo mode by itself yet. Ask the player to press the photo mode key (V must be in the world); game_wait with phase photo_mode notices when it opens.",
+    "The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens.",
+  creator_leave_disabled:
+    "Confirming or backing out of the appearance screen is switched off in this bridge's config.ini (allow_creator_leave). Ask the player to press Confirm or Back.",
   not_in_gameplay: "This needs V in the world: load a save and close any menus first.",
   not_in_character_menu:
     "Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first.",

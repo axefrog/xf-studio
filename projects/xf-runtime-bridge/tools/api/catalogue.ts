@@ -18,6 +18,7 @@ import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
 import { frame, FramingError, FRAMINGS, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
+import { KeySendError, readPhotoModeBinding, virtualKey, type KeyRoute } from "../input/photo-key.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
@@ -138,6 +139,51 @@ async function bridgeCall(context: CommandContext, method: string, params: Recor
 
 const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * photo.open: presses the player's photo-mode key in the game window (the one input the tools may
+ * send; approved for the test profile), after the bridge says V is in the world and photo mode is
+ * allowed, then waits for photo mode.
+ */
+async function runPhotoOpen(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const status = await bridgeCall(context, "game.status", {});
+  const phase = String(status.phase);
+  if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
+  if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
+  if (status.photo_mode_can_open === false) {
+    throw planError("photo_not_allowed", "The game doesn't allow photo mode right now (combat, a scene or a vehicle?). Nothing was sent.");
+  }
+  const binding = readPhotoModeBinding();
+  const vk = virtualKey(binding.name);
+  if (vk === null) throw planError("key_unsupported", `The photo mode key is bound to ${binding.name}, which the bridge can't send. Ask the player to press it.`);
+  const target = context.api.keyTarget();
+  if (!target) throw planError("no_window", "The game has no visible window to send the key to.");
+  const route = ((input.route as string | undefined) ?? "sendinput") as KeyRoute;
+  let sent;
+  try {
+    sent = await context.api.keySender()(target, vk, route);
+  } catch (error) {
+    if (error instanceof KeySendError) throw planError(error.code, error.message);
+    throw error;
+  }
+  const timeout = (input.timeout_ms as number | undefined) ?? 5000;
+  const started = performance.now();
+  for (;;) {
+    await sleepMs(250);
+    const now = await bridgeCall(context, "game.status", {});
+    if (String(now.phase) === "photo_mode") {
+      return {
+        value: { changed: true, key: binding.name, key_source: binding.source, ...sent, waited_ms: Math.round(performance.now() - started), undo: { method: "photo.exit", params: {} } },
+      };
+    }
+    if (performance.now() - started >= timeout) {
+      throw planError(
+        "photo_open_timeout",
+        `The photo mode key (${binding.name}) was sent, but photo mode didn't open within ${Math.round(timeout / 1000)} s. Ask the player to press it; game_wait with phase photo_mode then continues.`,
+      );
+    }
+  }
+}
+
 /** photo.frame: builds the framing adapter over the bridge and the window capture, then runs the loop. */
 async function runFrame(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
   let hudUndo: Record<string, unknown> | null = null;
@@ -181,7 +227,19 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
     },
   };
   let lookAtBefore: number | undefined;
+  let presetBefore: number | undefined;
   try {
+    if (input.xf_preset && input.camera_preset !== undefined) throw planError("bad_input", "Give xf_preset or camera_preset, not both.");
+    const target = (input.target as FrameOptions["target"]) ?? "face";
+    const preset = input.xf_preset ? FRAMINGS[target].xf_preset : (input.camera_preset as number | undefined);
+    if (preset !== undefined) {
+      // A camera preset first (attribute 23): it puts the camera at a fixed offset from V, so the
+      // framing loop only fine-tunes. XF presets 7-9 come from the test profile's TweakXL file.
+      const set = await bridgeCall(context, "photo.camera.set", { camera_preset: preset });
+      const applied = ((set.applied as CameraApplied[] | undefined) ?? [])[0];
+      if (applied && applied.before_known !== false && typeof applied.before === "number" && applied.before >= 0) presetBefore = Math.round(applied.before);
+      await sleepMs(800);
+    }
     if (input.look_at !== undefined && input.look_at !== "keep") {
       const set = await bridgeCall(context, "photo.camera.set", { look_at: input.look_at === "off" ? 0 : 1 });
       const applied = ((set.applied as CameraApplied[] | undefined) ?? [])[0];
@@ -189,7 +247,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       await sleepMs(300);
     }
     const options: FrameOptions = {
-      target: (input.target as FrameOptions["target"]) ?? "face",
+      target,
       ...(input.span_m !== undefined ? { span_m: input.span_m as number } : {}),
       ...(input.offset !== undefined ? { offset: input.offset as FrameOptions["offset"] } : {}),
       ...(input.position !== undefined ? { position: input.position as FrameOptions["position"] } : {}),
@@ -200,10 +258,13 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       ...(input.tolerance !== undefined ? { tolerance: input.tolerance as number } : {}),
     };
     const result = await frame(adapter, options);
-    if (lookAtBefore !== undefined) {
-      result.undo = { method: "photo.camera.set", params: { ...(result.undo?.params ?? {}), look_at: lookAtBefore } };
+    if (lookAtBefore !== undefined || presetBefore !== undefined) {
+      result.undo = {
+        method: "photo.camera.set",
+        params: { ...(presetBefore !== undefined ? { camera_preset: presetBefore } : {}), ...(result.undo?.params ?? {}), ...(lookAtBefore !== undefined ? { look_at: lookAtBefore } : {}) },
+      };
     }
-    return { value: result };
+    return { value: preset !== undefined ? { ...result, camera_preset: preset } : result };
   } catch (error) {
     if (error instanceof FramingError) throw planError(error.code, error.message);
     throw error;
@@ -396,10 +457,23 @@ export const CATALOGUE: readonly CommandDef[] = [
 
   // Photo mode (changes vanish when photo mode closes)
   {
-    name: "photo.enter",
+    name: "photo.open",
     title: "Open photo mode",
     description:
-      "For now this answers that the player has to press the photo mode key: the bridge can't yet open the full photo mode by itself. Ask the player to press it, then use game.wait with phase photo_mode. route quest opens a restricted photo mode (first-person camera only, no V tab) and is kept for research only.",
+      "Opens photo mode by pressing the player's own photo mode key in the game window (read from the game's key bindings, N by default): the only key the XF tools ever send, and only to the game window. It checks first that V is in the world and the game allows photo mode, brings the game window to the front if needed and refuses if it can't, then waits until photo mode is open.",
+    permission: "write-photo",
+    input: obj({
+      route: oneOf("sendinput (default: a key press, the game window must be in front) or postmessage (research: posted to the game window only).", ["sendinput", "postmessage"]),
+      timeout_ms: int("How long to wait for photo mode after the key, in milliseconds (default 5000).", 500, 30000),
+    }),
+    undo: "photo.exit.",
+    local: runPhotoOpen,
+  },
+  {
+    name: "photo.enter",
+    title: "Open photo mode (restricted route)",
+    description:
+      "Use photo_open instead. The game offers no way to open the full photo mode from inside, so without a route this answers that the photo mode key is needed (photo_open presses it). route quest opens a restricted photo mode (first-person camera only, no V tab) and is kept for research only.",
     permission: "write-photo",
     input: obj({
       route: oneOf("How to open photo mode: auto (the default; answers that the player must press the photo mode key until a proper route exists) or quest (research only: a restricted photo mode).", ["auto", "quest"]),
@@ -413,7 +487,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     description: "Leaves photo mode, discarding its settings as the game always does.",
     permission: "write-photo",
     input: obj(),
-    undo: "Ask the player to press the photo mode key again (photo-mode settings start fresh).",
+    undo: "photo.open (photo-mode settings start fresh).",
     bridge: { method: "photo.exit" },
   },
   {
@@ -425,6 +499,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     permission: "write-photo",
     input: obj({
       preset: oneOf("A named framing; explicit values override it.", Object.keys(CAMERA_PRESETS)),
+      camera_preset: int("Photo mode's own camera preset: 0 Customization, 1-9 its presets (in the XF test profile 7 face, 8 eyes, 9 head and shoulders). Applied before the other values.", 0, 9),
       fov: num("Field of view in degrees (photo mode allows 5 to 90).", 1, 180),
       roll: num("Camera roll in degrees.", -360, 360),
       focal_distance: num("Focus distance in metres.", 0, 1000),
@@ -458,6 +533,7 @@ export const CATALOGUE: readonly CommandDef[] = [
         light: int("Which light: 1, 2 or 3.", 1, 3),
         on: bool("Switch the light on (true) or off (false)."),
         type: oneOf("The kind of light: spot or ambient.", ["spot", "ambient"]),
+        shadow: bool("The light casts shadows (true) or not."),
         brightness: num("Brightness, 0 to 100.", 0, 100),
         range: num("Range, 0 to 100.", 0, 100),
         inner_angle: num("Inner cone angle in degrees.", 0, 180),
@@ -525,6 +601,8 @@ export const CATALOGUE: readonly CommandDef[] = [
         description: "Where the target should sit, as fractions of the window (default the centre).",
         ...obj({ x: num("0 left edge, 1 right edge.", 0, 1), y: num("0 top edge, 1 bottom edge.", 0, 1) }),
       },
+      xf_preset: bool("First select the framing's XF camera preset (7 face, 8 eyes, 9 head and shoulders; needs the test profile's preset file), then fine-tune."),
+      camera_preset: int("First select this photo-mode camera preset (0-9), then fine-tune.", 0, 9),
       face_camera: bool("Turn V to face the camera first. Default true."),
       yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps.", -90, 90),
       look_at: oneOf("V's look-at before framing: keep (default), off (V's head follows the body, for light sweeps) or camera.", ["keep", "off", "camera"]),
@@ -532,7 +610,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       max_steps: int("Most correction steps (default 6).", 1, 12),
       tolerance: num("Allowed centring error as a fraction of the window height (default 0.01).", 0.001, 0.2),
     }),
-    undo: "the result's undo puts the field of view, V's rotation and placement (and look-at) back as they were.",
+    undo: "the result's undo puts the field of view, V's rotation and placement (and look-at and camera preset) back as they were.",
     local: runFrame,
   },
 
@@ -546,6 +624,25 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({ option: str("The option's internal name or on-screen label.", { maxLength: 128 }), index: int("The value, counting from 0.", 0, 100000) }, ["option", "index"]),
     undo: "cc.apply with the previous index (in the result's undo), or Back in the appearance screen, which discards every change made there.",
     bridge: { method: "cc.apply" },
+  },
+  {
+    name: "cc.confirm",
+    title: "Confirm the appearance screen",
+    description:
+      "Presses Confirm on the open appearance screen (mirror or ripperdoc), keeping the look in the running game and closing the screen. Only in the XF test profile, and only in sessions that end by loading the safety save; saving stays locked while the change is live. Refused on a creator opened in new-game mode, where Confirm wouldn't keep the look.",
+    permission: "write-character",
+    input: obj(),
+    undo: "Load the safety save (the look stays in the running game until then).",
+    bridge: { method: "cc.confirm" },
+  },
+  {
+    name: "cc.back",
+    title: "Leave the appearance screen without keeping changes",
+    description: "Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. Only in the XF test profile.",
+    permission: "write-character",
+    input: obj(),
+    undo: "Nothing to undo: the changes made on the screen were discarded.",
+    bridge: { method: "cc.back" },
   },
 
   // World

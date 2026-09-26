@@ -63,12 +63,12 @@ describe("planScript", () => {
       expect(problems, file).toEqual([]);
       expect(existsSync(join(projectDir, "..", "..", s.card!)), file).toBe(true);
       // Every photo-mode excursion ends with photo.exit, and restore leaves photo mode too.
-      const enters = plan.filter((p) => p.command === "photo.enter").length;
+      const enters = plan.filter((p) => p.command === "photo.enter" || p.command === "photo.open").length;
       const exits = plan.filter((p) => p.phase === "steps" && p.command === "photo.exit").length;
       expect(exits, file).toBe(enters);
       expect(plan.some((p) => p.phase === "restore" && p.command === "photo.exit")).toBe(true);
       // The very first thing the player is asked is to make a safety save, before any write.
-      const firstWrite = plan.findIndex((p) => p.command && !["bridge.info", "game.status", "game.wait", "player.appearance", "photo.state", "capture.screenshot"].includes(p.command));
+      const firstWrite = plan.findIndex((p) => p.command && !["bridge.info", "game.status", "game.wait", "player.appearance", "photo.state", "photo.subject", "capture.screenshot", "capture.burst"].includes(p.command));
       const firstAsk = plan.findIndex((p) => p.kind === "ask");
       expect(firstAsk).toBeLessThan(firstWrite);
       expect(plan[firstAsk].text).toContain("manual save");
@@ -98,7 +98,7 @@ describe("runScript against the self-test host", () => {
     const out = tempDir("xfb-sess-out-");
     const s = script(
       [
-        { do: "run", label: "enter", command: "photo.enter" },
+        { do: "run", label: "enter", command: "photo.enter", input: { route: "quest" } },
         { do: "set camera", label: "cam", preset: "face" },
         { do: "capture", label: "shot", region: "center-16x9", max_width: 640 },
         { do: "apply cc", label: "cc-refused", option: "XF", index: 1, expect_error: "not_in_character_menu" },
@@ -179,7 +179,7 @@ describe("runScript against the self-test host", () => {
     const lines: string[] = [];
     const s = script(
       [
-        { do: "run", label: "enter", command: "photo.enter" },
+        { do: "run", label: "enter", command: "photo.enter", input: { route: "quest" } },
         { do: "run", label: "hide", command: "photo.hud.hide", input: { hidden: true } },
         { do: "run", label: "wait-menu", command: "game.wait", input: { phase: ["character_menu"], timeout_ms: 60000 } },
         { do: "wait", label: "long", ms: 60000 },

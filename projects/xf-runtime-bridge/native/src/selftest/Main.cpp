@@ -61,6 +61,7 @@ int wmain(int argc, wchar_t** argv)
     bool allowWrites = false;
     std::wstring writeClasses = L"photo,world,character";
     bool pump = true;
+    bool allowCreatorLeave = false;
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
@@ -88,6 +89,10 @@ int wmain(int argc, wchar_t** argv)
         {
             pump = false;
         }
+        else if (arg == L"--allow-creator-leave")
+        {
+            allowCreatorLeave = true;
+        }
         else
         {
             std::fwprintf(stderr, L"unknown argument: %ls\n", arg.c_str());
@@ -111,6 +116,7 @@ int wmain(int argc, wchar_t** argv)
     // The same parser as the plugin's config.ini ([bridge] allow_write_classes).
     config.writeClasses =
         xfb::ParseConfig("[bridge]\nallow_write_classes = " + xfb::win32::Narrow(writeClasses) + "\n").writeClasses;
+    config.allowCreatorLeave = allowCreatorLeave;
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
 
@@ -251,6 +257,7 @@ int wmain(int argc, wchar_t** argv)
                                          {"phase", sim.phase},
                                          {"player_present", sim.phase == "gameplay" || sim.phase == "photo_mode"},
                                          {"photo_mode_active", sim.phase == "photo_mode"},
+                                         {"photo_mode_can_open", sim.phase == "gameplay"},
                                          {"world_frozen", sim.frozen},
                                          {"ui_hidden", sim.hudHidden},
                                          {"cursor_hidden", sim.cursorHidden},
@@ -310,7 +317,7 @@ int wmain(int argc, wchar_t** argv)
                                          sim.cursorHidden = false;
                                      }
                                      return json{{"simulated", true}, {"changed", changed}, {"active", false}, {"undo", nullptr},
-                                                 {"undo_note", "press the photo mode key to open photo mode again; its settings start fresh"}};
+                                                 {"undo_note", "photo.open (or the player's photo mode key) opens photo mode again; its settings start fresh"}};
                                  }));
     dispatcher.Register(simWrite("photo.camera.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Camera (simulated).",
                                  [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
@@ -445,6 +452,22 @@ int wmain(int argc, wchar_t** argv)
                                      return json{{"simulated", true}, {"option", request.option}, {"before", 0}, {"after", request.index},
                                                  {"undo", {{"method", "cc.apply"}, {"params", {{"option", request.option}, {"index", 0}}}}}};
                                  }));
+    // The creator's Confirm and Back, simulated: gated like the plugin, then the appearance screen closes.
+    const auto simLeave = [&config](bool aKeep) {
+        return [&config, aKeep](const xfb::MethodContext& aContext) {
+            p::RequireOnly(aContext.params, {});
+            p::CreatorLeaveAllowed(config.allowCreatorLeave);
+            std::scoped_lock _(sim.mutex);
+            if (sim.phase != "character_menu")
+            {
+                throw xfb::MethodError("not_in_character_menu", "simulated: the game is in '" + sim.phase + "'");
+            }
+            sim.phase = "gameplay";
+            return json{{"simulated", true}, {"kept", aKeep}, {"undo", nullptr}};
+        };
+    };
+    dispatcher.Register(simWrite("cc.confirm", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator confirm (simulated).", simLeave(true)));
+    dispatcher.Register(simWrite("cc.back", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator back (simulated).", simLeave(false)));
     dispatcher.Register(simWrite("world.time.set", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Clock (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseTime(aContext.params);

@@ -54,7 +54,7 @@ json UndoParams(const json& aApplied, std::vector<std::string>* aUnknown)
         {
             undo["subject"][name.substr(8)] = before;
         }
-        else if (name == "dof" || name == "autofocus" || name == "on")
+        else if (name == "dof" || name == "autofocus" || name == "on" || name == "shadow")
         {
             undo[name] = before != 0.0;
         }
@@ -73,7 +73,7 @@ json UndoParams(const json& aApplied, std::vector<std::string>* aUnknown)
             }
             undo[name] = data == 1 ? "spot" : "ambient";
         }
-        else if (name == "look_at" || name == "look_at_part" || name == "faceId")
+        else if (name == "look_at" || name == "look_at_part" || name == "faceId" || name == "camera_preset")
         {
             if (before < 0.0)
             {

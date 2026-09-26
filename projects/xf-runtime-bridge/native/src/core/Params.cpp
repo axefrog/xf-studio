@@ -183,10 +183,14 @@ void RequireOnly(const json& aParams, std::initializer_list<const char*> aKnown)
 CameraRequest ParseCamera(const json& aParams)
 {
     RequireOnly(aParams,
-                {"fov", "roll", "focal_distance", "aperture", "dof", "autofocus", "look_at", "look_at_part", "subject",
-                 "reset"});
+                {"camera_preset", "fov", "roll", "focal_distance", "aperture", "dof", "autofocus", "look_at", "look_at_part",
+                 "subject", "reset"});
     CameraRequest request;
     request.reset = Boolean(aParams, "reset").value_or(false);
+    if (const auto preset = Integer(aParams, "camera_preset", 0, 9))
+    {
+        request.attributes.push_back({key::kCameraPreset, static_cast<float>(*preset), "camera_preset"});
+    }
     Add(request.attributes, aParams, "fov", key::kFov, 1, 180);
     Add(request.attributes, aParams, "roll", key::kRoll, -360, 360);
     Add(request.attributes, aParams, "focal_distance", key::kFocalDistance, 0, 1000);
@@ -221,8 +225,8 @@ CameraRequest ParseCamera(const json& aParams)
     }
     if (!request.reset && request.attributes.empty())
     {
-        Bad("give at least one camera setting (fov, roll, focal_distance, aperture, dof, autofocus, look_at, "
-            "look_at_part or subject), or reset = true");
+        Bad("give at least one camera setting (camera_preset, fov, roll, focal_distance, aperture, dof, autofocus, "
+            "look_at, look_at_part or subject), or reset = true");
     }
     return request;
 }
@@ -231,6 +235,8 @@ std::string CameraParamName(int32_t aKey)
 {
     switch (aKey)
     {
+    case key::kCameraPreset:
+        return "camera_preset";
     case key::kFov:
         return "fov";
     case key::kRoll:
@@ -262,7 +268,8 @@ std::string CameraParamName(int32_t aKey)
 
 std::vector<int32_t> CameraKeys()
 {
-    return {key::kFov,         key::kRoll,     key::kFocalDistance, key::kAperture,     key::kDepthOfField,
+    // The preset first: resetting it moves the camera, and the other keys then reset on top.
+    return {key::kCameraPreset, key::kFov, key::kRoll, key::kFocalDistance, key::kAperture, key::kDepthOfField,
             key::kAutofocus,   key::kLookAt,   key::kLookAtPart,    key::kSubjectYaw,   key::kSubjectLeftRight,
             key::kSubjectNearFar, key::kSubjectUpDown};
 }
@@ -270,8 +277,8 @@ std::vector<int32_t> CameraKeys()
 LightRequest ParseLight(const json& aParams)
 {
     RequireOnly(aParams,
-                {"light", "on", "type", "brightness", "range", "inner_angle", "outer_angle", "hue", "saturation",
-                 "luminosity", "select_after"});
+                {"light", "on", "type", "shadow", "brightness", "range", "inner_angle", "outer_angle", "hue",
+                 "saturation", "luminosity", "select_after"});
     LightRequest request;
     request.light = static_cast<int32_t>(Integer(aParams, "light", 1, 3).value_or(1));
     request.selectAfter = static_cast<int32_t>(Integer(aParams, "select_after", 1, 3).value_or(0));
@@ -285,6 +292,7 @@ LightRequest ParseLight(const json& aParams)
         }
         request.attributes.push_back({key::kLightType, *type == "spot" ? 1.0f : 2.0f, "type"});
     }
+    AddFlag(request.attributes, aParams, "shadow", key::kLightShadow);
     Add(request.attributes, aParams, "brightness", key::kLightBrightness, 0, 100);
     Add(request.attributes, aParams, "range", key::kLightRange, 0, 100);
     Add(request.attributes, aParams, "inner_angle", key::kLightInnerAngle, 0, 180);
@@ -294,8 +302,8 @@ LightRequest ParseLight(const json& aParams)
     Add(request.attributes, aParams, "luminosity", key::kLightLuminosity, 0, 100);
     if (request.attributes.empty())
     {
-        Bad("give at least one light setting: on, type, brightness, range, inner_angle, outer_angle, hue, saturation "
-            "or luminosity");
+        Bad("give at least one light setting: on, type, shadow, brightness, range, inner_angle, outer_angle, hue, "
+            "saturation or luminosity");
     }
     return request;
 }
@@ -338,9 +346,20 @@ PhotoEnterRoute ParsePhotoEnter(const json& aParams)
         Bad("'route' must be \"auto\" or \"quest\"");
     }
     throw MethodError("photo_key_needed",
-                      "the bridge can't open the full photo mode by itself yet; press the photo mode key in the game "
-                      "(game.wait with phase photo_mode notices when it opens). route \"quest\" opens a restricted "
-                      "photo mode and is for research only");
+                      "the game offers no way to open the full photo mode from inside; photo.open presses the photo "
+                      "mode key in the game window (or the player presses it; game.wait with phase photo_mode notices). "
+                      "route \"quest\" opens a restricted photo mode and is for research only");
+}
+
+bool CreatorLeaveAllowed(bool aConfigFlag)
+{
+    if (!aConfigFlag)
+    {
+        throw MethodError("creator_leave_disabled",
+                          "confirming or backing out of the character creator is switched off ([bridge] "
+                          "allow_creator_leave = false) until that is decided; the player presses Confirm or Back");
+    }
+    return true;
 }
 
 SubjectRequest ParseSubject(const json& aParams)
