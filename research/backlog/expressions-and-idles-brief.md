@@ -114,6 +114,8 @@ Runtime-bridge experiments worth adding to its phase 2: a read-only `face_rig` d
 
 Still open: questions 2 and 4–7 below.
 
+The phased build plan for the first scope (data model, live preview, export with the superset table, module boundaries, bridge commands for R1–R5 and in-game preview, tests, effort, and proposed defaults for the open questions) is the [static expression editor design](../animation/expression-editor-design.md).
+
 ## Questions for the maintainer
 
 1. **Scope of the first version**: static expressions only, or animated/looping faces too? Static needs no graph override and has the cleanest registration.
