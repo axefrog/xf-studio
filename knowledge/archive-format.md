@@ -115,7 +115,7 @@ All [resource]. `curveData`/`multiChannelCurve` values (for example in `.env` re
 
 ### 5.1 Roots verified
 
-The native reader has matched the reference JSON on every field the resolver reads for these root classes (see the evidence in §7): `gameuiCharacterCustomizationInfoResource` (`.inkcharcustomization`), `appearanceAppearanceResource` (`.app`), `entEntityTemplate` (`.ent`), `CMesh`, `MorphTargetMesh`, `CMaterialInstance` (`.mi`), `CMaterialTemplate` (`.mt`), `CBitmapTexture` (`.xbm`, header only), `CHairProfile`, `CSkinProfile`, `CGradient`, `Multilayer_Setup` and `Multilayer_LayerTemplate`. [resource]
+The native reader has matched the reference JSON on every field the resolver reads for these root classes (see the evidence in §7): `gameuiCharacterCustomizationInfoResource` (`.inkcharcustomization`), `appearanceAppearanceResource` (`.app`), `entEntityTemplate` (`.ent`), `CMesh`, `MorphTargetMesh`, `CMaterialInstance` (`.mi`), `CMaterialTemplate` (`.mt`), `CBitmapTexture` (`.xbm`; its pixels in §10), `CHairProfile`, `CSkinProfile`, `CGradient`, `Multilayer_Setup` and `Multilayer_LayerTemplate`. [resource]
 
 `JsonResource` is read only when a request asks for it, and for the creator catalogue only with the payload class the documents were checked on: its `root` handle must hold `localizationPersistenceOnScreenEntries` (the game's and mods' `onscreens.json` texts), otherwise the resource falls back as `not-verified`. On all 1,113 text resources of the reference route (19 languages; the game's own files and every mod's declared ones), the documents equal WolvenKit's leaf for leaf [resource]. The clothing host reads one other `JsonResource`, the visual-tag preset, which WolvenKit can't serialize ([worn clothing §4.1](clothing.md#41-where-visual-tags-come-from-source-wiki)).
 
@@ -201,7 +201,52 @@ Mod archives are untrusted input, and every size and count in them is chosen by 
 
 ## 9. Where this lives in XF Studio
 
-`projects/xf-studio/authoring/src/native/` holds the code. `rdar-archive.ts`, `kark.ts`, `oodle.ts` and `archive-reader.ts` cover §1–2; `cr2w-file.ts`, `cr2w-reader.ts`, `red-values.ts` and `red-package.ts` cover §3–5; `red-json-writer.ts`, `red-defaults.ts`, `json-numbers.ts` and `resource-document.ts` cover §6. `native-errors.ts` and `limits.ts` hold the typed failures and budgets of §8. `native-decode.ts` and `native-decode-worker.ts` hold the in-process and worker decoders, and `native-fetch-port.ts` the `NativeFirstFetcher`. The resolver reads through it: one decoder per game folder, native first and WolvenKit per resource ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)); the creator catalogue's on-screen texts go through the same fetch port (`ResolverFetcher.fetchJsonResource`, at background priority), and the clothing host decodes the item visual-tag preset ([worn clothing §4.1](clothing.md#41-where-visual-tags-come-from-source-wiki)) in a worker of its own. The [backlog page](../research/backlog/native-archive-reader.md) holds the measurements and the texture and mesh phases.
+`projects/xf-studio/authoring/src/native/` holds the code. `rdar-archive.ts`, `kark.ts`, `oodle.ts` and `archive-reader.ts` cover §1–2; `cr2w-file.ts`, `cr2w-reader.ts`, `red-values.ts` and `red-package.ts` cover §3–5; `red-json-writer.ts`, `red-defaults.ts`, `json-numbers.ts` and `resource-document.ts` cover §6. `native-errors.ts` and `limits.ts` hold the typed failures and budgets of §8. `native-decode.ts` and `native-decode-worker.ts` hold the in-process and worker decoders, and `native-fetch-port.ts` the `NativeFirstFetcher`. Textures (§10): `bcn.ts` (block formats), `xbm-texture.ts` (the layout, the served mip, rows) and `texture-decode.ts` (one texture to its PNG, in the worker); `src/native-texture-export.ts` wraps the character details' exporter, natively first and WolvenKit per texture ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)). The resolver reads through it: one decoder per game folder, native first and WolvenKit per resource ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)); the creator catalogue's on-screen texts go through the same fetch port (`ResolverFetcher.fetchJsonResource`, at background priority), and the clothing host decodes the item visual-tag preset ([worn clothing §4.1](clothing.md#41-where-visual-tags-come-from-source-wiki)) in a worker of its own. The [backlog page](../research/backlog/native-archive-reader.md) holds the measurements and the texture and mesh phases.
+
+## 10. Textures (`.xbm`)
+
+The texture reader (phase 3) decodes a `CBitmapTexture`'s pixels to the PNG the preview is served. Offline evidence on game 2.31 and the reference MO2 route, 27 September 2026, with WolvenKit CLI 9.0.1's `uncook --uext png` as the oracle; the block formats themselves are written from the Khronos Data Format Specification 1.3 ([Sources](#sources)).
+
+### 10.1 Layout
+
+| Where | What | Grade |
+|---|---|---|
+| `CBitmapTexture.setup` (`STextureGroupSetup`) | `compression` (`ETextureCompression`), `rawFormat` (`ETextureRawFormat`, read when the compression is `TCM_None`) and `isGamma`. Omitted, they are `TCM_None`, `TRF_TrueColor` and false | [resource] |
+| `renderTextureResource.renderResourceBlobPC` | a handle to export 1, a `rendRenderTextureBlobPC` | [resource] |
+| `header.sizeInfo` | width and height of the **stored** mip 0 (and `depth` for a volume) | [resource] |
+| `header.textureInfo` | `type` (omitted: `TEXTYPE_2D`), `textureDataSize`, `sliceSize`, `sliceCount`, `mipCount`, `dataAlignment` (8 in every sample) | [resource] |
+| `header.mipMapInfo[i]` | `placement.offset` and `placement.size` of mip i inside a slice, and a `layout` (`rowPitch`, `slicePitch`) | [resource] |
+| `textureData` | a `serializationDeferredDataBuffer`: every slice's mips back to back, largest first, down to 1×1 | [resource] |
+
+- **The blob holds the PC-cooked texture.** A texture whose `platformMipBiasPC` is 1 stores its mip 0 at half the `CBitmapTexture` width and height (the vanilla head's `h0_000_wa_c__basehead_rm01.xbm` says 2048² and stores 1024²), and WolvenKit's PNG has the stored size. So the blob's `sizeInfo`, not the root's width, is what a texture holds [resource]. That the bias is exactly the number of halvings dropped is inferred from the samples, not read from the engine [hypothesis].
+- **The mip layout's pitches are not reliable.** `base\surfaces\microblends\default.xbm` (BC7, 64²) gives mip 0 a row pitch of 595,391,616 and a slice pitch of 32,761; its placement is right. The reader never reads the pitches: each mip's size is computed from its format and dimensions and must fit inside its placement, and every placement inside the slice [resource].
+- **Formats.** The compression names the block format as WolvenKit's exporter maps it [source: WolvenKit `CommonFunctions.GetDXGIFormat`]: `TCM_DXTNoAlpha` BC1, `TCM_DXTAlpha` and `TCM_DXTAlphaLinear` BC3, `TCM_Normalmap` and `TCM_QualityRG` BC5, `TCM_QualityR` BC4, `TCM_QualityColor` BC7, `TCM_HalfHDR_*` BC6H; `TCM_None` with `TRF_TrueColor` is RGBA8, `TRF_Grayscale` R8 and `TRF_R8G8` R8G8. The five block formats are confirmed by decoding [resource]. The default V with the body on the reference route uses 63 distinct textures: 21 BC7, 16 BC1, 14 BC5, 10 BC4 and 2 BC3 (the placeholders), no raw or HDR ones; its four largest are a body texture mod's 8192² maps (two BC7, one BC5, one BC1) [resource].
+- The reader decodes 2-D, one-slice textures in those block formats and the three raw formats. Cube maps, arrays, volumes (the creator's grading LUT is a 32³ `TRF_HDRFloat` volume), HDR formats and BC6H are refused as unsupported, and WolvenKit exports them.
+
+### 10.2 What WolvenKit's PNGs hold
+
+The preview has always been served WolvenKit's PNGs, and the native PNG is the same image [resource: the oracle below]:
+
+- **Rows are flipped:** the PNG's first row is the last row stored (WolvenKit flips on export [source: WolvenKit `Uncook.UncookXBM`]).
+- **Channels:** BC5 is red and green with blue 0 and alpha 255, **no Z reconstruction** (the preview's shaders rebuild Z from XY); BC4 and R8 are grey (R = G = B); R8G8 is red and green with blue 0.
+- **Colour is raw:** an `isGamma` texture's bytes are not converted (a BC7 sRGB albedo decodes to its stored values); the record's colour flag says how to read them.
+- **Arithmetic:** BC7 is exact integer arithmetic as the specification defines it. BC1, BC3 and BC5 interpolate in single precision and round to nearest (DirectXTex's decoder, which WolvenKit calls). A lone BC4 channel is interpolated in single precision and **truncated**: the level is ⌊((e0/255·w0 + e1/255·w1) · (1/d)) · 255⌋, with the reciprocal of 7 or 5 in single precision. This rule was fitted to WolvenKit's output and agrees on all 94,696 distinct endpoint and index combinations of three real BC4 maps; the plain integer quotient misses 10 of them and rounding to nearest misses 26,687 [resource].
+
+### 10.3 Evidence and cost
+
+| Check | Result |
+|---|---|
+| Oracle (`tools/native-texture-oracle.ts`), the default V's textures | All 59 textures up to 4096² **bit-identical** to WolvenKit's PNGs, texel for texel and channel for channel: 19 BC7, 15 BC1, 13 BC5, 10 BC4, 2 BC3 (and 10 vanilla samples, also identical). The four 8192² maps were decoded natively only (WolvenKit needs gigabytes for them) [resource] |
+| Lower mips | Mips 1 and 2 against WolvenKit's mip 0 box-halved: mean absolute error 0.2–0.45 levels for a colour map and a mask, 7–11 for a normal map (the game's own mips are not box means) [resource] |
+| Decode time (TypeScript, one thread) | 4096² BC7 0.43–0.5 s, BC5 0.33 s; 1024² BC7 26 ms; PNG at zlib level 3 about 0.3 s for a 4096² map. The default V's 63 textures take 5.4–6.1 s through the worker, and each 8192² map is served from its 4096² mip in 0.25–0.6 s [resource] |
+| Memory | The worker decodes a block row at a time straight into the PNG stream, so neither the texels nor the filtered rows are ever whole. The process's peak for one 4096² BC7 map is 221 MiB (base 72 MiB), for one 8192² map 300 MiB, over all 63 textures 438 MiB [resource] |
+| Hostile input | 3,000 mutated texture resources and random blocks of every format: typed refusals only, no reader bug (`tests/native-texture.test.ts`) [resource] |
+
+A native module was not needed: the slowest map decodes in about half a second. The texture reader's output rules are versioned (`NATIVE_TEXTURE_VERSION`, part of its cache identity).
+
+### 10.4 Not decoded yet
+
+`.mlmask` layer masks stay with WolvenKit. Their layers sit in a tiled atlas with a tile table and a low-resolution fallback, which WolvenKit's exporter reconstructs [source: WolvenKit's multilayer-mask exporter, studied only]. A layered material has one mask (the default V has one, a cyberware part's), so it costs little beside the maps.
 
 ## Open questions
 
@@ -210,7 +255,7 @@ Mod archives are untrusted input, and every size and count in them is chosen by 
 3. Does the engine skip drawing a render chunk whose `renderMask` lacks `MCF_RenderInScene`? The resolver assumes so (the vanilla hair `*_shadow` meshes store only `MCF_RenderInShadows`), and an omitted mask is the class default, no flags (§6.5), so it applies there too; no runtime check yet.
 4. The meaning of the index CRC, and whether the engine checks the per-entry SHA-1. It is the extracted file's SHA-1 in game archives but not in most mod archives (§1.2), which suggests the engine does not check it [hypothesis].
 5. `curveData` encoding (needed for `.env` and animation-adjacent resources).
-6. Texture (`.xbm` mip data) and mesh render-blob decoding, the reader's phases 3 and 4.
+6. Mesh render-blob decoding (phase 4) and `.mlmask` layers (§10.4). Does `platformMipBiasPC` alone decide how many mips the PC blob drops (§10.1)?
 
 ## Sources
 
@@ -219,6 +264,8 @@ Format facts were learned from the following, at these commits, without copying 
 - WolvenKit ([GitHub](https://github.com/WolvenKit/WolvenKit), GPL-3.0) at `11720772`: `WolvenKit.RED4/Archive/IO/ArchiveReader.cs`, `CR2WReader.cs`, `RedPackageReader.cs`, `WolvenKit.RED4/Types/IO/Red4Reader.cs` (`ReadCArray`: elements past an array's count), `WolvenKit.Core/Compression/Oodle.cs`, `WolvenKit.Common/RED4/CR2W/JSON/RedJsonSerializer.cs`. Studied as documentation only, and its CLI 9.0.1 serves as the byte and JSON oracle.
 - Cyberpunk 2077 Modding Wiki at `be2f44eed841`: `for-mod-creators-theory/files-and-what-they-do/file-formats/README.md` §Archive Format (tables, no images; section history by manavortex, muad_ and Zhincore).
 - RED4ext.SDK ([GitHub](https://github.com/wopss/RED4ext.SDK), MIT) at `ad7277714ad3`: `include/RED4ext/ResourcePath.hpp`, `include/RED4ext/Hashing/FNV1a.hpp`.
+- Khronos Data Format Specification 1.3 ([HTML](https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html), CC BY 4.0; copy fetched 27 September 2026, SHA-256 `2d9850c6c657…`): §18 S3TC (BC1, BC3), §19 RGTC (BC4, BC5) and §20.1 BPTC (BC7), with Tables 109–120 (modes, partitions, anchors, weights). The BC7 tables in `bcn.ts` were checked against the parsed tables, entry for entry.
+- WolvenKit at `11720772`, as documentation: `WolvenKit.Common/RED4/CommonFunctions.cs` (`GetDXGIFormat`, compression to format), `WolvenKit.Modkit/RED4/Uncook.cs` (`UncookXBM`, flipped on export) and `WolvenKit.Common/DDS/Texconv.cs`.
 - Cyber Engine Tweaks at `9a8522f2a3d6`: `src/reverse/TweakDB/ResourcesList.cpp` (the `OodleLZ_Decompress` call).
 - red4ext-rs at `d419d98d8b81`: `src/types/res.rs` (path sanitizing).
 - The scripting RTTI dump exported by psiberx with a fork of wopss's RED4.RTTIDumper, as published in `red-dump-json` at `a8e52990`. It supplies class property lists, enums and bitfields; the dump dates from May 2025, so newer properties come only from learned keys.
