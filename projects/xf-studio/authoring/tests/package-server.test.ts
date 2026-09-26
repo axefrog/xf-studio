@@ -1,122 +1,104 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { localPackageTools, localPlateRouteKey } from "../src/package-server";
-import { packagePresetIdentities } from "../src/package-filter";
-import { createHash } from "node:crypto";
-import { packageErrorCode, type PackageAction, type PackageCheck } from "../src/package-action";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, type PackageTools } from "../src/package-server";
+import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
+import type { PackageCheckResult } from "../src/platform/api";
+import { STUDIO_EXPORTERS } from "../src/compose/exporters";
+import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { defaultLocalSettings } from "../src/local-settings";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { contentFingerprint, EyePlateCache } from "../src/eye-plate-cache";
 import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/eye-plate-service";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
-import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/package-filter";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
-import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
-import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
-import { tmpdir } from "node:os";
 import { withGlitterKnob } from "./glitter-knob-fixture";
-import { join } from "node:path";
-import { createPackageHandler, preparePackageCollection, preflightPackageCollection } from "./fixtures/eye-exporter";
+import { preparePackageCollection } from "./fixtures/eye-exporter";
+import { FOOTPRINT } from "./fixtures/product-fixture";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const url = "http://127.0.0.1:4317/api/package";
 const request = (body: unknown, origin = "http://127.0.0.1:4317") => new Request(url, {
   method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
-const summary = (collection: unknown = fixture): PackageCheck => {
-  const { source, packaged, plan, omissions } = preparePackageCollection(collection);
-  return { ready: true, collectionId: plan.collectionId, namespace: plan.namespace,
-    modName: plan.modName, selectorLabel: plan.selectorLabel, originalPresetCount: source.presets.length, omissions,
-    packagedCollectionSha256: createHash("sha256").update(JSON.stringify(packaged)).digest("hex"),
-    presets: packagePresetIdentities(plan), plateLiftsMm: plan.plate.liftsMm };
-};
+/** Localhost's real adapter (real Check worker and exporters) with a stand-in builder and no Build issue unless asked. */
+function adapter(options: { tools?: PackageTools; run?: (args: readonly string[]) => Promise<BuilderRun>; issue?: string | null;
+  prerequisites?: (tools: PackageTools) => Record<string, HostPrerequisite> } = {}): PackageHostAdapter {
+  const base = localPackageAdapter({ exporters: STUDIO_EXPORTERS, tools: options.tools ?? localPackageTools(defaultLocalSettings(), {}),
+    prerequisites: options.prerequisites ?? (() => ({})) });
+  return { ...base, buildIssue: () => options.issue ?? null,
+    runBuilder: args => options.run?.(args) ?? Promise.resolve({ exitCode: 1, stdout: "", stderr: "no builder", stopped: null }) };
+}
+const eyes = (result: PackageCheckResult) => result.products[0].features[0];
 
 test("package boundary accepts only same-origin validated collection snapshots and ignores browser paths", async () => {
-  let calls = 0;
-  const handler = createPackageHandler(localPackageTools(), async (_action, file) => {
-    calls++; return summary(JSON.parse(readFileSync(file, "utf8")));
-  });
+  const handler = createPackageHandler(() => adapter());
   expect((await handler(request({ action: "check", collection: fixture }, "https://other.example"))).status).toBe(403);
   expect((await handler(request({ action: "check", collection: fixture, outputRoot: "F:/Games/Cyberpunk 2077" }))).status).toBe(400);
-  expect((await handler(request({ action: "check", collection: { ...fixture, presets: [] } }))).status).toBe(400);
+  expect((await handler(request({ action: "check", collection: { ...fixture, presets: [] } }))).status).toBe(422);
   expect((await handler(new Request(url, { method: "POST", headers: { Origin: url.replace("/api/package", ""),
     "Content-Type": "application/json", "Content-Length": "16000001" }, body: "{}" }))).status).toBe(413);
   const valid = await handler(request({ action: "check", collection: fixture }));
   expect(valid.status).toBe(200);
-  expect((await valid.json()).namespace).toBe(summary(fixture).namespace);
-  expect(calls).toBe(1);
+  const result = await valid.json() as PackageCheckResult;
+  expect(result.products.map(product => [product.modName, product.archive])).toEqual([["XF Eye Artistry", preparePackageCollection(fixture).plan.namespace]]);
 });
 
 test("a running package build blocks a second build without blocking the HTTP event loop", async () => {
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  const handler = createPackageHandler(localPackageTools(), async (action: PackageAction) => {
-    if (action === "build") await gate;
-    throw Error("Simulated local tool failure");
-  });
+  const prerequisite: HostPrerequisite = { cached: () => null, async prepare() { await gate; throw Object.assign(Error("Simulated plate failure"), { code: "plate_source_missing" }); },
+    discard() {} };
+  const handler = createPackageHandler(() => adapter({ prerequisites: () => ({ [EYE_PLATE_PREREQUISITE]: prerequisite }) }));
   const first = handler(request({ action: "build", collection: fixture }));
+  await new Promise(done => setTimeout(done, 20));
   const second = await handler(request({ action: "build", collection: fixture }));
   expect(second.status).toBe(409);
+  // Check still runs while a Build waits.
+  expect((await handler(request({ action: "check", collection: fixture }))).status).toBe(200);
   release();
   const result = await first;
   expect(result.status).toBe(422);
-  expect((await result.json()).error).toContain("Simulated local tool failure");
+  expect(await result.json()).toEqual({ code: "plate_source_missing", error: "Simulated plate failure" });
 });
 
-test("real local preflight omits unsupported active layers and identifies them", async () => {
-  const handler = createPackageHandler();
-  const accepted = await handler(request({ action: "check", collection: fixture }));
-  expect(accepted.status).toBe(200);
+test("real local Check omits unsupported active layers and identifies them, from an immutable request snapshot", async () => {
+  const handler = createPackageHandler(() => adapter());
   const unsupported = structuredClone(fixture);
   unsupported.presets[0].recipe.layers[0].finish = "glitter";
   unsupported.presets[0].recipe.layers.push({ ...structuredClone(unsupported.presets[2].recipe.layers[0]), id: "supported-extra" });
   const checked = await handler(request({ action: "check", collection: unsupported }));
   expect(checked.status).toBe(200);
-  const response = await checked.json();
+  const response = eyes(await checked.json());
   expect(response.presets).toHaveLength(4);
   expect(response.omissions).toEqual([expect.objectContaining({ kind: "layer", presetName: "Verification — metallic copy",
     layerName: "Petal wash", finish: "glitter" })]);
-});
-
-test("check derives the filtered plan from an immutable original request snapshot", async () => {
-  let calls = 0, captured: unknown;
-  const handler = createPackageHandler(localPackageTools(), async (_action, file) => {
-    calls++; captured = JSON.parse(readFileSync(file, "utf8")); return summary(captured);
-  });
-  const unsupported = structuredClone(fixture);
-  unsupported.presets[0].recipe.layers[0].finish = "glitter";
-  unsupported.presets[1].recipe.layers[0].finish = "shimmer";
-  const response = await handler(request({ action: "check", collection: unsupported }));
-  expect(response.status).toBe(200);
-  const result = await response.json();
-  expect(result.omissions).toHaveLength(4);
-  expect(result.omissions.filter((item: {kind: string}) => item.kind === "layer")).toHaveLength(2);
-  expect(result.omissions.filter((item: {kind: string}) => item.kind === "preset")).toHaveLength(2);
-  expect(result.presets).toHaveLength(2);
-  expect(result.presets.map((preset: {id: string}) => preset.id)).toEqual(unsupported.presets.slice(2).map((preset: {id: string}) => preset.id));
-  expect(calls).toBe(1);
-  expect((captured as typeof fixture).presets[0].recipe.layers[0].finish).toBe("glitter");
-  expect(unsupported.presets[0].recipe.layers[0].finish).toBe("glitter");
+  const partial = structuredClone(fixture);
+  partial.presets[0].recipe.layers[0].finish = "glitter";
+  partial.presets[1].recipe.layers[0].finish = "shimmer";
+  const result = eyes(await (await handler(request({ action: "check", collection: partial }))).json());
+  expect(result.omissions.filter(item => item.kind === "layer")).toHaveLength(2);
+  expect(result.omissions.filter(item => item.kind === "preset")).toHaveLength(2);
+  expect(result.presets.map(preset => preset.id)).toEqual(partial.presets.slice(2).map((preset: { id: string }) => preset.id));
+  expect(partial.presets[0].recipe.layers[0].finish).toBe("glitter");
 });
 
 test("inactive and transparent experimental layers keep the current compiler eligibility", async () => {
-  const handler = createPackageHandler(localPackageTools(), async (_action, file) => summary(JSON.parse(readFileSync(file, "utf8"))));
   const collection = structuredClone(fixture);
   collection.presets[0].recipe.layers[0].finish = "glitter";
   collection.presets[0].recipe.layers[0].enabled = false;
   collection.presets[1].recipe.layers[0].finish = "shimmer";
   collection.presets[1].recipe.layers[0].opacity = 0;
-  const response = await handler(request({ action: "check", collection }));
+  const response = await createPackageHandler(() => adapter())(request({ action: "check", collection }));
   expect(response.status).toBe(200);
-  expect((await response.json()).omissions.every((item: {kind: string}) => item.kind === "preset")).toBe(true);
+  expect(eyes(await response.json()).omissions.every(item => item.kind === "preset")).toBe(true);
 });
 
-test("check and build both refuse a wholly unsupported collection before invoking tools", async () => {
-  let calls = 0;
-  const handler = createPackageHandler(localPackageTools(), async () => { calls++; return summary(); });
+test("check and build both refuse a wholly unsupported collection before any builder runs", async () => {
+  let runs = 0;
+  const handler = createPackageHandler(() => adapter({ run: async () => { runs++; return { exitCode: 0, stdout: "", stderr: "", stopped: null }; } }));
   const collection = structuredClone(fixture);
   for (const preset of collection.presets) for (const layer of preset.recipe.layers)
     if (layer.enabled && layer.opacity > 0) layer.finish = "glitter";
@@ -125,119 +107,84 @@ test("check and build both refuse a wholly unsupported collection before invokin
     expect(response.status).toBe(422);
     expect((await response.json()).code).toBe("no_exportable_content");
   }
-  expect(calls).toBe(0);
+  expect(runs).toBe(0);
 });
 
-test("the package server resolves local settings for each build and leaves Check independent", async () => {
+test("the package server resolves local settings for each request", async () => {
   const directory = mkdtempSync(join(tmpdir(), "xfs-package-settings-"));
   try {
     const store = new LocalSettingsStore(directory);
-    let selected = "";
-    const handler = createPackageHandler(action => action === "check" ? localPackageTools() :
-      localPackageTools(store.load().settings, {}), async (action, file, tools) => {
-      if (action === "check") return summary(JSON.parse(readFileSync(file, "utf8")));
-      selected = tools.gamepath;
-      throw Error("Captured configured build input");
+    const seen: string[] = [];
+    const handler = createPackageHandler(() => {
+      const tools = localPackageTools(store.load().settings, {});
+      seen.push(tools.gamepath);
+      return localPackageAdapter({ exporters: STUDIO_EXPORTERS, tools, prerequisites: () => ({}) });
     });
-    expect((await handler(request({ action: "check", collection: fixture }))).status).toBe(200);
     const first = store.save({ ...defaultLocalSettings(), gameRoot: join(directory, "game-a") }, 0);
-    expect((await handler(request({ action: "build", collection: fixture }))).status).toBe(422);
-    expect(selected).toBe(first.gameRoot!);
+    const refused = await handler(request({ action: "build", collection: fixture }));
+    expect(refused.status).toBe(503);
+    expect((await refused.json()).error).toContain("WolvenKit isn't set up yet");
+    expect(seen.at(-1)).toBe(first.gameRoot!);
     const second = store.save({ ...first, gameRoot: join(directory, "game-b") }, 1);
-    expect((await handler(request({ action: "build", collection: fixture }))).status).toBe(422);
-    expect(selected).toBe(second.gameRoot!);
+    await handler(request({ action: "build", collection: fixture }));
+    expect(seen.at(-1)).toBe(second.gameRoot!);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("PIPE-33: Check plans on the plate the cache last prepared for this game, and the host holds the tool to it", async () => {
+test("PIPE-33: Check plans on the plate the cache last prepared for this game, route and head choice", async () => {
   const directory = mkdtempSync(join(tmpdir(), "xfs-package-plate-reach-"));
   try {
     // A prepared plate in the private cache: its status, manifest and UV footprint (a synthetic plate over the lids).
     const cacheRoot = join(directory, "cache"), game = join(directory, "game"), name = "xfs-expanded-eye-plate-r1-fixture";
-    const footprint = plateUvFootprint(withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(),
-      "a\b.mesh"), plateLikeUv).mesh.Data.RootChunk);
     mkdirSync(join(cacheRoot, name), { recursive: true });
-    const manifestFile = join(cacheRoot, name, "plate-manifest.json");
-    writeFileSync(manifestFile, JSON.stringify({ schema: EYE_PLATE_MANIFEST_SCHEMA, recipeId: EYE_PLATE_RECIPE.id,
-      recipeRevision: EYE_PLATE_RECIPE.revision, uv: plateUvManifestRecord(footprint) }));
-    writeFileSync(join(cacheRoot, name, PLATE_UV_FILE), JSON.stringify(footprint));
-    const tools = { ...localPackageTools(), plateCache: cacheRoot, gamepath: game };
+    writeFileSync(join(cacheRoot, name, "plate-manifest.json"), JSON.stringify({ schema: EYE_PLATE_MANIFEST_SCHEMA, recipeId: EYE_PLATE_RECIPE.id,
+      recipeRevision: EYE_PLATE_RECIPE.revision, uv: plateUvManifestRecord(FOOTPRINT) }));
+    writeFileSync(join(cacheRoot, name, PLATE_UV_FILE), JSON.stringify(FOOTPRINT));
+    const tools = { ...localPackageTools(defaultLocalSettings(), {}), plateCache: cacheRoot, gamepath: game };
     new EyePlateCache(cacheRoot).writeStatus({ recipeId: EYE_PLATE_RECIPE.id, recipeRevision: EYE_PLATE_RECIPE.revision, state: "ready",
       code: null, message: "ready", gameRoot: game, contentFingerprint: contentFingerprint(game, EYE_PLATE_RECIPE.source.archiveDirectory),
       cacheName: name, routeKey: localPlateRouteKey(tools) });
     const collection = structuredClone(fixture);
     for (const layer of collection.presets[1].recipe.layers) layer.points = layer.points.map((p: { v: number }) => ({ ...p, v: p.v + .4 }));
-    const plate = plateReachInput(footprint);
-    let passed: string | undefined;
-    const planned = (value: unknown, reach: typeof plate | null) => {
-      const { packagedCollectionJson: _json, ...check } = preflightPackageCollection(value, reach);
-      return check;
-    };
-    const handler = createPackageHandler(tools, async (_action, file, actionTools) => {
-      passed = actionTools.checkPlateManifest;
-      return planned(JSON.parse(readFileSync(file, "utf8")), plate);
-    });
-    const response = await handler(request({ action: "check", collection }));
-    expect(response.status).toBe(200);
-    const result = await response.json();
-    expect(passed).toBe(manifestFile);
+    const check = async (current: PackageTools) => eyes(await (await createPackageHandler(() =>
+      adapter({ tools: current, prerequisites: t => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(t) }) }))(request({ action: "check", collection }))).json());
+    const result = await check(tools);
     expect(result.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
       reason: OFF_PLATE_REASON }]);
-    expect(result.plateUv.footprintSha256).toBe(plate.sha256);
-    // A tool answer planned on no plate (or another one) is not accepted.
-    const blind = createPackageHandler(tools, async (_action, file) => planned(JSON.parse(readFileSync(file, "utf8")), null));
-    expect((await blind(request({ action: "check", collection }))).status).toBe(422);
-    // Another game folder has no prepared plate yet: Check plans on none.
-    const other = createPackageHandler({ ...tools, gamepath: join(directory, "other") }, async (_action, file, actionTools) => {
-      passed = actionTools.checkPlateManifest;
-      return planned(JSON.parse(readFileSync(file, "utf8")), null);
-    });
-    const unplanned = await other(request({ action: "check", collection }));
-    expect(unplanned.status).toBe(200);
-    expect(passed).toBeUndefined();
-    const blindCheck = await unplanned.json();
-    expect(blindCheck.omissions).toEqual([]);
-    expect(blindCheck.plateUv).toBeNull();
-    expect(blindCheck.notes).toEqual([PLATE_REACH_UNCHECKED_NOTE]); // the Studio says so plainly
+    expect((result.details.plateUv as { footprintSha256: string }).footprintSha256).toBe(plateReachInput(FOOTPRINT).sha256);
     expect(result.notes).toEqual([]);
-    // PIPE-36: the plate was prepared for the direct route; after switching to an MO2 profile (or the other head choice) Check plans on none.
-    for (const changed of [{ ...tools, route: { launchRoute: "mo2" as const, mo2Root: join(directory, "mo2"), mo2ProfileId: "Default", manualModRoot: null } },
+    // Another game folder, an MO2 route or the other head choice has no prepared plate yet: Check plans on none and says so.
+    for (const changed of [{ ...tools, gamepath: join(directory, "other") },
+      { ...tools, route: { launchRoute: "mo2" as const, mo2Root: join(directory, "mo2"), mo2ProfileId: "Default", manualModRoot: null } },
       { ...tools, headOverride: "base-game" as const }]) {
-      passed = "unset";
-      const switched = createPackageHandler(changed, async (_action, file, actionTools) => {
-        passed = actionTools.checkPlateManifest;
-        return planned(JSON.parse(readFileSync(file, "utf8")), null);
-      });
-      expect((await switched(request({ action: "check", collection }))).status).toBe(200);
-      expect(passed).toBeUndefined();
+      const blind = await check(changed);
+      expect(blind.omissions).toEqual([]);
+      expect(blind.details.plateUv).toBeNull();
+      expect(blind.notes).toEqual([PLATE_REACH_UNCHECKED_NOTE]); // the Studio says so plainly
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("PIPE-37: the package CLI's machine error line is read back by code", () => {
-  expect(packageErrorCode(`log line\nXFS_PACKAGE_ERROR=${JSON.stringify({ code: "package_plate_stale", message: "stale" })}\nPackage build failed: stale`))
-    .toBe("package_plate_stale");
-  expect(packageErrorCode("Package build failed: no machine line")).toBeNull();
-  expect(packageErrorCode("XFS_PACKAGE_ERROR={not json")).toBeNull();
-});
-
 test("PIPE-70: a posted collection's glitter knob gives no glitter route and no diagnostics on localhost", async () => {
   const knob = withGlitterKnob(fixture);
-  // Precondition: the knob is valid, so only the host's own parsing keeps it from the route.
+  // Precondition: the knob is valid, so only the host's own handling keeps it from the route.
   expect(preparePackageCollection(knob).plan.presets.some(p => p.route === "glitter")).toBe(true);
-  // Check through the real local preflight (the builder CLI, run without --diagnostics).
-  const checked = await createPackageHandler()(request({ action: "check", collection: knob }));
+  const checked = await createPackageHandler(() => adapter())(request({ action: "check", collection: knob }));
   expect(checked.status).toBe(200);
-  const summary = await checked.json() as PackageCheck;
+  const summary = eyes(await checked.json());
   expect(summary.presets.map(p => p.route)).not.toContain("glitter");
   expect(summary.presets.every(p => !("diagnostics" in p))).toBe(true);
-  expect(summary.plateLiftsMm).toEqual([.4]);
-  // Build: the file handed to the builder carries no knob, and the host adds no --diagnostics.
-  let seen: Record<string, unknown> | undefined;
-  const building = createPackageHandler(localPackageTools(), async (_action, file) => {
-    seen = JSON.parse(readFileSync(file, "utf8")); throw Error("stop after reading the snapshot");
-  });
+  expect(summary.details.plateLiftsMm).toEqual([.4]);
+  // Build: the snapshot handed to the builder carries no knob, and the host adds no --diagnostics.
+  let snapshot: Record<string, unknown> | undefined, args: readonly string[] = [];
+  const plate: HostPrerequisite = { cached: () => null, discard() {},
+    prepare: async () => ({ builder: { directory: "unused" }, plan: plateReachInput(FOOTPRINT) }) };
+  const building = createPackageHandler(() => adapter({ prerequisites: () => ({ [EYE_PLATE_PREREQUISITE]: plate }), run: async given => {
+    args = given; snapshot = JSON.parse(readFileSync(given[given.indexOf("--collection") + 1], "utf8"));
+    return { exitCode: 1, stdout: "", stderr: "stop after reading the snapshot", stopped: null };
+  } }));
   expect((await building(request({ action: "build", collection: knob }))).status).toBe(422);
-  expect(seen && Object.keys(seen)).not.toContain("diagnostics");
+  expect(snapshot && Object.keys(snapshot)).not.toContain("diagnostics");
+  expect(args).not.toContain("--diagnostics");
   expect(readFileSync(resolve(import.meta.dir, "../src/package-server.ts"), "utf8")).not.toContain("--diagnostics");
 });

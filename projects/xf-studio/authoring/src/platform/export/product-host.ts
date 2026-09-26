@@ -258,6 +258,14 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   let collection: Record<string, unknown>;
   try { collection = hostCollection(value); } catch (error) { return refusalOf(error)!; }
   const source = JSON.stringify(collection), collectionSha256 = sha256(source);
+  // Refuse what no prerequisite can change (nothing exportable, a damaged plan) before preparing anything.
+  try { checkProducts({ collection, exporters: adapter.exporters, prerequisites: {}, diagnostics: false, preflight: false, collectionSha256 }); }
+  catch (error) {
+    const refused = refusalOf(error);
+    if (refused) return refused;
+    adapter.log("build", "package_build_failed", (error as Error).message, error);
+    return failure("package_build_failed", "Package Build could not plan these mod files. No candidate was published.");
+  }
   // Which features this collection holds decides which prerequisites to prepare.
   const present = adapter.exporters.filter(entry => { try { return entry.exporter.present(collection); } catch { return false; } });
   const needed = [...new Set(present.flatMap(entry => entry.exporter.prerequisites))];
