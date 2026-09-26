@@ -95,6 +95,22 @@ export interface WorkerInit {
   readonly identity: string;
 }
 
+/** One resource to decode; the worker echoes `id` with its outcome. */
+export interface WorkerDecodeMessage { readonly type: "decode"; readonly id: number; readonly request: NativeDecodeRequest }
+
+/** What a worker sends: whether it started, and one outcome per decode message, carrying that message's id. */
+export type WorkerReply =
+  | { readonly type: "ready" }
+  | { readonly type: "init-failed"; readonly message: string }
+  | { readonly type: "outcome"; readonly id: number; readonly outcome: NativeDecodeOutcome };
+
+/** The part of a `Worker` the decoder uses, so a test can drive one by hand. */
+export interface DecodeWorker {
+  postMessage(message: WorkerInit | WorkerDecodeMessage): void;
+  addEventListener(type: "message" | "error" | "close", listener: (event: any) => void): void;
+  terminate(): unknown;
+}
+
 export interface WorkerDecoderOptions {
   readonly decompressor: WorkerDecompressor;
   readonly roots: ReadonlySet<string>;
@@ -102,26 +118,48 @@ export interface WorkerDecoderOptions {
   readonly identity: string;
   /** Wall-clock budget per resource, from the moment the worker receives it. */
   readonly timeoutMs?: number;
+  /** How long a worker may take to report ready (starting Bun, loading and hashing the library). */
+  readonly startTimeoutMs?: number;
+  /** After a worker fails to start, how long every resource is answered `unavailable` before one new start is tried. */
+  readonly restartDelayMs?: number;
+  /** Consecutive start failures after which the decoder stays `unavailable` for the rest of the session. */
+  readonly maxStartFailures?: number;
   /** The worker script (defaults to native-decode-worker.ts next to this module). */
   readonly script?: URL | string;
+  /** Starts a worker (tests inject one; the default is `new Worker(script)`). */
+  readonly createWorker?: () => DecodeWorker;
 }
 
 /** Default time budget per resource: far above the slowest real decode (see the backlog page's budget table). */
 export const DEFAULT_DECODE_TIMEOUT_MS = 10_000;
+/** Default start budget: a cold worker is ready in well under a second. */
+export const DEFAULT_WORKER_START_TIMEOUT_MS = 15_000;
+export const DEFAULT_WORKER_RESTART_DELAY_MS = 60_000;
+export const DEFAULT_WORKER_MAX_START_FAILURES = 3;
 
 type Pending = { request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOutcome) => void };
 
 /**
  * Decodes in a worker, one resource at a time, each within `timeoutMs`. A resource over its time budget, or a worker that dies,
  * answers `over-budget` or `internal` and the worker is replaced before the next resource.
+ *
+ * Only the current worker is heard: every message, error and exit is checked against it, and an outcome must carry the id of the
+ * resource in progress, so a late answer from a replaced worker, or a stale one, is dropped and never given to the next resource.
+ *
+ * A worker that fails to start (reports `init-failed`, exits or errors before it is ready, or is not ready within `startTimeoutMs`)
+ * is not restarted for every request: resources are answered `unavailable`, so they fall back to WolvenKit, for `restartDelayMs`,
+ * then one new start is tried. After `maxStartFailures` consecutive failures the decoder stays unavailable for the session.
  */
 export class WorkerDecoder implements NativeDecoder {
-  private worker: Worker | null = null;
-  private ready: Promise<void> | null = null;
+  private current: { worker: DecodeWorker; ready: boolean; startTimer: ReturnType<typeof setTimeout> | null } | null = null;
   private readonly queue: Pending[] = [];
-  private busy: { pending: Pending; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  private busy: { pending: Pending; id: number; sent: boolean; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  private nextId = 1;
   private closed = false;
-  /** Workers started (1 + replacements after timeouts or crashes). */
+  private startFailures = 0;
+  private unavailableUntil = 0;
+  private unavailableReason = "";
+  /** Workers started (1 + replacements after timeouts, crashes or start retries). */
   started = 0;
 
   constructor(private readonly options: WorkerDecoderOptions) {}
@@ -133,39 +171,79 @@ export class WorkerDecoder implements NativeDecoder {
   }
 
   private spawn(): void {
-    const worker = new Worker(this.options.script ?? new URL("./native-decode-worker.ts", import.meta.url));
+    const worker = this.options.createWorker?.()
+      ?? new Worker(this.options.script ?? new URL("./native-decode-worker.ts", import.meta.url)) as unknown as DecodeWorker;
     this.started++;
-    this.worker = worker;
+    const startMs = this.options.startTimeoutMs ?? DEFAULT_WORKER_START_TIMEOUT_MS;
+    const current: NonNullable<WorkerDecoder["current"]> = { worker, ready: false, startTimer: null };
+    this.current = current;
+    current.startTimer = setTimeout(() => this.startFailed(worker, `The native decoder worker did not start within ${startMs} ms.`), startMs);
+    worker.addEventListener("message", event => this.onMessage(worker, (event as MessageEvent).data as WorkerReply));
+    worker.addEventListener("error", event => this.onExit(worker, `The native decoder worker failed: ${(event as ErrorEvent).message}`));
+    worker.addEventListener("close", () => this.onExit(worker, "The native decoder worker exited."));
     const init: WorkerInit = { type: "init", decompressor: this.options.decompressor, roots: [...this.options.roots], limits: this.options.limits ?? DEFAULT_LIMITS, identity: this.options.identity };
-    this.ready = new Promise<void>((resolve, reject) => {
-      const onReady = (event: MessageEvent) => {
-        const message = event.data as { type: string; message?: string };
-        if (message.type === "ready") { worker.removeEventListener("message", onReady); resolve(); }
-        else if (message.type === "init-failed") { worker.removeEventListener("message", onReady); reject(new Error(message.message)); }
-      };
-      worker.addEventListener("message", onReady);
-    });
-    worker.addEventListener("message", event => {
-      const message = event.data as { type: string; outcome?: NativeDecodeOutcome };
-      if (message.type === "outcome" && this.busy) this.finish(message.outcome!);
-    });
-    worker.addEventListener("error", event => { this.fail(`The native decoder worker failed: ${(event as ErrorEvent).message}`); });
-    worker.addEventListener("close", () => { if (this.worker === worker) this.fail("The native decoder worker exited."); });
     worker.postMessage(init);
+  }
+
+  private onMessage(worker: DecodeWorker, message: WorkerReply): void {
+    const current = this.current;
+    if (current?.worker !== worker || !message || typeof message !== "object") return;
+    if (message.type === "ready") {
+      if (current.ready) return;
+      if (current.startTimer) clearTimeout(current.startTimer);
+      current.ready = true; current.startTimer = null;
+      this.startFailures = 0;
+      this.send();
+    } else if (message.type === "init-failed") {
+      this.startFailed(worker, `The native decoder could not start: ${message.message}`);
+    } else if (message.type === "outcome") {
+      if (this.busy?.sent && message.id === this.busy.id) this.finish(message.outcome);
+    }
+  }
+
+  /** An error or exit: before ready it is a start failure; after, the resource in progress (if any) fails and the worker is replaced. */
+  private onExit(worker: DecodeWorker, message: string): void {
+    const current = this.current;
+    if (current?.worker !== worker) return;
+    if (!current.ready) { this.startFailed(worker, message); return; }
+    this.stopWorker();
+    if (this.busy) this.finish({ ok: false, kind: "internal", message });
+  }
+
+  private startFailed(worker: DecodeWorker, message: string): void {
+    if (this.current?.worker !== worker || this.current.ready) return;
+    this.stopWorker();
+    this.startFailures++;
+    const permanent = this.startFailures >= (this.options.maxStartFailures ?? DEFAULT_WORKER_MAX_START_FAILURES);
+    this.unavailableUntil = permanent ? Infinity : Date.now() + (this.options.restartDelayMs ?? DEFAULT_WORKER_RESTART_DELAY_MS);
+    this.unavailableReason = permanent ? `${message} It failed to start ${this.startFailures} times in a row, so it is off for this session.` : message;
+    if (this.busy) this.finish({ ok: false, kind: "unavailable", message: this.unavailableReason });
   }
 
   private pump(): void {
     if (this.busy || this.closed || !this.queue.length) return;
-    if (!this.worker) this.spawn();
-    const pending = this.queue.shift()!;
-    const worker = this.worker!;
-    // The budget starts once the worker is ready: a cold start (library load, JIT) is not charged to the resource.
-    this.busy = { pending, timer: null };
-    this.ready!.then(() => {
-      if (this.busy?.pending !== pending || this.worker !== worker) return;
-      this.busy.timer = setTimeout(() => this.timeout(worker), this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS);
-      worker.postMessage({ type: "decode", request: pending.request });
-    }, error => { if (this.busy?.pending === pending) this.fail(`The native decoder could not start: ${(error as Error).message}`, "internal"); });
+    if (!this.current) {
+      if (Date.now() < this.unavailableUntil) {
+        for (const pending of this.queue.splice(0)) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason });
+        return;
+      }
+      this.spawn();
+    }
+    this.busy = { pending: this.queue.shift()!, id: this.nextId++, sent: false, timer: null };
+    this.send();
+  }
+
+  /**
+   * Send the resource in progress to the current worker once it is ready. The budget starts then: a cold start (library load,
+   * JIT) is not charged to the resource.
+   */
+  private send(): void {
+    const busy = this.busy, current = this.current;
+    if (!busy || busy.sent || !current?.ready) return;
+    const { worker } = current, id = busy.id;
+    busy.sent = true;
+    busy.timer = setTimeout(() => this.timeout(worker, id), this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS);
+    worker.postMessage({ type: "decode", id, request: busy.pending.request });
   }
 
   private finish(outcome: NativeDecodeOutcome): void {
@@ -177,20 +255,17 @@ export class WorkerDecoder implements NativeDecoder {
   }
 
   private stopWorker(): void {
-    const worker = this.worker;
-    this.worker = null; this.ready = null;
-    if (worker) void worker.terminate();
+    const current = this.current;
+    this.current = null;
+    if (!current) return;
+    if (current.startTimer) clearTimeout(current.startTimer);
+    void current.worker.terminate();
   }
 
-  private timeout(worker: Worker): void {
-    if (this.worker !== worker || !this.busy) return;
+  private timeout(worker: DecodeWorker, id: number): void {
+    if (this.current?.worker !== worker || this.busy?.id !== id) return;
     this.stopWorker();
     this.finish({ ok: false, kind: "over-budget", message: `Decoding took longer than ${this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS} ms and was abandoned.` });
-  }
-
-  private fail(message: string, kind: NativeFailureKind = "internal"): void {
-    this.stopWorker();
-    if (this.busy) this.finish({ ok: false, kind, message });
   }
 
   close(): void {

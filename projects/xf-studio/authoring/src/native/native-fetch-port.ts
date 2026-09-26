@@ -5,10 +5,11 @@
  * - A resource is served natively when its archive indexes it, its root class is one the native reader has been verified on
  *   (`NATIVE_ROOTS`, from the differential harness tools/native-cr2w-diff.ts) and decoding succeeds within its budgets. Anything
  *   else goes to the fallback port, which keeps its own cache and rules, and is counted by kind (native-errors.ts): not-indexed,
- *   not-verified, unsupported, malformed, decompress, over-budget, io, and internal (a reader bug, kept with its stack and
- *   optionally rethrown so it is never mistaken for an ordinary fallback).
+ *   not-verified, unsupported, malformed, decompress, over-budget, io, unavailable (the worker could not start), and internal (a
+ *   reader bug, kept with its stack and optionally rethrown so it is never mistaken for an ordinary fallback).
  * - Decoding runs through a `NativeDecoder` (native-decode.ts): in-process, or in a worker whose time budget abandons a resource
- *   that runs too long (then WolvenKit answers it).
+ *   that runs too long (then WolvenKit answers it). Hosts open it with `openNativeDecoderAsync`, which never blocks the event loop;
+ *   the synchronous `openNativeReader`/`openNativeDecoder` are for command-line tools.
  * - The answer carries the same `extractedSha256` the fallback would (the native bytes are identical to WolvenKit's extraction),
  *   so provenance and render records do not depend on which reader answered. It also carries `notes` (a property stored with a
  *   type the RTTI disagrees with, e.g. a mod's `castShadows` stored as `Bool`) and `defaulted` (watched properties the file left
@@ -27,7 +28,7 @@ import type { Decompress } from "./kark";
 import { DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
 import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecoder, WorkerDecoder } from "./native-decode";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "./native-errors";
-import { loadGameOodle, type OodleVerifier } from "./oodle";
+import { loadGameOodle, type OodleLibrary, openGameOodle, type OodleVerifier, type OodleVerifierSync } from "./oodle";
 import { NATIVE_READER_VERSION } from "./resource-document";
 import rttiClassHashes from "./rtti-class-hashes.json";
 import rttiSubset from "./rtti-subset.json";
@@ -57,14 +58,28 @@ export interface NativeReader {
 const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassHashes)).digest("hex").slice(0, 12);
 export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATIVE_READER_VERSION}:${dataHash}:${decompressor}`;
 
-/** The native reader over a game installation, or the reason it can't be used (then every read goes to the fallback). */
-export function openNativeReader(gameRoot: string, options: { limits?: NativeLimits; verify?: OodleVerifier } = {}): { reader: NativeReader } | { reader: null; reason: string } {
-  try {
-    const oodle = loadGameOodle(gameRoot, { verify: options.verify });
-    const pool = new NativeArchivePool(oodle.decompress, 64, options.limits ?? DEFAULT_LIMITS);
-    return { reader: { pool, decompress: oodle.decompress, identity: nativeReaderIdentity(oodle.identity), oodleSha256: oodle.sha256,
-      close: () => { pool.close(); oodle.close(); } } };
-  } catch (error) { return { reader: null, reason: (error as Error).message }; }
+type Opened<T> = { reader: T } | { reader: null; reason: string };
+type ReaderOptions = { limits?: NativeLimits };
+type DecoderOptions = { timeoutMs?: number; limits?: NativeLimits; roots?: ReadonlySet<string> };
+
+function readerOver(oodle: OodleLibrary, limits: NativeLimits = DEFAULT_LIMITS): NativeReader {
+  const pool = new NativeArchivePool(oodle.decompress, 64, limits);
+  return { pool, decompress: oodle.decompress, identity: nativeReaderIdentity(oodle.identity), oodleSha256: oodle.sha256, close: () => { pool.close(); oodle.close(); } };
+}
+
+/**
+ * The native reader over a game installation, or the reason it can't be used (then every read goes to the fallback). Checking an
+ * Oodle library whose hash is not on the known list runs PowerShell asynchronously, so a host's event loop never waits on it.
+ */
+export async function openNativeReaderAsync(gameRoot: string, options: ReaderOptions & { verify?: OodleVerifier } = {}): Promise<Opened<NativeReader>> {
+  try { return { reader: readerOver(await openGameOodle(gameRoot, { verify: options.verify }), options.limits) }; }
+  catch (error) { return { reader: null, reason: (error as Error).message }; }
+}
+
+/** `openNativeReaderAsync`, blocking while an unknown library's signature is checked: for command-line tools only. */
+export function openNativeReader(gameRoot: string, options: ReaderOptions & { verify?: OodleVerifierSync } = {}): Opened<NativeReader> {
+  try { return { reader: readerOver(loadGameOodle(gameRoot, { verify: options.verify }), options.limits) }; }
+  catch (error) { return { reader: null, reason: (error as Error).message }; }
 }
 
 /** Decode on the calling thread with a reader's pool and decompressor. */
@@ -72,17 +87,26 @@ export function inProcessDecoder(reader: NativeReader, roots: ReadonlySet<string
   return new InProcessDecoder(reader.pool, reader.decompress, { roots, limits, identity: reader.identity }, depotHash, () => reader.close());
 }
 
-/**
- * Decode in a worker with a time budget per resource. The library is checked here first, so a worker loads only a library whose
- * bytes match the checked hash.
- */
-export function openNativeDecoder(gameRoot: string, options: { timeoutMs?: number; limits?: NativeLimits; roots?: ReadonlySet<string>; verify?: OodleVerifier } = {}):
-  { decoder: NativeDecoder } | { decoder: null; reason: string } {
-  const opened = openNativeReader(gameRoot, { limits: options.limits, verify: options.verify });
+function workerDecoderFor(gameRoot: string, opened: Opened<NativeReader>, options: DecoderOptions): { decoder: NativeDecoder } | { decoder: null; reason: string } {
   if (!opened.reader) return { decoder: null, reason: opened.reason };
   const { identity, oodleSha256 } = opened.reader;
   opened.reader.close();
   return { decoder: new WorkerDecoder({ decompressor: { gameRoot, trustedSha256: oodleSha256 }, roots: options.roots ?? NATIVE_ROOTS, limits: options.limits, identity, timeoutMs: options.timeoutMs }) };
+}
+
+/**
+ * Decode in a worker with a time budget per resource. The library is checked here first (asynchronously), so a worker loads only
+ * a library whose bytes match the checked hash.
+ */
+export async function openNativeDecoderAsync(gameRoot: string, options: DecoderOptions & { verify?: OodleVerifier } = {}):
+  Promise<{ decoder: NativeDecoder } | { decoder: null; reason: string }> {
+  return workerDecoderFor(gameRoot, await openNativeReaderAsync(gameRoot, { limits: options.limits, verify: options.verify }), options);
+}
+
+/** `openNativeDecoderAsync`, blocking while an unknown library's signature is checked: for command-line tools only. */
+export function openNativeDecoder(gameRoot: string, options: DecoderOptions & { verify?: OodleVerifierSync } = {}):
+  { decoder: NativeDecoder } | { decoder: null; reason: string } {
+  return workerDecoderFor(gameRoot, openNativeReader(gameRoot, { limits: options.limits, verify: options.verify }), options);
 }
 
 /** Fallback counts by kind, plus a bounded sample of messages and the internal failures' stacks. */

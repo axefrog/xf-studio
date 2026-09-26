@@ -7,7 +7,7 @@
  * modification time and file id from `fstat`), reads and closes. So an installer or mod manager can replace an archive by rename
  * at any time (Windows refuses to rename over a file another process holds open), and a replaced archive is re-indexed rather
  * than read through a stale index. Every size read from the file is checked against the real file size and the caps in
- * limits.ts before anything is allocated.
+ * limits.ts before anything is allocated, the index block included (`maxIndexBytes`, and `maxPooledIndexBytes` for a pool).
  */
 import { closeSync, fstatSync, openSync, readSync, statSync, type Stats } from "node:fs";
 import { basename } from "node:path";
@@ -52,6 +52,7 @@ export class NativeArchive {
       const got = readSync(fd, head, 0, head.length, 0);
       const header = parseRdarHeader(head.subarray(0, got));
       if (header.indexOffset + header.indexSize > stamp.size) throw new NativeMalformedError("RDAR index lies outside the file.");
+      if (header.indexSize > limits.maxIndexBytes) throw new NativeBudgetError(`${basename(path)}: a ${header.indexSize}-byte index passes the ${limits.maxIndexBytes}-byte cap.`);
       const block = new Uint8Array(header.indexSize);
       readFully(fd, block, 0, header.indexOffset, block.length, basename(path));
       return new NativeArchive(path, new RdarIndex(header, block, stamp.size), stamp, decompress, limits);
@@ -137,12 +138,13 @@ export class NativeArchive {
 }
 
 /**
- * Parsed archive indexes by path, at most `limit` at once (least recently used dropped first), re-parsed when the file at the path
- * changed. A resolver reads from a few dozen of a route's ~1,000 archives, so a small pool keeps memory bounded. The pool holds no
- * file handles.
+ * Parsed archive indexes by path, at most `limit` at once and at most `maxPooledIndexBytes` of index blocks together (least recently
+ * used dropped first), re-parsed when the file at the path changed. A resolver reads from a few dozen of a route's ~1,000 archives,
+ * so a small pool keeps memory bounded. The pool holds no file handles.
  */
 export class NativeArchivePool {
   private readonly open = new Map<string, NativeArchive>();
+  private indexBytes = 0;
   constructor(private readonly decompress: Decompress, private readonly limit = 64, private readonly limits: NativeLimits = DEFAULT_LIMITS) {}
 
   /** The archive at `path`, re-indexed first if the file changed (one `stat`). */
@@ -166,7 +168,16 @@ export class NativeArchivePool {
     return this.indexed(path).read(hash);
   }
 
-  private drop(path: string): void { this.open.get(path)?.close(); this.open.delete(path); }
+  private drop(path: string): void {
+    const archive = this.open.get(path);
+    if (!archive) return;
+    archive.close(); this.open.delete(path); this.indexBytes -= archive.index.header.indexSize;
+  }
+
+  /** Index bytes the pool holds now. */
+  get heldIndexBytes(): number { return this.indexBytes; }
+  /** How many archives the pool holds now. */
+  get heldArchives(): number { return this.open.size; }
 
   /** The cached index for `path` (most recently used), or a freshly parsed one. */
   private indexed(path: string): NativeArchive {
@@ -174,12 +185,12 @@ export class NativeArchivePool {
     if (archive) { this.open.delete(path); this.open.set(path, archive); return archive; }
     archive = NativeArchive.open(path, this.decompress, this.limits);
     this.open.set(path, archive);
-    while (this.open.size > this.limit) {
-      const [oldest, value] = this.open.entries().next().value!;
-      value.close(); this.open.delete(oldest);
-    }
+    this.indexBytes += archive.index.header.indexSize;
+    // The newest archive stays even alone over the byte budget (its own size is capped by `maxIndexBytes`).
+    while (this.open.size > this.limit || (this.indexBytes > this.limits.maxPooledIndexBytes && this.open.size > 1))
+      this.drop(this.open.keys().next().value!);
     return archive;
   }
 
-  close(): void { for (const archive of this.open.values()) archive.close(); this.open.clear(); }
+  close(): void { for (const archive of this.open.values()) archive.close(); this.open.clear(); this.indexBytes = 0; }
 }
