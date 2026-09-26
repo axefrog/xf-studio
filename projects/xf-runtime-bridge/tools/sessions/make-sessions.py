@@ -5,10 +5,13 @@ consistent. Edit here, run `python tools/sessions/make-sessions.py` from the pro
 commit the generator and both scripts.
 
 The flow is the one the first bridge session proved (26 September 2026), with what the bridge can
-now do itself:
-  - the player opens the character creator (a mirror, or F12 with Character Customization Anywhere);
-    that is still an `ask`, marked `replaced_by: cc.open` for when the bridge can open it;
-  - the bridge sets the XF row (cc.apply), photographs the creator's eyes zoom, and presses Confirm
+now do itself (batch 3 adds cc.open, cc.page, cc.apply by value and game.options.read, all offline
+only until a session runs them):
+  - the bridge opens the character creator (cc.open; the ripperdoc mode where face-shape or cyberware
+    rows are needed); if that doesn't work, a note asks the player to open it (a mirror, or F12 with
+    Character Customization Anywhere), and game.wait follows;
+  - the bridge sets the XF row (cc.apply), points the creator's camera at the eyes (cc.page), photographs
+    that zoom, and presses Confirm
     (cc.confirm; allowed in the test profile's -writes build). If Confirm is refused (a creator
     opened in new-game mode), a note asks the player to press it, and game.wait follows;
   - the bridge opens photo mode with the player's own photo-mode key (photo.open, approved for the
@@ -25,6 +28,10 @@ Each script follows its test card:
   session-3.json  experiments/022-session-3/README.md
 Selector indices assume the XF row lists Off (0) and then the collection's presets in order; the
 first creator visit reads the row's values (player.appearance) so the coordinator can confirm that.
+Vanilla rows are set by their on-screen label (cc.apply value: piercing style "09", eye colour "24",
+hairstyle "05", eye shape "12"; the creator writes positions as two digits) or, for colours, by a
+word in the value's name ("black", "silver", "gold"); each such step continues on error, and the
+coordinator then reads the row (player.appearance) and picks the index.
 """
 
 import json, os
@@ -77,6 +84,15 @@ def apply(label, index):
     return {"do": "apply cc", "label": label, "option": "XF", "index": index}
 
 
+def apply_value(label, option, value, **extra):
+    # A vanilla row by its on-screen label or a word of its value's name (cc.apply value).
+    return {"do": "apply cc", "label": label, "option": option, "value": value, "continue_on_error": True, **extra}
+
+
+def page(label, part):
+    return run(label, "cc.page", {"page": part}, continue_on_error=True)
+
+
 def wait_phase(label, phase, timeout=PLAYER):
     return run(label, "game.wait", {"phase": [phase], "timeout_ms": timeout})
 
@@ -86,16 +102,23 @@ REGION = {"eyes": "eyes", "face": "face", "head-and-shoulders": "head-and-should
 # --- the repeated parts ------------------------------------------------------------------------
 
 
-def open_creator(prefix, first=False):
-    text = "Open the character creator (a mirror's appearance screen, or F12 with Character Customization Anywhere) and go to the page with the XF row. Leave its camera on the eyes zoom."
-    if not first:
-        text = "Open the character creator again (mirror or F12) and go to the XF row."
-    return [ask(f"{prefix}-open-creator", text, replaced_by="cc.open"), wait_phase(f"{prefix}-wait-creator", "character_menu")]
+def open_creator(prefix, first=False, mode="mirror"):
+    # cc.open locks saving first and opens the mirror's appearance screen; the ripperdoc mode also
+    # allows the eye-shape, nose, skin and cyberware rows. The note and game.wait cover a refusal.
+    text = "If the character creator didn't open by itself, open it (a mirror, or F12 with Character Customization Anywhere)."
+    if mode == "ripperdoc":
+        text += " The eye-shape and cyberware rows need the ripperdoc's screen or F12; a mirror doesn't offer them."
+    return [
+        run(f"{prefix}-open-creator", "cc.open", {"mode": mode} if mode != "mirror" else None, continue_on_error=True),
+        note(f"{prefix}-open-fallback", text),
+        wait_phase(f"{prefix}-wait-creator", "character_menu"),
+    ]
 
 
 def creator_pick(prefix, index, settle=1500):
-    # The creator's own eyes zoom, photographed as a bonus view under its fixed light.
-    return [apply(f"{prefix}-apply", index), wait(f"{prefix}-settle", settle), capture(f"{prefix}-creator", "cc-eyes")]
+    # The creator's own eyes zoom (cc.page eyes, after cc.apply moved the camera to the XF row's part),
+    # photographed as a bonus view under its fixed light.
+    return [apply(f"{prefix}-apply", index), wait(f"{prefix}-settle", settle), page(f"{prefix}-cc-page", "eyes"), wait(f"{prefix}-cc-page-settle", 1000), capture(f"{prefix}-creator", "cc-eyes")]
 
 
 def confirm_creator(prefix):
@@ -156,15 +179,18 @@ def preflight(save_text):
     return [
         run("p0-bridge", "bridge.info"),
         run("p0-status", "game.status"),
+        # The upscaler and its mode, ray and path tracing, SSS quality, HDR, the camera effects and the
+        # character render options, recorded instead of asked (game.options.read, read-only).
+        run("p0-options", "game.options.read", continue_on_error=True),
         ask("p0-ready", save_text),
     ]
 
 
 SAVE = (
     "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge "
-    "changes something, saving stays locked until you load a save. (2) Tell the coordinator the game version, the upscaler "
-    "and mode, the resolution, and whether ray tracing or path tracing is on. (3) Stand V in an open, quiet spot with room in "
-    "front of her (photo mode's camera needs a few metres); keep the game window in front."
+    "changes something, saving stays locked until you load a save. (2) Tell the coordinator the resolution (the bridge has "
+    "read the graphics settings; p0-options). (3) Stand V in an open, quiet spot with room in front of her (photo mode's "
+    "camera needs a few metres); keep the game window in front."
 )
 
 # --- Session 2, the parts still open (experiments/020-session-2/README.md) ----------------------
@@ -231,15 +257,32 @@ s2 += [
         "Quick verdicts for the coordinator: which Gloss reads most like four distinct finishes; does Shimmer flash as V turns and still differ from Satin at face distance; are the Metal ramp's angular highlights gone, and is there a seam along the lid; is Lines · new sharper than Lines · old close up?",
     )
 ]
-# Part 3 (optional, card step 9): piercings and the heart eye, set by hand in the creator.
-s2 += open_creator("p3") + [apply("p3-xf-off", 0), wait("p3-settle", 1500)]
-for label, text in [
-    ("p3-piercing-9-black", "Optional (card step 9): set piercing style 9 in black; the bridge photographs the creator's eyes zoom."),
-    ("p3-piercing-1-silver", "Set piercing style 1 in silver."),
-    ("p3-piercing-1-gold", "Set piercing style 1 in gold."),
-    ("p3-eye-24", "Set eye colour 24 (the heart design)."),
-]:
-    s2 += [ask(label, text), capture(f"{label}-shot", "cc-eyes"), capture(f"{label}-shot-full")]
+# Part 3 (optional, card step 9): piercings and the heart eye, set through the bridge (cc.apply by label
+# or colour name; each continues on error, and the coordinator then picks the index from the read).
+s2 += open_creator("p3") + [apply("p3-xf-off", 0), wait("p3-settle", 1500), run("p3-read-piercings", "player.appearance", {"option": "piercings"})]
+
+
+def vanilla_rows(prefix, rows, camera):
+    # rows: (label, [(option, value), ...]); each row set, the camera pointed, then two captures.
+    steps = []
+    for label, sets in rows:
+        for i, (option, value) in enumerate(sets):
+            steps += [apply_value(f"{label}-set{i}", option, value), wait(f"{label}-set{i}-settle", 1500)]
+        steps += [page(f"{label}-page", camera(label)), wait(f"{label}-page-settle", 800), capture(f"{label}-shot", "cc-eyes"), capture(f"{label}-shot-full")]
+    return steps
+
+
+PIERCINGS = [
+    ("p3-piercing-9-black", [("piercings", "09"), ("piercings_color", "black")]),
+    ("p3-piercing-1-silver", [("piercings", "01"), ("piercings_color", "silver")]),
+    ("p3-piercing-1-gold", [("piercings", "01"), ("piercings_color", "gold")]),
+    ("p3-eye-24", [("eyes_color", "24")]),
+]
+s2 += vanilla_rows("p3", PIERCINGS, lambda label: "eyes" if "eye" in label else "head")
+s2 += [
+    run("p3-read-colours", "player.appearance", {"option": "piercings_color"}),
+    note("p3-check", "Coordinator: if a colour step failed (the value's name didn't contain black, silver or gold), read p3-read-colours and repeat that step with its index."),
+]
 s2 += [run("p4-back", "cc.back", continue_on_error=True)]
 s2 += [
     ask(
@@ -254,7 +297,7 @@ session2 = {
     "title": "Session 2 (continued): gloss, shimmer and metal under a light sweep; depth in motion; lines sharpness",
     "card": "experiments/020-session-2/README.md",
     "requires": [
-        "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (session 2 build) and XF Runtime Bridge (-writes build of this commit, with its XF camera presets)",
+        "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (session 2 build) and XF Runtime Bridge (-writes build of this commit, with its XF camera presets; cc.open, cc.page and game.options.read are new in it)",
         "a loaded save with V in the world, in an open spot",
         "a fresh manual safety save (step p0-ready)",
         "the game window in front (photo.open presses the photo-mode key in it)",
@@ -301,6 +344,7 @@ s3 += glitter_loop(
         run("a-c-exit-for-dlaa", "photo.exit"),
         ask("a-c-dlaa", "Card step 5: switch the upscaler to DLAA (or its highest-quality mode) in the graphics settings, then come back to the world."),
         wait_phase("a-c-wait-world-dlaa", "gameplay"),
+        run("a-c-dlaa-options", "game.options.read", {"render_options": False}, continue_on_error=True),
         *enter_photo("a-c-dlaa"),
     ]
     + [dict(s, label=s["label"].replace("a-c-", "a-c-dlaa-")) for s in shots("a-c", ["eyes", "face"])],
@@ -322,26 +366,43 @@ s3 += [
     ask("a-winterkissed", "Optional card step 9: only if Winterkissed is already enabled, equip Golden Girl for a reference close-up (don't change the mod list for this). Otherwise skip."),
     capture("a-winterkissed-shot", "cc-eyes"),
 ]
-# Part B: blink (by hand in the creator; the bridge photographs).
-for label, text in [
-    ("b-shape-01", "Part B: set eye shape 01 and catch V's eyes closed in a blink (the bridge takes a burst next)."),
-    ("b-shape-10", "Eye shape 10."),
-    ("b-shape-12", "Eye shape 12."),
-    ("b-shape-h011", "The eye shape that uses morph h011."),
-    ("b-makeup-closed", "Eye shape 12 with an XF look covering the upper lid: does bare skin show between the crease and the lashes when the eyes close?"),
-]:
-    s3 += [ask(label, text), burst(f"{label}-burst", "cc-eyes", 12, 120)]
-# Part C: creator and piercings (by hand).
-for label, text in [
-    ("c-legacy-off", "Part C step 4 (needs the legacy build on the reference character; otherwise skip): set every legacy XF layer row, lipstick and blush to Off. Does anything remain drawn?"),
-    ("c-hair-5", "Step 5: pick hairstyle 5 without face cyberware."),
-    ("c-hair-cyberware", "Now pick a face cyberware that swaps the hairstyle row to its cyberware variant. Is it the same hair?"),
-    ("c-piercing-9-black", "Step 7 (if not done in session 2): piercing style 9 in black."),
-    ("c-piercing-1-silver", "Piercing style 1 in silver."),
-    ("c-piercing-1-gold", "Piercing style 1 in gold."),
-    ("c-eye-24", "Eye colour 24."),
-]:
-    s3 += [ask(label, text), capture(f"{label}-shot", "cc-eyes"), capture(f"{label}-shot-full")]
+# Parts B and C need the eye-shape and cyberware rows, which only the ripperdoc's edit mode offers: back
+# out of the mirror screen (the E, A, Off previews above are discarded) and open it again in that mode.
+s3 += [run("b-back", "cc.back", continue_on_error=True), note("b-back-fallback", "If the creator is still open, press Back and confirm."), wait_phase("b-wait-world", "gameplay")]
+s3 += open_creator("b", mode="ripperdoc") + [run("b-read-shapes", "player.appearance", {"option": "eyes"})]
+# Part B: blink. The bridge sets each eye shape by its on-screen label (01 is None, h011 is 02) and
+# takes a burst long enough to catch a blink (4 s).
+for label, value in [("b-shape-01", "01"), ("b-shape-10", "10"), ("b-shape-12", "12"), ("b-shape-h011", "h011")]:
+    s3 += [apply_value(f"{label}-set", "eyes", value), wait(f"{label}-settle", 1500), page(f"{label}-page", "eyes"), wait(f"{label}-page-settle", 800), burst(f"{label}-burst", "cc-eyes", 40, 100)]
+s3 += [
+    apply_value("b-makeup-closed-shape", "eyes", "12"),
+    wait("b-makeup-closed-settle", 1500),
+    ask("b-makeup-closed", "Eye shape 12 is set. Pick an XF look covering the upper lid (the coordinator can name one), then watch a blink: does bare skin show between the crease and the lashes when the eyes close?"),
+    burst("b-makeup-closed-burst", "cc-eyes", 40, 100),
+]
+# Part C: creator and piercings, through the bridge except the legacy check.
+s3 += [
+    ask("c-legacy-off", "Part C step 4 (needs the legacy build on the reference character; otherwise skip): set every legacy XF layer row, lipstick and blush to Off. Does anything remain drawn?"),
+    capture("c-legacy-off-shot", "cc-eyes"),
+    capture("c-legacy-off-shot-full"),
+]
+s3 += vanilla_rows(
+    "c",
+    [
+        ("c-hair-5", [("cyberware", "Off"), ("hairstyle", "05")]),
+        # Any face cyberware swaps the hairstyle row for its cyberware twin (knowledge/cc-file-chain.md).
+        ("c-hair-cyberware", [("cyberware", "01")]),
+        ("c-piercing-9-black", [("cyberware", "Off"), ("piercings", "09"), ("piercings_color", "black")]),
+        ("c-piercing-1-silver", [("piercings", "01"), ("piercings_color", "silver")]),
+        ("c-piercing-1-gold", [("piercings", "01"), ("piercings_color", "gold")]),
+        ("c-eye-24", [("eyes_color", "24")]),
+    ],
+    lambda label: "hair" if "hair" in label else ("eyes" if "eye" in label else "head"),
+)
+s3 += [
+    run("c-read-hair", "player.appearance", {"option": "hairstyle_cyberware"}),
+    note("c-hair-check", "Coordinator (card step 5, CC file chain 11): compare c-hair-5-shot with c-hair-cyberware-shot; the same hair means the Studio's switcher rule holds, the same position with different hair means it changes. If a colour step failed, read the row and repeat it with its index."),
+]
 s3 += [ask("c-creator-rows", "Step 6 needs a new game's body page; note the rows in order and any unlabelled row the next time a new game is started. Skip it here.")]
 s3 += [run("c-back", "cc.back", continue_on_error=True), note("c-back-fallback", "If the creator is still open, press Back and confirm."), wait_phase("c-wait-world", "gameplay")]
 # Part D: expressions through the bridge instead of the CET console.
@@ -380,7 +441,7 @@ session3 = {
     "title": "Session 3: Glitter board, blink and creator checks",
     "card": "experiments/022-session-3/README.md",
     "requires": [
-        "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build, with its XF camera presets)",
+        "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build of batch 3 or later, with its XF camera presets)",
         "a loaded save with V in the world, in an open spot",
         "a fresh manual safety save (step p0-ready)",
         "the game window in front (photo.open presses the photo-mode key in it)",

@@ -138,7 +138,8 @@ describe("command API without a game", () => {
       expect(outcome.error.message).toContain("must be a number");
     }
     outcome = await api.run("cc_apply", { option: "XF" });
-    expect(!outcome.ok && outcome.error.message).toContain('"index" is required');
+    expect(!outcome.ok && outcome.error.code).toBe("bad_input");
+    expect(!outcome.ok && outcome.error.message).toContain("Give index");
   });
 
   test("with no bridge session every game command answers no_bridge with a next step", async () => {

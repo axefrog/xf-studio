@@ -76,6 +76,29 @@ struct LightOps
 // and, when this call changed it, the menu's selection (select_after).
 json LightSet(const params::LightRequest& aRequest, const LightOps& aOps);
 
+// What CreatorOpen needs from the game. Each game step throws MethodError to refuse.
+struct CreatorOpenOps
+{
+    // Game thread: checks that this is a safe moment (V in the world, no combat, scene, vehicle or
+    // menu) and requests the save lock. Answers {already_open: true} when the screen is open already.
+    std::function<json()> prepare;
+    // Waits a few game ticks, so the game has processed the save-lock request.
+    std::function<void()> settle;
+    // Game thread: checks the moment again, refuses unless saving is locked, then asks the idle menu
+    // scenario to open the appearance screen (the request is picked up a frame or two later).
+    std::function<json()> open;
+    // Game thread: the game's phase now (game.status's phase).
+    std::function<std::string()> phase;
+    // Game thread: withdraws a request that didn't open the screen in time.
+    std::function<void()> cancel;
+    std::function<void(std::chrono::milliseconds)> sleep;
+};
+
+// cc.open: prepare, settle, open, then wait until the phase is character_menu (aRequest.timeoutMs).
+// The result carries the undo (cc.back, which discards every change and closes the screen). On a
+// timeout the request is withdrawn and creator_open_timeout thrown; nothing is left pending.
+json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOps& aOps);
+
 // Bridge thread: waits until the game thread has drained the queue aTicks more times (one drain
 // per engine tick), up to aTimeout. False on timeout (or a closed queue).
 bool WaitTicks(const GameThreadQueue& aQueue, uint64_t aTicks, std::chrono::milliseconds aTimeout);

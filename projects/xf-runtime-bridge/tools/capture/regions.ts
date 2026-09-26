@@ -4,7 +4,7 @@
 // so they frame the same part of the picture on 16:9, 21:9 and 32:9 windows: the game keeps its
 // vertical field of view and widens the picture sideways on wider screens (Hor+).
 //
-// The photo-mode regions (face, eyes, head-and-shoulders) are centred: photo.frame puts its target
+// The photo-mode regions (face, eyes, head-and-shoulders, full-body) are centred: photo.frame puts its target
 // (the face, the eyes, the head and shoulders) at the centre of the window at a known size, and
 // these regions match those framings. cc-eyes is for the character creator's own camera, which the
 // bridge can't move: it was measured from the first session's creator captures (26 September 2026,
@@ -24,6 +24,7 @@ export const NAMED_REGIONS = {
   "head-and-shoulders": "A centred area around V's head and shoulders in the photo-mode face framing.",
   face: "A centred area around V's face, matching photo.frame's face framing.",
   eyes: "A centred band across both of V's eyes and brows, matching photo.frame's eyes framing.",
+  "full-body": "A centred full-height area around V standing, matching photo.frame's full-body framing.",
   "cc-eyes": "V's eyes and brows in the character creator's eyes zoom (the creator's own camera, not photo mode).",
 } as const;
 export type NamedRegion = keyof typeof NAMED_REGIONS;
@@ -32,7 +33,8 @@ export type NamedRegion = keyof typeof NAMED_REGIONS;
 // aspect ratio), cy the vertical centre as a fraction of the height. Size in window heights.
 type Shape = { dx: number; cy: number; w: number; h: number };
 const SHAPES: Record<Exclude<NamedRegion, "full" | "center-16x9">, Shape> = {
-  // photo.frame spans: head-and-shoulders 0.8 m, face 0.36 m, eyes 0.2 m of the window height.
+  // photo.frame spans: full-body 2 m, head-and-shoulders 0.8 m, face 0.36 m, eyes 0.2 m of the window height.
+  "full-body": { dx: 0, cy: 0.5, w: 0.62, h: 1.0 },
   "head-and-shoulders": { dx: 0, cy: 0.5, w: 0.9, h: 0.96 },
   face: { dx: 0, cy: 0.5, w: 0.5, h: 0.62 },
   eyes: { dx: 0, cy: 0.5, w: 0.62, h: 0.28 },

@@ -93,6 +93,7 @@ add_library(xfb_core STATIC
   src/core/Dispatcher.cpp
   src/core/GameThreadQueue.cpp
   src/core/Log.cpp
+  src/core/OptionsExchange.cpp
   src/core/Params.cpp
   src/core/PipeServer.cpp
   src/core/ScriptFrame.cpp

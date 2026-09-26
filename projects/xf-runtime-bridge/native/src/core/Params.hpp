@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -147,10 +148,10 @@ enum class PhotoEnterRoute
 };
 PhotoEnterRoute ParsePhotoEnter(const json& aParams);
 
-// cc.confirm and cc.back take no parameters. Both are refused unless [bridge] allow_creator_leave =
-// true: false by default and in the default and -diagnostic packages; the -writes package (the
-// dedicated test profile only) sets it, as approved on 26 September 2026 for sessions that end by
-// loading the safety save.
+// cc.confirm and cc.back take no parameters. Both, and cc.open, are refused unless [bridge]
+// allow_creator_leave = true: false by default and in the default and -diagnostic packages; the
+// -writes package (the dedicated test profile only) sets it, as approved on 26 September 2026 for
+// sessions that end by loading the safety save.
 bool CreatorLeaveAllowed(bool aConfigFlag); // throws creator_leave_disabled when the flag is off
 
 // photo.subject: {up, forward, right} in metres: the point to report, relative to V's head slot, along
@@ -171,13 +172,59 @@ struct PhotoStateRequest
 };
 PhotoStateRequest ParsePhotoState(const json& aParams);
 
-// cc.apply: {option, index}.
+// cc.apply: {option, index} or {option, value}. option is the option's internal name, its on-screen
+// label or its UI slot (the one active option in that slot, e.g. piercings_color); value is a value's
+// internal name or on-screen label (index is then -1). The redscript layer resolves both.
 struct CharacterRequest
 {
     std::string option;
     int32_t index = 0;
+    std::string value;
 };
 CharacterRequest ParseCharacterApply(const json& aParams);
+
+// cc.open: {mode: "mirror" (default) | "ripperdoc", timeout_ms: 500-15000 (default 5000)}. The mode
+// is the edit tag the appearance screen opens with (gameuiCharacterCustomizationEditTag HairDresser or
+// Ripperdoc), which decides which rows can be changed: the vanilla eye shape, nose and skin rows carry
+// NewGame and Ripperdoc only. Refused, like cc.confirm and cc.back, unless allow_creator_leave = true.
+enum class CreatorMode : int32_t
+{
+    Mirror = 1,    // gameuiCharacterCustomizationEditTag.HairDresser
+    Ripperdoc = 2, // gameuiCharacterCustomizationEditTag.Ripperdoc
+};
+const char* CreatorModeName(CreatorMode aMode);
+struct CreatorOpenRequest
+{
+    CreatorMode mode = CreatorMode::Mirror;
+    int32_t timeoutMs = 5000;
+};
+CreatorOpenRequest ParseCreatorOpen(const json& aParams);
+
+// cc.page: {page}: points the open appearance screen's preview camera at one body region, as hovering
+// a row does (the menu's own RequestCameraChange). page is a name from CreatorPages; slot is the
+// camera slot it stands for ("" for default: the menu's own starting slot).
+struct CreatorPageRequest
+{
+    std::string page;
+    std::string slot;
+};
+std::vector<std::pair<std::string, std::string>> CreatorPages();
+CreatorPageRequest ParseCreatorPage(const json& aParams);
+
+// game.options.read: {settings (default true), render_options (default true), groups: [settings
+// groups, a subset of SettingsGroups], names: [render options "Category/Sub/Name", at most 128]}.
+// settings are the game's user settings (graphics and display), read in script; render options are
+// the engine's GameOptions, which only the CET layer can read (core/OptionsExchange.hpp).
+struct GameOptionsRequest
+{
+    bool settings = true;
+    bool renderOptions = true;
+    std::vector<std::string> groups;
+    std::vector<std::string> names;
+};
+std::vector<std::string> SettingsGroups();
+std::vector<std::string> DefaultRenderOptions();
+GameOptionsRequest ParseGameOptions(const json& aParams);
 
 // player.appearance: {option, check: [{group, option, fpp}]}.
 struct AppearanceCheck

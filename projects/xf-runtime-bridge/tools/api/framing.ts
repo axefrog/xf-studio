@@ -58,6 +58,9 @@ export const FRAMINGS = {
   eyes: { description: "Both eyes and brows, filling the eyes region (the window's centre band).", offset: { up: 0.075, forward: 0.09, right: 0 }, span_m: 0.2, xf_preset: 8 },
   face: { description: "The face from chin to hairline, filling the face region.", offset: { up: 0.045, forward: 0.08, right: 0 }, span_m: 0.36, xf_preset: 7 },
   "head-and-shoulders": { description: "Head and shoulders.", offset: { up: -0.1, forward: 0.04, right: 0 }, span_m: 0.8, xf_preset: 9 },
+  // The body's middle, about 0.8 m below the head joint of a standing V (an anatomical estimate until a
+  // session checks a capture), with 2 m filling the window height.
+  "full-body": { description: "V from head to feet, standing.", offset: { up: -0.8, forward: 0, right: 0 }, span_m: 2.0, xf_preset: 6 },
 } as const satisfies Record<string, { description: string; offset: Offset; span_m: number; xf_preset: number }>;
 export type FramingName = keyof typeof FRAMINGS;
 
@@ -482,6 +485,7 @@ export const CAPTURE_PROPORTIONS: Record<FramingName, { below_top: number; head_
   eyes: { below_top: 0.55, head_widths_per_span: 0.2 / 0.155 },
   face: { below_top: 0.62, head_widths_per_span: 0.36 / 0.155 },
   "head-and-shoulders": { below_top: 1.1, head_widths_per_span: 0.8 / 0.155 },
+  "full-body": { below_top: 0.92 / 0.155, head_widths_per_span: 2.0 / 0.155 },
 };
 
 export async function frameByCapture(adapter: FramingAdapter, options: FrameOptions, start: { fov: number; lr: number; ud: number; yaw: number; ranges?: Partial<Ranges> }): Promise<FrameResult> {

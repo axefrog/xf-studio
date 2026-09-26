@@ -111,9 +111,9 @@ export function stageVariant(options: StageOptions): Manifest {
     if (name.endsWith(".reds")) put(join(projectDir, "redscript", name), `${PLUGIN_DIR}/Scripts/${name}`);
   }
   put(join(projectDir, "tweaks", "xf_runtime_bridge.yaml"), "r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml");
-  // XF photo-mode camera presets (photo_mode.std_preset_7..9) for repeatable framing: approved for the
+  // XF photo-mode camera presets (photo_mode.std_preset_6..9) for repeatable framing: approved for the
   // test profile only (26 September 2026), so only the diagnostic and writes packages carry them;
-  // the distribution package must not, since they replace three of the player's presets.
+  // the distribution package must not, since they replace four of the player's presets.
   if (variant !== "default") put(join(projectDir, "tweaks", "test-profile", "xf_photo_mode_presets.yaml"), PRESETS_FILE);
   put(join(projectDir, "cet", "xf_runtime_bridge", "init.lua"), "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua");
 
@@ -130,7 +130,7 @@ export function stageVariant(options: StageOptions): Manifest {
     allow_writes: variant === "writes",
     write_classes: variant === "writes" ? ["photo", "world", "character"] : [],
     allow_creator_leave: variant === "writes",
-    photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_7..9 (XF face, eyes, head and shoulders)" : null,
+    photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {

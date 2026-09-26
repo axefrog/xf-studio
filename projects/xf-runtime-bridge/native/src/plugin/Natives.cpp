@@ -167,6 +167,49 @@ void Kill(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64
     });
 }
 
+// XFBridge_OptionsWanted() -> String   (CET layer: the render options game.options.read waits for,
+// {"seq":n,"names":["Category/Name",...]}, or "" when none are wanted)
+void OptionsWanted(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    aFrame->code++; // skip ParamEnd
+    Guarded("XFBridge_OptionsWanted", [&] {
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(Get().options.Pending().c_str());
+        }
+    });
+}
+
+// XFBridge_OptionsReport(values: String) -> Bool   (CET layer: {"seq":n,"values":{"Category/Name":"text"|null}})
+// Stored only when it answers the pending request exactly (core/OptionsExchange.cpp checks it).
+void OptionsReport(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    RED4ext::CString values;
+    RED4ext::GetParameter(aFrame, &values);
+    aFrame->code++; // skip ParamEnd
+
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_OptionsReport", [&] {
+        std::string why;
+        const bool stored = Get().options.Report(ToStd(values), &why);
+        if (stored)
+        {
+            log::Debug("options.reported", "bytes=" + std::to_string(values.Length()));
+        }
+        else
+        {
+            log::Warn("options.report_refused", "why=" + why);
+        }
+        if (aOut)
+        {
+            *aOut = stored;
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams)
 {
@@ -200,7 +243,9 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_Log", &LogFromScript, nullptr, {"layer", "level", "cid", "message"});
         RegisterGlobal(rtti, "XFBridge_Announce", &Announce, nullptr, {"layer", "detail"});
         RegisterGlobal(rtti, "XFBridge_Kill", &Kill, "Bool", {"reason"});
-        log::Info("rtti.register_types", "phase=post_register natives=5");
+        RegisterGlobal(rtti, "XFBridge_OptionsWanted", &OptionsWanted, "String", {});
+        RegisterGlobal(rtti, "XFBridge_OptionsReport", &OptionsReport, "Bool", {"values"});
+        log::Info("rtti.register_types", "phase=post_register natives=7");
     }
     catch (const std::exception& e)
     {

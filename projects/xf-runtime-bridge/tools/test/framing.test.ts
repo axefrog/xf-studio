@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
-import { frame, frameByCapture, readingProblem, screenSpace, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
+import { frame, frameByCapture, FRAMINGS, readingProblem, screenSpace, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
+import { resolveRegion } from "../capture/regions.ts";
 import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
 import { INPUT_SIZE, isExtendedKey, isGameImage, keyboardInput, keyMessageParam, KeySendError, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
@@ -147,6 +148,17 @@ describe("photo.frame", () => {
     expect(result.steps.length).toBeLessThanOrEqual(14);
     // The undo holds the values from before the call.
     expect(result.undo).toEqual({ method: "photo.camera.set", params: { fov: 40, subject: { yaw: 0, left_right: 0, up_down: 0 } } });
+  });
+
+  test("B8: the full-body framing centres V's middle and fits 2 m into the window height, from XF preset 6", async () => {
+    expect(FRAMINGS["full-body"]).toMatchObject({ span_m: 2.0, xf_preset: 6 });
+    const world = new World();
+    const result = await frame(adapterFor(world), { target: "full-body" });
+    expect(result.converged).toBe(true);
+    expect(Math.abs(result.residual.size - 1)).toBeLessThan(0.05);
+    expect(result.offset.up).toBeCloseTo(-0.8, 5);
+    // The matching capture region is the full window height, centred.
+    expect(resolveRegion({ name: "full-body" }, 3840, 1600)).toEqual({ x: 1424, y: 0, width: 992, height: 1600 });
   });
 
   test("the projection route honours position, span and yaw_offset", async () => {

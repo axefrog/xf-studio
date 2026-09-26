@@ -105,6 +105,34 @@ describe("MCP server against a read-only bridge", () => {
     expect(host.log.filter((l) => l.includes("evt=bridge.request")).length).toBe(before);
   });
 
+  test("game_options_read is a read: the settings summary and the render options through the CET layer", async () => {
+    const result = await call(mcp, "game_options_read");
+    expect(result.isError).toBeFalsy();
+    const value = json(result).result;
+    expect(value.summary).toMatchObject({ upscaler: "DLSS", upscaler_mode: "DLAA", ray_tracing: true, path_tracing: false, sss_quality: "High", hdr: "SDR" });
+    expect(value.summary.camera_effects.film_grain).toBe(false);
+    expect(Object.keys(value.settings.groups).sort()).toEqual(["/graphics/advanced", "/graphics/basic", "/graphics/performance", "/graphics/presets", "/graphics/raytracing", "/video/display"]);
+    expect(value.render_options.available).toBe(true);
+    expect(value.render_options.values["Editor/Characters/Hair/GlobalLight/R"]).toBe("0.500000");
+    expect(value.render_options.missing).toEqual([]);
+    const some = json(await call(mcp, "game_options_read", { settings: false, names: ["Editor/Characters/Eyes/DiffuseBoost", "Rendering/Unknown/Thing"] })).result;
+    expect(some.settings).toBeUndefined();
+    expect(some.render_options.values).toEqual({ "Editor/Characters/Eyes/DiffuseBoost": "0.500000" });
+    expect(some.render_options.missing).toEqual(["Rendering/Unknown/Thing"]);
+    const bad = await call(mcp, "game_options_read", { groups: ["/gameplay/hud"] });
+    expect(bad.isError).toBe(true);
+    const nothing = await call(mcp, "game_options_read", { settings: false, render_options: false });
+    expect(nothing.isError).toBe(true);
+    expect(text(nothing)).toContain("aren't valid");
+  });
+
+  test("cc_open is a write, refused while allow_writes is off", async () => {
+    const result = await call(mcp, "cc_open");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("writes_disabled");
+    expect(json(await call(mcp, "game_status")).result.phase).toBe("gameplay");
+  });
+
   test("the audit log records the refused write with its undo note", () => {
     const logs = join(root, "logs");
     expect(existsSync(logs)).toBe(true);
@@ -256,6 +284,19 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(json(result).result.undo).toEqual({ method: "world.pause", params: { paused: true } });
   });
 
+  test("cc_open and cc_page are refused without allow_creator_leave or outside the appearance screen", async () => {
+    let result = await call(mcp, "cc_open");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("creator_leave_disabled");
+    expect(text(result)).toContain("Opening, confirming or backing out");
+    result = await call(mcp, "cc_page", { page: "eyes" });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("appearance screen");
+    result = await call(mcp, "cc_page", { page: "UI_Eyes" });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("must be one of");
+  });
+
   test("cc_apply works while the appearance screen is open", async () => {
     await setPhase(host, "character_menu");
     const status = await call(mcp, "game_status");
@@ -280,6 +321,96 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(after.isError).toBe(true);
     expect(text(after)).toMatch(/isn't running|connection is gone|closed|switched off/);
   });
+});
+
+describe("MCP server with the creator gate open (batch 3: cc.open, cc.page, cc.apply by value, the clock in the creator)", () => {
+  let host: Host;
+  let mcp: Mcp;
+  beforeAll(async () => {
+    host = await startSelftestHost(["--allow-writes", "--allow-creator-leave"], 120);
+    mcp = await startMcp(["--runtime-dir", host.dir, "--capture-root", join(tempDir("xfb-mcp-cc-"), "captures")]);
+  });
+  afterAll(async () => {
+    await mcp?.close();
+    await host?.stop();
+  });
+
+  test("cc_open opens the appearance screen from normal play, with cc_back as its undo", async () => {
+    let result = await call(mcp, "cc_open", { mode: "ripperdoc" });
+    expect(result.isError).toBeFalsy();
+    const opened = json(result).result;
+    expect(opened).toMatchObject({ changed: true, opened: true, mode: "ripperdoc", edit_mode: "Ripperdoc", saving_locked: true, route: "menu_event" });
+    expect(opened.undo).toEqual({ method: "cc.back", params: {} });
+    expect(json(await call(mcp, "game_status")).result.phase).toBe("character_menu");
+    result = await call(mcp, "cc_open");
+    expect(json(result).result).toMatchObject({ changed: false, undo: null });
+  });
+
+  test("cc_apply takes a value by on-screen label, and refuses index with value before anything is sent", async () => {
+    const before = host.log.filter((l) => l.includes("evt=bridge.request")).length;
+    let result = await call(mcp, "cc_apply", { option: "XF", index: 1, value: "02" });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("not both");
+    result = await call(mcp, "cc_apply", { option: "XF" });
+    expect(result.isError).toBe(true);
+    expect(host.log.filter((l) => l.includes("evt=bridge.request")).length).toBe(before);
+    result = await call(mcp, "cc_apply", { option: "XF", value: "5" });
+    expect(json(result).result).toMatchObject({ after: 4, matched_by: "value" });
+    result = await call(mcp, "cc_apply", { option: "XF", value: "xfs_value_07" });
+    expect(json(result).result.after).toBe(7);
+    result = await call(mcp, "cc_apply", { option: "XF", value: "gold" });
+    expect(result.isError).toBe(true);
+  });
+
+  test("cc_page points the creator's camera and undoes to the starting view", async () => {
+    const result = await call(mcp, "cc_page", { page: "eyes" });
+    expect(json(result).result).toMatchObject({ page: "eyes", slot: "UI_Eyes", undo: { method: "cc.page", params: { page: "default" } } });
+  });
+
+  test("world_time_set works with the appearance screen open (B2)", async () => {
+    const result = await call(mcp, "world_time_set", { hours: 0, minutes: 0 });
+    expect(json(result).result).toMatchObject({ phase: "character_menu", after_total_seconds: 0 });
+    const back = await call(mcp, "world_time_set", json(result).result.undo.params);
+    expect(json(back).result.after_total_seconds).toBe(12 * 3600);
+    // Freezing stays refused there: the appearance screen freezes the world itself.
+    const pause = await call(mcp, "world_pause", { paused: true });
+    expect(pause.isError).toBe(true);
+  });
+
+  test("cc_back leaves; cc_open refuses outside normal play and withdraws a request that never opens", async () => {
+    expect(json(await call(mcp, "cc_back")).result.kept).toBe(false);
+    await setPhase(host, "photo_mode");
+    let result = await call(mcp, "cc_open");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("not_in_gameplay");
+    await sleep(3500);
+    const direct = new BridgeClient(host.session, 3000);
+    await direct.connect();
+    expect((await direct.call("selftest.phase", { phase: "gameplay", creator_opens: false }, "t-no-open")).ok).toBe(true);
+    direct.close();
+    await sleep(200);
+    result = await call(mcp, "cc_open", { timeout_ms: 600 });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("creator_open_timeout");
+    expect(text(result)).toContain("request was withdrawn");
+    expect(json(await call(mcp, "game_status")).result.phase).toBe("gameplay");
+  }, 20000);
+});
+
+describe("game_options_read without the CET layer", () => {
+  test("the settings still come back; the render options say why they can't", async () => {
+    const host = await startSelftestHost(["--no-cet"], 30);
+    const mcp = await startMcp(["--runtime-dir", host.dir, "--capture-root", join(tempDir("xfb-mcp-nocet-"), "captures")]);
+    try {
+      const value = json(await call(mcp, "game_options_read")).result;
+      expect(value.summary.upscaler).toBe("DLSS");
+      expect(value.render_options).toMatchObject({ available: false });
+      expect(value.render_options.reason).toContain("CET");
+    } finally {
+      await mcp.close();
+      await host.stop();
+    }
+  }, 20000);
 });
 
 describe("RB-34: an idle disconnect gives the cursor back", () => {

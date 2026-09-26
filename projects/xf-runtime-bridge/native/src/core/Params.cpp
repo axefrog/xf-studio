@@ -1,5 +1,6 @@
 #include "core/Params.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "core/Dispatcher.hpp"
@@ -461,9 +462,9 @@ bool CreatorLeaveAllowed(bool aConfigFlag)
     if (!aConfigFlag)
     {
         throw MethodError("creator_leave_disabled",
-                          "confirming or backing out of the character creator is switched off ([bridge] "
+                          "opening, confirming or backing out of the character creator is switched off ([bridge] "
                           "allow_creator_leave = false; only the test profile's -writes package allows it); the "
-                          "player presses Confirm or Back");
+                          "player opens it, or presses Confirm or Back");
     }
     return true;
 }
@@ -489,16 +490,193 @@ PhotoStateRequest ParsePhotoState(const json& aParams)
 
 CharacterRequest ParseCharacterApply(const json& aParams)
 {
-    RequireOnly(aParams, {"option", "index"});
+    RequireOnly(aParams, {"option", "index", "value"});
     CharacterRequest request;
     const auto option = Text(aParams, "option", 128);
     const auto index = Integer(aParams, "index", 0, 100000);
-    if (!option || !index)
+    const auto value = Text(aParams, "value", 128);
+    if (!option || (!index && !value))
     {
-        Bad("'option' (the option's name or on-screen label) and 'index' (0 = first value) are required");
+        Bad("'option' (the option's name, on-screen label or slot) and 'index' (0 = first value) or 'value' (the "
+            "value's name or on-screen label) are required");
+    }
+    if (index && value)
+    {
+        Bad("give either 'index' or 'value', not both");
     }
     request.option = *option;
-    request.index = static_cast<int32_t>(*index);
+    request.index = index ? static_cast<int32_t>(*index) : -1;
+    request.value = value.value_or("");
+    return request;
+}
+
+const char* CreatorModeName(CreatorMode aMode)
+{
+    return aMode == CreatorMode::Ripperdoc ? "ripperdoc" : "mirror";
+}
+
+CreatorOpenRequest ParseCreatorOpen(const json& aParams)
+{
+    RequireOnly(aParams, {"mode", "timeout_ms"});
+    CreatorOpenRequest request;
+    const auto mode = Text(aParams, "mode", 16).value_or("mirror");
+    if (mode == "ripperdoc")
+    {
+        request.mode = CreatorMode::Ripperdoc;
+    }
+    else if (mode != "mirror")
+    {
+        Bad("'mode' must be \"mirror\" (hair, make-up, eye colour, piercings and XF rows) or \"ripperdoc\" (also the face "
+            "shape, skin and cyberware rows)");
+    }
+    request.timeoutMs = static_cast<int32_t>(Integer(aParams, "timeout_ms", 500, 15000).value_or(5000));
+    return request;
+}
+
+std::vector<std::pair<std::string, std::string>> CreatorPages()
+{
+    // The creator's preview-camera slots (characterCreationBodyMorphMenu.GetSlotName, 2.31), by the
+    // name the tools use. "default" is the menu's own starting slot.
+    return {{"skin", "UI_Skin"},   {"hair", "UI_Hairs"}, {"eyes", "UI_Eyes"}, {"teeth", "UI_Teeth"},
+            {"nose", "UI_Nose"},   {"lips", "UI_Lips"},  {"jaw", "UI_Jaw"},   {"head", "UI_HeadPreview"},
+            {"nails", "UI_FingerNails"}, {"body", "UI_Preview"}, {"default", ""}};
+}
+
+CreatorPageRequest ParseCreatorPage(const json& aParams)
+{
+    RequireOnly(aParams, {"page"});
+    const auto page = Text(aParams, "page", 16);
+    if (!page)
+    {
+        Bad("'page' is required: skin, hair, eyes, teeth, nose, lips, jaw, head, nails, body or default");
+    }
+    for (const auto& [name, slot] : CreatorPages())
+    {
+        if (name == *page)
+        {
+            return {name, slot};
+        }
+    }
+    Bad("'page' must be one of skin, hair, eyes, teeth, nose, lips, jaw, head, nails, body or default");
+}
+
+std::vector<std::string> SettingsGroups()
+{
+    // The user-settings groups game.options.read may read (r6/config/settings/platform/pc/options.json,
+    // 2.31): the upscaler, ray and path tracing, the advanced graphics (subsurface scattering quality
+    // among them), the basic camera effects, crowd density and the display (HDR).
+    return {"/graphics/presets", "/graphics/advanced", "/graphics/raytracing", "/graphics/basic",
+            "/graphics/performance", "/video/display"};
+}
+
+std::vector<std::string> DefaultRenderOptions()
+{
+    // The engine's character render options that decide how V looks in a capture, as named by the
+    // hair and skin shader references (research/materials/shader-hair.md §6.4, knowledge/head-cc-rendering.md
+    // §2): "<category>/<name>", the category being everything before the last '/'.
+    std::vector<std::string> out;
+    for (const char* light : {"GlobalLight", "LocalLight", "EnvProbe"})
+    {
+        for (const char* term : {"R", "TT", "TRT", "MultiScatter", "ScatterDepth"})
+        {
+            out.push_back(std::string("Editor/Characters/Hair/") + light + "/" + term);
+        }
+    }
+    for (const char* name :
+         {"Editor/Characters/Hair/AlphaShifts/R", "Editor/Characters/Hair/AlphaShifts/TT", "Editor/Characters/Hair/AlphaShifts/TRT",
+          "Editor/Characters/Hair/RoughnessFactor", "Editor/Characters/Hair/AlbedoMultiplier",
+          "Editor/Characters/Hair/SpecularRandom_Min", "Editor/Characters/Hair/SpecularRandom_Max",
+          "Editor/Characters/Hair/AdditionalAreaRoughness", "Editor/Characters/Hair/ContactShadowClamp",
+          "Editor/Characters/Hair/UseGlobalContactShadowsOnHair", "Editor/Characters/Hair/UseLocalContactShadowsOnHair",
+          "Editor/Characters/Hair/UseReferenceImplementation", "Editor/Characters/Hair/MultiScatter/Wrap",
+          "Editor/Characters/Hair/MultiScatter/DiffuseScatterFactor", "Editor/Characters/Hair/MultiScatter/ShadowFactorExp",
+          "Editor/Characters/Hair/MultiScatter/Mask_Intensity", "Editor/Characters/Hair/Specular/Wrap",
+          "Editor/Characters/Hair/Specular/Mask_Intensity", "Editor/Characters/Hair/TRT_Params/EXP_SCALE",
+          "Editor/Characters/Hair/TRT_Params/EXP_BIAS", "Editor/Characters/Hair/Debug/DebugSwitch1",
+          "Editor/Characters/Hair/Debug/DebugSwitch2", "Editor/Characters/Skin/SkinAmbientIntensity_Factor",
+          "Editor/Characters/Skin/SkinAmbientMix_Factor", "Editor/Characters/Skin/AllowSkinAmbientMix",
+          "Editor/Characters/Skin/SubsurfaceSpecularTintWeight", "Editor/Characters/Skin/SubsurfaceSpecularTint_R",
+          "Editor/Characters/Skin/SubsurfaceSpecularTint_G", "Editor/Characters/Skin/SubsurfaceSpecularTint_B",
+          "Editor/Characters/RimEnhancement/GlobalCharacterFresnel", "Editor/Characters/RimEnhancement/LightBlockerInfluence",
+          "Editor/Characters/Eyes/DiffuseBoost", "Editor/Characters/Eyes/UseAOOnEyes",
+          "Developer/FeatureToggles/CharacterSubsurfaceScattering", "Developer/FeatureToggles/CharacterRimEnhancement",
+          "Developer/FeatureToggles/ContactShadows", "Developer/FeatureToggles/Hair"})
+    {
+        out.emplace_back(name);
+    }
+    return out;
+}
+
+namespace
+{
+bool RenderOptionNameOk(const std::string& aName)
+{
+    if (aName.size() < 3 || aName.size() > 128 || aName.front() == '/' || aName.back() == '/' ||
+        aName.find('/') == std::string::npos || aName.find("//") != std::string::npos)
+    {
+        return false;
+    }
+    for (const auto c : aName)
+    {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '/';
+        if (!ok)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<std::string> NameList(const json& aParams, const char* aKey, size_t aMax, const std::vector<std::string>& aAllowed,
+                                  bool (*aShapeOk)(const std::string&), const char* aWhat)
+{
+    const auto it = aParams.find(aKey);
+    if (!it->is_array() || it->empty() || it->size() > aMax)
+    {
+        Bad(std::string("'") + aKey + "' must be a list of 1 to " + std::to_string(aMax) + " " + aWhat);
+    }
+    std::vector<std::string> out;
+    for (const auto& entry : *it)
+    {
+        if (!entry.is_string())
+        {
+            Bad(std::string("each entry of '") + aKey + "' must be text");
+        }
+        const auto name = entry.get<std::string>();
+        if (aShapeOk && !aShapeOk(name))
+        {
+            Bad("'" + name.substr(0, 64) + "' isn't a " + aWhat + " name (\"Category/Sub/Name\": letters, digits and _)");
+        }
+        if (!aAllowed.empty() && std::find(aAllowed.begin(), aAllowed.end(), name) == aAllowed.end())
+        {
+            Bad("'" + name.substr(0, 64) + "' isn't one of the settings groups game.options.read reads");
+        }
+        if (std::find(out.begin(), out.end(), name) != out.end())
+        {
+            Bad("'" + name.substr(0, 64) + "' is listed twice");
+        }
+        out.push_back(name);
+    }
+    return out;
+}
+} // namespace
+
+GameOptionsRequest ParseGameOptions(const json& aParams)
+{
+    RequireOnly(aParams, {"settings", "render_options", "groups", "names"});
+    GameOptionsRequest request;
+    request.settings = Boolean(aParams, "settings").value_or(true);
+    request.renderOptions = Boolean(aParams, "render_options").value_or(true);
+    if (!request.settings && !request.renderOptions)
+    {
+        Bad("'settings' and 'render_options' can't both be false: there would be nothing to read");
+    }
+    request.groups = aParams.contains("groups") && !aParams["groups"].is_null()
+                         ? NameList(aParams, "groups", 6, SettingsGroups(), nullptr, "settings groups")
+                         : SettingsGroups();
+    request.names = aParams.contains("names") && !aParams["names"].is_null()
+                        ? NameList(aParams, "names", 128, {}, &RenderOptionNameOk, "render option")
+                        : DefaultRenderOptions();
     return request;
 }
 
