@@ -1,9 +1,12 @@
 import type { PreviewState } from "./workspace-state";
 import { refusal, type Capability } from "./platform/api";
+import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING } from "./game-blink-messages";
 
 export type MotionState = Pick<PreviewState,
   "idle" | "idleTime" | "idlePaused" | "idleBody" | "idleFace" | "blink" | "blinkPlaying"> &
-  { available: boolean; error?: string; blinkAvailable: boolean; blinkError?: string };
+  { available: boolean; error?: string; blinkAvailable: boolean; blinkError?: string;
+    /** How often Play blink repeats (a Studio choice: the idle's average blink spacing). */
+    blinkRepeatSeconds: number };
 export type MotionAction =
   | { kind: "motion.setIdle"; enabled: boolean }
   | { kind: "motion.setPaused"; paused: boolean }
@@ -12,8 +15,8 @@ export type MotionAction =
   | { kind: "motion.playBlink"; playing: boolean };
 export type MotionPort = {
   available: boolean; error?: string;
-  /** The game's blink (game-blink.ts): whether it was prepared on this computer, and the plain reason when not. */
-  blink: { available: boolean; error?: string };
+  /** The game's blink (game-blink.ts): whether it was prepared on this computer, the plain reason when not, and its repeat. */
+  blink: { available: boolean; error?: string; repeatSeconds?: number };
   idle?: { enabled: boolean; time: number; paused: boolean; bodyEnabled: boolean; faceEnabled: boolean; seek(time: number): void };
   setIdle(enabled: boolean): void; setIdlePaused(paused: boolean): void;
   setIdleContributions(body: boolean, face: boolean): void;
@@ -38,7 +41,11 @@ export class MotionActions {
       idleBody: idle?.bodyEnabled ?? this.initial.idleBody,
       idleFace: idle?.faceEnabled ?? this.initial.idleFace,
       blink: this.blink, blinkPlaying: this.blinkPlaying,
-      blinkAvailable: this.port.blink.available, blinkError: this.port.blink.error };
+      blinkAvailable: this.port.blink.available, blinkError: this.blinkError(),
+      blinkRepeatSeconds: this.port.blink.repeatSeconds ?? BLINK_REPEAT_SECONDS };
+  }
+  private blinkError() {
+    return this.port.blink.available ? undefined : this.port.blink.error || GAME_BLINK_MISSING;
   }
   capability(action: MotionAction): Capability {
     if (action.kind === "motion.setBlink" && (!Number.isFinite(action.value) || action.value < 0 || action.value > 1))
@@ -50,7 +57,7 @@ export class MotionActions {
       return refusal("invalid_value", "Enable the game idle before pausing it.");
     const blinking = action.kind === "motion.setBlink" || action.kind === "motion.playBlink";
     if (blinking && !this.port.blink.available)
-      return refusal("asset_unavailable", this.port.blink.error ?? "The game's blink hasn't been prepared on this computer yet.");
+      return refusal("asset_unavailable", this.blinkError()!);
     // Kept as the code the facade gave this refusal before codes were structured (see the code-health ledger).
     if (blinking && this.snapshot().idle)
       return refusal("asset_unavailable", "Blink is off while the game idle plays: the idle blinks on its own.");

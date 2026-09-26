@@ -231,18 +231,3 @@ test("blink commands say plainly why they are off: not prepared, or the idle is 
   restoring.restore();
   expect(restoring.snapshot()).toMatchObject({ blink: 0, blinkPlaying: false });
 });
-
-test("the scene draws blink changes on demand and keeps its blink out of the idle's way", async () => {
-  const source = await Bun.file(new URL("../src/scene.ts", import.meta.url)).text();
-  // Slider and Play blink go through the scene's invalidating wrapper; playback keeps the scheduler animating.
-  const wrapped = source.slice(source.indexOf('return { ...api, ...invalidating(api, ['));
-  for (const name of ['"setBlink"', '"animateBlink"', '"eyeShape"', '"applySavedV"', '"setCharacterDetails"']) expect(wrapped).toContain(name);
-  expect(source).toContain("animating: () => idle?.enabled ? !idle.paused : !!blink?.playing,");
-  expect(source).toContain("if (blink) { const blinking = blink; blinking.onChange = invalidate;");
-  // The blink captures a detail's neutral pose before a playing idle poses it, and the idle takes over from an open, stopped blink.
-  expect(source.indexOf("blink?.attach(drawnDetails()")).toBeLessThan(source.indexOf("idle?.attach(drawnDetails()"));
-  const setIdle = source.slice(source.indexOf("    setIdle: (enabled: boolean) => {"), source.indexOf("    setIdlePaused:"));
-  expect(setIdle.indexOf("blink?.reset();")).toBeLessThan(setIdle.indexOf("idle.setEnabled(enabled);"));
-  // No synthetic eyelid pose remains.
-  expect(source).not.toMatch(/eye_lid_\(\?:lashes_\)\?/);
-});

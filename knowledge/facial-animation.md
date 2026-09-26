@@ -36,11 +36,18 @@ The female face-rig entity names the **male** player setup (`h0_001_ma_c__player
 - The facial setup's `JointRegions` assigns every joint a region: 0 eyes (132 joints: lids, brows, eye joints), 1 nose, 2 mouth, 3 jaw, 4 ear, 255 none [resource].
 - The 21 eye shapes translate the eye region's skinned joints without turning them; the eye joint moves 0.9 to 3.9 mm [resource]. The unskinned lid roots, which carry the blink's big turn, are listed by no target [resource].
 - A community fix, the Facial Customisation Rig Fix, renames six ear joints in every morph target to stop eye clipping, which only makes sense if the engine uses these binds at runtime [resource; runtime effect a hypothesis].
-- **Reading adopted by the Studio** [hypothesis]: an eye shape re-seats the eye-region joints on its binds, the facial poses act about the moved pivots, and the unskinned lid roots follow the eye joint. Offline this closes the base shape and `h211` completely and `h091` to within a slit about 1 mm high, where turning about the base centre leaves 17 to 22 % of the eye in view; `h011` and `h111` keep 5 to 22 %. How the engine blends five region targets' binds, and whether the game's own blink closes these shapes fully, is open.
+- **Reading adopted by the Studio** [hypothesis]: an eye shape re-seats the eye-region joints on its binds, the facial poses act about the moved pivots, and the unskinned lid roots follow the eye joint. Nothing in the game files or at runtime confirms it; it was chosen because it closes the four measured shapes best on the whole, not on every shape. Measured offline at full closure (share of the open eye in view from the front, left / right, [the game's blink](../research/animation/game-blink.md#eye-shapes-morph-specific-joint-binds)) [measured offline]:
+  - the base shape closes completely either way;
+  - `h211` closes completely, where turning about the base centre leaves 16 / 18 %;
+  - `h091` keeps a slit about 1 mm high (7.5 / 4.8 %), where turning about the base centre leaves 22 / 17 %;
+  - **`h011` gets worse**: 10.2 / 5.5 % re-seated against 3.6 / 0 % about the base centre.
+
+  `h111` was not measured offline; the slit on it was seen only in the browser [observed in the browser]. How the engine blends five region targets' binds, what it does with joints no target lists, and whether the game's own blink closes these shapes fully are open.
 
 ## 5. The Studio's blink
 
-- **Source.** An offline bake (`tools/bake_game_blink.py`) solves the game's `additive__blink_normal__01` clip with the female head's setup, the same way the idle is baked. The **Closure** slider scrubs that clip's closing half (0 to 0.10 s, 21 solved steps); **Play blink** plays the whole clip at its own speed, repeating every 2.45 s (the idle's average spacing, a Studio choice). Closure 0 is the exact editing pose; the clip's first frame looks about 1° down. The asset is made locally from the player's game files and never shipped [source].
+- **Source.** An offline bake (`tools/bake_game_blink.py`) solves the game's `additive__blink_normal__01` clip with the female head's setup, the same way the idle is baked. The **Closure** slider scrubs that clip's closing half (0 to 0.10 s, 21 solved steps); **Play blink** plays the whole clip at its own speed, repeating every 2.45 s (the idle's average spacing, a Studio choice). Closure 0 is the exact editing pose; the clip's first frame looks about 1° down. The asset is made locally from the player's game files and never shipped; it records the rig and facial setup it was solved with, and the Studio refuses it, in plain words, when it is missing, damaged, or made for a head whose joints sit more than 0.1 mm from the preview head's [source].
+- **Eye shapes.** The blink re-seats its rig on the shown eye shape's joint binds, the hypothesis in §4, with its `h011` regression. The idle still turns the lids about the base centres. A modded eye shape the bake has no binds for keeps the base seat [source].
 - **Everything follows the lids.** The solved rig drives every bone of the same name: the core head, the eye plate and each resolved detail's own skeleton copy (brows, lashes of any mod, the eye). Offline on the real head at full closure, the upper-lash roots stay within about 0.6 mm (median) of the lid skin, where the retired synthetic study left them about 6 mm behind; the plate stays exactly on the skin [source, measured offline].
 - **No push-through.** The retired study drove the upper lid 3.4 mm through the lower one; the solved lids meet with about half a millimetre of overlap [measured offline].
 - **The idle.** The idle blinks by itself and the facial solve is not additive, so the blink controls are off while the idle plays; turning the idle on returns the blink to the editing pose [source].
@@ -50,7 +57,7 @@ The female face-rig entity names the **male** player setup (`h0_001_ma_c__player
 
 1. Which facial setup does the engine solve V's face with: the female head's own or the male player setup the face-rig entity names?
 2. How does the engine combine the joint binds of V's five region targets, and what happens to joints no target lists (the lid roots)?
-3. Does the game's blink close every eye shape completely, or does it leave the slit the preview shows on `h091`, `h111` and `h011`?
+3. Does the game's blink close every eye shape completely, or does it leave the slit the preview shows on `h091` and `h011` (measured offline) and `h111` (seen in the browser)? Does `h011` close fully in game, as it does about the base centre?
 4. Which blink clip plays when, and at what rate, during gameplay and in the creator?
 5. Does the closed lid on deep-set shapes uncover skin outside the eye plate in game?
 
@@ -58,7 +65,7 @@ The female face-rig entity names the **male** player setup (`h0_001_ma_c__player
 
 Batch into one prepared session; record the game version and the face-rig and morph mods installed.
 
-1. **Blink closure on three eye shapes.** In the creator (or photo mode with eyes closed), capture frontal close-ups of a fully closed blink for eye shapes 01 (base), 10 (`h091`) and 12 (`h111`): is any eye visible between the lids? Compare with the Studio at Closure 100 %.
+1. **Blink closure on four eye shapes.** In the creator (or photo mode with eyes closed), capture frontal close-ups of a fully closed blink for eye shapes 01 (base), 10 (`h091`), 12 (`h111`) and the shape whose morph is `h011`: is any eye visible between the lids? Compare with the Studio at Closure 100 %. `h011` decides between the per-shape seat and the base centre.
 2. **Lashes on closed lids.** Same captures: do the upper lashes lie along the closed lid line as in the Studio?
 3. **Makeup on closed lids.** With an XF Eye Artistry look covering the upper lid, close the eyes on eye shape 12: does bare skin show between the crease and the lashes?
 

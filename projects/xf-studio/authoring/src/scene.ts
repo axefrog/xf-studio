@@ -6,6 +6,7 @@ import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "./game-blink";
+import { composePreviewMotion } from "./preview-motion";
 import type { CameraState } from "./workspace-state";
 import { previewClipPlanes } from "./camera-depth";
 import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
@@ -324,10 +325,11 @@ async function assembleScene(
     scene.updateMatrixWorld(true);
     scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
     blink = await loadGameBlink(targets);
-    if (!blink.bindings.length) throw Error(GAME_BLINK_MISSING);
   } catch (error) {
     blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
   }
+  // One owner of the rig's bones at a time: the idle while enabled, otherwise the blink (preview-motion.ts).
+  const rigMotion = composePreviewMotion(idle, blink);
   function frameIdle() {
     // Stored cameras use neutral space. Always derive the displacement at phase
     // zero so restoring a paused/nonzero phase never adds a different offset.
@@ -390,6 +392,7 @@ async function assembleScene(
       }
     }
     if (shownEyeShape !== null && eyeShapeChoices[shownEyeShape]) applyFaceMorph(eyeShapeChoices[shownEyeShape]!);
+    blink?.setShape(activeEyeShape(head));
     return missing;
   }
   function eyeShapeOptions() {
@@ -468,8 +471,7 @@ async function assembleScene(
     next?.adopt();
     const kept = new Set(next?.components ?? []);
     if (previous) {
-      blink?.detach(drawnBefore.flatMap(item => item.bones));
-      idle?.detach(drawnBefore.flatMap(item => item.bones));
+      rigMotion.detach(drawnBefore.flatMap(item => item.bones));
       for (const item of previous.components) for (const mesh of item.meshes) {
         const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
       }
@@ -527,8 +529,7 @@ async function assembleScene(
     applyEyeOptics();
     scene.updateMatrixWorld(true);
     // The blink binds first: it must capture the details' neutral pose before a playing idle poses them.
-    blink?.attach(drawnDetails().flatMap(item => item.bones));
-    idle?.attach(drawnDetails().flatMap(item => item.bones));
+    rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };
   }
@@ -582,10 +583,9 @@ async function assembleScene(
   // controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
   const scheduler = createRenderScheduler({
     clock: { request: callback => requestAnimationFrame(callback), cancel: handle => cancelAnimationFrame(handle), now: () => performance.now() },
-    animating: () => idle?.enabled ? !idle.paused : !!blink?.playing,
+    animating: rigMotion.animating,
     frame(dt) {
-      if (idle?.enabled) { if (!idle.paused) idle.update(dt); }
-      else blink?.update(dt);
+      rigMotion.advance(dt);
       if (controls.enabled) controls.update();
       // At long orbits, move the near plane in front of a conservative head
       // envelope so the thin makeup plate retains depth precision.
@@ -608,8 +608,7 @@ async function assembleScene(
   releases.push(bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting }));
   // Creator options (exposure, intensity form, cone) don't notify the lighting device's listeners.
   Object.assign(lighting, invalidating(lighting, ["setCreatorOptions"], invalidate));
-  if (idle) { const playing = idle; playing.onChange = invalidate; releases.push(() => { playing.onChange = undefined; }); }
-  if (blink) { const blinking = blink; blinking.onChange = invalidate; releases.push(() => { blinking.onChange = undefined; }); }
+  releases.push(rigMotion.connect(invalidate));
   const observer = new ResizeObserver(() => { resize(); invalidate(); });
   observer.observe(host);
   releases.push(() => observer.disconnect());
@@ -723,12 +722,7 @@ async function assembleScene(
       return frame.limited;
     },
     endFovGesture: () => { fovGestureAnchor = undefined; },
-    setIdle: (enabled: boolean) => {
-      if (!idle || idle.enabled === enabled) return;
-      blink?.reset();
-      idle.setEnabled(enabled);
-      frameIdle();
-    },
+    setIdle: (enabled: boolean) => { if (rigMotion.setIdle(enabled)) frameIdle(); },
     setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;

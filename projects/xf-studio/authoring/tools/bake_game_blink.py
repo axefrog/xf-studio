@@ -164,17 +164,23 @@ def main():
     parser.add_argument('--eye-morph', type=Path, default=None,
                         help='Serialized he_000_pwa__morphs.morphtarget.json (default: <blink intake>/json/)')
     parser.add_argument('--setup', type=Path, default=None,
-                        help='Facial setup JSON to solve with (default: the female head own setup, from the idle intake); for comparisons')
+                        help='Facial setup JSON to solve with (default: the female head own setup, from the idle intake); for '
+                             'comparisons, so it needs --output and --evidence (the Studio blink and its tracked report stay untouched)')
     parser.add_argument('--output', type=Path, default=None, help='Output GLB (default: public/assets/game-blink.glb)')
     parser.add_argument('--evidence', type=Path, default=None, help='Report JSON (default: evidence/game-blink-bake.json)')
     parser.add_argument('--steps', type=int, default=20, help='Closure samples between open (0) and closed (1)')
     parser.add_argument('--rate', type=int, default=60, help='Clip sample rate in Hz')
     args = parser.parse_args()
+    if args.setup and not (args.output and args.evidence):
+        parser.error('--setup bakes a comparison: give --output and --evidence too, so the Studio blink and its tracked report stay as they are')
     loader, runtime, model, solver = external_solver(args.addon)
     rig_path = args.idle_intake / 'json/h0_000_pwa_c__basehead_skeleton.rig.json'
     setup_path = args.setup or args.idle_intake / 'json/h0_000_pwa_c__basehead_rigsetup.facialsetup.json'
     clip_path = args.blink_intake / f'raw/{CLIP}.glb'
     rig = json.loads(rig_path.read_text())['Data']['RootChunk']
+    rig_name, setup_name = rig_path.name.removesuffix('.json'), setup_path.name.removesuffix('.json')
+    # Player heads are named for their body type: pwa (female), pma (male).
+    body_gender = next((gender for tag, gender in (('_pwa', 'female'), ('_pma', 'male')) if tag in rig_name), 'unknown')
     setup_json = json.loads(setup_path.read_text())
     setup = loader.parse_facial_setup(setup_json)
     clip = read_glb(clip_path)
@@ -236,7 +242,8 @@ def main():
                                 'closure': {'animation': 'eye_blink_closure', 'tracks': list(BLINK_TRACKS), 'steps': args.steps,
                                             'clip': CLIP, 'closedTime': peak},
                                 'clip': {'animation': CLIP, 'source': CLIP_SOURCE, 'duration': duration, 'sampleRate': args.rate},
-                                'shapes': shapes}},
+                                'shapes': shapes,
+                                'rig': {'skeleton': rig_name, 'setup': setup_name, 'bodyGender': body_gender}}},
            'scene': 0, 'scenes': clip['scenes'], 'nodes': clip['nodes'],
            'buffers': [], 'bufferViews': [], 'accessors': [], 'animations': []}
     data = bytearray()
@@ -318,13 +325,20 @@ def main():
               'activeBones': [names[int(i)] for i in active], 'outputBytes': len(payload),
               'outputSha256': hashlib.sha256(payload).hexdigest(),
               'trackPolicy': 'AdditiveFromRefPose: decoded track values added to rig referenceTracks; the closure is the clip from 0 to closedTime',
-              'setup': {'used': 'h0_000_pwa_c__basehead_rigsetup.facialsetup (the female head\'s own setup, beside its skeleton)',
-                        'alsoReferenced': 'The female face-rig entity names base\\characters\\head\\pma\\h0_001_ma_c__player\\h0_001_ma_c__player_rigsetup.facialsetup; which one the engine solves V\'s face with is untested'},
+              'rig': {'skeleton': rig_name, 'bodyGender': body_gender},
+              'setup': {'used': setup_name, 'sha256': hashlib.sha256(setup_path.read_bytes()).hexdigest(),
+                        'role': 'the female head\'s own setup, beside its skeleton' if args.setup is None else 'a comparison setup (--setup)',
+                        'alsoReferenced':'The female face-rig entity names base\\characters\\head\\pma\\h0_001_ma_c__player\\h0_001_ma_c__player_rigsetup.facialsetup; which one the engine solves V\'s face with is untested'},
               'limitations': ['Which clip or system blinks V during gameplay is not established; the clip is one of the game\'s own blink clips.',
                               'External solver applies rotations/translations, not pose scale arrays; wrinkle outputs are not rendered.',
                               'In-game visual parity is not established.']}
     evidence = args.evidence or APP / 'evidence/game-blink-bake.json'
-    evidence.write_text(json.dumps(report, indent=2) + '\n')
+    text = json.dumps(report, indent=2) + '\n'
+    # The report is tracked: an identical bake leaves the file (and its timestamp) alone.
+    if evidence.exists() and evidence.read_text() == text:
+        print('Report unchanged:', evidence.name)
+    else:
+        evidence.write_text(text)
     print(json.dumps({k: report[k] for k in ['closure', 'outputBytes', 'outputSha256']}, indent=2))
     print('Active bones:', len(active))
 

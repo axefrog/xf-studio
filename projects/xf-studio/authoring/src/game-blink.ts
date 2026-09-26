@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD } from "./game-blink-messages";
 
 /**
  * The game's own blink on the preview head (knowledge/facial-animation.md). An offline bake
@@ -23,14 +24,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
  */
 export const GAME_BLINK_ASSET = "/assets/game-blink.glb";
 export const GAME_BLINK_SCHEMA = "xfs/game-blink-1";
-/**
- * Play blink repeats the game's clip every this many seconds. The clip has no repeat of its own; this is the average
- * spacing of the nine blinks in the character-creator close-up idle (onsets from 0.70 s to 20.30 s), a Studio choice
- * grounded in that clip rather than a game timing.
- */
-export const BLINK_REPEAT_SECONDS = 2.45;
-/** What the user reads when the blink could not be made ready (the idle guide explains the one-time preparation). */
-export const GAME_BLINK_MISSING = "The game's blink hasn't been prepared on this computer yet.";
+export { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD } from "./game-blink-messages";
+/** How far (metres) a target bone's bind may sit from its rig joint's rest: 0.1 mm. The derived head matches to about 0.0003 mm. */
+export const BLINK_BIND_TOLERANCE = 1e-4;
 
 /** A joint's world bind for one eye shape, glTF axes: position then rotation quaternion (x, y, z, w). */
 export type ShapeBind = [number, number, number, number, number, number, number];
@@ -41,6 +37,8 @@ export type GameBlinkDescription = {
   clip: { animation: string; source: string; duration: number; sampleRate: number };
   /** Per eye-shape target (`h091`), the eye-region joints that shape moves. Absent in a bake without morph intake. */
   shapes?: Record<string, Record<string, ShapeBind>>;
+  /** The rig and facial setup the bake solved with (absent in bakes before it was recorded). */
+  rig?: { skeleton: string; setup: string; bodyGender: "female" | "male" | "unknown" };
 };
 export type GameBlinkClips = { description: GameBlinkDescription; closure: THREE.AnimationClip; clip: THREE.AnimationClip };
 
@@ -61,6 +59,10 @@ export function parseGameBlink(extras: unknown, animations: readonly THREE.Anima
   if (shapes !== undefined && (typeof shapes !== "object" || shapes === null || Object.values(shapes).some(joints =>
     typeof joints !== "object" || joints === null || !Object.values(joints).every(isShapeBind))))
     throw Error("The prepared blink's eye shapes are damaged.");
+  const rig = record.rig;
+  if (rig !== undefined && (typeof rig !== "object" || rig === null || typeof rig.skeleton !== "string" || typeof rig.setup !== "string"
+    || !["female", "male", "unknown"].includes(rig.bodyGender)))
+    throw Error("The prepared blink's rig description is damaged.");
   const closure = animations.find(entry => entry.name === closureInfo.animation);
   const clip = animations.find(entry => entry.name === clipInfo.animation);
   if (!closure || !closure.tracks.length) throw Error("The prepared blink is missing its closure.");
@@ -92,16 +94,25 @@ type Driver = {
 type Channel = { driver: Driver; position?: THREE.Interpolant; quaternion?: THREE.Interpolant };
 type Binding = { bone: THREE.Object3D; driver: Driver; worldBind: THREE.Matrix4;
   position: THREE.Vector3; rotation: THREE.Quaternion; scale: THREE.Vector3 };
+/** Schedules Play blink's wake-up for the next blink (setTimeout in the browser; a fake clock in tests). */
+export type BlinkTimer = { set(callback: () => void, milliseconds: number): unknown; clear(handle: unknown): void };
+const TIMEOUTS: BlinkTimer = { set: (callback, milliseconds) => setTimeout(callback, milliseconds),
+  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>) };
 
 export class GameBlink {
   readonly bindings: Binding[] = [];
   /** Target bones with no rig driver of their name (a detail's rigid-part bone, say); they are left alone. */
   readonly unmapped: string[] = [];
-  /** Called after anything but playback changes the pose or playing state, so a render-on-demand viewport draws it. */
+  /**
+   * Called after anything changes the pose or playing state except a playback frame, so a render-on-demand viewport
+   * draws it; also when Play blink wakes for its next blink after the held pause between blinks.
+   */
   onChange?: () => void;
   private closureValue = 0;
   private playback = false;
+  /** Seconds into the current Play blink cycle, 0 to `repeatSeconds`. */
   private elapsed = 0;
+  private wake: { handle: unknown } | null = null;
   private shapeName: string | null = null;
   private readonly drivers = new Map<string, Driver>();
   /** Every rig node, parents first. */
@@ -114,8 +125,13 @@ export class GameBlink {
   readonly description: GameBlinkDescription;
   readonly clipDuration: number;
 
+  /**
+   * Bind `targets` (the preview head's skeleton). Each target's world bind must sit on its rig joint's rest (within
+   * BLINK_BIND_TOLERANCE): a skeleton with the same names but other rests (another body type's head, a modded one) is
+   * refused with GAME_BLINK_OTHER_HEAD, since the lids would turn about the wrong places.
+   */
   constructor(readonly source: THREE.Object3D, clips: GameBlinkClips, targets: readonly THREE.Object3D[],
-    readonly repeatSeconds = BLINK_REPEAT_SECONDS) {
+    readonly repeatSeconds = BLINK_REPEAT_SECONDS, private readonly timer: BlinkTimer = TIMEOUTS) {
     this.description = clips.description;
     this.clipDuration = clips.clip.duration;
     source.updateMatrixWorld(true);
@@ -128,6 +144,12 @@ export class GameBlink {
     });
     this.closureChannels = this.channels(clips.closure);
     this.clipChannels = this.channels(clips.clip);
+    const at = new THREE.Vector3(), rest = new THREE.Vector3();
+    const offRest = targets.some(bone => {
+      const driver = this.drivers.get(bone.name);
+      return !!driver && at.setFromMatrixPosition(bone.matrixWorld).distanceTo(rest.setFromMatrixPosition(driver.baseWorld)) > BLINK_BIND_TOLERANCE;
+    });
+    if (offRest) throw Error(GAME_BLINK_OTHER_HEAD);
     this.bind(targets);
   }
   private channels(clip: THREE.AnimationClip): Channel[] {
@@ -156,29 +178,37 @@ export class GameBlink {
   }
   /** The closure the slider holds, 0 (open) to 1 (closed). */
   get closure() { return this.closureValue; }
+  /** Whether Play blink is on (including the held pause between blinks). */
   get playing() { return this.playback; }
+  /**
+   * Whether the pose changes by itself right now: only while Play blink is inside the clip. Between blinks the clip's last
+   * frame holds, nothing needs drawing, and a single timer wakes the viewport (`onChange`) for the next blink.
+   */
+  get animating() { return this.playback && this.elapsed < this.clipDuration; }
   /** The eye-shape target the rig is seated on (null: the base shape, or a shape the bake has no binds for). */
   get shape() { return this.shapeName; }
   /** Seconds into the current Play blink cycle (0 while not playing). */
-  get time() { return this.playback ? this.elapsed % this.repeatSeconds : 0; }
+  get time() { return this.playback ? this.elapsed : 0; }
   /** Hold the solved closure at `value` (clamped to 0–1); stops Play blink. Zero restores the captured pose exactly. */
   setClosure(value: number) {
     this.closureValue = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
-    this.playback = false; this.elapsed = 0;
+    this.stopPlayback();
     this.applyHeld();
     this.onChange?.();
   }
   /** Start or stop playing the game's blink clip; stopping returns to the held closure. */
   setPlaying(playing: boolean) {
-    this.playback = playing; this.elapsed = 0;
+    this.stopPlayback();
+    this.playback = playing;
     if (playing) this.update(0); else this.applyHeld();
     this.onChange?.();
   }
   /** Open, not playing, exact captured pose (the idle is taking over). */
-  reset() { this.closureValue = 0; this.playback = false; this.elapsed = 0; this.restore(); this.onChange?.(); }
+  reset() { this.closureValue = 0; this.stopPlayback(); this.restore(); this.onChange?.(); }
   /**
    * Seat the rig on an eye shape's joint binds (`h091`), or the base shape (null). A shape the bake has no binds for
-   * (a modded eye shape, say) keeps the base seat. The current pose is applied again at once.
+   * (a modded eye shape, say) keeps the base seat. A held closure or Play blink is applied again at once; open and
+   * stopped, the bones are left as they are (the captured pose, or the idle's while it owns them).
    */
   setShape(target: string | null) {
     const binds = (target && this.description.shapes?.[target]) || null;
@@ -202,21 +232,36 @@ export class GameBlink {
       driver.inverseBind.copy(world).invert();
       driver.fix = driver.restLocal.clone().multiply(driver.baseLocal.clone().invert());
     }
-    if (this.playback) this.update(0); else this.applyHeld();
+    this.reapply();
     this.onChange?.();
   }
   /** Advance Play blink; the held closure needs no per-frame work. */
   update(seconds: number) {
     if (!this.playback) return;
-    if (Number.isFinite(seconds)) this.elapsed += Math.max(0, Math.min(seconds, .1));
+    if (Number.isFinite(seconds)) this.elapsed = (this.elapsed + Math.max(0, Math.min(seconds, .1))) % this.repeatSeconds;
     // Between blinks the clip's last frame holds (its gaze-down track ends slightly above zero), so each repeat is continuous.
-    this.apply(this.clipChannels, Math.min(this.elapsed % this.repeatSeconds, this.clipDuration));
+    this.apply(this.clipChannels, Math.min(this.elapsed, this.clipDuration));
+    if (this.animating) this.clearWake();
+    else if (!this.wake) {
+      // One wake-up for the next blink. Frames drawn meanwhile for other reasons (an orbit) advance the cycle as usual;
+      // a wake-up that finds the next blink already started only asks for a frame.
+      const wake = { handle: undefined as unknown };
+      this.wake = wake;
+      wake.handle = this.timer.set(() => {
+        if (this.wake !== wake) return;
+        this.wake = null;
+        if (!this.animating) this.elapsed = 0;
+        this.onChange?.();
+      }, (this.repeatSeconds - this.elapsed) * 1000);
+    }
   }
   /** Bind bones loaded later (a resolved detail's own skeleton copy) in their neutral pose; the current blink applies at once. */
   attach(targets: readonly THREE.Object3D[]) {
     if (!targets.length) return;
+    // A detail's bones follow the head's (checked) rig in world space, so their own binds may sit elsewhere (some hair
+    // meshes bind these joints millimetres away); only the head's skeleton is held to the rig's rests.
     this.bind(targets);
-    if (this.playback) this.update(0); else this.applyHeld();
+    this.reapply();
     this.onChange?.();
   }
   /** Forget bones that leave the scene, restoring their captured pose first. */
@@ -233,15 +278,31 @@ export class GameBlink {
     for (let i = this.unmapped.length - 1; i >= 0; i--) if (targets.some(bone => bone.name === this.unmapped[i])) this.unmapped.splice(i, 1);
     this.onChange?.();
   }
+  /** Stop for good: no wake-up fires and no frame is requested. */
+  dispose() { this.clearWake(); this.onChange = undefined; }
   restore() {
     for (const b of this.bindings) {
       b.bone.position.copy(b.position); b.bone.quaternion.copy(b.rotation); b.bone.scale.copy(b.scale);
       b.bone.updateWorldMatrix(false, false);
     }
   }
+  private stopPlayback() { this.playback = false; this.elapsed = 0; this.clearWake(); }
+  private clearWake() {
+    if (!this.wake) return;
+    this.timer.clear(this.wake.handle);
+    this.wake = null;
+  }
   private applyHeld() {
     if (this.closureValue === 0) this.restore();
     else this.apply(this.closureChannels, this.closureValue);
+  }
+  /**
+   * The current blink again after the seat or the bound bones changed. Open and stopped writes nothing: the bones already
+   * hold their captured pose, or the idle's pose while it is enabled (PREV-80: a paused idle keeps its pose).
+   */
+  private reapply() {
+    if (this.playback) this.update(0);
+    else if (this.closureValue > 0) this.apply(this.closureChannels, this.closureValue);
   }
   private apply(channels: readonly Channel[], time: number) {
     for (const driver of this.order) driver.restLocal.decompose(driver.node.position, driver.node.quaternion, driver.node.scale);
@@ -264,13 +325,25 @@ export class GameBlink {
   }
 }
 
-/** Load the local blink asset and bind it to `targets`; throws plain errors (GAME_BLINK_MISSING when it was never prepared). */
-export async function loadGameBlink(targets: readonly THREE.Object3D[], fetcher: (url: string) => Promise<Response> = fetch): Promise<GameBlink> {
-  let response: Response;
-  try { response = await fetcher(GAME_BLINK_ASSET); }
-  catch { throw Error(GAME_BLINK_MISSING); }
-  if (!response.ok) throw Error(GAME_BLINK_MISSING);
-  const gltf = await new GLTFLoader().parseAsync(await response.arrayBuffer(), "");
+/**
+ * Load the local blink asset and bind it to `targets` (the preview head's skeleton). Throws plain errors:
+ * GAME_BLINK_MISSING when it was never prepared (or can't be fetched), GAME_BLINK_DAMAGED when it isn't a readable GLB,
+ * the parser's own sentence when its description doesn't fit, GAME_BLINK_OTHER_HEAD for another head's rig and
+ * GAME_BLINK_NO_JOINTS when none of its joints are in `targets`.
+ */
+export async function loadGameBlink(targets: readonly THREE.Object3D[], fetcher: (url: string) => Promise<Response> = fetch,
+  timer?: BlinkTimer): Promise<GameBlink> {
+  let bytes: ArrayBuffer;
+  try {
+    const response = await fetcher(GAME_BLINK_ASSET);
+    if (!response.ok) throw Error(GAME_BLINK_MISSING);
+    bytes = await response.arrayBuffer();
+  } catch { throw Error(GAME_BLINK_MISSING); }
+  let gltf: Awaited<ReturnType<GLTFLoader["parseAsync"]>>;
+  try { gltf = await new GLTFLoader().parseAsync(bytes, ""); }
+  catch { throw Error(GAME_BLINK_DAMAGED); }
   const clips = parseGameBlink(gltf.asset?.extras, gltf.animations);
-  return new GameBlink(gltf.scene, clips, targets);
+  const blink = new GameBlink(gltf.scene, clips, targets, undefined, timer);
+  if (!blink.bindings.length) throw Error(GAME_BLINK_NO_JOINTS);
+  return blink;
 }
