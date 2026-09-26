@@ -10,7 +10,7 @@
  */
 import type { DocumentHistory } from "./authoring-document";
 import type { FieldSelection } from "./engines/layered-makeup/field-selection";
-import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection, type LookMemory,
+import { COLLECTION_1, COLLECTION_2, isNewerData, storedPackagePlan, type Look, type LookCollection, type LookMemory,
   type PartMemory } from "./platform/api";
 import type { NewerPolicy, PartRegistry } from "./platform/core/document";
 import type { LiveFeatureState } from "./platform/core/live-features";
@@ -267,7 +267,8 @@ export function writeCollectionWorkspace(workspace: CollectionWorkspace, model: 
   const draft = (value: CollectionDraft) => ({
     collection: { schema: COLLECTION_2, id: value.collection.id, name: value.collection.name,
       presets: value.collection.presets.map(look => parts.minimalLook(look, false)),
-      ...(value.collection.packagePlan ? { packagePlan: value.collection.packagePlan } : {}) },
+      // A kept package plan (CORE-91) is written back exactly as it came.
+      ...(value.collection.packagePlan ? { packagePlan: storedPackagePlan(value.collection.packagePlan) } : {}) },
     ...(value.revision !== undefined ? { revision: value.revision } : {}),
     ...(value.selected !== undefined ? { selected: value.selected } : {}),
     memory: Object.fromEntries(Object.entries(value.memory).map(([id, memory]) => [id, parts.writeMemory(memory, options)])),

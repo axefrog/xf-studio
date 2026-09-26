@@ -11,11 +11,13 @@
  * - A buffer whose disk size differs from its memory size is stored as a `KARK` segment (kark.ts), exactly as the archive held it.
  *
  * Every table must lie inside the file. String-pool entries are found through one index of the pool's zero bytes and decoded once
- * per offset, each at most `maxNameBytes` long, so a pool without terminators cannot make the name table quadratic.
+ * per offset, each at most `maxNameBytes` long, so a pool without terminators cannot make the name table quadratic. The pool is
+ * capped (`maxStringPoolBytes`) and its index is a `Uint32Array` of exactly its zero count, charged to the decoded-bytes budget
+ * before it is allocated, so a pool of zeros (a few KB compressed) cannot make the index large.
  */
 import { decodeSegment, type Decompress } from "./kark";
 import { DecodeSession } from "./limits";
-import { NativeMalformedError } from "./native-errors";
+import { NativeBudgetError, NativeMalformedError } from "./native-errors";
 
 export const CR2W_MAGIC = 0x57325243; // "CR2W"
 const HEADER_SIZE = 40, TABLES = 10, EMBEDDED_SIZE = 16;
@@ -58,11 +60,16 @@ export class Cr2wFile {
     };
     const strings = table(0);
     within(strings.offset, strings.count, "string");
-    const poolStart = strings.offset, poolEnd = strings.offset + strings.count;
-    // One pass over the pool finds every terminator; an entry ends at the first zero at or after its offset.
-    const zeros: number[] = [];
-    const pool = bytes.subarray(poolStart, poolEnd);
-    for (let i = pool.indexOf(0); i >= 0; i = pool.indexOf(0, i + 1)) zeros.push(i);
+    if (strings.count > session.limits.maxStringPoolBytes)
+      throw new NativeBudgetError(`A ${strings.count}-byte CR2W string pool passes the ${session.limits.maxStringPoolBytes}-byte cap.`);
+    const pool = bytes.subarray(strings.offset, strings.offset + strings.count);
+    // One pass counts the terminators, which are charged (4 bytes each) before the index is allocated; a second fills it. An
+    // entry ends at the first zero at or after its offset.
+    let zeroCount = 0;
+    for (let i = pool.indexOf(0); i >= 0; i = pool.indexOf(0, i + 1)) zeroCount++;
+    session.bytes(zeroCount * 4, "the string pool's terminator index");
+    const zeros = new Uint32Array(zeroCount);
+    for (let i = pool.indexOf(0), n = 0; i >= 0; i = pool.indexOf(0, i + 1)) zeros[n++] = i;
     const texts = new Map<number, string>();
     const decoder = new TextDecoder();
     const text = (offset: number) => {

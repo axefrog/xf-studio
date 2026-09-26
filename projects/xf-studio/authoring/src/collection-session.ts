@@ -3,7 +3,7 @@ import { COLLECTION_RECOVERY_LIMIT, collectionDraft, copyWorkspace, editPresets,
   type PresetCommand } from "./collection-workspace";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import type { LiveFeatureState } from "./platform/core/live-features";
-import type { LookCollection } from "./platform/api";
+import { isKeptPackagePlan, type LookCollection } from "./platform/api";
 import type { StoredCollection } from "./collection-store";
 import { editPackagePlan, type PackagePlanEdit, type PlannedProduct } from "./platform/core/package-plan";
 
@@ -67,6 +67,8 @@ export class CollectionSession {
   editPackagePlan(edit: (newId: string) => PackagePlanEdit, products: readonly PlannedProduct[]) {
     this.stash();
     const collection = this.state.collection;
+    // A plan this build can't read is never edited (CORE-91); the actions refuse before this.
+    if (isKeptPackagePlan(collection.packagePlan)) throw Error("This collection's mod packaging choices can't be changed in this version.");
     const plan = editPackagePlan(collection.packagePlan, edit(this.newId()), products, collection.id);
     const { packagePlan: _old, ...rest } = collection;
     this.state.collection = this.model.parts.rereadCollection({ ...rest, ...(plan ? { packagePlan: plan } : {}) });

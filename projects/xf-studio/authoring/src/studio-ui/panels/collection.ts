@@ -333,15 +333,17 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       run: () => { rt.dispatch({ kind: "package.merge", productId: product.id, intoId: other.id }); } });
     openMenu(items, anchor, { label: `${product.modName} options`, invoker: anchor });
   };
-  const renderMods = (products: readonly PackageProductSummary[]) => {
-    const signature = JSON.stringify(products);
+  const renderMods = (products: readonly PackageProductSummary[], planIssue?: string) => {
+    const signature = JSON.stringify([products, planIssue ?? null]);
     if (signature === modsSignature) return;
     modsSignature = signature;
-    mods.replaceChildren(...products.map(product => h("li", {}, icon("package"),
+    // A plan made with a newer version (or damaged) is kept as it came; the service says why in plain words (CORE-91).
+    if (planIssue) mods.replaceChildren(h("li", {}, icon("warning"), h("span", { text: planIssue })));
+    else mods.replaceChildren(...products.map(product => h("li", {}, icon("package"),
       h("span", {}, h("strong", { text: product.modName }), h("span", { class: "muted", text: ` · ${product.features.map(feature => feature.label).join(", ")}` })),
       button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true,
         onClick: event => modMenu(product, products, event.currentTarget as Element) }))));
-    mods.hidden = !products.length;
+    mods.hidden = !products.length && !planIssue;
   };
   async function runPackage(action: "check" | "build") {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
@@ -383,7 +385,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
-      renderMods(frame.library.products ?? []);
+      renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
       const setup = frame.localSetup;
       if (setup.view && !dirty && setup.view.revision !== loadedRevision) {
         loadedRevision = setup.view.revision;
@@ -458,12 +460,17 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
   }
   // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
   if (!isBuild) for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
-  const omissions = [...r.omissions, ...r.products.flatMap(product => product.features.flatMap(feature => feature.omissions))];
+  // Each omission once: whole looks, parts and features (the host decided them), then each feature's own, labelled with
+  // its feature when several features export (PIPE-88; the same order as `resultOmissions` in the export contract).
+  const features = r.products.flatMap(product => product.features), several = new Set(features.map(feature => feature.feature)).size > 1;
+  const omissions = [...r.omissions.map(omission => ({ omission, label: undefined as string | undefined })),
+    ...features.flatMap(feature => feature.omissions.map(omission => ({ omission, label: several ? feature.label : undefined })))];
   if (omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
-    h("ul", { class: "result-list" }, omissions.map(item => h("li", {}, icon("warning"),
-      h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` :
+    h("ul", { class: "result-list" }, omissions.map(({ omission: item, label }) => h("li", {}, icon("warning"),
+      h("span", { text: item.kind === "layer" ? `${label ? `${label} layer` : "Layer"} “${item.layerName}” in “${item.presetName}” — ${item.reason}` :
         item.kind === "part" ? `The ${item.feature} part of “${item.presetName}” — ${item.reason}` :
         item.kind === "feature" ? `${item.label} — ${item.reason}` :
+        label ? `${label} of “${item.presetName}” — ${item.reason}` :
         `Whole preset “${item.presetName}” — ${item.reason}` }))))));
   if (isBuild) card.append(note(r.products.length === 1 ? "Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed."
     : "Your mods were built and checked. They haven't been tested in game yet, and nothing was installed.", "info"));

@@ -26,7 +26,7 @@ const settle = async () => { for (let i = 0; i < 20; i++) await sleep(1); };
 // ---- The prefetcher over fakes ----
 
 const withChoice = (position: number): CharacterRequest => ({ ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "hair", choice: `c${position}` }] });
-function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; maxBatch: number; timeMs: number; bytes: number }>; bytes?: () => number; now?: () => number } = {}) {
+function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; maxBatch: number; timeMs: number; bytes: number; unpolledMs: number }>; bytes?: () => number; now?: () => number } = {}) {
   const warmed: number[][] = [];
   let foreground: Promise<void> = Promise.resolve();
   const deps: PrefetchDeps = {
@@ -236,7 +236,7 @@ describe("exports in as few launches as possible", () => {
     const launches: { archives: string[]; paths: string[]; withMaterials: boolean; lowPriority?: boolean }[] = [];
     const run: UncookRun = async ({ source, sources, depotPaths, outDir, withMaterials, lowPriority }) => {
       const archives = (sources ?? [source]).map(item => item.archivePath);
-      launches.push({ archives, paths: [...depotPaths], withMaterials, lowPriority });
+      launches.push({ archives, paths: [...depotPaths], withMaterials, lowPriority: lowPriority as boolean | undefined });
       if (options.failFor && archives.includes(options.failFor) && archives.length > 1) throw new GameAssetExportError("tool_failed", "WolvenKit failed.");
       if (options.failFor && archives.length === 1 && archives[0] === options.failFor) throw new GameAssetExportError("tool_failed", "WolvenKit failed.");
       for (const path of depotPaths) {
@@ -333,7 +333,7 @@ describe("lasting outcomes and the mesh export repair", () => {
   // WolvenKit reads the ponytail mesh (its raw copy is written) but refuses to write its GLB (mesh-export-repair.ts).
   const PONY = "base\\characters\\common\\hair\\fhair_highpony_pony.mesh";
   const readOnly = (launches: { withMaterials: boolean; lowPriority?: boolean }[] = []): UncookRun => async ({ depotPaths, outDir, withMaterials, lowPriority }) => {
-    launches.push({ withMaterials, lowPriority });
+    launches.push({ withMaterials, lowPriority: lowPriority as boolean | undefined });
     for (const path of depotPaths) {
       const file = join(outDir, ...path.split("\\"));
       mkdirSync(join(file, ".."), { recursive: true });
@@ -341,7 +341,7 @@ describe("lasting outcomes and the mesh export repair", () => {
     }
   };
   const repairing = (outcome: "glb" | "none", calls: { path: string; lowPriority?: boolean }[] = []): GeometryRepair => async ({ depotPath, workDir, lowPriority }) => {
-    calls.push({ path: depotPath, lowPriority });
+    calls.push({ path: depotPath, lowPriority: lowPriority as boolean | undefined });
     if (outcome === "none") return { outcome: "not-applicable", detail: "no known repair fits this mesh" };
     writeFileSync(join(workDir, "copy.glb"), "glTF");
     return { outcome: "repaired", glb: join(workDir, "copy.glb"), materials: null, detail: "the copy's repair" };
@@ -525,4 +525,180 @@ test("choosing in the row keeps its job: the V is keyed without the row's own ch
   await settle();
   expect(service.update({ base: withRowChoice, option: "head/hair", positions: [0, 1], focus: null }).states).toBe("rr");
   expect(warmed).toEqual([[0, 1]]);
+});
+
+// ---- Cleanup batch 2: failures, settling, budget, unpolled jobs, launch priority (PREV-101, 102, 104, 105, PIPE-96) ----
+
+/** Unhandled rejections while `work` runs (Bun ends the host on one, PREV-101). */
+async function unhandledDuring(work: () => Promise<void>): Promise<unknown[]> {
+  const seen: unknown[] = [];
+  const listener = (reason: unknown) => { seen.push(reason); };
+  process.on("unhandledRejection", listener);
+  try { await work(); await settle(); } finally { process.off("unhandledRejection", listener); }
+  return seen;
+}
+
+describe("a background failure never ends the host (PREV-101)", () => {
+  test("a dependency that throws stops the job, leaves its choices not prepared and is reported once; nothing is left unhandled", async () => {
+    const failures: unknown[] = [];
+    const deps: PrefetchDeps = {
+      requestFor: async (_base, _option, position) => withChoice(position),
+      readiness: async () => () => false,
+      warm: async requests => requests.map(() => ({ ready: true })),
+      foregroundIdle: async () => {},
+      preparedBytes: async () => { throw Error("the prepared folder can't be listed"); },
+      failed: error => { failures.push(error); },
+    };
+    const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12 });
+    const seen = await unhandledDuring(async () => { ask(service, [0, 1]); });
+    expect(seen).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(ask(service, [0, 1])).toMatchObject({ states: "nn", stopped: "failed", busy: false });
+    expect(service.stats.failed).toBe(1);
+  });
+
+  test("an unreadable readiness check queues the choices; one manifest check that throws queues only its choice; a failed lookup is not prepared", async () => {
+    const warmed: number[][] = [];
+    const deps: PrefetchDeps = {
+      requestFor: async (_base, _option, position) => { if (position === 3) throw Error("catalogue gone"); return withChoice(position); },
+      readiness: async () => request => { const position = Number(request.choices![0]!.choice.slice(1)); if (position === 1) throw Error("damaged manifest"); return position === 0; },
+      warm: async requests => { warmed.push(requests.map(request => Number(request.choices![0]!.choice.slice(1)))); return requests.map(() => ({ ready: true })); },
+      foregroundIdle: async () => {},
+      preparedBytes: async () => 0,
+    };
+    const service = new ChoicePrefetcher(deps, { batch: 8, timeMs: 60_000, bytes: 1e12 });
+    const seen = await unhandledDuring(async () => { ask(service, [0, 1, 2, 3]); });
+    expect(seen).toEqual([]);
+    expect(warmed).toEqual([[1, 2]]);
+    expect(ask(service, [0, 1, 2, 3]).states).toBe("rrrn");
+
+    let calls = 0;
+    const unreadable = new ChoicePrefetcher({ ...deps, requestFor: async (_base, _option, position) => withChoice(position),
+      readiness: async () => { calls++; throw Error("installation unreadable"); } }, { batch: 8, timeMs: 60_000, bytes: 1e12 });
+    expect(await unhandledDuring(async () => { ask(unreadable, [0, 1]); })).toEqual([]);
+    expect(calls).toBe(1);
+    expect(ask(unreadable, [0, 1]).states).toBe("rr");
+  });
+
+  test("a damaged manifest is read as none: every entry is checked on read", () => {
+    const dir = temporary(), key = "k";
+    const good = { schema: "xfs/choice-manifest-1", tool: "wk", xl: "xl", reads: [[depotHash("a\\b.app"), depotHash("a\\b.app"), "C:\\a.archive"]],
+      exports: [["geometry", "a\\b.mesh", "C:\\a.archive"]] };
+    const write = (value: unknown) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, `${key}.json`), JSON.stringify(value)); };
+    write(good);
+    expect(readChoiceManifest(dir, key)).toEqual(good as never);
+    for (const damaged of [
+      { ...good, reads: [["not-a-hash", "1", null]] },
+      { ...good, reads: [["1", "1"]] },
+      { ...good, reads: [["1", "1", 5]] },
+      { ...good, reads: [["99999999999999999999999", "1", null]] },
+      { ...good, exports: [["sounds", "a\\b.mesh", "C:\\a.archive"]] },
+      { ...good, exports: [["geometry", null, "C:\\a.archive"]] },
+      { ...good, tool: 1 },
+      { ...good, reads: null },
+      "text",
+    ]) { write(damaged); expect(readChoiceManifest(dir, key)).toBeNull(); }
+  });
+});
+
+describe("settling, the budget and unpolled jobs (PREV-102, PREV-104, PREV-105)", () => {
+  test("idle waits for a stopped batch to settle", async () => {
+    let finish!: () => void;
+    const { service } = prefetcher({ warm: () => new Promise(resolve => { finish = () => resolve([{ ready: true }, { ready: true }]); }) });
+    ask(service, [0, 1]);
+    await settle();
+    expect(service.preparing).toBe(true);
+    let idle = false;
+    void service.idle().then(() => { idle = true; });
+    service.foreground(withChoice(5));
+    await settle();
+    expect(idle).toBe(false);
+    finish();
+    await settle();
+    expect(idle).toBe(true);
+    expect(service.preparing).toBe(false);
+  });
+
+  test("Clear starts the session's byte budget again", async () => {
+    let bytes = 0;
+    const heavy = prefetcher({ limits: { bytes: 100 }, bytes: () => bytes, warm: async requests => { bytes += 80; return requests.map(() => ({ ready: true })); } });
+    ask(heavy.service, [0, 1, 2, 3]);
+    await settle();
+    expect(heavy.service.update({ base: DEFAULT_CHARACTER, option: "head/eyes", positions: [0], focus: null }).stopped).toBe("disk");
+    bytes = 0;
+    heavy.service.resetBudget();
+    expect(heavy.service.update({ base: DEFAULT_CHARACTER, option: "head/brows", positions: [0], focus: null }).stopped).toBeNull();
+    await settle();
+    expect(heavy.service.update({ base: DEFAULT_CHARACTER, option: "head/brows", positions: [0], focus: null }).states).toBe("r");
+  });
+
+  test("a job nobody asks about is stopped, its batch in WolvenKit too; asking again starts it afresh", async () => {
+    const signals: AbortSignal[] = [];
+    const { service } = prefetcher({ limits: { unpolledMs: 40 }, warm: (requests, signal) => { signals.push(signal); return new Promise((resolve, reject) => {
+      signal.addEventListener("abort", () => reject(Error("stopped")));
+      if (signals.length > 1) resolve(requests.map(() => ({ ready: true })));
+    }); } });
+    ask(service, [0, 1]);
+    await settle();
+    expect(signals).toHaveLength(1);
+    await sleep(120);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(service.stats.unpolled).toBe(1);
+    // The page comes back: a new job, and its choices are prepared.
+    expect(ask(service, [0, 1]).states).toBe("??");
+    await settle();
+    expect(signals).toHaveLength(2);
+    expect(ask(service, [0, 1]).states).toBe("rr");
+  });
+});
+
+describe("launch priority is decided as each launch starts (PIPE-96)", () => {
+  test("a background batch that a person's change now waits on starts at normal priority", async () => {
+    const root = temporary(), cache = join(root, "cache");
+    const archive = { id: join(root, "a.archive"), name: "a.archive", virtualPath: "archive/pc/content/a.archive", group: "content", provider: "game", providerName: "game", rank: 0, shadowed: [] };
+    writeFileSync(archive.id, "archive");
+    const fetcher = new WolvenKitFetcher("WolvenKit.CLI.exe", cache, () => true);
+    const runs: { hashes: string[]; lowPriority: boolean | undefined }[] = [];
+    let releaseFirst!: () => void;
+    const first = new Promise<void>(resolve => { releaseFirst = resolve; });
+    (fetcher as unknown as { run: unknown }).run = async (args: string[], options: { lowPriority?: boolean }) => {
+      if (args[0] === "unbundle") {
+        const out = args[args.indexOf("-o") + 1]!, list = readFileSync(args[args.indexOf("--hash") + 1]!, "utf8").split(/\r?\n/).filter(Boolean);
+        runs.push({ hashes: list, lowPriority: options.lowPriority });
+        if (list.includes("1")) await first;
+        mkdirSync(out, { recursive: true });
+        for (const hash of list) writeFileSync(join(out, `${hash}.app`), "raw");
+      }
+      if (args[0] === "convert") for (const name of readdirSync(args[2]!)) if (!name.endsWith(".json")) writeFileSync(join(args[2]!, `${name}.json`), JSON.stringify(cr2w({ $type: "x" })));
+      return { exitCode: 0, stdout: "", stderr: "", output: "" };
+    };
+    // A background batch in WolvenKit, and a second one queued behind it while only background work runs.
+    const slow = backgroundExtraction(cache, () => fetcher.fetch(archive as never, { hash: "1", path: null }, "app"));
+    await sleep(80);
+    const queued = backgroundExtraction(cache, () => fetcher.fetch(archive as never, { hash: "3", path: null }, "app"));
+    await sleep(80);
+    // A person's own change now needs the queued resource.
+    const waiting = foregroundExtraction(cache, () => queued);
+    releaseFirst();
+    expect(await waiting).not.toBeNull();
+    expect(await slow).not.toBeNull();
+    expect(runs.map(run => [run.hashes.join(","), run.lowPriority])).toEqual([["1", true], ["3", false]]);
+  });
+
+  test("background exports by hash run at the batch's priority", async () => {
+    const root = temporary(), a = join(root, "a.archive");
+    const launches: { byHash: boolean; lowPriority: boolean | undefined }[] = [];
+    const run: UncookRun = async ({ depotPaths, outDir, byHash, lowPriority }) => {
+      launches.push({ byHash: !!byHash, lowPriority: typeof lowPriority === "function" ? lowPriority() : lowPriority });
+      for (const path of depotPaths) {
+        if (!byHash) continue;
+        writeFileSync(join(outDir, `${depotHash(path)}.png`), "png");
+      }
+    };
+    const exporter = createGameAssetExporter(join(root, "exports"), run, { tool: { key: "fake", label: "Fake" },
+      contains: (_source, hashes) => new Set(hashes.filter(hash => hash === depotHash("x\\h.xbm"))) });
+    const [answer] = await exporter.exportAll!([{ source: archiveExportSource(a, root), geometry: [], textures: ["x\\h.xbm"], masks: [] }], undefined, { lowPriority: () => true });
+    expect(answer!.textures.get("x\\h.xbm")?.png).toBeTruthy();
+    expect(launches).toEqual([{ byHash: false, lowPriority: true }, { byHash: true, lowPriority: true }]);
+  });
 });

@@ -7,15 +7,15 @@
 import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { runProductBuild, builderError, type BuilderRun, type HostPrerequisite, type PackageHostAdapter } from "../src/platform/export/product-host";
 import { runProductCommand } from "../src/platform/export/product-builder";
-import { ExportRefusal, PrerequisiteStale, type FeatureExporterEntry, type PackageBuildResult } from "../src/platform/api";
+import { ExportRefusal, PACKAGE_PLAN_1, PrerequisiteStale, type FeatureExporterEntry, type PackageBuildResult } from "../src/platform/api";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { packagePlateRecord, type EyePlateManifest } from "../src/eye-plate-service";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { localCheckWorker } from "../src/package-server";
-import { eyeEntry, fakeTools, fakeVerifierTools, FOOTPRINT, writePlate } from "./fixtures/product-fixture";
+import { eyeEntry, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, writePlate } from "./fixtures/product-fixture";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-product-host-")));
@@ -134,3 +134,28 @@ test("the builder's machine error line is read back by code, message and stale p
   expect(builderError("XFS_PACKAGE_ERROR={not json")).toEqual({ code: null });
   expect(new ExportRefusal("x", "y").code).toBe("x");
 });
+
+test("several products move into the store all or nothing (PIPE-92)", async () => {
+  const collection = { schema: "xfs/collection-2", id: fixture.id, name: fixture.name,
+    packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: "11111111-2222-4333-8444-555555555555", features: [LIPS] }] },
+    presets: fixture.presets.map((preset: { id: string; name: string; revision: number; recipe: unknown }) => ({ id: preset.id, name: preset.name,
+      revision: preset.revision, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: preset.recipe },
+        [LIPS]: { schema: "xfs/lips-part-1", body: { shades: ["#aa3355"] } } } })) };
+  // Both products build and move in together.
+  const both = host({ exporters: [eyeEntry(), LIPS_ENTRY] });
+  const built = await runProductBuild(both.adapter, collection, new AbortController().signal);
+  if (!built.ok) throw Error(built.message);
+  expect((built.result as PackageBuildResult).products).toHaveLength(2);
+  expect(readdirSync(join(both.dir, "candidates"))).toHaveLength(2);
+  // The second product can't move in (its folder name is taken): the first one is not left behind in the store either.
+  const clash = host({ exporters: [eyeEntry(), LIPS_ENTRY] });
+  const blocked: PackageHostAdapter = { ...clash.adapter, async runBuilder(args, run) {
+    const out = await clash.adapter.runBuilder(args, run);
+    const line = out.stdout.split(/\r?\n/).find(item => item.startsWith("XFS_PACKAGE_RESULT="))!;
+    const result = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageBuildResult;
+    mkdirSync(join(clash.dir, "candidates", basename(result.products[1].package)), { recursive: true });
+    return out;
+  } };
+  expect(await runProductBuild(blocked, collection, new AbortController().signal)).toMatchObject({ ok: false, code: "package_build_failed" });
+  expect(readdirSync(join(clash.dir, "candidates"))).toHaveLength(1);
+}, 120_000);

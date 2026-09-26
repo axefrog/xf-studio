@@ -109,10 +109,26 @@ export function localPackageAdapter(options: { exporters: readonly FeatureExport
   };
 }
 
+/** Why a Build can't start when the Local setup and its backup are unreadable (PIPE-94), in plain words. */
+export const SETUP_UNREADABLE_MESSAGE = "XF Studio couldn't read your Local setup, so it can't build mod files. Open Game & tools in " +
+  "Mod package, check your choices and save them again, then try once more. Your collection is unchanged.";
+/**
+ * The Local setup a package request uses (PIPE-94), as the desktop host reads it: when the saved settings and their
+ * backup are unreadable, Check plans with the defaults (it needs no tools) and Build is refused in plain words.
+ */
+export function packageRequestSettings(load: () => LocalSettings, action: PackageAction): LocalSettings {
+  try { return load(); }
+  catch (error) {
+    if (action === "check") return defaultLocalSettings();
+    throw Object.assign(Error(SETUP_UNREADABLE_MESSAGE), { code: "package_setup_unreadable", cause: error });
+  }
+}
+
 /**
  * The localhost package route: requests carry only `{ action, collection }` (the server decides every path and
  * tool), and one Check and one Build run at a time. `adapter` makes the host adapter for each request, so
- * Local setup changes apply to the next Build.
+ * Local setup changes apply to the next Build; when it can't (the Local setup is unreadable), the answer is a JSON
+ * refusal with plain words, never a bare server error (PIPE-94).
  */
 export function createPackageHandler(adapter: (action: PackageAction) => PackageHostAdapter) {
   const service = new PackageHostService();
@@ -135,7 +151,15 @@ export function createPackageHandler(adapter: (action: PackageAction) => Package
     if (service.busy(action)) return json({ code: `package_${action}_busy`, error: action === "build"
       ? "A local package build is already running. Wait for its result before starting another."
       : "A package Check is already running. Wait for its result before starting another." }, 409);
-    const outcome = await service.run(adapter(action), action, input.collection, request.signal);
+    let host: PackageHostAdapter;
+    try { host = adapter(action); }
+    catch (error) {
+      const code = (error as { code?: unknown }).code === "package_setup_unreadable" ? "package_setup_unreadable" : "package_setup_unavailable";
+      hostFailure("package", code, `Package ${action}: the host adapter could not be made.`, error);
+      return json({ code, error: code === "package_setup_unreadable" ? SETUP_UNREADABLE_MESSAGE
+        : "XF Studio couldn't prepare mod files right now. Restart XF Studio and try again. Your collection is unchanged." }, 503);
+    }
+    const outcome = await service.run(host, action, input.collection, request.signal);
     return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);
   };
 }

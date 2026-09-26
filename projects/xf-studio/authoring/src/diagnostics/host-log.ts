@@ -137,6 +137,20 @@ function readTail(path: string, maxBytes: number): string[] {
   finally { if (handle !== null) try { closeSync(handle); } catch { /* Closed. */ } }
 }
 
+let lastResort = false;
+/**
+ * A composition root's last resort (PREV-101): a rejected promise nobody handled is recorded as a host failure with a plain message, and
+ * the host keeps running (Bun would otherwise end the process). Background work still catches its own failures; this only keeps a missed
+ * one from closing the app. Entries only (never tests): a registered handler would also hide a test's unhandled rejection.
+ */
+export function logUnhandledRejections(): void {
+  if (lastResort) return;
+  lastResort = true;
+  process.on("unhandledRejection", reason => {
+    hostFailure("host", "unhandled_rejection", "Something went wrong in the background. XF Studio kept running; if something looks wrong, try it again.", reason);
+  });
+}
+
 /** A host's diagnostics: its log and its rolling detail window, both in `<data>/diagnostics/`. */
 export type HostDiagnostics = { readonly log: DiagnosticLog; readonly trace: TraceWindow;
   /** What both redact with: the person's folders, plus the configured ones the diagnostics endpoint names. */

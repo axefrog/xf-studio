@@ -11,7 +11,7 @@ import type { LibraryState } from "./workspace-state";
 import type { PackageAction } from "./package-action";
 import { describePackageBuild, describePackageCheck } from "./package-filter";
 import { refusal, type Capability, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
-import { renameCollectionId } from "./platform/core/package-plan";
+import { copyPackagePlan } from "./platform/core/package-plan";
 
 /** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
 export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made with a newer version of XF Studio, so this version " +
@@ -47,7 +47,9 @@ export type CollectionServiceState = { busy: boolean; progress?: CollectionProgr
 export type CollectionServiceSummary = { busy: boolean; progress?: CollectionProgress;
   summaries: CollectionSummary[]; draft?: CollectionDraftSummary;
   /** The XF mods the draft would build (feature-module platform §6); absent while the collection loads. */
-  products?: PackageProductSummary[] };
+  products?: PackageProductSummary[];
+  /** Why the draft's package plan can't be used (made with a newer version, or damaged), in plain words (CORE-91). */
+  packagePlanIssue?: string };
 /**
  * Draft versus its library revision (audit A-1). `baseline` is `none` for a collection never
  * saved, `unknown` when the saved revision's content has not been loaded in this session
@@ -163,7 +165,8 @@ export class CollectionService {
   summary(): CollectionServiceSummary {
     return { busy: this.busy, progress: this.progress && { ...this.progress },
       summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary(),
-      ...(this.actions ? { products: this.actions.productSummary() } : {}) };
+      ...(this.actions ? { products: this.actions.productSummary() } : {}),
+      ...(this.actions?.packagePlanIssue() ? { packagePlanIssue: this.actions.packagePlanIssue()!.message } : {}) };
   }
   snapshot() { return this.actions?.snapshot(); }
   /** The accepted request in flight, if any (requests are serialized). */
@@ -247,6 +250,9 @@ export class CollectionService {
     // The draft is validated on every change, so only emptiness can refuse here; no snapshot is taken (CORE-05).
     if ((request.kind === "exportCollection" || request.kind === "exportPlan" || request.kind === "package") &&
         !this.actions.summary().presets.length) return refusal("invalid_value", COLLECTION_MESSAGE);
+    // Check and Build plan on the package plan: one this build can't read is refused with its reason (CORE-91).
+    if (request.kind === "package" && this.actions.packagePlanIssue())
+      return refusal("unavailable", this.actions.packagePlanIssue()!.message);
     // A build plan and a mod hold eye makeup only: they need a look that has some (CORE-34).
     if (request.kind === "exportPlan" || request.kind === "package") {
       const reason = this.unpackageable();
@@ -284,8 +290,9 @@ export class CollectionService {
     const snapshot = this.actions!.snapshot(), sourceId = snapshot.collection.id;
     if (copy) {
       snapshot.collection.id = crypto.randomUUID(); snapshot.revision = undefined;
-      // The copy's default mod is the copy's own: its archive name follows the new collection ID.
-      const plan = renameCollectionId(snapshot.collection.packagePlan, sourceId, snapshot.collection.id);
+      // The copy's mods are the copy's own: its default mod's archive name follows the new collection ID, and every
+      // split-off mod gets a fresh ID, so no archive of the copy hides one of the original's (PIPE-89).
+      const plan = copyPackagePlan(snapshot.collection.packagePlan, sourceId, snapshot.collection.id, () => crypto.randomUUID());
       if (plan) snapshot.collection.packagePlan = plan; else delete snapshot.collection.packagePlan;
     }
     const saved = await this.transport.save(snapshot.collection, snapshot.revision);

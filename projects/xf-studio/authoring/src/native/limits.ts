@@ -15,7 +15,10 @@ export interface NativeLimits {
   readonly maxBodyBytes: number;
   /** One buffer, stored or decompressed. */
   readonly maxBufferBytes: number;
-  /** Everything one resource decompresses or decodes to text (body, parsed buffers, names and strings). */
+  /**
+   * Everything one resource decompresses or decodes to text (body, parsed buffers, names and strings), plus 4 bytes per string-pool
+   * entry for the pool's terminator index.
+   */
   readonly maxDecodedBytes: number;
   /** Values decoded (properties, array elements, objects). */
   readonly maxNodes: number;
@@ -31,6 +34,17 @@ export interface NativeLimits {
   readonly maxDepth: number;
   /** One entry of a CR2W string pool (a name or an import path). */
   readonly maxNameBytes: number;
+  /**
+   * Names decoded (distinct string-pool entries and package names). Each is a string and a slot (~150 bytes measured per distinct
+   * pool entry), so a pool of many empty or one-byte entries is budgeted by count, not only by its bytes.
+   */
+  readonly maxNames: number;
+  /** A CR2W string pool (table 0) as a whole; its terminator index also counts against `maxDecodedBytes`, 4 bytes per entry. */
+  readonly maxStringPoolBytes: number;
+  /** One archive's index block (entries, segments and dependencies), read whole and kept while the archive is pooled. */
+  readonly maxIndexBytes: number;
+  /** The index blocks an archive pool keeps at once; the least recently used are dropped (and re-read when needed) past it. */
+  readonly maxPooledIndexBytes: number;
   /** An archive's custom-data block (the `LXRS` file-name list), stored or decompressed. */
   readonly maxNameListBytes: number;
 }
@@ -42,7 +56,9 @@ export interface NativeLimits {
  * buffer 11.1 MiB) → 128 MiB; decoded names and parsed buffers 15.6 MiB → 64 MiB; values 0.6 M in the resources the resolver
  * reads → 8 M (a few large world meshes of 33 M fall back to WolvenKit, which keeps one decode's memory near 1 GB at worst);
  * JSON values 1.3 M → 16 M, and at most 8 per decoded value past 2^20 (measured 0.97); nesting 11 → 128; name 159 bytes → 1 KiB;
- * name list 0.37 MiB → 16 MiB. Details: research/backlog/native-archive-reader.md#budgets.
+ * names 314 K (one mesh) → 2 M; string pool 2.7 MiB (any class; bodies under 1 MiB hold smaller ones) → 16 MiB; name list 0.37 MiB → 16 MiB; one archive index
+ * 28.6 MiB → 128 MiB; all 1,157 archive indexes together 96.2 MiB → 512 MiB pooled. Details:
+ * research/backlog/native-archive-reader.md#budgets.
  */
 export const DEFAULT_LIMITS: NativeLimits = Object.freeze({
   maxResourceBytes: 128 * 2 ** 20,
@@ -55,7 +71,11 @@ export const DEFAULT_LIMITS: NativeLimits = Object.freeze({
   jsonNodesAllowance: 2 ** 20,
   maxDepth: 128,
   maxNameBytes: 1024,
+  maxNames: 2_000_000,
+  maxStringPoolBytes: 16 * 2 ** 20,
   maxNameListBytes: 16 * 2 ** 20,
+  maxIndexBytes: 128 * 2 ** 20,
+  maxPooledIndexBytes: 512 * 2 ** 20,
 });
 
 /** Something the reader noticed about a resource that the JSON document cannot say (its value is still readable). */
@@ -72,7 +92,7 @@ export const DEFAULT_WATCHED_PROPERTIES: readonly string[] = ["rendChunk.renderM
 const MAX_NOTES = 64, MAX_PATHS = 256;
 
 /** High-water marks of one decode, for measuring real resources against the caps. */
-export interface NativeUsage { readonly decodedBytes: number; readonly nodes: number; readonly jsonNodes: number; readonly depth: number; readonly longestName: number; readonly largestBuffer: number }
+export interface NativeUsage { readonly decodedBytes: number; readonly nodes: number; readonly jsonNodes: number; readonly depth: number; readonly longestName: number; readonly names: number; readonly largestBuffer: number }
 
 /** The budgets and findings of decoding one resource (a nested buffer shares its parent's session). */
 export class DecodeSession {
@@ -82,6 +102,7 @@ export class DecodeSession {
   private depthNow = 0;
   private depthMax = 0;
   private longestName = 0;
+  private nameCount = 0;
   private largestBuffer = 0;
   private readonly notesByKey = new Map<string, { kind: "type-mismatch"; property: string; stored: string; rtti: string; count: number }>();
   private readonly defaultedByProperty = new Map<string, { property: string; paths: string[]; count: number }>();
@@ -97,9 +118,10 @@ export class DecodeSession {
     if (this.decodedBytes > this.limits.maxDecodedBytes) throw new NativeBudgetError(`Decoding ${what} passes the ${this.limits.maxDecodedBytes}-byte budget.`);
   }
 
-  /** A string-pool entry of `length` bytes. */
+  /** A string-pool entry or package name of `length` bytes, counted against the name budget as well as the decoded bytes. */
   name(length: number): void {
     if (length > this.limits.maxNameBytes) throw new NativeBudgetError(`A ${length}-byte name passes the ${this.limits.maxNameBytes}-byte cap.`);
+    if (++this.nameCount > this.limits.maxNames) throw new NativeBudgetError(`The resource passes the ${this.limits.maxNames}-name budget.`);
     if (length > this.longestName) this.longestName = length;
     this.bytes(length, "names");
   }
@@ -153,7 +175,7 @@ export class DecodeSession {
   get notes(): readonly NativeNote[] { return [...this.notesByKey.values()].map(note => ({ ...note })); }
   get defaultedProperties(): readonly DefaultedProperty[] { return [...this.defaultedByProperty.values()].map(row => ({ ...row, paths: [...row.paths] })); }
   get usage(): NativeUsage {
-    return { decodedBytes: this.decodedBytes, nodes: this.nodeCount, jsonNodes: this.jsonNodeCount, depth: this.depthMax, longestName: this.longestName, largestBuffer: this.largestBuffer };
+    return { decodedBytes: this.decodedBytes, nodes: this.nodeCount, jsonNodes: this.jsonNodeCount, depth: this.depthMax, longestName: this.longestName, names: this.nameCount, largestBuffer: this.largestBuffer };
   }
 }
 
@@ -162,5 +184,6 @@ export const UNLIMITED: NativeLimits = Object.freeze({
   maxResourceBytes: Number.MAX_SAFE_INTEGER, maxBodyBytes: Number.MAX_SAFE_INTEGER, maxBufferBytes: Number.MAX_SAFE_INTEGER,
   maxDecodedBytes: Number.MAX_SAFE_INTEGER, maxNodes: Number.MAX_SAFE_INTEGER, maxJsonNodes: Number.MAX_SAFE_INTEGER, maxJsonNodesPerValue: Number.MAX_SAFE_INTEGER,
   jsonNodesAllowance: Number.MAX_SAFE_INTEGER, maxDepth: 100_000,
-  maxNameBytes: Number.MAX_SAFE_INTEGER, maxNameListBytes: Number.MAX_SAFE_INTEGER,
+  maxNameBytes: Number.MAX_SAFE_INTEGER, maxNames: Number.MAX_SAFE_INTEGER, maxStringPoolBytes: Number.MAX_SAFE_INTEGER, maxNameListBytes: Number.MAX_SAFE_INTEGER,
+  maxIndexBytes: Number.MAX_SAFE_INTEGER, maxPooledIndexBytes: Number.MAX_SAFE_INTEGER,
 });

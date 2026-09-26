@@ -232,6 +232,14 @@ export async function foregroundExtraction<T>(cacheDir: string, work: () => Prom
   raiseBackgroundWolvenKit();
   try { return await work(); } finally { lane.foreground--; }
 }
+/**
+ * Whether background work on a cache folder should run below normal priority now: only while no foreground work runs there. Pass it as a
+ * launch's `lowPriority` so each launch decides when it starts (PIPE-96).
+ */
+export const backgroundPriority = (cacheDir: string): (() => boolean) => {
+  const lane = laneFor(cacheDir);
+  return () => lane.foreground === 0;
+};
 /** Run `work` as background work on a cache folder: its batches run below normal priority, unless foreground work runs too. */
 export async function backgroundExtraction<T>(cacheDir: string, work: () => Promise<T>): Promise<T> {
   const lane = laneFor(cacheDir);
@@ -361,6 +369,12 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     this.stats.cliCalls++;
     return runWolvenKit(this.cli, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
   }
+  /**
+   * A background batch's priority, decided as each launch starts rather than when the batch was queued: once foreground work runs on
+   * this lane (a person's own change, which may wait on a resource in this batch or be queued behind it), it runs at normal priority
+   * (PIPE-96).
+   */
+  private low(background: boolean): boolean { return background && this.lane.foreground === 0; }
   /** Whether this resource is in the cache now, answered from it without WolvenKit (a file, or a lasting marker); nothing is parsed. */
   isCached(archive: MountedArchive, hash: string): boolean {
     const path = this.cachePath(archive, hash);
@@ -465,7 +479,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       for (const pattern of uncookPatterns(this.cli, archives, serialized, named)) {
         mkdirSync(serialized, { recursive: true });
         const run = await this.run(["uncook", ...archives, "-o", serialized, "-r", pattern, "-u", "-s", "-v", "Minimal"],
-          { accept: () => true, failure: /(?!)/, lowPriority: background });
+          { accept: () => true, failure: /(?!)/, lowPriority: this.low(background) });
         walk(serialized, serialized, finished(run, "uncook"));
       }
       // Step 2, only for what step 1 did not serialize (a reference without a path, an archive that lists hashes only, or
@@ -477,7 +491,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
         this.log(`WolvenKit: ${rest.length} resource(s) not serialized by name, extracting by hash: ${rest.slice(0, 4).map(label).join(", ")}${rest.length > 4 ? ", …" : ""}`);
         mkdirSync(raw, { recursive: true });
         writeFileSync(join(dir, "hashes.txt"), rest.join("\n") + "\n");
-        finished(await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true, failure: /(?!)/, lowPriority: background }), "unbundle");
+        finished(await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true, failure: /(?!)/, lowPriority: this.low(background) }), "unbundle");
         const before = new Set(found.keys());
         walk(raw, raw, true);
         // Unnamed outputs get the expected extension so WolvenKit's converter recognises them.
@@ -490,7 +504,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
         }
         // The converter's own exit and log decide only whether a missing JSON may be recorded as a lasting failure.
         if (found.size > before.size) {
-          const clean = finished(await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/, lowPriority: background }), "convert");
+          const clean = finished(await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/, lowPriority: this.low(background) }), "convert");
           for (const [hash, hit] of found) if (!before.has(hash)) hit.clean = clean;
         }
       }

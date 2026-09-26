@@ -37,7 +37,7 @@ function setup(collection: unknown = fixture, recordFootprint = true) {
 /** The host's own plan of a collection on the fixture plate (what the result gate compares with). */
 const hostPlan = (collection: unknown, source: string, manifest: EyePlateManifest) => checkProducts({ collection, exporters: [eyeEntry()],
   prerequisites: { [EYE_PLATE_PREREQUISITE]: { ...plateReachInput(FOOTPRINT), record: packagePlateRecord(manifest) } },
-  diagnostics: false, preflight: false, collectionSha256: sha(source) }).result;
+  diagnostics: false, preflight: false, collectionSha256: sha(source) });
 
 test("Build promotes only a verified candidate per product with the full local-package-2 manifest", async () => {
   const collection = structuredClone(fixture);
@@ -52,12 +52,15 @@ test("Build promotes only a verified candidate per product with the full local-p
   expect(product).toMatchObject({ productId: collection.id, modName: "XF Eye Artistry", nameSource: "derived", isDefault: true,
     archive: prepared.plan.namespace, installed: false, gameRenderingVerified: false });
   const written = JSON.parse(readFileSync(product.manifest, "utf8"));
+  // Whole looks left out are the product's (decided once by the host); the feature keeps its own layers (PIPE-88).
+  const wholeLooks = prepared.omissions.filter(item => item.kind === "preset"), own = prepared.omissions.filter(item => item.kind !== "preset");
+  expect(written.omissions).toEqual(wholeLooks);
   expect(written).toMatchObject({ schema: "xfs/local-package-2", productId: collection.id, modName: prepared.plan.modName,
     archive: prepared.plan.namespace, collectionSha256: sha(source), originalPresetCount: 4, verifiedUnpackedFiles: 13,
     installed: false, gameRenderingVerified: false, requirements: { ArchiveXL: "1.27.3", game: "2.31" } });
   const [feature] = written.features;
   expect(feature).toMatchObject({ feature: "eye-makeup", exporter: "eye-makeup/mesh-decal", namespace: prepared.plan.namespace,
-    selectorLabel: prepared.plan.selectorLabel, selector: "own", omissions: prepared.omissions,
+    selectorLabel: prepared.plan.selectorLabel, selector: "own", omissions: own,
     packagedSha256: sha(JSON.stringify(prepared.packaged)), planSha256: sha(JSON.stringify(prepared.plan)),
     details: { plateLiftsMm: [0.4], plateUv: prepared.plateUv, plate: { source: "derived", cacheKey: "c".repeat(64), sourceRevision: "cp2077-2.31" } },
     verification: { presetCount: 3, verifiedFiles: 13, limits: [...VERIFICATION_LIMITS] } });
@@ -157,22 +160,27 @@ test("PIPE-33: Check with the prepared plate and Build both omit a preset that m
     reason: OFF_PLATE_REASON }]);
   // Check planned on the prepared plate's manifest agrees with Build; Check without a plate cannot judge it.
   const check = await runProductCommand({ ...options, check: true }) as PackageCheckResult;
-  expect(check.products[0].features[0].omissions).toEqual(expected.omissions);
+  // A look no feature packages is left out whole: the host reports it once, in the result and the product (PIPE-88).
+  expect(check.omissions).toEqual(expected.omissions);
+  expect(check.products[0].omissions).toEqual(expected.omissions);
+  expect(check.products[0].features[0].omissions).toEqual([]);
   expect(check.products[0].features[0].details.plateUv).toEqual(expected.plateUv);
   const blind = await runProductCommand({ ...options, check: true, prerequisites: {} }) as PackageCheckResult;
-  expect(blind.products[0].features[0].omissions).toEqual([]);
+  expect(blind.omissions).toEqual([]);
   expect(blind.products[0].features[0].details.plateUv).toBeNull();
   const result = await runProductCommand(options) as PackageBuildResult;
   const feature = result.products[0].features[0];
-  expect(feature.omissions).toEqual(expected.omissions);
+  expect(result.omissions).toEqual(expected.omissions);
+  expect(feature.omissions).toEqual([]);
   expect(feature.packagedSha256).toBe(check.products[0].features[0].packagedSha256);
   expect(feature.details.plateUv).toEqual(expected.plateUv!);
   const written = JSON.parse(readFileSync(result.products[0].manifest, "utf8"));
-  expect(written.features[0]).toMatchObject({ omissions: expected.omissions, details: { plateUv: expected.plateUv }, verification: { presetCount: 3 } });
+  expect(written.omissions).toEqual(expected.omissions);
+  expect(written.features[0]).toMatchObject({ omissions: [], details: { plateUv: expected.plateUv }, verification: { presetCount: 3 } });
   verifyProductBuildResult(result, hostPlan(collection, source, manifest), join(dir, "dist"));
   // The host's gate refuses a result judged against another plate (or none).
   const unplanned = checkProducts({ collection, exporters: [eyeEntry()], prerequisites: {}, diagnostics: false, preflight: false,
-    collectionSha256: sha(source) }).result;
+    collectionSha256: sha(source) });
   expect(() => verifyProductBuildResult(result, unplanned, join(dir, "dist"))).toThrow("does not match this collection snapshot");
   // build.json records the footprint of the plate the builder serialized.
   const record = JSON.parse(readFileSync(join(dir, "build", basename(result.products[0].package), "features", "eye-makeup", "build.json"), "utf8"));
@@ -186,7 +194,7 @@ test("PIPE-33: a plate without a recorded footprint is read from its mesh; a foo
   expect(calls[0]).toBe("serialize");
   expect(calls.filter(call => call === "serialize")).toHaveLength(2);
   const feature = result.products[0].features[0];
-  expect(feature.omissions.map(item => item.kind === "preset" && item.reason)).toEqual([OFF_PLATE_REASON]);
+  expect(result.omissions.map(item => item.kind === "preset" && item.reason)).toEqual([OFF_PLATE_REASON]);
   expect((feature.details.plateUv as { footprintSha256: string }).footprintSha256).toBe(plateReachInput(FOOTPRINT).sha256);
   // A manifest recording some other plate's footprint: the builder's own serialization disagrees, so nothing is built.
   const other = setup();

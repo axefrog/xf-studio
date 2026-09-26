@@ -10,7 +10,7 @@ import { readDdsChain } from "../src/features/eye-makeup/verify/dds-reader";
 import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/features/eye-makeup/verify/resource-inventory";
 import { componentId, sameJson } from "../src/features/eye-makeup/verify/resource-checks";
 import { errorStats, expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
-import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/features/eye-makeup/verify/verify-build";
+import { verifyBuild, verifyEyeMakeupBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/features/eye-makeup/verify/verify-build";
 import { oracleTest } from "./optional-oracles";
 // Test-only use of the plate cut and lift: they make a real single-chunk plate and its packaged form,
 // which the verifier's own decoder must accept (and reject when tampered).
@@ -644,3 +644,63 @@ test("plate-local window: stored row order, record window and texture space are 
   expectFailure(/was built on head UV, but its route and diagnostics need plate-window/, (_b, d) => { d.plan.presets[0].uvSpace = "head"; });
   expectFailure(/invalid diagnostic uvSpace/, (_b, d) => { (d.plan.presets[0] as any).diagnostics = { uvSpace: "window" }; });
 }, 30_000);
+
+// ---- The merged branch (PIPE-95): eye makeup beside another feature in one product archive ----
+
+/** Every regular file below `root` as the product verifier lists it: depot path, length and SHA-256. */
+function productFiles(root: string) {
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+    .flatMap(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]);
+  return walk(root).map(path => ({ path: path.slice(root.length + 1).split(/[\\/]/).join("/"), bytes: statSync(path).size,
+    sha256: sha(readFileSync(path)) })).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+}
+const LIPS_APP = "xfs/test/lips/xfs_lips.app", LIPS_CC = "xfs/test/lips/xfs_lips.inkcharcustomization";
+/** The merged declaration of eye makeup and a second feature, as the export host writes it (lists for several entries). */
+const mergedDeclaration = (p: typeof plan, eyes = true) => ["customizations:", "  female:",
+  ...(eyes ? [`    - ${p.customization.replaceAll("/", "\\")}`] : []), `    - ${LIPS_CC.replaceAll("/", "\\")}`, "resource:", "  scope:",
+  "    player_customization.app:", ...(eyes ? [`      - ${p.app.replaceAll("/", "\\")}`] : []), `      - ${LIPS_APP.replaceAll("/", "\\")}`, ""].join("\r\n");
+
+/**
+ * Run the real eye-makeup verifier on a product archive holding its resources and a second feature's: the unpacked
+ * tree is the build's tree plus the other feature's files; `features` says how many features the product holds.
+ */
+function runMerged(fixture: Fixture, options: { features?: number; xl?: string; tamper?: (unpacked: string) => void } = {}) {
+  const unpacked = join(fixture.build, "product-unpacked");
+  cpSync(join(fixture.build, "archive"), unpacked, { recursive: true });
+  for (const path of [LIPS_APP, LIPS_CC]) writeFile(join(unpacked, path), `lips ${path}`);
+  options.tamper?.(unpacked);
+  const xl = options.xl ?? mergedDeclaration(plan), calls: string[] = [];
+  const report = verifyEyeMakeupBuild({ work: fixture.build, staging: join(fixture.build, "archive"), workDir: join(fixture.build, "verify-merged"),
+    tools: fakeTools(fixture, {}, calls),
+    unpacked: { root: unpacked, files: productFiles(unpacked), archiveSha256: sha("product archive"), archiveBytes: 15, xl, xlSha256: sha(xl),
+      features: options.features ?? 2 } });
+  return { report, calls };
+}
+
+test("merged product: the real verifier checks only its own members and entries beside another feature's (PIPE-95)", () => {
+  const fixture = makeBuild();
+  try {
+    const { report, calls } = runMerged(fixture);
+    expect(report).toMatchObject({ presetCount: 2, unpackedFilesVerified: 10, archiveXlSha256: sha(mergedDeclaration(plan)) });
+    // Its own members are copied out of the product tree and converted there; the other feature's files never are.
+    const members = join(fixture.build, "verify-merged", "members");
+    expect(calls[0]).toBe(`serialize ${members}`);
+    expect(productFiles(members).map(file => file.path)).not.toContain(LIPS_APP);
+    expect(productFiles(members)).toHaveLength(10);
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+  const failing = (message: RegExp, options: Parameters<typeof runMerged>[1]) => {
+    const f = makeBuild();
+    try { expect(() => runMerged(f, options)).toThrow(message); } finally { rmSync(f.build, { recursive: true, force: true }); }
+  };
+  // Its entries must each be declared once in the merged declaration.
+  failing(/register the planned customization exactly once/, { xl: mergedDeclaration(plan, false) });
+  failing(/register the planned customization exactly once/, { xl: mergedDeclaration(plan).replace("  female:\r\n",
+    `  female:\r\n    - ${plan.customization.replaceAll("/", "\\")}\r\n`) });
+  failing(/list the planned app exactly once/, { xl: mergedDeclaration(plan).replace(`      - ${plan.app.replaceAll("/", "\\")}\r\n`, "") });
+  // Its members in the product archive must still be byte for byte what it generated, and all present.
+  failing(/differs from its generated payload/, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
+  failing(/member paths differ/, { tamper: out => rmSync(join(out, plan.app)) });
+  // The same product claimed to hold eye makeup alone: the declaration and the member count must be exactly its own.
+  failing(/exactly the planned customization|only the female list|exactly customizations/, { features: 1 });
+  failing(/Unpacked 12 files; expected 10/, { features: 1, xl: declaration(plan) });
+}, 60_000);

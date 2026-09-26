@@ -27,6 +27,7 @@
  * again next time instead of serving it as final (PIPE-53). The written record is what the browser's own reader makes of it
  * (`parseCharacterDetail`), so the host and the page share one rule set (PIPE-40).
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -46,6 +47,7 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot,
   type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
+import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
@@ -90,7 +92,7 @@ export type PrepareCharacterOptions = {
    */
   manifests?: { dir: string; key: (request: CharacterRequest) => string };
   /** Background work (a prefetch): WolvenKit runs below normal priority. */
-  lowPriority?: boolean;
+  lowPriority?: LowPriority;
 };
 /**
  * `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). `note`: one plain line about
@@ -354,44 +356,111 @@ type BuiltComponent = { component: RenderComponent; notes: string[]; textures: M
  * cache starts afresh (`reset`). Only what the tried choice changes is resolved and exported. Nothing here is written to disk; the
  * exporter's own cache and the content-addressed store already are. Entries are only added once complete, so a cancelled preparation
  * leaves nothing half-made.
+ *
+ * Each preparation or prefetch batch runs as a `CacheRun`, followed through its async work (`AsyncLocalStorage`): the cache records
+ * which run added each entry and which earlier runs' entries a run was served. A degraded run forgets only the entries it added, never
+ * one another run added meanwhile (PREV-102), and a run's manifest names the reads behind every entry it was served from memory, not
+ * only its own (PREV-103).
  */
 export class CharacterPreparationCache {
   /** The registry's installation this cache was derived from (its `depot` identifies it; the registry owns it). */
   installation: Installation | null = null;
   /** Resolved appearances by descriptor (part, option, app, definition) and the V's morphs. */
-  readonly appearances = new Map<string, ResolvedAppearance>();
-  readonly defaults = new Map<string, ResolvedParam[]>();
-  readonly identities = new Map<string, { name: string | null; priority: string | null }>();
-  readonly profiles = new Map<string, RenderProfile | null>();
-  readonly skinProfiles = new Map<string, RenderSkinProfile | null>();
-  readonly gradients = new Map<string, RenderGradient | null>();
-  readonly setups = new Map<string, { values: SetupValues; source: RenderSourceRef } | null>();
-  readonly layerTemplates = new Map<string, { values: TemplateValues; source: RenderSourceRef } | null>();
-  readonly gamma = new Map<string, boolean | null>();
+  readonly appearances = new RunMap<string, ResolvedAppearance>();
+  readonly defaults = new RunMap<string, ResolvedParam[]>();
+  readonly identities = new RunMap<string, { name: string | null; priority: string | null }>();
+  readonly profiles = new RunMap<string, RenderProfile | null>();
+  readonly skinProfiles = new RunMap<string, RenderSkinProfile | null>();
+  readonly gradients = new RunMap<string, RenderGradient | null>();
+  readonly setups = new RunMap<string, { values: SetupValues; source: RenderSourceRef } | null>();
+  readonly layerTemplates = new RunMap<string, { values: TemplateValues; source: RenderSourceRef } | null>();
+  readonly gamma = new RunMap<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
-  readonly geometry = new Map<string, { glb: string | null; complete: boolean; repair?: string | null }>();
-  readonly textures = new Map<string, { png: string }>();
-  readonly masks = new Map<string, { layers: string[] }>();
+  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null }>();
+  readonly textures = new RunMap<string, { png: string }>();
+  readonly masks = new RunMap<string, { layers: string[] }>();
   /** Served components by their plan (canonical JSON), within this installation. */
-  readonly components = new Map<string, BuiltComponent>();
+  readonly components = new RunMap<string, BuiltComponent>();
   /** The export tool that read these files (the record names it even when nothing new is exported). */
   toolLabel: string | undefined;
-  private maps(): Map<string, unknown>[] {
+  private maps(): RunMap<string, unknown>[] {
     return [this.appearances, this.defaults, this.identities, this.profiles, this.skinProfiles, this.gradients, this.setups,
-      this.layerTemplates, this.gamma, this.geometry, this.textures, this.masks, this.components] as Map<string, unknown>[];
+      this.layerTemplates, this.gamma, this.geometry, this.textures, this.masks, this.components] as RunMap<string, unknown>[];
   }
-  /** The keys held now, so a degraded preparation can forget what it added (`forget`). */
-  mark(): Set<string>[] { return this.maps().map(map => new Set(map.keys())); }
-  /** Forget every entry added since `mark` (a degraded preparation's results: nulls and parts made without inputs; PIPE-53). */
-  forget(mark: readonly Set<string>[]): void {
-    this.maps().forEach((map, i) => { for (const key of [...map.keys()]) if (!mark[i]!.has(key)) map.delete(key); });
+  /**
+   * Forget every entry `run` added that still holds what it added (a degraded preparation's results: nulls and parts made without
+   * inputs; PIPE-53). Entries another run added meanwhile stay (PREV-102).
+   */
+  forget(run: CacheRun): void {
+    const maps = new Set<unknown>(this.maps());
+    for (const { map, key, value } of run.added.splice(0)) if (maps.has(map)) map.forgetAdded(key, value);
   }
   /** Forget everything derived from an earlier installation. */
   reset(): void {
-    for (const map of [this.appearances, this.defaults, this.identities, this.profiles, this.skinProfiles, this.gradients, this.setups,
-      this.layerTemplates, this.gamma, this.geometry, this.textures, this.masks, this.components] as Map<string, unknown>[]) map.clear();
+    for (const map of this.maps()) map.clear();
     this.toolLabel = undefined;
     this.installation = null;
+  }
+}
+
+/**
+ * One preparation or prefetch batch using a `CharacterPreparationCache` (PREV-102, PREV-103): the entries it added (so a degraded run
+ * forgets only its own), the runs whose entries it was served, and what it read from the resource graph (`reads`).
+ */
+export class CacheRun {
+  readonly added: { map: RunMap<unknown, unknown>; key: unknown; value: unknown }[] = [];
+  readonly used = new Set<CacheRun>();
+  /** The resources this run read (its graph recording, plus its merged creator resource's files). */
+  readonly reads = new Set<string>();
+  /**
+   * The reads of every run whose entries this run was served from memory, and of the runs those were served from: what an entry this
+   * run didn't make itself depends on. This run's own reads are not included.
+   */
+  inherited(): Set<string> {
+    const out = new Set<string>(), seen = new Set<CacheRun>([this]), stack = [...this.used];
+    while (stack.length) {
+      const run = stack.pop()!;
+      if (seen.has(run)) continue;
+      seen.add(run);
+      for (const hash of run.reads) out.add(hash);
+      for (const next of run.used) if (!seen.has(next)) stack.push(next);
+    }
+    return out;
+  }
+}
+const cacheRuns = new AsyncLocalStorage<CacheRun>();
+/** Run `work` as `run`: every cache entry it adds or is served, through all the async work it starts, is attributed to `run`. */
+export const withCacheRun = <T>(run: CacheRun, work: () => Promise<T>): Promise<T> => cacheRuns.run(run, work);
+
+/** A `Map` that attributes each entry to the `CacheRun` that added it and records which runs another run was served from. */
+export class RunMap<K, V> extends Map<K, V> {
+  // Declared without an initializer: `Map`'s constructor may call `set` before field initializers run.
+  private origins: Map<K, CacheRun> | undefined;
+  override set(key: K, value: V): this {
+    const run = cacheRuns.getStore();
+    if (run && !super.has(key)) {
+      run.added.push({ map: this as RunMap<unknown, unknown>, key, value });
+      (this.origins ??= new Map()).set(key, run);
+    }
+    return super.set(key, value);
+  }
+  override get(key: K): V | undefined {
+    const value = super.get(key);
+    if (value !== undefined || super.has(key)) this.served(key);
+    return value;
+  }
+  override has(key: K): boolean {
+    const found = super.has(key);
+    if (found) this.served(key);
+    return found;
+  }
+  override delete(key: K): boolean { this.origins?.delete(key); return super.delete(key); }
+  override clear(): void { this.origins?.clear(); super.clear(); }
+  /** Forget `key` when it still holds `value` (what one run added). */
+  forgetAdded(key: K, value: V): void { if (super.has(key) && super.get(key) === value) this.delete(key); }
+  private served(key: K): void {
+    const run = cacheRuns.getStore(), origin = this.origins?.get(key);
+    if (run && origin && origin !== run) run.used.add(origin);
   }
 }
 
@@ -438,7 +507,7 @@ type GatherContext = {
   signal?: AbortSignal;
   log: (message: string) => void;
   /** Background work (a prefetch): WolvenKit runs at a lower priority. */
-  lowPriority?: boolean;
+  lowPriority?: LowPriority;
 };
 /** Where each fresh part's geometry, textures and masks come from, and the archives WolvenKit failed on. */
 type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<string, Located>; maskAt: Map<string, Located>;
@@ -639,12 +708,13 @@ const creatorReads = (cco: Awaited<ReturnType<typeof loadMergedCco>>): string[] 
 const fetcherTool = (installation: Installation) => (installation.fetcher as { tool?: string } | undefined)?.tool ?? "unknown";
 
 export async function prepareCharacterDetails(options: PrepareCharacterOptions): Promise<CharacterDetailResult> {
-  // What the preparation reads is recorded until it ends, however it ends.
+  // What the preparation reads is recorded until it ends, however it ends; the cache attributes what it adds and uses to this run.
   const recordings: { end(): void }[] = [];
-  try { return await prepareOnce(options, graph => { const recording = graph.beginReads(); recordings.push(recording); return recording; }); }
+  const run = new CacheRun();
+  try { return await withCacheRun(run, () => prepareOnce(options, graph => { const recording = graph.beginReads(); recordings.push(recording); return recording; }, run)); }
   finally { for (const recording of recordings) recording.end(); }
 }
-async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph: ResourceGraph) => { reads: Set<string> }): Promise<CharacterDetailResult> {
+async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph: ResourceGraph) => { reads: Set<string> }, run: CacheRun): Promise<CharacterDetailResult> {
   const { request, signal } = options;
   const log = options.log ?? (() => {});
   const cache = options.cache ?? new CharacterPreparationCache();
@@ -667,6 +737,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
   // The registry hands out a fresh view object per acquire (its own graph over the shared archives); the opened archives (`depot`)
   // are what identify one installation, and a reopened one has new ones.
+  cancelled();
   if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
   const { graph, summary } = installation;
@@ -677,7 +748,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     appearances: request.source === "save" ? request.appearances.length : 0, installation: summary });
   // What this preparation adds to the cache, and the fetcher's count of failures that may not repeat: if it grows, or WolvenKit fails
   // on an archive, the preparation is degraded and what it added is forgotten (PIPE-53).
-  const mark = cache.mark(), transientBefore = transientFailures(installation);
+  const transientBefore = transientFailures(installation);
   time("open");
   cancelled();
 
@@ -688,6 +759,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const recording = beginReads(graph);
   try { cco = await loadMergedCco(graph, request.bodyGender); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).message); }
+  for (const hash of creatorReads(cco)) run.reads.add(hash);
   // The V as stored (a save's descriptors) or the default V: what is shown when there are no choices, or they can't be interpreted.
   const plainV = (): CharacterInput => {
     if (request.source !== "default") return inputFromCharacterRequest(request);
@@ -999,11 +1071,13 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   time("write");
   const degraded = choicesFailed || toolFailures.size > 0 || transientFailures(installation) > transientBefore;
   if (degraded) {
-    cache.forget(mark);
+    cache.forget(run);
     log("Some files couldn't be read this time (WolvenKit or a resource failed in a way that may not repeat); the V will be prepared again next time.");
   }
+  // What it read, and what the entries it was served from memory were read from (PREV-103).
+  for (const hash of recording.reads) run.reads.add(hash);
   if (!degraded && options.manifests) writeChoiceManifest(options.manifests.dir, options.manifests.key(request),
-    manifestOf(graph, [...recording.reads, ...creatorReads(cco)], planExports(graph, cache, plan), fetcherTool(installation), xlIdentity(installation)));
+    manifestOf(graph, [...run.reads, ...run.inherited()], planExports(graph, cache, plan), fetcherTool(installation), xlIdentity(installation)));
   log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
   trace.event("character", "prepared", { record: recordName, degraded, note: choicesNote ?? null, timings, slots: record.slots,
@@ -1037,6 +1111,10 @@ export type WarmOutcome = { ready: boolean; note?: string };
  * what the batch added is forgotten (PIPE-53); the others' manifests are kept (`manifests`).
  */
 export async function warmCharacters(options: WarmOptions): Promise<WarmOutcome[]> {
+  const run = new CacheRun();
+  return withCacheRun(run, () => warmOnce(options, run));
+}
+async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcome[]> {
   const { requests, signal } = options;
   const log = options.log ?? (() => {});
   const cache = options.cache ?? new CharacterPreparationCache();
@@ -1046,13 +1124,16 @@ export async function warmCharacters(options: WarmOptions): Promise<WarmOutcome[
   let installation: Installation;
   try { installation = await open({ ...options.route, cacheDir: options.resolverCache, log }); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
+  // A batch stopped while the installation opened must not start the shared cache afresh under a person's own change (PREV-102).
+  cancelled();
   if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
   const { graph } = installation;
-  const mark = cache.mark(), transientBefore = transientFailures(installation);
+  const transientBefore = transientFailures(installation);
   const recording = graph.beginReads();
   try {
     const cco = await loadMergedCco(graph, requests[0]!.bodyGender);
+    for (const hash of creatorReads(cco)) run.reads.add(hash);
     cancelled();
     const inputs = await Promise.all(requests.map(async request => {
       if (request.choices?.length && options.derive) {
@@ -1076,13 +1157,16 @@ export async function warmCharacters(options: WarmOptions): Promise<WarmOutcome[
     }
     const gathered = await gatherParts({ graph, cache, exporter: options.exporter, gameRoot: options.route.gameRoot, storeRoot: options.storeRoot,
       signal, log, lowPriority: options.lowPriority }, [...fresh.values()]);
+    // Stopped while its reads finished (a person's own change started): nothing is forgotten and no manifest is written (PREV-102).
+    cancelled();
     if (gathered.toolLabel) cache.toolLabel ??= gathered.toolLabel;
     const degraded = gathered.toolFailures.size > 0 || transientFailures(installation) > transientBefore;
     if (degraded) {
-      cache.forget(mark);
+      cache.forget(run);
       log("Some files couldn't be read while preparing choices ahead (WolvenKit or a resource failed in a way that may not repeat); they are tried again later.");
     }
-    const reads = [...recording.reads, ...creatorReads(cco)], tool = fetcherTool(installation), xl = xlIdentity(installation);
+    for (const hash of recording.reads) run.reads.add(hash);
+    const reads = [...run.reads, ...run.inherited()], tool = fetcherTool(installation), xl = xlIdentity(installation);
     return requests.map((request, index) => {
       const plan = plans[index];
       if (!plan) return { ready: false, note: "The choice couldn't be interpreted." };

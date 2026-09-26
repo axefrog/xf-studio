@@ -7,7 +7,7 @@ import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache
 import { choiceKey, manifestHolds, readChoiceManifest, xlIdentity } from "./choice-manifest";
 import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
 import { clearPrepared, evictPrepared, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
-import { backgroundExtraction, foregroundExtraction, type Installation, type InstallationOptions } from "./resolver-host";
+import { backgroundExtraction, backgroundPriority, foregroundExtraction, type Installation, type InstallationOptions } from "./resolver-host";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
@@ -87,6 +87,16 @@ export type CharacterDetailHostOptions = {
 };
 /** How often, at most, the prepared files are checked against their budget. */
 const EVICT_INTERVAL_MS = 60_000;
+/** `work`'s answer, or a cancellation as soon as `signal` aborts (`work` itself keeps running; its caller tracks it). */
+function untilStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const stopped = () => reject(new CharacterDetailError("character_cancelled", "Preparing choices ahead was stopped."));
+    if (signal.aborted) { stopped(); return; }
+    signal.addEventListener("abort", stopped, { once: true });
+    work.then(value => { signal.removeEventListener("abort", stopped); resolve(value); },
+      error => { signal.removeEventListener("abort", stopped); reject(error); });
+  });
+}
 
 const NEEDS_SETUP = "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body appear once your game folder and WolvenKit are set up.";
 const PREPARING = "Preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body…";
@@ -125,6 +135,12 @@ export class CharacterDetailHost {
   readonly prefetch: ChoicePrefetcher;
   private evictedAt = 0;
   private evicting: Promise<void> | null = null;
+  /**
+   * Prefetch batches still settling, each as a promise that never rejects. A stopped batch answers the prefetcher at once, so a
+   * person's own change isn't held up by reads already in WolvenKit; the batch itself runs to its end in the background (it no longer
+   * forgets cache entries or writes manifests once stopped), and Clear waits for it before removing files (PREV-102).
+   */
+  private readonly warming = new Set<Promise<void>>();
   constructor(private readonly options: CharacterDetailHostOptions) {
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
       resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
@@ -210,8 +226,11 @@ export class CharacterDetailHost {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
         }, log: this.options.log, trace: this.options.trace }));
     };
-    // Start now, or once the cancelled run (still settling on the shared cache) has stopped.
-    const begun = this.running ? this.running.promise.then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
+    // Start now, or once the cancelled run (still settling on the shared cache) and a stopped prefetch batch have let go (PREV-102).
+    const waits: Promise<unknown>[] = [];
+    if (this.running) waits.push(this.running.promise);
+    if (this.prefetch.preparing) waits.push(this.prefetch.idle());
+    const begun = waits.length ? Promise.all(waits).then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
     const promise = begun
       .then(result => {
         this.set({ key, phase: "ready", message: result.note ?? "", progress: null, record: result.recordFile });
@@ -291,10 +310,14 @@ export class CharacterDetailHost {
     const fingerprint = installationFingerprint(settings);
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
     const cache = this.shared.cache;
-    return backgroundExtraction(this.resolverCache, () => (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
+    // Each launch decides its priority as it starts: below normal only while no person's own change is being prepared (PIPE-96).
+    const work = backgroundExtraction(this.resolverCache, () => (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
       open: options => this.backgroundInstallation(options),
-      derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal, lowPriority: true,
-      manifests: this.manifests(route), log: this.options.log }));
+      derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal,
+      lowPriority: backgroundPriority(this.resolverCache), manifests: this.manifests(route), log: this.options.log }));
+    const settled: Promise<void> = work.then(() => {}, () => {}).finally(() => { this.warming.delete(settled); });
+    this.warming.add(settled);
+    return untilStopped(work, signal);
   }
   /** The opened installation for background work, without the check a person's request makes (opened when it isn't yet). */
   private async backgroundInstallation(options: InstallationOptions): Promise<Installation> {
@@ -331,11 +354,16 @@ export class CharacterDetailHost {
     this.prefetch.cancel();
     this.running?.controller.abort();
     await this.settled().catch(() => {});
+    // A stopped prefetch batch lets go of the cache and finishes its reads before anything is removed (PREV-102).
+    await this.prefetch.idle();
+    while (this.warming.size) await Promise.all([...this.warming]);
     await this.evicting;
     const result = await clearPrepared(this.preparedRoots);
     this.shared = null;
     this.states.clear();
     this.degraded.clear();
+    // The files are gone, so preparing ahead may fill the budget again this session (PREV-104).
+    this.prefetch.resetBudget();
     return result;
   }
   async settled(): Promise<void> { await this.running?.promise; }

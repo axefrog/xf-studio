@@ -322,7 +322,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       const manifest: LocalPackageManifest2 = {
         schema: LOCAL_PACKAGE_2, productId: product.id, modName: product.modName, nameSource: product.nameSource, archive: product.archive,
         collectionId: planned.result.collectionId, collectionSha256: sourceHash, originalPresetCount: planned.result.originalPresetCount,
-        omissions: planned.result.omissions, requirements: productCheck.requirements,
+        // Only this product's own omissions (PIPE-88); the result lists the collection's once.
+        omissions: productCheck.omissions, requirements: productCheck.requirements,
         features: item.outcome.features.map(({ outcome: feature }, i) => ({
           feature: feature.check.feature, exporter: feature.check.exporter, exporterVersion: feature.check.exporterVersion,
           namespace: feature.check.namespace, brand: feature.check.brand, selectorLabel: feature.check.selectorLabel,
@@ -337,7 +338,10 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       products.push({ ...productCheck, package: final, manifest: join(final, "manifest.json"), archiveSha256: item.archiveSha256,
         xlSha256: item.xlSha256, verifiedUnpackedFiles: item.unpacked, installed: false, gameRenderingVerified: false });
     }
-    for (const { staging, final } of staged) renameSync(staging, final);
+    // All or nothing (PIPE-92): a product that can't be moved into place takes back the ones already moved.
+    const moved: string[] = [];
+    try { for (const { staging, final } of staged) { renameSync(staging, final); moved.push(final); } }
+    catch (error) { for (const final of moved) rmSync(final, { recursive: true, force: true }); throw error; }
   } finally { for (const { staging } of staged) if (existsSync(staging)) rmSync(staging, { recursive: true, force: true }); }
   const { schema: _schema, ready: _ready, products: _products, ...common } = planned.result;
   return { ...common, schema: PACKAGE_BUILD_2, products, installed: false, gameRenderingVerified: false };

@@ -2,7 +2,8 @@ import { parseExportDiagnostics } from "./export-diagnostics";
 import { canonicalFinish, finishLabel, type Finish } from "./engines/layered-makeup/finish";
 import { layerExport, planPresetExport, type ExportAdapterId } from "./engines/layered-makeup/finish-export";
 import { NEWER_LOOK_REASON, NO_EYE_MAKEUP_REASON, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
-import { packagedLookCount, type ExportExperimental, type ExportOmission, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
+import { NOTHING_PACKAGED_REASON, packagedLookCount, resultOmissions, type ExportExperimental, type ExportOmission, type PackageBuildResult,
+  type PackageCheckResult } from "./platform/api";
 import type { PackagePresetIdentity } from "./package-action";
 import { plateUvRecord, presetReachesPlate, type PlateReachInput } from "./plate-reach";
 import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
@@ -29,12 +30,19 @@ export type PackageExperimental = { presetId: string; presetName: string; layerI
 
 const label = (finish: Finish) => { const name = finishLabel(finish); return name[0].toUpperCase() + name.slice(1); };
 
-export function describePackageOmissions(omissions: readonly ExportOmission[]): string {
+/**
+ * Omissions in plain words. Each entry is an omission, or one with the `label` of the feature it belongs to (from
+ * `resultOmissions`): a labelled layer names its feature, and a labelled `preset` is that feature's part of a look
+ * another feature packages, not a whole look (PIPE-88).
+ */
+export function describePackageOmissions(omissions: readonly (ExportOmission | { omission: ExportOmission; label?: string })[]): string {
   if (!omissions.length) return "";
-  return ` Partial export: ${omissions.map(item => item.kind === "layer"
-    ? `omitted layer “${item.layerName}” (${label(canonicalFinish(item.finish as Finish))}) from preset “${item.presetName}”`
+  return ` Partial export: ${omissions.map(entry => "omission" in entry ? entry : { omission: entry, label: undefined }).map(({ omission: item, label: owner }) => item.kind === "layer"
+    ? `omitted ${owner ? `${owner.toLowerCase()} ` : ""}layer “${item.layerName}” (${label(canonicalFinish(item.finish as Finish))}) from preset “${item.presetName}”`
     : item.kind === "part" ? `left out the ${item.feature} part of preset “${item.presetName}”, which this mod can't hold yet`
     : item.kind === "feature" ? `left out ${item.label.toLowerCase()}: ${item.reason.replace(/^No mod files can be made: /, "")}`
+    : owner ? `left out the ${owner.toLowerCase()} of preset “${item.presetName}”: ${item.reason[0].toLowerCase()}${item.reason.slice(1).replace(/\.$/, "")}`
+    : item.reason === NOTHING_PACKAGED_REASON ? `omitted whole preset “${item.presetName}” because nothing in it can be made into mod files yet`
     : item.reason === OFF_PLATE_REASON ? `omitted whole preset “${item.presetName}” because its makeup doesn't reach the eye plate`
     : item.reason === NO_EYE_MAKEUP_REASON ? `omitted whole preset “${item.presetName}” because it has no eye makeup`
     : item.reason === NEWER_LOOK_REASON ? `omitted whole preset “${item.presetName}” because it was made with a newer version of XF Studio`
@@ -47,9 +55,8 @@ export function describePackageExperimental(experimental: readonly ExportExperim
   return ` Experimental finishes included (${finishes.join(", ")}): built from the game's own decal materials but not yet confirmed in game.`;
 }
 
-/** Every omission of a result: the parts no exporter packages, then each product's features' own. */
-const allOmissions = (result: Pick<PackageCheckResult, "omissions" | "products">) =>
-  [...result.omissions, ...result.products.flatMap(product => product.features.flatMap(feature => feature.omissions))];
+/** Every omission of a result once: the whole looks, parts and features the host decided, then each feature's own, labelled. */
+const allOmissions = resultOmissions;
 const allExperimental = (result: Pick<PackageCheckResult, "products">) =>
   result.products.flatMap(product => product.features.flatMap(feature => feature.experimental));
 const mods = (products: readonly { modName: string }[]) => products.length === 1 ? products[0].modName

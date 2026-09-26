@@ -22,11 +22,13 @@ export class NativeDecompressError extends Error { override name = "NativeDecomp
  * - `not-verified`: the root class is outside the verified set;
  * - `unsupported`, `malformed`, `decompress`, `over-budget`: the typed refusals above;
  * - `io`: the file system failed (missing, locked, replaced mid-read);
+ * - `unavailable`: the decoder itself could not start (a worker that failed or timed out while starting); it answers this without
+ *   retrying until its restart delay passes, or for the rest of the session after repeated failures;
  * - `internal`: anything else, i.e. a bug in the reader (TypeError, a plain RangeError, a stack overflow).
  */
-export type NativeFailureKind = "not-indexed" | "not-verified" | "unsupported" | "malformed" | "decompress" | "over-budget" | "internal" | "io";
+export type NativeFailureKind = "not-indexed" | "not-verified" | "unsupported" | "malformed" | "decompress" | "over-budget" | "internal" | "io" | "unavailable";
 
-export const NATIVE_FAILURE_KINDS: readonly NativeFailureKind[] = ["not-indexed", "not-verified", "unsupported", "malformed", "decompress", "over-budget", "internal", "io"];
+export const NATIVE_FAILURE_KINDS: readonly NativeFailureKind[] = ["not-indexed", "not-verified", "unsupported", "malformed", "decompress", "over-budget", "internal", "io", "unavailable"];
 
 /** The failure kind of an error thrown while reading or decoding a resource. */
 export function classifyNativeFailure(error: unknown): NativeFailureKind {

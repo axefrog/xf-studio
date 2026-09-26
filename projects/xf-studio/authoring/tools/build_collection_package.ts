@@ -81,6 +81,8 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   if (machine) console.error("XFS_PACKAGE_ERROR=" + JSON.stringify({ code, message,
     ...(error instanceof PrerequisiteStale ? { prerequisite: error.prerequisite } : {}) }));
-  console.error(`Package build failed: ${message}\nNo package was installed or promoted.`);
+  // A refusal's technical detail (a namespace, a depot path) goes to this log, which the host keeps; never to the page (PIPE-93).
+  const detail = typeof (error as { detail?: unknown })?.detail === "string" ? `\nDetail: ${(error as { detail: string }).detail}` : "";
+  console.error(`Package build failed: ${message}${detail}\nNo package was installed or promoted.`);
   process.exitCode = 1;
 }

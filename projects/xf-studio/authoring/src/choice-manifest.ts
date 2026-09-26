@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MountedArchive } from "./archive-precedence";
 import type { CharacterRequest } from "./character-detail-request";
-import { refFromHash, refFromPath } from "./depot-path";
+import { isDecimalHash, refFromHash, refFromPath } from "./depot-path";
 import { writeFileAtomic } from "./derived-cache";
 import { canonicalJson } from "./eye-plate-recipe";
 import { archiveExportSource, type ExportKind, type GameAssetExporter } from "./game-asset-export";
@@ -49,13 +49,33 @@ export function xlIdentity(installation: Pick<Installation, "watch">): string {
   return createHash("sha256").update(files.join("\n")).digest("hex").slice(0, 32);
 }
 
+const EXPORT_KINDS = new Set<string>(["geometry", "textures", "masks"]);
+const text = (value: unknown, max = 4096): value is string => typeof value === "string" && value.length > 0 && value.length <= max;
+/**
+ * A manifest as written by `writeChoiceManifest`, or null: every entry is checked on read (PREV-101), so a damaged or hand-edited file
+ * makes its choice "not prepared" instead of throwing later in `manifestProblem` (`refFromHash`, `refFromPath`).
+ */
+export function parseChoiceManifest(value: unknown): ChoiceManifest | null {
+  const manifest = value as Partial<ChoiceManifest> | null;
+  if (!manifest || typeof manifest !== "object" || manifest.schema !== CHOICE_MANIFEST_SCHEMA || !text(manifest.tool) || !text(manifest.xl)
+    || !Array.isArray(manifest.reads) || !Array.isArray(manifest.exports)) return null;
+  for (const read of manifest.reads as unknown[]) {
+    if (!Array.isArray(read) || read.length !== 3) return null;
+    const [hash, entry, archive] = read as unknown[];
+    if (typeof hash !== "string" || !isDecimalHash(hash) || typeof entry !== "string" || !isDecimalHash(entry)) return null;
+    if (archive !== null && !text(archive)) return null;
+  }
+  for (const item of manifest.exports as unknown[]) {
+    if (!Array.isArray(item) || item.length !== 3) return null;
+    const [kind, path, archive] = item as unknown[];
+    if (typeof kind !== "string" || !EXPORT_KINDS.has(kind) || !text(path, 1024) || !text(archive)) return null;
+  }
+  return manifest as ChoiceManifest;
+}
 export function readChoiceManifest(dir: string, key: string): ChoiceManifest | null {
   const file = join(dir, `${key}.json`);
   if (!existsSync(file)) return null;
-  try {
-    const value = JSON.parse(readFileSync(file, "utf8")) as ChoiceManifest;
-    return value?.schema === CHOICE_MANIFEST_SCHEMA && Array.isArray(value.reads) && Array.isArray(value.exports) ? value : null;
-  } catch { return null; }
+  try { return parseChoiceManifest(JSON.parse(readFileSync(file, "utf8"))); } catch { return null; }
 }
 export function writeChoiceManifest(dir: string, key: string, manifest: ChoiceManifest): void {
   try { mkdirSync(dir, { recursive: true }); writeFileAtomic(join(dir, `${key}.json`), JSON.stringify(manifest)); }

@@ -1,12 +1,14 @@
 // NATIVE-11: the game's Oodle library is loaded only when its bytes are on the known list or carry a valid CD PROJEKT S.A.
-// Authenticode signature, and the file is held against changes from the check until it is loaded. The Windows-only checks use a
-// junk file and a system binary; the real library is checked opt-in (XFS_RESOLVER_GAME_ROOT).
+// Authenticode signature, and the file is held against changes from the check until it is loaded. NATIVE-21: the bytes hashed are
+// read through the held handle and the library is loaded by the handle's final path. NATIVE-22: `openGameOodle` checks a signature
+// without blocking the event loop. The Windows-only checks use a junk file and a system binary; the real library is checked opt-in
+// (XFS_RESOLVER_GAME_ROOT).
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { authenticodeSignature, GAME_OODLE_LIBRARY, holdFile, isPublisherSignature, KNOWN_OODLE_SHA256, loadGameOodle, OodleUnavailableError, subjectField } from "../src/native/oodle";
+import { dirname, join, resolve } from "node:path";
+import { authenticodeSignature, authenticodeSignatureSync, GAME_OODLE_LIBRARY, holdFile, isPublisherSignature, KNOWN_OODLE_SHA256, loadGameOodle, openGameOodle, OodleUnavailableError, subjectField } from "../src/native/oodle";
 import { oracleTest } from "./optional-oracles";
 
 const roots: string[] = [];
@@ -46,35 +48,107 @@ onWindows("an unsigned library is refused before it is loaded, and a verifier se
   expect(() => loadGameOodle(root, { verify: () => ({ trustedBy: "test" }) })).toThrow("could not be loaded");
 }, 60_000);
 
-onWindows("a system binary signed by someone else is not the game's publisher", () => {
+onWindows("a system binary signed by someone else is not the game's publisher", async () => {
   const notepad = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "notepad.exe");
-  const verdict = authenticodeSignature(notepad);
+  const verdict = await authenticodeSignature(notepad);
   expect(verdict.status).toBe("Valid");
   expect(verdict.sha256.toLowerCase()).toBe(createHash("sha256").update(readFileSync(notepad)).digest("hex"));
   expect(isPublisherSignature(verdict, verdict.sha256)).toBe(false);
+  expect(authenticodeSignatureSync(notepad)).toEqual(verdict);
 }, 60_000);
 
-onWindows("while held for checking, the library cannot be renamed, replaced or deleted", () => {
+onWindows("while held for checking, the library cannot be renamed, replaced or deleted, nor can its folders", () => {
   const { dll } = fakeGame(new Uint8Array([1, 2, 3]));
-  const release = holdFile(import.meta.require("bun:ffi"), dll);
+  const held = holdFile(import.meta.require("bun:ffi"), dll);
   try {
     expect(readFileSync(dll)).toEqual(Buffer.from([1, 2, 3]));
+    expect(held.read(1024)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(() => held.read(2)).toThrow(OodleUnavailableError);
     expect(() => renameSync(dll, `${dll}.moved`)).toThrow();
     expect(() => writeFileSync(dll, new Uint8Array([9]))).toThrow();
     expect(() => unlinkSync(dll)).toThrow();
-  } finally { release(); }
+    expect(() => renameSync(dirname(dll), `${dirname(dll)}.moved`)).toThrow();
+    expect(() => renameSync(dirname(dirname(dll)), `${dirname(dirname(dll))}.moved`)).toThrow();
+  } finally { held.release(); }
   renameSync(dll, `${dll}.moved`);
   expect(existsSync(`${dll}.moved`)).toBe(true);
 });
 
+/** A game folder whose `bin` is a junction to `real/bin`, and a second library under `other/bin` to repoint it at. */
+function junctionGame(): { root: string; real: string; repoint: () => void } {
+  const base = mkdtempSync(join(tmpdir(), "xfs-oodle-junction-")); roots.push(base);
+  const library = (folder: string, text: string) => {
+    const path = join(base, folder, ...GAME_OODLE_LIBRARY);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `MZ ${text}`);
+    return path;
+  };
+  const real = library("real", "checked");
+  library("other", "swapped");
+  const root = join(base, "game");
+  mkdirSync(root);
+  symlinkSync(join(base, "real", "bin"), join(root, "bin"), "junction");
+  return { root, real, repoint: () => { rmdirSync(join(root, "bin")); symlinkSync(join(base, "other", "bin"), join(root, "bin"), "junction"); } };
+}
+
+onWindows("NATIVE-21: the library is hashed through the held handle and loaded by its final path, so a repointed junction swaps nothing", () => {
+  const first = junctionGame();
+  const held = holdFile(import.meta.require("bun:ffi"), join(first.root, ...GAME_OODLE_LIBRARY));
+  try {
+    expect(held.finalPath.toLowerCase()).toBe(first.real.toLowerCase());
+    first.repoint();
+    expect(readFileSync(join(first.root, ...GAME_OODLE_LIBRARY), "utf8")).toBe("MZ swapped");
+    expect(new TextDecoder().decode(held.read(1024))).toBe("MZ checked");
+  } finally { held.release(); }
+
+  // The junction is repointed while the verdict is made: the verifier saw the final path and the checked bytes' hash, and the
+  // load (which fails, the bytes being no library) was of the checked file, never the swapped one.
+  const second = junctionGame();
+  let seen = { path: "", sha256: "" };
+  let failure: Error | null = null;
+  try { loadGameOodle(second.root, { verify: (path, sha256) => { seen = { path, sha256 }; second.repoint(); return { trustedBy: "test" }; } }); }
+  catch (error) { failure = error as Error; }
+  expect(seen.path.toLowerCase()).toBe(second.real.toLowerCase());
+  expect(seen.sha256).toBe(createHash("sha256").update("MZ checked").digest("hex"));
+  expect(failure).toBeInstanceOf(OodleUnavailableError);
+  expect(failure!.message).toContain("could not be loaded");
+  expect(failure!.message.toLowerCase()).toContain(second.real.toLowerCase());
+});
+
+onWindows("NATIVE-22: openGameOodle checks an unknown library's signature without blocking the event loop, and holds the file meanwhile", async () => {
+  const junk = new TextEncoder().encode("MZ not really a library");
+  const { root, dll } = fakeGame(junk);
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 5);
+  try {
+    // PowerShell takes most of a second; the interval keeps running while it does.
+    await expect(openGameOodle(root)).rejects.toThrow(`not signed by CD PROJEKT S.A.`);
+    expect(ticks).toBeGreaterThan(3);
+    // The blocking twin, for tools, holds the loop for the whole check.
+    ticks = 0;
+    expect(() => loadGameOodle(root)).toThrow(`not signed by CD PROJEKT S.A.`);
+    expect(ticks).toBe(0);
+  } finally { clearInterval(timer); }
+  // While an asynchronous verdict is awaited, the bytes it judges cannot change.
+  let seen = "";
+  await expect(openGameOodle(root, { verify: async (_, sha256) => {
+    seen = sha256;
+    await Bun.sleep(20);
+    expect(() => writeFileSync(dll, new Uint8Array([9]))).toThrow();
+    return { refused: "no" };
+  } })).rejects.toThrow("no");
+  expect(seen).toBe(createHash("sha256").update(junk).digest("hex"));
+  expect(readFileSync(dll)).toEqual(Buffer.from(junk));
+}, 60_000);
+
 const game = process.env.XFS_RESOLVER_GAME_ROOT ? resolve(process.env.XFS_RESOLVER_GAME_ROOT) : "";
 const hasGame = windows && !!game && existsSync(join(game, ...GAME_OODLE_LIBRARY));
-oracleTest(hasGame, "the Oodle signer check on the real library needs XFS_RESOLVER_GAME_ROOT (read-only).")("the installed game's library is trusted by hash, and its signature says CD PROJEKT S.A.", () => {
-  const oodle = loadGameOodle(game);
+oracleTest(hasGame, "the Oodle signer check on the real library needs XFS_RESOLVER_GAME_ROOT (read-only).")("the installed game's library is trusted by hash, and its signature says CD PROJEKT S.A.", async () => {
+  const oodle = await openGameOodle(game);
   try {
     // A game patch that ships a new library is trusted through its signature until its hash is added to the list.
     expect(oodle.trustedBy).toBe(Object.hasOwn(KNOWN_OODLE_SHA256, oodle.sha256) ? "known-hash" : "authenticode");
-    expect(isPublisherSignature(authenticodeSignature(oodle.path), oodle.sha256)).toBe(true);
+    expect(isPublisherSignature(await authenticodeSignature(oodle.path), oodle.sha256)).toBe(true);
     expect(oodle.identity).toBe(`oodle:${oodle.sha256.slice(0, 16)}`);
   } finally { oodle.close(); }
 }, 60_000);

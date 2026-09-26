@@ -20,9 +20,16 @@ export interface ProcessTreeOptions {
   readonly env?: Record<string, string | undefined>;
   /** Characters of stdout and of stderr to keep (the tail). */
   readonly keep?: number;
-  /** Run the process below normal priority (background work). */
-  readonly lowPriority?: boolean;
+  /**
+   * Run the process below normal priority (background work). A function is asked when the process starts, not when the work was
+   * queued, so a launch that a person's own change now waits on starts at normal priority (PIPE-96).
+   */
+  readonly lowPriority?: LowPriority;
 }
+/** Whether background work runs below normal priority: fixed, or decided when each process starts (PIPE-96). */
+export type LowPriority = boolean | (() => boolean);
+/** A `LowPriority` decided now. */
+export const lowPriorityNow = (value: LowPriority | undefined): boolean => typeof value === "function" ? value() : !!value;
 
 /** Stop a child and every process it started: `taskkill /T` on Windows, the process group elsewhere. */
 function stopTree(child: ReturnType<typeof spawn>): void {
@@ -52,7 +59,7 @@ export function runProcessTree(command: string, args: readonly string[], options
     if (options.signal?.aborted) { done({ exitCode: null, stdout: "", stderr: "", stopped: "cancelled" }); return; }
     const child = spawn(command, [...args], { cwd: options.cwd, env: options.env, windowsHide: true,
       detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
-    if (options.lowPriority && child.pid) {
+    if (lowPriorityNow(options.lowPriority) && child.pid) {
       try { setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL); lowPriority.add(child.pid); } catch { /* Advisory. */ }
     }
     let stdout = "", stderr = "", stopped: ProcessStop | null = null, settled = false;

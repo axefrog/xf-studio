@@ -6,8 +6,10 @@ import { CharacterDetailHost, characterRequestKey, installationFingerprint, type
 import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
 import type { DetailLimit, SlotLimits } from "../src/detail-limits";
 import type { DetailSlot } from "../src/render-detail";
-import { CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes, skinProfileValues,
-  storeScaledTexture, templateIdentity, textureIsGamma } from "../src/character-detail-service";
+import { CacheRun, CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes,
+  skinProfileValues, storeScaledTexture, templateIdentity, textureIsGamma, withCacheRun } from "../src/character-detail-service";
+import { DEFAULT_CHARACTER } from "../src/character-detail-request";
+import { readChoiceManifest } from "../src/choice-manifest";
 import { depotHash } from "../src/depot-path";
 import { decodePng, encodePng } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
@@ -564,5 +566,105 @@ describe("the body in the character record", () => {
     expect(storeScaledTexture(dir, source, { width: 8, height: 4 }, 2)).toEqual(scaled);
     // An odd edge repeats its last texel.
     expect(halveImage({ width: 3, height: 1, data: new Uint8Array([0, 0, 0, 0, 100, 100, 100, 100, 50, 50, 50, 50]) })).toEqual({ width: 1, height: 1, data: new Uint8Array([50, 50, 50, 50]) });
+  });
+});
+
+// ---- Preparations and prefetch batches sharing one cache (PREV-102, PREV-103, PREV-104) ----
+
+describe("the shared preparation cache's runs", () => {
+  test("a degraded run forgets only what it added, never an entry another run added meanwhile (PREV-102)", async () => {
+    const cache = new CharacterPreparationCache(), a = new CacheRun(), b = new CacheRun();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const first = withCacheRun(a, async () => { cache.gamma.set("a-before", true); await gate; cache.gamma.set("a-after", false); });
+    // Another run adds its own entry while the first is still going, and uses one of the first run's.
+    await withCacheRun(b, async () => { await Promise.resolve(); cache.gamma.set("b", true); expect(cache.gamma.has("a-before")).toBe(true); });
+    release();
+    await first;
+    cache.forget(a);
+    expect([...cache.gamma.keys()]).toEqual(["b"]);
+    expect(b.used.has(a)).toBe(true);
+    // An entry replaced since is not the run's any more, so it stays.
+    const c = new CacheRun();
+    await withCacheRun(c, async () => { cache.textures.set("t", { png: "c.png" }); });
+    cache.textures.set("t", { png: "other.png" });
+    cache.forget(c);
+    expect(cache.textures.get("t")).toEqual({ png: "other.png" });
+  });
+
+  test("a manifest names the reads behind entries served from the shared cache, not only its own (PREV-103)", async () => {
+    const dir = join(root, "manifests-103");
+    const fixture = detailFixture();
+    const run = (request: typeof REQUEST_A, installation: ReturnType<typeof fixture.installation>, cache: CharacterPreparationCache, key: string) =>
+      prepareCharacterDetails({ request, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"), exporter: fakeExporter(),
+        open: () => installation, cache, manifests: { dir, key: () => key } });
+    const shared = fixture.installation(), cache = new CharacterPreparationCache();
+    await run(REQUEST_A, shared, cache, "a");
+    // V B shares V A's lashes: served from the cache, so B's own graph reads miss their resources.
+    await run(REQUEST_B, shared, cache, "b-shared");
+    await run(REQUEST_B, fixture.installation(), new CharacterPreparationCache(), "b-fresh");
+    const reads = (key: string) => new Set(readChoiceManifest(dir, key)!.reads.map(read => read[0]));
+    const fresh = reads("b-fresh"), fromShared = reads("b-shared");
+    expect(fresh.size).toBeGreaterThan(0);
+    expect([...fresh].filter(hash => !fromShared.has(hash))).toEqual([]);
+    expect(fromShared.has(depotHash(P.lashApp))).toBe(true);
+  });
+});
+
+describe("the host's prefetch beside a person's change and Clear", () => {
+  const settings: CharacterDetailSettings = { gameRoot: join(root, "game-prefetch"), launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
+    manualModRoot: null, wolvenKitCli: process.execPath };
+  /** A creator catalogue offering one option with four choices (no game files read). */
+  const creator = { ensure: async () => ({ source: { index: { byOptionId: () => ({ part: "head", name: "hair",
+    choices: [{ key: "c0" }, { key: "c1" }, { key: "c2" }, { key: "c3" }] }) } } }) } as never;
+  const hostWith = (cacheRoot: string, options: Partial<ConstructorParameters<typeof CharacterDetailHost>[0]>) => {
+    const host = new CharacterDetailHost({ cacheRoot, settings: () => settings, exporter: () => fakeExporter(), creator, ...options });
+    // Every choice is unknown to the manifests (no installation is opened for the check).
+    Object.assign(host, { readiness: async () => () => false });
+    return host;
+  };
+  const until = async (done: () => boolean) => { for (let i = 0; i < 200 && !done(); i++) await new Promise(resolve => setTimeout(resolve, 5)); };
+
+  test("a stopped batch lets a person's change start at once, and Clear waits until the batch has finished (PREV-102)", async () => {
+    const signals: AbortSignal[] = [];
+    let finish!: () => void;
+    const prepared: { batchStopped: boolean; preparing: boolean }[] = [];
+    const host = hostWith(join(root, "host-prefetch-102"), {
+      // Like reads already in WolvenKit: the batch notices its stop only when they finish.
+      warm: options => { signals.push(options.signal!); return new Promise(resolve => { finish = () => resolve(options.requests.map(() => ({ ready: false }))); }); },
+      prepare: async () => {
+        prepared.push({ batchStopped: signals[0]?.aborted ?? false, preparing: host.prefetch.preparing });
+        return { record: {} as never, recordFile: `${"c".repeat(64)}.json`, degraded: false };
+      } });
+    host.prefetchRow({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1] });
+    await until(() => signals.length > 0);
+    expect(signals).toHaveLength(1);
+    host.request(REQUEST_A);
+    await host.settled();
+    // The person's change ran without waiting for the batch's reads, and only after the prefetcher let go of the stopped batch.
+    expect(prepared).toEqual([{ batchStopped: true, preparing: false }]);
+    let cleared = false;
+    const clearing = host.clearPreparedFiles().then(() => { cleared = true; });
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(cleared).toBe(false);
+    finish();
+    await clearing;
+    expect(cleared).toBe(true);
+  });
+
+  test("Clear lets preparing ahead fill the budget again this session (PREV-104)", async () => {
+    const cacheRoot = join(root, "host-prefetch-104");
+    const host = hostWith(cacheRoot, { prefetchLimits: { batch: 4, timeMs: 60_000, bytes: 10 },
+      warm: async options => {
+        mkdirSync(join(cacheRoot, "exports"), { recursive: true });
+        writeFileSync(join(cacheRoot, "exports", `${options.requests.length}-${Date.now()}.bin`), Buffer.alloc(64));
+        return options.requests.map(() => ({ ready: true }));
+      } });
+    host.prefetchRow({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1] });
+    await until(() => host.prefetchRow({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1] }).stopped === "disk");
+    expect(host.prefetchRow({ base: DEFAULT_CHARACTER, option: "head/eyes", positions: [0] }).stopped).toBe("disk");
+    await host.clearPreparedFiles();
+    expect(host.prefetchRow({ base: DEFAULT_CHARACTER, option: "head/brows", positions: [0] }).stopped).toBeNull();
+    host.stopPrefetch();
   });
 });
