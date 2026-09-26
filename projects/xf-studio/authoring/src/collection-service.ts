@@ -56,7 +56,9 @@ export type CollectionServiceSummary = { busy: boolean; progress?: CollectionPro
 export type DraftPersistence = { collectionId: string; savedRevision?: number;
   baseline: "none" | "unknown" | "known"; dirty?: boolean; dirtyPresets: string[]; structureDirty?: boolean };
 /** A saved revision's content: each look's name, its parts as last read and their canonical text. */
-type Baseline = { name: string; order: string[]; presets: Map<string, { name: string; raw: string; canonical: string }> };
+type Baseline = { name: string; order: string[]; presets: Map<string, { name: string; raw: string; canonical: string }>;
+  /** The saved package plan's JSON (`null`: the default). */
+  plan: string };
 /** Accepted requests carry their `requestId`; a refused request never started and has none. */
 export type CollectionOutcome = { ok: true; result: CollectionResult; requestId?: number } |
   { ok: false; code: string; message: string; requestId?: number };
@@ -114,7 +116,8 @@ export class CollectionService {
     } catch { return; }
     this.persistenceCache = undefined;
     this.baselines.delete(`${parsed.id}@${revision}`);
-    this.baselines.set(`${parsed.id}@${revision}`, { name: parsed.name, order: parsed.presets.map(preset => preset.id), presets });
+    this.baselines.set(`${parsed.id}@${revision}`, { name: parsed.name, order: parsed.presets.map(preset => preset.id), presets,
+      plan: JSON.stringify(parsed.packagePlan ?? null) });
     while (this.baselines.size > 8) this.baselines.delete(this.baselines.keys().next().value!);
   }
   persistence(): DraftPersistence | undefined {
@@ -140,7 +143,9 @@ export class CollectionService {
         // Gestures edit in place and may reorder keys; compare canonically before calling it a change.
         try { return this.model.parts.canonicalParts(parts) !== saved.canonical; } catch { return true; }
       }).map(preset => preset.id);
-      const structureDirty = base.name !== summary.name || base.order.join() !== ids.join();
+      // Package-plan choices (mod names, which features ship together) are part of the collection too.
+      const structureDirty = base.name !== summary.name || base.order.join() !== ids.join() ||
+        base.plan !== JSON.stringify(this.actions.packagePlan() ?? null);
       value = { collectionId: summary.id, savedRevision: summary.revision, baseline: "known",
         dirty: structureDirty || dirtyPresets.length > 0, dirtyPresets, structureDirty };
     }

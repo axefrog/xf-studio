@@ -51,7 +51,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   expect(kinds("eye-makeup")).toEqual([...RECIPE_ACTION_KINDS, "layer.edit", "layer.setEnabled"].sort());
   // Before step 1: `COLLECTION_KIND_TABLE`.
   expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.open", "collection.rename",
-    "collection.undoOpen", "preset.edit", "preset.select"]);
+    "collection.undoOpen", "package.assign", "package.merge", "package.rename", "package.split", "preset.edit", "preset.select"]);
   // Before step 1: literal comparisons and `startsWith` prefixes, with saved-V as the final fallback.
   expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.undo"]);
   expect(kinds("preview")).toEqual(all.filter(kind => kind.startsWith("preview.") || kind.startsWith("camera.")).sort());

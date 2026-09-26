@@ -38,6 +38,10 @@
   "collection.open",
   "collection.undoOpen",
   "collection.importRecipe",
+  "package.rename",
+  "package.assign",
+  "package.split",
+  "package.merge",
   "camera.front",
   "camera.setFov",
   "camera.endFovGesture",
@@ -1347,6 +1351,84 @@
     }
    }
   },
+  "package.rename": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "productId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "name": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 0,
+     "maxLength": 80
+    }
+   }
+  },
+  "package.assign": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "feature": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "productId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "package.split": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "feature": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "newId": {
+     "type": "string",
+     "required": false,
+     "from": "state"
+    }
+   }
+  },
+  "package.merge": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "productId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "intoId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
   "camera.front": {
    "scope": [
     "viewport"
@@ -2524,6 +2606,42 @@
    "family": "action",
    "scope": [
     "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "package.rename",
+   "family": "action",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "package.assign",
+   "family": "action",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "package.split",
+   "family": "action",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "package.merge",
+   "family": "action",
+   "scope": [
+    "collection"
    ],
    "undo": "none",
    "async": false

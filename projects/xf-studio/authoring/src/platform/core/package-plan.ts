@@ -97,6 +97,8 @@ export type PackagePlanEdit =
 export function packagePlanEditIssue(edit: PackagePlanEdit, products: readonly PlannedProduct[], collectionId: string,
   labels: Readonly<Record<string, string>> = {}): string | undefined {
   const product = (id: string) => products.find(item => item.id === id);
+  // The default mod always exists as a place for features to go, even while it holds none.
+  const target = (id: string) => id === collectionId || !!product(id);
   const home = (feature: string) => products.find(item => item.features.includes(feature));
   const label = (feature: string) => labels[feature] ?? feature;
   switch (edit.kind) {
@@ -106,7 +108,7 @@ export function packagePlanEditIssue(edit: PackagePlanEdit, products: readonly P
     case "assign": {
       const from = home(edit.feature);
       if (!from) return `This collection has no ${label(edit.feature)} to package.`;
-      if (!product(edit.productId)) return "That mod is no longer part of this collection's package.";
+      if (!target(edit.productId)) return "That mod is no longer part of this collection's package.";
       if (from.id === edit.productId) return `${label(edit.feature)} is already in that mod.`;
       return undefined;
     }
@@ -118,7 +120,7 @@ export function packagePlanEditIssue(edit: PackagePlanEdit, products: readonly P
       return undefined;
     }
     case "merge":
-      if (!product(edit.productId) || !product(edit.intoId)) return "That mod is no longer part of this collection's package.";
+      if (!product(edit.productId) || !target(edit.intoId)) return "That mod is no longer part of this collection's package.";
       if (edit.productId === edit.intoId) return "Choose another mod to merge into.";
       return undefined;
   }

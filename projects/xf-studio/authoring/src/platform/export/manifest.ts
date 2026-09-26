@@ -20,7 +20,7 @@ export type ManifestFeature = {
   readonly experimental: readonly ExportExperimental[];
   readonly requirements: FrameworkRequirements;
   readonly packagedSha256: string;
-  /** SHA-256 of the feature's plan as written (`plan.json`). */
+  /** SHA-256 of the feature's plan (its compact JSON; `plan.json` holds the same plan pretty-printed). */
   readonly planSha256: string;
   readonly details: Readonly<Record<string, unknown>>;
   readonly verification: { readonly presetCount: number; readonly verifiedFiles: number; readonly limits: readonly string[] };

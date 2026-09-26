@@ -41,6 +41,11 @@ export const ACTION_DESCRIPTORS = {
   "collection.open": desc("collection", "library", "recovery", { collection: input("object"), revision: { ...state("integer"), required: false } }),
   "collection.undoOpen": desc("collection", "library", "recovery"),
   "collection.importRecipe": desc("file", "library", "none", { recipe: input("object"), name: input("string") }),
+  // The package plan (feature-module platform §6): which features ship in which XF mod; stored with the collection.
+  "package.rename": desc("collection", "library", "none", { productId: target("string"), name: inputText(0, 80) }),
+  "package.assign": desc("collection", "library", "none", { feature: target("string"), productId: target("string") }),
+  "package.split": desc("collection", "library", "none", { feature: target("string"), newId: { ...state("string"), required: false } }),
+  "package.merge": desc("collection", "library", "none", { productId: target("string"), intoId: target("string") }),
   "camera.front": desc("viewport", "workspace", "none"),
   "camera.setFov": desc("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
   "camera.endFovGesture": desc("viewport", "workspace", "none"),

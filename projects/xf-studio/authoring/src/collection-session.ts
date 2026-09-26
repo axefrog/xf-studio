@@ -5,6 +5,7 @@ import type { Recipe } from "./engines/layered-makeup/recipe";
 import type { LiveFeatureState } from "./platform/core/live-features";
 import type { LookCollection } from "./platform/api";
 import type { StoredCollection } from "./collection-store";
+import { editPackagePlan, type PackagePlanEdit, type PlannedProduct } from "./platform/core/package-plan";
 
 /** The live editor document: its recipe (the look's eye-makeup part) and its memory for that look. */
 export type EditorSnapshot = EditorMemory & { recipe: Recipe;
@@ -58,6 +59,17 @@ export class CollectionSession {
   select(id: string) {
     if (!this.state.collection.presets.some(p => p.id === id)) throw Error("Preset not found.");
     this.stash(); this.state.selected = id; this.display();
+  }
+  /**
+   * Apply a package-plan edit over the products the draft plans now (`edit` gets a fresh ID from the host's ID source
+   * for a new mod); the plan is stored only when it differs from the default.
+   */
+  editPackagePlan(edit: (newId: string) => PackagePlanEdit, products: readonly PlannedProduct[]) {
+    this.stash();
+    const collection = this.state.collection;
+    const plan = editPackagePlan(collection.packagePlan, edit(this.newId()), products, collection.id);
+    const { packagePlan: _old, ...rest } = collection;
+    this.state.collection = this.model.parts.rereadCollection({ ...rest, ...(plan ? { packagePlan: plan } : {}) });
   }
   renameCollection(name: string) {
     this.stash();
