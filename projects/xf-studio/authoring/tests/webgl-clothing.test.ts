@@ -44,6 +44,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(probe.shapes.garment).toBe(1);
   });
 
+  test("a clothing change that re-masks the body keeps every garment whose body shape is unchanged (PREV-106)", () => {
+    expect(probe.reuse).toEqual({ garmentsKept: true, bodyLoaded: true, reused: 2 });
+  });
+
   test("the Body toggle hides the clothes with the body, and shows them again unchanged, without touching GPU memory", () => {
     expect(probe.hidden).toEqual({ clothesHidden: true, memorySame: true, shownAgainSame: true });
   });

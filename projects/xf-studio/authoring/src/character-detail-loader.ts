@@ -10,7 +10,7 @@ import type { DetailLimit } from "./detail-limits";
 import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from "./eye-material";
 import type { FaceDecalHandle } from "./face-decal-material";
 import type { LayeredHandle } from "./layered-material";
-import { transferDeltas } from "./decal-underlay";
+import { transferDeltas, VertexGrid } from "./decal-underlay";
 
 /**
  * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
@@ -95,8 +95,13 @@ export function releaseDetailObject(root: THREE.Object3D, keep?: ReadonlySet<THR
 export const BODY_SHAPE_KEY = "xfs_body_shape";
 /** A loaded body skin part's applied shapes, for decals over it that have none (`followBodyShape`). */
 type BodyShape = { meshes: readonly THREE.SkinnedMesh[]; names: readonly string[] };
-/** World-space rest positions and applied shape deltas of the body's skin parts. */
-function bodyShapeField(shapes: readonly BodyShape[]): { positions: Float32Array; deltas: Float32Array } | null {
+/** The body's applied shape as one searchable field: world-space rest positions, their shape deltas, and the grid over them. */
+type BodyShapeField = { positions: Float32Array; deltas: Float32Array; grid: VertexGrid };
+/**
+ * World-space rest positions and applied shape deltas of the body's skin parts, with one grid over them: built once per load and
+ * searched by every body decal and garment that follows the body's shape (PREV-106).
+ */
+function bodyShapeField(shapes: readonly BodyShape[]): BodyShapeField | null {
   const positions: number[] = [], deltas: number[] = [];
   const v = new THREE.Vector3(), moved = new THREE.Vector3();
   for (const { meshes, names } of shapes) for (const mesh of meshes) {
@@ -113,14 +118,16 @@ function bodyShapeField(shapes: readonly BodyShape[]): { positions: Float32Array
       positions.push(v.x, v.y, v.z); deltas.push(moved.x - v.x, moved.y - v.y, moved.z - v.z);
     }
   }
-  return positions.length && deltas.some(value => value !== 0) ? { positions: Float32Array.from(positions), deltas: Float32Array.from(deltas) } : null;
+  if (!positions.length || !deltas.some(value => value !== 0)) return null;
+  const field = Float32Array.from(positions);
+  return { positions: field, deltas: Float32Array.from(deltas), grid: new VertexGrid(field) };
 }
 /** Give a body decal the body's applied shape as one shape key (`BODY_SHAPE_KEY`); returns the vertices it moves. */
-function followBodyShape(mesh: THREE.SkinnedMesh, field: { positions: Float32Array; deltas: Float32Array }): number {
+function followBodyShape(mesh: THREE.SkinnedMesh, field: BodyShapeField): number {
   mesh.updateWorldMatrix(true, false);
   const position = mesh.geometry.getAttribute("position"), world = new Float32Array(position.count * 3), v = new THREE.Vector3();
   for (let i = 0; i < position.count; i++) v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld).toArray(world, i * 3);
-  const { deltas, moved } = transferDeltas(world, field.positions, field.deltas);
+  const { deltas, moved } = transferDeltas(world, field.grid, field.deltas);
   if (!moved) return 0;
   // Into the mesh's own space (a direction: the inverse of the world matrix's linear part).
   const inverse = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld).invert();
@@ -233,11 +240,18 @@ const READS_SKIN: ReadonlySet<DetailSlot> = new Set(["face", "brows"]);
 /** Whether a component draws with the skin adapter (the head's skin, or the body's: its skin, arms, feet, nails). */
 const drawsSkin = (component: RenderComponent) => component.materials.some(material => renderTemplate(material.template, material.templateName)?.adapter === "skin");
 /**
- * Whether a component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover), or follows the body's applied shape
- * (a body decal, a garment), so it is reused only while the body's skin parts are unchanged.
+ * Whether a component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover), so it is reused only while the
+ * body's skin parts are unchanged.
  */
-const readsBodySkin = (component: RenderComponent) => component.slot === "clothing" || (component.slot === "body" &&
-  component.materials.some(material => !!renderTemplate(material.template, material.templateName)?.decal));
+const readsBodySkin = (component: RenderComponent) => component.slot === "body" &&
+  component.materials.some(material => !!renderTemplate(material.template, material.templateName)?.decal);
+/**
+ * A garment follows only the body's applied shape (which body meshes, with which shape keys), not its chunk masks or materials: a change of
+ * clothing, which re-masks the body, keeps every garment whose body shape is unchanged instead of loading and baking it again (PREV-106).
+ */
+const followsBodyShape = (component: RenderComponent) => component.slot === "clothing";
+const bodyShapeKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "body" && drawsSkin(item) && item.morphs?.length)
+  .map(item => `${item.geometry.depotHash}|${item.morphs!.join(",")}`).sort().join("\n");
 
 /**
  * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
@@ -324,6 +338,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   // The body's decals read the body's own skin (its skin-drawing parts), so they are reused only while that is unchanged.
   const bodySkinKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "body" && drawsSkin(item)).map(contentKey).join("|");
   const sameBodySkin = !!previous && bodySkinKey(previous.record.components) === bodySkinKey(record.components);
+  const sameBodyShape = !!previous && bodyShapeKey(previous.record.components) === bodyShapeKey(record.components);
   // The skin loads first, so decals over it (brows) can blend against the resolved skin colour, read on the
   // head the scene will draw (the skin's own chunks or the core head; head-skin-placement.ts).
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
@@ -333,6 +348,12 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
    * the shapes those parts carry (knowledge/body-rendering.md).
    */
   const bodySkins: NonNullable<AdapterContext["skins"]>[number][] = [], bodyShapes: BodyShape[] = [];
+  /** The body's shape field, built once from the skin parts loaded so far (they load before the parts that follow them; PREV-106). */
+  let field: { shapes: number; value: BodyShapeField | null } | null = null;
+  const shapeField = () => {
+    if (field?.shapes !== bodyShapes.length) field = { shapes: bodyShapes.length, value: bodyShapeField(bodyShapes) };
+    return field.value;
+  };
   const skinFor = (slot: DetailSlot) => slot === "body" ? bodySkins[0] : resolvedSkin;
   const keepSkin = (component: RenderComponent, skin: NonNullable<LoadedCharacterComponent["skin"]>, meshes: THREE.SkinnedMesh[]) => {
     const surface = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
@@ -363,7 +384,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         continue;
       }
       const lent = lendable.get(contentKey(component));
-      if (lent && (!READS_SKIN.has(component.slot) || sameSkin) && (!readsBodySkin(component) || sameBodySkin) && !components.includes(lent)) {
+      if (lent && (!READS_SKIN.has(component.slot) || sameSkin) && (!readsBodySkin(component) || sameBodySkin) &&
+        (!followsBodyShape(component) || sameBodyShape) && !components.includes(lent)) {
         spendTexels(component);
         components.push(lent); borrowed.add(lent);
         for (const limit of lent.limits ?? []) addLimit(component.slot, limit);
@@ -466,7 +488,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         // A body decal with no shapes of its own (the underwear cover) follows the body's applied shape, so it stays over the skin; so does a
         // garment, a first stand-in for the game's garment support (knowledge/clothing.md §4.5).
         if (((component.slot === "body" && decals.length) || component.slot === "clothing") && !component.morphs?.length) {
-          const field = bodyShapeField(bodyShapes);
+          const field = shapeField();
           // A geometry another component draws too (a file used twice) is this component's own copy first: the shape key it gains is its own.
           if (field) for (const mesh of meshes) { if (shared) mesh.geometry = mesh.geometry.clone(); followBodyShape(mesh, field); }
         }
