@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256, writeFileAtomic } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
+import type { LowPriority } from "./process-tree";
 
 /**
  * Generic export of game resources into renderer formats: any `.mesh` or `.morphtarget`
@@ -94,7 +95,7 @@ export type ExportRequest = { readonly source: ExportSource; readonly geometry: 
 export type ExportAnswer = { geometry: Map<string, ExportedGeometry>; textures: Map<string, ExportedTexture>; masks: Map<string, ExportedMask>;
   /** The tool failed on this source (its launch, retried alone when it shared one); what the cache already had is still answered. */
   failed?: GameAssetExportError };
-export type ExportOptions = { /** Background work (a prefetch): the tool runs at a lower process priority. */ readonly lowPriority?: boolean };
+export type ExportOptions = { /** Background work (a prefetch): the tool runs at a lower process priority (decided per launch). */ readonly lowPriority?: LowPriority };
 export type ExportKind = "geometry" | "textures" | "masks";
 export interface GameAssetExporter {
   /** The exporting tool, for provenance records (also each session's). */
@@ -119,7 +120,7 @@ export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; ou
   byHash?: boolean;
   /** Every archive the launch reads (`exportAll`'s batch; `source` alone otherwise). Their requested resources never collide. */
   sources?: readonly ExportSource[];
-  lowPriority?: boolean }) => Promise<void>;
+  lowPriority?: LowPriority }) => Promise<void>;
 /** The steps of the repair route, so a failed repair says where it stopped (PIPE-86). `tool`: a tool failure outside a named step. */
 export type GeometryRepairStep = "serialize" | "deserialize" | "pack" | "uncook" | "tool";
 /**
@@ -137,7 +138,7 @@ export type GeometryRepairOutcome =
  * disk, a bug) are thrown, never reported as the tool's (PIPE-86).
  */
 export type GeometryRepair = (input: { source: ExportSource; depotPath: string; raw: string; workDir: string; signal?: AbortSignal;
-  /** Background work (a prefetch): the tool runs at a lower process priority. */ lowPriority?: boolean }) =>
+  /** Background work (a prefetch): the tool runs at a lower process priority. */ lowPriority?: LowPriority }) =>
   Promise<GeometryRepairOutcome>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
@@ -372,7 +373,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
    * (`GameAssetExporterOptions.repairGeometry`) under `repairRoot`. Adds the GLB, the materials file when missing and the repair's note.
    */
   const repair = async (source: ExportSource, depotPath: string, files: Record<string, string>, repairRoot: string, signal?: AbortSignal,
-    lowPriority?: boolean) => {
+    lowPriority?: LowPriority) => {
     if (files["export.glb"] || !/\.mesh$/i.test(depotPath) || !options.repairGeometry) return;
     const repairDir = join(repairRoot, depotHash(depotPath));
     mkdirSync(repairDir, { recursive: true });
@@ -458,7 +459,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
    * Returns the textures and masks not found by name.
    */
   const collect = async (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer, needMaterials = true,
-    { repairing = true, signal, lowPriority }: { repairing?: boolean; signal?: AbortSignal; lowPriority?: boolean } = {}): Promise<{ textures: string[]; masks: string[] }> => {
+    { repairing = true, signal, lowPriority }: { repairing?: boolean; signal?: AbortSignal; lowPriority?: LowPriority } = {}): Promise<{ textures: string[]; masks: string[] }> => {
     for (const depotPath of needed.geometry) {
       const raw = depotFile(outDir, depotPath);
       if (!existsSync(raw)) continue;
@@ -489,14 +490,15 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
    * own index says it is there: an unreadable index would otherwise cost one launch per resource that may not exist at all (PREV-55).
    * WolvenKit selects one resource per `--hash` call, so the calls run a few at a time, each into its own folder.
    */
-  const byHash = async (source: ExportSource, unnamed: { textures: string[]; masks: string[] }, outDir: string, answer: ExportAnswer, signal?: AbortSignal) => {
+  const byHash = async (source: ExportSource, unnamed: { textures: string[]; masks: string[] }, outDir: string, answer: ExportAnswer, signal?: AbortSignal,
+    lowPriority?: LowPriority) => {
     const all = [...unnamed.textures, ...unnamed.masks];
     const inIndex = all.length ? present(source, all) : null;
     const wanted = inIndex ? all.filter(depotPath => inIndex.has(depotPath)) : [];
     await forEachLimited(wanted, BY_HASH_CONCURRENCY, async depotPath => {
       const hashDir = join(outDir, "by-hash", depotHash(depotPath));
       mkdirSync(hashDir, { recursive: true });
-      await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
+      await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true, lowPriority });
       if (/\.mlmask$/i.test(depotPath)) {
         const layers = maskLayerFiles(join(hashDir, `${depotHash(depotPath)}.mlmask`));
         if (layers.length) storeMask(answer, source, depotPath, layers, true);
@@ -561,7 +563,8 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
           const unnamed = await collect(item.request.source, item.needed, outDir, answers[item.index]!, item.request.materials ?? false, { repairing: final, signal, lowPriority });
           const missing = final ? [] : item.needed.geometry.filter(path => !answers[item.index]!.geometry.get(path)?.glb);
           if (missing.length) again.push({ ...item, needed: { geometry: missing, textures: [], masks: [] }, hashes: missing.map(depotHash) });
-          try { await byHash(item.request.source, unnamed, join(outDir, `source-${item.index}`), answers[item.index]!, signal); }
+          // Background by-hash exports run at the batch's priority too (PIPE-96).
+          try { await byHash(item.request.source, unnamed, join(outDir, `source-${item.index}`), answers[item.index]!, signal, lowPriority); }
           catch (error) {
             if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
             answers[item.index]!.failed = error;

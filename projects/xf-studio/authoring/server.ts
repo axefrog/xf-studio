@@ -23,13 +23,15 @@ import { CharacterDetailHost } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
-import { consoleEcho, hostDiagnosticsAt, setProcessDiagnostics } from "./src/diagnostics/host-log";
+import { consoleEcho, hostDiagnosticsAt, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 // One structured log and rolling detail window in data/diagnostics/ (docs/diagnostics.md); routine events still print here.
 const diagnostics = hostDiagnosticsAt(dataRoot, { echo: consoleEcho });
 setProcessDiagnostics(diagnostics);
+// A background failure nobody caught is logged; it never ends the dev server (PREV-101).
+logUnhandledRejections();
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);

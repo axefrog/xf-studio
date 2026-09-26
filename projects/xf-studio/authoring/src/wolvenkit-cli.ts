@@ -3,7 +3,7 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } fro
 import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { readPeFileVersion } from "./pe-version";
-import { raiseLowPriority, runProcessTree, type ProcessTreeResult } from "./process-tree";
+import { type LowPriority, raiseLowPriority, runProcessTree, type ProcessTreeResult } from "./process-tree";
 
 /**
  * Process adapter: the one place XF Studio starts WolvenKit CLI. It owns the success policy
@@ -29,7 +29,7 @@ export type WolvenKitRunOptions = {
   /** A log line that means failure despite exit 0; default `Unhandled exception`. */
   failure?: RegExp;
   /** Background work: run below normal process priority, so the machine (and a foreground launch) stays responsive. */
-  lowPriority?: boolean;
+  lowPriority?: LowPriority;
 };
 
 /** WolvenKit versions whose command lines and outputs XF Studio's pipeline has been verified against. */
