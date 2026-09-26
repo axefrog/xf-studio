@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `5e64894` | 2026-09-26 | Runtime bridge phase 2: command catalogue, MCP server, session runner, capture, write methods (security and game safety) | 0 High, 5 Medium, 10 Low (RB-12..26). Write gate enforced natively; `cc.apply` never confirms; save lock real and non-persistent; redscript wraps coexist with the profile's photo-mode mods. Before the first session: RB-12, RB-13, RB-24; before session 2: RB-15. Fixes in claude/bridge-fixes |
 | `5e64894` | 2026-09-26 | Native archive and resource reader (`src/native/`, R&D, not wired in) | 5 High, 7 Medium, 5 Low (NATIVE-01..17). Every High reproduced with a scratch script: hostile archives can loop, exhaust memory or run unbounded in the host process. Not reachable by users (no production importer), but counted: open Highs 5, so feature merges stay paused. All Highs and NATIVE-06..10 gate integration. Container bounds, the Oodle call, CR2W bounds, the port's cache identity and licensing hygiene are sound. Fixes in claude/native-hardening |
 | `972ee62` | 2026-09-26 | Diagnostics subsystem (`src/diagnostics/`, boundary exception 13): privacy, endpoint, correctness, architecture | 5 High, 6 Medium, 7 Low (DIAG-01..18). DIAG-02 and DIAG-03 reproduced; DIAG-04 confirmed against a local trace (sizes only). Endpoint access, size limits, entry validation, disk bounds and the ZIP writer are sound. All fixed in claude/cleanup-diagnostics (DIAG-05 and DIAG-11 in its second delivery, after claude/rnd-vortex) |
 | `972ee62` | 2026-09-26 | Ponytail export repair (`mesh-export-repair.ts`, 90cb492) and the single-file installer (972ee62) | 0 High, 2 Medium, 5 Low (PIPE-84..87, REL-04..06; renumbered from the reviewer's PIPE-81..84 and DESK-01..03). Matrix maths, guards, cache hashing and GPL hygiene sound; Inno Setup download pinned and hash-checked; workflow permissions least-privilege |
@@ -58,6 +59,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| RB-12 | Med | Runtime bridge | The kill switch releases the save lock while changed state (clock, confirmed look) is still live, so an autosave can capture test state into the shared save folder (`XFRuntimeBridgeActions.reds:394-398`) | Open (claude/bridge-fixes; before the first session) |
+| RB-13 | Med | Runtime bridge | `Bridge::Kill` doesn't close the queue synchronously, so a write queued just before the kill can run after `RestoreAfterKill` (world frozen with the bridge dead) (`Bridge.cpp:119-125`, `Main.cpp:127-132`) | Open (claude/bridge-fixes; before the first session) |
+| RB-14 | Med | Runtime bridge | `capture.recrop`'s folder check passes other drives and UNC paths (`relative()` returns an absolute path), so it reads and writes outside the capture folder and can make an outbound SMB connection; read-class, so available under `--read-only` (`tools/capture/capture.ts:195-208`) | Open (claude/bridge-fixes) |
+| RB-15 | Med | Runtime bridge | Session 2 stops in photo mode: PhotoMode-EX (enabled in the test profile) clamps V rotation to -180..180, refusing the 195°/210° sweep steps; no settle after photo mode opens while Photo Mode Preferences re-applies settings (`tools/sessions/make-sessions.py:83`) | Open (claude/bridge-fixes; before session 2) |
+| RB-16 | Med | Runtime bridge | "Restore on kill" is graded [offline] but the self-test host has no restore; the plugin's write wrapper, undo parameters, two-step light set and `RestoreAfterKill` never run offline (`runtime-bridge-design.md:168`, `native/src/selftest/Main.cpp:180-345`) | Open (claude/bridge-fixes) |
 | NATIVE-01 | High | Native reader | A negative string length (32-bit bitwise length build, `shift > 34` check) moves the cursor backwards; an `array:String` of one normal and one −8 string loops over up to 4 billion elements (20 M: 1.9 s, 1.46 GB) (`red-values.ts:15-46`) | Open (claude/native-hardening) |
 | NATIVE-02 | High | Native reader | Name-table reads scan each name to its zero byte separately: an unterminated pool with many names at offset 0 is quadratic (391 KB body: 3.0 s, 5.8 GB) (`cr2w-file.ts:54-74`) | Open (claude/native-hardening) |
 | NATIVE-03 | High | Native reader | Package field values are read at file-chosen offsets without caching; fields pointing at the same nested struct blow up exponentially (452 bytes: 0.9 s, 1.3 GB), reachable through every `.ent`/`.app` `compiledData` (`red-package.ts:67-85`) | Open (claude/native-hardening) |
@@ -316,6 +322,18 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **NATIVE-15:** the diff harness excuses any hash where the reference has a path without checking the hash matches it (`document-diff.ts:92-95`).
   - **NATIVE-16:** a missing `renderMask` is always written `"0"`, so the resolver's missing-means-drawn branch never runs; the reader knows which properties were defaulted and could say so.
   - **NATIVE-17:** no boundary test for `src/native` (pure modules versus host adapters; page code must not import it).
+
+- **RB-17..26** (bridge phase 2 review at `5e64894`), Open (claude/bridge-fixes):
+  - **RB-17:** the session runner skips `restore` on Ctrl+C (photo mode left open with its menu hidden) (`tools/session.ts:170-231`).
+  - **RB-18:** wrong undo values: `world.pause` undo ignores the previous state; `photo.light.set` doesn't restore the previous selection and reports "nothing was changed" after step 1; a `before` of -1 yields undo parameters the plugin refuses; `reset: true` returns no undo.
+  - **RB-19:** the post-write check rounds while `ForceValue` truncates, so a stale option list silently selecting option 0 isn't caught (`XFRuntimeBridgeActions.reds:522-540`).
+  - **RB-20:** the fixed 150 ms between light select and set can be 2–3 frames under path tracing; before values may come from the previous light.
+  - **RB-21:** `--allow` silently overrides `--read-only`; an empty `--allow` exposes every tool; no partial-list test.
+  - **RB-22:** the TS schema accepts inherited keys (`constructor`, `__proto__`) as known; the plugin still refuses them (`tools/api/schema.ts:191`).
+  - **RB-23:** huge floats converted to integers (undefined behaviour) and unsigned wrap in `Params.cpp:56-60`.
+  - **RB-24:** the CET kill hotkey has no binding and the staging checklist never asks for one (before the first session).
+  - **RB-25:** nothing but the one-client pipe stops MCP and the session runner driving the game together; a mid-session MCP call can fail the runner's step.
+  - **RB-26:** the write-photo/world/character classes exist only in the TS tools; the plugin knows read/write/control.
 
 ## New subsystems since last review
 
