@@ -93,6 +93,11 @@ test("glossy is a flat low-roughness dielectric and flat-only output is unchange
   let checked = 0;
   for (let p = 0; p < 64 * 64; p++) if (mask[p * 4 + 3] > 200) { expect(baked.roughness[p]).toBe(31); expect(baked.metalness[p]).toBe(0); checked++; }
   expect(checked).toBeGreaterThan(10);
+  // Matte writes the rough end (roughness 1.0, byte 255; research/materials/shader-decal.md §10 item 5).
+  const matte = recipe({ finish: "matte" }), matteBaked = compileFlatPreset(matte, 64), matteMask = raster(matte.layers[0], 64);
+  let matteChecked = 0;
+  for (let p = 0; p < 64 * 64; p++) if (matteMask[p * 4 + 3] > 200) { expect(matteBaked.roughness[p]).toBe(255); expect(matteBaked.metalness[p]).toBe(0); matteChecked++; }
+  expect(matteChecked).toBeGreaterThan(10);
   const compiled = compilePreset(recipe({ finish: "matte" }, { finish: "metallic" }), 64);
   expect(compiled.route).toBe("flat");
   expect(Object.keys(compiled.maps)).toEqual(["diffuse", "roughness", "metalness"]);
@@ -170,6 +175,9 @@ test("the filter lists experimental finishes and names the preset rule; resource
   for (const [key, want] of Object.entries(expected))
     if (typeof want === "number") expect(values[key]).toBeCloseTo(want, 6); else expect(values[key]).toEqual(want);
   expect(values.FadeOutOffset).toBe(1000);
+  // Colour-shifting's surface is a uniform bias: roughness 0.32 and metalness 0.08, below the 0.1 at which a skin pixel
+  // leaves subsurface scattering (research/materials/shader-decal.md §10 item 2).
+  expect([values.RoughnessScale, values.RoughnessBias, values.MetalnessScale, values.MetalnessBias]).toEqual([0, .32, 0, .08]);
   // A preset left with only an earlier-model Glossy layer is omitted whole.
   const older = structuredClone(board);
   delete older.presets[0].recipe.layers[2].optics; delete older.presets[0].recipe.layers[4].optics;

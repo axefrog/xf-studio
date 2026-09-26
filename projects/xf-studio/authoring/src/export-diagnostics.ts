@@ -33,7 +33,11 @@ export type GlitterFlakes = {
 };
 /** One glitter region: the flakes of one layer, drawn over its UV bounds and clipped by its coverage. */
 export type GlitterRegion = { layer: string; mips: "nested" | "box"; flakes?: GlitterFlakes; mirrorOf?: string };
-/** Emissive accent: the lowest-key share of one region's flakes, drawn on a second plate chunk. */
+/**
+ * Emissive accent: the lowest-key share of one region's flakes, drawn on a second plate chunk. `ev` is the accent's
+ * `EmissiveEV`, which `mesh_decal_emissive_subsurface` uses as a plain multiplier of `EmissiveColor` (not 2^EV), so it
+ * must be above 0: at 0 the accent is black (research/materials/shader-decal.md §5.4).
+ */
 export type GlitterAccent = { layer: string; share: number; ev: number };
 export type GlitterDiagnostic = { base: { roughness: number; metalness: number }; regions: GlitterRegion[]; accent?: GlitterAccent };
 export type PresetDiagnostics = { plateLiftMm?: number; surface?: SurfaceOverride; uvSpace?: "head"; glitter?: GlitterDiagnostic };
@@ -41,7 +45,7 @@ export type PresetDiagnostics = { plateLiftMm?: number; surface?: SurfaceOverrid
 /** Accepted ranges of the glitter knob's numbers. */
 export const GLITTER_RANGES = {
   sizeMm: [.05, 1.2], sizeSigma: [0, 1], cover: [.01, .6], tiltSigmaDeg: [0, 90], tiltMaxDeg: [1, 89], roughness: [0, 1], metalness: [0, 1],
-  seed: [0, 2147483647], share: [.01, 1], ev: [-10, 10],
+  seed: [0, 2147483647], share: [.01, 1], ev: [0, 10],
 } as const;
 const FLAKE_KEYS = ["sizeMm", "sizeSigma", "cover", "tiltSigmaDeg", "tiltMaxDeg", "roughness", "metalness", "color", "seed"] as const;
 export type ExportDiagnostics = { schema: typeof EXPORT_DIAGNOSTICS_SCHEMA; presets: Record<string, PresetDiagnostics> };
@@ -126,6 +130,8 @@ function parseGlitter(value: unknown, id: string): GlitterDiagnostic {
   let accent: GlitterAccent | undefined;
   if (value.accent !== undefined) {
     const a = value.accent;
+    if (isRecord(a) && typeof a.ev === "number" && !(a.ev > 0))
+      throw Error(`${where} accent ev must be above 0: the accent's colour is its flake colour times ev, so 0 is black.`);
     if (!isRecord(a) || Object.keys(a).length !== 3 || typeof a.layer !== "string" || !inRange(a.share, GLITTER_RANGES.share) || !inRange(a.ev, GLITTER_RANGES.ev))
       throw Error(`${where} accent must set layer, share and ev.`);
     if (!layers.includes(a.layer)) throw Error(`${where} accent names a layer with no flakes.`);

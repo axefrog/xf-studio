@@ -309,7 +309,7 @@ export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPre
   const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
   const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(v / peak)) : [0, 0, 0];
   return { DiffuseAlpha: 1, RoughnessMetalnessAlpha: 1, NormalAlpha: 0, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
-    RoughnessScale: 0, RoughnessBias: .32, MetalnessScale: 0, MetalnessBias: .25, FadeOutOffset: 1000, FadeOutDistance: 1,
+    RoughnessScale: 0, RoughnessBias: .32, MetalnessScale: 0, MetalnessBias: .08, FadeOutOffset: 1000, FadeOutDistance: 1,
     FresnelColorIntensity: round6(2 * shift.strength * peak), FresnelExponent: 2,
     FresnelColor: { $type: "Color", Red, Green, Blue, Alpha: 255 }, DiffuseColor: white };
 }
@@ -327,6 +327,8 @@ export interface VerifierPlan {
 export function expectedAccentValues(preset: VerifierPreset): Record<string, Node> {
   const glitter = glitterOf(preset);
   ensure(glitter?.accent, `Preset ${preset.name} has no glitter accent`);
+  // The template writes EmissiveEV × EmissiveColor as a plain product: an accent at EV 0 or below draws black.
+  ensure(typeof glitter.accent.ev === "number" && glitter.accent.ev > 0, `Preset ${preset.name}'s glitter accent EmissiveEV must be above 0`);
   const color = glitter.regions.find(r => r.layer === glitter.accent!.layer)!.flakes.color;
   const [Red, Green, Blue] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
   return { EmissiveMaskChannel: { $type: "Vector4", X: 1, Y: 0, Z: 0, W: 0 }, EmissiveColor: { $type: "Color", Red, Green, Blue, Alpha: 255 },
