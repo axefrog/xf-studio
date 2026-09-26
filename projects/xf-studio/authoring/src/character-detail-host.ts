@@ -217,7 +217,7 @@ export class CharacterDetailHost {
     const fingerprint = installationFingerprint(settings);
     const key = characterRequestKey(request, fingerprint);
     const known = this.states.get(key);
-    const live = (run: { controller: AbortController } | undefined) => run && !run.controller.signal.aborted ? run : null;
+    const live = <T extends { controller: AbortController }>(run: T | undefined) => run && !run.controller.signal.aborted ? run : null;
     const active = live(this.running.get(page));
     // A degraded answer is served once, then prepared again (PIPE-53). A V another page is having prepared is shared, not restarted.
     if ((known?.phase === "ready" && !this.degraded.has(key))
