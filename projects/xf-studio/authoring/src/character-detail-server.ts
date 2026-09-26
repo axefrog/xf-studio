@@ -13,9 +13,14 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
  * browser. Callers mount it behind their own session checks (the desktop adds a token cookie). The body is read within the shared
  * request limit (creator-names.ts), its declared length checked first (PIPE-79, PIPE-83).
  * `serveCharacterAsset` answers `/assets/character/<content-addressed name>`.
+ * A POST names the open page it comes from (`X-XFS-Page`, a random name per page load): a page's request supersedes only that page's
+ * earlier one, so two open pages never cancel each other's V (PIPE-103). A missing or malformed name is one anonymous page.
  */
 export const CHARACTER_DETAIL_ENDPOINT = "/api/preview-character";
 export const CHARACTER_ASSET_PREFIX = "/assets/character/";
+export const CHARACTER_PAGE_HEADER = "X-XFS-Page";
+/** The page a request comes from, or "" (anonymous): a short name of letters, digits and dashes only. */
+const pageOf = (request: Request) => { const page = request.headers.get(CHARACTER_PAGE_HEADER) ?? ""; return /^[A-Za-z0-9-]{1,64}$/.test(page) ? page : ""; };
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
 export function createCharacterDetailHandler(host: CharacterDetailHost, options: { trustedOrigin?: (request: Request) => boolean } = {}) {
@@ -44,7 +49,7 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
     }
     // An answer prepared earlier is reused only while the mod setup it came from is unchanged.
     await host.refresh();
-    return json(host.request(body as ReturnType<typeof parseCharacterRequest>));
+    return json(host.request(body as ReturnType<typeof parseCharacterRequest>, pageOf(request)));
   };
 }
 

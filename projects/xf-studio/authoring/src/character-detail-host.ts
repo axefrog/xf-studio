@@ -24,8 +24,11 @@ import { hostFailure } from "./diagnostics/host-log";
  * Host application service that owns one character-detail preparation at a time for the preview (both
  * hosts share it). It reads the launch route from the host's own settings (never from the browser),
  * runs `prepareCharacterDetails` in the background with cancellation, reports progress as a read-only
- * snapshot keyed by the request, and serves the content-addressed files of finished records. A newer
- * request supersedes (cancels) an older one, so switching between Vs never finishes the previous V.
+ * snapshot keyed by the request, and serves the content-addressed files of finished records. A page's newer
+ * request supersedes (cancels) that page's older one, so switching between Vs never finishes the previous V. Each open page (a
+ * window or tab; `X-XFS-Page`, character-detail-server.ts) supersedes only its own: another page's request waits its turn, so two
+ * pages following different Vs (the person's own tab and a `?verify=1` tab) each get theirs instead of cancelling each other
+ * forever (PIPE-103).
  *
  * The key covers the request and the installation it is prepared from (launch route, game and mod
  * folders, MO2 profile, WolvenKit identity, the modification stamps of the mod lists and folders, and the
@@ -142,7 +145,8 @@ export function characterRoute(settings: CharacterDetailSettings): CharacterRout
 }
 
 export class CharacterDetailHost {
-  private running: { key: string; controller: AbortController; promise: Promise<void> } | null = null;
+  /** Each open page's latest preparation (`request`'s `page`); they run one at a time, in the order they were asked for (PIPE-103). */
+  private readonly running = new Map<string, { key: string; controller: AbortController; promise: Promise<void> }>();
   private readonly states = new Map<string, CharacterDetailState>();
   /** What preparations on the current installation share, and the fingerprint it belongs to. */
   private shared: { fingerprint: string; cache: CharacterPreparationCache } | null = null;
@@ -204,17 +208,20 @@ export class CharacterDetailHost {
   }
 
   /**
-   * Start (or reuse) the preparation for a request. Another running request is cancelled, and its state
-   * is forgotten at once; the new preparation starts once the cancelled one has stopped.
+   * Start (or reuse) the preparation for a request from one open page (`page`: its name, empty for a caller that gives none). That
+   * page's other running request is cancelled, and its state is forgotten at once; another page's is left to finish (PIPE-103). The
+   * new preparation starts once every earlier one (a cancelled one too) has stopped.
    */
-  request(request: CharacterRequest): CharacterDetailState {
+  request(request: CharacterRequest, page = ""): CharacterDetailState {
     const settings = this.options.settings();
     const fingerprint = installationFingerprint(settings);
     const key = characterRequestKey(request, fingerprint);
     const known = this.states.get(key);
-    const active = this.running && !this.running.controller.signal.aborted ? this.running : null;
-    // A degraded answer is served once, then prepared again (PIPE-53).
-    if ((known?.phase === "ready" && !this.degraded.has(key)) || (known?.phase === "preparing" && active?.key === key)) return known;
+    const live = <T extends { controller: AbortController }>(run: T | undefined) => run && !run.controller.signal.aborted ? run : null;
+    const active = live(this.running.get(page));
+    // A degraded answer is served once, then prepared again (PIPE-53). A V another page is having prepared is shared, not restarted.
+    if ((known?.phase === "ready" && !this.degraded.has(key))
+      || (known?.phase === "preparing" && [...this.running.values()].some(run => live(run) && run.key === key))) return known;
     this.degraded.delete(key);
     // A different (or a stale, cancelled) preparation: stop it and forget its answer now, so a quick
     // V1 -> V2 -> V1 restarts V1 instead of reporting the cancelled run as still preparing.
@@ -236,7 +243,7 @@ export class CharacterDetailHost {
     const first = CHARACTER_DETAIL_STEPS[0]!;
     this.set({ key, phase: "preparing", message: PREPARING, progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: first.label }, record: null });
     // Whether this run still owns its key's state (a newer run for the same key takes it over).
-    const owns = () => !this.running || this.running.key !== key || this.running.controller === controller;
+    const owns = () => ![...this.running.values()].some(run => run.key === key && run.controller !== controller);
     let started = 0;
     const run = () => {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
@@ -248,9 +255,9 @@ export class CharacterDetailHost {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
         }, log: this.options.log, trace: this.options.trace, nativeDecodeWorker: this.options.nativeDecodeWorker }));
     };
-    // Start now, or once the cancelled run (still settling on the shared cache) and a stopped prefetch batch have let go (PREV-102).
-    const waits: Promise<unknown>[] = [];
-    if (this.running) waits.push(this.running.promise);
+    // Start now, or once the earlier runs (a cancelled one still settling on the shared cache, another page's) and a stopped prefetch
+    // batch have let go (PREV-102, PIPE-103).
+    const waits: Promise<unknown>[] = [...this.running.values()].map(run => run.promise);
     if (this.prefetch.preparing) waits.push(this.prefetch.idle());
     const begun = waits.length ? Promise.all(waits).then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
     const promise = begun
@@ -272,8 +279,8 @@ export class CharacterDetailHost {
         if (!need) hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null, ...(need ? { need: "wolvenkit" as const } : {}) });
       })
-      .finally(() => { if (this.running?.controller === controller) this.running = null; });
-    this.running = { key, controller, promise };
+      .finally(() => { if (this.running.get(page)?.controller === controller) this.running.delete(page); });
+    this.running.set(page, { key, controller, promise });
     return this.states.get(key)!;
   }
 
@@ -294,7 +301,7 @@ export class CharacterDetailHost {
     return this.states.get(key) ?? { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, key, phase: "unknown", message: "", progress: null, record: null };
   }
 
-  cancel(): void { this.running?.controller.abort(); this.prefetch.cancel(); }
+  cancel(): void { for (const run of this.running.values()) run.controller.abort(); this.prefetch.cancel(); }
 
   // ---- Preparing choices ahead (choice-prefetch.ts) ----
 
@@ -351,7 +358,7 @@ export class CharacterDetailHost {
   }
   /** Resolves once no person's own change is being prepared. */
   private async foregroundIdle(): Promise<void> {
-    while (this.running) { try { await this.running.promise; } catch { /* Settled. */ } }
+    while (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise.catch(() => { /* Settled. */ })));
   }
 
   // ---- Prepared game files (prepared-files.ts) ----
@@ -378,7 +385,7 @@ export class CharacterDetailHost {
    */
   async clearPreparedFiles(): Promise<{ freed: number }> {
     this.prefetch.cancel();
-    this.running?.controller.abort();
+    for (const run of this.running.values()) run.controller.abort();
     await this.settled().catch(() => {});
     // A stopped prefetch batch lets go of the cache and finishes its reads before anything is removed (PREV-102).
     await this.prefetch.idle();
@@ -392,7 +399,8 @@ export class CharacterDetailHost {
     this.prefetch.resetBudget();
     return result;
   }
-  async settled(): Promise<void> { await this.running?.promise; }
+  /** Resolves once no preparation is running (every page's). */
+  async settled(): Promise<void> { while (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise)); }
 
   /** Absolute path of a served record or file, or null. Names are content-addressed, never paths. */
   filePath(name: string): string | null {
