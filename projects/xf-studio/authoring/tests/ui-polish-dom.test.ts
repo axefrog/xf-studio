@@ -13,6 +13,12 @@ beforeAll(() => {
 });
 afterAll(() => uninstallLightDom());
 const settle = (ms = 5) => new Promise(resolve => setTimeout(resolve, ms));
+/** Wait (up to a second, for a busy full run) until `ready` holds, repainting between tries. */
+async function until(ready: () => boolean, paint: () => void = () => {}) {
+  for (let i = 0; i < 100 && !ready(); i++) { await settle(10); paint(); }
+  return ready();
+}
+const openSheet = () => lightDocument.body.querySelectorAll("dialog").filter(dialog => dialog.open).at(-1);
 const text = (element: LightElement) => element.textContent;
 const buttons = (root: LightElement) => root.querySelectorAll("button");
 const buttonNamed = (root: LightElement, name: string) => buttons(root).find(button => text(button) === name || button.getAttribute("aria-label") === name);
@@ -157,9 +163,8 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   test("Add reviews the plan first, names what changes and where, and adds only on consent", async () => {
     const h = await packageHarness();
     buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
-    await settle(); h.paint();
-    const sheet = lightDocument.body.querySelector("dialog")!;
-    expect(sheet.open).toBe(true);
+    expect(await until(() => !!openSheet() && text(openSheet()!).includes("Nothing else in your mod list changes."), h.paint)).toBe(true);
+    const sheet = openSheet()!;
     expect(h.sentInstall).toEqual([{ action: "plan", candidateId: "c1" }]);
     expect(text(sheet)).toContain("Add “XF Eye Artistry” to Mod Organizer 2?");
     expect(text(sheet)).toContain("At the bottom of the \"Looks\" section");
@@ -167,7 +172,7 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     const consent = buttonNamed(sheet, "Add to Mod Organizer 2")!;
     expect(consent.getAttribute("aria-disabled")).toBeNull();
     consent.click();
-    await settle(); h.paint();
+    expect(await until(() => !sheet.open, h.paint)).toBe(true);
     expect(h.sentInstall.at(-1)).toEqual({ action: "install", candidateId: "c1", token: "t1" });
     expect(sheet.open).toBe(false);
     expect(text(h.root.querySelector(".install-line")!)).toContain("switched on in the profile “Main”");
@@ -177,8 +182,8 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   test("a blocked plan says why, offers the one next step, and can't be accepted", async () => {
     const h = await packageHarness({ plan: PLAN({ blocked: "Choose your Mod Organizer 2 instance and profile in Game & tools first." }) });
     buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
-    await settle(); h.paint();
-    const sheet = lightDocument.body.querySelectorAll("dialog").at(-1)!;
+    expect(await until(() => !!openSheet()?.querySelector(".install-status")?.textContent, h.paint)).toBe(true);
+    const sheet = openSheet()!;
     expect(text(sheet.querySelector(".install-status")!)).toBe("Choose your Mod Organizer 2 instance and profile in Game & tools first.");
     expect(buttonNamed(sheet, "Open Game & tools")!.hidden).toBe(false);
     const consent = buttonNamed(sheet, "Add to Mod Organizer 2")!;
