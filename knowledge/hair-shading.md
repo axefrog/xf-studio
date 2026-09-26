@@ -13,7 +13,7 @@ This page covers hair cards, and lashes that use hair materials. Every vanilla a
 | `Strand_ID` (reg 0) | Greyscale per-strand identity; its **red** channel indexes the profile's ID gradient. Templates and the inspected textures are `isGamma=0`, so the value is linear. | [source] [resource] |
 | `Strand_Gradient` (reg 1) | Greyscale root(0)-to-tip(1) position; **red** indexes the root-to-tip gradient. | [source] [resource] |
 | `Strand_Alpha` (reg 2) | Coverage; **red** channel. | [source] |
-| `HairProfile` (reg 15) | `CHairProfile` (`.hp`): `gradientEntriesID`, `gradientEntriesRootToTip` (unsorted colour stops), `sampleCount` (127 in all but three vanilla profiles). In the shader it is a row index into a runtime float texture. | [source] [resource] |
+| `HairProfile` (reg 15) | `CHairProfile` (`.hp`): `gradientEntriesID`, `gradientEntriesRootToTip` (unsorted colour stops), `sampleCount` (127 in most vanilla profiles; `black_salt_n_pepper` stores 43, and `purple_ombre` and `liliac` omit it, so it is the class default, 64 [resource: native reads of game 2.31; the default from WolvenKit's generated class]). In the shader it is a row index into a runtime float texture. | [source] [resource] |
 | `AlphaCutoff`, `RoughnessScale`, `RoughnessBias`, `ShadowStrength`, `ShadowMin`, `ShadowMax`, `ShadowRoughness`, `Flow`, `FlowStrength`, `Scattering`, `DebugHairColor` | See below. `VertexColorStrength` (reg 8) is declared but unused by the three pixel programs. | [source] |
 | Vertex colour **red** | Baked self-shadow (red = inner, darker). The vertex program passes `COLOR.r` to the pixel programs (`TEXCOORD1.y`). | [source]; [wiki] runtime screenshot |
 
