@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { tagRuleOf } from "../src/archivexl-config";
 import { componentPrefix, NO_OVERRIDES, overriddenMask, overridesKey, resolveCharacter } from "../src/character-resolver";
-import { itemWords, layerScore, pickRootAppearance, resolveClothing, SLOT_TAGS, type ItemRecord } from "../src/clothing-resolver";
+import { BASE_BODY, itemWords, layerScore, pickRootAppearance, PLAYER_ENTITIES, playerBodyType, resolveClothing, SLOT_TAGS, type ItemRecord } from "../src/clothing-resolver";
 import { depotHash } from "../src/depot-path";
 import type { ClothingArea, WornArea } from "../src/save-loadout";
 import { ALL_CHUNKS, cn, cr2w, fixtureInstallation, handle, mesh, rp } from "./resolver-fixtures";
@@ -213,5 +213,51 @@ describe("clothing resolver", () => {
     const neck = resolved.appearances.find(entry => entry.part === "head")!.components[0]!;
     expect(neck.geometry?.visibleChunks).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     expect(resolved.gaps.some(gap => gap.code === "worn-item-hides-head" && gap.subject === "n0_000_pwa_neck")).toBe(true);
+  });
+
+  // ---- PIPE-99: the body type and each record's own suffixes ----
+  test("only the suffixes the item's record lists are evaluated", async () => {
+    const { graph } = setup();
+    // The coat lists Gender and Camera: its &Female&TPP root. Listing Gender alone, the camera root is out of reach.
+    const onlyGender = { ...records["1002"]!, suffixes: ["Gender"] };
+    const result = await resolveClothing(graph, { bodyGender: "female", hairType: "Bald", worn: wear([["OuterChest", "1002"]]), shown: ALL }, ports({ "1002": onlyGender }));
+    expect(result.garments[0]!.rootAppearance).toBe("t2_coat_01_basic_01_&Female");
+    // An item whose record lists no suffix at all takes its bare root only (here: none, so it is reported, not guessed).
+    const none = await resolveClothing(graph, { bodyGender: "female", hairType: "Bald", worn: wear([["OuterChest", "1002"]]), shown: ALL },
+      ports({ "1002": { ...records["1002"]!, suffixes: [] } }));
+    expect(none.garments[0]!.gap?.code).toBe("item-appearance-missing");
+  });
+
+  test("the body type is base_body until a body mod declares one and tags the player entity (ArchiveXL GetBodyType)", async () => {
+    const plain = setup();
+    expect(await playerBodyType(plain.graph, "female")).toEqual({ bodyType: BASE_BODY, gap: null });
+    const player = PLAYER_ENTITIES.female, patchEnt = "mods\\solo\\player_patch.ent";
+    const bodyFiles = { ...files, [player]: partEnt([garment("t0_000_pwa_base__full", `${PARTS}t1_shirt.mesh`)]),
+      [patchEnt]: partEnt([{ $type: "entMeshComponent", name: cn("Body:SoloBody"), chunkMask: ALL_CHUNKS }]),
+      [`${P}torso\\player_inner_torso_item.ent`]: root([["t1_shirt_01_basic_01_&Female", `${APPS}t1_shirt.app`, "basic_01_w"],
+        ["t1_shirt_01_basic_01_&Female&SoloBody", `${APPS}t1_shirt.app`, "basic_01_w_partial"]]) };
+    const declare = { id: "archive/pc/mod/solo.archive.xl", document: { player: { bodyTypes: ["SoloBody", "OtherBody"] }, resource: { patch: { [patchEnt]: [player] } } } };
+    const { graph } = fixtureInstallation([{ virtualPath: "archive/pc/content/basegame_4_gamedata.archive", files: bodyFiles }], [VISUAL_TAGS_XL, declare]);
+    expect(await playerBodyType(graph, "female")).toEqual({ bodyType: "SoloBody", gap: null });
+    // The item's BodyType suffix now reads it.
+    const shirt = { ...records["1001"]!, suffixes: ["Gender", "BodyType"] };
+    const result = await resolveClothing(graph, { bodyGender: "female", hairType: "Bald", worn: wear([["InnerChest", "1001"]]), shown: ALL }, ports({ "1001": shirt }));
+    expect(result.bodyType).toBe("SoloBody");
+    expect(result.garments[0]!.rootAppearance).toBe("t1_shirt_01_basic_01_&Female&SoloBody");
+    // Declared, but the player entity can't be read: the base body, with a gap, never a guess.
+    const unread = fixtureInstallation([{ virtualPath: "archive/pc/content/basegame_4_gamedata.archive", files }], [VISUAL_TAGS_XL, declare]);
+    const answer = await playerBodyType(unread.graph, "female");
+    expect(answer.bodyType).toBe(BASE_BODY);
+    expect(answer.gap?.code).toBe("body-type-unread");
+    const withGap = await resolveClothing(unread.graph, { bodyGender: "female", hairType: "Bald", worn: wear([["InnerChest", "1001"]]), shown: ALL }, ports({ "1001": shirt }));
+    expect(withGap.gaps.map(gap => gap.code)).toContain("body-type-unread");
+  });
+
+  test("an unreadable TweakDB is said as such for every item, never as a mod's item (PIPE-100)", async () => {
+    const { graph } = setup();
+    const result = await resolveClothing(graph, { bodyGender: "female", hairType: "Bald", worn: wear([["Legs", "1003"]]), shown: ALL },
+      { records: () => null, presetTags: () => [] });
+    expect(result.garments[0]!.gap?.code).toBe("records-unreadable");
+    expect(result.gaps.map(gap => gap.code)).toEqual(["records-unreadable"]);
   });
 });

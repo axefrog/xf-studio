@@ -67,7 +67,7 @@ const members = tar(["-tf", archive]).trim().split(/\r?\n/);
 const views = `${bundle}/Resources/app/views/studio/`;
 const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWith("/"))
   .map(name => name.slice(views.length));
-sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
+sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js", "native-decode-worker.js",
   "build/studio-startup.js", "build/raster-worker.js", "boot-watchdog.js", packagedNotices, packagedLicence], "Packaged Studio view");
 // The installed app must carry the current licence and notices, and the notices
 // must name every shipped program and the versions actually built in.
@@ -139,5 +139,5 @@ console.log(`${config.app.version} ${channel} build ${update.hash}; single setup
   `carries the three verified payload files byte for byte, once each, plus ${wrapper.length} bytes of Inno Setup's own wrapper ` +
   `(budget ${WRAPPER_BUDGET}). The wrapper's setup data is stored uncompressed; its Latin-1 and UTF-16 strings hold no user paths or ` +
   `email addresses (its program code is not text, and is not scanned).`);
-console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
+console.log("Eleven allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
 console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);

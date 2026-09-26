@@ -30,11 +30,14 @@ export type ClothingProbe = {
   colours: { overlapWithClothes: Colour; overlapEmpty: Colour; legsWithClothes: Colour; legsBodyOnly: Colour; torsoWithClothes: Colour; torsoEmpty: Colour };
   shapes: { garmentKeys: string[]; garment: number | null };
   hidden: { clothesHidden: boolean; memorySame: boolean; shownAgainSame: boolean };
+  /** A clothing change that re-masks the body: the body loads again, the garments (same body shape) are kept (PREV-106). */
+  reuse: { garmentsKept: boolean; bodyLoaded: boolean; reused: number };
   memory: { empty: Memory; withClothes: Memory; bodyOnly: Memory; clothesAgain: Memory; none: Memory; noneAgain: Memory };
 };
 const probe: ClothingProbe = { ok: false, errors: [], renderer: "", drawn: { slots: [], problems: null, limits: null, notes: [], bakes: [] },
   colours: {} as ClothingProbe["colours"], shapes: { garmentKeys: [], garment: null },
-  hidden: { clothesHidden: false, memorySame: false, shownAgainSame: false }, memory: {} as ClothingProbe["memory"] };
+  hidden: { clothesHidden: false, memorySame: false, shownAgainSame: false }, reuse: { garmentsKept: false, bodyLoaded: false, reused: 0 },
+  memory: {} as ClothingProbe["memory"] };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const hex = async (bytes: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>)), b => b.toString(16).padStart(2, "0")).join("");
@@ -212,8 +215,14 @@ try {
   await show(bodyOnly);
   probe.memory.bodyOnly = memory();
   probe.colours.legsBodyOnly = at(frame(), LEGS);
-  await show(withClothes);
+  const again = await show(withClothes);
   probe.memory.clothesAgain = memory();
+  // The same clothes with the torso chunk shown again (another item's hiding tag gone): the body's chunk mask changed, its shape didn't.
+  const garments = again!.components.filter(item => item.component.slot === "clothing");
+  const remasked: RenderComponent = { ...body, chunks: [0, 1], materials: [0, 1].map(chunk => ({ ...body.materials[0]!, chunk })) };
+  const after = await show(record("d", [remasked, outer, inner]));
+  probe.reuse = { garmentsKept: after!.components.filter(item => item.component.slot === "clothing").every(item => garments.includes(item)) && garments.length === 2,
+    bodyLoaded: !again!.components.some(item => item.component.slot === "body" && after!.components.includes(item)), reused: after!.reused };
   await show(null);
   probe.memory.none = memory();
   // A second round: the layered bake keeps one kit per renderer for its life, so only growth between rounds is a leak.

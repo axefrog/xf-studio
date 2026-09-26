@@ -9,9 +9,10 @@
  * 2. **Factory**: `entityName` → the root entity, from the game's item factories and every factory an `.xl` adds (FactoryIndex; a later
  *    factory's row for the same name wins [hypothesis]). The engine's own factory list is native; its item factories are the `.csv`s it
  *    ships at `…\gameplay\factories\items\` (`FACTORIES`) [resource: present in the 2.31 archives].
- * 3. **Root appearance**: the item's suffixes evaluated for this V (`Gender` from the body, `Camera` = third person, `Partial` from the
- *    outer torso item's `hide_T1part`, `HairType` from the creator's hair tags, ArchiveXL's `BodyType`, `ArmsState`, `FeetState` and
- *    `LegsState`), then the most specific root appearance whose `&` suffixes are all among them (`&Female&TPP` over `&Female` over the
+ * 3. **Root appearance**: the suffixes the item's own record lists (`appearanceSuffixes`), each evaluated for this V (`Gender` from the
+ *    body, `Camera` = third person, `Partial` from the outer torso item's `hide_T1part`, `HairType` from the creator's hair tags, ArchiveXL's
+ *    `BodyType` from the player entity (`playerBodyType`) and `ArmsState` for arms without cyberware; `FeetState` and `LegsState` are not
+ *    evaluated yet), then the most specific root appearance whose `&` suffixes are all among them (`&Female&TPP` over `&Female` over the
  *    bare name) [wiki: ArchiveXL suffixes, "Suffix load order"]. A root tagged `EmptyAppearance:<suffix>` for a suffix the V has draws
  *    nothing (ArchiveXL `OnResolveAppearance`). Items resolved through ArchiveXL dynamic appearances (a `!` name or the root's
  *    `DynamicAppearance` tag) are reported, not guessed (clothing render phase 5).
@@ -29,10 +30,10 @@
 import type { ArchiveXlConfig } from "./archivexl-config";
 import { type BodyGender, type ComponentOverrides, componentPrefix, NO_OVERRIDES, resolveAppDefinition, type ResolvedCharacter,
   type ResolvedComponent } from "./character-resolver";
-import { depotHash, refFromPath, refLabel, type DepotRef } from "./depot-path";
-import { asArray, cname, depotRef, isObject, type JsonObject } from "./red-json";
+import { depotHash, refFromHash, refFromPath, refLabel, type DepotRef } from "./depot-path";
+import { asArray, cname, depotRef, HandleScope, isObject, type JsonObject, packageChunks } from "./red-json";
 import type { Ambiguity } from "./resolution-evidence";
-import { entityVisualTags, type Provenance, type ResourceGraph } from "./resource-graph";
+import { entityVisualTags, tagList, type Provenance, type ResourceGraph } from "./resource-graph";
 import type { ClothingArea, WornArea } from "./save-loadout";
 
 import type { HairType } from "./clothing-dressing";
@@ -56,8 +57,11 @@ export type ItemRecord = {
   readonly garmentOffset: number;
 };
 export interface ClothingPorts {
-  /** Item records by the save's decimal TweakDBID; null for an ID the compiled TweakDB doesn't define (a TweakXL item). */
-  records(items: readonly string[]): Promise<ReadonlyMap<string, ItemRecord | null>> | ReadonlyMap<string, ItemRecord | null>;
+  /**
+   * Item records by the save's decimal TweakDBID; null for an ID the compiled TweakDB doesn't define (a TweakXL item). The whole answer is
+   * null when the TweakDB itself couldn't be read (each item then says so, never "a mod's item").
+   */
+  records(items: readonly string[]): Promise<ReadonlyMap<string, ItemRecord | null> | null> | ReadonlyMap<string, ItemRecord | null> | null;
   /** The cooked preset's tags for a root entity (depot hash) and root appearance name; null when the preset couldn't be read. */
   presetTags(entityHash: string, appearance: string): readonly string[] | null;
 }
@@ -101,6 +105,8 @@ export type ResolvedGarment = {
   readonly components: readonly ResolvedComponent[];
   readonly layers: Readonly<Record<string, number>>;
 };
+/** Clothes that couldn't be worked out at all (the host's resolution failed, or the item records are unreadable): an outcome, never "none". */
+export type ClothingFailure = { readonly failed: "records-unreadable" | "unresolved" };
 export type ResolvedClothing = {
   readonly garments: readonly ResolvedGarment[];
   /** What the drawn items change on every component of the player (ArchiveXL tag rules and entity-wide `partsOverrides`). */
@@ -109,6 +115,8 @@ export type ResolvedClothing = {
   readonly feet: "flat" | "lifted";
   /** ArchiveXL's feet state for `{feet}` and the feet suffixes. */
   readonly feetState: "Flat" | "Lifted" | "HighHeels" | "FlatShoes" | "None";
+  /** ArchiveXL's body type the items' `BodyType` suffix reads (`base_body` unless a body mod's tag is on the player entity). */
+  readonly bodyType: string;
   readonly gaps: ResolvedCharacter["gaps"];
   readonly ambiguities: readonly Ambiguity[];
 };
@@ -190,11 +198,15 @@ export async function resolveClothing(graph: ResourceGraph, input: ClothingInput
   const gaps: ResolvedCharacter["gaps"][number][] = [], ambiguities: Ambiguity[] = [];
   const records = await ports.records(input.worn.map(entry => entry.item));
   const factories = await factoryTable(graph, graph.xl);
+  const body = await playerBodyType(graph, input.bodyGender);
+  if (body.gap) gaps.push({ code: body.gap.code, subject: PLAYER_ENTITIES[input.bodyGender], detail: body.gap.detail });
   type Working = { worn: WornArea; record: ItemRecord | null; root: { ref: DepotRef; appearances: RootAppearance[]; tags: string[]; provenance: Provenance } | null;
     picked: RootAppearance | null; tags: string[]; definitionTags: string[]; gap: { code: string; detail: string } | null; empty: boolean };
   const working: Working[] = await Promise.all(input.worn.map(async (worn): Promise<Working> => {
-    const record = records.get(worn.item) ?? null;
+    const record = records?.get(worn.item) ?? null;
     const out: Working = { worn, record, root: null, picked: null, tags: [], definitionTags: [], gap: null, empty: false };
+    // An unreadable TweakDB is said as such, never as a mod's item (PIPE-100).
+    if (!records) { out.gap = { code: "records-unreadable", detail: "The game's compiled item records (TweakDB) couldn't be read." }; return out; }
     if (!record) { out.gap = { code: "item-unknown", detail: "The game's compiled item records don't define it (an item a mod adds with TweakXL isn't read yet)." }; return out; }
     out.tags = [...record.visualTags];
     if (record.appearanceName.includes("!")) { out.gap = { code: "item-dynamic", detail: "It uses an ArchiveXL dynamic appearance, which the preview doesn't read yet." }; return out; }
@@ -213,7 +225,10 @@ export async function resolveClothing(graph: ResourceGraph, input: ClothingInput
   const shownArea = (area: ClothingArea) => input.shown.includes(area);
   const pick = async (entry: Working, partial: "Part" | "Full") => {
     if (!entry.root || !entry.record || entry.gap) return;
-    const values = new Set([gender, "TPP", partial, input.hairType, "base_body", "BaseArms"]);
+    // Only the suffixes the item's own record lists; one the Studio can't evaluate yet (`FeetState`, `LegsState`, a mod's) has no value.
+    const state: Readonly<Record<string, string>> = { Gender: gender, Camera: "TPP", Partial: partial, HairType: input.hairType, BodyType: body.bodyType,
+      ArmsState: ARMS_STATE };
+    const values = new Set(entry.record.suffixes.flatMap(suffix => state[suffix] ?? []));
     const picked = pickRootAppearance(entry.root.appearances, entry.record.appearanceName, values);
     entry.picked = picked;
     entry.empty = false;
@@ -315,7 +330,62 @@ export async function resolveClothing(graph: ResourceGraph, input: ClothingInput
   const feetItem = drawn.find(entry => entry.worn.area === "Feet");
   const feetState = input.bodyGender === "male" ? "None" : !feetItem ? "Flat" : feetItem.tags.includes("HighHeels") ? "HighHeels"
     : feetItem.tags.includes("FlatShoes") || feetItem.tags.includes("force_FlatFeet") ? "FlatShoes" : "Lifted";
-  return { garments, overrides, feet: feetItem ? "lifted" : "flat", feetState, gaps, ambiguities };
+  return { garments, overrides, feet: feetItem ? "lifted" : "flat", feetState, bodyType: body.bodyType, gaps, ambiguities };
+}
+
+/** The third-person player entity per body gender: what body mods patch their body tag into [wiki: ArchiveXL body mods, "Patch the player entity files"]. */
+export const PLAYER_ENTITIES: Readonly<Record<BodyGender, string>> = Object.freeze({
+  female: "base\\characters\\entities\\player\\player_wa_tpp.ent", male: "base\\characters\\entities\\player\\player_ma_tpp.ent" });
+/** ArchiveXL's body type without a body mod's tag, which also covers vanilla-shaped body replacers [source: PuppetState `BaseBodyName`]. */
+export const BASE_BODY = "base_body";
+/** ArchiveXL's arms state for arms without arm cyberware (a creator V has none; the `{arms}` state from cyberware is not read yet). */
+export const ARMS_STATE = "BaseArms";
+
+/** An entity template's body-tag evidence: its entity and visual tags, and its components (names, morph-target tags) in stored order. */
+function bodyEvidence(root: JsonObject): { tags: string[]; components: { name: string; tags: string[] }[] } {
+  const scope = new HandleScope(root);
+  const compiled = packageChunks(root.compiledData);
+  const inline = asArray(root.components).map(item => scope.data(item)).filter((item): item is JsonObject => !!item);
+  const tags = [...entityVisualTags(root)], components: { name: string; tags: string[] }[] = [];
+  for (const chunk of [...compiled, ...inline]) {
+    const type = typeof chunk.$type === "string" ? chunk.$type : "";
+    if (!/Component$/.test(type)) { tags.push(...tagList(chunk.tags), ...tagList(chunk.visualTags)); continue; }
+    components.push({ name: cname(chunk.name), tags: type === "entMorphTargetSkinnedMeshComponent" ? tagList(chunk.tags) : [] });
+  }
+  return { tags, components };
+}
+
+/**
+ * ArchiveXL's body type for the player (PuppetStateExtension `GetBodyType`, 1.27.3): `base_body` unless a body mod declares a type
+ * (`player.bodyTypes` in its `.xl`) whose tag `Body:<name>` the player entity carries: in its entity or visual tags first, then on a
+ * component (its name, or a morph-target component's tags), the last component first. Body mods add the tag by patching the player entity
+ * (ArchiveXL `resource.patch`), so the entity is read with every patch that targets it. With a type declared but the entity unreadable,
+ * or two declared types both present, the answer is `base_body` with a gap, never a guess.
+ */
+export async function playerBodyType(graph: ResourceGraph, gender: BodyGender): Promise<{ bodyType: string; gap: { code: string; detail: string } | null }> {
+  const declared = [...new Set(graph.xl.bodyTypes.map(entry => entry.name))];
+  if (!declared.length) return { bodyType: BASE_BODY, gap: null };
+  const ref = refFromPath(PLAYER_ENTITIES[gender]);
+  const loaded = await graph.load(ref, "ent");
+  if (!loaded) return { bodyType: BASE_BODY, gap: { code: "body-type-unread", detail:
+    `A body mod declares a body type (${declared.slice(0, 4).join(", ")}), but the player entity couldn't be read, so clothes use the base body's look.` } };
+  const evidence = [bodyEvidence(loaded.root)];
+  for (const patch of graph.patchesFor(ref.hash)) {
+    const source = await graph.load(refFromHash(patch.source, patch.sourcePath), "ent");
+    if (source) evidence.push(bodyEvidence(source.root));
+  }
+  const tag = (name: string) => `Body:${name}`;
+  const tags = new Set(evidence.flatMap(item => item.tags));
+  let found = declared.filter(name => tags.has(tag(name)));
+  if (!found.length) {
+    for (const component of evidence.flatMap(item => item.components).reverse()) {
+      found = declared.filter(name => component.name === tag(name) || component.tags.includes(tag(name)));
+      if (found.length) break;
+    }
+  }
+  if (found.length > 1) return { bodyType: BASE_BODY, gap: { code: "body-type-ambiguous", detail:
+    `The player entity carries the tags of more than one body type (${found.slice(0, 4).join(", ")}), so clothes use the base body's look.` } };
+  return { bodyType: found[0] ?? BASE_BODY, gap: null };
 }
 
 /** The depot hash of a root entity path, as the cooked preset keys it (`entityPathHash`). */

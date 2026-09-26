@@ -47,12 +47,16 @@
  *   their factories, root entities and `.app`s; knowledge/clothing.md), each garment component carrying its `garment` (clothing area, item
  *   record ID and layer score), and body components whose chunk masks worn items changed (ArchiveXL tag rules, entity-wide parts
  *   overrides). A v9 reader refuses v2 to v8 character records.
+ * - `xfs/render-detail-10`: body components carry their part in the censorship policy (`censor`: the game's underwear `cover`, or a part
+ *   `covered` by it, the uncensored skin), so every reader fails closed: a record whose covered parts outlive a cover withdraws the body
+ *   (`withdrawUncoveredBody`), and covers are kept within the part cap. A v10 reader refuses v2 to v9 character records, whose body carried
+ *   no such marker.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-9" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-10" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
 export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5",
-  "xfs/render-detail-6", "xfs/render-detail-7", "xfs/render-detail-8"];
+  "xfs/render-detail-6", "xfs/render-detail-7", "xfs/render-detail-8", "xfs/render-detail-9"];
 
 /**
  * A record from a host of another version: older (a retired schema) or newer (a schema this reader doesn't know yet). It means the host
@@ -304,7 +308,26 @@ export type RenderComponent = {
    * and its layer score (component prefix and size tag; null when its prefix has none), which orders coincident layers.
    */
   garment?: { area: string; item: string; layer: number | null };
+  /**
+   * Body components in the censorship policy (character-detail-plan.ts `censorRole`): a `cover` is the game's underwear; a `covered` part
+   * (the uncensored skin) is drawn only while every cover of the record is (`withdrawUncoveredBody`).
+   */
+  censor?: "cover" | "covered";
 };
+/** One plain line for a body withdrawn because its underwear couldn't be read or loaded (PIPE-97). */
+export const UNCOVERED_BODY = "XF Studio couldn't load the underwear the game draws on your V, so the body isn't shown.";
+/**
+ * The fail-closed rule every reader of a record applies (PIPE-97): a `covered` part is drawn only while the record's covers all are.
+ * `covers` counts the covers the record lists and `present` the ones still there (parsed or loaded); if any covered part remains while a
+ * cover is missing (or the record lists none), every body part is withdrawn: a body without its skin is not the body, and never more than
+ * the underwear shows. Returns the parts kept and whether the body was withdrawn.
+ */
+export function withdrawUncoveredBody<T>(parts: readonly T[], componentOf: (part: T) => RenderComponent, covers: number): { kept: T[]; withdrawn: boolean } {
+  const covered = parts.some(part => componentOf(part).censor === "covered");
+  const present = parts.filter(part => componentOf(part).censor === "cover").length;
+  if (!covered || (covers > 0 && present >= covers)) return { kept: [...parts], withdrawn: false };
+  return { kept: parts.filter(part => componentOf(part).slot !== "body"), withdrawn: true };
+}
 export type DetailSlotState = { slot: DetailSlot; state: "shown" | "none" | "unavailable";
   /** Short plain label (the resolved choice), for the character panel. */
   label: string;
@@ -495,6 +518,8 @@ function component(value: unknown, index: number): RenderComponent {
   if (rule !== undefined && (!rule || typeof rule !== "object")) fail(`${what} morph texture rule is invalid.`);
   const morphs = item.morphs;
   if (morphs !== undefined && (!Array.isArray(morphs) || morphs.length > 16)) fail(`${what} morphs are invalid.`);
+  const censor = item.censor;
+  if (censor !== undefined && (item.slot !== "body" || (censor !== "cover" && censor !== "covered"))) fail(`${what} censorship part is invalid.`);
   const garment = item.garment;
   if (garment !== undefined && (!garment || typeof garment !== "object" || item.slot !== "clothing" || !/^[A-Za-z]{1,32}$/.test(String(garment.area)) ||
     !/^[1-9][0-9]{0,19}$/.test(String(garment.item)) || !(garment.layer === null || (Number.isInteger(garment.layer) && Math.abs(garment.layer) <= 100_000))))
@@ -508,8 +533,10 @@ function component(value: unknown, index: number): RenderComponent {
     ...(rule ? { morphTexture: { morph: text(rule.morph, `${what} morph`), texture: rule.texture === null ? null : text(rule.texture, `${what} morph texture`),
       parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}),
     ...(morphs ? { morphs: morphs.map((name, k) => paramName(name, `${what} morph ${k}`)) } : {}),
-    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer } } : {}) };
+    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer } } : {}), ...(censor ? { censor } : {}) };
 }
+/** A record entry that says it is a cover (before it is parsed: a cover the parser drops still counts, so its covered parts go too). */
+const isRawCover = (item: unknown) => !!item && typeof item === "object" && (item as RenderComponent).slot === "body" && (item as RenderComponent).censor === "cover";
 
 /**
  * Parse of a character record: an unexpected field shape never reaches the loader. The record's frame (schema, origin, character, slot
@@ -529,14 +556,22 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
   const left: string[] = [];
   const dropped = (what: string) => { left.push(what); };
   if (!Array.isArray(doc.components)) fail("components are invalid.");
-  const components: RenderComponent[] = [], ids = new Set<string>();
+  const parsedParts: RenderComponent[] = [], ids = new Set<string>();
+  // The covers are kept within the part cap first (PIPE-97): the parts they cover are never kept while they are cut.
+  const covers = Math.min(LIMITS.components, doc.components.filter(isRawCover).length);
+  let others = 0, keptCovers = 0;
   doc.components.forEach((item, index) => {
-    if (components.length >= LIMITS.components) { dropped(`a part beyond the first ${LIMITS.components}`); return; }
+    const cover = isRawCover(item);
+    if (cover ? keptCovers >= covers : others >= LIMITS.components - covers) { dropped(`a part beyond the first ${LIMITS.components}`); return; }
+    if (cover) keptCovers++; else others++;
     let parsed: RenderComponent;
     try { parsed = component(item, index); } catch { dropped(`${DETAIL_SLOTS.includes((item as RenderComponent)?.slot) ? `a ${(item as RenderComponent).slot}` : "a"} part`); return; }
     if (ids.has(parsed.id)) { dropped(`a repeated ${parsed.slot} part`); return; }
-    ids.add(parsed.id); components.push(parsed);
+    ids.add(parsed.id); parsedParts.push(parsed);
   });
+  // Every cover the record lists must have been kept for the parts it covers to be (fail closed).
+  const { kept: components, withdrawn } = withdrawUncoveredBody(parsedParts, part => part, doc.components.filter(isRawCover).length);
+  if (withdrawn) dropped("the body, because the underwear the game draws on it couldn't be read");
   if (!Array.isArray(doc.slots) || doc.slots.length !== DETAIL_SLOTS.length) fail("slot outcomes are invalid.");
   const slots = DETAIL_SLOTS.map((slot): DetailSlotState => {
     const entry = doc.slots.find(item => item?.slot === slot);
@@ -547,6 +582,7 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     const label = clampedText(entry.label, SLOT_LABEL_MAX);
     if (typeof entry.message === "string" && entry.message.length > SLOT_MESSAGE_MAX) dropped(`the end of the ${slot} message`);
     const message = entry.message === undefined ? undefined : text(typeof entry.message === "string" ? clampedText(entry.message, SLOT_MESSAGE_MAX) : entry.message, `${slot} message`);
+    if (slot === "body" && withdrawn) return { slot, state: "unavailable", label, message: UNCOVERED_BODY };
     if (entry.state === "shown" && !components.some(item => item.slot === slot)) {
       const { noun, not, pronoun } = SLOT_WORDS[slot];
       return { slot, state: "unavailable", label, message: `XF Studio couldn't read your V's ${noun} from the prepared details, so ${pronoun} ${not} shown.` };

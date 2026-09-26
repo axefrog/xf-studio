@@ -16,7 +16,7 @@
  * tables). A field of any other type is skipped by the next field's offset; one that can't be skipped that way (the last field of an
  * array element) makes the element, and so the field holding it, unreadable, which the caller learns from `skipped`.
  *
- * Strictness: every read is bounded by its chunk (a chunk ends where the next one starts), offsets must increase, a count can't exceed the
+ * Strictness: the name and chunk tables are capped (`MAX_NAMES`, `MAX_CHUNKS`) and names are decoded only when used; every read is bounded by its chunk (a chunk ends where the next one starts), offsets must increase, a count can't exceed the
  * bytes left, and nesting and decoded values are capped, so a hostile save can't make one value decode many times.
  */
 
@@ -43,6 +43,8 @@ const FIXED: Readonly<Record<string, [size: number, read: (view: DataView, at: n
   TweakDBID: [8, (v, at) => v.getBigUint64(at, true).toString()],
 };
 const MAX_DEPTH = 32, MAX_VALUES = 1_000_000;
+/** Names a package may list (fields index them by a u16) and chunks it may hold (far above any save's script data; CORE-92). */
+export const MAX_NAMES = 65_536, MAX_CHUNKS = 65_536;
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 
 /** Open a save's object package (the bytes after the node's u32 size). Throws `SavePackageError` when the frame is not one. */
@@ -64,19 +66,24 @@ export function readSavePackage(bytes: Uint8Array): SavePackage {
   const base = pos + cruids * 8, size = bytes.length - base;
   if (!(nameDesc <= nameData && nameData <= chunkDesc && chunkDesc <= chunkData && chunkData <= size)) throw new SavePackageError("The package's sections are out of order.");
   if ((nameData - nameDesc) % 4 || (chunkData - chunkDesc) % 8) throw new SavePackageError("A package table is not a whole number of entries.");
-  const names: string[] = [];
-  for (let i = 0; i < (nameData - nameDesc) / 4; i++) {
-    const d = view.getUint32(base + nameDesc + i * 4, true), offset = d & 0xffffff, length = d >>> 24;
-    if (offset + Math.max(0, length - 1) > size) throw new SavePackageError("A package name lies outside the package.");
-    names.push(utf8.decode(bytes.subarray(base + offset, base + offset + Math.max(0, length - 1))));
-  }
+  // Bounded before anything is decoded (CORE-92): a field names its name and type by a u16, so more names than that can never be used, and
+  // no save's script data holds more chunks than `MAX_CHUNKS`. Names are decoded only when a chunk or field asks for them.
+  const nameCount = (nameData - nameDesc) / 4, chunkCount = (chunkData - chunkDesc) / 8;
+  if (nameCount > MAX_NAMES) throw new SavePackageError(`A package with ${nameCount} names is not read.`);
+  if (chunkCount > MAX_CHUNKS) throw new SavePackageError(`A package with ${chunkCount} chunks is not read.`);
+  const names = new Map<number, string>();
   const name = (index: number) => {
-    const value = names[index];
-    if (value === undefined) throw new SavePackageError(`Package name ${index} doesn't exist.`);
+    const known = names.get(index);
+    if (known !== undefined) return known;
+    if (!Number.isInteger(index) || index < 0 || index >= nameCount) throw new SavePackageError(`Package name ${index} doesn't exist.`);
+    const d = view.getUint32(base + nameDesc + index * 4, true), offset = d & 0xffffff, length = d >>> 24;
+    if (offset + Math.max(0, length - 1) > size) throw new SavePackageError("A package name lies outside the package.");
+    const value = utf8.decode(bytes.subarray(base + offset, base + offset + Math.max(0, length - 1)));
+    names.set(index, value);
     return value;
   };
   const table: { type: string; start: number; end: number }[] = [];
-  for (let i = 0; i < (chunkData - chunkDesc) / 8; i++) {
+  for (let i = 0; i < chunkCount; i++) {
     const at = base + chunkDesc + i * 8;
     table.push({ type: name(view.getUint32(at, true)), start: base + view.getUint32(at + 4, true), end: bytes.length });
   }

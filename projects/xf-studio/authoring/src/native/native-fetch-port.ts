@@ -60,7 +60,9 @@ export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATI
 
 type Opened<T> = { reader: T } | { reader: null; reason: string };
 type ReaderOptions = { limits?: NativeLimits };
-type DecoderOptions = { timeoutMs?: number; limits?: NativeLimits; roots?: ReadonlySet<string> };
+type DecoderOptions = { timeoutMs?: number; limits?: NativeLimits; roots?: ReadonlySet<string>;
+  /** The worker script: a packaged host's bundle of native-decode-worker.ts (the source file next to the reader otherwise). */
+  script?: string | URL };
 
 function readerOver(oodle: OodleLibrary, limits: NativeLimits = DEFAULT_LIMITS): NativeReader {
   const pool = new NativeArchivePool(oodle.decompress, 64, limits);
@@ -91,7 +93,8 @@ function workerDecoderFor(gameRoot: string, opened: Opened<NativeReader>, option
   if (!opened.reader) return { decoder: null, reason: opened.reason };
   const { identity, oodleSha256 } = opened.reader;
   opened.reader.close();
-  return { decoder: new WorkerDecoder({ decompressor: { gameRoot, trustedSha256: oodleSha256 }, roots: options.roots ?? NATIVE_ROOTS, limits: options.limits, identity, timeoutMs: options.timeoutMs }) };
+  return { decoder: new WorkerDecoder({ decompressor: { gameRoot, trustedSha256: oodleSha256 }, roots: options.roots ?? NATIVE_ROOTS, limits: options.limits, identity,
+    timeoutMs: options.timeoutMs, ...(options.script ? { script: options.script } : {}) }) };
 }
 
 /**

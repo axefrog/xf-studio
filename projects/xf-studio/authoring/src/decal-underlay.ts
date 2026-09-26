@@ -13,47 +13,86 @@ export type NearestVertices = {
 };
 
 /**
+ * A uniform grid over a set of source vertices, built once and searched for many targets (PREV-106: the body's shape is searched by
+ * every garment of a load). Cells of a few millimetres (about the head's vertex spacing) are keyed by one number within the sources'
+ * bounds (no string per lookup), and a target farther than `maxDistance` outside those bounds is unmatched without a search.
+ */
+export class VertexGrid {
+  private readonly cell: number;
+  private readonly rings: number;
+  private readonly origin: [number, number, number];
+  private readonly size: [number, number, number];
+  private readonly cells = new Map<number, number[]>();
+  private readonly low: [number, number, number];
+  private readonly high: [number, number, number];
+  constructor(private readonly sourcePositions: ArrayLike<number>, readonly maxDistance = 0.02) {
+    this.cell = Math.max(1e-6, Math.min(maxDistance, 0.004));
+    this.rings = Math.ceil(maxDistance / this.cell);
+    const sources = sourcePositions.length / 3;
+    const low: [number, number, number] = [Infinity, Infinity, Infinity], high: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+    for (let s = 0; s < sources; s++) for (let k = 0; k < 3; k++) {
+      const v = sourcePositions[s * 3 + k]!;
+      if (v < low[k]!) low[k] = v;
+      if (v > high[k]!) high[k] = v;
+    }
+    this.low = low; this.high = high;
+    const cellOf = (v: number) => Math.floor(v / this.cell);
+    this.origin = sources ? [cellOf(low[0]), cellOf(low[1]), cellOf(low[2])] : [0, 0, 0];
+    this.size = sources ? [cellOf(high[0]) - this.origin[0] + 1, cellOf(high[1]) - this.origin[1] + 1, cellOf(high[2]) - this.origin[2] + 1] : [0, 0, 0];
+    for (let s = 0; s < sources; s++) {
+      const key = this.key(cellOf(sourcePositions[s * 3]!), cellOf(sourcePositions[s * 3 + 1]!), cellOf(sourcePositions[s * 3 + 2]!))!;
+      const bucket = this.cells.get(key);
+      if (bucket) bucket.push(s); else this.cells.set(key, [s]);
+    }
+  }
+  /** A cell's number, or null outside the sources' cells (no vertex there). */
+  private key(x: number, y: number, z: number): number | null {
+    const i = x - this.origin[0], j = y - this.origin[1], k = z - this.origin[2];
+    if (i < 0 || j < 0 || k < 0 || i >= this.size[0] || j >= this.size[1] || k >= this.size[2]) return null;
+    return (i * this.size[1] + j) * this.size[2] + k;
+  }
+  /** Nearest source vertex for every target vertex within the grid's distance (the same answer as a full search). */
+  nearest(targetPositions: ArrayLike<number>): NearestVertices {
+    const targets = targetPositions.length / 3, cell = this.cell, reach = this.maxDistance, source = this.sourcePositions;
+    const index = new Int32Array(targets).fill(-1);
+    let maxMatchedDistance = 0, unmatched = 0;
+    const limit = reach * reach;
+    for (let t = 0; t < targets; t++) {
+      const tx = targetPositions[t * 3]!, ty = targetPositions[t * 3 + 1]!, tz = targetPositions[t * 3 + 2]!;
+      // Farther than the reach outside the sources' bounds: nothing can be close enough.
+      if (tx < this.low[0] - reach || ty < this.low[1] - reach || tz < this.low[2] - reach ||
+        tx > this.high[0] + reach || ty > this.high[1] + reach || tz > this.high[2] + reach) { unmatched++; continue; }
+      const cx = Math.floor(tx / cell), cy = Math.floor(ty / cell), cz = Math.floor(tz / cell);
+      let best = -1, bestD = Infinity;
+      for (let ring = 0; ring <= this.rings; ring++) {
+        // Every vertex in shell `ring` is at least (ring − 1) cells away.
+        if (best >= 0 && ((ring - 1) * cell) ** 2 > bestD) break;
+        for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++) for (let dz = -ring; dz <= ring; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== ring) continue;
+          const key = this.key(cx + dx, cy + dy, cz + dz);
+          const bucket = key === null ? undefined : this.cells.get(key);
+          if (!bucket) continue;
+          for (const s of bucket) {
+            const ex = source[s * 3]! - tx, ey = source[s * 3 + 1]! - ty, ez = source[s * 3 + 2]! - tz;
+            const d = ex * ex + ey * ey + ez * ez;
+            if (d < bestD || (d === bestD && s < best)) { bestD = d; best = s; }
+          }
+        }
+      }
+      if (best < 0 || bestD > limit) { unmatched++; continue; }
+      index[t] = best;
+      maxMatchedDistance = Math.max(maxMatchedDistance, Math.sqrt(bestD));
+    }
+    return { index, maxMatchedDistance, unmatched };
+  }
+}
+
+/**
  * Nearest source vertex for every target vertex within `maxDistance`, through a uniform grid of that cell size (the same
  * answer as a full search, in time proportional to the vertices, not their product).
  */
 export function nearestVertices(targetPositions: ArrayLike<number>, sourcePositions: ArrayLike<number>, maxDistance = 0.02): NearestVertices {
-  const targets = targetPositions.length / 3, sources = sourcePositions.length / 3;
-  // Cells of a few millimetres (about the head's vertex spacing), searched in growing shells until no closer vertex can exist.
-  const cell = Math.max(1e-6, Math.min(maxDistance, 0.004));
-  const rings = Math.ceil(maxDistance / cell);
-  const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
-  const grid = new Map<string, number[]>();
-  for (let s = 0; s < sources; s++) {
-    const k = key(Math.floor(sourcePositions[s * 3]! / cell), Math.floor(sourcePositions[s * 3 + 1]! / cell), Math.floor(sourcePositions[s * 3 + 2]! / cell));
-    const bucket = grid.get(k);
-    if (bucket) bucket.push(s); else grid.set(k, [s]);
-  }
-  const index = new Int32Array(targets).fill(-1);
-  let maxMatchedDistance = 0, unmatched = 0;
-  const limit = maxDistance * maxDistance;
-  for (let t = 0; t < targets; t++) {
-    const tx = targetPositions[t * 3]!, ty = targetPositions[t * 3 + 1]!, tz = targetPositions[t * 3 + 2]!;
-    const cx = Math.floor(tx / cell), cy = Math.floor(ty / cell), cz = Math.floor(tz / cell);
-    let best = -1, bestD = Infinity;
-    for (let ring = 0; ring <= rings; ring++) {
-      // Every vertex in shell `ring` is at least (ring − 1) cells away.
-      if (best >= 0 && ((ring - 1) * cell) ** 2 > bestD) break;
-      for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++) for (let dz = -ring; dz <= ring; dz++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== ring) continue;
-        const bucket = grid.get(key(cx + dx, cy + dy, cz + dz));
-        if (!bucket) continue;
-        for (const s of bucket) {
-          const ex = sourcePositions[s * 3]! - tx, ey = sourcePositions[s * 3 + 1]! - ty, ez = sourcePositions[s * 3 + 2]! - tz;
-          const d = ex * ex + ey * ey + ez * ez;
-          if (d < bestD || (d === bestD && s < best)) { bestD = d; best = s; }
-        }
-      }
-    }
-    if (best < 0 || bestD > limit) { unmatched++; continue; }
-    index[t] = best;
-    maxMatchedDistance = Math.max(maxMatchedDistance, Math.sqrt(bestD));
-  }
-  return { index, maxMatchedDistance, unmatched };
+  return new VertexGrid(sourcePositions, maxDistance).nearest(targetPositions);
 }
 
 /**
@@ -86,9 +125,10 @@ export const decodeSrgbByte = (byte: number) => { const c = byte / 255; return c
  * the body's shape this way where the body's own shape keys move the surface under it (the breast size), as the game's garment system
  * keeps a garment over the body [hypothesis: an approximation of garment support; knowledge/body-rendering.md].
  */
-export function transferDeltas(targetPositions: ArrayLike<number>, sourcePositions: ArrayLike<number>, sourceDeltas: ArrayLike<number>,
+export function transferDeltas(targetPositions: ArrayLike<number>, sourcePositions: ArrayLike<number> | VertexGrid, sourceDeltas: ArrayLike<number>,
   maxDistance = 0.02): { deltas: Float32Array; moved: number } {
-  const nearest = nearestVertices(targetPositions, sourcePositions, maxDistance);
+  // A grid built once over the source (the body's shape, searched by every garment of a load) is reused as it is.
+  const nearest = sourcePositions instanceof VertexGrid ? sourcePositions.nearest(targetPositions) : nearestVertices(targetPositions, sourcePositions, maxDistance);
   const deltas = new Float32Array(nearest.index.length * 3);
   let moved = 0;
   nearest.index.forEach((source, t) => {

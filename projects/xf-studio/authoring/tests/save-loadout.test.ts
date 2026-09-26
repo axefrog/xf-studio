@@ -1,7 +1,7 @@
 // The save's loadout (save-loadout.ts) and the object package reader it uses (save-package.ts), on synthetic packages built here: the
 // layout WolvenKit's `RedPackageReader` reads for a save's script systems (u32 CRUID count), with self-describing field tables.
 import { describe, expect, test } from "bun:test";
-import { readSavePackage, SavePackageError } from "../src/save-package";
+import { MAX_CHUNKS, MAX_NAMES, readSavePackage, SavePackageError } from "../src/save-package";
 import { parseSavedLoadout, readSavedLoadout, wornAreas } from "../src/save-loadout";
 import { parseSavedV, readSavedV } from "../src/save-reader";
 import { tweakDbId } from "../src/tweakdb-flats";
@@ -107,6 +107,45 @@ describe("save loadout", () => {
     // A script mod's class is walkable by its own field tables (the loadout never needs it); a static array isn't read, only skipped.
     expect(pkg.decode(1, new Set()).object.fields.parts).toEqual([{ $type: "SomeMod.OutfitPart", fields: {} }]);
     expect(() => readSavedLoadout(new Uint8Array([1, 0, 0, 0]), null)).toThrow();
+  });
+
+  // ---- CORE-92: a hostile save can't exhaust memory through the package's tables ----
+  const header = (nameCount: number, chunkCount: number) => {
+    const nameData = nameCount * 4, chunkDesc = nameData, chunkData = chunkDesc + chunkCount * 8;
+    const out = new Uint8Array(28 + chunkData + 16);
+    const view = new DataView(out.buffer);
+    out[0] = 4; view.setUint16(2, 6, true);
+    view.setUint32(8, 0, true); view.setUint32(12, nameData, true); view.setUint32(16, chunkDesc, true); view.setUint32(20, chunkData, true);
+    return out;
+  };
+  test("CORE-92: more names than a field can index, or more chunks than any save holds, are refused before anything is decoded", () => {
+    expect(MAX_NAMES).toBe(65_536);
+    expect(() => readSavePackage(header(MAX_NAMES + 1, 0))).toThrow(/65537 names is not read/);
+    expect(() => readSavePackage(header(1, MAX_CHUNKS + 1))).toThrow(new RegExp(`${MAX_CHUNKS + 1} chunks is not read`));
+  });
+
+  test("CORE-92: names are decoded only when used, so a broken name nothing refers to costs nothing, and one a field uses is refused", () => {
+    const b = new PackageBuilder();
+    b.chunk(b.object("Thing", [["value", b.int(7)]]));
+    const unused = b.name("never_used");
+    const bytes = b.build();
+    // Point the unused name's descriptor far outside the package (offset 0xffffff, 255 bytes).
+    new DataView(bytes.buffer).setUint32(28 + unused * 4, 0xffffffff, true);
+    const pkg = readSavePackage(bytes);
+    expect(pkg.decode(0, new Set()).object.fields.value).toBe(7);
+    // The same broken name as a chunk's type is refused plainly when the table reads it.
+    const c = new PackageBuilder();
+    c.chunk(c.object("Thing", [["value", c.int(7)]]));
+    const built = c.build(), typeIndex = c.names.indexOf("Thing");
+    new DataView(built.buffer).setUint32(28 + typeIndex * 4, 0xffffffff, true);
+    expect(() => readSavePackage(built)).toThrow(/lies outside the package/);
+    // A chunk naming a name index past the table is refused too.
+    const d = new PackageBuilder();
+    d.chunk(d.object("Thing", []));
+    const tableAt = (bytes: Uint8Array) => new DataView(bytes.buffer).getUint32(16, true) + 28;
+    const other = d.build();
+    new DataView(other.buffer).setUint32(tableAt(other), 60_000, true);
+    expect(() => readSavePackage(other)).toThrow(/name 60000 doesn't exist/);
   });
 
   test("a stored V keeps its loadout; one stored before clothes were read has none, and one whose script data failed is null", () => {

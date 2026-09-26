@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
-import { decodeSrgbByte, nearestVertices, sampleAtVertices } from "../src/decal-underlay";
+import { decodeSrgbByte, nearestVertices, sampleAtVertices, transferDeltas, VertexGrid } from "../src/decal-underlay";
 import { createFaceDecalMaterial, decalColourUnits, decalContrast, decalCoverage, decalTargets, doubleDiffuseCoverage, faceDecalParameters,
   forwardDecal, forwardSurface, gbufferColour, patchFaceDecalShader, type Rgb } from "../src/face-decal-material";
 import type { RenderChunkMaterial, RenderTexture } from "../src/render-detail";
@@ -224,6 +224,18 @@ describe("the skin under a decal", () => {
     }
     expect(nearest.unmatched).toBe(0);
     expect(nearestVertices([5, 5, 5], source).unmatched).toBe(1);
+    // PREV-106: one grid built once answers every target set exactly as a fresh search (negative coordinates too), and a target beyond
+    // the sources' bounds is unmatched; one within the reach just outside them still finds its vertex.
+    const shifted = Float32Array.from(source, (v, i) => i % 3 === 1 ? v - 0.1 : v);
+    const grid = new VertexGrid(shifted);
+    for (const targets of [Float32Array.from(target, (v, i) => i % 3 === 1 ? v - 0.1 : v), Float32Array.from({ length: 30 }, () => random() * 0.3 - 0.15)])
+      expect(grid.nearest(targets)).toEqual(nearestVertices(targets, shifted));
+    expect(grid.nearest([10, 10, 10, -10, 0, 0]).unmatched).toBe(2);
+    const edge = Array.from({ length: 3 }, (_, k) => Math.max(...Array.from({ length: 400 }, (_, s) => shifted[s * 3 + k]!)));
+    expect(grid.nearest([edge[0]! + 0.01, edge[1]!, edge[2]!]).unmatched).toBe(nearestVertices([edge[0]! + 0.01, edge[1]!, edge[2]!], shifted).unmatched);
+    // Carrying deltas through a prebuilt grid is the same as through the positions.
+    const deltas = Float32Array.from(shifted, (_, i) => i * 0.001);
+    expect(transferDeltas(target, grid, deltas)).toEqual(transferDeltas(target, shifted, deltas));
     // A 2×1 image: the vertex at u = 0.5 reads halfway between the two texels.
     const image = { width: 2, height: 1, texel: (x: number) => x === 0 ? 0 : 255 };
     const values = sampleAtVertices({ index: Int32Array.from([0, -1]), maxMatchedDistance: 0, unmatched: 1 }, [0.5, 0.5], image, 1, byte => byte / 255);

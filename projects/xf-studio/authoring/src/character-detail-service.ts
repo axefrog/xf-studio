@@ -30,24 +30,25 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
-import { resolveClothing, type ResolvedClothing } from "./clothing-resolver";
+import { type ClothingFailure, resolveClothing, type ResolvedClothing } from "./clothing-resolver";
 import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
-import { decodePng, encodePng, type RgbaImage } from "./png";
+import { decodePngHalved, encodePngAsync, type RgbaImage } from "./png";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
-  type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
+  type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
@@ -96,6 +97,8 @@ export type PrepareCharacterOptions = {
   manifests?: { dir: string; key: (request: CharacterRequest) => string };
   /** Background work (a prefetch): WolvenKit runs below normal priority. */
   lowPriority?: LowPriority;
+  /** The native decode worker a packaged host ships (clothing-host.ts); the source file next to the reader otherwise. */
+  nativeDecodeWorker?: string;
 };
 /**
  * `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). `note`: one plain line about
@@ -313,30 +316,59 @@ export function halveImage(image: RgbaImage): RgbaImage {
 }
 /**
  * The served copy of an exported texture larger than `SERVED_TEXTURE_MAX` on a side: halved until it fits, keyed in the store by the
- * export's hash, the limit and `SCALED_TEXTURE_VERSION`, so it is made once. Returns null when the texture fits as it is.
+ * export's hash, the limit and `SCALED_TEXTURE_VERSION`, so it is made once. Returns null when the texture fits as it is. The decode and
+ * halving stream (png.ts `decodePngHalved`: never the whole 8K image in memory) and the compression runs on zlib's thread pool, so the
+ * host's event loop keeps serving while an 8K body map is scaled (PREV-107); the bytes are the same as the halving `halveImage` describes.
  */
-export function storeScaledTexture(storeRoot: string, file: string, size: { width: number; height: number }, max = SERVED_TEXTURE_MAX):
-  { file: string; sha256: string; size: { width: number; height: number } } | null {
+export async function storeScaledTexture(storeRoot: string, file: string, size: { width: number; height: number }, max = SERVED_TEXTURE_MAX):
+  Promise<{ file: string; sha256: string; size: { width: number; height: number } } | null> {
   if (size.width <= max && size.height <= max) return null;
   const stamp = fileStamp(file), known = hashed.get(file);
   let source = known?.stamp === stamp ? known.sha256 : null, bytes: Uint8Array | null = null;
-  if (!source) { bytes = new Uint8Array(readFileSync(file)); source = sha256(bytes); }
+  if (!source) { bytes = new Uint8Array(await readFile(file)); source = sha256(bytes); }
   const key = join(storeRoot, "scaled", `${source}-${max}-v${SCALED_TEXTURE_VERSION}.json`);
   try {
     const kept = JSON.parse(readFileSync(key, "utf8")) as { file: string; sha256: string; size: { width: number; height: number } };
     if (STORE_FILE.test(kept.file) && existsSync(join(storeRoot, "files", kept.file))) return kept;
   } catch { /* Not made yet. */ }
-  let image = decodePng(bytes ?? new Uint8Array(readFileSync(file)));
-  while (image.width > max || image.height > max) image = halveImage(image);
+  const image = await decodePngHalved(bytes ?? new Uint8Array(await readFile(file)), max);
+  bytes = null;
   let alpha = false;
   for (let i = 3; i < image.data.length && !alpha; i += 4) alpha = image.data[i] !== 255;
-  const stored = storeBytes(storeRoot, encodePng(image, { alpha }), "png");
+  const stored = storeBytes(storeRoot, await encodePngAsync(image, { alpha }), "png");
   const result = { file: stored.file, sha256: stored.sha256, size: { width: image.width, height: image.height } };
   mkdirSync(join(storeRoot, "scaled"), { recursive: true, mode: 0o700 });
   const staging = `${key}.${process.pid}.tmp`;
   writeFileSync(staging, JSON.stringify(result), { mode: 0o600 });
   renameSync(staging, key);
   return result;
+}
+
+type ScaledCopy = { file: string; sha256: string; size: { width: number; height: number } } | { why: string };
+/**
+ * The served copies of the exported textures among `located` that are larger than `SERVED_TEXTURE_MAX`, by export file: made (or found in
+ * the store) one at a time, each off the event loop (`storeScaledTexture`), and remembered per export file and stamp for the installation.
+ */
+async function scaleTextures(cache: CharacterPreparationCache, storeRoot: string, located: readonly Located[], cancelled: () => void): Promise<Map<string, ScaledCopy>> {
+  const out = new Map<string, ScaledCopy>();
+  for (const at of located) {
+    const png = cache.textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png;
+    if (!png || out.has(png)) continue;
+    // An export whose file has gone (cleared by hand, a work folder removed) is left to the writing step, which says so for its part.
+    let size: ReturnType<typeof pngFileSize>;
+    try { size = pngFileSize(png); } catch { continue; }
+    if (!size || (size.width <= SERVED_TEXTURE_MAX && size.height <= SERVED_TEXTURE_MAX)) continue;
+    const key = `${png}|${fileStamp(png)}`, known = cache.scaled.get(key);
+    if (known) { out.set(png, known); continue; }
+    cancelled();
+    let copy: ScaledCopy;
+    try { copy = (await storeScaledTexture(storeRoot, png, size)) ?? { why: "unreadable image" }; }
+    catch (error) { copy = { why: String((error as Error)?.message ?? error).slice(0, 120) }; }
+    // A copy made is kept for the installation; a failure is tried again next time.
+    if (!("why" in copy)) cache.scaled.set(key, copy);
+    out.set(png, copy);
+  }
+  return out;
 }
 
 /** An exported PNG's size from its header, without reading the whole file (null when it isn't a PNG). */
@@ -384,6 +416,8 @@ export class CharacterPreparationCache {
   readonly masks = new RunMap<string, { layers: string[] }>();
   /** Served components by their plan (canonical JSON), within this installation. */
   readonly components = new RunMap<string, BuiltComponent>();
+  /** Served copies of textures larger than the preview takes, by export file and stamp (PREV-107). */
+  readonly scaled = new Map<string, { file: string; sha256: string; size: { width: number; height: number } }>();
   /** The export tool that read these files (the record names it even when nothing new is exported). */
   toolLabel: string | undefined;
   private maps(): RunMap<string, unknown>[] {
@@ -401,6 +435,7 @@ export class CharacterPreparationCache {
   /** Forget everything derived from an earlier installation. */
   reset(): void {
     for (const map of this.maps()) map.clear();
+    this.scaled.clear();
     this.toolLabel = undefined;
     this.installation = null;
   }
@@ -785,19 +820,22 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     input = plainV();
   }
   cancelled();
-  // What V wears first: the feet group and the items' overrides of the body follow from it.
-  const clothing = await dress(graph, request, options, log);
+  // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off (or a male one, which the
+  // preview doesn't draw yet) is neither dressed nor resolved (PREV-108, PIPE-98).
+  const scope = bodyScopeOf(request);
+  const dressed = scope === "drawn" ? await dress(graph, request, options, log) : null;
+  const clothing = dressed && !("failed" in dressed) ? dressed : null;
   cancelled();
   const bodyState = { feet: clothing?.feet ?? "flat" } as const;
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
-  input = previewInput(input, bodyState);
+  input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
   trace.event("character", "resolved", resolutionTrace(resolved), RESOLUTION_TRACE_OPTIONS);
   cancelled();
   const templates = [...resolved.appearances.flatMap(entry => entry.components), ...clothingComponents(clothing)].flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template));
   await loadTemplates(graph, templates, cache);
-  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, clothing);
+  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope);
   time("resolve and plan");
   cancelled();
 
@@ -816,13 +854,15 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   };
   // A component whose plan is unchanged on this installation is served as it was (a tried choice changes only its own slot).
   const planKey = (component: PlannedComponent) => canonical(component);
-  const fresh = plan.components.filter(component => !cache.components.has(planKey(component)));
+  const fresh = [...plan.components, ...plan.censoredBody].filter(component => !cache.components.has(planKey(component)));
   const gathered = await gatherParts({ graph, cache, exporter: options.exporter, gameRoot: options.route.gameRoot, storeRoot: options.storeRoot, signal, log }, fresh);
   const { geometryAt, textureAt, maskAt, toolFailures } = gathered;
   const toolLabel = cache.toolLabel ?? gathered.toolLabel;
   if (toolLabel) cache.toolLabel = toolLabel;
   time(`read and export ${fresh.length} of ${plan.components.length} part(s)`);
   cancelled();
+  // Textures larger than the preview is served are scaled now, off the event loop (PREV-107), so writing the record only looks them up.
+  const scaled = await scaleTextures(cache, options.storeRoot, [...textureAt.values()], cancelled);
 
   progress("writing");
   const notes: string[] = [];
@@ -848,12 +888,11 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     const exported = pngFileSize(png);
     let stored: { file: string; sha256: string; size: { width: number; height: number } | null };
     if (exported && (exported.width > SERVED_TEXTURE_MAX || exported.height > SERVED_TEXTURE_MAX)) {
-      let scaled: ReturnType<typeof storeScaledTexture> = null;
-      try { scaled = storeScaledTexture(options.storeRoot, png, exported); }
-      catch (error) { return { why: `too large to prepare (${String((error as Error)?.message ?? error).slice(0, 120)})` }; }
-      if (!scaled) return { why: "unreadable image" };
-      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the preview uses it at ${scaled.size.width}×${scaled.size.height}.`);
-      stored = scaled;
+      const copy = scaled.get(png);
+      if (!copy) return { why: "too large to prepare" };
+      if ("why" in copy) return { why: `too large to prepare (${copy.why})` };
+      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the preview uses it at ${copy.size.width}×${copy.size.height}.`);
+      stored = copy;
     } else stored = store(options.storeRoot, png, "png");
     const size = stored.size;
     if (!size) return { why: "unreadable image" };
@@ -1019,15 +1058,17 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
           ...(hexSha(component.drawnFrom.extractedSha256) ? { sha256: hexSha(component.drawnFrom.extractedSha256)! } : {}) }] },
       renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
       ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}),
-      ...(component.morphs ? { morphs: component.morphs } : {}), ...(component.garment ? { garment: component.garment } : {}) };
+      ...(component.morphs ? { morphs: component.morphs } : {}), ...(component.garment ? { garment: component.garment } : {}),
+      ...(component.censor ? { censor: component.censor } : {}) };
   };
   let reusedComponents = 0;
-  for (const component of plan.components) {
+  /** Serve one planned component (as before when its plan is unchanged), or say why it can't be (null). */
+  const serve = (component: PlannedComponent): RenderComponent | null => {
     const key = planKey(component), known = cache.components.get(key);
     // An unchanged plan on this installation is served as before, while its textures still fit the record's budget.
     if (known && [...known.textures].every(([file, texels]) => spend(file, texels))) {
-      components.push(known.component); notes.push(...known.notes); reusedComponents++;
-      continue;
+      notes.push(...known.notes); reusedComponents++;
+      return known.component;
     }
     componentNotes = []; componentTextures = new Map();
     let built: ReturnType<typeof build>;
@@ -1039,10 +1080,26 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       built = "export";
     }
     notes.push(...componentNotes);
-    if (typeof built === "string") { failSlot(component.slot, built); continue; }
-    components.push(built);
+    if (typeof built === "string") { failSlot(component.slot, built); return null; }
     cache.components.set(key, { component: built, notes: componentNotes, textures: componentTextures });
+    return built;
+  };
+  // Fail closed (PIPE-97): the underwear covers are served first, so the texture budget never leaves one out while the parts it covers
+  // are served; if one can't be served, the covered skin is replaced by the game's censored skin, and without that the body isn't shown.
+  const coverParts = new Map(plan.components.filter(component => component.censor === "cover").map(component => [component, serve(component)] as const));
+  const coversServed = [...coverParts.values()].every(item => !!item);
+  const firstCovered = plan.components.find(component => component.censor === "covered");
+  const toServe = coversServed || !firstCovered ? plan.components
+    : plan.components.flatMap(component => component === firstCovered ? plan.censoredBody : component.censor === "covered" ? [] : [component]);
+  const censoredServed = new Set<RenderComponent>();
+  for (const component of toServe) {
+    const item = coverParts.has(component) ? coverParts.get(component)! : serve(component);
+    if (!item) continue;
+    components.push(item);
+    if (plan.censoredBody.includes(component)) censoredServed.add(item);
   }
+  const bodyWithdrawn = !coversServed && !!firstCovered && !censoredServed.size;
+  if (bodyWithdrawn) for (let i = components.length - 1; i >= 0; i--) if (components[i]!.slot === "body") components.splice(i, 1);
   if (cache.components.size > 2048) for (const key of [...cache.components.keys()].slice(0, 512)) cache.components.delete(key);
   if (overBudget) notes.push(`${overBudget} texture(s) are over what the preview can load for one V, so the parts that need them are drawn without them.`);
   for (const [slot, why] of partial) {
@@ -1056,6 +1113,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   }
   // A slot whose components all failed is unavailable; one with some drawn stays shown.
   for (const [slot, state] of slots) if (state.state === "shown" && !components.some(item => item.slot === slot)) unavailable(slot, "export");
+  if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
+  else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
   if (summary.scanGaps.length) notes.push("Some installed mod files could not be read; the resolved details may differ from the game.");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
@@ -1102,19 +1161,26 @@ const clothingComponents = (clothing: ResolvedClothing | null) => clothing?.garm
 
 /**
  * What a request's V wears (clothing-resolver.ts), or null without clothing. The item records come from the installation's TweakDB and the
- * cooked visual-tag preset (clothing-host.ts). A failure leaves V without clothes, with a log line, rather than failing the V.
+ * cooked visual-tag preset (clothing-host.ts). A failure leaves V without clothes, with a log line and a plain outcome (PIPE-100), rather
+ * than failing the V; nothing about it is kept, so the next preparation tries again.
  */
-async function dress(graph: ResourceGraph, request: CharacterRequest, options: { route: CharacterRoute; resolverCache: string }, log: (message: string) => void):
-  Promise<ResolvedClothing | null> {
+async function dress(graph: ResourceGraph, request: CharacterRequest, options: { route: CharacterRoute; resolverCache: string; nativeDecodeWorker?: string },
+  log: (message: string) => void):
+  Promise<ResolvedClothing | ClothingFailure | null> {
   if (!request.clothing) return null;
   try {
-    const ports = clothingPorts(graph, options.route.gameRoot, options.resolverCache, log);
+    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker });
     return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
   } catch (error) {
     log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);
-    return null;
+    return { failed: "unresolved" };
   }
 }
+
+/** Whether a request's body is drawn: off by the viewer's Body switch, or a male V's (not drawn yet), else drawn. */
+export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : request.bodyGender === "male" ? "male" : "drawn";
+/** A body whose covered skin was replaced by the game's censored skin because its underwear couldn't be served (PIPE-97). */
+export const CENSORED_BODY = "The underwear the game draws on your V couldn't be prepared, so the body is shown in the game's censored look.";
 
 /** The most notes a record's provenance carries. */
 export const RECORD_NOTE_CAP = 32;
@@ -1172,18 +1238,20 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
       return { bodyGender: request.bodyGender, origin: "ui-state" as const, appearances: derived.appearances, morphs: derived.morphs };
     }));
     // Every request resolves at once, so each level of their chains is one extraction batch.
-    const clothes = await Promise.all(requests.map(request => dress(graph, request, options, log)));
+    const clothes = await Promise.all(requests.map(request => bodyScopeOf(request) === "drawn" ? dress(graph, request, options, log) : null));
     cancelled();
-    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: clothes[index]?.feet ?? "flat" }), cco, cache,
-      clothes[index]?.overrides).then(result => result.resolved) : null));
+    const scopes = requests.map(bodyScopeOf);
+    const worn = clothes.map(entry => entry && !("failed" in entry) ? entry : null);
+    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: worn[index]?.feet ?? "flat" },
+      scopes[index] === "drawn"), cco, cache, worn[index]?.overrides).then(result => result.resolved) : null));
     cancelled();
-    await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(clothes[index] ?? null)]
+    await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(worn[index] ?? null)]
       .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
     const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
-      { feet: clothes[index]?.feet ?? "flat" }, clothes[index] ?? null) : null);
+      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index]) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
-    for (const plan of plans) for (const component of plan?.components ?? []) {
+    for (const plan of plans) for (const component of [...plan?.components ?? [], ...plan?.censoredBody ?? []]) {
       const key = canonical(component);
       if (!cache.components.has(key)) fresh.set(key, component);
     }

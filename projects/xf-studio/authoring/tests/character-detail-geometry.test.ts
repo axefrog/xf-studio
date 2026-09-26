@@ -8,7 +8,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { loadCharacterDetails } from "../src/character-detail-loader";
 import { storeChunkGeometry } from "../src/character-detail-service";
 import { GlbWriter, keepGlbMeshes, parseGlb, readAccessor } from "../src/glb";
-import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent } from "../src/render-detail";
+import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent, UNCOVERED_BODY } from "../src/render-detail";
 import { characterDetailsEvidence } from "../src/scene-evidence";
 import { restoreFirstWeights } from "../src/skin";
 
@@ -206,6 +206,62 @@ describe("a tried choice loads only what changed (PREV-68)", () => {
     expect(loaded.limits).toContainEqual({ slot: "piercings", limit: "rigid-part" });
     expect(loaded.components[0]!.limits).toContain("rigid-part");
     expect(loaded.components[0]!.meshes[0]).toBeInstanceOf(THREE.SkinnedMesh);
+    loaded.dispose();
+  });
+});
+
+// ---- PIPE-97: the loader fails closed on the underwear floor ----
+describe("a cover that doesn't load takes the body with it (PIPE-97)", () => {
+  const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+  const part = (id: string, option: string, file: string, hash: string, censor?: "cover" | "covered"): RenderComponent => ({
+    id, slot: "body", option, definition: option, component: id,
+    geometry: { file, sha256: hash, depotPath: `base\\fixture\\${id}.mesh`, depotHash: "1", morphTargets: true, sources: [] },
+    renderChunks: 1, chunks: [0], materials: [{ chunk: 0, name: "m", template: "base\\materials\\mesh_decal_emissive.mt", templateName: null,
+      materialPriority: "EMP_Normal", scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} }], ...(censor ? { censor } : {}) });
+  const record = (components: RenderComponent[]): CharacterDetail => ({ schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: "a".repeat(64),
+    origin: "game-files", character: { source: "save", bodyGender: "female" }, provenance: { label: "fixture", notes: [] }, components,
+    slots: [{ slot: "body", state: "shown", label: "body, underwear" }] });
+  const options = (files: Map<string, Uint8Array>) => ({ anisotropy: 1, context: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }),
+    fetcher: async (url: string) => { const bytes = files.get(url.split("/").pop()!); return bytes ? new Response(bytes.slice()) : new Response("gone", { status: 404 }); } });
+
+  test("with its cover loaded the covered skin is drawn", async () => {
+    const skin = morphMesh(1), cover = morphMesh(2);
+    const files = new Map([[`${sha(skin)}.glb`, skin], [`${sha(cover)}.glb`, cover]]);
+    const loaded = await loadCharacterDetails(record([part("t0_body", "body_color", `${sha(skin)}.glb`, sha(skin), "covered"),
+      part("i0_cover", "underpants", `${sha(cover)}.glb`, sha(cover), "cover")]), options(files));
+    expect(loaded.components.map(item => item.component.censor)).toEqual(["covered", "cover"]);
+    expect(loaded.problems).toEqual([]);
+    loaded.dispose();
+  });
+
+  test("a cover whose file fails withdraws the covered skin and every body part, releases them and says so plainly", async () => {
+    const skin = morphMesh(1), feet = morphMesh(3), cover = morphMesh(2);
+    // The cover's file is not served (a failed fetch): its part fails.
+    const files = new Map([[`${sha(skin)}.glb`, skin], [`${sha(feet)}.glb`, feet]]);
+    // What the load made of the skin and feet is released at once (their geometry disposed), not kept hidden.
+    let disposed = 0;
+    const dispose = THREE.BufferGeometry.prototype.dispose;
+    THREE.BufferGeometry.prototype.dispose = function () { disposed++; return dispose.call(this); };
+    try {
+      const loaded = await loadCharacterDetails(record([part("t0_body", "body_color", `${sha(skin)}.glb`, sha(skin), "covered"),
+        part("l0_feet", "flat_feet", `${sha(feet)}.glb`, sha(feet)), part("i0_cover", "underpants", `${sha(cover)}.glb`, sha(cover), "cover")]), options(files));
+      expect(loaded.components).toEqual([]);
+      expect(loaded.problems).toEqual([{ slot: "body", message: UNCOVERED_BODY }]);
+      expect(loaded.limits.some(limit => limit.slot === "body")).toBe(false);
+      expect(disposed).toBeGreaterThanOrEqual(2);
+      loaded.dispose();
+    } finally { THREE.BufferGeometry.prototype.dispose = dispose; }
+  });
+
+  test("a cover over the texture budget is a cover that didn't load: the covered skin goes with it", async () => {
+    const skin = morphMesh(1), cover = morphMesh(2);
+    const files = new Map([[`${sha(skin)}.glb`, skin], [`${sha(cover)}.glb`, cover]]);
+    const huge = { file: `${"f".repeat(64)}.png`, sha256: "f".repeat(64), sources: [], depotPath: "base\\huge.xbm", width: 16384, height: 16384, isGamma: true };
+    const coverPart = part("i0_cover", "underpants", `${sha(cover)}.glb`, sha(cover), "cover");
+    coverPart.materials[0]!.textures = { DiffuseTexture: huge, NormalTexture: { ...huge, file: `${"e".repeat(64)}.png`, sha256: "e".repeat(64) } };
+    const loaded = await loadCharacterDetails(record([part("t0_body", "body_color", `${sha(skin)}.glb`, sha(skin), "covered"), coverPart]), options(files));
+    expect(loaded.components).toEqual([]);
+    expect(loaded.problems).toEqual([{ slot: "body", message: UNCOVERED_BODY }]);
     loaded.dispose();
   });
 });
