@@ -62,6 +62,15 @@ try {
     const status = await page.evaluate(`JSON.parse(JSON.stringify(window.xfStudioPresentation.status.snapshot().assets?.characterDetails ?? null))`);
     results[state] = { dispatched, status, evidence: await evidence() };
   }
+  // The Character panel's Clothing section, after one area was switched off (the setting becomes "Choose areas").
+  await run({ kind: "character.setClothingArea", area: "OuterChest", shown: false }).catch(() => undefined);
+  await page.waitFor(settled, 1200000);
+  await page.evaluate(`document.getElementById("dock-tab-character")?.click()`);
+  await page.wait(2500);
+  await page.evaluate(`[...document.querySelectorAll(".section-title")].find(e => e.textContent === "Clothing")?.scrollIntoView()`);
+  await run({ kind: "camera.body" });
+  await page.wait(2500);
+  await page.screenshot(resolve(out, "panel-custom.png"));
   const gpu = await page.evaluate(`(() => { const gl = document.createElement("canvas").getContext("webgl2");
     const info = gl?.getExtension("WEBGL_debug_renderer_info"); return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown"; })()`);
   writeFileSync(resolve(out, "run.json"), JSON.stringify({ date: new Date().toISOString(), save: "(private save copy)", gpu, results,
