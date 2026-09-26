@@ -1,4 +1,5 @@
-import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./engines/layered-makeup/recipe";
+import { emptyRecipe, type Recipe } from "./engines/layered-makeup/recipe";
+import { readRecipe as parseRecipe } from "./recipe-schema";
 import { parseSavedV, type SavedV } from "./save-reader";
 import { liveFeatureStates, liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, withLiveFeatures, withLiveMemory,
   writeCollectionWorkspace,
@@ -109,7 +110,7 @@ export type StoredWorkspace = Omit<WorkspaceState, "schema" | "recipe" | "active
   features: Record<string, unknown>;
   collections?: ReturnType<typeof writeCollectionWorkspace>;
 };
-export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
+export function freshWorkspace(recipe: Recipe): WorkspaceState {
   return {
     schema: WORKSPACE_2, recipe, active: 0, selected: 0, history: emptyLookHistory(),
     uvView: defaultUVView(), fieldSelection: {}, glitterChoices: {},
@@ -332,6 +333,9 @@ export const NEWER_WORKSPACE_MESSAGE = "Parts of this workspace were saved by a 
  * workspace holding a newer build's data anywhere opens read-only: its current draft is shown
  * when this build can read it, and nothing is ever written over the stored workspace.
  */
+/** The live feature's first-run part (its codec's starter): what a fresh or unreadable workspace shows. */
+const liveStarter = (model: DocumentModel) => model.parts.feature(model.live)!.part.starter() as Recipe;
+
 export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel): LoadedWorkspace {
   const keys = workspaceKeys(verification);
   let error: string | undefined, newer = false;
@@ -353,11 +357,11 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
     }
   } catch (e) {
     error = newer ? NEWER_WORKSPACE_MESSAGE : `Workspace could not be restored: ${(e as Error).message}`;
-    if (newer) return { state: freshWorkspace(starterRecipe()), writable: false, newer: true, error };
+    if (newer) return { state: freshWorkspace(liveStarter(model)), writable: false, newer: true, error };
   }
   // The fallback shows the small authored contour. Saved workspaces and legacy
   // recipe-only drafts still pass through their existing parsers unchanged.
-  let state = freshWorkspace(starterRecipe());
+  let state = freshWorkspace(liveStarter(model));
   try {
     const legacy = storage.getItem(keys.legacy);
     if (legacy !== null) state = freshWorkspace(parseRecipe(JSON.parse(legacy)));

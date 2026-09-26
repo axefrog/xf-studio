@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
+import { packagePresetIdentities } from "../src/package-filter";
 import { parseCollection } from "../src/preset-collection";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
+import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");

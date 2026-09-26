@@ -75,7 +75,7 @@ Avoid a custom `onBeforeCompile` colour mix for this first step. `extendSkin` cu
 
 ## Integration files and ownership boundaries
 
-All paths below are relative to `projects/xf-studio/authoring/`.
+All paths below are relative to `projects/xf-studio/authoring/` and record the code this proposal was written against: the finish, flake-field, recipe, layer-stack, makeup-stack and preset-compiler modules now live under `src/engines/layered-makeup/`, and the legacy `src/main.ts` shell has been retired. <!-- historical-paths -->
 
 | File | Necessary change |
 |---|---|
@@ -94,6 +94,8 @@ All paths below are relative to `projects/xf-studio/authoring/`.
 | tests and isolated browser evidence | Legacy bake golden parity, migration/Undo/reload, catalogue stability, overlap/density/colour/alpha correctness, stale-worker and resource disposal checks, view/light/minification comparisons. |
 
 Do not feed the new heavy material jobs into the single alpha-mask worker without scheduling analysis. A long flake bake should not delay a point drag's mask. A separate worker with one in-flight job and latest pending setting per layer is a small justified boundary. Reuse scheduling principles, not a new shared infrastructure framework.
+
+<!-- /historical-paths -->
 
 ## Memory and latency budget
 

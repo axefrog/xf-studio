@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringGeometry } from "../src/authoring-geometry";
 import { AuthoringPresentation } from "../src/authoring-presentation";
-import { freshWorkspace } from "../src/workspace-state";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 test("control read port detaches live recipe, caches repeated reads and tracks selection", () => {
   const document = new AuthoringDocument(freshWorkspace());

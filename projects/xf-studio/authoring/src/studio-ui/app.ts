@@ -20,6 +20,8 @@ import { previewSetupCard } from "./preview-setup-card";
 import { panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
 import type { ViewComposition, ViewContext } from "./views/panels";
+import { featureCommands, featureViewContext } from "./views/feature-context";
+import type { FeatureViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
 /**
@@ -37,11 +39,18 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
   let guidance!: GuidanceController;
   const context: ViewContext = { guidance: { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) } };
+  // Each feature's view gets one context over its own facade, never the runtime or the port (UI-73).
+  const featureViews = views.features.map(binding => ({ binding, ctx: featureViewContext(rt, binding.owner) as FeatureViewContext }));
   // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order.
-  const panels: PanelController[] = catalogue.ids.map(id => {
-    const factory = views.factories[id];
-    if (!factory) throw Error(`Panel ${id} has no factory.`);
-    return factory(rt, context);
+  const panels: PanelController[] = catalogue.panels.map(({ id, owner }) => {
+    if (owner === "shell") {
+      const factory = views.shell[id];
+      if (!factory) throw Error(`Panel ${id} has no factory.`);
+      return factory(rt, context);
+    }
+    const view = featureViews.find(entry => entry.binding.owner === owner), factory = view?.binding.panels[id];
+    if (!view || !factory) throw Error(`Panel ${id} has no factory.`);
+    return (factory as (ctx: FeatureViewContext) => PanelController)(view.ctx);
   });
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
   const help = byId.get("help") as PanelController & { focusSearch?(): void };
@@ -135,7 +144,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     }, 120);
   });
 
-  const commands = () => [...buildCommands(rt, theme, view, byId), ...guidance.commands()];
+  const commands = () => [...buildCommands(rt, theme, view, byId,
+    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...guidance.commands()];
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -324,13 +334,13 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
   (target ?? next).focus();
 }
 
-function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>): Command[] {
-  const port = rt.port, layer = rt.editor.layer(), field = rt.editor.selectedField();
-  const act = (id: string, title: string, group: string, action: StudioAction | undefined, extra: Partial<Command> = {},
-    missing = "Select a layer first."): Command => ({
+/** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
+function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[]): Command[] {
+  const port = rt.port;
+  const act = (id: string, title: string, group: string, action: StudioAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
-    capability: () => action ? port.authoring.capability(action) : { available: false, reason: missing },
-    run: () => { if (action) rt.dispatch(action); },
+    capability: () => port.authoring.capability(action),
+    run: () => { rt.dispatch(action); },
   });
   const file = (id: string, title: string, group: string, action: StudioFileAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.files.capability(action), run: () => void rt.file(action) });
@@ -347,19 +357,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       ...always, run: () => rt.dock.reveal("history") },
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
-    { id: "layer.add", title: "Add layer", group: "Edit", icon: "plus", capability: () => rt.addLayerCapability(), run: () => { rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }); } },
-    act("layer.duplicate", "Duplicate selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "duplicate", id: layer.id } }, { icon: "duplicate", shortcut: `${shortcutLabel("rows.duplicate")} in Layers` }),
-    act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash", shortcut: `${shortcutLabel("rows.remove")} in Layers` }),
-    act("layer.reset", "Reset selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "reset", id: layer.id } }, { icon: "reset" }),
-    act("layer.toggle", layer?.enabled === false ? "Show selected layer" : "Hide selected layer", "Edit", layer && { kind: "layer.setEnabled", id: layer.id, enabled: !layer.enabled }, { icon: "eye" }),
-    act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: rt.editor.selected() }, { icon: "trash" }),
-    act("path.bezier", "Enable Bézier handles", "Shape", layer && { kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } }, { icon: "shape" }),
-    act("layer.mirror", layer?.symmetry ? "Stop mirroring across the face" : "Mirror across the face", "Shape", layer && { kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }, { icon: "mirror" }),
-    act("field.add", "Add warp control", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
-    act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" },
-      layer ? "Select a warp control first." : "Select a layer first."),
-    ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : finish.exportAdapter === "experimental" ? " (experimental export)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
-      { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview only study" : "exports" })),
+    ...features,
     request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     request("library.refresh", "Refresh saved collections", "Library", { kind: "refresh" }, { icon: "refresh" }),

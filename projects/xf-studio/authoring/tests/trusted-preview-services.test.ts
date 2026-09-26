@@ -4,11 +4,11 @@ import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import type { PreviewPort } from "../src/preview-actions";
 import type { MotionPort } from "../src/motion-actions";
 import type { SavedV } from "../src/save-reader";
-import { freshWorkspace } from "../src/workspace-state";
 import { bodySexOf, SavedAppearanceActions } from "../src/saved-appearance-actions";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 test("preview bootstrap restores saved V, scene, motion and camera in order without controls", () => {
   const calls: string[] = [], workspace = freshWorkspace();

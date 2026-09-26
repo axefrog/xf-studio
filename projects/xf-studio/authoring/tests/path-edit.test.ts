@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { insertPathPoint, nearestPathSection } from "../src/engines/layered-makeup/path-edit";
 import { curve, type Point } from "../src/engines/layered-makeup/recipe";
 import { bezierAt, convertToBezier } from "../src/engines/layered-makeup/bezier-path";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe } from "./fixtures/eye-region";
 
 const square = (): Point[] => [
   { u: .3, v: .3, weight: 0 }, { u: .7, v: .3, weight: .4 },

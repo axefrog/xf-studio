@@ -9,7 +9,10 @@ import type { AuthoringDocument } from "./authoring-document";
 import type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./eye-makeup-model";
 import type { FeatureActionSpec, GestureProvider } from "./platform/api";
 import type { Recipe } from "./engines/layered-makeup/recipe";
-import type { GestureEdit, RecipeAction, RecipeActions } from "./engines/layered-makeup/recipe-actions";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
+import { remembers, type GestureEdit, type ReadonlyRecipeState, type RecipeAction, type RecipeActionEffect,
+  type RecipeActionState } from "./engines/layered-makeup/recipe-actions";
+import type { GlitterChoices, LayerChoices } from "./engines/layered-makeup/glitter-model";
 
 /** Eye makeup's registered spec for one action kind (from the injected registry). */
 export type EyeMakeupSpec = FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction, string, EyeMakeupEffect>;
@@ -17,6 +20,8 @@ export type EyeMakeupSpec = FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeM
 export type EyeMakeupGestures = GestureProvider<Recipe, GestureEdit, { layerIndex: number; kind: GestureEdit["kind"] }>;
 
 export type EyeMakeupPort = {
+  /** Eye makeup's layered-makeup region (its models, mirror, textures and wording), from the composition. */
+  readonly region: LayeredMakeupRegion;
   /** The current part and editor state; read-only, never a copy. */
   state(): EyeMakeupState;
   /**
@@ -35,10 +40,12 @@ export type EyeMakeupPort = {
 
 export function eyeMakeupPort(document: AuthoringDocument,
   recipe: Pick<RecipeActions, "layerChoices" | "commit" | "publishGesture">,
+  region: LayeredMakeupRegion,
   structureChanged: (previous: Recipe) => void = () => {},
   /** Where new items' IDs come from (the host's ID source). */
   newId: () => string = () => crypto.randomUUID()): EyeMakeupPort {
   const port: EyeMakeupPort = {
+    region,
     state: () => ({ part: document.recipe, editor: { active: document.active, selected: document.selected,
       fieldSelection: document.fieldSelection,
       // Only Glitter-model and finish changes read these; project them on demand.
@@ -72,4 +79,51 @@ export function eyeMakeupPort(document: AuthoringDocument,
     },
   };
   return port;
+}
+
+/**
+ * Publishes eye makeup's recipe results to the live document: the registered apply's results
+ * (`commit`) and gesture frames (`publishGesture`), with the per-layer memory they use. It applies
+ * nothing itself: every edit is dispatched through `app.dispatch`, form controls and gestures (CORE-44).
+ */
+export class RecipeActions {
+  private listeners = new Set<(effect: RecipeActionEffect) => void>();
+  constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
+    private history: { checkpoint(recipe: Recipe): void }, private choices: GlitterChoices, private presetId: () => string,
+    private gestureChanged?: (layerIndex: number, kind: GestureEdit["kind"]) => void) {}
+  snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
+  subscribe(listener: (effect: RecipeActionEffect) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  /**
+   * The current preset's per-layer memory (inactive Glitter models, Colour-shift settings),
+   * keyed by layer ID: the editor state eye makeup's pure actions read. Not cloned; read-only.
+   */
+  layerChoices(): Readonly<Record<string, LayerChoices>> {
+    const prefix = `${this.presetId()}/`, result: Record<string, LayerChoices> = {};
+    for (const [key, choices] of Object.entries(this.choices)) if (key.startsWith(prefix)) result[key.slice(prefix.length)] = choices;
+    return result;
+  }
+  /**
+   * Publish a result computed by eye makeup's pure apply: one checkpoint when `record` and the result
+   * is more than a selection, the per-layer memory written back for actions that use it, then the
+   * state and its effect.
+   */
+  commit(action: RecipeAction, next: RecipeActionState, effect: RecipeActionEffect,
+    choices: Readonly<Record<string, LayerChoices>>, record: boolean) {
+    if (record && effect.kind !== "selection") this.history.checkpoint(this.read().recipe);
+    if (remembers(action.kind)) {
+      const prefix = `${this.presetId()}/`;
+      for (const [layerId, remembered] of Object.entries(choices)) this.choices[prefix + layerId] = remembered;
+    }
+    this.write(next, effect);
+    for (const listener of this.listeners) listener(effect);
+  }
+  /**
+   * Publish a gesture edit eye makeup's registered gesture provider applied in place: the changed
+   * layer is scheduled for the preview, as every gesture frame always was.
+   */
+  publishGesture(layerIndex: number, kind: GestureEdit["kind"]) {
+    this.gestureChanged?.(layerIndex, kind);
+    const effect: RecipeActionEffect = { kind: "scheduled", layerIndex };
+    for (const listener of this.listeners) listener(effect);
+  }
 }

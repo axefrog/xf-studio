@@ -6,8 +6,9 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { initialRecipe, raster, curve, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { raster, curve, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { compileFlatPreset } from "../src/engines/layered-makeup/preset-compiler";
+import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
 
 const directory = resolve(import.meta.dir, "../data/pigment-validation");
 await mkdir(directory, { recursive: true });
@@ -71,7 +72,7 @@ for(const [name,{layer,crop}] of Object.entries(fixtures)) {
   const item:any={ recipe:{...initialRecipe(),layers:[layer]},crop, files:{}, comparisons:{}, compiler:[] };
   for(const size of [1024,2048]) {
     for(const mode of ["legacy","smooth"]) {
-      const mask=alpha(raster(mode==="legacy"?legacy(layer):layer,size));
+      const mask=alpha(raster(mode==="legacy"?legacy(layer):layer, size, EYE_MAKEUP_REGION.mirror));
       masks.set(`${mode}-${size}`,mask);
       const file=`${name}-${mode}-${size}.alpha`;
       await Bun.write(resolve(directory,file),mask);
@@ -84,8 +85,8 @@ for(const [name,{layer,crop}] of Object.entries(fixtures)) {
   ]));
   for(const size of [128,256]) for(const mode of ["legacy","smooth"]) {
     const selected=mode==="legacy"?legacy(layer):layer;
-    const recipe:Recipe={...initialRecipe(),layers:[selected]},mask=alpha(raster(selected,size));
-    const compiled=compileFlatPreset(recipe,size);
+    const recipe:Recipe={...initialRecipe(),layers:[selected]},mask=alpha(raster(selected, size, EYE_MAKEUP_REGION.mirror));
+    const compiled=compileFlatPreset(recipe, EYE_MAKEUP_REGION, size);
     let mismatch=0,covered=0;
     for(let i=0;i<mask.length;i++) {
       if(mask[i]) covered++;
@@ -104,9 +105,9 @@ const dense={...structuredClone(petal),points:curve(petal.points,4)};
 for(const [name,layer] of [["six-knots",petal],["24-knots",dense]] as const) {
   results.benchmark[name]={knots:layer.points.length,polygonEdges:curve(layer.points).length};
   for(const size of [1024,2048]) {
-    raster(layer,size);
+    raster(layer, size, EYE_MAKEUP_REGION.mirror);
     const durations=[];
-    for(let i=0;i<3;i++) {const start=performance.now();raster(layer,size);durations.push(performance.now()-start);}
+    for(let i=0;i<3;i++) {const start=performance.now();raster(layer, size, EYE_MAKEUP_REGION.mirror);durations.push(performance.now()-start);}
     results.benchmark[name][size]={warmRunsMs:durations,medianMs:[...durations].sort((a,b)=>a-b)[1]};
   }
 }

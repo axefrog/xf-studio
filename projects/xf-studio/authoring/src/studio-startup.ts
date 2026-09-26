@@ -15,6 +15,7 @@ import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
+import { rasterRegion } from "./engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-workspace-device";
 import { collectionTransport } from "./collection-transport";
@@ -95,8 +96,9 @@ async function start(host: StudioHost, root: HTMLElement) {
 
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
+  const region = STUDIO_COMPOSITION.region;
   const measurements = new GlitterMeasurements({
-    layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size });
+    layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
     return { ...status, glitter: measurements.snapshot(), assets: { ...status.assets,
@@ -114,7 +116,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
   const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
+  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     capture: {
@@ -135,7 +137,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const persist = () => session.request();
   const drawUV = () => viewportDevice.drawUV();
   previewDevice = createBrowserPreviewDevice({
-    document: core.document, initialSize: workspace.preview.textureSize,
+    document: core.document, region: rasterRegion(region), initialSize: workspace.preview.textureSize,
     makeWorker: () => new Worker("/build/raster-worker.js", { type: "module" }),
     frame: run => requestAnimationFrame(run),
     refresh: () => { drawUV(); persist(); }, refreshSelection: () => { drawUV(); persist(); },

@@ -3,6 +3,7 @@ import { extendSkin } from "../../../skin";
 import { canonicalFinish, defaultFlakes, isIrregular } from "../finish";
 import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "../makeup-dependencies";
 import type { Layer } from "../recipe";
+import type { FineGlitterScope } from "../region";
 import {installProceduralGlintStudy} from "./direct-glint";
 import {isDirectGlint} from "../direct-glint-settings";
 import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "../finish-export";
@@ -19,8 +20,11 @@ export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
 /** The skin under each plate vertex (head-skin-placement.ts `surfaceUnderlay`): linear colour, roughness and metalness. */
 export type PlateUnderlay = { colour: THREE.BufferAttribute; roughness: THREE.BufferAttribute; metalness: THREE.BufferAttribute };
 
-/** Owns layer GPU resources; complete worker bundles supply generated optical maps. */
-export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number) {
+/**
+ * Owns layer GPU resources; complete worker bundles supply generated optical maps. `fineGlitter` is the feature's
+ * fine-Glitter scope (its region's), part of the optical identities the worker publishes.
+ */
+export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number, fineGlitter: FineGlitterScope) {
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
@@ -48,11 +52,11 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     !isDirectGlint(layer.flakes);
   const keyFor = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? studioIrregularOpticalKey(layer.flakes,size)
+    ? studioIrregularOpticalKey(layer.flakes,size,fineGlitter)
     // Game-matched Shimmer bakes the same flakes but uploads route-filtered mip chains.
     : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size, ...(layer.optics ? [layer.optics.model] : [])]);
   const albedoKeyFor = (layer:Layer,size:number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? irregularAlbedoKey(studioIrregularOpticalKey(layer.flakes,size),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
+    ? irregularAlbedoKey(studioIrregularOpticalKey(layer.flakes,size,fineGlitter),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
     : undefined;
   function maskTexture(canvas: HTMLCanvasElement) {
     const texture = new THREE.CanvasTexture(canvas);

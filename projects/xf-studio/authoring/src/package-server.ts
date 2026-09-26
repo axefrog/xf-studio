@@ -13,6 +13,7 @@ import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, ey
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
 import { plateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import type { PlateReachInput } from "./plate-reach";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { createInstalledHeadSource } from "./eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
 import { runProcessTree } from "./process-tree";
@@ -166,7 +167,12 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
 type Runner = (action: PackageAction, file: string, tools: PackageTools, onPlate?: (plate: PlateReachInput) => void) => Promise<PackageCheck | PackageBuild>;
 const defaultRunner: Runner = (action, file, tools, onPlate) => runLocalPackage(action, file, tools, undefined, undefined, onPlate);
 /** One active build per server; requests carry only a validated collection snapshot. */
-export function createPackageHandler(tools: PackageTools | ((action: PackageAction) => PackageTools) = () => localPackageTools(), runner: Runner = defaultRunner) {
+/**
+ * The localhost package route. `region` is eye makeup's layered-makeup region (its mirror decides which presets
+ * reach the plate), handed in by the server root.
+ */
+export function createPackageHandler(region: Pick<LayeredMakeupRegion, "mirror">,
+  tools: PackageTools | ((action: PackageAction) => PackageTools) = () => localPackageTools(), runner: Runner = defaultRunner) {
   let building = false;
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -192,7 +198,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
     const cached = action === "check" ? cachedPlateReach(actionTools.plateCache, actionTools.gamepath, localPlateRouteKey(actionTools)) : null;
     if (cached) actionTools = { ...actionTools, checkPlateManifest: cached.manifestFile };
     let prepared: ReturnType<typeof preparePackageCollection>;
-    try { prepared = preparePackageCollection(collection, cached?.plate ?? null); }
+    try { prepared = preparePackageCollection(collection, region, cached?.plate ?? null); }
     catch (error) { return json({ error: (error as Error).message, code: "no_exportable_content" }, 422); }
     const { plan, omissions, experimental, packaged } = prepared;
     const source = JSON.stringify(collection);
@@ -219,7 +225,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
       }
       const built = result as PackageBuild;
       // The host's own filter on the plate the build packaged: presets that do not reach it are omitted.
-      verifyPackageBuildResult(built, collection, packagedPlate.reach ? preparePackageCollection(collection, packagedPlate.reach) : prepared, source, dist);
+      verifyPackageBuildResult(built, collection, packagedPlate.reach ? preparePackageCollection(collection, region, packagedPlate.reach) : prepared, source, dist);
       return json(built);
     } catch (error) {
       console.error("Local package action failed:", (error as Error).message);

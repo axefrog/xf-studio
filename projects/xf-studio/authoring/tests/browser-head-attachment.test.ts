@@ -3,7 +3,7 @@ import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices } from "
 import { createBrowserViewportDevice } from "../src/browser-viewport-device";
 import type { createScene } from "../src/scene";
 import type { createSurfaceEditor } from "../src/surface-editor";
-import { freshWorkspace } from "../src/workspace-state";
+import { freshWorkspace, EYE_REGION } from "./fixtures/eye-region";
 
 // PREV-20: everything wired to a loaded head is released together when a later step fails, so
 // "Try again" starts clean: no doubled theme bindings, service attachments, subscriptions,
@@ -40,7 +40,7 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
   const host = { canvases: 0, clientWidth: 600, clientHeight: 400, contains: () => false };
   const scenes: ReturnType<typeof fakeScene>[] = [];
   let loads = 0, presents = 0, persisted = 0;
-  const viewport = createBrowserViewportDevice({
+  const viewport = createBrowserViewportDevice({ region: EYE_REGION,
     headHost: host as unknown as HTMLElement, uvHost: { clientWidth: 1, clientHeight: 1, contains: () => false } as unknown as HTMLElement,
     queryContext: () => { throw Error("No hit expected"); },
     sceneFactory: (async () => {

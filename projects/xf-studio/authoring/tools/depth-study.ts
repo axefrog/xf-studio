@@ -1,9 +1,10 @@
 // Run on the isolated /build/depth-study.html page; never reads/writes workspace or library data.
 import * as THREE from "three";
 import { createScene } from "../src/scene";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
+
 import { extendSkin } from "../src/skin";
 import { previewClipPlanes, previewNearPlane } from "../src/camera-depth";
+import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
 
 const run = document.getElementById("run") as HTMLButtonElement;
 const output = document.getElementById("output")!;
@@ -12,7 +13,7 @@ run.onclick = async () => {
   try {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 8;
     const context = canvas.getContext("2d")!; context.fillStyle = "white"; context.fillRect(0, 0, 8, 8);
-    const v = await createScene(document.getElementById("stage")!, [canvas]);
+    const v = await createScene(document.getElementById("stage")!, [canvas], EYE_MAKEUP_REGION.fineGlitter);
     v.renderer.setAnimationLoop(null); v.renderer.setPixelRatio(1); v.renderer.setSize(640, 640);
     v.camera.aspect = 1; v.controls.enableDamping = false;
     v.updateLayer(0, initialRecipe().layers[0]);

@@ -4,6 +4,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { extendSkin } from "./skin";
 import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./engines/layered-makeup/render/makeup-stack";
+import type { FineGlitterScope } from "./engines/layered-makeup/region";
 import { IdleAnimation } from "./idle-animation";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "./game-blink";
 import { composePreviewMotion } from "./preview-motion";
@@ -55,10 +56,11 @@ export const faceDecalRenderOrder = (priority: string | null | undefined, index:
 export async function createScene(
   host: HTMLElement,
   canvases: HTMLCanvasElement[],
+  fineGlitter: FineGlitterScope,
   stage: StageTheme = "dark",
 ) {
   const releases: (() => void)[] = [];
-  try { return await assembleScene(host, canvases, stage, releases); }
+  try { return await assembleScene(host, canvases, fineGlitter, stage, releases); }
   catch (error) { releaseAll(releases); throw error; }
 }
 
@@ -72,6 +74,7 @@ function releaseAll(releases: (() => void)[]) {
 async function assembleScene(
   host: HTMLElement,
   canvases: HTMLCanvasElement[],
+  fineGlitter: FineGlitterScope,
   stage: StageTheme,
   releases: (() => void)[],
 ) {
@@ -225,7 +228,7 @@ async function assembleScene(
         return result.attribute;
       } } : {}) };
   }
-  const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
+  const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy(), fineGlitter);
   // A restored WebGL context comes back with empty render targets: prefilter the environment again and redraw the composite.
   // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the composite
   // redraws, and the shown V's layered parts are baked again from their stacks (PREV-62): their kept maps died with the context.

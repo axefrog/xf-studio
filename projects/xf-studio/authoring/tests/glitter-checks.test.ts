@@ -2,16 +2,15 @@ import { expect, test } from "bun:test";
 // Test-only use of the builder side (glitter route, region rules, planning) against the independent verifier's
 // restatements: the verifier must accept the builder's chains and refuse every tampered copy (PIPE-68..73, PIPE-76).
 import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { compileGlitterPreset } from "../src/glitter-route";
 import { clipRect, flakeCount, layerOutlineBounds, MAX_REGION_FLAKES } from "../src/glitter-region";
-import { preparePackageCollection } from "../src/package-filter";
-import { preflightPackageCollection } from "../src/package-preflight";
-import { parseRecipe, raster } from "../src/engines/layered-makeup/recipe";
 import { checkGlitterChains, levelDims, restatedCatalogue } from "../src/mod-verifier/glitter-checks";
 import { glitterOf, restatedOutline } from "../src/mod-verifier/resource-checks";
 import { expectedChain } from "../src/mod-verifier/texture-checks";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { plateWindow } from "./window-fixture";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { raster } from "./fixtures/eye-region";
+import { compileGlitterPreset, preparePackageCollection, preflightPackageCollection } from "./fixtures/eye-exporter";
 
 const CUT = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
 const WINDOW = plateWindow(CUT).window;

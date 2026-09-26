@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { CollectionServiceError } from "../src/collection-service";
 import { PreviewQualityActions } from "../src/preview-quality-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 const makeCore = () => createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
 

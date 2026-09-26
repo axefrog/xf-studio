@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/uv-view";
-import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace } from "../src/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
 test("UV mapping is invertible and isotropic across both crops, pane sizes, insets and mirrored instances", () => {
   for (const mode of ["both", "single"] as const) for (const [width, height] of [[260, 112], [400, 700], [1200, 380], [333.3, 333.3]]) {

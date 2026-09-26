@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringPreviewCoordinator, type CompleteRaster, type PreviewRenderPort } from "../src/authoring-preview-coordinator";
-import { freshWorkspace } from "../src/workspace-state";
-import { editLayers } from "../src/engines/layered-makeup/layer-stack";
+import { freshWorkspace, editLayers } from "./fixtures/eye-region";
 
 function harness() {
   const document = new AuthoringDocument(freshWorkspace());

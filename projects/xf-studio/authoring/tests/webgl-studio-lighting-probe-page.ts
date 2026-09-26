@@ -9,12 +9,14 @@
  * light probe (PREV-59). Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
-import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { skinParameters } from "../src/skin-material";
 import { createStudioLightRig } from "../src/studio-light-rig";
 import { DEFAULT_STUDIO_LIGHTS, STUDIO_LIGHT_TARGET, type StudioLights } from "../src/studio-lighting";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
+import { initialRecipe } from "./fixtures/eye-region";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 export type Highlight = { x: number; y: number; peak: number };
 export type SurfaceProbe = { azimuth: Record<string, Highlight>; elevation: Record<string, Highlight>; strength: { single: number; double: number } };

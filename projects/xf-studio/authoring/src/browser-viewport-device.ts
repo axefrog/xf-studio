@@ -1,4 +1,5 @@
 import { createScene } from "./scene";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
 import { modifiersOf, NO_MODIFIERS } from "./input-bindings";
@@ -11,6 +12,8 @@ type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
 
 /** Browser resource owner. The presentation receives only `attachment`, never these handles. */
 export function createBrowserViewportDevice(options: {
+  /** The live feature's region: its editors' models and mirror, and the scene's fine-Glitter scope. */
+  region: Pick<LayeredMakeupRegion, "models" | "mirror" | "fineGlitter">;
   headHost: HTMLElement;
   uvHost: HTMLElement;
   queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
@@ -68,16 +71,16 @@ export function createBrowserViewportDevice(options: {
   return {
     attachment,
     mountUV(canvas: HTMLCanvasElement, controls: Parameters<typeof createUVEditor>[1],
-      hooks: Parameters<typeof createUVEditor>[2], initial: Parameters<typeof createUVEditor>[3]) {
+      hooks: Omit<Parameters<typeof createUVEditor>[2], "region">, initial: Parameters<typeof createUVEditor>[3]) {
       uvEditor = (options.uvFactory ?? createUVEditor)(canvas, controls,
-        { ...hooks, input: state => attachment.reportInput("uv", state) }, initial);
+        { ...hooks, region: options.region, input: state => attachment.reportInput("uv", state) }, initial);
       editors.attach("uv", uvEditor);
       attachment.setReady("uv");
       return uvEditor;
     },
     async loadHead(canvases: HTMLCanvasElement[]) {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createScene)(options.headHost, canvases);
+      viewer = await (options.sceneFactory ?? createScene)(options.headHost, canvases, options.region.fineGlitter);
       return viewer;
     },
     /**
@@ -87,10 +90,10 @@ export function createBrowserViewportDevice(options: {
     unloadHead(scene: Scene) {
       if (scene === viewer) releaseHead();
     },
-    mountSurface(hooks: Parameters<typeof createSurfaceEditor>[1]) {
+    mountSurface(hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
       if (!viewer) throw Error("The head scene must load before mounting surface controls.");
       surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)(viewer,
-        { ...hooks, input: state => attachment.reportInput("head", state) });
+        { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },

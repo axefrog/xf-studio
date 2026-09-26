@@ -3,6 +3,7 @@ import type { RasterRequest, RasterResponse } from "./engines/layered-makeup/ras
 import {isIrregular} from "./engines/layered-makeup/finish";
 import {isDirectGlint} from "./engines/layered-makeup/direct-glint-settings";
 import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./engines/layered-makeup/makeup-dependencies";
+import type { RasterRegion } from "./engines/layered-makeup/region";
 
 export type RasterPort = {
   onmessage: ((event: MessageEvent<RasterResponse>) => void) | null;
@@ -27,7 +28,7 @@ function validResult(data: Completed, request: RasterRequest): boolean {
     !(data.optics.surface instanceof Uint8Array) || data.optics.surface.length !== length)) return false;
   if (irregular) {
     const candidate=settings as import("./engines/layered-makeup/flake-field").IrregularFlakes;
-    const optical=studioIrregularOpticalKey(candidate,request.size);
+    const optical=studioIrregularOpticalKey(candidate,request.size,request.region.fineGlitter);
     const expected=irregularAlbedoKey(optical,maskAlphaKey(request.layer,request.size),request.layer.color,candidate.color);
     if (!data.albedo || data.albedo.key!==expected || !(data.albedo.data instanceof Uint8Array) || data.albedo.data.length!==length) return false;
     if(data.glitterStats){
@@ -44,9 +45,11 @@ function validResult(data: Completed, request: RasterRequest): boolean {
 
 /** Latest pending snapshot per slot, with cancellation for obsolete running work.
  * Versions never reset, so an old message cannot apply to a replacement preset.
+ * `region` (the live feature's mirror and fine-Glitter scope) travels with every request.
  */
 export function createRasterClient(makeWorker: () => RasterPort,
-  publish: (result: Completed) => void, failed: (reason?: string) => void, size = 1024) {
+  publish: (result: Completed) => void, failed: (reason?: string) => void, region: RasterRegion, size = 1024) {
+  region = structuredClone(region);
   const queue = new Map<number, RasterRequest>(), versions = new Map<number, number>();
   let running: RasterRequest | undefined, cancelSent = false, sequence = 0;
   let cancellations = 0, completed = 0, discarded = 0, failures = 0;
@@ -111,7 +114,7 @@ export function createRasterClient(makeWorker: () => RasterPort,
         throw Error("Invalid preview raster request.");
       const version = ++sequence;
       versions.set(i, version);
-      const request = { i, version, layer: structuredClone(layer), size: requestedSize, bakeOptics };
+      const request = { i, version, layer: structuredClone(layer), size: requestedSize, region, bakeOptics };
       if (prioritize) {
         if (running && running.i !== i && versions.get(running.i) === running.version && !queue.has(running.i))
           queue.set(running.i, running);

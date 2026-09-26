@@ -1,33 +1,35 @@
 import type { EyeMakeupAction } from "../../../eye-makeup-model";
-import type { StudioTarget } from "../../../studio-application";
-import type { DispatchFeedback, StudioRuntime } from "../../../studio-ui/runtime";
+import type { EyeMakeupFacade } from "../../../studio-presentation";
+import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
 
 /**
- * Eye makeup's view acts only through eye makeup's facade (`port.feature("eye-makeup")`, UI-52): its
- * dispatches, capabilities and per-target capabilities are the facade's, which refuses any other owner's
- * kind. Feedback is the shell's (`rt.report`), exactly as for any other dispatch. A platform action the
- * view offers (adding a preset, Undo) goes through the shell's runtime, never through this.
+ * What eye makeup's view receives from the shell: a context over eye makeup's facade only (UI-52, UI-73).
+ * Its dispatches, capabilities, limits and choices are the facade's, which refuses any other owner's kind;
+ * feedback is the shell's, exactly as for any other dispatch. A platform action the view offers (adding a
+ * preset, Undo) goes through the context's `platform`, which refuses a feature's kinds.
  */
-export type EyeMakeupActions = {
-  dispatch(action: EyeMakeupAction, options?: DispatchFeedback): boolean;
-  capability(action: EyeMakeupAction): ReturnType<StudioRuntime["eyeMakeup"]["capability"]>;
-  contextCapability(target: StudioTarget, action: EyeMakeupAction): ReturnType<StudioRuntime["eyeMakeup"]["contextCapability"]>;
-  /** Layer creation; refused (with a reason) while no preset owns the editor. */
-  addLayerCapability(): ReturnType<StudioRuntime["eyeMakeup"]["capability"]>;
-};
+export type EyeMakeupViewContext = FeatureViewContext<EyeMakeupFacade>;
 
-const bound = new WeakMap<StudioRuntime, EyeMakeupActions>();
-export function eyeMakeupActions(rt: StudioRuntime): EyeMakeupActions {
-  let actions = bound.get(rt);
-  if (!actions) {
-    const facade = rt.eyeMakeup;
-    actions = Object.freeze({
-      dispatch: (action, options) => rt.report(action.kind, facade.dispatch(action), options),
-      capability: action => facade.capability(action),
-      contextCapability: (target, action) => facade.contextCapability(target, action),
-      addLayerCapability: () => facade.capability({ kind: "layer.edit", command: { kind: "add" } }),
-    } satisfies EyeMakeupActions);
-    bound.set(rt, actions);
+/** Add a layer at the front of the selected preset (a fresh action each time). */
+export const addLayer = (): EyeMakeupAction => ({ kind: "layer.edit", command: { kind: "add" } });
+/** Layer creation; refused (with a reason) while no preset owns the editor. */
+export const addLayerCapability = (ctx: EyeMakeupViewContext) => ctx.facade.capability(addLayer());
+
+type Catalogues = {
+  readonly finishes: ReturnType<EyeMakeupFacade["finishCatalogue"]>;
+  readonly glitterModels: ReturnType<EyeMakeupFacade["glitterModelCatalogue"]>;
+  /** The catalogue's finish a layer's stored finish name means (its ID, or a stored alias such as older recipes' `satin`). */
+  finishOf(finish: string): ReturnType<EyeMakeupFacade["finishCatalogue"]>[number] | undefined;
+};
+const read = new WeakMap<EyeMakeupViewContext, Catalogues>();
+/** Eye makeup's static catalogues (finishes, Glitter models), read from its facade once per context. */
+export function catalogues(ctx: EyeMakeupViewContext): Catalogues {
+  let entry = read.get(ctx);
+  if (!entry) {
+    const finishes = ctx.facade.finishCatalogue(), glitterModels = ctx.facade.glitterModelCatalogue();
+    entry = Object.freeze({ finishes, glitterModels,
+      finishOf: (finish: string) => finishes.find(item => item.id === finish || item.stored.includes(finish)) });
+    read.set(ctx, entry);
   }
-  return actions;
+  return entry;
 }

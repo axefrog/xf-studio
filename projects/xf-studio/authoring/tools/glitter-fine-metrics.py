@@ -52,10 +52,11 @@ def main():
     rows = manifest['records']
     masks = {}
     for size in sorted({r['size'] for r in rows}):
-        script = ('import {initialRecipe,raster} from "./src/recipe";'
+        script = ('import {raster} from "./src/engines/layered-makeup/recipe";'
+                  'import {EYE_MAKEUP_REGION,initialRecipe} from "./src/features/eye-makeup/region";'
                   'const layer=initialRecipe().layers[0];'
                   'layer.color="#592640";layer.opacity=1;layer.enabled=true;'
-                  f'process.stdout.write(Buffer.from(raster(layer,{size})));')
+                  f'process.stdout.write(Buffer.from(raster(layer,{size},EYE_MAKEUP_REGION.mirror)));')
         data = subprocess.run([args.bun, '-e', script], cwd=authoring,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
         if len(data) != size * size * 4:

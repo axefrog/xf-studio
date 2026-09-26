@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { initialRecipe } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/recipe";
+import { initialRecipe } from "../../projects/xf-studio/authoring/src/features/eye-makeup/region";
+
 const violet=initialRecipe(),copper=initialRecipe();
 violet.layers[0]!.finish="regular";violet.layers[0]!.opacity=.68;violet.layers[1]!.enabled=true;
 copper.layers[0]!.color="#b96632";copper.layers[0]!.finish="metallic";copper.layers[0]!.opacity=.74;

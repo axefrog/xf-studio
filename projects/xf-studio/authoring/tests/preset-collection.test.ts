@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 import { planCollection, type PresetCollection } from "../src/preset-collection";
+import { initialRecipe } from "./fixtures/eye-region";
 const source = (): PresetCollection => ({schema:"xfas/collection-1",id:"11ea932b-7ce9-4d40-a284-47c307009137",name:"Collection",
   presets:["193f4397-e313-4409-b842-a333307dece3","6bf9f1e3-a9fa-4882-a87c-fbdc346464ea"].map((id,i)=>({id,name:`Look ${i}`,revision:1,recipe:recipeFile(initialRecipe())!}))});
 test("collection identities and resource paths survive renaming, revisions and reordering",()=>{

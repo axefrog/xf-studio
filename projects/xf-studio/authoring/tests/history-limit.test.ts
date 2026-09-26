@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { RECIPE_HISTORY_LIMIT } from "../src/editor-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 // Transactions identify the Undo entry their checkpoint added. At the limit a new entry
 // displaces the oldest, so the depth no longer grows; depth-based detection used to

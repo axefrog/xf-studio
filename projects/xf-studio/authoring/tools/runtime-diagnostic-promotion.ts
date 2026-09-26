@@ -6,11 +6,12 @@ function usage(): never {
   throw Error("Usage: bun tools/runtime-diagnostic-promotion.ts --candidate-store <absolute> --candidate-id <id> --game-root <absolute> --mo2-root <absolute> --profile <existing-name> --staging-root <existing-absolute-stage> --new-profile <new-name> [--promote|--recover|--rollback]");
 }
 const args = process.argv.slice(2), values = new Map<string, string>();
-let verb: "preview" | "promote" | "recover" | "rollback" = "preview";
+type Verb = "preview" | "promote" | "recover" | "rollback";
+let verb = "preview" as Verb;
 for (let i = 0; i < args.length; i++) {
   const key = args[i];
   if (["--promote", "--recover", "--rollback"].includes(key)) {
-    if (verb !== "preview") usage(); verb = key.slice(2) as typeof verb; continue;
+    if (verb !== "preview") usage(); verb = key.slice(2) as Verb; continue;
   }
   if (!key.startsWith("--") || !args[i + 1] || args[i + 1].startsWith("--") || values.has(key)) usage();
   values.set(key, args[++i]);

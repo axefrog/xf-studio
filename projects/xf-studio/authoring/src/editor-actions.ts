@@ -1,44 +1,12 @@
-import { editLayers, type LayerCommand } from "./engines/layered-makeup/layer-stack";
-import { joinRecipe, MAX_LAYERS, parseRecipe, recipeChunks, type Recipe } from "./engines/layered-makeup/recipe";
-import type { CodedCapability } from "./collection-actions";
-import { nameIssue, positionIssue, refuse } from "./validation-issues";
-import { HISTORY_LIMIT, refusal, type HistoryEntryId as PlatformHistoryEntryId, type HistoryParts } from "./platform/api";
+/**
+ * The eye-makeup document's history owner: one recipe's Undo history on its own and the look history's
+ * recipe chunks. The pure layer-stack actions are the engine's (`engines/layered-makeup/layer-stack.ts`).
+ */
+import { joinRecipe, recipeChunks, type Recipe } from "./engines/layered-makeup/recipe";
+import { HISTORY_LIMIT, type HistoryEntryId as PlatformHistoryEntryId, type HistoryParts } from "./platform/api";
 import { LookHistory, type HistoryStepInfo } from "./platform/core/look-history";
-import { EYE_MAKEUP_FEATURE } from "./recipe-schema";
+import { EYE_MAKEUP_FEATURE, readRecipe } from "./recipe-schema";
 import type { HistoryLabel } from "./history-labels";
-
-export type LayerAction =
-  | { kind: "layer.edit"; command: LayerCommand }
-  | { kind: "layer.setEnabled"; id: string; enabled: boolean };
-
-export function layerCapability(recipe: Recipe, action: LayerAction): CodedCapability {
-  const command = action.kind === "layer.edit" ? action.command : action;
-  if ("id" in command && !recipe.layers.some(layer => layer.id === command.id))
-    return refusal("missing_target", "That layer no longer exists.");
-  if (action.kind === "layer.edit") {
-    if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
-      return refuse({ code: "range", message: `This preview currently supports up to ${MAX_LAYERS} layers.` });
-    if ((command.kind === "add" || command.kind === "duplicate") && command.newId !== undefined &&
-        (typeof command.newId !== "string" || !command.newId || recipe.layers.some(layer => layer.id === command.newId)))
-      return refusal("invalid_value", "The new layer needs an unused ID.");
-    // Layers are stored bottom-to-top: index 0 is the back, the last index the front.
-    const issue = command.kind === "move" ? positionIssue(command.to, recipe.layers.length,
-      { below: "This layer is already at the back.", above: "This layer is already at the front." }) :
-      command.kind === "rename" ? nameIssue(command.name, 80) : undefined;
-    if (issue) return refuse(issue);
-  }
-  return { available: true };
-}
-
-export function applyLayerAction(recipe: Recipe, activeId: string | undefined, action: LayerAction) {
-  const capability = layerCapability(recipe, action);
-  if (!capability.available) throw Error(capability.reason);
-  if (action.kind === "layer.edit") return { ...editLayers(recipe, activeId, action.command), structure: true as const };
-  const next = parseRecipe({ ...recipe, layers: recipe.layers.map(layer => layer.id === action.id
-    ? { ...layer, enabled: action.enabled } : layer) });
-  return { recipe: next, active: Math.max(0, next.layers.findIndex(layer => layer.id === activeId)), structure: false as const,
-    changed: next.layers.findIndex(layer => layer.id === action.id) };
-}
 
 /** Opaque identity of one Undo entry (a look-history step), returned when a checkpoint actually adds it. */
 export type HistoryEntryId = PlatformHistoryEntryId;
@@ -100,6 +68,6 @@ export class RecipeHistory {
 /** A look history of whole recipes (validated first, as every restore always did). */
 export function recipeHistory(entries: readonly unknown[], trimmed = false,
   history: { readonly feature: string; readonly parts: HistoryParts } = RECIPE_HISTORY): LookHistory {
-  const kept = entries.slice(-RECIPE_HISTORY_LIMIT).map(recipe => parseRecipe(recipe));
+  const kept = entries.slice(-RECIPE_HISTORY_LIMIT).map(recipe => readRecipe(recipe));
   return LookHistory.fromBodies(history.parts, history.feature, kept, trimmed || entries.length > RECIPE_HISTORY_LIMIT);
 }

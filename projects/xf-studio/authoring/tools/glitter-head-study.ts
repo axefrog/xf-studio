@@ -2,9 +2,10 @@
  * controller; never edits production recipes or the material's skinning hooks. */
 import * as THREE from "three";
 import {createScene} from "../src/scene";
-import {createRasterJob,initialRecipe} from "../src/engines/layered-makeup/recipe";
+import { createRasterJob } from "../src/engines/layered-makeup/recipe";
 import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
+import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
 
 const SIZE=new URLSearchParams(location.search).get("size")==="2048"?2048:1024,
   BASE="#592640",variants=["legacy","sparse","default","default-16sample","dense","maximum","fine160k","fine350k","fine350k-covered","uv-cell-glints","uv-cell-polygons"] as const;
@@ -117,12 +118,12 @@ async function selectVariant(variant:Variant,alpha:Uint8ClampedArray<ArrayBuffer
 async function main(){
   const sizeInput=element<HTMLSelectElement>("size");sizeInput.value=String(SIZE);
   sizeInput.addEventListener("change",()=>{const url=new URL(location.href);url.searchParams.set("size",sizeInput.value);location.assign(url);});
-  const job=createRasterJob(fixed,SIZE);
+  const job=createRasterJob(fixed, SIZE, EYE_MAKEUP_REGION.mirror);
   while(!job.done){const end=performance.now()+8;do{job.advance(16);}while(!job.done&&performance.now()<end);if(!job.done)await wait();}
   maskHash=await sha(new Uint8Array(job.data));
   const canvas=document.createElement("canvas");canvas.width=canvas.height=SIZE;canvas.getContext("2d")!.putImageData(new ImageData(job.data,SIZE,SIZE),0,0);
   status.textContent="Loading the local studio head...";
-  viewer=await createScene(element("viewport"),[canvas]);viewer.updateLayer(0,fixed);
+  viewer=await createScene(element("viewport"), [canvas], EYE_MAKEUP_REGION.fineGlitter);viewer.updateLayer(0,fixed);
   mixture=installGlitterMixtureStudy(viewer.materials[0]!,{baseColor:BASE,flakeColor:"#f5df9f"});
   glint=installProceduralGlintStudy(viewer.materials[0]!);
   viewer.onFrame(()=>frames++);viewer.setIdle(false);viewer.setBlink(0);viewer.setLightAngle(Number(lightInput.value));

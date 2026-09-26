@@ -2,7 +2,7 @@ import {expect,test} from "bun:test";
 import {createHash} from "node:crypto";
 import {bakeFlakes,createFlakeJob,defaultFlakes,type Flakes} from "../src/engines/layered-makeup/finish";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import {initialRecipe,raster} from "../src/engines/layered-makeup/recipe";
+import { initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
 
 // Captured from the unmodified synchronous baker before this scheduling change.
 const frozen: {size:number;finish:"shimmer"|"glitter";p:Flakes;sha256:string}[] = [
@@ -50,7 +50,7 @@ test("optical phase yields and cancels without publishing a mask-only result",as
   const processor=createRasterProcessor(r=>responses.push(r),()=>new Promise(resolve=>resumes.push(resolve)),()=>++clock*10);
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.feather=.0005;layer.fields=[];layer.symmetry=false;
   layer.points=Array.from({length:3},()=>({u:.5,v:.5,weight:1}));layer.pathMode="catmull-rom";
-  const pending=processor.start({i:0,version:1,layer,size:32,bakeOptics:true});
+  const pending=processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:32,bakeOptics:true});
   await Promise.resolve();expect(resumes.length).toBe(1);expect(responses).toEqual([]); // Between phases.
   resumes.shift()!();await Promise.resolve();await Promise.resolve();
   expect(resumes.length).toBe(1);expect(responses).toEqual([]); // Inside optical cells.
@@ -63,7 +63,7 @@ test("complete optical bundles use immutable requested settings and matching res
   const processor=createRasterProcessor(r=>responses.push(r),()=>new Promise(resolve=>resumes.push(resolve)),()=>++clock*10);
   const layer=initialRecipe().layers[0];layer.finish="shimmer";layer.flakes=defaultFlakes();
   const original=structuredClone(layer);let done=false;
-  const pending=processor.start({i:3,version:10,layer,size:33,bakeOptics:true}).then(()=>{done=true;});
+  const pending=processor.start({ region: EYE_RASTER_REGION,i:3,version:10,layer,size:33,bakeOptics:true}).then(()=>{done=true;});
   layer.finish="matte";layer.enabled=false;layer.flakes.seed=0;layer.opacity=0;
   while(!done){resumes.shift()?.();await Promise.resolve();}
   await pending;expect(responses.length).toBe(1);
@@ -75,7 +75,7 @@ test("nonoptical, disabled and opt-out requests avoid the optical phase",async()
   for(const [enabled,finish,bakeOptics]of[[true,"matte",true],[false,"glitter",true],[true,"glitter",false]]as const){
     const layer=initialRecipe().layers[0];layer.enabled=enabled;layer.finish=finish;let result:RasterResponse|undefined;
     const processor=createRasterProcessor(r=>{result=r;},async()=>{},()=>0);
-    await processor.start({i:0,version:1,layer,size:32,bakeOptics});
+    await processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:32,bakeOptics});
     expect(result?.cancelled).not.toBe(true);if(result&&!result.cancelled){expect(result.size).toBe(32);expect(result.optics).toBeUndefined();expect(result.data).toEqual(raster(layer,32));}
   }
 });

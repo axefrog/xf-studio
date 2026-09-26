@@ -256,7 +256,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(swap.indexOf("releasePrevious();", swap.indexOf("const bakeLimits = bakeLayered();"))).toBeGreaterThan(swap.indexOf("const bakeLimits = bakeLayered();"));
   expect(swap).not.toContain("previous.dispose(kept);\n    }");
   // Behaviour: a skin-light change needs no composite pass, and an unchanged stack draws nothing more.
-  const { createMakeupStack } = await import("../src/engines/layered-makeup/render/makeup-stack");
+  const { createMakeupStack, initialRecipe } = await import("./fixtures/eye-region");
   const THREE = await import("three");
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
@@ -273,7 +273,7 @@ test("the authored plate's light, skin and composite change only inside calls th
     roughness: new THREE.BufferAttribute(new Float32Array(n).fill(0.6), 1), metalness: new THREE.BufferAttribute(new Float32Array(n), 1) });
   stack.setCanvases([{ width: 16, height: 16 } as HTMLCanvasElement]);
   stack.setUnderlaySource(underlay);
-  stack.updateLayer(0, (await import("../src/engines/layered-makeup/recipe")).initialRecipe().layers[0]!);
+  stack.updateLayer(0, initialRecipe().layers[0]!);
   stack.prepareBlend(renderer);
   // One composite update: the layer, the resolve and the 9 × 3 composite's four roughness levels (plate-composite.ts).
   expect(stack.blendDiagnostics().plate.compositeDraws).toEqual({ layerDraws: 1, resolves: 1, levelDraws: 4 });

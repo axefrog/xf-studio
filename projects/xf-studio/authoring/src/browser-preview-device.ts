@@ -8,6 +8,7 @@ import { createRasterClient, type RasterPort } from "./raster-client";
 import type { RasterResponse, GlitterStats } from "./engines/layered-makeup/raster-processor";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import type { PreviewTextureSize } from "./preview-quality";
+import type { RasterRegion } from "./engines/layered-makeup/region";
 import type { ReadonlyDeep } from "./read-only";
 import type { createScene } from "./scene";
 
@@ -22,6 +23,8 @@ export { previewOpticalKey };
 /** Trusted browser resource owner. A replacement presentation receives quality actions, never these canvases or worker. */
 export function createBrowserPreviewDevice(options: {
   document: AuthoringDocument;
+  /** The live feature's region (its mirror and fine-Glitter scope), for the raster worker and optical identities. */
+  region: RasterRegion;
   initialSize: PreviewTextureSize;
   makeWorker(): RasterPort;
   frame(run: () => void): void;
@@ -50,12 +53,13 @@ export function createBrowserPreviewDevice(options: {
   let coordinator: AuthoringPreviewCoordinator;
   let scheduler: AuthoringRenderScheduler;
   const client = createRasterClient(options.makeWorker,
-    result => coordinator.publish(result), reason => coordinator.fail(reason));
+    result => coordinator.publish(result), reason => coordinator.fail(reason), options.region);
+  const opticalKey = (layer: ReadonlyDeep<Layer>, size: number) => previewOpticalKey(layer, size, options.region.fineGlitter);
   coordinator = new AuthoringPreviewCoordinator(authoring, options.initialSize, {
     maxTextureSize: () => viewer?.renderer.capabilities.maxTextureSize ?? 4096,
     resourceSize: i => canvases[i]?.width ?? 0,
     needsOptics: (i, layer, size) => viewer ? viewer.needsOptics(i, layer, size)
-      : initialOptics[i]?.key !== previewOpticalKey(layer, size),
+      : initialOptics[i]?.key !== opticalKey(layer, size),
     needsPresentationMaps: (i, layer, size) => !!viewer &&
       (viewer.needsOptics(i, layer, size) || viewer.needsAlbedo(i, layer, size)),
     queue: () => client.diagnostics(),
@@ -101,7 +105,7 @@ export function createBrowserPreviewDevice(options: {
       viewer?.setLayerCanvas(i, canvases[i]);
       if (viewer) { viewer.updateLayer(i, layer, optics, albedo, true); initialOptics[i] = undefined; }
       else if (optics || albedo) {
-        const key = previewOpticalKey(layer, size), prior = initialOptics[i];
+        const key = opticalKey(layer, size), prior = initialOptics[i];
         initialOptics[i] = { key, data: optics ?? (prior?.key === key ? prior.data : undefined), albedo };
       }
       else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) initialOptics[i] = undefined;
@@ -145,7 +149,7 @@ export function createBrowserPreviewDevice(options: {
         const layer = authoring.recipe.layers[i], stored = initialOptics[i];
         if (initialQuality.accepted && !(layer.finish === "glitter" &&
           (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)) && canvases[i].width < 32)) {
-          const valid = stored?.key === previewOpticalKey(layer, canvases[i].width);
+          const valid = stored?.key === opticalKey(layer, canvases[i].width);
           viewer.updateLayer(i, layer, valid ? stored?.data : undefined,
             valid ? stored?.albedo : undefined, true);
         }

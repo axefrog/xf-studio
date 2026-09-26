@@ -3,10 +3,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { PackageBuildError, runPackageCommand, type PackageCommandOptions } from "../src/package-build-service";
+import { PackageBuildError, type PackageCommandOptions } from "../src/package-build-service";
 import type { PackageResourceTools } from "../src/package-build-wolvenkit";
 import { VERIFICATION_LIMITS, type VerificationReport, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
-import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import type { PackageBuild, PackageCheck } from "../src/package-action";
 import type { EyePlateManifest } from "../src/eye-plate-service";
@@ -15,6 +14,8 @@ import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlat
 import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { OFF_PLATE_REASON } from "../src/package-filter";
+import { EYE_REGION } from "./fixtures/eye-region";
+import { runPackageCommand, preparePackageCollection } from "./fixtures/eye-exporter";
 
 /** A synthetic plate over the fixture's lids (UVs like the built-in plate's rectangle), and its UV footprint. */
 const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
@@ -82,7 +83,7 @@ function setup(collection: unknown = fixture, recordFootprint = true) {
   writeFileSync(join(dir, "collection.json"), source);
   const calls: string[] = [];
   const verified: VerifyBuildOptions[] = [];
-  const options: PackageCommandOptions = { collection: join(dir, "collection.json"), plate, plateManifest: join(dir, "plate-manifest.json"),
+  const options: PackageCommandOptions = { region: EYE_REGION, collection: join(dir, "collection.json"), plate, plateManifest: join(dir, "plate-manifest.json"),
     wolvenkit: join(tools, "WolvenKit.CLI.exe"), gamepath: game, appRoot: app, buildRoot: join(dir, "build"), distRoot: join(dir, "dist"),
     tools: () => fakeTools(calls), verify: fakeVerify({}, verified) };
   return { dir, options, calls, verified, source, manifest: manifest as unknown as EyePlateManifest };

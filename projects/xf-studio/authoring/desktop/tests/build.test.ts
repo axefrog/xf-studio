@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { parseCollection } from "../../src/preset-collection";
-import { packagePresetIdentities, preparePackageCollection } from "../../src/package-filter";
+import { packagePresetIdentities } from "../../src/package-filter";
 import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, probeBun, runDesktopBuild, useBuilderBun, type DesktopPlatePreparer } from "../build";
 import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
 import { createDesktopServer } from "../server";
@@ -15,6 +15,7 @@ import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-wind
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
+import { preparePackageCollection } from "../../tests/fixtures/eye-exporter";
 
 const root = realpathSync.native(mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"))); // Canonical: CI temp folders use 8.3 short names.
 afterAll(() => rmSync(root, { recursive: true, force: true }));

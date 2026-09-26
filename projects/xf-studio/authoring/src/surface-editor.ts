@@ -6,6 +6,7 @@ import { isCameraEffect } from "./head-camera-input";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./engines/layered-makeup/recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./engines/layered-makeup/bezier-path";
 import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer } from "./engines/layered-makeup/shape-transform";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import {
   SurfaceMap,
   anchorPosition,
@@ -44,6 +45,8 @@ type Hooks = {
   message: (text: string) => void;
   /** Hover target, active gesture and editability, for hint strips and cursors (the presentation draws both). */
   input?: (state: EditorInputState) => void;
+  /** The live feature's region: the layer models shape edits validate with and the mirror hit tests reflect across. */
+  region: Pick<LayeredMakeupRegion, "models" | "mirror">;
 };
 const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
@@ -475,7 +478,7 @@ export function createSurfaceEditor(
     if (uv) {
       const others = [...hooks.layers?.() ?? []].reverse().filter(item => item.id !== layer?.id);
       for (const candidate of [...layer ? [layer] : [], ...others]) {
-        const shape = shapeHit(candidate, uv);
+        const shape = shapeHit(candidate, uv, hooks.region.mirror);
         if (shape) return { hit: { kind: "shape", layerId: candidate.id }, mirror: shape.mirror, affordance: "shape" };
       }
     }
@@ -507,7 +510,7 @@ export function createSurfaceEditor(
     const layer = hooks.layer(), editable = enabled && !!layer?.enabled;
     if (!editable || !layer) return { target: "empty" as PointerTarget, editable, layer };
     const handle = handleAt(x, y), uv = !handle || needUV ? hit(x, y) : undefined;
-    const painted = handle ? { mirror: handle.mirror } : uv ? shapeHit(layer, uv) : undefined;
+    const painted = handle ? { mirror: handle.mirror } : uv ? shapeHit(layer, uv, hooks.region.mirror) : undefined;
     return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget,
       editable, layer, handle, uv, painted };
   }
@@ -597,7 +600,7 @@ export function createSurfaceEditor(
           : { kind: "rotate" as const, pivot: state.pivot,
               radians: Math.atan2(current.v - state.pivot.v, current.u - state.pivot.u)
                 - Math.atan2(state.start.v - state.pivot.v, state.start.u - state.pivot.u) };
-        applyShape(state, transformLayer(state.snapshot, transform));
+        applyShape(state, transformLayer(state.snapshot, transform, hooks.region.models));
         return;
       }
       if (!drag) {
@@ -706,7 +709,7 @@ export function createSurfaceEditor(
       publishInput();
     }
     const factor = wheel.factor * shapeWheelScaleFactor(shiftWheelDelta(e), e.deltaMode);
-    if (applyShape(wheel, transformLayer(wheel.snapshot, { kind: "scale", pivot: wheel.pivot, factor })))
+    if (applyShape(wheel, transformLayer(wheel.snapshot, { kind: "scale", pivot: wheel.pivot, factor }, hooks.region.models)))
       wheel.factor = factor;
     clearTimeout(wheel.timer);
     wheel.timer = setTimeout(() => finishWheel(), 250);

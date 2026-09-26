@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createUVEditor } from "../src/uv-editor";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("UV hit discovery uses drag handle priority and canonical mirrored identities without editing", () => {
   const originalGlobals = Object.fromEntries(["document", "window", "ResizeObserver"].map(name =>
@@ -26,7 +26,7 @@ test("UV hit discovery uses drag handle priority and canonical mirrored identiti
     let selected = 0, selections = 0, begins = 0;
     const element = () => ({ setAttribute() {}, disabled: false, textContent: "" }) as any;
     const editor = createUVEditor(canvas, { both: element(), single: element(), other: element(),
-      fit: element(), note: element() }, {
+      fit: element(), note: element() }, { region: EYE_REGION,
       recipe: () => recipe, layer: () => layer, selected: () => selected,
       selectedField: () => layer.fields[0].id,
       select: i => { selected = i; selections++; }, selectField: () => { selections++; },

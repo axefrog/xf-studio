@@ -5,8 +5,9 @@ import { memoryOf } from "./fixtures/looks";
 import { RECIPE_HISTORY_LIMIT, RecipeHistory } from "../src/editor-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/workspace-budget";
-import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace } from "../src/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 // The History panel's read model and its single jump action (history.jumpTo).
 
