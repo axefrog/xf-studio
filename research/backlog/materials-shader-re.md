@@ -1,6 +1,10 @@
 # Materials system and shader reverse-engineering
 
-**Status (25 Sep 2026): open — never properly begun as a systematic study.** Track 4 in the [ranked queue](README.md). Existing work is finish-specific or follows one saved resource chain at a time; no shader has a complete, reusable reference.
+**Status (26 Sep 2026): in progress, 2 of 5 families referenced.** Track 4 in the [ranked queue](README.md).
+
+- **Done:** the [skin reference](../materials/shader-skin.md) (parameters, head and body chains, channel packing, passes, the G-buffer program, the wrinkle driver, wetness, the SSS blur/combine/translucency pipeline, the lip seam) and the [hair reference](../materials/shader-hair.md) (template, three-pass transparency, profiles, flow, the sun and local-light hair paths, cap, lashes, colour blockers), plus the [shader fact index](../materials/shader-fact-index.md).
+- **What they changed:** skin GBuffer2.z does reach lighting (SSS translucency setup); the SSS mechanism is a separable screen-space blur of irradiance with post-scatter albedo; the local-light hair path is the sun model with its own intensities; `Scattering` does not reach direct light.
+- **Next:** 3. Eye, 4. Decals (consolidating the existing decal contract into `shader-decal.md`), 5. Multilayered. Browser follow-ups suggested by the skin study (a screen-space SSS blur; the lip-seam capture on the current preview) and the hair study (update `HAIR_LOCAL_LIGHT`'s stale comment) are separate reviewable changes.
 
 ## Requirement (long-standing directive)
 

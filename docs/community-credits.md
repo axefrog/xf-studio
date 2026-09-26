@@ -328,7 +328,11 @@ Kneiphof and Klein, [Real-time Image-based Lighting of Glints](https://arxiv.org
 
 ### Barré-Brisebois and Hill (2012)
 
-Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfshadow.com/publications/blending-in-detail/). Their reoriented normal mapping formula let us recognise how the game's decal composes a makeup normal map with the skin normal, which decided the Shimmer export design.
+Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfshadow.com/publications/blending-in-detail/). Their reoriented normal mapping formula let us recognise how the game's decal composes a makeup normal map with the skin normal, which decided the Shimmer export design. Their survey of detail-normal blends also let us name the partial-derivative blend the game's skin shader uses for its detail and micro-detail normals.
+
+### Jimenez et al. (2015)
+
+Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger, Xian-Chun Wu, Javier von der Pahlen, Michael Wimmer and Diego Gutierrez, [Separable Subsurface Scattering](https://www.iryoku.com/separable-sss/) (Computer Graphics Forum, 2015). Its per-profile separable kernel, scaled by depth and applied horizontally then vertically, let us recognise the game's skin subsurface-scattering passes when reading their compiled programs.
 
 ### Toksvig (2005) and Olano and Baker (2010)
 
