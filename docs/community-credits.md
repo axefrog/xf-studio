@@ -364,7 +364,11 @@ Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfs
 
 ### Jimenez et al. (2015)
 
-Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger, Xian-Chun Wu, Javier von der Pahlen, Michael Wimmer and Diego Gutierrez, [Separable Subsurface Scattering](https://www.iryoku.com/separable-sss/) (Computer Graphics Forum, 2015). Its per-profile separable kernel, scaled by depth and applied horizontally then vertically, let us recognise the game's skin subsurface-scattering passes when reading their compiled programs.
+Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger, Xian-Chun Wu, Javier von der Pahlen, Michael Wimmer and Diego Gutierrez, [Separable Subsurface Scattering](https://www.iryoku.com/separable-sss/) (Computer Graphics Forum, 2015). Its per-profile separable kernel, scaled by depth, let us recognise the game's skin subsurface-scattering passes when reading their compiled programs, and its published reference code let us identify the game's CPU kernel builder, which follows it constant for constant. That code's licence asks binary redistributions to reproduce the notice "Uses Separable SSS. Copyright (C) 2012 by Jorge Jimenez and Diego Gutierrez."; the Studio has not adapted it yet.
+
+### d'Eon and Luebke (2007)
+
+Eugene d'Eon and David Luebke, [Advanced Techniques for Realistic Real-Time Skin Rendering](https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-14-advanced-techniques-realistic-real-time-skin) (GPU Gems 3, chapter 14). Its sum-of-Gaussians fit of skin's diffusion profile let us recognise the variances and weights in the game's subsurface-scattering kernel.
 
 ### Cigolle et al. (2014)
 

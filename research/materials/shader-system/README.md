@@ -104,7 +104,7 @@ python research/materials/shader-system/exe_hair.py fill       # which cb0 regis
 python research/materials/shader-system/exe_hair.py dis 0xaeb374 0xaeb690   # the profile bake
 ```
 
-Addresses are RVAs of the 2.31 executable; another build moves them, but the method still applies.
+Addresses are RVAs of the 2.31 executable; another build moves them, but the method still applies. The same `dis` command reads the skin SSS kernel builder and its constant fills; their RVAs are in the [skin reference §6.3](../shader-skin.md#63-blur-kernel-and-combine). Run from a worktree, set `XF_TOOLS_DIR` to the lab's tools folder, since the default resolves beside the worktree.
 
 ## Programs examined in this pass
 
@@ -174,6 +174,7 @@ Decompiled for [experiment 017](../../../experiments/017-plate-depth/README.md) 
 | Setup `18323727242039837728` | For class 1, copies the global light's diffuse output and writes linear depth. No GBuffer2 read. |
 | Setup_UseTranslucency `11387959167119825062` (DXBC SHA-256 `5760e2dc1add793974e950f1df773c1969793e4a2b41e2dc498f0fe62b425901`) | The Setup plus a sun transmission term: thickness falloff `saturate(1.0111 − 15.128·d − 0.9598·d²)` from the scene depth minus a back-face depth target, × `saturate((GBuffer2.z − 1/3)·1.5)`, × sun colour and a camera-vector term. **Reads GBuffer2.z.** |
 | Blur_Horizontal `13638945895069409584` / Blur_Vertical `1061893983243070248` | Identical but for the axis. Reads GBuffer2 `.x` (skips pixels with metalness > 0.1) and `.w` (profile bit) only. A per-slot kernel row (centre weight, then RGB weight + offset per tap) is applied symmetrically at an offset scaled by 1/linear depth; taps only on class-1 pixels; normalised per channel. |
+| Blur_Stochastic `5799281617917762538` (DXBC SHA-256 `8f0ad92c934898e49c0d63460530444788b7bfca347fe477852e30d8e54bec45`) | One random tap per pixel per frame from a 256-entry kernel row, at a random angle and the same radius; unnormalised, so it relies on temporal accumulation |
 | Combine `7703933925853799832` | Class 1 only. Metalness > 0.1: exposure × (specular + unblurred diffuse), no SSS. Otherwise (unblurred + profile colour × (blurred − unblurred)) × lerp(albedo², `cb6[0].rgb`, `cb6[0].w`) + specular + an ambient term. Specular is added unchanged; `.y` and `.z` are never read. |
 
 The static index lists two GUIDs under `Setup_UseTranslucency`. The second, `2220067148481019988`, is a full sun-light program (class switch, GBuffer2.w profile bits, skin kernel fetch) attributed to that name by the index's heuristic; the earlier note that both were sun lights missed `11387959167119825062`.
