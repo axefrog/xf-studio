@@ -1,6 +1,6 @@
 # XF Studio third-party notices
 
-This file lists the third-party software included in the **XF Studio desktop app for Windows** (the setup ZIP published on GitHub Releases and the app it installs), with the licence notices those components require. XF Studio's own code is released under the MIT licence in the repository's [`LICENSE`](../../LICENSE) file; the installed app carries a copy next to this file.
+This file lists the third-party software included in the **XF Studio desktop app for Windows** (the setup program published on GitHub Releases and the app it installs), with the licence notices those components require. XF Studio's own code is released under the MIT licence in the repository's [`LICENSE`](../../LICENSE) file; the installed app carries a copy next to this file.
 
 The installer contains no files from Cyberpunk 2077 or from any other mod, and no fonts (the app uses fonts that come with Windows). The app icon is original. The release build checks this list against what it actually packages: `desktop/verify-canary.ts` fails if a shipped program file is not named here, if the versions of Bun, Electrobun or three.js recorded here differ from the ones built in, or if this file or the licence is missing from the installed app.
 
@@ -9,12 +9,13 @@ The installer contains no files from Cyberpunk 2077 or from any other mod, and n
 | Component | Version | Where it is in the installed app | Licence |
 |---|---|---|---|
 | [Bun](https://bun.com) JavaScript runtime | 1.4.0 | `bin/bun.exe` | MIT, with statically linked components under their own licences (below), including LGPL-2 JavaScriptCore/WebKit |
-| [Electrobun](https://github.com/blackboardsh/electrobun) desktop framework | 2.0.1 | `bin/launcher.exe`, `bin/ElectrobunCore.dll`, `bin/libNativeWrapper.dll`, `bin/libasar.dll`, `bin/bspatch.exe`, `bin/zig-zstd.exe`, `Resources/main.js`, `Resources/preload-full.js`, `Resources/preload-sandboxed.js`, `Resources/uninstall`, the setup program, and the Electrobun API code inside `Resources/app/bun/index.js` | MIT |
+| [Electrobun](https://github.com/blackboardsh/electrobun) desktop framework | 2.0.1 | `bin/launcher.exe`, `bin/ElectrobunCore.dll`, `bin/libNativeWrapper.dll`, `bin/libasar.dll`, `bin/bspatch.exe`, `bin/zig-zstd.exe`, `Resources/main.js`, `Resources/preload-full.js`, `Resources/preload-sandboxed.js`, `Resources/uninstall`, Electrobun's own setup program (carried inside the downloadable setup program), and the Electrobun API code inside `Resources/app/bun/index.js` | MIT |
 | Microsoft WebView2 SDK loader | as built into Electrobun 2.0.1 | inside `bin/libNativeWrapper.dll` (no separate `WebView2Loader.dll` is shipped; the DLL contains the loader's own strings) | BSD-style (Microsoft) |
 | [Zstandard](https://github.com/facebook/zstd) | as built into Electrobun 2.0.1 | Electrobun's `bin/zig-zstd.exe`, `bin/ElectrobunCore.dll` and `bin/bspatch.exe` refer to Zstandard | BSD (reproduced as a precaution) |
 | [Zig](https://ziglang.org) standard library | as built into Electrobun 2.0.1 | Electrobun's native programs are built with Zig | MIT (reproduced as a precaution) |
 | Microsoft Edge WebView2 Runtime Evergreen Bootstrapper | the current release from Microsoft at build time (recorded in each release's `build-info.json`) | `Resources/app/webview2/MicrosoftEdgeWebview2Setup.exe` | Microsoft software, redistributed unmodified as described below |
 | [three.js](https://github.com/mrdoob/three.js) | 0.186.0 | `Resources/app/views/studio/build/studio-startup.js`, including the OrbitControls, RoomEnvironment and GLTFLoader add-ons | MIT |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) | 6.7.3 | the downloadable setup program (`XFStudio-<version>-win-x64-setup.exe`) is built with Inno Setup: its setup runtime unpacks Electrobun's setup program and payload to a temporary folder and runs it. Nothing from Inno Setup is installed with the app | Inno Setup License (permissive; below) |
 
 The Microsoft Edge WebView2 Runtime that displays the app comes with Windows or from Microsoft and is not shipped by XF Studio. If it is missing, XF Studio asks first and then runs Microsoft's **Evergreen Bootstrapper**, which downloads and installs the runtime from Microsoft. The bootstrapper is packaged exactly as Microsoft publishes it (Copyright Microsoft Corporation), and every build checks that it carries a valid Microsoft Corporation code signature. Microsoft's [WebView2 distribution guidance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution) lets apps "download the bootstrapper and package it with your WebView2 app". The WebView2 Runtime it installs is Microsoft's software under Microsoft's own terms; XF Studio's licence does not cover it.
 
@@ -226,6 +227,45 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+```
+
+### Inno Setup License
+
+Applies to the Inno Setup runtime inside the downloadable setup program. Inno Setup is by Jordan Russell and Martijn Laan; the setup program's **About Setup** box keeps their copyright notice and web address, as the licence requires.
+
+```text
+Inno Setup License
+==================
+
+Except where otherwise noted, all of the documentation and software included in the Inno
+Setup package is copyrighted by Jordan Russell.
+
+Copyright (C) 1997-2026 Jordan Russell. All rights reserved.
+Portions Copyright (C) 2000-2026 Martijn Laan. All rights reserved.
+
+This software is provided "as-is," without any express or implied warranty. In no event shall
+the author be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial
+applications, and to alter and redistribute it, provided that the following conditions are met:
+
+1. All redistributions of source code files must retain all copyright notices that are currently
+   in place, and this list of conditions without modification.
+
+2. All redistributions in binary form must retain all occurrences of the above copyright notice
+   and web site addresses that are currently in place (for example, in the About boxes).
+
+3. The origin of this software must not be misrepresented; you must not claim that you wrote
+   the original software. If you use this software to distribute a product, an acknowledgment
+   in the product documentation would be appreciated but is not required.
+
+4. Modified versions in source or binary form must be plainly marked as such, and must not
+   be misrepresented as being the original software.
+
+
+Jordan Russell
+jr-2020 AT jrsoftware.org
+https://jrsoftware.org/
 ```
 
 ### GNU Lesser General Public License, version 2.1

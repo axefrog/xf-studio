@@ -26,6 +26,7 @@ import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./r
 import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
+import { hostFailure } from "./diagnostics/host-log";
 
 export interface InstallationOptions {
   readonly gameRoot: string;
@@ -398,6 +399,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       }
       for (const batch of batches) await this.extract(batch, background);
     } catch (error) {
+      hostFailure("resolver", "extract_failed", "WolvenKit couldn't read some resources for your V.", error, "warn");
       this.stats.failures.push(String(error));
       for (const queue of queues) for (const item of queue.items.values()) this.answerNull(queue.archive, item, false);
     }
@@ -533,6 +535,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
         fail(item, lasting);
       }
     } catch (error) {
+      hostFailure("resolver", error instanceof WolvenKitRunError ? error.code : "extract_failed", "WolvenKit couldn't read some resources for your V.", error, "warn");
       this.stats.failures.push(error instanceof WolvenKitRunError ? `${error.code}: ${error.message}` : String(error));
       for (const queue of batch) for (const item of queue.items.values()) if (!answered.has(item)) fail(item, false);
     } finally { rmSync(dir, { recursive: true, force: true }); }

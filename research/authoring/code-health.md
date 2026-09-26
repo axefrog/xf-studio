@@ -287,6 +287,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 - **Choices prepared ahead** (claude/choice-prefetch): `src/choice-prefetch.ts` (host application service: one job per open Character panel row, batches, a person's own change first, time and disk bounds, per-choice states), `src/choice-manifest.ts` (what a prepared request depended on, so a later session knows it is ready; invalidated by archive identity, winner, ArchiveXL files and WolvenKit), `src/prepared-files.ts` (the prepared files' size, least-recently-used budget and Clear), `warmCharacters` in `src/character-detail-service.ts`, the exporter's `exportAll` (several archives and kinds in one launch) and the fetcher's foreground and background lanes (`src/resolver-host.ts`). Host endpoint: `POST /api/preview-character/creator {kind:"prefetch" | "prefetchStop" | "prepared" | "clearPrepared"}`; action `character.clearPreparedFiles`.
+- **Diagnostics** (`src/diagnostics/`, claude/diagnostics): host log and rolling detail window, error references, page trapping and forwarding endpoint, problem-report builder (mod identities, resource extracts, ZIP), report review UI, and one-line failure hooks in the character, resolver, LUT, preview, eye-plate, package and library hosts. A new host capability and a boundary exception (ui-architecture-boundary.md item 13), so a deep review is due. [docs/diagnostics.md](../../docs/diagnostics.md).
 
 ## Fixed in claude/platform-step7
 

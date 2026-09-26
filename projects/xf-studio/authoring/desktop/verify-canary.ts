@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import config from "./electrobun.config";
 import { WEBVIEW2_BOOTSTRAPPER, verifyMicrosoftSignature, webView2Folder } from "./prepare-webview2";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -9,9 +9,13 @@ import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
 import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
 import { contentIssues, describeContentIssues, SCANNED_TEXT } from "./package-content-scan";
+import { payloadMembers, singleInstallerWrapper, wrapperTexts } from "./single-installer";
 
 // A private packaging gate. The checked files are the actual installer/update
-// artifacts, not the source `static` tree that Electrobun consumes.
+// artifacts, not the source `static` tree that Electrobun consumes: the update archive
+// (allowlisted and content-scanned), Electrobun's setup ZIP (whose payload must be that same
+// archive) and the single setup program built from the ZIP (which must carry the ZIP's files
+// byte for byte and nothing else but Inno Setup's own wrapper).
 const root = import.meta.dir;
 const channel = "canary";
 const platform = "win-x64";
@@ -22,6 +26,7 @@ const artifactDir = resolve(root, "artifacts");
 const archive = resolve(artifactDir, `${prefix}${bundle}.tar.zst`);
 const installer = resolve(artifactDir, `${prefix}${compactName}-Setup-${channel}.zip`);
 const updateFile = resolve(artifactDir, `${prefix}update.json`);
+const singleSetup = resolve(artifactDir, `${prefix}${compactName}-Setup-${channel}.exe`);
 
 function requireFile(path: string) {
   if (!existsSync(path) || !statSync(path).isFile()) throw Error(`Missing packaging artifact: ${path}`);
@@ -39,7 +44,7 @@ function tar(args: string[]): string {
   return result.stdout;
 }
 function tarBytes(args: string[]): Buffer {
-  const result = spawnSync(tarCommand, args, { maxBuffer: 32 * 1024 * 1024 });
+  const result = spawnSync(tarCommand, args, { maxBuffer: 256 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw Error(`Cannot inspect archive: ${result.error?.message ?? result.stderr}`);
   return result.stdout;
 }
@@ -49,7 +54,7 @@ function sameMembers(actual: string[], expected: string[], label: string) {
     throw Error(`${label} members differ: ${actual.join(", ")}`);
 }
 
-for (const file of [archive, installer, updateFile]) requireFile(file);
+for (const file of [archive, installer, updateFile, singleSetup]) requireFile(file);
 const update = JSON.parse(readFileSync(updateFile, "utf8"));
 if (update.schemaVersion !== 1 || update.identifier !== config.app.identifier ||
   update.version !== config.app.version || update.channel !== channel ||
@@ -110,14 +115,26 @@ if (packagedVersion.identifier !== config.app.identifier || packagedVersion.vers
   throw Error("Packaged local version differs from the canary metadata or unexpectedly enables an update feed.");
 
 const setupMembers = tar(["-tf", installer]).trim().split(/\r?\n/);
-sameMembers(setupMembers, [
-  `${config.app.name}-Setup-${channel}.exe`,
-  `.installer/${config.app.name}-Setup-${channel}.metadata.json`,
-  `.installer/${config.app.name}-Setup-${channel}.tar.zst`,
-], "Windows setup ZIP");
+sameMembers(setupMembers, [...payloadMembers], "Windows setup ZIP");
+const setupPayload = payloadMembers.map(name => ({ name, bytes: tarBytes(["-xOf", installer, name]) }));
+// The setup installs exactly the archive checked above, under the canary identity and build.
+if (!setupPayload[2].bytes.equals(readFileSync(archive))) throw Error("The setup ZIP's payload differs from the verified update archive.");
+const installMetadata = JSON.parse(setupPayload[1].bytes.toString("utf8"));
+if (installMetadata.identifier !== config.app.identifier || installMetadata.name !== config.app.name ||
+  installMetadata.channel !== channel || installMetadata.hash !== update.hash)
+  throw Error("The setup ZIP's install metadata differs from the canary identity and build.");
 
-const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
-console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
-console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
+// The released download: one setup program carrying those three files and Inno Setup's wrapper only.
+const single = readFileSync(singleSetup);
+const wrapper = singleInstallerWrapper(single, setupPayload);
+const singleName = `${prefix}${compactName}-Setup-${channel}.exe`;
+const wrapperIssues = wrapperTexts(wrapper).flatMap(text => contentIssues(singleName, text));
+if (wrapperIssues.length)
+  throw Error(["The single setup's wrapper contains personal paths or addresses:", ...describeContentIssues(wrapperIssues)].join("\n"));
+
+const digest = createHash("sha256").update(single).digest("hex");
+console.log(`Verified unsigned Windows setup: artifacts\\${singleName}, built from artifacts\\${basename(installer)}`);
+console.log(`${config.app.version} ${channel} build ${update.hash}; single setup SHA-256 ${digest}; ` +
+  `carries the verified payload byte for byte plus ${wrapper.length} bytes of Inno Setup wrapper, scanned clean.`);
 console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
 console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);

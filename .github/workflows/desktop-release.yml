@@ -1,5 +1,7 @@
-# XF Studio desktop app (Windows): test, build the unsigned Electrobun installer from source and
-# run the asset-free allowlist gate (verify-canary.ts) on the actual setup ZIP and update archive.
+# XF Studio desktop app (Windows): test, build the unsigned Electrobun app from source, wrap its
+# setup ZIP into one self-contained setup program with the pinned Inno Setup (single-installer.ts)
+# and run the asset-free allowlist gate (verify-canary.ts) on the update archive, the setup ZIP and
+# the single setup program.
 #
 # - Pull request touching the desktop app: tests and build only; nothing is uploaded.
 # - Manual run (Actions -> Desktop release -> Run workflow): also uploads the unsigned build as a
@@ -7,8 +9,10 @@
 # - Pushed tag v<version>: the tag must equal projects/xf-studio/authoring/desktop/package.json
 #   "version", the tagged commit must be on main, and projects/xf-studio/CHANGELOG.md must have a
 #   complete section for that version, and the repository must have a top-level LICENSE. Creates a DRAFT
-#   GitHub release (pre-release for -alpha/-beta/-rc) with the setup ZIP, build-info.json,
-#   THIRD_PARTY_NOTICES.md, SHA256SUMS.txt and build-provenance attestations.
+#   GitHub release (pre-release for -alpha/-beta/-rc) with the single setup program
+#   (XFStudio-<version>-win-x64-setup.exe), build-info.json, THIRD_PARTY_NOTICES.md,
+#   SHA256SUMS.txt and build-provenance attestations. Electrobun's setup ZIP is a build input
+#   only; it is not uploaded.
 #   A maintainer reviews and publishes the draft by hand; nothing here publishes it.
 #
 # Decisions, verification and maintenance: research/authoring/desktop-release-decisions.md
@@ -114,9 +118,14 @@ jobs:
           XFS_PRIVATE_ASSETS: absent
         run: bun test
 
+      # build:canary also downloads the pinned Inno Setup release (SHA-256 checked, inno-setup.ts)
+      # into this job-local folder and wraps the setup ZIP into the single setup program.
       - name: Build and verify unsigned installer
         working-directory: projects/xf-studio/authoring/desktop
-        run: bun run build:canary
+        run: |
+          $env:XFS_INNO_SETUP_HOME = Join-Path $env:RUNNER_TEMP "innosetup"
+          bun run build:canary
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Stage checksums and build information
         working-directory: projects/xf-studio/authoring/desktop
@@ -195,7 +204,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            ${{ env.ASSETS }}/*.zip
+            ${{ env.ASSETS }}/*.exe
             ${{ env.ASSETS }}/build-info.json
             ${{ env.ASSETS }}/THIRD_PARTY_NOTICES.md
 
@@ -203,5 +212,5 @@ jobs:
         run: |
           flags=(--draft --verify-tag --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md")
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$TAG" "${flags[@]}" "$ASSETS"/*.zip "$ASSETS/build-info.json" "$ASSETS/THIRD_PARTY_NOTICES.md" "$ASSETS/SHA256SUMS.txt"
+          gh release create "$TAG" "${flags[@]}" "$ASSETS"/*.exe "$ASSETS/build-info.json" "$ASSETS/THIRD_PARTY_NOTICES.md" "$ASSETS/SHA256SUMS.txt"
           echo "Draft release for $TAG created. Review it on GitHub and publish it by hand." >> "$GITHUB_STEP_SUMMARY"

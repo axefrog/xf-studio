@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, utimesSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256, writeFileAtomic } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
@@ -42,6 +42,11 @@ export type ExportedGeometry = {
    */
   complete: boolean;
   cached: boolean;
+  /**
+   * When the tool could not write the resource as it is and the GLB came from a repaired copy (`GameAssetExporterOptions.repairGeometry`):
+   * one plain line saying what the copy changed. Null for a direct export.
+   */
+  repair?: string | null;
 };
 export type ExportedTexture = { depotPath: string; hash: string; png: string; pngSha256: string; cached: boolean };
 /** A `.mlmask` decoded into one PNG per mask layer (index = layer), as WolvenKit writes them (`<name>_layers/<name>_<i>.png`). */
@@ -114,12 +119,29 @@ export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; ou
   /** Every archive the launch reads (`exportAll`'s batch; `source` alone otherwise). Their requested resources never collide. */
   sources?: readonly ExportSource[];
   lowPriority?: boolean }) => Promise<void>;
+/**
+ * A second route for a mesh the tool read (`raw`) but could not write as a GLB: export a repaired copy into `workDir` (mesh-export-repair.ts).
+ * Returns the GLB, the materials file and one plain line on what the copy changed, or null when no repair applies or it failed too.
+ * A tool failure inside the repair leaves the original outcome standing; only cancellation and a missing tool or runtime are thrown.
+ */
+export type GeometryRepair = (input: { source: ExportSource; depotPath: string; raw: string; workDir: string; signal?: AbortSignal;
+  /** Background work (a prefetch): the tool runs at a lower process priority. */ lowPriority?: boolean }) =>
+  Promise<{ glb: string; materials: string | null; detail: string } | null>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
   tool?: ExportTool;
   /** Archive index lookup: which decimal depot hashes the source contains. May throw when unreadable. */
   contains?: (source: ExportSource, hashes: readonly string[]) => Set<string>;
+  /** Repair route for a mesh whose GLB the tool could not write. */
+  repairGeometry?: GeometryRepair;
+  /**
+   * Identity of `repairGeometry` (its version). With the tool's key it identifies every lasting outcome (a settled "nothing exported",
+   * a lasting partial export): one recorded without this repair, or by another version of it, is tried again.
+   */
+  repairKey?: string;
 };
+/** The cache file that records a repaired export's plain line (`ExportedGeometry.repair`). */
+const REPAIR_NOTE = "repair.txt";
 const UNKNOWN_TOOL: ExportTool = { key: "unknown", label: "an unidentified exporter" };
 /** How many by-hash launches one session runs at once (each WolvenKit call selects one resource by its hash). */
 export const BY_HASH_CONCURRENCY = 4;
@@ -174,7 +196,9 @@ type EntryMeta = { schema: "xfs/game-asset-export-1"; version: number; depotPath
    * A partial geometry export (the GLB without its materials file) from clean runs, counted: served from the cache from the
    * `PARTIAL_RUNS`th (a lasting property of that resource and WolvenKit build, as the resolver's `not-written` markers are).
    */
-  partialRuns?: number };
+  partialRuns?: number;
+  /** The exporter identity (tool and repair route) that counted `partialRuns`; another identity's count is void (`lastingIdentity`). */
+  partialIdentity?: string };
 /** Clean runs that exported a mesh without its materials file before the partial export is served from the cache. */
 export const PARTIAL_RUNS = 2;
 /** Paths this process already marked as used (the disk budget evicts the least recently used by their modification time). */
@@ -190,7 +214,21 @@ export const usedThisSession = (path: string) => touched.has(path);
 
 /** Persistent per-resource cache in host-owned private storage. */
 export class GameAssetExportCache extends DerivedCache {
-  constructor(root: string, private readonly tool: ExportTool = UNKNOWN_TOOL) { super(root, "game asset export"); }
+  /**
+   * Identity of the exporter's lasting outcomes: the tool and its repair route. A settled "nothing exported" or a lasting partial entry
+   * counts only under the identity that recorded it, so a repair added later (the ponytail's mesh, mesh-export-repair.ts) or a changed
+   * one is never blocked by what an exporter without it settled.
+   */
+  readonly lastingIdentity: string;
+  constructor(root: string, private readonly tool: ExportTool = UNKNOWN_TOOL, repairKey = "none") {
+    super(root, "game asset export");
+    this.lastingIdentity = `${tool.key}|repair:${repairKey}`;
+  }
+  /** A meta's partial run count under the current identity: a complete entry counts as settled, another identity's partial count as 0. */
+  private runsOf(meta: EntryMeta): number {
+    if (meta.partialRuns === undefined) return PARTIAL_RUNS;
+    return meta.partialIdentity === this.lastingIdentity ? meta.partialRuns : 0;
+  }
   private sourceKey(source: ExportSource) {
     return createHash("sha256").update(`${GAME_ASSET_EXPORT_VERSION}|${this.tool.key}|${source.fingerprint}`).digest("hex").slice(0, 16);
   }
@@ -210,7 +248,7 @@ export class GameAssetExportCache extends DerivedCache {
     const directory = this.entryDirectory(depotPath, source);
     try {
       const meta = this.meta(depotPath, source);
-      if (!meta || (meta.partialRuns ?? PARTIAL_RUNS) < PARTIAL_RUNS) return null;
+      if (!meta || this.runsOf(meta) < PARTIAL_RUNS) return null;
       const out: Record<string, string> = {};
       for (const [name, file] of Object.entries(meta.files)) {
         const path = join(directory, name);
@@ -225,19 +263,24 @@ export class GameAssetExportCache extends DerivedCache {
   present(depotPath: string, source: ExportSource, required: readonly string[] = []): boolean {
     if (this.settledNone(depotPath, source)) return true;
     const meta = this.meta(depotPath, source);
-    if (!meta || (meta.partialRuns ?? PARTIAL_RUNS) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
+    if (!meta || this.runsOf(meta) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
     const directory = this.entryDirectory(depotPath, source);
     return Object.entries(meta.files).every(([name, file]) => { try { return statSync(join(directory, name)).size === file.bytes; } catch { return false; } });
   }
   private noneFile(depotPath: string, source: ExportSource) { return `${this.entryDirectory(depotPath, source)}.none.json`; }
   /**
    * Clean launches so far that exported nothing for this resource (WolvenKit can't uncook it: a CCXL mesh it fails on). From the
-   * `PARTIAL_RUNS`th it is settled: not asked for again until the archive or WolvenKit changes (both are in the key), as the
-   * resolver's `not-written` markers are.
+   * `PARTIAL_RUNS`th it is settled: not asked for again until the archive, WolvenKit or the repair route changes (the archive and
+   * WolvenKit are in the key, the repair route in the marker's `identity`), as the resolver's `not-written` markers are. A marker
+   * recorded under another `lastingIdentity` counts 0.
    */
   noneRuns(depotPath: string, source: ExportSource): number {
-    try { const runs = Number((this.readJson(this.noneFile(depotPath, source)) as { runs?: unknown }).runs); return Number.isInteger(runs) ? runs : 0; }
-    catch { return 0; }
+    try {
+      const marker = this.readJson(this.noneFile(depotPath, source)) as { runs?: unknown; identity?: unknown };
+      if (marker.identity !== this.lastingIdentity) return 0;
+      const runs = Number(marker.runs);
+      return Number.isInteger(runs) ? runs : 0;
+    } catch { return 0; }
   }
   settledNone(depotPath: string, source: ExportSource): boolean { return this.noneRuns(depotPath, source) >= PARTIAL_RUNS; }
   /** Count one more clean launch that exported nothing for this resource (advisory). */
@@ -245,18 +288,22 @@ export class GameAssetExportCache extends DerivedCache {
     try {
       this.ensure();
       mkdirSync(join(this.root, "resources"), { recursive: true });
-      writeFileAtomic(this.noneFile(depotPath, source), JSON.stringify({ depotPath, runs: this.noneRuns(depotPath, source) + 1, at: new Date().toISOString() }));
+      writeFileAtomic(this.noneFile(depotPath, source), JSON.stringify({ depotPath, identity: this.lastingIdentity,
+        runs: this.noneRuns(depotPath, source) + 1, at: new Date().toISOString() }));
     } catch { /* Tried again next time. */ }
   }
   /** Clean runs so far that exported this resource only partly (0 when none). */
-  partialRuns(depotPath: string, source: ExportSource): number { return this.meta(depotPath, source)?.partialRuns ?? 0; }
+  partialRuns(depotPath: string, source: ExportSource): number {
+    const meta = this.meta(depotPath, source);
+    return meta?.partialRuns !== undefined ? this.runsOf(meta) : 0;
+  }
   /** Copy `files` (name → source path) into a new entry, replacing any older one atomically. `partialRuns` marks a partial geometry export. */
   write(depotPath: string, source: ExportSource, files: Record<string, string>, partialRuns?: number): Record<string, string> {
     const directory = this.entryDirectory(depotPath, source);
     const staging = `${directory}.${process.pid}.${Date.now()}.tmp`;
     mkdirSync(staging, { recursive: true, mode: 0o700 });
     const meta: EntryMeta = { schema: "xfs/game-asset-export-1", version: GAME_ASSET_EXPORT_VERSION, depotPath, hash: depotHash(depotPath),
-      source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns } : {}) };
+      source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns, partialIdentity: this.lastingIdentity } : {}) };
     for (const [name, from] of Object.entries(files)) {
       copyFileSync(from, join(staging, name));
       meta.files[name] = { sha256: fileSha256(from), bytes: statSync(from).size };
@@ -281,15 +328,41 @@ export const MAX_SOURCES_PER_LAUNCH = 24;
 /** Exporter over one `UncookRun` implementation and a persistent cache. */
 export function createGameAssetExporter(cacheRoot: string, run: UncookRun, options: GameAssetExporterOptions = {}): GameAssetExporter {
   const tool = options.tool ?? UNKNOWN_TOOL;
-  const cache = new GameAssetExportCache(cacheRoot, tool);
+  const cache = new GameAssetExportCache(cacheRoot, tool, options.repairGeometry ? options.repairKey ?? "unversioned" : "none");
   const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
   /** The files a geometry export needs: with materials, `requiredGeometryFiles`; without, the raw resource and its GLB. */
   const required = (depotPath: string, materials: boolean) => materials ? requiredGeometryFiles(depotPath) : ["raw", "export.glb"];
+  const repairOf = (files: Record<string, string>) => {
+    if (!files[REPAIR_NOTE]) return null;
+    try { return readFileSync(files[REPAIR_NOTE]!, "utf8").trim().slice(0, 400) || null; } catch { return null; }
+  };
   const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean, materials = true): ExportedGeometry => ({
     depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: fileSha256(files.raw!),
     glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
     materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
-    complete: required(depotPath, materials).every(name => !!files[name]), cached });
+    complete: required(depotPath, materials).every(name => !!files[name]), cached, repair: repairOf(files) });
+  /**
+   * The tool read a mesh but could not write its GLB (e.g. WolvenKit refusing a skin it built too small): export a repaired copy
+   * (`GameAssetExporterOptions.repairGeometry`) under `repairRoot`. Adds the GLB, the materials file when missing and the repair's note.
+   */
+  const repair = async (source: ExportSource, depotPath: string, files: Record<string, string>, repairRoot: string, signal?: AbortSignal,
+    lowPriority?: boolean) => {
+    if (files["export.glb"] || !/\.mesh$/i.test(depotPath) || !options.repairGeometry) return;
+    const repairDir = join(repairRoot, depotHash(depotPath));
+    mkdirSync(repairDir, { recursive: true });
+    let repaired: Awaited<ReturnType<GeometryRepair>> = null;
+    try { repaired = await options.repairGeometry({ source, depotPath, raw: files.raw!, workDir: repairDir, signal, lowPriority }); }
+    catch (error) {
+      if (error instanceof GameAssetExportError && error.code !== "tool_failed") throw error;
+      repaired = null;
+    }
+    if (!repaired || !existsSync(repaired.glb)) return;
+    files["export.glb"] = repaired.glb;
+    if (!files["materials.json"] && repaired.materials && existsSync(repaired.materials)) files["materials.json"] = repaired.materials;
+    const note = join(repairDir, REPAIR_NOTE);
+    writeFileSync(note, repaired.detail);
+    files[REPAIR_NOTE] = note;
+  };
   const present = (source: ExportSource, depotPaths: readonly string[]): Set<string> | null => {
     if (!options.contains) return null;
     try {
@@ -350,9 +423,12 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
   /**
    * Take one launch's outputs in `outDir` for a request's needed resources into the cache. Everything answered points into the cache,
    * never into the launch's work folder (which is removed): a complete export as before, and a partial one (the GLB without its
-   * materials file) as a partial entry counting its clean runs (`PARTIAL_RUNS`). Returns the textures and masks not found by name.
+   * materials file) as a partial entry counting its clean runs (`PARTIAL_RUNS`). With `repairing`, a mesh the tool read but wrote no
+   * GLB for goes through the repair route first (`repair`); without it (a launch retried with the game folder next) it doesn't yet.
+   * Returns the textures and masks not found by name.
    */
-  const collect = (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer, needMaterials = true): { textures: string[]; masks: string[] } => {
+  const collect = async (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer, needMaterials = true,
+    { repairing = true, signal, lowPriority }: { repairing?: boolean; signal?: AbortSignal; lowPriority?: boolean } = {}): Promise<{ textures: string[]; masks: string[] }> => {
     for (const depotPath of needed.geometry) {
       const raw = depotFile(outDir, depotPath);
       if (!existsSync(raw)) continue;
@@ -360,6 +436,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
       const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
       if (existsSync(glb)) files["export.glb"] = glb;
       if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
+      if (repairing) await repair(source, depotPath, files, join(outDir, "repair"), signal, lowPriority);
       const complete = required(depotPath, needMaterials).every(name => files[name]);
       // Without a GLB there is nothing to serve; a GLB without the materials file it was asked for is kept as a partial entry.
       const written = complete ? cache.write(depotPath, source, files)
@@ -450,8 +527,9 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
         // Geometry exported without the game folder that came out without a GLB: once more with it.
         const again: typeof pending = [];
         for (const item of group) {
-          const unnamed = collect(item.request.source, item.needed, outDir, answers[item.index]!, item.request.materials ?? false);
-          const missing = withGame || item.request.materials ? [] : item.needed.geometry.filter(path => !answers[item.index]!.geometry.get(path)?.glb);
+          const final = withGame || !!item.request.materials;
+          const unnamed = await collect(item.request.source, item.needed, outDir, answers[item.index]!, item.request.materials ?? false, { repairing: final, signal, lowPriority });
+          const missing = final ? [] : item.needed.geometry.filter(path => !answers[item.index]!.geometry.get(path)?.glb);
           if (missing.length) again.push({ ...item, needed: { geometry: missing, textures: [], masks: [] }, hashes: missing.map(depotHash) });
           try { await byHash(item.request.source, unnamed, join(outDir, `source-${item.index}`), answers[item.index]!, signal); }
           catch (error) {
@@ -489,7 +567,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
         const outDir = join(workDir(), kind);
         mkdirSync(outDir, { recursive: true });
         await run({ source, depotPaths: neededPaths(needed), outDir, withMaterials: kind === "geometry", signal });
-        const unnamed = collect(source, needed, outDir, answer);
+        const unnamed = await collect(source, needed, outDir, answer, true, { signal });
         await byHash(source, unnamed, outDir, answer, signal);
         return answer;
       };

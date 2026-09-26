@@ -47,6 +47,8 @@ import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
+import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
+import { resolutionTrace } from "./diagnostics/resolution-trace";
 
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
@@ -69,6 +71,8 @@ export type PrepareCharacterOptions = {
   signal?: AbortSignal;
   progress?: (step: CharacterDetailStep, index: number, total: number, label: string) => void;
   log?: (message: string) => void;
+  /** The rolling diagnostics window (docs/diagnostics.md): the request, the resolution and the outcome, as references. */
+  trace?: DiagnosticTrace;
   /**
    * What earlier preparations on the same installation made (the host's, per installation fingerprint). Without one, everything is
    * resolved, read and exported afresh, and the installation is opened with `open`.
@@ -307,7 +311,7 @@ export class CharacterPreparationCache {
   readonly layerTemplates = new Map<string, { values: TemplateValues; source: RenderSourceRef } | null>();
   readonly gamma = new Map<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
-  readonly geometry = new Map<string, { glb: string | null; complete: boolean }>();
+  readonly geometry = new Map<string, { glb: string | null; complete: boolean; repair?: string | null }>();
   readonly textures = new Map<string, { png: string }>();
   readonly masks = new Map<string, { layers: string[] }>();
   /** Served components by their plan (canonical JSON), within this installation. */
@@ -608,6 +612,11 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
   const { graph, summary } = installation;
+  // The rolling diagnostics window (docs/diagnostics.md): the request, what the installation looks like, the resolution and the outcome.
+  const trace = options.trace ?? NO_TRACE;
+  graph.trace = trace;
+  trace.event("character", "prepare", { source: request.source, bodyGender: request.bodyGender, choices: request.choices ?? [],
+    appearances: request.source === "save" ? request.appearances.length : 0, installation: summary });
   // What this preparation adds to the cache, and the fetcher's count of failures that may not repeat: if it grows, or WolvenKit fails
   // on an archive, the preparation is degraded and what it added is forgotten (PIPE-53).
   const mark = cache.mark(), transientBefore = transientFailures(installation);
@@ -642,6 +651,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   }
   cancelled();
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
+  trace.event("character", "resolved", resolutionTrace(resolved));
   cancelled();
   const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template)));
@@ -756,14 +766,32 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     return { setup: setup.source, mask: maskRef ? { depotPath: refLabel(maskRef.ref), archive: maskAtArchive?.archive.name ?? null,
       sha256: hexSha(maskRef.extractedSha256), layers: maskFiles.length } : null, ratio: setup.values.ratio, useNormal: setup.values.useNormal, layers };
   };
-  /** Write one planned component; null when it can't be served (the slot's outcome is decided by the caller). */
+  /** One plain line naming a part that is left out and why (it feeds the record's notes and diagnostics). */
+  const dropped = (component: PlannedComponent, why: string) =>
+    note(`Part ${component.component} of your V's ${SLOT_WORDS[component.slot].noun} isn't shown: ${why}`);
+  /**
+   * Write one planned component, or say why it can't be served (the slot's outcome is decided by the caller). Every path that leaves the
+   * component out adds a `dropped` note.
+   */
   const build = (component: PlannedComponent): RenderComponent | "tool" | "export" => {
     const located = geometryAt.get(component) ?? locate(graph, component.drawnFrom.ref) ?? undefined;
     const geometryKey = located ? `${located.archive.id}|${located.depotPath.toLowerCase()}` : "";
     const exported = located ? cache.geometry.get(geometryKey) : undefined;
+    const shape = refLabel(component.drawnFrom.ref);
     // An export whose file has gone (cleared by hand, or a work folder removed) fails only this part, and is exported again next time.
-    if (exported?.glb && !existsSync(exported.glb)) { cache.geometry.delete(geometryKey); return "export"; }
-    if (!located || !exported?.glb) return located && toolFailures.has(located.archive.id) ? "tool" : "export";
+    if (exported?.glb && !existsSync(exported.glb)) {
+      cache.geometry.delete(geometryKey);
+      dropped(component, `its exported shape (${shape}) was removed before it could be used; it is exported again next time.`);
+      return "export";
+    }
+    if (!located) { dropped(component, `its shape (${shape}) isn't in any archive your game loads.`); return "export"; }
+    if (!exported?.glb) {
+      const tool = toolFailures.has(located.archive.id);
+      dropped(component, tool ? `WolvenKit couldn't read ${located.archive.name}.`
+        : `WolvenKit couldn't export its shape (${located.depotPath}) from ${located.archive.name}.`);
+      return tool ? "tool" : "export";
+    }
+    if (exported.repair) note(`${component.component}: WolvenKit couldn't export its shape as it is, so it was exported from a repaired copy: ${exported.repair}.`);
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};
@@ -812,8 +840,14 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     }
     // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws. A face detail made only of
     // decal templates the preview can't draw yet is kept, hidden, so the renderer reports it (limit `decal-template`).
-    if (!materials.length || (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)))
+    if (!materials.length) {
+      dropped(component, `none of its ${component.materials.length} chunk(s) could be drawn, because an input they need couldn't be read.`);
       return "export";
+    }
+    if (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
+      dropped(component, "its chunks use only materials the preview can't draw yet.");
+      return "export";
+    }
     const glb = storeChunkGeometry(options.storeRoot, exported.glb, materials.map(material => material.chunk));
     if (!glb.trimmed) note(`${component.component}: the exported geometry is served whole.`);
     if (component.skippedChunks) note(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
@@ -838,7 +872,12 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     componentNotes = []; componentTextures = new Map();
     let built: ReturnType<typeof build>;
     // One part that can't be built leaves only its slot unshown; it never costs the V's other details.
-    try { built = build(component); } catch (error) { log(`${component.component} could not be served: ${(error as Error).message}`); built = "export"; }
+    try { built = build(component); }
+    catch (error) {
+      log(`${component.component} could not be served: ${(error as Error)?.stack ?? error}`);
+      dropped(component, `it couldn't be prepared (${String((error as Error)?.message ?? error).slice(0, 160)}).`);
+      built = "export";
+    }
     notes.push(...componentNotes);
     if (typeof built === "string") { failSlot(component.slot, built); continue; }
     components.push(built);
@@ -886,6 +925,10 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     manifestOf(graph, [...recording.reads, ...creatorReads(cco)], planExports(graph, cache, plan), fetcherTool(installation), xlIdentity(installation)));
   log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
+  trace.event("character", "prepared", { record: recordName, degraded, note: choicesNote ?? null, timings, slots: record.slots,
+    components: record.components.map(item => ({ slot: item.slot, option: item.option, definition: item.definition, component: item.component,
+      geometry: item.geometry.depotPath, sources: item.geometry.sources.map(source => ({ path: source.depotPath, archive: source.archive ?? null, provider: source.provider ?? null })), chunks: item.chunks })),
+    loadErrors: [...graph.loadErrors].slice(0, 50), ambiguities: [...graph.observedAmbiguities.values()].slice(0, 50) });
   return { record, recordFile: recordName, degraded, ...(choicesNote ? { note: choicesNote } : {}) };
 }
 

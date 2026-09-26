@@ -18,6 +18,8 @@
  * - **Scene chunks**: a chunk draws only when its `renderMask` has `MCF_RenderInScene`; a shadow-only chunk (`MCF_RenderInShadows`
  *   alone: every vanilla hair `*_shadow` mesh) casts shadows and is never drawn [resource: the render blob's chunk flags]. This is
  *   what used to be guessed per slot; a layered chunk now draws on whichever slot brings it (knowledge/head-cc-rendering.md §4).
+ * - **Unlisted chunks**: a chunk past the end of its appearance's chunk material list has no material of its own (CCXL hair points its
+ *   lower levels of detail at three-vertex stubs this way) and is neither drawn nor counted as skipped (character-resolver.ts `unlistedChunk`).
  * - **Drawable chunks** are those whose material template the renderer has an adapter for
  *   (render-templates.ts). A chunk with none (`glass.mt`, `metal_base.remt`) is left out. A placeholder template (a decal the
  *   preview can't draw yet) is recorded beside drawn chunks, so the renderer can say plainly that part is not shown, but never
@@ -203,8 +205,10 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   const lods = geometry.chunkLods, scene = geometry.chunkInScene;
   const morphTexture = geometry.morphTexture && geometry.morphTarget
     ? { morph: geometry.morphTarget, texture: geometry.morphTexture.texture, parameter: geometry.morphTexture.parameter } : null;
-  // The highest level of detail, and only chunks the scene draws (a shadow-only chunk is neither drawn nor "skipped").
-  const materials = component.materials.filter(material => (!lods || ((lods[material.chunk] ?? 1) & 1) === 1) && scene?.[material.chunk] !== false)
+  // The highest level of detail, and only chunks the scene draws (a shadow-only chunk is neither drawn nor "skipped"). A chunk past the
+  // end of its appearance's chunk material list has no material of its own (a CCXL stub chunk), so it is not "skipped" either.
+  const materials = component.materials.filter(material => (!lods || ((lods[material.chunk] ?? 1) & 1) === 1) && scene?.[material.chunk] !== false &&
+      material.route !== "none")
     .map(material => planChunk(material, defaults, morphTexture, identities, slot));
   const drawn = materials.filter(material => material.drawn);
   // A face detail made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.

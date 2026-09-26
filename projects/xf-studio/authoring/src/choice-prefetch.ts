@@ -52,6 +52,8 @@ export type PrefetchDeps = {
   /** After a batch: keep the prepared files within their budget. */
   afterBatch?(): Promise<void>;
   log?(message: string): void;
+  /** A batch failed for a reason other than being stopped (the host's diagnostics hook). */
+  failed?(error: unknown): void;
   now?(): number;
 };
 /**
@@ -183,7 +185,10 @@ export class ChoicePrefetcher {
         let outcomes: readonly { ready: boolean }[] | null = null;
         try { outcomes = await this.deps.warm(batch.map(item => item.request!), controller.signal); }
         catch (error) {
-          if (!controller.signal.aborted) this.deps.log?.(`Preparing choices ahead failed: ${(error as Error)?.message ?? error}`);
+          if (!controller.signal.aborted) {
+            this.deps.log?.(`Preparing choices ahead failed: ${(error as Error)?.message ?? error}`);
+            this.deps.failed?.(error);
+          }
         } finally {
           job.controller.signal.removeEventListener("abort", stop);
           if (this.batch === controller) this.batch = null;

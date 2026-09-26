@@ -17,6 +17,8 @@ import { CreatorCatalogueHost, structuralInput } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
 import { routeIdentity, routeStamps } from "./route-fingerprint";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
+import type { DiagnosticTrace } from "./diagnostics/model";
+import { hostFailure } from "./diagnostics/host-log";
 
 /**
  * Host application service that owns one character-detail preparation at a time for the preview (both
@@ -80,6 +82,8 @@ export type CharacterDetailHostOptions = {
   /** Bytes of exports and extracted JSON kept on disk (prepared-files.ts `PREPARED_BUDGET_BYTES`). */
   preparedBudget?: number;
   log?: (message: string) => void;
+  /** The rolling diagnostics window: what each preparation resolved and prepared (docs/diagnostics.md). */
+  trace?: DiagnosticTrace;
 };
 /** How often, at most, the prepared files are checked against their budget. */
 const EVICT_INTERVAL_MS = 60_000;
@@ -132,6 +136,7 @@ export class CharacterDetailHost {
       preparedBytes: async () => (await preparedSize(this.preparedRoots)).bytes,
       afterBatch: () => this.keepWithinBudget(),
       log: options.log,
+      failed: error => hostFailure("character", "prefetch_failed", "Some character choices couldn't be prepared ahead; they are read when picked.", error, "warn"),
     }, options.prefetchLimits);
   }
 
@@ -203,7 +208,7 @@ export class CharacterDetailHost {
         resolverCache: this.resolverCache, exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
-        }, log: this.options.log }));
+        }, log: this.options.log, trace: this.options.trace }));
     };
     // Start now, or once the cancelled run (still settling on the shared cache) has stopped.
     const begun = this.running ? this.running.promise.then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
@@ -221,6 +226,7 @@ export class CharacterDetailHost {
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
+        hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null });
       })
       .finally(() => { if (this.running?.controller === controller) this.running = null; });
@@ -309,7 +315,10 @@ export class CharacterDetailHost {
     this.evictedAt = Date.now();
     this.evicting = evictPrepared(this.preparedRoots, this.options.preparedBudget ?? PREPARED_BUDGET_BYTES)
       .then(result => { if (result.removed) this.options.log?.(`Prepared game files: removed ${result.removed} least recently used (${(result.freed / 1024 ** 2).toFixed(0)} MB).`); })
-      .catch(error => this.options.log?.(`Prepared game files could not be checked against their budget: ${(error as Error)?.message ?? error}`))
+      .catch(error => {
+        this.options.log?.(`Prepared game files could not be checked against their budget: ${(error as Error)?.message ?? error}`);
+        hostFailure("character", "prepared_budget_failed", "The prepared game files couldn't be checked against their space limit.", error, "warn");
+      })
       .finally(() => { this.evicting = null; });
     return this.evicting;
   }

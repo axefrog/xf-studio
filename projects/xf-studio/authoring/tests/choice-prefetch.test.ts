@@ -11,7 +11,7 @@ import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detai
 import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceManifest, xlIdentity } from "../src/choice-manifest";
 import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/choice-prefetch";
 import { depotHash, refFromPath } from "../src/depot-path";
-import { archiveExportSource, createGameAssetExporter, GameAssetExportError, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
+import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
 import { clearPrepared, evictPrepared, preparedSize } from "../src/prepared-files";
 import { backgroundExtraction, foregroundExtraction, WolvenKitFetcher } from "../src/resolver-host";
 import { ResourceGraph } from "../src/resource-graph";
@@ -326,6 +326,88 @@ describe("exports in as few launches as possible", () => {
     const cached = await ask();
     expect(launches.length).toBe(runs);
     expect(cached).toMatchObject({ complete: false, cached: true });
+  });
+});
+
+describe("lasting outcomes and the mesh export repair", () => {
+  // WolvenKit reads the ponytail mesh (its raw copy is written) but refuses to write its GLB (mesh-export-repair.ts).
+  const PONY = "base\\characters\\common\\hair\\fhair_highpony_pony.mesh";
+  const readOnly = (launches: { withMaterials: boolean; lowPriority?: boolean }[] = []): UncookRun => async ({ depotPaths, outDir, withMaterials, lowPriority }) => {
+    launches.push({ withMaterials, lowPriority });
+    for (const path of depotPaths) {
+      const file = join(outDir, ...path.split("\\"));
+      mkdirSync(join(file, ".."), { recursive: true });
+      writeFileSync(file, "raw mesh");
+    }
+  };
+  const repairing = (outcome: "glb" | "none", calls: { path: string; lowPriority?: boolean }[] = []): GeometryRepair => async ({ depotPath, workDir, lowPriority }) => {
+    calls.push({ path: depotPath, lowPriority });
+    if (outcome === "none") return null;
+    writeFileSync(join(workDir, "copy.glb"), "glTF");
+    return { glb: join(workDir, "copy.glb"), materials: null, detail: "the copy's repair" };
+  };
+  const tool = { key: "fake", label: "Fake" };
+
+  test("exportAll repairs a mesh the tool read but wrote no GLB for, on its last launch only and at the priority asked for; the repair is cached", async () => {
+    const root = temporary(), source = archiveExportSource(join(root, "hair.archive"), root);
+    const launches: { withMaterials: boolean; lowPriority?: boolean }[] = [], calls: { path: string; lowPriority?: boolean }[] = [];
+    const exporter = createGameAssetExporter(join(root, "exports"), readOnly(launches), { tool, repairGeometry: repairing("glb", calls), repairKey: "r1" });
+    const [answer] = await exporter.exportAll!([{ source, geometry: [PONY], textures: [], masks: [] }], undefined, { lowPriority: true });
+    // Without the game folder first, then with it; the repair runs once, after the second launch.
+    expect(launches.map(launch => launch.withMaterials)).toEqual([false, true]);
+    expect(calls).toEqual([{ path: PONY, lowPriority: true }]);
+    expect(answer!.geometry.get(PONY)).toMatchObject({ complete: true, repair: "the copy's repair" });
+    expect(readFileSync(answer!.geometry.get(PONY)!.glb!, "utf8")).toBe("glTF");
+    const [again] = await exporter.exportAll!([{ source, geometry: [PONY], textures: [], masks: [] }]);
+    expect(again!.geometry.get(PONY)).toMatchObject({ cached: true, repair: "the copy's repair" });
+    expect(launches).toHaveLength(2);
+  });
+
+  test("a settled 'nothing exported' recorded without the repair, or by another version of it, never blocks the repaired export", async () => {
+    const root = temporary(), cacheRoot = join(root, "exports"), source = archiveExportSource(join(root, "hair.archive"), root);
+    const ask = (exporter: ReturnType<typeof createGameAssetExporter>) => exporter.exportAll!([{ source, geometry: [PONY], textures: [], masks: [] }]);
+    // An exporter without the repair settles the mesh as exporting nothing.
+    const before = createGameAssetExporter(cacheRoot, readOnly(), { tool });
+    for (let run = 0; run < PARTIAL_RUNS; run++) await ask(before);
+    expect(before.has!("geometry", PONY, source)).toBe(true);
+    // A repair whose version also fails settles again under its own identity...
+    const failing = createGameAssetExporter(cacheRoot, readOnly(), { tool, repairGeometry: repairing("none"), repairKey: "r1" });
+    expect(failing.has!("geometry", PONY, source)).toBe(false);
+    for (let run = 0; run < PARTIAL_RUNS; run++) expect((await ask(failing))[0]!.geometry.get(PONY)?.glb ?? null).toBeNull();
+    expect(failing.has!("geometry", PONY, source)).toBe(true);
+    // ...and the next version is tried and wins.
+    const calls: { path: string }[] = [];
+    const repaired = createGameAssetExporter(cacheRoot, readOnly(), { tool, repairGeometry: repairing("glb", calls), repairKey: "r2" });
+    expect(repaired.has!("geometry", PONY, source)).toBe(false);
+    expect((await ask(repaired))[0]!.geometry.get(PONY)).toMatchObject({ complete: true, repair: "the copy's repair" });
+    expect(calls).toHaveLength(1);
+    expect(repaired.has!("geometry", PONY, source)).toBe(true);
+  });
+
+  test("a lasting partial export counts only for the exporter identity that recorded it", async () => {
+    const root = temporary(), cacheRoot = join(root, "exports"), source = archiveExportSource(join(root, "a.archive"), root);
+    let launches = 0;
+    // The GLB without its materials file (a partial export).
+    const partial: UncookRun = async ({ depotPaths, outDir }) => {
+      launches++;
+      for (const path of depotPaths) {
+        const file = join(outDir, ...path.split("\\"));
+        mkdirSync(join(file, ".."), { recursive: true });
+        writeFileSync(file, "raw");
+        writeFileSync(file.replace(/\.mesh$/, ".glb"), "glb");
+      }
+    };
+    const ask = async (exporter: ReturnType<typeof createGameAssetExporter>) => {
+      const session = exporter.open(source);
+      try { return (await session.geometry(["x\\a.mesh"])).get("x\\a.mesh")!; } finally { session.close(); }
+    };
+    const before = createGameAssetExporter(cacheRoot, partial, { tool });
+    for (let run = 0; run < PARTIAL_RUNS; run++) await ask(before);
+    expect(await ask(before)).toMatchObject({ cached: true, complete: false });
+    const counted = launches;
+    const after = createGameAssetExporter(cacheRoot, partial, { tool, repairGeometry: repairing("none"), repairKey: "r1" });
+    expect(await ask(after)).toMatchObject({ cached: false });
+    expect(launches).toBe(counted + 1);
   });
 });
 

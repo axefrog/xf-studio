@@ -30,6 +30,8 @@ import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
 import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
 import type { LocalSettings } from "../src/local-settings";
+import { hostDiagnosticsAt, setProcessDiagnostics } from "../src/diagnostics/host-log";
+import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
 export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
@@ -42,6 +44,8 @@ export type DesktopHostOptions = {
   wolvenKit?: Partial<Omit<WolvenKitSetupOptions, "root" | "configured">>;
   /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
   openExternal?: (url: string) => boolean;
+  /** The WebView2 Runtime version the host detected, for problem reports. */
+  webView2?: string | null;
 };
 
 /**
@@ -70,7 +74,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
   const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
-  let report: (message: string) => void = message => console.log(message);
+  // One structured log and rolling detail window in <data>/diagnostics/ (docs/diagnostics.md). Host events go there by area;
+  // `onReport` adds a listener (tests), it doesn't replace the log.
+  const diagnostics = hostDiagnosticsAt(dataRoot);
+  setProcessDiagnostics(diagnostics);
+  let listener: ((message: string) => void) | null = null;
+  const logTo = (area: string) => (message: string) => { diagnostics.log.info(area, "event", message); listener?.(message); };
+  const report = logTo("desktop");
   const shutdown = new AbortController();
   const activity = new DesktopWorkActivity();
   const updateGuard = updateTrial && new DesktopUpdateApplyGuard(activity,
@@ -82,7 +92,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const savedSettings = () => { try { return settingsStore.load().settings; } catch { return null; } };
   // WolvenKit: a CLI path in Build setup wins; otherwise XF Studio's own copy, downloaded with consent.
   const wolvenKit = new WolvenKitSetupHost({ root: desktopToolsRoot(dataRoot), configured: () => savedSettings()?.wolvenKitCli ?? null,
-    log: message => report(message), ...hostOptions.wolvenKit });
+    log: logTo("wolvenkit"), ...hostOptions.wolvenKit });
   const withWolvenKit = (settings: LocalSettings): LocalSettings =>
     ({ ...settings, wolvenKitCli: settings.wolvenKitCli ?? wolvenKit.managedExecutable() });
   // Readiness requests never run external tools inline: cached answers, background checks.
@@ -107,7 +117,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
     // The preview runs WolvenKit only once it is ready to run (present, verified, with its .NET runtime).
     settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, wolvenKitCli: wolvenKit.usable() }),
-    log: message => report(message) });
+    log: logTo("preview") });
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
   // Brows, lashes and hair: resolved from the launch route Build uses (MO2, manual or game folder) and
   // exported from the winning archives into the same private preview cache.
@@ -117,7 +127,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
         mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
     },
-    log: message => report(message) });
+    log: logTo("character"), trace: diagnostics.trace });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
@@ -127,13 +137,24 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
         mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
     },
-    log: message => report(message) });
+    log: logTo("lut") });
   const gradingLutRequest = createGradingLutHandler(gradingLut);
+  // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
+  const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
+    app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,
+      channel: version.channel === "unavailable" ? null : version.channel, host: "desktop" }),
+    settings: () => savedSettings(), webView2: hostOptions.webView2 ?? null,
+    wolvenKit: () => { const state = wolvenKit.snapshot(); return { version: state.version, source: state.source, phase: state.phase }; },
+    roots: () => [{ label: "<data>", path: dataRoot }, { label: "<build-tools>", path: toolsRoot }],
+    resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    openExternal: hostOptions.openExternal,
+  });
   const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,
-    async fetch(request: Request): Promise<Response> {
+    // Each request runs in the diagnostics context: a failure is logged with a reference the page can show.
+    fetch: withRequestDiagnostics(diagnostics, async (request: Request): Promise<Response> => {
       const url = new URL(request.url);
       const origin = `http://127.0.0.1:${server.port}`;
       if (url.origin !== origin) return new Response("Forbidden", { status: 403 });
@@ -159,6 +180,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/desktop/capabilities")
         return Response.json(desktopCapabilities(previewCore.ready() ? "ready" : "missing", version, dataRoot, buildReady()),
           { headers: { "Cache-Control": "no-store" } });
+      if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(routedRequest);
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
@@ -228,7 +250,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
-        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: message => report(message),
+        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: logTo("package"),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
@@ -267,14 +289,16 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         ...(firstVisit ? { "Set-Cookie": `xfs_session=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}),
         ...(path.endsWith(".html") ? { "Content-Security-Policy": DESKTOP_CSP } : {}),
       } });
-    },
+    }),
   });
   return {
     url: `${server.url}?session=${token}`,
     port: server.port,
     onWorkspaceCloseAck(handler: (nonce: string, status: "saved" | "failed") => boolean) { closeAck = handler; },
-    /** Route host diagnostics (page served, bootstrap, smoke state) to the host log. */
-    onReport(handler: (message: string) => void) { report = handler; },
+    /** Also hand host events (page served, bootstrap, smoke state) to `handler`; they are always in the diagnostics log. */
+    onReport(handler: (message: string) => void) { listener = handler; },
+    /** The host's diagnostics log and rolling window. */
+    diagnostics,
     renderer(): Readonly<typeof renderer> { return { ...renderer }; },
     beforeQuit(event: { response?: { allow: boolean } }) { updateGuard?.beforeQuit(event); },
     beginInstallTransaction() { return activity.begin("install"); },
@@ -284,6 +308,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

@@ -18,6 +18,7 @@ import { refFromHash, refFromPath, type DepotRef, refLabel } from "./depot-path"
 import { asArray, cname, cr2wRoot, depotRef, depotText, HandleScope, isObject, materialParams, packageChunks,
   type JsonObject, type MaterialParamValue } from "./red-json";
 import { type Ambiguity, type RuleNote, note } from "./resolution-evidence";
+import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 
 /** Adapter port: read one resource's serialized JSON out of a specific mounted archive. */
 export interface ResourceFetchPort {
@@ -317,6 +318,11 @@ export class ResourceGraph {
   private readonly collectors = new Set<Map<string, Ambiguity>>();
   /** Read recorders of the work running now (`recordReads`). */
   private readonly recorders = new Set<Set<string>>();
+  /**
+   * The rolling diagnostics window (docs/diagnostics.md), set by whoever resolves through this graph. In diagnostic mode (`deep`)
+   * every consumer read records its winner; reads that fail are always recorded.
+   */
+  trace: DiagnosticTrace = NO_TRACE;
 
   constructor(readonly depot: DepotIndex, readonly xl: ArchiveXlConfig, readonly port: ResourceFetchPort, private readonly prefetch = true) {
     for (const [hash, path] of xl.paths) this.paths.set(hash, path);
@@ -439,6 +445,11 @@ export class ResourceGraph {
     if (!this.requested.has(named.hash)) {
       this.requested.add(named.hash);
       if (this.prefetch) pending.then(() => this.expand(named.hash), () => {});
+      if (this.trace.deep) {
+        const found = this.provenanceOf(named, null);
+        this.trace.event("resolver", "read", { path: named.path ?? null, hash: named.hash, archive: found.archive, provider: found.provider,
+          group: found.group, alternatives: found.alternatives, rule: found.rule.rule, via: found.via.map(hop => hop.kind), ambiguities: found.ambiguities });
+      }
     }
     return pending;
   }
@@ -479,6 +490,7 @@ export class ResourceGraph {
         const fetched = await this.port.fetch(lookup.winner, entry, extension);
         if (!fetched) {
           this.loadErrors.set(named.hash, `${lookup.winner.name} provides it, but it could not be extracted or converted.`);
+          this.trace.event("resolver", "read_failed", { path: named.path ?? null, hash: named.hash, archive: lookup.winner.name, provider: lookup.winner.providerName });
           if (this.port.transient?.(lookup.winner, entry) ?? true) this.transientFailures.add(named.hash);
           return null;
         }

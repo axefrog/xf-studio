@@ -39,7 +39,8 @@ test("a window that never loads gets plain words and one next step", () => {
 test("the host log is bounded and never throws", () => {
   const log = createHostLog(resolve(root, "log"));
   log.write("first\nline");
-  expect(readFileSync(log.path, "utf8")).toMatch(/Z first line\n$/);
+  const line = JSON.parse(readFileSync(log.path, "utf8").trim().split("\n").at(-1)!);
+  expect(line).toMatchObject({ level: "info", area: "desktop", message: "first line", origin: "host" });
   createHostLog(resolve(root, "missing", "\0bad")).write("ignored");
 });
 

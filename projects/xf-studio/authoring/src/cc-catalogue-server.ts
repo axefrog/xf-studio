@@ -4,6 +4,7 @@ import { parseCcPreset } from "./cc-preset";
 import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest } from "./character-detail-request";
 import type { PrefetchAnswer, PrefetchInput } from "./choice-prefetch";
 import { CREATOR_LIMITS, isCreatorName, isOptionId, isPresetName } from "./creator-names";
+import { hostFailure } from "./diagnostics/host-log";
 import { BodyTooLargeError, readBodyText } from "./request-body";
 
 /**
@@ -72,7 +73,12 @@ export function createCreatorHandler(host: CreatorCatalogueHost, options: { trus
       if (body?.kind === "prefetchStop" || body?.kind === "prepared" || body?.kind === "clearPrepared") {
         if (!prepared) return json({ code: "invalid", error: "Unknown request." }, 400);
         if (body.kind === "prefetchStop") { prepared.stopPrefetch(); return json({ stopped: true }); }
-        return json(body.kind === "prepared" ? { bytes: (await prepared.preparedFiles()).bytes } : await prepared.clearPreparedFiles());
+        if (body.kind === "prepared") return json({ bytes: (await prepared.preparedFiles()).bytes });
+        try { return json(await prepared.clearPreparedFiles()); }
+        catch (error) {
+          hostFailure("character", "clear_prepared_failed", "The prepared game files couldn't be cleared.", error);
+          return json({ code: "failed", error: "XF Studio couldn't clear its prepared game files. Close anything using them and try again." }, 500);
+        }
       }
       if (body?.kind === "prefetch") {
         if (!prepared || !isOptionId(body.option) || !Array.isArray(body.positions) || body.positions.length > MAX_PREFETCH_POSITIONS ||

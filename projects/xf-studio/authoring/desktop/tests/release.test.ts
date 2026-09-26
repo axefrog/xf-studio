@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import config from "../electrobun.config";
 import desktopPackage from "../package.json";
 import { noticeIssues, requireLicence } from "../notices";
+import { INNO_SETUP } from "../inno-setup";
 import { appVersion, changelogPath, changelogSection, checkTag, isPrerelease, parseChecksums, parseReleaseVersion,
   noticesAssetName, releaseNotes, releaseTag, releaseTitle, setupAssetName, stageRelease, verifyStaged } from "../release";
 
@@ -35,7 +36,7 @@ describe("app version", () => {
     expect(releaseTitle(parseReleaseVersion("1.0.0"))).toBe("XF Studio 1.0.0");
     expect(isPrerelease(alpha)).toBe(true);
     expect(isPrerelease(parseReleaseVersion("1.0.0"))).toBe(false);
-    expect(setupAssetName(alpha)).toBe("XFStudio-0.1.0-alpha.1-win-x64-setup.zip");
+    expect(setupAssetName(alpha)).toBe("XFStudio-0.1.0-alpha.1-win-x64-setup.exe");
   });
 
   test("a pushed tag must equal v + the checked-in version", () => {
@@ -76,21 +77,21 @@ describe("changelog", () => {
 describe("release staging and notes", () => {
   const version = parseReleaseVersion("0.1.0-alpha.1");
   const out = resolve(root, "release");
-  const setupZip = resolve(root, "setup.zip");
+  const setupExe = resolve(root, "setup.exe");
   const updateJson = resolve(root, "update.json");
   const lock = resolve(root, "dependencies.lock");
   const commit = "0123456789abcdef0123456789abcdef01234567";
-  writeFileSync(setupZip, "PK fake setup");
+  writeFileSync(setupExe, "MZ fake setup");
   writeFileSync(lock, JSON.stringify({ objects: [{ product: "electrobun", version: "2.0.1", relativeRoot: "releases/electrobun/2.0.1/windows-x64" }] }));
 
-  test("stages the named setup ZIP, build information and sha256sum-format checksums", () => {
+  test("stages the named single setup program, build information and sha256sum-format checksums", () => {
     writeFileSync(updateJson, JSON.stringify({ identifier: "dev.axefrog.xf-studio", version: "0.1.0-alpha.1", channel: "canary", hash: "abc123" }));
-    const assets = stageRelease({ setupZip, updateJson, outDir: out, commit, version, dependencyLock: lock });
-    expect(assets.map(asset => asset.name)).toEqual(["XFStudio-0.1.0-alpha.1-win-x64-setup.zip", "build-info.json", noticesAssetName]);
-    expect(assets[0].sha256).toBe(createHash("sha256").update("PK fake setup").digest("hex"));
+    const assets = stageRelease({ setupExe, updateJson, outDir: out, commit, version, dependencyLock: lock });
+    expect(assets.map(asset => asset.name)).toEqual(["XFStudio-0.1.0-alpha.1-win-x64-setup.exe", "build-info.json", noticesAssetName]);
+    expect(assets[0].sha256).toBe(createHash("sha256").update("MZ fake setup").digest("hex"));
     const info = JSON.parse(readFileSync(resolve(out, "build-info.json"), "utf8"));
     expect(info).toMatchObject({ version: "0.1.0-alpha.1", tag: "v0.1.0-alpha.1", commit, signed: false, updater: "disabled",
-      includesGameAssets: false, electrobunBuildHash: "abc123" });
+      includesGameAssets: false, electrobunBuildHash: "abc123", setupProgram: { wrapper: "Inno Setup", version: INNO_SETUP.version } });
     expect(JSON.stringify(info)).not.toMatch(/[A-Za-z]:[\\/]|\/Users\//);
     const sums = parseChecksums(readFileSync(resolve(out, "SHA256SUMS.txt"), "utf8"));
     expect(sums.map(entry => entry.name)).toEqual(assets.map(asset => asset.name));
@@ -101,7 +102,7 @@ describe("release staging and notes", () => {
     writeFileSync(updateJson, JSON.stringify({ version: "0.1.0-alpha.1", channel: "canary", hash: "abc123" }));
     const missing = resolve(root, "no-such-LICENSE");
     expect(() => requireLicence(missing)).toThrow("No LICENSE file at the repository root");
-    expect(() => stageRelease({ setupZip, updateJson, outDir: resolve(root, "unlicensed"), commit, version,
+    expect(() => stageRelease({ setupExe, updateJson, outDir: resolve(root, "unlicensed"), commit, version,
       dependencyLock: lock, licence: missing })).toThrow("No LICENSE file");
     const empty = resolve(root, "EMPTY-LICENSE");
     writeFileSync(empty, "  \n");
@@ -111,25 +112,27 @@ describe("release staging and notes", () => {
 
   test("refuses mismatched metadata, missing commits and altered files", () => {
     writeFileSync(updateJson, JSON.stringify({ version: "0.1.0", channel: "canary", hash: "abc123" }));
-    expect(() => stageRelease({ setupZip, updateJson, outDir: resolve(root, "bad"), commit, version, dependencyLock: lock }))
+    expect(() => stageRelease({ setupExe, updateJson, outDir: resolve(root, "bad"), commit, version, dependencyLock: lock }))
       .toThrow("does not match the app version");
     writeFileSync(updateJson, JSON.stringify({ version: "0.1.0-alpha.1", channel: "canary", hash: "abc123" }));
-    expect(() => stageRelease({ setupZip, updateJson, outDir: resolve(root, "bad"), commit: "main", version, dependencyLock: lock }))
+    expect(() => stageRelease({ setupExe, updateJson, outDir: resolve(root, "bad"), commit: "main", version, dependencyLock: lock }))
       .toThrow("full commit SHA");
-    stageRelease({ setupZip, updateJson, outDir: out, commit, version, dependencyLock: lock });
+    stageRelease({ setupExe, updateJson, outDir: out, commit, version, dependencyLock: lock });
     writeFileSync(resolve(out, "build-info.json"), "{}");
     expect(() => verifyStaged(out)).toThrow("Checksum mismatch for build-info.json");
   });
 
   test("notes put the curated changelog first, then checksums, provenance and SmartScreen guidance", () => {
     const notes = releaseNotes({ version: "0.1.0-alpha.1", newAndImproved: "- New editor.", fixes: "- Faster." }, version,
-      [{ name: "XFStudio-0.1.0-alpha.1-win-x64-setup.zip", sha256: "a".repeat(64), bytes: 1 }]);
+      [{ name: "XFStudio-0.1.0-alpha.1-win-x64-setup.exe", sha256: "a".repeat(64), bytes: 1 }]);
     expect(notes.indexOf("- New editor.")).toBeLessThan(notes.indexOf("- Faster."));
     expect(notes.indexOf("- Faster.")).toBeLessThan(notes.indexOf("Verify your download"));
     expect(notes).toContain("alpha pre-release");
     expect(notes).toContain("a".repeat(64));
     expect(notes).toContain("More info → Run anyway");
-    expect(notes).toContain("gh attestation verify XFStudio-0.1.0-alpha.1-win-x64-setup.zip --repo axefrog/xf-studio");
+    expect(notes).toContain("nothing to extract");
+    expect(notes).not.toMatch(/\bZIP\b|\.installer/);
+    expect(notes).toContain("gh attestation verify XFStudio-0.1.0-alpha.1-win-x64-setup.exe --repo axefrog/xf-studio");
     expect(notes).toContain("https://github.com/axefrog/xf-studio/commits/v0.1.0-alpha.1");
     expect(notes).toContain("have not been tested in the game");
     expect(notes).toContain("MIT-licensed");
@@ -143,7 +146,8 @@ describe("release staging and notes", () => {
 describe("third-party notices", () => {
   const notices = readFileSync(resolve(import.meta.dir, "../../../THIRD_PARTY_NOTICES.md"), "utf8");
   const facts = { binaries: ["bun.exe", "launcher.exe", "ElectrobunCore.dll", "libNativeWrapper.dll", "libasar.dll",
-    "bspatch.exe", "zig-zstd.exe"], bunVersion: "1.4.0", electrobunVersion: "2.0.1", threeVersion: "0.186.0" };
+    "bspatch.exe", "zig-zstd.exe"], bunVersion: "1.4.0", electrobunVersion: "2.0.1", threeVersion: "0.186.0",
+    innoSetupVersion: "6.7.3" };
 
   test("the checked-in notices cover the known shipped programs and versions", () => {
     expect(noticeIssues(notices, facts)).toEqual([]);
@@ -158,5 +162,11 @@ describe("third-party notices", () => {
       "Bun 1.4.2 is not the version listed.", "Bun's licence link does not point at bun-v1.4.2."]);
     expect(noticeIssues(notices, { ...facts, threeVersion: "0.187.0" })).toEqual(["three.js 0.187.0 is not the version listed."]);
     expect(noticeIssues(notices.replace("### Electrobun (MIT)", ""), facts)).toEqual(["Missing licence text: Electrobun (MIT)."]);
+    expect(noticeIssues(notices, { ...facts, innoSetupVersion: "6.8.0" })).toEqual(["Inno Setup 6.8.0 is not the version listed."]);
+    expect(noticeIssues(notices.replace("### Inno Setup License", ""), facts)).toEqual(["Missing licence text: Inno Setup License."]);
+  });
+
+  test("the notices list the pinned Inno Setup release that builds the setup program", () => {
+    expect(noticeIssues(notices, { ...facts, innoSetupVersion: INNO_SETUP.version })).toEqual([]);
   });
 });

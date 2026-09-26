@@ -10,7 +10,7 @@ const escape = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** The desktop release workflow's asset name for a tag (see authoring/desktop/release.ts). */
-export const setupAssetName = (tag: string) => `XFStudio-${tag.slice(1)}-win-x64-setup.zip`;
+export const setupAssetName = (tag: string) => `XFStudio-${tag.slice(1)}-win-x64-setup.exe`;
 
 export type ReleaseVars = { releaseStatement: string; downloadSection: string; releaseSummary: string };
 
@@ -84,9 +84,9 @@ ${fromSource(blob)}
     </div>
     <ol class="steps">
 ${[
-  step("01 · Download", "Get the setup ZIP", `On the release page, download <code>${setup}</code> and the <code>SHA256SUMS.txt</code> beside it.`),
+  step("01 · Download", "Get the setup program", `On the release page, download <code>${setup}</code>, a single setup program with nothing to extract, and the <code>SHA256SUMS.txt</code> beside it.`),
   step("02 · Check", "Confirm the file", `In PowerShell, run <code>(Get-FileHash .\\${setup} -Algorithm SHA256).Hash.ToLower()</code> and compare the result with <code>SHA256SUMS.txt</code>. With the GitHub CLI you can also run <code>gh attestation verify ${setup} --repo ${escape(new URL(repo).pathname.slice(1))}</code>.`),
-  step("03 · Install", "Get past SmartScreen", "Extract the whole ZIP and run the setup program. Because it is not code-signed yet, Windows may show <em>Windows protected your PC</em>: only if the checksum matched, choose <strong>More info</strong>, then <strong>Run anyway</strong>. If Smart App Control is on, Windows blocks unsigned apps and has no per-app override."),
+  step("03 · Install", "Get past SmartScreen", "Run the setup program and choose <strong>Install</strong>; it installs for your Windows user only, without administrator rights, and adds a Start menu entry and an uninstaller. Because it is not code-signed yet, Windows may show <em>Windows protected your PC</em>: only if the checksum matched, choose <strong>More info</strong>, then <strong>Run anyway</strong>. If Smart App Control is on, Windows blocks unsigned apps and has no per-app override."),
   step("04 · First run", "Start designing", "Choose <strong>Start designing</strong> to go straight to the flat UV editor, your library and export Check; nothing from the game is included. The first time you open it, XF Studio builds the 3D head preview from your own Cyberpunk 2077 files. It finds your game folder and asks before downloading WolvenKit (45 MB, from its official release); WolvenKit needs Microsoft's free .NET 10 Runtime, and XF Studio links to Microsoft's installer if it's missing. Building the mod files uses the same two things."),
 ].join("\n")}
     </ol>
