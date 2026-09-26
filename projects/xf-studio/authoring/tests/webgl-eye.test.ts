@@ -8,8 +8,8 @@ import type { EyeProbe } from "./webgl-eye-probe-page";
  * Eye plan ranks 4–5 on a real GPU in headless Chrome (tests/webgl-eye-probe-page.ts): the eye's GLSL functions agree with their
  * TypeScript twins (which tests/eye-shading.test.ts checks against the eye reference), and on a synthetic eyeball the eye material
  * changes the previous preview's eye the way the reference predicts: a smaller, brighter catch light (roughness 0.05 against the
- * flat 0.18), an iris shaded by its relief, the pupil displaced by parallax at a 30° view, and the iris plane mirrored in V against
- * the mesh's coordinate as the program computes it. Needs a local Chrome; public CI has none and skips, and
+ * flat 0.18), an iris shaded by its relief, the pupil displaced by parallax at a 30° view, and the iris kept in the mesh's own
+ * orientation (eye-material.ts `IRIS_PLANE_ORIENTATION`). Needs a local Chrome; public CI has none and skips, and
  * XFS_REQUIRE_ORACLES=1 turns the skip into a failure.
  */
 const PAGE = resolve(import.meta.dir, "webgl-eye-probe-page.ts");
@@ -58,10 +58,12 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(Math.abs(probe.after.view30!.pupil![1] - probe.before.view30!.pupil![1])).toBeLessThan(1);
   });
 
-  test("the program's iris plane is mirrored in V against the mesh coordinate: an iris marker below the pupil draws above it", () => {
+  test("the iris keeps the mesh's orientation (IRIS_PLANE_ORIENTATION as-mesh): a marker below the pupil stays below it, 9 % further out", () => {
     const before = probe.before.catchLight!.marker!, after = probe.after.catchLight!.marker!;
     expect(before[1]).toBeLessThan(-10);
-    expect(after[1]).toBeGreaterThan(10);
-    expect(Math.abs(after[0] - before[0])).toBeLessThan(2);
+    expect(after[1]).toBeLessThan(-10);
+    // The iris plane magnifies the iris texture (IrisSize/(2·EyeRadius) against this mesh's UV scale): the marker moves outward a little.
+    expect(Math.hypot(...after)).toBeGreaterThan(Math.hypot(...before));
+    expect(Math.hypot(...after) / Math.hypot(...before)).toBeLessThan(1.2);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { corneaNormal, EYE_AXIS_TURN, EYE_TEMPLATE_DEFAULTS, eyeAxes, eyeColourCoordinate, eyeDirectLight, eyeFresnel, eyeIrisWeight,
-  eyeLightsBeginChunk, eyeOpticalAxis, eyeParameters, eyeTurnUniform, eyeVisibility, ensureEyeTangents, ggxDistribution, irisPlaneCoordinate,
+  eyeLightsBeginChunk, eyeOpticalAxis, eyeParameters, eyeTurnUniform, eyeVisibility, ensureEyeTangents, ggxDistribution, IRIS_PLANE_ORIENTATION, irisPlaneCoordinate,
   patchEyeShader, prepareEyeballGeometry, refract, unpackNormalRG, type Vec3 } from "../src/eye-material";
 
 /**
@@ -155,6 +155,26 @@ describe("§5.2–5.3 the refracted iris coordinate", () => {
       worst = Math.max(worst, Math.abs(ours.uv[0] - theirs[0]!), Math.abs(ours.uv[1] - theirs[1]!));
     }
     expect(worst).toBeLessThan(1e-12);
+  });
+
+  test("orientation: literally the iris plane's V runs against the mesh's; as-mesh it follows the bitangent (CCXL guide's in-game image)", () => {
+    // A game-like frame at the pupil: U along +x (T), B = cross(N, T) along +y, i.e. towards decreasing V (up the eye), A out along +z.
+    const up = 20 * deg, normal: Vec3 = [0, Math.sin(up), Math.cos(up)], tangent: Vec3 = [1, 0, 0], bitangent: Vec3 = [0, Math.cos(up), -Math.sin(up)];
+    // The point is above the pupil: the mesh coordinate there is (0.5, 1 − v) with 1 − v > 0.5.
+    expect(irisPlaneCoordinate([0, 0, -1], normal, tangent, forward, optics).uv[1]).toBeLessThan(0.5);
+    expect(irisPlaneCoordinate([0, 0, -1], normal, tangent, forward, optics, bitangent).uv[1]).toBeGreaterThan(0.5);
+    // X is the same either way.
+    expect(irisPlaneCoordinate([0, 0, -1], turned(forward, lateral, 20), tangent, forward, optics, bitangent).uv[0])
+      .toBeCloseTo(irisPlaneCoordinate([0, 0, -1], turned(forward, lateral, 20), tangent, forward, optics).uv[0], 12);
+    expect(IRIS_PLANE_ORIENTATION).toBe("as-mesh");
+    // Across the limbus blend the literal reading sweeps the coordinate through the pupil (the dark arcs); as-mesh it stays outside it.
+    const limbus = (b?: Vec3) => {
+      const theta = Math.asin(0.165 / 0.4);
+      return eyeColourCoordinate({ uv: [1.5, 0.5 - 0.165], normal: [0, Math.sin(theta), Math.cos(theta)], tangent, view: [0, 0, -1], forward,
+        lateral: [0, 0, 0], optics, ...(b ? { bitangent: [0, Math.cos(theta), -Math.sin(theta)] as Vec3 } : {}) });
+    };
+    expect(Math.abs(limbus().uv[1] - 0.5)).toBeLessThan(0.02);
+    expect(limbus(bitangent).uv[1] - 0.5).toBeGreaterThan(0.15);
   });
 
   test("the optical axis turns by −EyeHorizAngle about the lateral vector; the uniform carries cos and sin per side", () => {

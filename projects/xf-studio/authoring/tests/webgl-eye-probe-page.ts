@@ -7,7 +7,7 @@
  *    relief normal map and the vanilla roughness levels): the previous preview's eye (the standard light, flat roughness 0.18,
  *    colour at the folded, V-flipped UV) against the eye material, drawn scene-linear without tone mapping. Measures the
  *    catch light's peak and size, the iris's relief contrast under a side light, the pupil's parallax at a 30° view, and where an
- *    asymmetric iris marker lands (the program's iris plane is mirrored in V against the mesh's coordinate).
+ *    asymmetric iris marker lands (the iris keeps the mesh's orientation: eye-material.ts `IRIS_PLANE_ORIENTATION`).
  * Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
@@ -127,6 +127,7 @@ try {
   const optics = eyeParameters({ scalars: {} }).optics;
   const uniforms = {
     uMode: { value: 0 }, uView: { value: new THREE.Vector3() }, uNormal: { value: new THREE.Vector3() }, uTangent: { value: new THREE.Vector3() },
+    uBitangent: { value: new THREE.Vector3() }, uAlongB: { value: 0 },
     uAxis: { value: new THREE.Vector3() }, uOptics: { value: new THREE.Vector4(optics.RefractionIndex, optics.RefractionAmount, optics.IrisSize, optics.EyeRadius) },
     uPlane: { value: optics.EyeParallaxPlane }, uD: { value: new THREE.Vector2() }, uR: { value: 0 },
     uEgg: { value: new THREE.Vector4(optics.EggFullRadius, optics.EggMarginExponent, optics.EggMarginFactor, optics.EggSubFactor) },
@@ -135,12 +136,12 @@ try {
   };
   const parity = new THREE.ShaderMaterial({ uniforms, vertexShader: "void main() { gl_Position = vec4( position.xy, 0.0, 1.0 ); }",
     fragmentShader: `#include <common>
-uniform int uMode; uniform vec3 uView, uNormal, uTangent, uAxis; uniform vec4 uOptics; uniform float uPlane;
+uniform int uMode; uniform vec3 uView, uNormal, uTangent, uBitangent, uAxis; uniform vec4 uOptics; uniform float uPlane, uAlongB;
 uniform vec2 uD; uniform float uR; uniform vec4 uEgg; uniform vec3 uBubble; uniform float uIris;
 uniform vec3 uN1, uN2, uL, uV, uAlbedo; uniform float uRough, uMetal;
 ${EYE_GLSL_FUNCTIONS}
 void main() {
-	if ( uMode == 0 ) gl_FragColor = vec4( xfsEyeIrisPlane( uView, uNormal, uTangent, uAxis, uOptics, uPlane ), 0.0, 1.0 );
+	if ( uMode == 0 ) gl_FragColor = vec4( xfsEyeIrisPlane( uView, uNormal, uTangent, uBitangent, uAxis, uOptics, uPlane, uAlongB ), 0.0, 1.0 );
 	else if ( uMode == 1 ) gl_FragColor = vec4( xfsEyeCornea( uD, uR, uEgg, uBubble, uIris ), 1.0 );
 	else { vec3 d, s; xfsEyeBRDF( uN1, uN2, uL, uV, uRough, uAlbedo, uMetal, d, s ); gl_FragColor = vec4( d.x, s.x, 0.0, 1.0 ); }
 }` });
@@ -163,8 +164,13 @@ void main() {
     probe.parity.cases++;
     const normal = unit([(next() - 0.5) * 0.9, (next() - 0.5) * 0.9, 1]), tangent = unit([1, (next() - 0.5) * 0.2, -normal[0]]);
     const axis = unit([(next() - 0.5) * 0.2, (next() - 0.5) * 0.2, 1]), view = unit([(next() - 0.5) * 1.2, (next() - 0.5) * 1.2, -1]);
+    // Both orientations: literal (S = T2 × A) and as-mesh (S along the bitangent, which here points either way).
+    const flip = n % 2 ? 1 : -1, bitangent = unit([normal[1] * tangent[2] - normal[2] * tangent[1], normal[2] * tangent[0] - normal[0] * tangent[2],
+      normal[0] * tangent[1] - normal[1] * tangent[0]].map(c => c * flip));
+    const alongB = n % 3 !== 0;
     uniforms.uMode.value = 0; set(uniforms.uView, view); set(uniforms.uNormal, normal); set(uniforms.uTangent, tangent); set(uniforms.uAxis, axis);
-    const iris = read(), twin = irisPlaneCoordinate(view, normal, tangent, axis, optics).uv;
+    set(uniforms.uBitangent, bitangent); uniforms.uAlongB.value = alongB ? 1 : 0;
+    const iris = read(), twin = irisPlaneCoordinate(view, normal, tangent, axis, optics, alongB ? bitangent : undefined).uv;
     probe.parity.iris = Math.max(probe.parity.iris, Math.abs(iris[0]! - twin[0]), Math.abs(iris[1]! - twin[1]));
     const d: [number, number] = [(next() - 0.5) * 0.5, (next() - 0.5) * 0.5], bubble = unpackNormalRG(0.5 + (next() - 0.5) * 0.05, 0.5 + (next() - 0.5) * 0.05);
     const weight = Math.min(1, Math.max(0, 1 - (Math.hypot(...d) - 0.1448) / 0.0404));

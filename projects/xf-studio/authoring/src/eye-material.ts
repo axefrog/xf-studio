@@ -9,6 +9,7 @@
  * - the refracted/parallax iris coordinate (§5.3): the view ray refracted into the eye's own frame meets a plane
  *   `EyeParallaxPlane` from the centre of a virtual sphere of `EyeRadius`, scaled by `IrisSize/(2·EyeRadius)` (the 9 %
  *   magnification is that scale, not the bending); colour, iris normal and mask are sampled there, V-flipped outside the iris;
+ *   the plane's second axis follows the mesh's bitangent (`IRIS_PLANE_ORIENTATION`), so the iris is not mirrored against the sclera;
  * - the iris normal N2 (§5.4) from `Normal` at that coordinate, and the cornea normal N1 (§5.5), an analytic bulge inside the
  *   iris blended into the `NormalBubble` ripple outside it;
  * - `eye_gradient.mt`: base colour `lerp(Albedo, Gradient(IrisMask.R), IrisMask.A)` in linear light (§5.6), the ramp baked from
@@ -63,6 +64,17 @@ export const EYE_AXIS_TURN: EyeAxisTurn = "outward";
  * `Editor/Characters/Eyes` `DiffuseBoost` option, which matches that register by role [hypothesis for the pairing] (eye reference §6.3).
  */
 export const EYE_AMBIENT_BOOST = 0.1;
+/**
+ * How the iris plane's second axis is oriented. The program builds it as `S = T2 × A` (§5.3). On the exported eye mesh that axis runs
+ * opposite to the mesh's own bitangent (B = cross(N, T)·w, towards decreasing V), so taken literally the iris is drawn mirrored in V
+ * against the sclera around it, and across the limbus blend the coordinate sweeps through the pupil, drawing dark arcs at the top and
+ * bottom of the iris. In game the iris is not mirrored: the CCXL eye guide's in-game image shows an iris whose brown half is up in
+ * the texture drawn with it down, as the V-flipped mesh coordinate draws it [wiki: ccxl-eye-textures.md, `inverted_y_03.png`].
+ * "as-mesh" (the default) therefore orients S along the mesh's bitangent; "literal" keeps `T2 × A`. Why the exported frame and the
+ * engine's differ here (the per-eye engine vectors' convention, the engine's tangent stream) is not established [hypothesis].
+ */
+export type IrisPlaneOrientation = "as-mesh" | "literal";
+export const IRIS_PLANE_ORIENTATION: IrisPlaneOrientation = "as-mesh";
 /** How far (folded UV) the nearest vertex may lie from an eye's pupil at (0.5, 0.5) for `eyeAxes` to take it as the pupil. */
 export const EYE_PUPIL_TOLERANCE = 0.05;
 
@@ -167,11 +179,13 @@ export function eyeOpticalAxis(forward: Vec3, lateral: Vec3, angleDegrees: numbe
  * §5.3: where the view ray, refracted at the virtual cornea, meets the iris plane, in iris UV. `view` is the unit vector from the
  * camera to the surface point, `normal` and `tangent` the interpolated vertex frame, `axis` the optical axis. The frame is
  * {T2, A, S} with `T2 = normalize(T − (T·A)A)` and `S = T2 × A`; the height above the plane is `EyeRadius·(N·A) − EyeParallaxPlane`.
+ * With a `bitangent` (the "as-mesh" orientation, `IRIS_PLANE_ORIENTATION`) S is turned to point along it.
  */
 export function irisPlaneCoordinate(view: Vec3, normal: Vec3, tangent: Vec3, axis: Vec3, optics: Pick<EyeOptics,
-  "RefractionIndex" | "RefractionAmount" | "IrisSize" | "EyeRadius" | "EyeParallaxPlane">): { uv: [number, number]; height: number; refracted: Vec3 } {
+  "RefractionIndex" | "RefractionAmount" | "IrisSize" | "EyeRadius" | "EyeParallaxPlane">, bitangent?: Vec3): { uv: [number, number]; height: number; refracted: Vec3 } {
   const t2 = normalize(sub(tangent, scale(axis, dot(tangent, axis))));
-  const s = cross(t2, axis);
+  const literal = cross(t2, axis);
+  const s = bitangent && dot(literal, bitangent) < 0 ? scale(literal, -1) : literal;
   const il: Vec3 = [dot(view, t2), dot(view, axis), dot(view, s)], nl: Vec3 = [dot(normal, t2), dot(normal, axis), dot(normal, s)];
   const r = refract(il, nl, optics.RefractionIndex);
   const height = Math.max(0, optics.EyeRadius * dot(normal, axis) - optics.EyeParallaxPlane);
@@ -185,12 +199,12 @@ export function irisPlaneCoordinate(view: Vec3, normal: Vec3, tangent: Vec3, axi
  * (`lerp((fold(u), 1 − v), iris plane, iris)`). `forward` and `lateral` are the eye's engine vectors (here from `eyeAxes`).
  */
 export function eyeColourCoordinate(input: { uv: readonly [number, number]; normal: Vec3; tangent: Vec3; view: Vec3; forward: Vec3; lateral: Vec3;
-  optics: EyeOptics }): { side: "right" | "left"; uv: [number, number]; iris: number; height: number } {
+  optics: EyeOptics; bitangent?: Vec3 }): { side: "right" | "left"; uv: [number, number]; iris: number; height: number } {
   const [u, v] = input.uv, { optics } = input;
   const side = u > 0 ? "right" : "left", fu = u + (u > 0 ? -1 : 1);
   const iris = eyeIrisWeight(Math.hypot(fu - 0.5, 0.5 - v), optics.IrisCoordFactor, optics.IrisCoordMargin);
   const axis = eyeOpticalAxis(input.forward, input.lateral, side === "right" ? optics.EyeHorizAngleRight : optics.EyeHorizAngleLeft);
-  const plane = irisPlaneCoordinate(input.view, input.normal, input.tangent, axis, optics);
+  const plane = irisPlaneCoordinate(input.view, input.normal, input.tangent, axis, optics, input.bitangent);
   return { side, iris, height: plane.height, uv: [fu + (plane.uv[0] - fu) * iris, 1 - v + (plane.uv[1] - (1 - v)) * iris] };
 }
 
@@ -429,10 +443,13 @@ export const EYE_GLSL_FUNCTIONS = /* glsl */`
 float xfsEyeIrisWeight( const in float r, const in float factor, const in float margin ) {
 	return saturate( 1.0 - ( r - ( factor - margin ) ) / ( 2.0 * margin ) );
 }
-// §5.3: the refracted view ray meets the iris plane; optics = (RefractionIndex, RefractionAmount, IrisSize, EyeRadius).
-vec2 xfsEyeIrisPlane( const in vec3 view, const in vec3 n, const in vec3 t, const in vec3 axis, const in vec4 optics, const in float plane ) {
+// §5.3: the refracted view ray meets the iris plane; optics = (RefractionIndex, RefractionAmount, IrisSize, EyeRadius). With alongB 1
+// the second axis S = T2 × A is turned to point along the mesh's bitangent b (IRIS_PLANE_ORIENTATION "as-mesh"); 0 keeps it literal.
+vec2 xfsEyeIrisPlane( const in vec3 view, const in vec3 n, const in vec3 t, const in vec3 b, const in vec3 axis, const in vec4 optics, const in float plane,
+		const in float alongB ) {
 	vec3 t2 = normalize( t - dot( t, axis ) * axis );
 	vec3 s = cross( t2, axis );
+	s *= alongB > 0.5 && dot( s, b ) < 0.0 ? -1.0 : 1.0;
 	vec3 il = vec3( dot( view, t2 ), dot( view, axis ), dot( view, s ) );
 	vec3 nl = vec3( dot( n, t2 ), dot( n, axis ), dot( n, s ) );
 	vec3 r = refract( il, nl, optics.x );
@@ -507,6 +524,7 @@ uniform vec4 xfsEyePlane;
 uniform vec4 xfsEyeEgg;
 uniform vec4 xfsEyeTurn;
 uniform float xfsEyeAmbient;
+uniform float xfsEyeAlongB;
 varying vec3 vXfsEyeAxis;
 varying vec3 vXfsEyeLateral;
 vec3 xfsEyeN1 = vec3( 0.0, 0.0, 1.0 );
@@ -548,7 +566,7 @@ vec2 xfsEyeTurnSide = xfsEyeLeft ? xfsEyeTurn.zw : xfsEyeTurn.xy;
 vec3 xfsEyeAxisA = normalize( xfsEyeTurnSide.x * xfsEyeFwd + xfsEyeTurnSide.y * xfsEyeLat );
 // §5.3 the refracted iris coordinate: the colour, iris normal and mask are sampled there inside the iris, V-flipped outside.
 vec3 xfsEyeView = isOrthographic ? vec3( 0.0, 0.0, - 1.0 ) : normalize( - vViewPosition );
-vec2 xfsEyeUvI = xfsEyeIrisPlane( xfsEyeView, xfsEyeN, xfsEyeT, xfsEyeAxisA, xfsEyeOptics, xfsEyePlane.x );
+vec2 xfsEyeUvI = xfsEyeIrisPlane( xfsEyeView, xfsEyeN, xfsEyeT, xfsEyeB, xfsEyeAxisA, xfsEyeOptics, xfsEyePlane.x, xfsEyeAlongB );
 vec2 xfsEyeUvC = mix( vec2( xfsEyeFu, 1.0 - xfsEyeUv.y ), xfsEyeUvI, xfsEyeIris * xfsEyeHasAxis );
 // The fold jumps by a whole tile at U = 0 (behind the eye); the raw derivatives keep the mip level continuous.
 vec2 xfsEyeDx = dFdx( xfsEyeUv ), xfsEyeDy = dFdy( xfsEyeUv );
@@ -676,6 +694,7 @@ export function createEyeMaterial(textures: EyeTextures, parameters: EyeParamete
     xfsEyeEgg: { value: new THREE.Vector4(optics.EggFullRadius, optics.EggMarginExponent, optics.EggMarginFactor, optics.EggSubFactor) },
     xfsEyeTurn: { value: new THREE.Vector4(...eyeTurnUniform(optics)) },
     xfsEyeAmbient: { value: 1 + EYE_AMBIENT_BOOST },
+    xfsEyeAlongB: { value: IRIS_PLANE_ORIENTATION === "as-mesh" ? 1 : 0 },
   };
   material.onBeforeCompile = shader => { Object.assign(shader.uniforms, uniforms); patchEyeShader(shader); };
   material.customProgramCacheKey = () => `xfs-eye-2${gradient ? "-gradient" : ""}`;
