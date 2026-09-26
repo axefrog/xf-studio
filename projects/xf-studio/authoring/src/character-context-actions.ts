@@ -47,7 +47,8 @@ import { characterRequestOf, DEFAULT_CHARACTER, type CharacterRequest } from "./
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
 import { refusal, type Capability } from "./platform/api";
 import type { SavedV } from "./save-reader";
-import { CLOTHING_STATE_LABELS, type ClothingSetting, clothingSettingOf, type ClothingState, DEFAULT_CLOTHING, dressingFor } from "./clothing-dressing";
+import { CLOTHING_AREA_LABELS, CLOTHING_STATE_LABELS, CLOTHING_STATES, type ClothingSetting, clothingSettingOf, type ClothingState, DEFAULT_CLOTHING,
+  dressingFor, HEADWEAR_AREAS, UNDERWEAR_AREAS } from "./clothing-dressing";
 import { CLOTHING_AREAS, type ClothingArea, wornAreas } from "./save-loadout";
 
 /** The host side of the context: the installed catalogue's panel, pages, searches, views and presets (cc-catalogue-server.ts). */
@@ -107,6 +108,8 @@ export type StoredCharacter = { origin: "default" | "save" | "preset"; name?: st
  * where the clothes come from, one plain line when there is something to say, and the setting's own Undo and Redo labels.
  */
 export type ClothingSnapshot = { state: ClothingState; custom: ClothingArea[]; worn: ClothingArea[];
+  /** The areas the current state shows, and the states and areas as the control words them (so the presentation derives nothing). */
+  shown: ClothingArea[]; states: { value: ClothingState; label: string }[]; areas: { area: ClothingArea; label: string }[];
   source: "save" | "none" | "unread" | "older"; note: string; undo: string | null; redo: string | null };
 export type CharacterChoicesState = { readonly choices: readonly CcPanelChoice[]; readonly total: number; readonly loading: boolean; readonly error: string | null };
 export type CharacterSearchState = { readonly query: string; readonly options: ReadonlySet<string> | null; readonly more: boolean; readonly loading: boolean;
@@ -261,7 +264,9 @@ export class CharacterContextActions {
       : source === "older" ? "This save was loaded before XF Studio read clothes. Load it again to see what your V wears."
       : source === "unread" ? "XF Studio couldn't read what your V wears from this save, so her clothes aren't shown."
       : !worn.length ? "Your V wears nothing in this save." : "";
-    return { state: this.clothing.state, custom: [...this.clothing.custom], worn, source, note,
+    return { state: this.clothing.state, custom: [...this.clothing.custom], worn, shown: this.shownAreas(),
+      states: CLOTHING_STATES.map(value => ({ value, label: CLOTHING_STATE_LABELS[value] })),
+      areas: worn.map(area => ({ area, label: CLOTHING_AREA_LABELS[area] })), source, note,
       undo: this.clothingPast.at(-1)?.label ?? null, redo: this.clothingFuture.at(-1)?.label ?? null };
   }
   /** What the Clothing setting dresses the shown V in, for a request (null: nothing worn). */
@@ -650,9 +655,12 @@ export class CharacterContextActions {
   }
   /** The clothing areas the current setting shows (`custom` starts from them when an area is picked in another state). */
   private shownAreas(): ClothingArea[] {
-    const dressed = dressingFor(this.clothing, this.state.save?.value.loadout, this.state.bodyGender, []);
-    return this.clothing.state === "custom" ? [...this.clothing.custom] : dressed?.shown ?? (this.clothing.state === "underwear" ? ["UnderwearTop", "UnderwearBottom"]
-      : this.clothing.state === "no-headwear" ? CLOTHING_AREAS.filter(area => area !== "Head" && area !== "Face") : [...CLOTHING_AREAS]);
+    switch (this.clothing.state) {
+      case "custom": return [...this.clothing.custom];
+      case "underwear": return [...UNDERWEAR_AREAS];
+      case "no-headwear": return CLOTHING_AREAS.filter(area => !HEADWEAR_AREAS.includes(area));
+      case "saved": return [...CLOTHING_AREAS];
+    }
   }
   private clothingStep(label: string, setting: ClothingSetting) {
     if (sameClothing(setting, this.clothing)) return;

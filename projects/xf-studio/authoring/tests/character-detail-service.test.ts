@@ -70,7 +70,7 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-8");
+    expect(record.schema).toBe("xfs/render-detail-9");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
@@ -96,7 +96,7 @@ describe("character record from the resolver", () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
     // Every head slot is unavailable; V "A" as saved here lists no body part.
-    expect(record.slots.map(s => s.state)).toEqual([...Array(7).fill("unavailable"), "none"]);
+    expect(record.slots.map(s => s.state)).toEqual([...Array(7).fill("unavailable"), "none", "none"]);
     expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
     expect(record.slots[1]!.message).toBe("WolvenKit couldn't read your V's face details from your game files, so they aren't shown.");
     expect(record.slots[4]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
@@ -538,7 +538,7 @@ describe("the body in the character record", () => {
     const body = record.components.filter(c => c.slot === "body");
     expect(body.map(c => c.component)).toEqual(["t0_body", "l0_feet_flat", "a0_arms", "a0_nails_l", "i0_cover"]);
     expect(body.map(c => c.morphs)).toEqual([["breast_big_breast"], [], [], ["nails_long_l_nails_l"], []]);
-    expect(record.slots.at(-1)).toEqual({ slot: "body", state: "shown", label: "body, feet, arms, nails (beige), underwear" });
+    expect(record.slots.at(-2)).toEqual({ slot: "body", state: "shown", label: "body, feet, arms, nails (beige), underwear" });
     // Head parts carry no body shapes, and are the same entries as for the V without her body.
     const head = (await prepare(REQUEST_A)).record.components;
     expect(record.components.filter(c => c.slot !== "body")).toEqual(head);

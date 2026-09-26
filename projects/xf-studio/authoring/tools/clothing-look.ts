@@ -35,7 +35,7 @@ const run = (action: object) => page.evaluate(`window.xfStudioShell.runtime.disp
 const evidence = () => page.evaluate(`(() => { const e = window.xfStudioSceneEvidence?.()?.characterDetails; return e ? { identity: e.identity,
   components: e.components.filter(c => c.slot === "clothing" || c.slot === "body") } : null; })()`);
 const identity = () => page.evaluate(`window.xfStudioSceneEvidence?.()?.characterDetails?.identity ?? null`);
-const settled = `(() => { const s = window.xfStudioPresentation.authoring.previewState(); const d = s.assets?.characterDetails;
+const settled = `(() => { const d = window.xfStudioPresentation.status.snapshot().assets?.characterDetails;
   return !!d && d.phase === "ready" && !d.updating; })()`;
 const results: Record<string, unknown> = {};
 try {
@@ -59,7 +59,7 @@ try {
       await page.wait(1500);
       await page.screenshot(resolve(out, `${state}-${name}.png`));
     }
-    const status = await page.evaluate(`JSON.parse(JSON.stringify(window.xfStudioPresentation.authoring.previewState().assets?.characterDetails ?? null))`);
+    const status = await page.evaluate(`JSON.parse(JSON.stringify(window.xfStudioPresentation.status.snapshot().assets?.characterDetails ?? null))`);
     results[state] = { dispatched, status, evidence: await evidence() };
   }
   const gpu = await page.evaluate(`(() => { const gl = document.createElement("canvas").getContext("webgl2");

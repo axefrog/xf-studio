@@ -461,7 +461,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         // garment, a first stand-in for the game's garment support (knowledge/clothing.md §4.5).
         if (((component.slot === "body" && decals.length) || component.slot === "clothing") && !component.morphs?.length) {
           const field = bodyShapeField(bodyShapes);
-          if (field) for (const mesh of meshes) followBodyShape(mesh, field);
+          // A geometry another component draws too (a file used twice) is this component's own copy first: the shape key it gains is its own.
+          if (field) for (const mesh of meshes) { if (shared) mesh.geometry = mesh.geometry.clone(); followBodyShape(mesh, field); }
         }
         const item: LoadedCharacterComponent = { component, root, meshes, bones, ...(skin ? { skin } : {}),
           ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}),
