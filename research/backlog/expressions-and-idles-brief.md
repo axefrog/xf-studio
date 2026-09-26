@@ -112,7 +112,9 @@ Runtime-bridge experiments worth adding to its phase 2: a read-only `face_rig` d
 1. **Scope:** static photo-mode expressions first; animated or looping faces and idles follow.
 2. **Expression table precedence:** the Studio names its archive so its expression table wins, and carries the other installed mods' rows forward so their expressions keep working; it explains this in plain words when it happens.
 
-Still open: questions 2 and 4–7 below.
+Provisional (coordinator, 26 September 2026, for the maintainer's review; proposals from the [editor design](../animation/expression-editor-design.md)): handles plus an all-controls drawer, sculpt later (Q2); export both V body genders, not NPC puppets (Q4); no creator idle in the first version (Q5); "XF Expressions" when split (Q6); R1 and R2 join the next bridge session (Q7).
+
+The phased build plan for the first scope (data model, live preview, export with the superset table, module boundaries, bridge commands for R1–R5 and in-game preview, tests, effort, and proposed defaults for the open questions) is the [static expression editor design](../animation/expression-editor-design.md).
 
 ## Questions for the maintainer
 
