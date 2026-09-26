@@ -8,6 +8,7 @@ import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
 import { imports, resolveFrom } from "./fixtures/import-scan";
+import { codeOnly } from "./fixtures/code-scan";
 
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 /** Every src module as a src-relative name without its extension (`platform/scene/scene-host`). */
@@ -24,11 +25,11 @@ const sorted = (names: Iterable<string>) => [...new Set(names)].sort();
 const SCENE_HOST_IMPORTERS = ["browser-character-detail-device", "browser-scene-preview-ports", "browser-viewport-device", "surface-editor"];
 
 /**
- * Modules that spell a fixed viewport-kind union (`"head" | "uv"`, `"uv" | "surface"`): the attachment's two hosts, the gesture
- * sources, the binding scopes and the adapter messages. Phase 1 replaces them with view IDs and module-registered view kinds.
+ * Modules that spell a fixed viewport-kind union (`"head" | "uv"`, `"uv" | "surface"`). Phase 1 keyed the attachment, the editor
+ * adapter, the gesture sources and the adapter messages by view and host IDs; what is left are the binding scopes (a view kind
+ * `view3d` scope and module-registered flat views, P6) and the head panel's key description.
  */
-const FIXED_VIEWPORT_KINDS = ["authoring-gestures", "browser-viewport-device", "input-bindings", "presentation-status", "studio-startup",
-  "studio-ui/panels/viewports", "viewport-adapter", "viewport-attachment"];
+const FIXED_VIEWPORT_KINDS = ["input-bindings", "studio-ui/panels/viewports"];
 const VIEWPORT_KIND_UNION = /"head"\s*\|\s*"uv"|"uv"\s*\|\s*"surface"|"surface"\s*\|\s*"uv"/;
 
 /**
@@ -60,4 +61,39 @@ test("the ratchet patterns match what they are meant to", () => {
   expect(VIEWPORT_KIND_UNION.test(`type V = ViewId;`)).toBe(false);
   expect(FEATURE_TOOL_KINDS.test(`{ kind: "preview.setWire", enabled }`)).toBe(true);
   expect(FEATURE_TOOL_KINDS.test(`{ kind: "preview.setWireframe" }`)).toBe(false);
+});
+
+/*
+ * Boundary rules (view-graph-design.md §6.3), each shown to fail on an injected violation. The ratchets above shrink phase by phase;
+ * these hold from the phase that established them.
+ */
+
+/**
+ * Rule 4 (from P1): feature renderers are view-independent. The scene port names no camera, light rig or view type, so a renderer
+ * never depends on what draws it; its only per-view input will be the `viewTools` hook (P3).
+ */
+const VIEW_TYPES_IN_PORT = /\b(?:Camera|PerspectiveCamera|OrbitControls|Light(?:ing|Rig)\w*|ViewId|ViewRecord|ViewGraph\w*|subscribeLighting|lighting)\b/;
+const portViolations = (source: string) => [...codeOnly(source).matchAll(new RegExp(VIEW_TYPES_IN_PORT, "g"))].map(match => match[0]);
+
+test("rule 4: the scene port names no camera, light rig or view type (P1)", () => {
+  expect(portViolations(text("platform/api/scene"))).toEqual([]);
+  expect(portViolations(`export interface SceneHostPort { lighting(): LightingView; camera: THREE.PerspectiveCamera; view: ViewId }`))
+    .toEqual(["lighting", "LightingView", "PerspectiveCamera", "ViewId"]);
+  // Prose may still say what the host owns.
+  expect(portViolations(`/** The host owns the camera and lights. */ export type X = 1;`)).toEqual([]);
+});
+
+/**
+ * Rule 5 (from P1): camera, light, display and tool state has one owner, the view graph service. No other module keeps its own
+ * copy: nothing assigns these fields on a service's state object (as `PreviewActions` did before P1).
+ */
+const OWNED_FIELD_WRITE = /\bthis\.(?:state|config|preview)\.(?:camera|exposure|lightAngle|lightingPreset|studioLights|creatorLighting|surface|wire|brows|lashes|hair|piercings|body)\s*(?:=[^=]|\[)/;
+const ownerViolations = (sources: Record<string, string>) => Object.entries(sources).filter(([, source]) => OWNED_FIELD_WRITE.test(codeOnly(source))).map(([name]) => name);
+
+test("rule 5: only the view graph service stores camera, light, display and tool state (P1)", () => {
+  expect(ownerViolations(Object.fromEntries(modules().map(name => [name, text(name)])))).toEqual([]);
+  expect(ownerViolations({ "preview-actions": `class P { run() { this.state.lightingPreset = "creator"; } }`,
+    "other": `class Q { read() { return this.state.exposure === 1; } }` })).toEqual(["preview-actions"]);
+  // The graph service is the owner, and preview actions read it.
+  expect(text("preview-actions")).toMatch(/private readonly graph: ViewGraph/);
 });

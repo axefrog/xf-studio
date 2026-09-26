@@ -36,7 +36,7 @@ function gpu() {
 function context(parts = rig()) {
   const { renderer, stats } = gpu();
   const skinListeners = new Set<() => void>(), frameListeners = new Set<(dt: number) => void>(),
-    characterListeners = new Set<() => void>(), lightingListeners = new Set<() => void>();
+    characterListeners = new Set<() => void>();
   const state = { frames: 0, light: null as null | { lobes: { roughness0: number; roughness1: number; weight: number }; wrap: [number, number, number] },
     underlays: 0, underlayFails: false, superseded: 0, reports: [] as string[], rig: [] as string[] };
   const underlay = (surface: THREE.Mesh): SurfaceUnderlay => {
@@ -50,7 +50,6 @@ function context(parts = rig()) {
   const ctx: FeatureRendererContext = { renderer, head: parts.head, surfaces: new Map([[EYE_PLATE_SURFACE, parts.plate]]),
     skin: { light: () => state.light, underlay, subscribe: listen(skinListeners) },
     character: () => ({ identity: null, drawn: [] }), subscribeCharacter: listen(characterListeners),
-    lighting: () => ({ preset: "studio" }), subscribeLighting: listen(lightingListeners),
     requestFrame: () => { state.frames++; },
     onFrame: listen(frameListeners),
     rig: { attach: bones => state.rig.push(`attach:${bones.map(bone => bone.name).join(",")}`),
@@ -58,7 +57,7 @@ function context(parts = rig()) {
     supersededChanged: () => { state.superseded++; },
     report: (feature, method, error) => state.reports.push(`${feature}.${method}: ${(error as Error).message}`) };
   const skinChanged = () => { for (const listener of skinListeners) listener(); };
-  return { ctx, parts, state, stats, skinListeners, frameListeners, characterListeners, lightingListeners, skinChanged };
+  return { ctx, parts, state, stats, skinListeners, frameListeners, characterListeners, skinChanged };
 }
 
 const COMPLETE = { size: 16, normal: new Uint8Array(16 * 16 * 4), surface: new Uint8Array(16 * 16 * 4) };
@@ -210,8 +209,8 @@ test("a second feature adds its own surface through the port beside eye makeup's
   expect(state.superseded).toBe(0);
   expect(features.evidence()).toMatchObject({ "eye-makeup": { plate: {} }, "cheek-makeup": { surface: "cheek_plate" } });
   // A feature's port is the scene port and nothing more: no host internals.
-  expect(Object.keys(cheek.port).sort()).toEqual(["anchors", "attach", "character", "feature", "lighting", "onContextRestored", "onFrame",
-    "renderBand", "renderer", "requestFrame", "skin", "subscribeCharacter", "subscribeLighting", "supersede"]);
+  expect(Object.keys(cheek.port).sort()).toEqual(["anchors", "attach", "character", "feature", "onContextRestored", "onFrame",
+    "renderBand", "renderer", "requestFrame", "skin", "subscribeCharacter", "supersede"]);
   expect(cheek.port.feature as string).toBe("cheek-makeup");
   // UI-77: a different factory for the same feature is not this renderer.
   expect(features.get(cheekRenderer([]))).toBeUndefined();
@@ -312,34 +311,34 @@ test("bones added under a rig attachment after it joined, such as a GLB that loa
 });
 
 test("the host releases what a renderer left behind, and a failed creation releases its own leftovers and the renderers before it (PREV-92)", () => {
-  const { ctx, parts, frameListeners, skinListeners, characterListeners, lightingListeners, state } = context();
+  const { ctx, parts, frameListeners, skinListeners, characterListeners, state } = context();
   const before = parts.root.children.length;
   const careless: FeatureRendererFactory = { feature: featureId("careless"), create(host) {
     host.attach(new THREE.Mesh());
     host.onFrame(() => {});
-    host.skin.subscribe(() => {}); host.subscribeCharacter(() => {}); host.subscribeLighting(() => {});
+    host.skin.subscribe(() => {}); host.subscribeCharacter(() => {});
     return { dispose() {} };
   } };
   const features = createFeatureRenderers(ctx, [careless]);
   expect(parts.root.children.length).toBe(before + 1);
-  expect([skinListeners.size, characterListeners.size, lightingListeners.size, frameListeners.size]).toEqual([1, 1, 1, 1]);
+  expect([skinListeners.size, characterListeners.size, frameListeners.size]).toEqual([1, 1, 1]);
   features.dispose();
   expect(parts.root.children.length).toBe(before);
-  expect([skinListeners.size, characterListeners.size, lightingListeners.size, frameListeners.size]).toEqual([0, 0, 0, 0]);
+  expect([skinListeners.size, characterListeners.size, frameListeners.size]).toEqual([0, 0, 0]);
   // A renderer that throws after attaching, subscribing, joining the rig and superseding leaves none of it behind.
   const log: string[] = [];
   const halfway: FeatureRendererFactory = { feature: featureId("halfway"), create(host) {
     const bone = new THREE.Bone(); bone.name = "Head";
     const root = new THREE.Group(); root.add(bone);
     host.attach(root, { rig: true, morphs: true });
-    host.onFrame(() => {}); host.skin.subscribe(() => {}); host.subscribeCharacter(() => {}); host.subscribeLighting(() => {});
+    host.onFrame(() => {}); host.skin.subscribe(() => {}); host.subscribeCharacter(() => {});
     host.supersede([{ slot: "brows" }]);
     throw Error("no surface");
   } };
   expect(() => createFeatureRenderers(ctx, [EYE_MAKEUP_RENDERER, cheekRenderer(log), halfway])).toThrow("no surface");
   expect(log).toEqual(["cheek:dispose"]);
   expect(parts.root.children.length).toBe(before);
-  expect([skinListeners.size, characterListeners.size, lightingListeners.size, frameListeners.size]).toEqual([0, 0, 0, 0]);
+  expect([skinListeners.size, characterListeners.size, frameListeners.size]).toEqual([0, 0, 0]);
   expect(state.rig).toEqual(["attach:Head", "detach:Head"]);
   // One renderer per feature, and draw-order slots within the feature-plate range.
   expect(() => createFeatureRenderers(ctx, [cheekRenderer(log), cheekRenderer(log)])).toThrow("two renderers");

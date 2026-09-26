@@ -26,6 +26,12 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
   payload: PayloadSchema = {}, variants?: Record<string, PayloadSchema>, variantUndo?: Record<string, UndoPolicy>): ActionDescriptor =>
   describe<ActionScope>(scope, effect, undo, payload, variants, variantUndo);
 
+/**
+ * A camera, preview or motion action: it may name the view it acts on (view-graph-design.md §3.8); without one it acts on the
+ * focused view. Optional, so every existing caller is unchanged.
+ */
+const inView: typeof desc = (...args) => { const d = desc(...args); return { ...d, payload: { ...d.payload, view: { type: "string", required: false, from: "target" } } }; };
+
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
   "history.undo": desc("workspace", "content", "none"),
@@ -47,42 +53,42 @@ export const ACTION_DESCRIPTORS = {
   "package.assign": desc("collection", "library", "none", { feature: target("string"), productId: target("string") }),
   "package.split": desc("collection", "library", "none", { feature: target("string"), newId: { ...state("string"), required: false } }),
   "package.merge": desc("collection", "library", "none", { productId: target("string"), intoId: target("string") }),
-  "camera.front": desc("viewport", "workspace", "none"),
-  "camera.body": desc("viewport", "workspace", "none"),
-  "camera.setFov": desc("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
-  "camera.endFovGesture": desc("viewport", "workspace", "none"),
-  "camera.restore": desc("viewport", "workspace", "none", { camera: input("object") }),
-  "camera.navigate": desc("viewport", "workspace", "none", { command: input("object") }, {
+  "camera.front": inView("viewport", "workspace", "none"),
+  "camera.body": inView("viewport", "workspace", "none"),
+  "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
+  "camera.endFovGesture": inView("viewport", "workspace", "none"),
+  "camera.restore": inView("viewport", "workspace", "none", { camera: input("object") }),
+  "camera.navigate": inView("viewport", "workspace", "none", { command: input("object") }, {
     orbit: { yaw: input("number"), pitch: input("number") }, dolly: { factor: input("number", .01, 100) },
     pan: { dx: input("number", -10, 10), dy: input("number", -10, 10) } }),
-  "camera.creatorFraming": desc("viewport", "workspace", "none", { page: enumerated(Object.keys(CREATOR_PAGE_DISTANCE)) }),
-  "preview.setLightingPreset": desc("viewport", "workspace", "none", { preset: enumerated(LIGHTING_PRESETS) }),
-  "preview.setCreatorLighting": desc("viewport", "workspace", "none", { key: enumerated(["intensity", "cone", "exposure"]), value: input("number|string") }, {
+  "camera.creatorFraming": inView("viewport", "workspace", "none", { page: enumerated(Object.keys(CREATOR_PAGE_DISTANCE)) }),
+  "preview.setLightingPreset": inView("viewport", "workspace", "none", { preset: enumerated(LIGHTING_PRESETS) }),
+  "preview.setCreatorLighting": inView("viewport", "workspace", "none", { key: enumerated(["intensity", "cone", "exposure"]), value: input("number|string") }, {
     intensity: { value: enumerated(INTENSITY_FORMS) }, cone: { value: enumerated(CONE_READINGS) },
     exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
-  "preview.resetCreatorLighting": desc("viewport", "workspace", "none"),
-  "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) }),
-  "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
-  "preview.setStudioLight": desc("viewport", "workspace", "none", { key: enumerated(STUDIO_LIGHT_KEYS), value: input("number") },
+  "preview.resetCreatorLighting": inView("viewport", "workspace", "none"),
+  "preview.setExposure": inView("viewport", "workspace", "none", { value: input("number", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) }),
+  "preview.setKeyAngle": inView("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
+  "preview.setStudioLight": inView("viewport", "workspace", "none", { key: enumerated(STUDIO_LIGHT_KEYS), value: input("number") },
     Object.fromEntries(STUDIO_LIGHT_KEYS.map(key => [key, { value: input("number", STUDIO_LIGHT_RANGES[key].min, STUDIO_LIGHT_RANGES[key].max) }]))),
-  "preview.setStudioNeutral": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.applyStudioSetup": desc("viewport", "workspace", "none", { setup: enumerated(STUDIO_SETUP_IDS) }),
-  "preview.resetStudioLighting": desc("viewport", "workspace", "none"),
-  "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
-  "preview.setPiercings": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setBody": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setUncensored": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setSurfaceControls": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setWire": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setNormals": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setEyeOptics": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setHair": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setDetail": desc("viewport", "workspace", "none", { detail: enumerated(["brows", "lashes"]), enabled: input("boolean") }),
-  "motion.setIdle": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "motion.setPaused": desc("viewport", "workspace", "none", { paused: input("boolean") }),
-  "motion.setContributions": desc("viewport", "workspace", "none", { body: input("boolean"), face: input("boolean") }),
-  "motion.setBlink": desc("viewport", "workspace", "none", { value: input("number", 0, 1) }),
-  "motion.playBlink": desc("viewport", "workspace", "none", { playing: input("boolean") }),
+  "preview.setStudioNeutral": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.applyStudioSetup": inView("viewport", "workspace", "none", { setup: enumerated(STUDIO_SETUP_IDS) }),
+  "preview.resetStudioLighting": inView("viewport", "workspace", "none"),
+  "preview.setEyeShape": inView("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
+  "preview.setPiercings": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setBody": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setUncensored": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setSurfaceControls": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setWire": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setNormals": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setEyeOptics": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setHair": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setDetail": inView("viewport", "workspace", "none", { detail: enumerated(["brows", "lashes"]), enabled: input("boolean") }),
+  "motion.setIdle": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "motion.setPaused": inView("viewport", "workspace", "none", { paused: input("boolean") }),
+  "motion.setContributions": inView("viewport", "workspace", "none", { body: input("boolean"), face: input("boolean") }),
+  "motion.setBlink": inView("viewport", "workspace", "none", { value: input("number", 0, 1) }),
+  "motion.playBlink": inView("viewport", "workspace", "none", { playing: input("boolean") }),
   "quality.set": desc("viewport", "workspace", "none", { size: enumerated([512, 1024, 2048, 4096]) }),
   "quality.rebuild": desc("viewport", "workspace", "none"),
   "savedV.load": desc("file", "file", "none", { bytes: input("bytes", 0, 128 * 1024 * 1024) }),

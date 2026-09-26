@@ -5,32 +5,42 @@ export type ViewportPort = {
   inputCapture(): boolean;
   dispose(): void;
 };
-export type ViewportKind = "uv" | "surface";
+/**
+ * An editor's slot: the on-head editor of a 3D view (`surface`, the main view's) or a flat editor (`uv`). Slots are registered by
+ * the device that owns the editors, not a fixed set (view-graph-design.md §2.6).
+ */
+export type EditorSlot = string;
+/** The slots a browser viewport device registers today: the flat UV editor and the main view's on-head editor. */
+export const DEFAULT_EDITOR_SLOTS: readonly EditorSlot[] = ["uv", "surface"];
 
 export class ViewportAdapter {
-  private ports: Partial<Record<ViewportKind, ViewportPort>> = {};
-  attach(kind: ViewportKind, port: ViewportPort) {
-    if (this.ports[kind] === port) return;
-    this.detach(kind);
-    this.ports[kind] = port;
+  private ports = new Map<EditorSlot, ViewportPort>();
+  constructor(private readonly slots: readonly EditorSlot[] = DEFAULT_EDITOR_SLOTS) {}
+  attach(slot: EditorSlot, port: ViewportPort) {
+    if (this.ports.get(slot) === port) return;
+    this.detach(slot);
+    this.ports.set(slot, port);
     port.resize();
   }
-  detach(kind?: ViewportKind) {
-    for (const key of kind ? [kind] : ["uv", "surface"] as const) {
-      const port = this.ports[key];
+  detach(slot?: EditorSlot) {
+    for (const key of slot ? [slot] : this.known()) {
+      const port = this.ports.get(key);
       if (!port) continue;
-      delete this.ports[key];
+      this.ports.delete(key);
       port.cancelInput();
       port.dispose();
     }
   }
-  resize(kind?: ViewportKind) {
-    for (const key of kind ? [kind] : ["uv", "surface"] as const) this.ports[key]?.resize();
+  resize(slot?: EditorSlot) {
+    for (const key of slot ? [slot] : this.known()) this.ports.get(key)?.resize();
   }
-  cancelInput(kind?: ViewportKind) {
-    for (const key of kind ? [kind] : ["uv", "surface"] as const) this.ports[key]?.cancelInput();
+  cancelInput(slot?: EditorSlot) {
+    for (const key of slot ? [slot] : this.known()) this.ports.get(key)?.cancelInput();
   }
-  capture(): Readonly<Record<ViewportKind, boolean>> {
-    return { uv: this.ports.uv?.inputCapture() ?? false, surface: this.ports.surface?.inputCapture() ?? false };
+  /** Whether each registered slot's editor holds pointer capture (false for a slot with no editor attached). */
+  capture(): Readonly<Record<EditorSlot, boolean>> {
+    return Object.fromEntries(this.known().map(slot => [slot, this.ports.get(slot)?.inputCapture() ?? false]));
   }
+  /** Registered slots first, in order, then any other attached slot. */
+  private known() { return [...new Set([...this.slots, ...this.ports.keys()])]; }
 }

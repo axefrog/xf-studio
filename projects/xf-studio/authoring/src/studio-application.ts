@@ -1,6 +1,6 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
-import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
+import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring-gestures";
 import { historyTimeline, type AuthoringHistory, type HistoryAction, type HistorySnapshot, type HistoryState } from "./authoring-history";
 import { nameIssue } from "./validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
@@ -14,6 +14,8 @@ import type { CharacterContextActions } from "./character-context-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
+import type { ViewId } from "./platform/api/view-graph";
+import type { ViewGraph } from "./platform/core/view-graph";
 import type { Layer, Point, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { EyeMakeupPort, EyeMakeupSpec } from "./authoring-eye-makeup";
@@ -65,7 +67,7 @@ export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
   { exportable: false; reason: string; blockedBy: "layer" | "preset" };
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
-  { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" } | { kind: "workspace" };
+  { kind: "field"; layerId: string; id: string } | { kind: "viewport"; view?: ViewId } | { kind: "file" } | { kind: "workspace" };
 /** The platform's reason codes and capability shape (`platform/api`). */
 export type StudioReasonCode = ReasonCode;
 export type StudioCapability = Capability;
@@ -97,7 +99,9 @@ type Services = { document: AuthoringDocument;
   /** The shown V's resolved details (character-detail-actions.ts). */
   characterDetails?: CharacterDetailActions;
   /** Which V the makeup is shown on and every creator choice set on it (character-context-actions.ts). */
-  characterContext?: CharacterContextActions };
+  characterContext?: CharacterContextActions;
+  /** The view graph (view-graph-design.md §3.3): which views exist, for actions that name one. */
+  views?: ViewGraph };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -491,6 +495,9 @@ export class StudioApplication {
     // Descriptor payload types and ranges gate every entry point, not only context menus.
     const payload = payloadIssue(route.spec.descriptor, action);
     if (payload && payload.code !== "limit") return payload;
+    // An action that names a view acts on that view only while it exists (view-graph-design.md §3.8).
+    const view = (action as { view?: unknown }).view;
+    if (view !== undefined && s.views && !s.views.has(view as string)) return refusal("missing_target", "That view no longer exists.");
     // The owning module decides, with a structured code (CORE-15).
     const domain = coded(this.handler(route.owner.id).capability(action));
     // A range limit is generic; when the domain can say why in the user's terms
@@ -709,7 +716,10 @@ export class StudioApplication {
       { kind: "field.select", layerId: target.layerId, fieldId: target.id },
       { kind: "field.clear", layerId: target.layerId, fieldId: target.id },
       { kind: "field.remove", layerId: target.layerId, fieldId: target.id }];
-    if (target.kind === "viewport") actions = [{ kind: "camera.front" }, { kind: "camera.body" }, { kind: "quality.rebuild" }];
+    if (target.kind === "viewport") {
+      const view = target.view === undefined ? {} : { view: target.view };
+      actions = [{ kind: "camera.front", ...view }, { kind: "camera.body", ...view }, { kind: "quality.rebuild" }];
+    }
     return actions.map(action => ({ action, capability: this.capability(action),
       undo: this.routes.undoPolicy(action), async: false }));
   }
@@ -771,18 +781,18 @@ export class StudioApplication {
     const owner = this.services.collection?.selectedPreset();
     return !!owner?.loaded && !owner.id;
   }
-  canBeginGesture(source: GestureSource, layerId: string): StudioCapability {
+  canBeginGesture(source: GestureOrigin, layerId: string): StudioCapability {
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
-    if (source === "surface" && this.previewUnavailable)
+    if (fromView3d(source) && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
     return this.targetCapability({ kind: "layer", id: layerId });
   }
-  gestureCapability(source: GestureSource, target: { kind: "shape" | "path" } |
+  gestureCapability(source: GestureOrigin, target: { kind: "shape" | "path" } |
     { kind: "point"; index: number } | { kind: "field"; fieldId: string }): StudioCapability {
     const session = this.gesture;
-    if (!session || session.source !== source) return { available: false, code: "not_ready",
+    if (!session || session.source.view !== gestureSource(source).view) return { available: false, code: "not_ready",
       reason: "Begin a gesture on the target layer first." };
     if (!this.services.document.recipe.layers.includes(session.layer))
       return missingTarget("That gesture layer was replaced.");
@@ -794,7 +804,7 @@ export class StudioApplication {
       session.fields.get(target.fieldId))) return missingTarget("That warp control was replaced.");
     return { available: true };
   }
-  beginGesture(source: GestureSource, layerId: string) {
+  beginGesture(source: GestureOrigin, layerId: string) {
     if (!this.canBeginGesture(source, layerId).available) return false;
     const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
     if (!layer) return false;
@@ -802,12 +812,12 @@ export class StudioApplication {
     const control = this.services.controls.snapshot();
     if (control) this.services.controls.commit(control.id);
     if (!this.services.gestures.begin(source, layer)) return false;
-    this.gesture = { source, layer, points: [...layer.points],
+    this.gesture = { source: gestureSource(source), layer, points: [...layer.points],
       fields: new Map(layer.fields.map(field => [field.id, field])) }; this.notify(); return true;
   }
-  applyGesture(source: GestureSource, proposal: StudioGestureProposal) {
+  applyGesture(source: GestureOrigin, proposal: StudioGestureProposal) {
     const session = this.gesture;
-    if (!session || session.source !== source) return false;
+    if (!session || session.source.view !== gestureSource(source).view) return false;
     const target = proposal.kind === "point.replace" ? { kind: "point" as const, index: proposal.index } :
       proposal.kind === "field.replace" ? { kind: "field" as const, fieldId: proposal.fieldId } :
       proposal.kind === "path.replacePoints" ? { kind: "path" as const } : { kind: "shape" as const };
@@ -822,8 +832,8 @@ export class StudioApplication {
       proposal.kind === "field.replace" && !session.fields.has(proposal.fieldId)) return false;
     return this.services.gestures.apply(source, action);
   }
-  endGesture(source: GestureSource, cancel = false) {
-    if (this.gesture?.source !== source) return;
+  endGesture(source: GestureOrigin, cancel = false) {
+    if (this.gesture?.source.view !== gestureSource(source).view) return;
     if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
     this.gesture = undefined; this.notify();
   }

@@ -6,7 +6,7 @@ import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
 import { modifiersOf, NO_MODIFIERS } from "./input-bindings";
 import { ViewportAdapter } from "./viewport-adapter";
-import { ViewportAttachment, type ViewportAttachmentPort } from "./viewport-attachment";
+import { ViewportAttachment, type ViewportAttachmentPort, type ViewportHostKind } from "./viewport-attachment";
 
 type Scene = SceneHost;
 type UVEditor = ReturnType<typeof createUVEditor>;
@@ -33,7 +33,10 @@ export function createBrowserViewportDevice(options: {
   let viewer: Scene | undefined;
   let uvEditor: UVEditor | undefined;
   let surfaceEditor: SurfaceEditor | undefined;
-  const host = (kind: "head" | "uv") => kind === "head" ? options.headHost : options.uvHost;
+  // Each registered viewport host's element and the editor slot its input and capture belong to.
+  const hosts: Record<ViewportHostKind, { element: HTMLElement; editor: string }> = {
+    head: { element: options.headHost, editor: "surface" }, uv: { element: options.uvHost, editor: "uv" } };
+  const host = (kind: ViewportHostKind) => hosts[kind].element;
   const attachment = new ViewportAttachment<HTMLElement>({
     moveHost: (kind, slot) => {
       const node = host(kind);
@@ -42,11 +45,11 @@ export function createBrowserViewportDevice(options: {
     },
     measure: kind => ({ width: host(kind).clientWidth, height: host(kind).clientHeight }),
     resize: kind => {
-      if (kind === "head") { viewer?.resize(); editors.resize("surface"); }
-      else editors.resize("uv");
+      if (kind === "head") viewer?.resize();
+      editors.resize(hosts[kind].editor);
     },
-    cancelInput: kind => editors.cancelInput(kind === "head" ? "surface" : "uv"),
-    inputCapture: kind => editors.capture()[kind === "head" ? "surface" : "uv"],
+    cancelInput: kind => editors.cancelInput(hosts[kind].editor),
+    inputCapture: kind => editors.capture()[hosts[kind].editor] ?? false,
     headView: () => viewer?.cameraState(),
     uvView: () => uvEditor?.snapshot(),
     uvSelection: () => uvEditor?.selection?.(),

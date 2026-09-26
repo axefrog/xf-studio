@@ -23,7 +23,7 @@ import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-w
 import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import type { LocalSetupActions } from "./local-setup-actions";
-import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
+import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage } from "./presentation-status";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
@@ -37,6 +37,7 @@ import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { UIPreferenceActions } from "./ui-preferences";
+import { createStudioViewGraph, storedViewGraph } from "./preview-view-graph";
 import { DiagnosticsActions } from "./diagnostics/actions";
 import { createBrowserDiagnostics } from "./diagnostics/browser-device";
 import { pageFailure, setPageDiagnostics } from "./diagnostics/page-sink";
@@ -104,6 +105,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
+  // The view graph (view-graph-design.md §3.3): every view's camera, light, display, scene and tool state, for the whole session.
+  const views = createStudioViewGraph(workspace.preview, workspace.views);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
@@ -137,7 +140,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
 
   let messageId = 0;
-  const adapterMessage = (source: "uv" | "surface" | "preview", text: string) => {
+  const adapterMessage = (source: AdapterMessage["source"], text: string) => {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   const core = createTrustedAuthoringCore(workspace, {
@@ -156,7 +159,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
       collections: () => bootstrap?.collection.workspaceSnapshot() ?? workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
+      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => storedViewGraph(views),
       character: () => head ? head.characterContext.stored() ?? null : undefined,
       uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart }),
@@ -179,7 +182,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       statusSource.changed();
     },
   });
-  core.app.attach({ quality: previewDevice.coordinator.quality });
+  core.app.attach({ quality: previewDevice.coordinator.quality, views });
   previewDevice.coordinator.quality.subscribe(persist);
   const fieldHooks = {
     selectedField: () => core.presentation.selectedField()?.id,
@@ -275,7 +278,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     let attached: AttachedHead | undefined;
     try {
       attached = await attachBrowserHead({
-        workspace, viewport: viewportDevice, preferences,
+        workspace, graph: views, viewport: viewportDevice, preferences,
         // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
         // surfaces have no layer source until the core edits more than one live feature.
         layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,

@@ -1,3 +1,4 @@
+import type { ViewId } from "./platform/api/view-graph";
 import type { PreviewState } from "./workspace-state";
 import { refusal, type Capability } from "./platform/api";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING } from "./game-blink-messages";
@@ -14,7 +15,9 @@ export type MotionState = Pick<PreviewState,
   { available: boolean; error?: string; blinkAvailable: boolean; blinkError?: string;
     /** How often Play blink repeats (a Studio choice: the idle's average blink spacing). */
     blinkRepeatSeconds: number };
-export type MotionAction =
+/** A motion action may name the view whose scene it moves (view-graph-design.md §3.8); without one, the focused view's. */
+export type MotionAction = MotionActionBody & { view?: ViewId };
+type MotionActionBody =
   | { kind: "motion.setIdle"; enabled: boolean }
   | { kind: "motion.setPaused"; paused: boolean }
   | { kind: "motion.setContributions"; body: boolean; face: boolean }

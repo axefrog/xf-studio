@@ -5,3 +5,4 @@ export * from "./feature";
 export * from "./document";
 export * from "./history";
 export * from "./export";
+export * from "./view-graph";

@@ -238,7 +238,6 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // The feature renderers, through their scene ports only (platform/api/scene.ts).
   features = createFeatureRenderers({ renderer, head, surfaces, skin: character.skin,
     character: character.view, subscribeCharacter: character.subscribe,
-    lighting: () => ({ preset: lighting.status().preset }), subscribeLighting: listener => { const off = lighting.subscribe(listener); return () => { off(); }; },
     requestFrame: invalidate, onFrame, rig: { attach: bones => rigMotion.attach(bones), detach: bones => rigMotion.detach(bones) },
     supersededChanged: () => { character.refreshVisibility(); invalidate(); },
     ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);

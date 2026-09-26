@@ -20,6 +20,9 @@ import { storedCharacterOf, type StoredCharacter } from "./character-context-act
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
+import type { ViewGraphData } from "./platform/api/view-graph";
+import { parseViewGraph } from "./platform/core/view-graph";
+import { isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "./preview-view-graph";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -94,6 +97,11 @@ export type WorkspaceState = {
   glitterChoices: GlitterChoices;
   savedV?: SavedV;
   preview: PreviewState;
+  /**
+   * The view graph (`xfs/view-graph-1`, research/authoring/view-graph-design.md §3.5): present only when it differs from the
+   * default one-view graph, so a workspace that never adds a view keeps its bytes. Its main view always mirrors `preview`.
+   */
+  views?: ViewGraphData;
   library: LibraryState;
   collections?: CollectionWorkspace;
   uiPreferences: UIPreferences;
@@ -207,6 +215,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
       if (distance >= MIN_CAMERA_DISTANCE - .001 && distance <= MAX_CAMERA_DISTANCE + .001) state.preview.camera = structuredClone(c);
     }
   }
+  // A damaged graph, or the default one written anyway, falls back to the default graph over `preview`.
+  const views = v.views !== undefined ? parseViewGraph(v.views, STUDIO_VIEW_GRAPH_RULES) : undefined;
+  if (views && !isDefaultViewGraph(views)) state.views = views;
   if (v.previewSetup && typeof v.previewSetup === "object" && typeof v.previewSetup.autostart === "boolean")
     state.previewSetup = { autostart: v.previewSetup.autostart };
   if (v.library) {

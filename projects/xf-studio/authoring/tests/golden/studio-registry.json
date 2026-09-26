@@ -1442,7 +1442,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "camera.body": {
    "scope": [
@@ -1450,7 +1456,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "camera.setFov": {
    "scope": [
@@ -1465,6 +1477,11 @@
      "from": "input",
      "min": 10,
      "max": 90
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1474,7 +1491,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "camera.restore": {
    "scope": [
@@ -1487,6 +1510,11 @@
      "type": "object",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1501,6 +1529,11 @@
      "type": "object",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    },
    "variants": {
@@ -1567,6 +1600,11 @@
       "face",
       "hair"
      ]
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1585,6 +1623,11 @@
       "studio",
       "creator"
      ]
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1609,6 +1652,11 @@
      "type": "number|string",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    },
    "variants": {
@@ -1660,7 +1708,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "preview.setExposure": {
    "scope": [
@@ -1675,6 +1729,11 @@
      "from": "input",
      "min": 0.125,
      "max": 8
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1691,6 +1750,11 @@
      "from": "input",
      "min": 0,
      "max": 360
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1717,6 +1781,11 @@
      "type": "number",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    },
    "variants": {
@@ -1793,6 +1862,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1814,6 +1888,11 @@
       "rim",
       "mirror"
      ]
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1823,7 +1902,13 @@
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
   },
   "preview.setEyeShape": {
    "scope": [
@@ -1838,6 +1923,11 @@
      "from": "input",
      "min": 0,
      "max": 21
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1852,6 +1942,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1866,6 +1961,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1880,6 +1980,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1894,6 +1999,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1908,6 +2018,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1922,6 +2037,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1936,6 +2056,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1950,6 +2075,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1973,6 +2103,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -1987,6 +2122,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2001,6 +2141,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2020,6 +2165,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2036,6 +2186,11 @@
      "from": "input",
      "min": 0,
      "max": 1
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
@@ -2050,6 +2205,11 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
     }
    }
   },
