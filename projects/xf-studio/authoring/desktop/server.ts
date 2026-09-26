@@ -46,6 +46,11 @@ export type DesktopHostOptions = {
   openExternal?: (url: string) => boolean;
   /** The WebView2 Runtime version the host detected, for problem reports. */
   webView2?: string | null;
+  /**
+   * The bundled native decode worker (prepare-static.ts `native-decode-worker.js`), which decodes the clothing preset off the host's
+   * event loop (NATIVE-25); the source file next to the reader when absent (tests, running from source).
+   */
+  nativeDecodeWorker?: string;
 };
 
 /**
@@ -127,7 +132,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
         mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
     },
-    log: logTo("character"), trace: diagnostics.trace });
+    log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.

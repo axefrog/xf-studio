@@ -96,6 +96,8 @@ export type PrepareCharacterOptions = {
   manifests?: { dir: string; key: (request: CharacterRequest) => string };
   /** Background work (a prefetch): WolvenKit runs below normal priority. */
   lowPriority?: LowPriority;
+  /** The native decode worker a packaged host ships (clothing-host.ts); the source file next to the reader otherwise. */
+  nativeDecodeWorker?: string;
 };
 /**
  * `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). `note`: one plain line about
@@ -1128,11 +1130,12 @@ const clothingComponents = (clothing: ResolvedClothing | null) => clothing?.garm
  * cooked visual-tag preset (clothing-host.ts). A failure leaves V without clothes, with a log line and a plain outcome (PIPE-100), rather
  * than failing the V; nothing about it is kept, so the next preparation tries again.
  */
-async function dress(graph: ResourceGraph, request: CharacterRequest, options: { route: CharacterRoute; resolverCache: string }, log: (message: string) => void):
+async function dress(graph: ResourceGraph, request: CharacterRequest, options: { route: CharacterRoute; resolverCache: string; nativeDecodeWorker?: string },
+  log: (message: string) => void):
   Promise<ResolvedClothing | ClothingFailure | null> {
   if (!request.clothing) return null;
   try {
-    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log);
+    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker });
     return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
   } catch (error) {
     log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);

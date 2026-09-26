@@ -84,6 +84,8 @@ export type CharacterDetailHostOptions = {
   log?: (message: string) => void;
   /** The rolling diagnostics window: what each preparation resolved and prepared (docs/diagnostics.md). */
   trace?: DiagnosticTrace;
+  /** The native decode worker a packaged host ships (the clothing preset's decode; clothing-host.ts). */
+  nativeDecodeWorker?: string;
 };
 /** How often, at most, the prepared files are checked against their budget. */
 const EVICT_INTERVAL_MS = 60_000;
@@ -224,7 +226,7 @@ export class CharacterDetailHost {
         resolverCache: this.resolverCache, exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
-        }, log: this.options.log, trace: this.options.trace }));
+        }, log: this.options.log, trace: this.options.trace, nativeDecodeWorker: this.options.nativeDecodeWorker }));
     };
     // Start now, or once the cancelled run (still settling on the shared cache) and a stopped prefetch batch have let go (PREV-102).
     const waits: Promise<unknown>[] = [];
@@ -314,7 +316,7 @@ export class CharacterDetailHost {
     const work = backgroundExtraction(this.resolverCache, () => (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
       open: options => this.backgroundInstallation(options),
       derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal,
-      lowPriority: backgroundPriority(this.resolverCache), manifests: this.manifests(route), log: this.options.log }));
+      lowPriority: backgroundPriority(this.resolverCache), manifests: this.manifests(route), log: this.options.log, nativeDecodeWorker: this.options.nativeDecodeWorker }));
     const settled: Promise<void> = work.then(() => {}, () => {}).finally(() => { this.warming.delete(settled); });
     this.warming.add(settled);
     return untilStopped(work, signal);

@@ -33,7 +33,8 @@ try {
   useBuilderBun(inputs.bunExecutable!);
   const viewRoot = resolve(PATHS.VIEWS_FOLDER, "studio");
   app = createDesktopServer(viewRoot, dataRoot, version, resolve(viewRoot, "check-worker.js"),
-    resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"));
+    resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"), undefined, undefined, undefined,
+    { nativeDecodeWorker: resolve(viewRoot, "native-decode-worker.js") });
   const first = await fetch(app.url);
   const cookie = first.headers.get("Set-Cookie")?.split(";")[0];
   if (first.status !== 200 || !cookie) throw Error("Installed app loopback session failed.");
