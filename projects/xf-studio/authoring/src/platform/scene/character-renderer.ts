@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { extendSkin } from "../../skin";
-import { EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
+import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
 import { BODY_SHAPE_KEY, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
@@ -59,7 +59,8 @@ export function createCharacterRenderer(input: {
   const { scene, renderer, rig } = input;
   const { head, eyes, skin, coreEye } = rig;
   const rigMotion = rig.motion.rig;
-  let eyeOpticsEnabled = false;
+  // The eye's own roughness (RoughnessScale · Roughness.R) is on by default; off shows the preview's earlier flat gloss.
+  let eyeOpticsEnabled = true;
   /** The resolved eyeballs drawn now (empty while the core eye shows). */
   const resolvedEyeballs = () => drawnDetails().filter(componentShown).flatMap(item => item.eyes?.eyeballs ?? []);
   /** A layered eye design's baked eyeball chunks (the multilayered eye has no refraction or eye light; it replaces the core eye too). */
@@ -76,6 +77,8 @@ export function createCharacterRenderer(input: {
     const eyeballs = resolvedEyeballs();
     const item = drawnDetails().find(entry => entry.component.slot === "eyes");
     const shown = eyeballs[0]?.handle ?? coreEye.handle;
+    // How the drawn eyeball's per-eye vectors were found (eye-material.ts `eyeAxes`): pupils, their turn, tangents.
+    const axes = (eyeballs[0]?.mesh ?? eyes).geometry.userData.xfsEyeAxes ?? null;
     const templates = item ? [...new Set(item.component.materials.map(material => material.template))] : [];
     const layered = layeredEyes();
     return {
@@ -86,6 +89,8 @@ export function createCharacterRenderer(input: {
       optics: { requested: eyeOpticsEnabled, active: shown.sourceRoughness, error: undefined as string | undefined,
         reason: !eyeOpticsEnabled ? "off" : shown.sourceRoughness ? "source-roughness-r" : "no-source-roughness",
         roughnessScale: shown.sourceRoughness ? shown.parameters.roughnessScale : EYE_FLAT_ROUGHNESS },
+      // Eye plan ranks 4–5: the Eye-class light on two normals and the refracted iris (knowledge/eye-rendering.md §6.6).
+      shading: { light: "eye-class", axisTurn: EYE_AXIS_TURN, ambientBoost: EYE_AMBIENT_BOOST, axes },
     };
   }
   // Profile stops are decoded from sRGB before the shader's overlay (see

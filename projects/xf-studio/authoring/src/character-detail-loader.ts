@@ -7,7 +7,7 @@ import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetai
 import { renderTemplate } from "./render-templates";
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
-import type { EyeballHandle, EyeShellHandle } from "./eye-material";
+import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from "./eye-material";
 import type { FaceDecalHandle } from "./face-decal-material";
 import type { LayeredHandle } from "./layered-material";
 import { transferDeltas } from "./decal-underlay";
@@ -453,6 +453,12 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         for (const object of unwanted) object.removeFromParent();
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
+        // The eyeballs' frame and per-eye vectors, from the component's own eyeball meshes (eye-material.ts `eyeAxes`).
+        if (eyes.eyeballs.length) {
+          const axes = prepareEyeballGeometry(eyes.eyeballs.map(entry => entry.mesh.geometry));
+          if (axes.eyes === 0) notes.push(`${component.slot}: no pupil found on the eyeball; the iris is drawn without refraction`);
+          else if (!axes.lateral) notes.push(`${component.slot}: one eyeball only; its iris axis is its pupil`);
+        }
         // A body decal with no shapes of its own (the underwear cover) follows the body's applied shape, so it stays over the skin.
         if (component.slot === "body" && decals.length && !component.morphs?.length) {
           const field = bodyShapeField(bodyShapes);

@@ -192,8 +192,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       optics.update(!!preview?.eyeOptics, loading);
       const eye = assets.eyeOptics;
       setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the preview's even gloss." : eye.active
-        ? "The eye's own roughness from your game files. The eye's surface detail, depth and the game's eye lighting aren't reproduced yet."
-        : !eye.requested ? "Off: the eyes use the preview's even gloss."
+        ? "The eye's own roughness from your game files: a glassy eye with a crisp catch light, lit the way the game lights eyes."
+        : !eye.requested ? "Off: the eyes use the preview's earlier even gloss, for comparison."
           : "The eye shown has no roughness the preview can read, so it keeps the even gloss.");
     },
   };
