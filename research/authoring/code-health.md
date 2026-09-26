@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `fa74f98` | 2026-09-26 | Platform step 8: export host, product planner, `runProductBuild`, `local-package-2`, package-plan actions and panel | 0 High, 3 Medium, 6 Low (CORE-91, PIPE-88..95). Holds as a single-exporter product; most findings bite once a second exporting feature or a user-facing install exists. Check/Build agreement, partial export, namespace refusal, merged `.archive.xl` determinism, manifest v1/v2 and boundaries sound; the 15 s Check worker has more than 10x headroom at 900 looks |
 | `8857137` | 2026-09-26 | Vortex subsystem (9ee2fad) and the diagnostics cleanup (94bc1ff, 609731d) | 0 High, 3 Medium, 11 Low (VORTEX-01..08, DIAG-19..24). Vortex attribution only relabels (never changes the winner); read-only holds; fixtures hold no personal data. DIAG-01..18: 16 hold, DIAG-06 and DIAG-11 partly (DIAG-19, DIAG-24, VORTEX-05) |
 | `8857137`+`75ef068` | 2026-09-26 | Step 7 cleanup (49922f7) and the bridge fixes (e22363a, a39a461, 75ef068) | 0 High, 1 Medium, 7 Low (RB-27..31, CORE-90, PREV-99..100). Nothing can crash, freeze or save the game; RB-12..26 fixes verified; step 7 fixes hold. RB-27 and RB-28 fixed on main in df78ca0 |
 | `5e64894` | 2026-09-26 | Runtime bridge phase 2: command catalogue, MCP server, session runner, capture, write methods (security and game safety) | 0 High, 5 Medium, 10 Low (RB-12..26). Write gate enforced natively; `cc.apply` never confirms; save lock real and non-persistent; redscript wraps coexist with the profile's photo-mode mods. Before the first session: RB-12, RB-13, RB-24; before session 2: RB-15. All fixed in claude/bridge-fixes (two deliveries) |
@@ -61,6 +62,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| CORE-91 | Med | Core | An unreadable or newer package plan throws on every collection read (`document.ts:417` → `parsePackagePlan`), so the collection won't open (500, no next step); unknown plan fields (the planned `selectorLabels`) are dropped on the next save. Keep newer plans opaque and preserved, show the "made with a newer version" wording, refuse `package.*` and Build on them | Open |
+| PIPE-88 | Med | Pipeline | Looks another feature packages are listed as omitted: eye makeup reports whole looks with "no eye makeup" and the host flattens every feature's omissions (`features/eye-makeup/export/index.ts:65`, `package-filter.ts:51-54`); collection omissions are copied into every product's manifest (`product-builder.ts:325`). The host should decide whole-look omission once | Open |
+| PIPE-89 | Med | Pipeline | "Save as copy" re-IDs only the default product, so split-off mods of the copy and the original share `xfs_m<product>` archive names and hide each other in MO2's virtual folder (`package-plan.ts:33-34,164-167`) | Open |
 | VORTEX-01 | Med | Vortex | `stateFromPairs` walks keys into plain objects, so a key segment `__proto__` (a mod whose archive is named that, or a corrupt database) writes onto `Object.prototype` for the whole host process (reproduced) (`vortex-state.ts:30-39`) | Open |
 | VORTEX-02 | Med | Vortex | The LevelDB reader has no decompression bound: many index handles to one Snappy block each decompress it again (16.9 KB table → +125 MB, linear); Snappy output length unchecked; entry sizes allocated before bounds checks (`leveldb-read.ts:59-60,150-173`) | Open |
 | VORTEX-03 | Med | Vortex | A game-folder file replaced after Vortex deployed it is still credited to its Vortex mod (Nexus IDs, "re-downloadable"), pointing helpers at a different file; compare the file time with the manifest entry (`mod-identity.ts:79-119`, `source-discovery.ts:288-290`) | Open |
@@ -325,6 +329,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **CORE-90:** the import scan doesn't resolve `./x.js` specifiers or scan `new Worker(new URL(…, import.meta.url))`, so feature-core and view transitive rules don't see behind them (`tests/fixtures/import-scan.ts:34-39`).
   - **PREV-99:** `attach(obj, {rig: true})` collects bones once; bones added later (a GLB loading after attach) never join the idle or blink (`platform/scene/feature-renderers.ts:97-102`).
   - **PREV-100:** the makeup stack's shared geometry is never disposed; harmless while the renderer dies only with the scene host (`engines/layered-makeup/render/makeup-stack.ts:83,355-362`).
+
+- **PIPE-90..95** (step 8 review at `fa74f98`), Open:
+  - **PIPE-90:** a renamed mod can't be staged (the transport defaults to "XF Eye Artistry"; promotion hard-codes the brand folder), install-time duplicate refusal never fires (receipts per stage), and once names flow through, `targetFor` could write into an existing non-XF MO2 folder of the same name (Medium once a user-facing install lands).
+  - **PIPE-91:** the planner's "(collection name)" clash suffix isn't re-validated (collection names allow `/ : ?`), and renaming mod B to mod A's name silently becomes "A (Collection)".
+  - **PIPE-92:** promoting several products to the store isn't all-or-nothing (`product-host.ts:338-349`, `product-builder.ts:340`).
+  - **PIPE-93:** `PackagePlanConflict` names the raw feature key; `package_conflict` refusals show namespaces and depot paths to the person.
+  - **PIPE-94:** localhost Check fails with a non-JSON 500 when the local settings and their backup are unreadable (`server.ts:52-54`); desktop handles it.
+  - **PIPE-95:** the real verifier's merged branch is untested (fake verifier), fixtures never hold single-feature looks, the byte-identity gate isn't re-runnable, and the result gate strips `planSha256` without checking it.
 
 ## New subsystems since last review
 
