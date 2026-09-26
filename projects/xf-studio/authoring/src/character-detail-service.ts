@@ -354,7 +354,9 @@ async function scaleTextures(cache: CharacterPreparationCache, storeRoot: string
   for (const at of located) {
     const png = cache.textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png;
     if (!png || out.has(png)) continue;
-    const size = pngFileSize(png);
+    // An export whose file has gone (cleared by hand, a work folder removed) is left to the writing step, which says so for its part.
+    let size: ReturnType<typeof pngFileSize>;
+    try { size = pngFileSize(png); } catch { continue; }
     if (!size || (size.width <= SERVED_TEXTURE_MAX && size.height <= SERVED_TEXTURE_MAX)) continue;
     const key = `${png}|${fileStamp(png)}`, known = cache.scaled.get(key);
     if (known) { out.set(png, known); continue; }
