@@ -30,7 +30,7 @@ Why it mattered now: rendering is data driven, so the V's own eye makeup (vanill
 | **Preview coverage** | The preview side's projection (`catalogueCoverage`): `rendered` (morphs, skin, brows, lashes, hair, eyes, piercings), `conditional` (other face-group appearances; settled from the parts the shown record draws), `not-rendered` (body, arms, every masculine option), shown on the row as "Not shown in the 3D view yet". |
 | **CC preset format** | `xfs/cc-preset-1` (`src/cc-preset.ts`): part, option and choice identities, the `.app` hash hint, the switcher's activated options, and the supplying mod's name and resource hash; only the choices set. Size counted in UTF-8 bytes, unknown data copied into prototype-free objects with bounded depth and size, JSON read once (CORE-54, CORE-55); what the reader would refuse is left out on writing and counted (CORE-53); the host leaves out a name or kept data naming a personal folder or address (`src/private-data.ts`, the repository's patterns; CORE-56). |
 | Source resolution | MO2 and direct routes as before ([mod loading](../../knowledge/mod-loading.md)); Vortex, REDmod, `.ent` patches and TweakXL records are open. |
-| Save write-back | Not started. |
+| Save write-back | Not started. Designed: [save write-back design](../character-customization/save-writeback-design.md) (apply in game through the bridge first; an offline writer to a new save folder, gated on one in-game session). |
 
 ### On the reference installation (26 September, MO2 route, English)
 
@@ -83,11 +83,11 @@ Why it mattered now: rendering is data driven, so the V's own eye makeup (vanill
 
 ## Next
 
-1. **Choice icons**: draw the TweakDB icon records' inkatlas parts in the swatches (skin tones and eye colours use icons, so their swatches show text today). Needs the atlas textures from the host.
+1. **Choice icons**: draw the TweakDB icon records' inkatlas parts in the swatches (skin tones and eye colours use icons, so their swatches show text today). Needs the atlas textures from the host. Designed: [choice icons design](../character-customization/choice-icons-design.md): the one vanilla atlas first (every vanilla swatch and 17,855 mod choices that reuse vanilla icons), then a shared TweakXL YAML reader for the 105,630 mod choices whose icon records only YAML defines.
 2. **Face shape from the context**: the head's morphs follow the context's view; the preview's own eye-shape control still decides the eyes region. Decide whether the Eyes row and that control become one.
 3. **PIPE-50**: a JSON-resource mode in the resolver's fetcher instead of the catalogue host's own WolvenKit batching for `.json` text resources. Left for the resolver owner (the fetcher lives in `resolver-host.ts`, which the claude/cleanup-hosts3 track owns).
 4. **Masculine head**, body and arms rendering remain their own tracks; their rows already say they aren't drawn.
-5. **Save write-back**, gated as above.
+5. **Save write-back**, gated as above: [save write-back design](../character-customization/save-writeback-design.md). Phase A applies a look in game through the bridge (`player.appearance`, `cc.apply`) with the player confirming; phase B writes a new save folder with a minimal-diff rewrite of the creator node, shipped only after the batched session in its §14.
 6. **Prepare all choices** (idea, not built): an opt-in action that warms whole rows or sections in the background with progress and its disk and time cost shown first. Row prefetch already makes an opened row's clicks instant within about a minute, so this is only worth building if people want a whole large setup ready offline; measured costs to show: about 11.5 MB and 2.8 s per CCXL hairstyle, so all 285 hairstyles of the reference setup would take roughly 3 GB and 15 minutes.
 
 ## Open questions and test asks
