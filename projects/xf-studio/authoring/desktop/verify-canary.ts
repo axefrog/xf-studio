@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
 import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
 import { contentIssues, describeContentIssues, SCANNED_TEXT } from "./package-content-scan";
-import { payloadMembers, singleInstallerWrapper, wrapperTexts } from "./single-installer";
+import { payloadMembers, singleInstallerWrapper, WRAPPER_BUDGET, wrapperTexts } from "./single-installer";
 
 // A private packaging gate. The checked files are the actual installer/update
 // artifacts, not the source `static` tree that Electrobun consumes: the update archive
@@ -124,7 +124,8 @@ if (installMetadata.identifier !== config.app.identifier || installMetadata.name
   installMetadata.channel !== channel || installMetadata.hash !== update.hash)
   throw Error("The setup ZIP's install metadata differs from the canary identity and build.");
 
-// The released download: one setup program carrying those three files and Inno Setup's wrapper only.
+// The released download: one setup program carrying those three files and Inno Setup's wrapper only. The wrapper's setup data is
+// stored uncompressed (singleInstallerWrapper refuses it otherwise), so the scan below reads its strings as text (REL-04).
 const single = readFileSync(singleSetup);
 const wrapper = singleInstallerWrapper(single, setupPayload);
 const singleName = `${prefix}${compactName}-Setup-${channel}.exe`;
@@ -135,6 +136,8 @@ if (wrapperIssues.length)
 const digest = createHash("sha256").update(single).digest("hex");
 console.log(`Verified unsigned Windows setup: artifacts\\${singleName}, built from artifacts\\${basename(installer)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; single setup SHA-256 ${digest}; ` +
-  `carries the verified payload byte for byte plus ${wrapper.length} bytes of Inno Setup wrapper, scanned clean.`);
+  `carries the three verified payload files byte for byte, once each, plus ${wrapper.length} bytes of Inno Setup's own wrapper ` +
+  `(budget ${WRAPPER_BUDGET}). The wrapper's setup data is stored uncompressed; its Latin-1 and UTF-16 strings hold no user paths or ` +
+  `email addresses (its program code is not text, and is not scanned).`);
 console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
 console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);
