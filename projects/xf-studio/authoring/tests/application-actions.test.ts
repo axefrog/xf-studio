@@ -249,3 +249,19 @@ test("eye-shape choices come from the loaded head, and only those choices are ac
   actions.eyeShapeOptions().choices[0]!.target = "h999";
   expect(actions.eyeShapeOptions().choices[0]!.target).toBeNull();
 });
+
+test("UI-79: the whole-body view is offered only while the body is shown", () => {
+  const framed: string[] = [];
+  const port = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
+    endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+    setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
+    setBody: (enabled: boolean) => framed.push(`body:${enabled}`), frameBody: () => { framed.push("frame"); return false; } } satisfies PreviewPort;
+  const actions = new PreviewActions(freshWorkspace().preview, port);
+  expect(actions.capability({ kind: "camera.body" }).available).toBe(true);
+  actions.dispatch({ kind: "preview.setBody", enabled: false });
+  expect(actions.capability({ kind: "camera.body" })).toMatchObject({ available: false, reason: "Turn the body on to see the whole body." });
+  expect(() => actions.dispatch({ kind: "camera.body" })).toThrow("Turn the body on");
+  actions.dispatch({ kind: "preview.setBody", enabled: true });
+  actions.dispatch({ kind: "camera.body" });
+  expect(framed).toEqual(["body:false", "body:true", "frame"]);
+});

@@ -139,5 +139,5 @@ console.log(`${config.app.version} ${channel} build ${update.hash}; single setup
   `carries the three verified payload files byte for byte, once each, plus ${wrapper.length} bytes of Inno Setup's own wrapper ` +
   `(budget ${WRAPPER_BUDGET}). The wrapper's setup data is stored uncompressed; its Latin-1 and UTF-16 strings hold no user paths or ` +
   `email addresses (its program code is not text, and is not scanned).`);
-console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
+console.log("Eleven allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
 console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);

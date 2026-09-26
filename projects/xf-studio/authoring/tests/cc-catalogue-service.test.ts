@@ -109,7 +109,7 @@ describe("the creator catalogue service", () => {
     expect((await post({ kind: "view", request: { schema: "xfs/character-request-9", source: "default", bodyGender: "female" } })).status).toBe(409);
     expect((await post({ kind: "view", request: { ...DEFAULT_CHARACTER, choices: [{ part: "head" }] } })).status).toBe(400);
     expect((await post({ kind: "view", request: DEFAULT_CHARACTER }, "http://evil.example")).status).toBe(403);
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-5");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-6");
   });
 });
 

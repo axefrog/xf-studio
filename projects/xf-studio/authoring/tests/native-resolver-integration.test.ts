@@ -176,7 +176,7 @@ test("forgetDefaulted removes only watched properties at the reader's paths, and
   const unresolved = forgetDefaulted(document, [
     { property: "rendChunk.renderMask", count: 4, paths: [".Data.RootChunk.list[1].renderMask", ".Data.RootChunk.missing[0].renderMask", ".Data.RootChunk.list[1].renderMask"] },
     { property: "somethingElse.value", count: 1, paths: [".Data.RootChunk.other.renderMask"] }]);
-  expect(document).toEqual({ Data: { RootChunk: { list: [{ renderMask: "0" }, {}], other: { renderMask: "0" } } } });
+  expect(document as unknown).toEqual({ Data: { RootChunk: { list: [{ renderMask: "0" }, {}], other: { renderMask: "0" } } } });
   // One path past the reader's list (count 4, 3 paths), one that leads nowhere, and the repeated path (already removed).
   expect(unresolved).toBe(3);
 });

@@ -9,7 +9,11 @@
  *   [{entityPathHash, appearancesToTags: [{appearanceName, visualTags}], commonVisualTags}]}` [resource]. It holds the vanilla items'
  *   hide tags (`hide_T1`, `hide_T1part`, …) that their `.app`s don't carry, which answers the knowledge page's open question 2. WolvenKit
  *   9.0.1 doesn't serialize it, so it is decoded by the Studio's native reader (native/, the only resource read that way in production),
- *   from the archive that wins its path, and kept as a compact table in the resolver cache per archive identity.
+ *   from the archive that wins its path, and kept as a compact table in the resolver cache per archive identity. The decode runs in the
+ *   native reader's worker (`openNativeDecoderAsync`: the game's Oodle library is checked asynchronously, and the 13 MB document is
+ *   decoded off the host's event loop; NATIVE-25). Only a worker that can't start falls back to decoding in this process, after the same
+ *   asynchronous check. A failure is logged and not kept, so the next preparation tries again (PIPE-100).
+ * - **Failures** are never silent: an unreadable TweakDB makes `records` answer null (each item then says the records couldn't be read).
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
@@ -17,7 +21,8 @@ import { join } from "node:path";
 import type { ClothingPorts, ItemRecord } from "./clothing-resolver";
 import { refFromPath } from "./depot-path";
 import { NativeArchive } from "./native/archive-reader";
-import { loadGameOodle } from "./native/oodle";
+import { openNativeDecoderAsync } from "./native/native-fetch-port";
+import { openGameOodle } from "./native/oodle";
 import { readResourceJson } from "./native/resource-document";
 import { asArray, cname, isObject } from "./red-json";
 import type { ResourceGraph } from "./resource-graph";
@@ -86,13 +91,46 @@ export function presetTable(document: unknown): PresetTable {
 export const PRESET_PATHS = { base: "base\\entities\\appearancename_visualtags.json", ep1: "ep1\\entities\\appearancename_visualtags.json" } as const;
 /** 1: `[entity hash, [[appearance, tags], …]]` rows. */
 const PRESET_CACHE_VERSION = 1;
-const presets = new Map<string, PresetTable | null>();
+/** Tables read this session by preset identity, and reads in flight (a prefetch batch dresses many requests at once: one read). */
+const presets = new Map<string, PresetTable>();
+const reading = new Map<string, Promise<PresetTable | null>>();
+/** The preset's root class, the one the worker is asked to decode. */
+const PRESET_ROOT = "JsonResource";
+/** The largest preset read takes well under a few seconds; the budget only stops a runaway decode. */
+const PRESET_DECODE_TIMEOUT_MS = 120_000;
+
+/** How the preset's document is decoded: from an archive (its path) and a depot hash to the native reader's JSON document. */
+export type PresetDecoder = (archivePath: string, hash: string) => Promise<unknown>;
+/**
+ * Decode in the native reader's worker (`openNativeDecoderAsync`); a worker that can't start (`unavailable`) falls back to decoding here
+ * after the same asynchronous library check. `script` is the worker bundle a packaged host ships (the source file otherwise).
+ */
+export function workerPresetDecoder(gameRoot: string, script?: string | URL): PresetDecoder {
+  return async (archivePath, hash) => {
+    const opened = await openNativeDecoderAsync(gameRoot, { roots: new Set([PRESET_ROOT]), timeoutMs: PRESET_DECODE_TIMEOUT_MS, ...(script ? { script } : {}) });
+    if (!opened.decoder) throw Error(opened.reason);
+    let outcome: Awaited<ReturnType<typeof opened.decoder.decode>>;
+    try { outcome = await opened.decoder.decode({ archivePath, hash, needName: false }); } finally { opened.decoder.close(); }
+    if (outcome.ok) return outcome.document;
+    if (outcome.kind !== "unavailable") throw Error(`${outcome.kind}: ${outcome.message}`);
+    const oodle = await openGameOodle(gameRoot);
+    try {
+      const archive = NativeArchive.open(archivePath, oodle.decompress);
+      let bytes: Uint8Array | null;
+      try { bytes = archive.read(hash); } finally { archive.close(); }
+      if (!bytes) throw Error("The archive doesn't hold it.");
+      return readResourceJson(bytes, oodle.decompress);
+    } finally { oodle.close(); }
+  };
+}
 
 /**
- * The preset the installation's game reads (Phantom Liberty's when installed), decoded natively from its winning archive and cached by
- * that archive's identity. Null, with the reason logged, when it can't be read (the resolver then goes without the cooked tags).
+ * The preset the installation's game reads (Phantom Liberty's when installed), decoded natively from its winning archive (`decode`: the
+ * worker by default) and cached by that archive's identity. Null, with the reason logged, when it can't be read (the resolver then goes
+ * without the cooked tags); a failure is not kept, so the next call tries again.
  */
-export function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir: string, log: (message: string) => void = () => {}): PresetTable | null {
+export async function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir: string, log: (message: string) => void = () => {},
+  decode: PresetDecoder = workerPresetDecoder(gameRoot)): Promise<PresetTable | null> {
   const path = graph.depot.plan.ep1Installed && graph.exists(refFromPath(PRESET_PATHS.ep1).hash) ? PRESET_PATHS.ep1 : PRESET_PATHS.base;
   const ref = refFromPath(path);
   const winner = graph.locate(ref).lookup.winner;
@@ -100,42 +138,46 @@ export function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir: strin
   let identity: string;
   try { const stat = statSync(winner.id); identity = createHash("sha256").update(`${winner.id.toLowerCase()}|${stat.size}|${stat.mtimeMs}|${ref.hash}|v${PRESET_CACHE_VERSION}`).digest("hex").slice(0, 32); }
   catch { return null; }
-  if (presets.has(identity)) return presets.get(identity)!;
-  const file = join(cacheDir, "clothing", `visual-tag-preset-${identity}.json`);
-  let table: PresetTable | null = null;
-  try {
-    const rows = JSON.parse(readFileSync(file, "utf8")) as [string, [string, string[]][]][];
-    table = new Map(rows.map(([entity, entries]) => [entity, new Map(entries)]));
-  } catch { /* Not cached yet. */ }
-  if (!table) {
-    let oodle: ReturnType<typeof loadGameOodle> | null = null;
+  const known = presets.get(identity);
+  if (known) return known;
+  const pending = reading.get(identity);
+  if (pending) return pending;
+  const read = (async (): Promise<PresetTable | null> => {
+    const file = join(cacheDir, "clothing", `visual-tag-preset-${identity}.json`);
     try {
-      oodle = loadGameOodle(gameRoot);
-      const archive = NativeArchive.open(winner.id, oodle.decompress);
-      let bytes: Uint8Array | null;
-      try { bytes = archive.read(ref.hash); } finally { archive.close(); }
-      if (!bytes) throw Error(`${winner.name} doesn't hold it.`);
-      table = presetTable(readResourceJson(bytes, oodle.decompress));
+      const rows = JSON.parse(readFileSync(file, "utf8")) as [string, [string, string[]][]][];
+      return new Map(rows.map(([entity, entries]) => [entity, new Map(entries)]));
+    } catch { /* Not cached yet. */ }
+    try {
+      const table = presetTable(await decode(winner.id, ref.hash));
       mkdirSync(join(cacheDir, "clothing"), { recursive: true });
       const staging = `${file}.${process.pid}.tmp`;
       writeFileSync(staging, JSON.stringify([...table].map(([entity, entries]) => [entity, [...entries]])));
       renameSync(staging, file);
+      return table;
     } catch (error) {
       log(`The game's item visual tags (${path}) couldn't be read: ${(error as Error)?.message ?? error}`);
-      table = null;
-    } finally { oodle?.close(); }
-  }
-  presets.set(identity, table);
-  return table;
+      return null;
+    }
+  })();
+  reading.set(identity, read);
+  try {
+    const table = await read;
+    if (table) presets.set(identity, table);
+    return table;
+  } finally { reading.delete(identity); }
 }
 
-/** The clothing resolver's ports for one installation. */
-export function clothingPorts(graph: ResourceGraph, gameRoot: string, cacheDir: string, log?: (message: string) => void): ClothingPorts & { tweakDb: string | null; preset: boolean } {
+/** The clothing resolver's ports for one installation (`decodeWorker`: the native decode worker a packaged host ships). */
+export async function clothingPorts(graph: ResourceGraph, gameRoot: string, cacheDir: string, log?: (message: string) => void,
+  options: { decodeWorker?: string | URL; decode?: PresetDecoder } = {}): Promise<ClothingPorts & { tweakDb: string | null; preset: boolean }> {
   const tweakDb = (() => { try { return tweakDbOf(gameRoot, graph.depot.plan.ep1Installed); } catch (error) { log?.(`The game's TweakDB couldn't be read: ${(error as Error).message}`); return null; } })();
-  const preset = presetOf(graph, gameRoot, cacheDir, log);
+  if (!tweakDb) log?.("The game's TweakDB couldn't be found, so worn items can't be read.");
+  const preset = await presetOf(graph, gameRoot, cacheDir, log, options.decode ?? workerPresetDecoder(gameRoot, options.decodeWorker));
   return {
     tweakDb: tweakDb?.source ?? null, preset: !!preset,
-    records: items => tweakDb ? itemRecords(tweakDb.blob, items) : new Map(items.map(item => [item, null])),
+    // Without the TweakDB no item can be read: the whole answer says so (PIPE-100).
+    records: items => tweakDb ? itemRecords(tweakDb.blob, items) : null,
     presetTags: (entity, appearance) => {
       if (!preset) return null;
       const entry = preset.get(entity);

@@ -58,7 +58,7 @@ import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from
 import { clampedList, decalFamilySlot, DETAIL_SLOTS, isChoiceLabel, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
-import type { ResolvedClothing } from "./clothing-resolver";
+import type { ClothingFailure, ResolvedClothing } from "./clothing-resolver";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
@@ -111,8 +111,18 @@ export type PlannedComponent = {
    * an older type, a watched property left out. The record's notes carry them.
    */
   readerNotes?: string[];
+  /**
+   * Body components in the censorship policy (`censorRole`): a `cover` (the game's underwear), or a part `covered` by the covers (the
+   * uncensored skin), which is drawn only while every cover is.
+   */
+  censor?: "cover" | "covered";
 };
-export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[] };
+export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[];
+  /**
+   * The game's censored body skin, planned beside the covered one: the host serves it in place of every `covered` component when a cover
+   * can't be served (character-detail-service.ts). Empty when the creator resource has no censored twin or it can't be drawn.
+   */
+  censoredBody: PlannedComponent[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
@@ -324,22 +334,50 @@ export const BODY_DETAIL_WORDS: Readonly<Record<string, string>> = Object.freeze
   nails_color: "nails", nipples: "nipples", genitals: "genitals" });
 
 /**
- * Whether a body option draws in the preview's body: the V as the game shows it with nudity allowed and no clothing, covered by the
- * game's own censorship underwear (the policy is the Studio's; each rule's data is the creator resource's; knowledge/body-rendering.md):
- * - options without a censorship rule draw as the game draws them;
- * - of a pair on one creator slot that the rule swaps (the body skin and its censored twin), the uncensored one draws;
- * - an option the rule only turns on (the underwear) draws, standing in for the default underwear V wears in game, which is clothing;
- * - an option the rule turns off with no twin (nipples, genitals) does not draw: the underwear sits over it.
- * Morph options are not appearances and always apply (the breast size shapes the body under the underwear).
+ * A body option as the censorship policy reads it: its creator slot, link, kind and censorship rule (a `CcoOption` or the catalogue's
+ * coverage input; `type` and `link` absent read as an appearance option without a link).
  */
-export type CensorOption = { readonly name: string; readonly uiSlot: string; readonly censor?: { readonly flag: string; readonly action: "activate" | "deactivate" } };
-export function bodyOptionDraws(options: readonly CensorOption[], name: string): boolean {
+export type CensorOption = { readonly name: string; readonly uiSlot: string; readonly type?: string;
+  readonly link?: string | { readonly key: string } | null; readonly censor?: { readonly flag: string; readonly action: "activate" | "deactivate" } };
+/**
+ * A body option's part in the preview's censorship policy (knowledge/body-rendering.md §3). The preview shows the V as the game does with
+ * nudity allowed and no clothing, under the game's own censorship underwear; the policy (never more than the game's uncensored mode, with
+ * underwear on) is the Studio's, each rule's data the creator resource's:
+ * - `plain`: no censorship rule, or not an appearance (morphs always apply: the breast size shapes the body under the underwear); draws;
+ * - `cover`: an option the rule only turns on, with no twin (the underwear); draws, standing in for the underwear V wears in game;
+ * - `uncensored`: the one of a swapped pair the rule turns off (the body skin, whose albedo carries the female nipples); draws **only while
+ *   every cover draws** (the plan, the host, the record reader and the loader each fail closed on it);
+ * - `censored`: its twin the rule turns on (the game's own censored skin); draws only in place of the uncensored one when a cover can't;
+ * - `hidden`: an option the rule turns off with no twin (nipples, genitals); never draws, the underwear sits over it;
+ * - `unknown`: not in the merged creator resource; never draws (PIPE-98).
+ * A twin is another appearance option on the same creator slot and link with the same flag and the opposite action.
+ */
+export type CensorRole = "plain" | "cover" | "uncensored" | "censored" | "hidden" | "unknown";
+const linkKey = (link: CensorOption["link"]) => typeof link === "string" ? link : link?.key ?? "";
+const isAppearance = (option: CensorOption) => option.type === undefined || option.type === "appearance";
+export function censorRole(options: readonly CensorOption[], name: string): CensorRole {
   const option = options.find(entry => entry.name === name);
-  const rule = option?.censor;
-  if (!option || !rule) return true;
-  const twin = !!option.uiSlot && options.some(other => other !== option && other.uiSlot === option.uiSlot && other.censor?.flag === rule.flag &&
-    other.censor.action !== rule.action);
-  return rule.action === "activate" ? !twin : twin;
+  if (!option) return "unknown";
+  const rule = option.censor;
+  if (!rule || !isAppearance(option)) return "plain";
+  const twin = !!option.uiSlot && options.some(other => other !== option && isAppearance(other) && other.uiSlot === option.uiSlot &&
+    linkKey(other.link) === linkKey(option.link) && other.censor?.flag === rule.flag && other.censor.action !== rule.action);
+  return rule.action === "activate" ? twin ? "censored" : "cover" : twin ? "uncensored" : "hidden";
+}
+/** Whether a body option draws while the V wears the game's underwear cover (`censorRole`: plain, cover or uncensored). */
+export function bodyOptionDraws(options: readonly CensorOption[], name: string): boolean {
+  const role = censorRole(options, name);
+  return role === "plain" || role === "cover" || role === "uncensored";
+}
+/** The cover options a body state's consumer groups list (every one must draw for an uncensored option to draw). */
+export function requiredCovers(cco: CcoResource, body: BodyState = DEFAULT_BODY_STATE): Set<string> {
+  const out = new Set<string>();
+  for (const part of ["body", "arms"] as const) {
+    const groups = bodyGroups(part, body);
+    for (const group of cco.parts[part].groups) if (groups.includes(group.name))
+      for (const name of group.options) if (censorRole(cco.parts[part].options, name) === "cover") out.add(`${part}|${name}`);
+  }
+  return out;
 }
 
 /**
@@ -347,10 +385,16 @@ export function bodyOptionDraws(options: readonly CensorOption[], name: string):
  * third-person consumers read for the body state (a save and the default V list every perspective and holster state, whose first-person
  * and arm-cyberware parts the preview never draws) plus their morphs (breast size, nail length).
  */
-export function previewInput(input: CharacterInput, body: BodyState = DEFAULT_BODY_STATE): CharacterInput {
-  const appearances = input.appearances.filter(item => item.part === "head" || bodyGroups(item.part, body).includes(item.group));
-  return appearances.length === input.appearances.length ? input : { ...input, appearances };
+export function previewInput(input: CharacterInput, body: BodyState = DEFAULT_BODY_STATE, withBody = true): CharacterInput {
+  const appearances = input.appearances.filter(item => item.part === "head" || (withBody && bodyGroups(item.part, body).includes(item.group)));
+  const morphs = withBody ? input.morphs : input.morphs.filter(item => item.part === "head");
+  return appearances.length === input.appearances.length && morphs.length === input.morphs.length ? input : { ...input, appearances, morphs };
 }
+/**
+ * Whether a request's body is drawn: `drawn`; `hidden` (the viewer turned the body off, so neither it nor its clothes are prepared); or
+ * `male` (the preview has no male body yet: no male fixtures or evidence, so the host refuses it in plain words).
+ */
+export type BodyScope = "drawn" | "hidden" | "male";
 
 type BodyEntry = ResolvedAppearance & { part: "body" | "arms" };
 const isBodyEntry = (entry: ResolvedAppearance): entry is BodyEntry => entry.part === "body" || entry.part === "arms";
@@ -362,12 +406,17 @@ const isBodyEntry = (entry: ResolvedAppearance): entry is BodyEntry => entry.par
  * skin's components come first, so decals over the body (tattoos, scars, the underwear) blend against the loaded body skin, then in the
  * creator's option order (body before arms), which is also the decals' draw order (knowledge/body-rendering.md).
  */
-function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults, identities: TemplateIdentities, body: BodyState):
-  { components: PlannedComponent[]; state: DetailSlotState } {
+function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults, identities: TemplateIdentities, body: BodyState,
+  scope: BodyScope = "drawn"): { components: PlannedComponent[]; censored: PlannedComponent[]; state: DetailSlotState } {
+  const { noun, not, pronoun } = SLOT_WORDS.body;
+  if (scope === "hidden") return { components: [], censored: [], state: { slot: "body", state: "none", label: "Hidden" } };
+  // No male body is drawn until male fixtures and evidence exist (PIPE-98).
+  if (scope === "male" || resolved.bodyGender === "male") return { components: [], censored: [], state: { slot: "body", state: "unavailable", label: noun,
+    message: `XF Studio doesn't draw a male V's ${noun} yet, so ${pronoun} ${not} shown.` } };
   const index = new Map((["body", "arms"] as const).flatMap((part, p) =>
     cco.parts[part].options.map((option, i) => [`${part}|${option.name}`, p * 100_000 + i] as const)));
   const entries = resolved.appearances.filter(isBodyEntry).filter(entry => entry.groups.some(group => bodyGroups(entry.part, body).includes(group)));
-  const planned: { component: PlannedComponent; order: number; skin: boolean; label: string }[] = [];
+  const planned: { component: PlannedComponent; order: number; skin: boolean; label: string; role: CensorRole; option: string }[] = [];
   const seen = new Set<string>();
   const unshown: string[] = [];
   const label = (entry: BodyEntry) => {
@@ -378,36 +427,54 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
     const design = choiceLabel(entry.definition.replace(/__multilayer$/i, "")).replace(/^nails\s+/, "").replace(/^[0-9]+\s+/, "");
     return `nails (${design || "nails"})`;
   };
+  const roleOf = (entry: BodyEntry) => censorRole(cco.parts[entry.part].options, entry.option);
   for (const entry of entries) {
-    if (!bodyOptionDraws(cco.parts[entry.part].options, entry.option)) continue;
+    const role = roleOf(entry);
+    // Never drawn: what the underwear covers, and a descriptor the creator resource doesn't define.
+    if (role === "hidden" || role === "unknown") continue;
     const items = entry.components.map(component => planComponent("body", entry, component, defaults, identities))
       .filter((item): item is PlannedComponent => !!item);
     if (!items.length) {
-      // An appearance the game files don't give (missing or unreadable), or parts that draw but can't be planned, are reported.
+      // An appearance the game files don't give (missing or unreadable), or parts that draw but can't be planned, are reported. The
+      // censored skin is a stand-in only, so its absence is not.
       const unread = entry.appearance.status === "missing" || entry.appearance.status === "unreadable";
-      if (unread || entry.components.some(component => component.geometry && !component.geometry.drawsNothing)) unshown.push(label(entry));
+      if (role !== "censored" && (unread || entry.components.some(component => component.geometry && !component.geometry.drawsNothing))) unshown.push(label(entry));
       continue;
     }
     for (const item of items) {
-      const key = `${item.component}|${item.drawnFrom.ref.hash}|${item.chunks.join(",")}|${item.materials.map(material => material.name).join(",")}`;
+      const key = `${role}|${item.component}|${item.drawnFrom.ref.hash}|${item.chunks.join(",")}|${item.materials.map(material => material.name).join(",")}`;
       if (seen.has(key)) continue;
       seen.add(key);
       const skin = item.materials.some(material => renderTemplate(material.template, material.templateName)?.adapter === "skin");
-      planned.push({ component: item, order: index.get(`${entry.part}|${entry.option}`) ?? Number.MAX_SAFE_INTEGER, skin, label: label(entry) });
+      planned.push({ component: item, order: index.get(`${entry.part}|${entry.option}`) ?? Number.MAX_SAFE_INTEGER, skin, label: label(entry), role,
+        option: `${entry.part}|${entry.option}` });
     }
   }
-  // Stable: the skin first, then the creator's order; components of one choice keep theirs.
-  planned.sort((a, b) => Number(b.skin) - Number(a.skin) || a.order - b.order);
-  const components = planned.map(item => item.component);
-  const { noun, not, pronoun } = SLOT_WORDS.body;
+  // Fail closed (PIPE-97): the uncensored skin draws only while every cover the consumer groups list is planned; otherwise the game's
+  // censored skin stands in (and with neither, no skin draws). A creator resource that lists no cover never shows the uncensored skin.
+  const covers = requiredCovers(cco, body);
+  const coveredOk = covers.size > 0 && [...covers].every(cover => planned.some(item => item.role === "cover" && item.option === cover));
+  const censored = planned.filter(item => item.role === "censored").map(item => item.component);
+  const hadUncensored = planned.some(item => item.role === "uncensored");
+  const drawn = planned.filter(item => item.role === (coveredOk ? "uncensored" : "censored") || (item.role !== "uncensored" && item.role !== "censored"));
+  // Stable: the skin first, the covers after every other body option, then the creator's order; components of one choice keep theirs.
+  drawn.sort((a, b) => Number(b.skin) - Number(a.skin) || Number(a.role === "cover") - Number(b.role === "cover") || a.order - b.order);
+  const components = drawn.map(item => item.role === "cover" ? { ...item.component, censor: "cover" as const }
+    : item.role === "uncensored" ? { ...item.component, censor: "covered" as const } : item.component);
   const names = [...new Set(unshown)], missing = clampedList(names, 160);
+  // Neither the covered skin nor its censored twin can draw: nothing of the body is shown rather than a body without its skin.
+  if (hadUncensored && !coveredOk && !censored.length) return { components: [], censored: [], state: { slot: "body", state: "unavailable", label: noun,
+    message: `XF Studio couldn't read the underwear the game draws on your V, so the ${noun} ${not} shown.` } };
   // A V whose creator choices bring no body part at all (a creator resource without body options) has none to show.
-  if (!components.length && !entries.length) return { components, state: { slot: "body", state: "none", label: "None" } };
-  if (!components.length) return { components, state: { slot: "body", state: "unavailable", label: clampedList(names) || noun,
+  if (!components.length && !entries.length) return { components, censored: [], state: { slot: "body", state: "none", label: "None" } };
+  if (!components.length) return { components, censored: [], state: { slot: "body", state: "unavailable", label: clampedList(names) || noun,
     message: names.length ? `Your V's ${noun} (${missing}) couldn't be read from your game files, so ${pronoun} ${not} shown.`
       : `XF Studio can't draw your V's ${noun} yet, so ${pronoun} ${not} shown.` } };
-  return { components, state: { slot: "body", state: "shown", label: clampedList([...new Set(planned.map(item => item.label))]),
-    ...(names.length ? { message: `Some parts of your V's ${noun} (${missing}) couldn't be read from your game files, so they aren't shown.` } : {}) } };
+  const fallback = hadUncensored && !coveredOk ? `The underwear the game draws on your V couldn't be read, so the ${noun} is shown in the game's censored look.` : "";
+  const partly = names.length ? `Some parts of your V's ${noun} (${missing}) couldn't be read from your game files, so they aren't shown.` : "";
+  const message = [fallback, partly].filter(Boolean).join(" ");
+  return { components, censored: coveredOk ? censored : [], state: { slot: "body", state: "shown", label: clampedList([...new Set(drawn.map(item => item.label))]),
+    ...(message ? { message } : {}) } };
 }
 
 /**
@@ -415,9 +482,13 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
  * components keep their order), and one outcome: shown (with the items' words), none (nothing worn, or everything hidden), or unavailable.
  * An item that can't be followed to its meshes, or whose meshes can't be drawn, is named in the slot's line.
  */
-export function planClothing(clothing: ResolvedClothing | null | undefined, defaults: TemplateDefaults, identities: TemplateIdentities):
+export function planClothing(clothing: ResolvedClothing | ClothingFailure | null | undefined, defaults: TemplateDefaults, identities: TemplateIdentities):
   { components: PlannedComponent[]; state: DetailSlotState } {
   const { noun, not, pronoun } = SLOT_WORDS.clothing;
+  // The clothes couldn't be worked out at all (PIPE-100): said, never shown as "none".
+  if (clothing && "failed" in clothing) return { components: [], state: { slot: "clothing", state: "unavailable", label: noun,
+    message: clothing.failed === "records-unreadable" ? `XF Studio couldn't read the game's item records, so your V's ${noun} ${not} shown.`
+      : `XF Studio couldn't work out your V's ${noun} from your game files, so ${pronoun} ${not} shown.` } };
   if (!clothing || !clothing.garments.length) return { components: [], state: { slot: "clothing", state: "none", label: "None" } };
   const planned: PlannedComponent[] = [], shown: string[] = [], unshown: string[] = [], reasons: string[] = [];
   for (const garment of clothing.garments) {
@@ -434,7 +505,8 @@ export function planClothing(clothing: ResolvedClothing | null | undefined, defa
   const hiddenBySave = clothing.garments.length > 0 && clothing.garments.every(garment => garment.hiddenBy?.kind === "saved");
   if (!planned.length && !unshown.length) return { components: [], state: { slot: "clothing", state: "none", label: "None",
     ...(hiddenBySave ? { message: "Your save hides every clothing area (a mod, such as an outfit manager, may dress V instead), so no clothes are shown from it." } : {}) } };
-  const why = reasons.includes("item-unknown") ? " (items a mod adds aren't read yet)" : reasons.includes("item-dynamic") ? " (ArchiveXL dynamic items aren't read yet)" : "";
+  const why = reasons.includes("records-unreadable") ? " (the game's item records couldn't be read)"
+    : reasons.includes("item-unknown") ? " (items a mod adds aren't read yet)" : reasons.includes("item-dynamic") ? " (ArchiveXL dynamic items aren't read yet)" : "";
   if (!planned.length) return { components: [], state: { slot: "clothing", state: "unavailable", label: clampedList([...new Set(unshown)]),
     message: `XF Studio can't draw your V's ${noun} (${missing})${why} yet, so ${pronoun} ${not} shown.` } };
   return { components: planned, state: { slot: "clothing", state: "shown", label: clampedList([...new Set(shown)]),
@@ -446,14 +518,25 @@ export function planClothing(clothing: ResolvedClothing | null | undefined, defa
  * shown, none (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map(),
-  identities: TemplateIdentities = new Map(), body: BodyState = DEFAULT_BODY_STATE, clothing: ResolvedClothing | null = null): CharacterPlan {
+  identities: TemplateIdentities = new Map(), body: BodyState = DEFAULT_BODY_STATE, clothing: ResolvedClothing | ClothingFailure | null = null,
+  scope: BodyScope = "drawn"): CharacterPlan {
   const slotOf = detailSlotOf(cco);
   const components: PlannedComponent[] = [];
   const slots: DetailSlotState[] = [];
   const skinDecals: { entry: ResolvedAppearance; component: ResolvedComponent }[] = [];
+  let censoredBody: PlannedComponent[] = [];
   for (const slot of DETAIL_SLOTS) {
     if (slot === "face" || slot === "body" || slot === "clothing") {
-      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals) : slot === "body" ? planBody(resolved, cco, defaults, identities, body)
+      if (slot === "body") {
+        const planned = planBody(resolved, cco, defaults, identities, body, scope);
+        censoredBody = planned.censored;
+        components.push(...planned.components);
+        slots.push(planned.state);
+        continue;
+      }
+      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals)
+        // With the body hidden, its clothes are too (the Body switch hides both).
+        : scope === "hidden" ? { components: [], state: { slot: "clothing", state: "none", label: "Hidden" } as DetailSlotState }
         : planClothing(clothing, defaults, identities);
       components.push(...planned.components);
       slots.push(planned.state);
@@ -485,7 +568,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     components.push(...planned);
     slots.push({ slot, state: "shown", label });
   }
-  return { components, slots };
+  return { components, slots, censoredBody };
 }
 
 /** Creator slot names (`uiSlot`) that feed one detail slot. */

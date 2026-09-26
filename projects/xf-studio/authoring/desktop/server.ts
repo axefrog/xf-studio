@@ -48,8 +48,9 @@ export type DesktopHostOptions = {
   /** The WebView2 Runtime version the host detected, for problem reports. */
   webView2?: string | null;
   /**
-   * The built native decode worker (prepare-static.ts bundles it beside the Check worker). The packaged host is one bundle, so the
-   * resolver can't start the worker from its source; without it (tests, running from source) the source next to its module is used.
+   * The bundled native decode worker (prepare-static.ts `native-decode-worker.js`). The host is one bundle, so the native reader can't
+   * start its worker from its source: the resolver's route decoder (installation-registry.ts `useNativeWorker`) and the clothing
+   * preset's decode start this file. Absent (tests, running from source): the source file next to the reader.
    */
   nativeDecodeWorker?: string;
 };
@@ -135,7 +136,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
         mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
     },
-    log: logTo("character"), trace: diagnostics.trace });
+    log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
