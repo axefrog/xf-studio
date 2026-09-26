@@ -335,6 +335,7 @@ The plan is stored with the collection and edited through collection actions (`p
 Selectors and resource identities are **feature-scoped and product-independent**. Merging or splitting changes only the archive, `.xl`, folder and manifest that carry them.
 
 - **Selectors.** Each exporter chooses how its looks appear in the character creator: **its own selector** where that's genuinely best (eye makeup needs one because of its custom face plate), or **extra choices added to the matching vanilla option set** otherwise (for example lip makeup joining the vanilla lipstick choices). The choice is part of the exporter's defaults and is recorded in the plan and manifest. A merged `.archive.xl` lists every feature's customizations; a split one lists only its own.
+- **Selectors as the organising unit** (proposed 27 September, [selectors design](selectors-design.md)): a selector is a feature type on a target (its own XF row, or a vanilla row it adds choices to) holding its own looks, settings and a generated identity. Several selectors of one type are allowed up to a per-type cap (eye makeup: 1). Products would group selectors (`xfs/package-plan-2`), each resource key being per selector (`xfs_s<uuid>`), while today's collection migrates to one implicit eye makeup selector with its `xfs_c<collection>` identity and byte-identical export.
 - **Resources.** Eye makeup keeps its grandfathered depot root. New features use `…/<key>/<feature>/`.
 - **Versioning.** Each feature plan records exporter ID/version, plan hash, source revisions and output hashes.
 
