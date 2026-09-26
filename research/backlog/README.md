@@ -18,6 +18,8 @@
 
 Supporting research that sits under a track rather than being ranked on its own: [wgpu/ray-tracing assessment](wgpu-renderer-assessment.md) (under track 2/4; current recommendation is to keep the browser renderer), [hair, piercings and jewellery context](jewellery-and-customization.md) (preview context under track 2; jewellery *authoring* is a later feature), and the [portable mod-source resolver](jewellery-and-customization.md#portable-mod-source-discovery) (shared by tracks 2, 3 and 5).
 
+Later-domain research queue (below the body and appearance work): [world, terminals, arcade and scripting](world-and-interactive-ideas.md).
+
 ## Standing direction (set 25 September 2026)
 
 1. **First goal: a fully working XF Eye Artistry export.** Prove the supported finishes (Matte, Satin, Metallic) in game, then design and prove game materials for every finish the editor offers (Shimmer, Glitter, Glossy, Colour-shifting). Shader decompilation and R&D are approved where they're needed to do this properly.
