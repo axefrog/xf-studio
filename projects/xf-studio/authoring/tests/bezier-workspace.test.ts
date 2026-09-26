@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { initialRecipe, parseRecipe, raster } from "../src/engines/layered-makeup/recipe";
 import { convertToBezier, moveTangent, setPointMode, splitBezierSegment, tangentEndpoint } from "../src/engines/layered-makeup/bezier-path";
-import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
-import { editLayers } from "../src/engines/layered-makeup/layer-stack";
+import { parseWorkspace } from "../src/workspace-state";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe, raster, freshWorkspace, editLayers } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 test("old v4 shapes stay unchanged; edited handles and legacy Undo coexist through workspace reload", () => {
   const old = { ...initialRecipe(), schema: "xfs/recipe-4", layers: initialRecipe().layers.map(({ pathMode: _mode, softness: _softness, points, ...layer }) =>

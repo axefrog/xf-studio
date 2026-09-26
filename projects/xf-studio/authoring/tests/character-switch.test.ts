@@ -12,9 +12,9 @@ import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail } from "../src/render-det
 import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved-appearance-actions";
 import type { SavedV } from "../src/save-reader";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 // Application-level save switching (A → B → A) over records the real preparation produced from the
 // synthetic installation (character-detail-fixtures.ts), never from the private saves.

@@ -48,9 +48,10 @@ async function glb(path: string) {
 }
 const [head, eye, body, face] = await Promise.all([paths.head, paths.eye, paths.body, paths.face].map(glb));
 const binding = JSON.parse(readFileSync(paths.binding, "utf8"));
-let headMesh: THREE.SkinnedMesh | undefined;
-head.scene.traverse(o => { if (o instanceof THREE.SkinnedMesh) { if (headMesh) throw Error("Multiple head skins"); headMesh = o; } });
-if (!(headMesh instanceof THREE.SkinnedMesh)) throw Error("No native head skin");
+let foundHead: THREE.SkinnedMesh | undefined;
+head.scene.traverse(o => { if (o instanceof THREE.SkinnedMesh) { if (foundHead) throw Error("Multiple head skins"); foundHead = o; } });
+if (!(foundHead instanceof THREE.SkinnedMesh)) throw Error("No native head skin");
+const headMesh = foundHead;
 const eyeParts = ["submesh_00_LOD_1_doubled", "submesh_01_LOD_1", "submesh_02_LOD_1"].map(name => {
   const mesh = eye.scene.getObjectByName(name);
   if (!(mesh instanceof THREE.SkinnedMesh)) throw Error(`Missing eye part ${name}`);

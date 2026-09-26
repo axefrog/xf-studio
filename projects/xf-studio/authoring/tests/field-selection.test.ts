@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { parseFieldSelection, selectedWarp } from "../src/engines/layered-makeup/field-selection";
-import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace } from "../src/workspace-state";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
 test("field selection follows stable layer/field IDs and safely falls back for empty or removed fields", () => {
   const recipe = initialRecipe(), l = recipe.layers[0], f = { ...l.fields[0], id: "second", du: .02 };

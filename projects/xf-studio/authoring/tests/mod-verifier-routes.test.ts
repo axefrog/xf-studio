@@ -8,7 +8,6 @@ import { basename, dirname, join, resolve } from "node:path";
 import { encodeDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { planCollection } from "../src/preset-collection";
-import { preparePackageCollection } from "../src/package-filter";
 import { FINISH_EXPORT } from "../src/engines/layered-makeup/finish-export";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
 import { archiveKey } from "../src/mod-verifier/resource-inventory";
@@ -18,6 +17,7 @@ import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { liftPlate } from "../src/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
+import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 // Synthetic, asset-free fixture in the style of mod-verifier.test.ts: archive members and plate inputs
 // hold their WolvenKit JSON as text, the fake `serialize` derives documents from the hash-checked bytes

@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import { bakeFlakes, canonicalFinish, defaultFlakes } from "../src/engines/layered-makeup/finish";
-import { initialRecipe, parseRecipe, raster } from "../src/engines/layered-makeup/recipe";
+import { initialRecipe, raster } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 test("flake fields are deterministic, seed-dependent, bounded and opaque with unit normals", () => {
   const p = defaultFlakes(),

@@ -1,6 +1,6 @@
 // Game-export route policy for makeup finishes. Pure: no IO, no UI, no WolvenKit.
 //
-// One authored preset becomes one decal draw on the eye plate, so every active layer of a
+// One authored preset becomes one decal draw on the feature's surface (eye makeup's: the eye plate), so every active layer of a
 // preset must be expressible by the same stock material template. The engine facts behind
 // each route are in research/materials/finish-designs/ and knowledge/materials-and-shaders.md §6:
 //
@@ -35,18 +35,11 @@ export const ROUTE_MATERIAL_ENTRY: Record<Exclude<ExportRoute, "fresnel">, strin
 export const ACCENT_ENTRY_PREFIX = "@accent_";
 
 /**
- * Texture grid of each route. `mesh_decal` transforms every texture UV by UVScale/UVOffset, so the flat and
- * faceted routes spend their texels on a plate-local window (plate-uv-window.ts): 2048 × 512, today's texel
- * count, about 4.3 × 3.3 times the head atlas's linear density on the plate (0.13 × 0.12 mm per texel against
- * 0.56 × 0.40 mm). The gradient-recolour template of the Fresnel route has no UV transform (its only UV math
- * is the flipbook), so it stays on the 1024 head atlas.
+ * Whether each route's textures may use a plate-local UV window: `mesh_decal` transforms every texture UV by
+ * UVScale/UVOffset, so the flat, faceted and diagnostic Glitter routes can; the gradient-recolour template of the
+ * Fresnel route has no UV transform (its only UV math is the flipbook), so it stays on head UV. The texture grids
+ * themselves are the region's (`LayeredMakeupRegion.textures`).
  */
-export const WINDOW_TEXTURE = { width: 2048, height: 512 } as const;
-/** The diagnostic Glitter route's window: 4096 × 1024, about 0.064 × 0.060 mm per texel on the lids (experiment 018). */
-export const GLITTER_WINDOW_TEXTURE = { width: 4096, height: 1024 } as const;
-/** The emissive accent's head-UV mask side (its template has no UV transform): about 0.28 × 0.20 mm per texel. */
-export const ACCENT_TEXTURE_SIZE = 2048;
-export const HEAD_TEXTURE_SIZE = 1024;
 export const ROUTE_UV_WINDOW: Record<ExportRoute, boolean> = { flat: true, faceted: true, fresnel: false, glitter: true };
 /** Entry suffix of a flat or faceted preset that a diagnostic keeps on head UV (no UV transform). */
 export const HEAD_UV_ENTRY_SUFFIX = "_head";

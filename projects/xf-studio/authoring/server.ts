@@ -5,6 +5,7 @@ import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { createPackageHandler, localPackageTools, localPlateCache, localToolsRoot } from "./src/package-server";
+import { EYE_MAKEUP_REGION } from "./src/features/eye-makeup/region";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
 import { eyePlateReadiness } from "./src/eye-plate-cache";
@@ -40,7 +41,7 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
   const settings = localSettings.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
 } });
-const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
+const packageRequest = createPackageHandler(EYE_MAKEUP_REGION, action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings, process.env, wolvenKit.managedExecutable()));
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.

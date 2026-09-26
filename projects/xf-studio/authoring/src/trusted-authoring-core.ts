@@ -1,6 +1,6 @@
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { AuthoringDocument } from "./authoring-document";
-import { eyeMakeupPort, type EyeMakeupGestures, type EyeMakeupSpec } from "./authoring-eye-makeup";
+import { eyeMakeupPort, RecipeActions, type EyeMakeupGestures, type EyeMakeupSpec } from "./authoring-eye-makeup";
 import { AuthoringGeometry } from "./authoring-geometry";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
@@ -10,9 +10,9 @@ import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
 import type { AnyOwner, Registry } from "./platform/core/registry";
 import { LiveFeatures } from "./platform/core/live-features";
-import { RecipeActions } from "./engines/layered-makeup/recipe-actions";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "./engines/layered-makeup/recipe";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import type { WorkspaceState } from "./workspace-state";
 
 /**
@@ -20,7 +20,9 @@ import type { WorkspaceState } from "./workspace-state";
  * action registry and the document model. Built once in `compose/` and passed in by the startup
  * and server roots; nothing below the roots imports the composition.
  */
-export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel };
+export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel;
+  /** The live feature's layered-makeup region (eye makeup's), which its port, catalogues and edits use. */
+  readonly region: LayeredMakeupRegion };
 
 /** Trusted, DOM-free authoring composition. The presentation receives only StudioApplication. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
@@ -30,6 +32,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   newId?(): string;
 }, composition: StudioComposition) {
   const { registry, documents } = composition;
+  if (composition.region.id !== documents.live) throw Error(`The composition's layered-makeup region is not the live feature's (${documents.live}).`);
   const live = registry.owner(documents.live);
   if (live?.owner !== "feature" || !live.gestures) throw Error(`The live feature ${documents.live} is not a registered feature with gestures.`);
   const specOf = (kind: string): EyeMakeupSpec => {
@@ -59,7 +62,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   // Cancelling a gesture or form transaction restores its checkpoint without creating Redo.
   const revert = (step: HistoryEntryId | undefined) => history.revertTransaction(step);
   // Eye makeup's registered behaviour runs over this port; stack edits reset the preview's layer resources.
-  const eyeMakeup = eyeMakeupPort(document, recipe, ports.resetStack, ports.newId);
+  const eyeMakeup = eyeMakeupPort(document, recipe, composition.region, ports.resetStack, ports.newId);
   // Gesture frames run the module's registered gestures and publish through the port (CORE-31).
   const gestures = new AuthoringGestures(document,
     { applyGesture: edit => eyeMakeup.gesture(live.gestures as EyeMakeupGestures, edit) }, revert,

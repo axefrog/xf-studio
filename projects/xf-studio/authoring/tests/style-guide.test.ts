@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { iconNames } from "../src/studio-ui/icons";
 import { PANEL_IDS, PANEL_META } from "../src/compose/views";
-import { finishCatalogue } from "../src/engines/layered-makeup/finish-catalogue";
 import { contrastTable } from "../src/studio-ui/style-guide/contrast";
+import { finishCatalogue } from "./fixtures/eye-region";
 
 const root = resolve(import.meta.dir, "..");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");

@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { createRasterJob, coverage, initialRecipe, raster } from "../src/engines/layered-makeup/recipe";
 import { createRasterProcessor, type RasterRequest, type RasterResponse } from "../src/engines/layered-makeup/raster-processor";
-import { createRasterClient, type RasterPort } from "../src/raster-client";
+import { type RasterPort } from "../src/raster-client";
+import { createRasterJob, coverage, initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
+import { createRasterClient } from "./fixtures/eye-region";
 
 test("sliced raster preserves scalar pixels and is isolated from source mutation", () => {
   const layer = initialRecipe().layers[0];
@@ -23,12 +24,12 @@ test("worker processor yields, cancels without partial masks, then produces a co
   let clock = 0;
   const worker = createRasterProcessor(r => responses.push(r), () => new Promise(resolve => resumes.push(resolve)), () => ++clock * 10);
   const layer = initialRecipe().layers[0];
-  const pending = worker.start({ i: 0, version: 1, layer, size: 128 });
+  const pending = worker.start({ region: EYE_RASTER_REGION, i: 0, version: 1, layer, size: 128 });
   expect(resumes.length).toBe(1); expect(responses).toEqual([]);
   worker.cancel(1); resumes.shift()!(); await pending;
   expect(responses).toEqual([{ i: 0, version: 1, cancelled: true }]);
   let done = false;
-  const next = worker.start({ i: 0, version: 2, layer, size: 32 }).then(() => { done = true; });
+  const next = worker.start({ region: EYE_RASTER_REGION, i: 0, version: 2, layer, size: 32 }).then(() => { done = true; });
   while (!done) { resumes.shift()?.(); await Promise.resolve(); }
   await next;
   const result = responses[1];

@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
-import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 import type { LookCollection } from "../src/platform/api";
 import { historyRecipes, looks, memoryOf, recipeOf } from "./fixtures/looks";
 import { recipeFile } from "../src/recipe-schema";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
 function fixture() {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",

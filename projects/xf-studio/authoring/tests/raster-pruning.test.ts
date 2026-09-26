@@ -1,6 +1,7 @@
 import {expect,test} from "bun:test";
-import {coverage,curve,initialRecipe,raster,createRasterJob,type Layer} from "../src/engines/layered-makeup/recipe";
+import { curve, type Layer } from "../src/engines/layered-makeup/recipe";
 import {convertToBezier} from "../src/engines/layered-makeup/bezier-path";
+import { coverage, initialRecipe, raster, createRasterJob } from "./fixtures/eye-region";
 
 function compareScalar(layer:Layer,size:number){
   const pixels=raster(layer,size),polygon=curve(layer.points);

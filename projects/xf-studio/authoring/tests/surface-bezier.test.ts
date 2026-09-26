@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /** Exercise real ray picking/anchors without a WebGL context or game assets. */
 test("surface tangents retain knot identity, mirror edits and report missing anchors", () => {
@@ -39,7 +39,7 @@ test("surface tangents retain knot identity, mirror edits and report missing anc
     const messages: string[] = [];
     const viewer = { renderer: { domElement: canvas }, scene, camera, plate, head, eyes, controls,
       onFrame: (fn: () => void) => { frame = fn; } };
-    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
       layer: () => layer, selected: () => 0, select: () => {},
       selectedField: () => undefined, selectField: () => {},
       begin: () => checkpoints++, apply: action => { const changed = applyAdapterProposal(layer,action); if (changed) changes++; return changed; },

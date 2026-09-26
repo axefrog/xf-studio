@@ -22,6 +22,7 @@ import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "./eye-plate-servi
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
 import { plateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import type { PlateReachInput } from "./plate-reach";
+import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 
 export const MAX_COLLECTION_BYTES = 16_000_000;
 
@@ -40,6 +41,8 @@ export interface PackageCommandOptions {
    * neither host ever does, and both hosts' own parsers drop the knobs before the builder sees the file (PIPE-70).
    */
   readonly diagnostics?: boolean;
+  /** Eye makeup's layered-makeup region (its models, mirror and texture grids), from the composition root. */
+  readonly region: LayeredMakeupRegion;
   /** Eye plate directory prepared by the host (or a developer override). */
   readonly plate?: string;
   /** Verified built-in plate manifest from the host; absent for a developer override. */
@@ -211,7 +214,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
       if (!options.diagnostics && value && typeof value === "object" && "diagnostics" in value)
         throw Error("This collection carries diagnostic export knobs, which only build a prepared in-game test candidate. " +
           "Pass --diagnostics to build one on purpose, or export the collection again from XF Studio.");
-      return preflightPackageCollection(value, plate);
+      return preflightPackageCollection(value, options.region, plate);
     } catch (error) {
       const message = (error as Error).message;
       return fail(message.startsWith("No mod files can be made") ? "no_exportable_content" : "invalid_collection",
@@ -264,7 +267,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     if (textHash(written) !== packagedHash) fail("collection_changed", "Filtered collection snapshot changed while writing; retry.");
     log(`Building ${check.presets.length} preset(s) in ignored local intermediates: ${intermediate}`);
     cancelled();
-    record = await buildPackageResources({ collection: JSON.parse(written), output: intermediate, plate,
+    record = await buildPackageResources({ collection: JSON.parse(written), output: intermediate, plate, region: options.region,
       plateUv: plateReach.footprint, tools, signal: options.signal, log });
   } catch (error) {
     if (error instanceof PackageToolError) fail(error.code, error.code === "package_tool_failed"

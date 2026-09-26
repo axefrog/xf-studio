@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { type StudioAction, type StudioTarget } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { freshWorkspace } from "../src/workspace-state";
 import { BUILD_NEEDS_SETUP, NO_3D_PREVIEW_IN_ALPHA, USER_FACING_JARGON } from "../src/alpha-availability";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 // Release gate for the community alpha: every catalogued action a user can reach
 // is either available or explains itself in plain words. Nothing is silently

@@ -10,7 +10,7 @@ import { plateReachInput } from "../../src/plate-uv-footprint-io";
 import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
-import { preparePackageCollection } from "../../src/package-filter";
+import { preparePackageCollection } from "../../tests/fixtures/eye-exporter";
 
 const directory = mkdtempSync(resolve(tmpdir(), "xfs-check-worker-"));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));

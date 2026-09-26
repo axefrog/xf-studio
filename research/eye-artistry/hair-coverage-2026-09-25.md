@@ -30,7 +30,7 @@ Consequences, derived from that arithmetic:
 
 ## 3. Changes
 
-- `src/scene.ts` creates the WebGL 2 context itself with `alpha: false`, so the canvas is opaque whatever alpha the fragments write.
+- `src/platform/scene/scene-host.ts` creates the WebGL 2 context itself with `alpha: false`, so the canvas is opaque whatever alpha the fragments write.
 - `src/stage-backdrop.ts` (pure) and `src/viewport-backdrop.ts` (Three adapter) draw the `--stage` radial gradient as the scene background. Its colours are interpolated in OKLab, as CSS does for `oklch()` stops. It is an sRGB texture, so Three draws it without tone mapping. `scene.environment` is unchanged, so lighting does not depend on the theme. A test keeps the token values in step with `public/studio.css`.
 - `src/stage-theme-binding.ts` resolves the UI theme preference (with the OS scheme for "system") and passes it to the renderer's typed `setStage` input. `studio-main.ts` wires it.
 - **Strands and saved lashes** use `STRAND_COVERAGE_MATERIAL`: opaque, depth-writing, alpha-to-coverage, no alpha test. Their alpha is `hairResolvedCoverage(remapped Strand_Alpha)`. The lashes had been alpha-blended; they are `hair.mt` in game, so they now share the hair coverage. They stay in Three's transparent queue without blending (`STRAND_COVERAGE_OVER_MAKEUP_MATERIAL`), so they still draw after the editable makeup layers, as before. As fully opaque objects, the makeup plate painted over lash roots behind its surface.

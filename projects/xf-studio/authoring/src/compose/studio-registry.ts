@@ -9,7 +9,7 @@
  */
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
-import { EYE_MAKEUP, EYE_MAKEUP_ID } from "../features/eye-makeup";
+import { EYE_MAKEUP, EYE_MAKEUP_ID, EYE_MAKEUP_REGION } from "../features/eye-makeup";
 import { CHARACTER_CONTEXT_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY,
   SAVED_V_FAMILY } from "./system-families";
 import type { DocumentModel } from "../collection-workspace";
@@ -43,7 +43,10 @@ export const STUDIO_PARTS = new PartRegistry(STUDIO_OWNERS.filter(owner => owner
 export const LIVE_FEATURE = EYE_MAKEUP_ID;
 /** The document model the collection, library and workspace code is given. */
 export const STUDIO_DOCUMENTS: DocumentModel = Object.freeze({ parts: STUDIO_PARTS, live: LIVE_FEATURE });
+/** The live feature's layered-makeup region: eye makeup's plate, mirror, fine-Glitter scope, textures and wording. */
+export const LIVE_REGION = EYE_MAKEUP_REGION;
 /** Everything the trusted core needs from the composition. */
-export const STUDIO_COMPOSITION: StudioComposition = Object.freeze({ registry: STUDIO_REGISTRY, documents: STUDIO_DOCUMENTS });
+export const STUDIO_COMPOSITION: StudioComposition = Object.freeze({ registry: STUDIO_REGISTRY, documents: STUDIO_DOCUMENTS,
+  region: LIVE_REGION });
 export type { EyeMakeupAction, EyeMakeupEditor, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupMemory, EyeMakeupResult,
   EyeMakeupState } from "../features/eye-makeup";

@@ -4,6 +4,7 @@ import { createBrowserViewportDevice } from "../src/browser-viewport-device";
 import type { createSceneHost } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/surface-editor";
 import type { createUVEditor } from "../src/uv-editor";
+import { EYE_REGION } from "./fixtures/eye-region";
 
 test("a toolbar-free browser viewport mounts once and rehosts live editors", async () => {
   const events: string[] = [];
@@ -25,7 +26,7 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   } as unknown as ReturnType<typeof createSurfaceEditor>;
   const viewer = { cameraState: () => camera, resize: () => events.push("scene:resize") };
   let sceneLoads = 0, uvControls: unknown;
-  const device = createBrowserViewportDevice({
+  const device = createBrowserViewportDevice({ region: EYE_REGION,
     headHost: head as unknown as HTMLElement, uvHost: uv as unknown as HTMLElement,
     queryContext: () => { throw Error("No hit expected"); },
     sceneFactory: (async () => { sceneLoads++; return viewer; }) as unknown as typeof createSceneHost,

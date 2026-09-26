@@ -1,9 +1,10 @@
 import { test, expect } from "bun:test";
-import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
 import { readSavedV } from "../src/save-reader";
-import { initialRecipe, newLayerTemplate, parseRecipe } from "../src/engines/layered-makeup/recipe";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace, initialRecipe, newLayerTemplate } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 test("an absent browser workspace starts with one editable four-point makeup area", () => {
   const keys = workspaceKeys(false);

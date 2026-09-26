@@ -7,9 +7,9 @@ import { expect, test } from "bun:test";
 import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { createStudioPresentation } from "../src/studio-presentation";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { trustedFixture } from "./studio-presentation-fixture";
 import { withHair, type Hair } from "./fixtures/hair-feature";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 test("the port lists the registered features and eye makeup's facade owns exactly its actions", () => {
   const { shell } = trustedFixture();

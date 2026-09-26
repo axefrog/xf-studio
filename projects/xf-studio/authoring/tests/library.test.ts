@@ -3,8 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LookLibrary, libraryRequest } from "../src/library-store";
-import { initialRecipe, parseRecipe, parseRecipeFile } from "../src/engines/layered-makeup/recipe";
 import { Database } from "bun:sqlite";
+import { initialRecipe } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
 
 test("legacy SQLite revisions stay byte-identical while empty and expanded recipes survive reopening", () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-variable-library-")), path = join(dir, "library.sqlite");

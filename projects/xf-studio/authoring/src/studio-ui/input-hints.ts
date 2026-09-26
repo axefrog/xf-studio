@@ -1,7 +1,10 @@
 import { cursorFor, targetTip, viewportHints, type BlockReason, type HintItem, type ViewportHints,
   type ViewportInputContext, type ViewportScope } from "../input-bindings";
 import { h } from "./dom";
-import type { Frame, StudioRuntime } from "./runtime";
+import type { Frame, Port } from "./runtime";
+
+/** The viewport input snapshot and its subscription (the port's `viewport`). */
+export type ViewportInputSource = Pick<Port["viewport"], "input" | "subscribeInput">;
 
 const esc = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const item = (hint: HintItem) => `<span class="hint">${hint.input ? `<kbd class="hint-key">${esc(hint.input)}</kbd>` : ""}<span class="hint-label">${esc(hint.label)}</span></span>`;
@@ -41,10 +44,10 @@ export class ViewportInputHints {
   private pointer: { x: number; y: number } | undefined;
   private dwell: ReturnType<typeof setTimeout> | undefined;
   private tipReady = false;
-  constructor(private rt: StudioRuntime, private scope: ViewportScope, private slot: HTMLElement, private host: HTMLElement) {
+  constructor(private source: ViewportInputSource, private scope: ViewportScope, private slot: HTMLElement, private host: HTMLElement) {
     this.strip = h("div", { class: "input-hints", "data-scope": scope });
     this.tip = h("div", { class: "target-tip", role: "tooltip", hidden: true });
-    rt.port.viewport.subscribeInput(() => this.render());
+    source.subscribeInput(() => this.render());
     // Presentation-only pointer tracking: where to place the tooltip and when it has dwelt long enough.
     slot.addEventListener("pointermove", event => {
       this.pointer = { x: event.clientX, y: event.clientY };
@@ -56,7 +59,7 @@ export class ViewportInputHints {
     slot.addEventListener("pointerdown", () => { clearTimeout(this.dwell); this.tipReady = false; this.render(); });
   }
   context(): ViewportInputContext {
-    const input = this.rt.port.viewport.input(), own = input[this.scope];
+    const input = this.source.input(), own = input[this.scope];
     return { scope: this.scope, target: own.target, gesture: own.gesture, modifiers: input.modifiers, blocked: this.blocked };
   }
   update(frame: Frame) {

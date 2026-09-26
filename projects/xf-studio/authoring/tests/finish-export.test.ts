@@ -4,15 +4,18 @@ import { resolve } from "node:path";
 import { FRESNEL_PRESET_RULE, fresnelConstants, layerExport, planPresetExport } from "../src/engines/layered-makeup/finish-export";
 import { facetedMipChain, maskMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
-import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compilePreset, GRADIENT_SIZE, UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
-import { describePackageExperimental, preparePackageCollection } from "../src/package-filter";
+import { GRADIENT_SIZE, UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
+import { describePackageExperimental } from "../src/package-filter";
 import { planCollection } from "../src/preset-collection";
 import { HandleCounter, rewritePlateMesh } from "../src/package-resources";
 import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
-import { initialRecipe, parseRecipe, parseRecipeFile, raster, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 import { facetedReference, maskReference } from "../src/mod-verifier/texture-checks";
 import { expectedMaterialValues } from "../src/mod-verifier/resource-checks";
+import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compilePreset, initialRecipe, raster } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
+import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 const board = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/016-finish-board/finish-board.collection.json"), "utf8"));
 const game = { model: "game-matched-1" } as const;
@@ -176,7 +179,8 @@ test("the filter lists experimental finishes and names the preset rule; resource
 });
 
 test("choosing a finish uses its game-matched model; earlier layers switch only by explicit action", async () => {
-  const { applyRecipeAction, recipeActionCapability } = await import("../src/engines/layered-makeup/recipe-actions");
+  const { recipeActionCapability } = await import("../src/engines/layered-makeup/recipe-actions");
+  const { applyRecipeAction } = await import("./fixtures/eye-region");
   const start = initialRecipe(), id = start.layers[0].id;
   let state = { recipe: start, active: 0, selected: 0, fieldSelection: {} };
   state = applyRecipeAction(state, { kind: "layer.setFinish", layerId: id, finish: "iridescent" }).state;
@@ -199,7 +203,7 @@ test("choosing a finish uses its game-matched model; earlier layers switch only 
 
 test("CORE-20/CORE-08: one finish table feeds game optics, surfaces, the catalogue and the setFinish choices", async () => {
   const { FINISH_EXPORT, finishExportSummary, flatSurface, hasGameOptics } = await import("../src/engines/layered-makeup/finish-export");
-  const { finishCatalogue } = await import("../src/engines/layered-makeup/finish-catalogue");
+  const { finishCatalogue } = await import("./fixtures/eye-region");
   const { ACTION_DESCRIPTORS } = await import("../src/studio-action-descriptors");
   const ids = finishCatalogue().map(item => item.id);
   expect([...ACTION_DESCRIPTORS["layer.setFinish"].payload.finish.values!]).toEqual([...ids, "satin"]);

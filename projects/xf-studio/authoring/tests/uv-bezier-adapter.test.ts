@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { convertToBezier, tangentEndpoint } from "../src/engines/layered-makeup/bezier-path";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, fitUVView, parseUVView, reflectUV, uvRegion, uvToPixel } from "../src/uv-view";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("UV Fit includes all explicit tangents, including outside-atlas and mirrored endpoints", () => {
   const layer = convertToBezier(initialRecipe().layers[0]);
@@ -65,7 +65,7 @@ test("UV tangent adapter mirrors drags, cancels exactly, guards replaced targets
     recipe.layers[0].points[0].handles!.mode = "corner";
     let selected = 0, checkpoint = structuredClone(recipe), begins = 0, changes = 0;
     const element = () => ({ setAttribute() {}, disabled: false, textContent: "" }) as any;
-    const editor = createUVEditor(canvas, { both: element(), single: element(), other: element(), fit: element(), note: element() }, {
+    const editor = createUVEditor(canvas, { both: element(), single: element(), other: element(), fit: element(), note: element() }, { region: EYE_REGION,
       recipe: () => recipe, layer: () => recipe.layers[0], selected: () => selected,
       canvases: () => [], albedo: () => undefined, select: index => { selected = index; },
       selectedField: () => undefined, selectField() {}, begin: () => { checkpoint = structuredClone(recipe); begins++; },

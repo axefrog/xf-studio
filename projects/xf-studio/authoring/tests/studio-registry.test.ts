@@ -9,7 +9,7 @@ import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-action
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { StudioApplication } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 function fixture() {
   const workspace = freshWorkspace();
