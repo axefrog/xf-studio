@@ -40,7 +40,7 @@ function service(value: unknown = collection(), model: DocumentModel = STUDIO_DO
 test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be renamed and named back, never split", async () => {
   const f = service();
   await f.svc.execute({ kind: "initialize" });
-  expect(f.svc.summary().draft!.products).toEqual([{ id: ID, isDefault: true, modName: "XF Eye Artistry", nameSource: "derived",
+  expect(f.svc.summary().products!).toEqual([{ id: ID, isDefault: true, modName: "XF Eye Artistry", nameSource: "derived",
     features: [{ id: "eye-makeup", label: "Eye makeup" }] }]);
   // Splitting needs a second feature; the refusal says so plainly.
   expect(f.svc.actionCapability({ kind: "package.split", feature: "eye-makeup" }))
@@ -48,7 +48,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(f.svc.actionCapability({ kind: "package.rename", productId: ID, modName: "a/b" })).toMatchObject({ available: false, code: "invalid_value" });
   expect(f.svc.persistence()?.dirty).toBe(false);
   f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "My looks" });
-  expect(f.svc.summary().draft!.products[0]).toMatchObject({ modName: "My looks", nameSource: "plan" });
+  expect(f.svc.summary().products![0]).toMatchObject({ modName: "My looks", nameSource: "plan" });
   // A mod name is part of the collection: the draft now has unsaved changes.
   expect(f.svc.persistence()).toMatchObject({ dirty: true, structureDirty: true, dirtyPresets: [] });
   expect(f.svc.snapshot()!.collection.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: ID, name: "My looks", features: [] }] });
@@ -62,7 +62,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   // An empty name goes back to the default: the plan disappears again.
   f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "" });
   expect(f.svc.snapshot()!.collection.packagePlan).toBeUndefined();
-  expect(f.svc.summary().draft!.products[0]).toMatchObject({ modName: "XF Eye Artistry", nameSource: "derived" });
+  expect(f.svc.summary().products![0]).toMatchObject({ modName: "XF Eye Artistry", nameSource: "derived" });
 });
 
 test("a collection without a plan stores exactly what it stored before", () => {
@@ -84,11 +84,11 @@ test("with two exporting features: split into its own mod, rename, assign back a
   let editor: EditorSnapshot = { recipe: recipe(), ...emptyMemory() };
   const ids = [NEW];
   const actions = new CollectionActions(model, collectionDraft(value, model), () => editor, next => { editor = next; }, () => ids.shift()!);
-  const products = () => actions.summary().products.map(p => [p.modName, p.features.map(f => f.id)]);
+  const products = () => actions.productSummary().map(p => [p.modName, p.features.map(f => f.id)]);
   expect(products()).toEqual([["XF Looks", ["eye-makeup", "hair"]]]);
   actions.dispatch({ kind: "package.split", feature: "hair" });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Artistry", ["hair"]]]);
-  expect(actions.summary().products[1].id).toBe(NEW);
+  expect(actions.productSummary()[1].id).toBe(NEW);
   actions.dispatch({ kind: "package.rename", productId: NEW, modName: "XF Hair Only" });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Only", ["hair"]]]);
   expect(actions.check({ kind: "package.assign", feature: "hair", productId: NEW }))

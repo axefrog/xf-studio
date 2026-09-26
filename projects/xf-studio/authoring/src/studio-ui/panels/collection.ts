@@ -383,7 +383,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
-      renderMods(frame.library.draft?.products ?? []);
+      renderMods(frame.library.products ?? []);
       const setup = frame.localSetup;
       if (setup.view && !dirty && setup.view.revision !== loadedRevision) {
         loadedRevision = setup.view.revision;

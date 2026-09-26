@@ -62,8 +62,6 @@ export type CollectionDraftSummary = {
   recoveryCount: number; recoveryLimit: number;
   /** `locked`: it holds a look made with a newer version, which the library can't take, so this draft may be its only copy. */
   oldestRecoverable?: { id: string; name: string; revision?: number; locked?: true };
-  /** The XF mods the draft would build (one merged mod by default), in order; empty when no look has an exportable feature. */
-  products: PackageProductSummary[];
 };
 export type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
@@ -94,9 +92,13 @@ export class CollectionActions {
         revision: s.previous.revision } : undefined,
       recoveryCount: recovery.length, recoveryLimit: COLLECTION_RECOVERY_LIMIT,
       oldestRecoverable: oldest ? { id: oldest.collection.id, name: oldest.collection.name,
-        revision: oldest.revision, ...(holdsLocked(oldest) ? { locked: true as const } : {}) } : undefined,
-      products: this.products().map(product => ({ id: product.id, isDefault: product.isDefault, modName: product.modName,
-        nameSource: product.nameSource, features: product.features.map(id => ({ id, label: this.labels()[id] ?? id })) })) };
+        revision: oldest.revision, ...(holdsLocked(oldest) ? { locked: true as const } : {}) } : undefined };
+  }
+  /** The XF mods the draft would build (one merged mod by default), in order; empty when no look has an exportable feature. */
+  productSummary(): PackageProductSummary[] {
+    const labels = this.labels();
+    return this.products().map(product => ({ id: product.id, isDefault: product.isDefault, modName: product.modName,
+      nameSource: product.nameSource, features: product.features.map(id => ({ id, label: labels[id] ?? id })) }));
   }
   /**
    * The mods the draft plans (feature-module platform §6), from its package plan and the exporting features its

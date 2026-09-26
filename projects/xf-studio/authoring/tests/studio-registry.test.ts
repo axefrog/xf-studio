@@ -111,7 +111,7 @@ test("every exporting feature has an exporter and an independent verifier in the
   const { STUDIO_OWNERS } = await import("../src/compose/studio-registry");
   const { STUDIO_EXPORTERS } = await import("../src/compose/exporters");
   const exporting = STUDIO_OWNERS.filter(owner => owner.owner === "feature" && owner.exports)
-    .map(owner => owner as { id: string; label: string; exports: { exporterId: string; brand: string } });
+    .map(owner => owner as { id: string; label: string; exports: import("../src/platform/api").ExportInfo });
   expect(exporting.map(feature => feature.id)).toEqual(["eye-makeup"]);
   expect(STUDIO_EXPORTERS.map(entry => entry.exporter.feature)).toEqual(exporting.map(feature => feature.id));
   for (const feature of exporting) {

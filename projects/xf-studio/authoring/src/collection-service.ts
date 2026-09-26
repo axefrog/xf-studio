@@ -1,4 +1,4 @@
-import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type ReadonlyDeep } from "./collection-actions";
+import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type PackageProductSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
 import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
@@ -45,7 +45,9 @@ export type CollectionServiceState = { busy: boolean; progress?: CollectionProgr
   summaries: CollectionSummary[]; draft?: ReadonlyDeep<CollectionWorkspace> };
 /** Cheap detached projection for frequently repainted views; see `view()` for the full draft. */
 export type CollectionServiceSummary = { busy: boolean; progress?: CollectionProgress;
-  summaries: CollectionSummary[]; draft?: CollectionDraftSummary };
+  summaries: CollectionSummary[]; draft?: CollectionDraftSummary;
+  /** The XF mods the draft would build (feature-module platform §6); absent while the collection loads. */
+  products?: PackageProductSummary[] };
 /**
  * Draft versus its library revision (audit A-1). `baseline` is `none` for a collection never
  * saved, `unknown` when the saved revision's content has not been loaded in this session
@@ -160,7 +162,8 @@ export class CollectionService {
   }
   summary(): CollectionServiceSummary {
     return { busy: this.busy, progress: this.progress && { ...this.progress },
-      summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary() };
+      summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary(),
+      ...(this.actions ? { products: this.actions.productSummary() } : {}) };
   }
   snapshot() { return this.actions?.snapshot(); }
   /** The accepted request in flight, if any (requests are serialized). */

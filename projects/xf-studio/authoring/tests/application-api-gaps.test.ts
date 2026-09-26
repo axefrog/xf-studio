@@ -214,7 +214,7 @@ test("draft persistence compares the live draft with the library revision it was
   expect(app.dispatch({ kind: "collection.rename", name: "Draft" }).ok).toBe(true);
   expect(service.persistence()?.dirty).toBe(false);
   // Naming the collection's mod through the application is a collection change too; an empty name goes back to the default.
-  const productId = service.summary().draft!.products[0].id;
+  const productId = service.summary().products![0].id;
   expect(app.capability({ kind: "package.rename", productId, modName: "a|b" })).toMatchObject({ available: false, code: "invalid_value" });
   expect(app.dispatch({ kind: "package.rename", productId, modName: "My looks" }).ok).toBe(true);
   expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [], structureDirty: true });
