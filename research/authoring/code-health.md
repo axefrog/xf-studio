@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `81bcac9` | 2026-09-26 | Platform step 5 file moves: `engines/layered-makeup`, `features/eye-makeup/view`, composed views, UI-52 | 0 High, 5 Medium, 6 Low (CORE-75..81, UI-73..75, PREV-88). Nothing broken; the engine isn't region-generic yet and the new boundary tests have holes. UI-52 and CORE-03's layout part confirmed. Fixes in claude/cleanup-engine |
 | `6a1ff15` | 2026-09-26 | CC controls slice 2: Character panel, context actions, catalogue endpoint, request-4 | 1 High (PIPE-78), 7 Medium, 11 Low (PIPE-78..83, PREV-86..87, UI-67..72, CORE-70..74; renumbered from the reviewer's IDs, which collided with the blink review). Open Highs 2. All fixed in claude/cleanup-ccpanel |
 | `e1219fd` | 2026-09-26 | Game blink (solved clip, per-eye-shape seats, lash and brow binding) | 0 High, 1 Medium, 7 Low (PREV-80..85, UI-61..62, CORE-65). No drift over 5,000 scrubs; no GPL code copied |
 | `368f70b` | 2026-09-26 | Diagnostic Glitter route and verifier; `volume-info.ts` | 0 High, 2 Medium, 8 Low (PIPE-68..77). Production guard holds; builds deterministic; verifier misses flake contents. All fixed in claude/cleanup-glitter |
@@ -101,6 +102,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-29 | Med | Core (design) | Nine non-root modules import `compose/studio-registry` as a service locator; the boundary test only checks direct `features/` imports | **Fixed** (claude/cleanup-platform, 26 Sep): registry, part registry and live feature injected from the startup and server roots; only `compose/` and roots import `compose/`; the feature-import test is transitive |
 | CORE-38 | Med | Core | Export and Build plan save to the library first, which the CORE-30 guard refuses for any collection needing `xfs/collection-2`, so the export fails too and its message says to export to a file (`collection-service.ts:324-325`). Every multi-feature collection will hit this | **Fixed** (claude/cleanup-platform2, 26 Sep): the draft is saved first only when the library takes it; otherwise its snapshot is exported unsaved, with a plain message; test with the real library |
 | CORE-39 | Med | Core (data) | A one-feature history is always stored as whole parts (12–17× the `xfs/look-history-1` form), so `fitWorkspace` drops steps instead of switching form: a heavy 32-layer look keeps 4 of 80 steps, below the floor of 10 (`document.ts:380`, `workspace-budget.ts:98-144`) | **Fixed** (claude/cleanup-platform2, 26 Sep): `fitWorkspace` stores every history look-level before dropping steps (whole parts kept whenever they fit); the heavy look keeps all 80; the desktop host keeps that form |
+| CORE-75 | Med | Core (design) | The layered-makeup engine still holds eye makeup's region config: the new-layer/reset contour and starter, the fine-Glitter UV regions and cache key, the 2048×512/4096×1024 plate texture grids and a mirror fixed at u=0.5; the design doc says the opposite (`engines/layered-makeup/recipe.ts:106-128`, `layer-stack.ts`, `flake-field.ts`, `raster-processor.ts`, `finish-export.ts`) | Open (claude/cleanup-engine) |
+| CORE-77 | Med | Core (design) | The feature-core boundary checks direct imports only with a permissive allowlist and no globals check; eye makeup's core already reaches `platform/core/look-history` through `editor-actions` (`tests/architecture-import-boundary.test.ts:181-199`) | Open (claude/cleanup-engine) |
+| CORE-78 | Med | Core (design) | "Three only in `render/`" is direct-only (a pure engine module may import its own `render/`), and the `window` allowance hides `const w = window` and other globals (`tests/architecture-import-boundary.test.ts:207-226`) | Open (claude/cleanup-engine) |
+| UI-73 | Med | Presentation (design) | The facade-only rule is a text regex and views receive the whole `StudioRuntime`: `rt.port.authoring` via a local, `rt.dispatch.bind(rt)` and the shell's layer menu all bypass the facade (`studio-ui-boundary.test.ts:74-98`, `target-menus.ts:112-152`) | Open (claude/cleanup-engine) |
+| UI-75 | Med | Presentation (design) | The shell's remaining eye-makeup coupling (runtime requires the eye facade, `Frame` reads its view and look-wide `canUndo`, `rt.finishes` in Presets, `port.authoring` eye methods, the `"eye-makeup"` branch, the `uv` viewport kind) has no owner or removal criterion (`studio-ui/runtime.ts`, `studio-presentation.ts`) | Open (claude/cleanup-engine) |
 | CORE-45 | Med | Core (data) | Reading with `keep` sends any preset with a truthy `locked` key straight to `keepLook`, skipping part validation, and import reads untrusted files that way (`platform/core/document.ts:200`, `collection-service.ts:374`): an imported file with `"locked": "x"` and a garbage body is accepted, and after autosave the workspace no longer restores | **Fixed** (claude/cleanup-platform3) |
 | CORE-46 | Med | Core | `redoValid()` trusts the eye-makeup geometry revision alone, so a feature change with Undo policy `none` leaves Redo offered and Redo then silently overwrites it (`authoring-history.ts:165`, `studio-application.ts:479`) | **Fixed** (claude/cleanup-platform3) |
 | CORE-50 | Med | Core | Resetting a link controller clears only the controller; its followers keep the copied position, so the request still draws the old skin tone, neck and body colour (`character-context.ts:219,238-248`) | **Fixed** (claude/cc-panel, 26 Sep; see below) |
@@ -222,6 +228,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **CORE-76, CORE-79..81, UI-74, PREV-88** (step 5 moves review at `81bcac9`), Open (claude/cleanup-engine):
+  - **CORE-76:** eye-only lineage in the engine: `parseRecipe` reads `eye-artistry/recipe-*` and defaults to eye layer models; `RecipeActions` is an application publisher; user text says "eye" and "lid".
+  - **CORE-79:** the design doc's "what stays in `src/`" list is incomplete and names no destinations.
+  - **CORE-80:** `bun run check` excludes `tools/` and `experiments/`; pre-existing type errors there (`tools/cc-catalogue.ts`, `tools/runtime-diagnostic-promotion.ts`, experiments 008–010 on `recipe.schema`).
+  - **CORE-81:** current-truth pages give pre-move `src/` paths in backticks (the link checker sees only Markdown links).
+  - **UI-74:** the view import scan matches only `import … from`; re-exports, dynamic imports, `require` and `import.meta.require` slip through.
+  - **PREV-88:** `tools/glitter-fine-metrics.py` imports `./src/recipe`, which the move broke.
 - **PIPE-81..83, UI-68..72, CORE-72..74** (Character panel review at `6a1ff15`): Fixed in claude/cleanup-ccpanel (see below).
 - **PREV-81..85, UI-61..62, CORE-65** (game blink review at `e1219fd`): **Fixed** in claude/cleanup-blink (see below):
   - **PREV-81:** during Play blink `animating` stays true for the whole 2.45 s cycle though the clip lasts 0.5 s, so ~80 % of frames redraw a held pose.
@@ -254,7 +267,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- `src/engines/` (the layered-makeup engine and its `render/`) and `src/features/eye-makeup/view/`: moved code, no new behaviour (platform step 5 file moves, claude/platform-step5-moves).
+- None.
 
 ## Fixed in claude/platform-step5-moves
 
