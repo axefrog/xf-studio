@@ -49,7 +49,7 @@ Each appearance also retains an unsigned 64-bit resource hash as a decimal **str
 
 ## How import works
 
-The format has a CSAV header, FZLC chunk table, LZ4-compressed 4ZLX blocks (or uncompressed chunks), and an indexed node directory at the end. The reader reconstructs the node-offset coordinate space, locates the appearance node, and reads its groups, appearance resource hashes, definitions, morph region/target pairs, perspectives and tags. It has bounded file/chunk/collection/string sizes and rejects incomplete appearance records. It has **no save-writing path**.
+The format has a CSAV header, FZLC chunk table, LZ4-compressed 4ZLX blocks (or uncompressed chunks), and an indexed node directory at the end. The reader reconstructs the node-offset coordinate space, locates the appearance node, and reads its groups, appearance resource hashes, definitions, morph region/target pairs, perspectives and tags. It has bounded file/chunk/collection/string sizes and rejects incomplete appearance records. It has **no save-writing path**; the [save write-back design](../character-customization/save-writeback-design.md) covers how one could be added safely.
 
 Current implementation: [reader](../../projects/xf-studio/authoring/src/save-reader.ts), [CLI](../../projects/xf-studio/authoring/tools/read-save.ts). Browser file selection is local; save bytes are never posted to the server. The CLI operates on the captured copy. Tested end-to-end on this 2.31 save; the supported version guard is not a claim of exhaustive compatibility with all older saves.
 
