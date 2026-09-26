@@ -8,6 +8,7 @@ privacy check and the packaged-app content scan. Every tracked file that reads a
 scanned, whatever its extension. CI runs this and its self-test beside the link check.
 Findings name the file, line and kind only, never the matched text: CI logs are public.
 """
+import hashlib
 import json
 import re
 import subprocess
@@ -15,6 +16,7 @@ import sys
 from pathlib import Path
 
 DATA = json.loads((Path(__file__).resolve().parent / 'private-data.json').read_text(encoding='utf-8'))
+REDACTED_HASHES = set(DATA.get('redactedNameHashes', {}).get('hashes', []))
 
 
 def _compile(spec):
@@ -28,7 +30,9 @@ ROLE_LOCAL = _compile(DATA['emailExemptions']['local'])
 NOT_ADDRESS_DOMAINS = [_compile(spec) for spec in DATA['emailExemptions']['domains']]
 
 USER_FOLDER, MEDIA_FOLDER, EMAIL_ADDRESS = 'user folder', 'personal media folder', 'e-mail address'
-KINDS = frozenset({USER_FOLDER, MEDIA_FOLDER, EMAIL_ADDRESS})
+REDACTED_NAME = 'a name someone asked us not to use (tools/private-data.json redactedNameHashes)'
+KINDS = frozenset({USER_FOLDER, MEDIA_FOLDER, EMAIL_ADDRESS, REDACTED_NAME})
+WORD = re.compile(r'[A-Za-z0-9]+')
 # A repository-only rule: the reference collection's private media folder.
 MEDIA = re.compile(r'Media[\\/]+Other[\\/]', re.I)
 
@@ -61,6 +65,16 @@ def personal_data(line):
                 add(USER_FOLDER, match.start(), match.end())
     for match in MEDIA.finditer(line):
         add(MEDIA_FOLDER, match.start(), match.end())
+    words = list(WORD.finditer(line))
+    for index, word in enumerate(words):
+        candidates = [(word.group(0), word.start(), word.end())]
+        if index + 1 < len(words):
+            nxt = words[index + 1]
+            if nxt.start() - word.end() == 1 and line[word.end()] in ' _-':
+                candidates.append((word.group(0) + nxt.group(0), word.start(), nxt.end()))
+        for text, start, end in candidates:
+            if hashlib.sha256(text.lower().encode('utf-8')).hexdigest() in REDACTED_HASHES:
+                add(REDACTED_NAME, start, end)
     for match in EMAIL.finditer(line):
         local, domain = match.group(1), match.group(2)
         if ROLE_LOCAL.search(local) or any(rule.search(domain) for rule in NOT_ADDRESS_DOMAINS):
@@ -130,6 +144,14 @@ def self_test():
         expect([kind for kind, _, _ in personal_data(text)] == [EMAIL_ADDRESS], f'vectors.email[{index}] not flagged once as an address')
     for index, text in enumerate(vectors['clean']):
         expect(personal_data(text) == [], f'vectors.clean[{index}] flagged')
+    # Redacted names: a probe word pair hashed on the fly is found in every spelling, and nothing else is.
+    probe = hashlib.sha256(b'zzxqprobe' + b'wordvv').hexdigest()
+    REDACTED_HASHES.add(probe)
+    for text in ('by zzxq' + 'probe wordvv today', 'zzxqprobe_wordvv', 'ZzxqProbe-WordVV', 'x ZzxqprobeWordvv y'):
+        expect([kind for kind, _, _ in personal_data(text)] == [REDACTED_NAME], 'redacted probe not flagged')
+    for text in ('zzxqprobe  wordvv', 'zzxqprobe.wordvv', 'probe wordvv', 'zzxqprobewordvvx'):
+        expect(personal_data(text) == [], 'redacted probe flagged where it should not be')
+    REDACTED_HASHES.discard(probe)
     # Repository-only rule.
     expect([kind for kind, _, _ in personal_data('see Media/Other/clip.mp4')] == [MEDIA_FOLDER], 'media folder not flagged')
     # Exemptions are exact paths and exact kinds: the same file name elsewhere is scanned.

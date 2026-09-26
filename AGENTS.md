@@ -100,6 +100,7 @@ Whenever a third-party mod, repository, tool, guide, paper, discussion or creato
 - **Write current truth.** Update or replace stale statements; don't prepend dated diary paragraphs.
 - **Check links.** Run `python tools/check_links.py` before committing documentation changes; CI runs it on every push.
 - **No personal paths or identifiers.** The repository and site are public: no user-folder, save, Downloads or Temp paths, credentials or account identifiers. Use placeholders such as `PATH_TO_GAME` or `%USERPROFILE%`. `python tools/check_private_paths.py` enforces this in CI; run it before committing. Its patterns and test vectors live in `tools/private-data.json`, shared with the site's privacy check and the packaged-app content scan, so change them there.
+- **Names people asked us not to use.** A creator asked not to be named or credited; the repository writes them only as `redacted-c01`, even where a wiki page or mod credits them. The private-path check refuses the name in any spelling (it stores only a hash in `tools/private-data.json`). If it flags a line, write `redacted-c01` or leave the name out; never credit them.
 
 ## Sources, assets and repository hygiene
 
