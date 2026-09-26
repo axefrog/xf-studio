@@ -1,4 +1,4 @@
-import { createInflate, deflate, deflateSync, inflateSync } from "node:zlib";
+import { createDeflate, createInflate, deflate, deflateSync, inflateSync } from "node:zlib";
 
 /**
  * Small, dependency-free PNG codec for host-side asset derivation: 8-bit, non-interlaced
@@ -96,18 +96,54 @@ function chunk(type: string, body: Uint8Array): Uint8Array {
 }
 
 /** Encode an RGBA8 image as RGB (`alpha: false`) or RGBA PNG with the Up filter on every row. */
-export function encodePng(image: RgbaImage, options: { alpha: boolean }): Uint8Array {
+export function encodePng(image: RgbaImage, options: { alpha: boolean; level?: number }): Uint8Array {
   const { filtered, header } = filterForPng(image, options);
-  return assemblePng(header, deflateSync(filtered, DEFLATE_OPTIONS));
+  return assemblePng(header, deflateSync(filtered, deflateOptions(options.level)));
 }
 /**
  * `encodePng` with the compression on zlib's thread pool, so a large image never holds the host's event loop (PREV-107). The same zlib
  * and settings over the same bytes: the output is byte-identical to `encodePng`'s.
  */
-export async function encodePngAsync(image: RgbaImage, options: { alpha: boolean }): Promise<Uint8Array> {
+export async function encodePngAsync(image: RgbaImage, options: { alpha: boolean; level?: number }): Promise<Uint8Array> {
   const { filtered, header } = filterForPng(image, options);
   return assemblePng(header, await new Promise<Uint8Array>((resolve, reject) =>
-    deflate(filtered, DEFLATE_OPTIONS, (error, out) => error ? reject(error) : resolve(out))));
+    deflate(filtered, deflateOptions(options.level), (error, out) => error ? reject(error) : resolve(out))));
+}
+
+/**
+ * Encode an image given row by row (`row(r)`: RGBA8, asked for in order 0, 1, 2…, valid until the next call) as RGB or RGBA PNG with the
+ * Up filter, streaming: rows are filtered into pieces of about 1 MB and compressed on zlib's thread pool as they are made, so neither the
+ * image nor its filtered data is ever whole in memory. The same filter and settings as `encodePng`, so the same bytes for the same image.
+ */
+export async function encodePngRows(width: number, height: number, row: (r: number) => Uint8Array, options: { alpha: boolean; level?: number }): Promise<Uint8Array> {
+  if (!width || !height || width * height > MAX_PIXELS) throw Error("Unsupported PNG dimensions.");
+  const channels = options.alpha ? 4 : 3, stride = width * channels;
+  const header = new Uint8Array(13), view = new DataView(header.buffer);
+  view.setUint32(0, width); view.setUint32(4, height);
+  header.set([8, options.alpha ? 6 : 2, 0, 0, 0], 8);
+  const deflater = createDeflate(deflateOptions(options.level)), compressed: Uint8Array[] = [];
+  deflater.on("data", (piece: Buffer) => { compressed.push(new Uint8Array(piece)); });
+  const finished = new Promise<void>((resolve, reject) => { deflater.on("end", () => resolve()); deflater.on("error", reject); });
+  const rowsPerPiece = Math.max(1, Math.floor(2 ** 20 / (stride + 1)));
+  let previous = new Uint8Array(stride), current = new Uint8Array(stride);
+  for (let first = 0; first < height; first += rowsPerPiece) {
+    const count = Math.min(rowsPerPiece, height - first), piece = new Uint8Array(count * (stride + 1));
+    for (let n = 0; n < count; n++) {
+      const r = first + n, source = row(r), target = n * (stride + 1) + 1;
+      if (source.length < width * 4) throw Error("A PNG row is shorter than the image.");
+      for (let x = 0; x < width; x++) for (let k = 0; k < channels; k++) current[x * channels + k] = source[x * 4 + k]!;
+      piece[target - 1] = 2;
+      for (let x = 0; x < stride; x++) piece[target + x] = (current[x]! - (r ? previous[x]! : 0)) & 255;
+      [previous, current] = [current, previous];
+    }
+    if (!deflater.write(piece)) await new Promise<void>(resolve => deflater.once("drain", () => resolve()));
+  }
+  deflater.end();
+  await finished;
+  const total = compressed.reduce((sum, part) => sum + part.length, 0), data = new Uint8Array(total);
+  let offset = 0;
+  for (const part of compressed) { data.set(part, offset); offset += part.length; }
+  return assemblePng(header, data);
 }
 
 /**
@@ -201,19 +237,22 @@ function toRgbaRow(row: Uint8Array, width: number, channels: number): Uint8Array
 }
 
 const DEFLATE_OPTIONS = { level: 9, memLevel: 9, strategy: 0 } as const;
+/** zlib settings: the defaults, or another compression level (a served texture trades a few percent of size for several times the speed). */
+const deflateOptions = (level?: number) => level === undefined ? DEFLATE_OPTIONS : { ...DEFLATE_OPTIONS, level };
 /** An RGBA8 image packed and Up-filtered for PNG, with its header. */
 function filterForPng(image: RgbaImage, options: { alpha: boolean }): { filtered: Uint8Array; header: Uint8Array } {
   const { width, height, data } = image;
   if (data.length !== width * height * 4) throw Error("Image data does not match its dimensions.");
-  const channels = options.alpha ? 4 : 3, stride = width * channels;
-  const packed = new Uint8Array(stride * height);
-  for (let pixel = 0; pixel < width * height; pixel++)
-    for (let k = 0; k < channels; k++) packed[pixel * channels + k] = data[pixel * 4 + k]!;
+  const channels = options.alpha ? 4 : 3, stride = width * channels, rowBytes = width * 4;
+  // Packed and Up-filtered in one pass from the RGBA rows (no packed copy of the image: a 4096² map is 48 MB less to allocate).
   const filtered = new Uint8Array((stride + 1) * height);
   for (let row = 0; row < height; row++) {
-    const target = row * (stride + 1), source = row * stride;
-    filtered[target] = 2;
-    for (let x = 0; x < stride; x++) filtered[target + 1 + x] = (packed[source + x]! - (row ? packed[source - stride + x]! : 0)) & 255;
+    const target = row * (stride + 1) + 1, source = row * rowBytes, above = source - rowBytes;
+    filtered[target - 1] = 2;
+    for (let pixel = 0; pixel < width; pixel++) {
+      const from = source + pixel * 4, to = target + pixel * channels;
+      for (let k = 0; k < channels; k++) filtered[to + k] = (data[from + k]! - (row ? data[above + pixel * 4 + k]! : 0)) & 255;
+    }
   }
   const header = new Uint8Array(13);
   const view = new DataView(header.buffer);

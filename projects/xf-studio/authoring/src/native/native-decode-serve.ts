@@ -8,11 +8,12 @@
 import { depotHash } from "../depot-path";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
-import { decodeFromPool, type NativeDecodeOptions, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerInit, type WorkerReply } from "./native-decode";
+import { decodeFromPool, type NativeDecodeOptions, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerInit, type WorkerReply, type WorkerTextureMessage } from "./native-decode";
+import { decodeTextureFromPool } from "./texture-decode";
 
 export interface WorkerScope {
   addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer?: Transferable[]): void;
   /** Ends the worker (a worker's global `close`). */
   close?(): void;
 }
@@ -29,9 +30,9 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
     state = { pool: new NativeArchivePool(decompress, 64, message.limits), decompress, release: typeof opened === "function" ? () => {} : opened.close,
       options: { roots: new Set(message.roots), limits: message.limits, identity: message.identity } };
   };
-  const reply = (message: WorkerReply) => scope.postMessage(message);
+  const reply = (message: WorkerReply, transfer?: Transferable[]) => transfer ? scope.postMessage(message, transfer) : scope.postMessage(message);
   scope.addEventListener("message", event => {
-    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerCloseMessage;
+    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerCloseMessage;
     if (message.type === "close") {
       // Idle: release the library (so a game update can replace it) and exit (NATIVE-42).
       const current = state;
@@ -47,6 +48,18 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
       const outcome = state ? decodeFromPool(state.pool, state.decompress, message.request, state.options, depotHash)
         : { ok: false as const, kind: "internal" as const, message: "The native decoder worker was not initialised." };
       reply({ type: "outcome", id: message.id, outcome });
+    }
+    if (message.type === "texture") {
+      const current = state;
+      const decoding = current ? decodeTextureFromPool(current.pool, current.decompress, message.request)
+        : Promise.resolve({ ok: false as const, kind: "internal" as const, message: "The native decoder worker was not initialised." });
+      void decoding.then(outcome => {
+        // The PNG's buffer moves to the host instead of being copied (a 4096² map's PNG is ten MB or more).
+        const png = outcome.ok ? outcome.texture.png : null;
+        reply({ type: "outcome", id: message.id, outcome }, png && png.byteOffset === 0 && png.byteLength === png.buffer.byteLength ? [png.buffer as ArrayBuffer] : undefined);
+        // A texture leaves tens of MB of garbage (the resource and its texture data): ask for a collection before the next one.
+        (globalThis as { Bun?: { gc?: (force: boolean) => void } }).Bun?.gc?.(false);
+      });
     }
   });
 }

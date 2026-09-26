@@ -413,7 +413,8 @@ export class CharacterPreparationCache {
   readonly gamma = new RunMap<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
   readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null }>();
-  readonly textures = new RunMap<string, { png: string }>();
+  /** A texture's PNG, and mip 0's size in the game files when the PNG is a smaller mip of it (XF Studio's texture reader). */
+  readonly textures = new RunMap<string, { png: string; gameSize?: { width: number; height: number } }>();
   readonly masks = new RunMap<string, { layers: string[] }>();
   /** Served components by their plan (canonical JSON), within this installation. */
   readonly components = new RunMap<string, BuiltComponent>();
@@ -559,6 +560,11 @@ type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<str
   toolFailures: Set<string>; toolLabel: string | undefined;
   /** Where the time went, for the preparation's log line (PIPE-103): the first exports, the reads beside them, the layer maps after. */
   stages: string[] };
+/** The native texture reader's counts of an exporter that has one (native-texture-export.ts), copied. */
+const nativeTextureCounts = (exporter: GameAssetExporter) => {
+  const stats = (exporter as { nativeTextures?: { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number } }).nativeTextures;
+  return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
+};
 /** Exports asked of the exporter, and how many of them its own disk cache answered (the rest ran WolvenKit). */
 type ExportTally = { asked: number; cached: number };
 
@@ -653,6 +659,7 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
   const began = performance.now(), seconds = (from: number) => `${((performance.now() - from) / 1000).toFixed(2)} s`;
   const tally: ExportTally = { asked: 0, cached: 0 }, stages: string[] = [];
+  const texturesBefore = nativeTextureCounts(ctx.exporter);
   const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
     ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures, tally)
     .finally(() => { stages.push(`exports ${seconds(began)}`); }));
@@ -730,6 +737,11 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   if (layered.length || later.length) stages.push(`layer maps ${seconds(laterBegan)}`);
   const first = await exportedFirst;
   stages.push(`${tally.asked} export(s), ${tally.cached} from the export cache`);
+  const textures = nativeTextureCounts(ctx.exporter);
+  if (textures && texturesBefore) {
+    const decoded = textures.decoded - texturesBefore.decoded, cachedNative = textures.cached - texturesBefore.cached, fellBack = textures.fellBack - texturesBefore.fellBack;
+    if (decoded || cachedNative || fellBack) stages.push(`textures read natively: ${decoded} decoded in ${((textures.decodeMs - texturesBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit; WolvenKit exports ${((textures.innerMs - texturesBefore.innerMs) / 1000).toFixed(2)} s beside them`);
+  }
   for (const outcome of [first, exportedLater, readsDone, laterReads]) if ("error" in outcome) throw outcome.error;
   const toolLabel = ("value" in first ? first.value : undefined) ?? ("value" in exportedLater ? exportedLater.value : undefined);
   return { geometryAt, textureAt, maskAt, toolFailures, toolLabel, stages };
@@ -923,7 +935,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   /** One exported texture as the record serves it: raw channels, the resource's own colour flag, and where it came from. */
   const serveTexture = (ref: DepotRef, parameter: string, extractedSha256?: string | null): { texture: RenderTexture } | { why: string } => {
     const key = refLabel(ref).toLowerCase(), at = textureAt.get(key) ?? locate(graph, ref) ?? undefined;
-    const png = at ? cache.textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png : undefined;
+    const exportedTexture = at ? cache.textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`) : undefined, png = exportedTexture?.png;
     if (!at || !png) return { why: at ? "not exported" : "not in any mounted archive" };
     // A texture larger than the preview is served (a body texture mod's 8K maps) is served halved until it fits; others as exported.
     const exported = pngFileSize(png);
@@ -937,6 +949,10 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     } else stored = store(options.storeRoot, png, "png");
     const size = stored.size;
     if (!size) return { why: "unreadable image" };
+    // XF Studio's texture reader serves a large map's own smaller mip (PIPE-104).
+    const game = exportedTexture?.gameSize;
+    if (game && (game.width > size.width || game.height > size.height))
+      note(`${refLabel(ref)}: ${game.width}×${game.height} in the game files; the preview uses its ${size.width}×${size.height} mip.`);
     if (!spend(stored.file, size.width * size.height)) return { why: "over the preview's texture budget" };
     componentTextures.set(stored.file, size.width * size.height);
     const gamma = cache.gamma.get(key);

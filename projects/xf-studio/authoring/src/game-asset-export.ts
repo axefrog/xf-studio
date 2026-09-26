@@ -50,7 +50,12 @@ export type ExportedGeometry = {
    */
   repair?: string | null;
 };
-export type ExportedTexture = { depotPath: string; hash: string; png: string; pngSha256: string; cached: boolean };
+export type ExportedTexture = { depotPath: string; hash: string; png: string; pngSha256: string; cached: boolean;
+  /**
+   * Mip 0's size in the game files, when the PNG is a smaller mip of it (XF Studio's texture reader serves the largest mip within the
+   * preview's size; native-texture-export.ts). Absent for WolvenKit's full-size exports.
+   */
+  gameSize?: { width: number; height: number } };
 /** A `.mlmask` decoded into one PNG per mask layer (index = layer), as WolvenKit writes them (`<name>_layers/<name>_<i>.png`). */
 export type ExportedMask = { depotPath: string; hash: string; layers: string[]; cached: boolean };
 
