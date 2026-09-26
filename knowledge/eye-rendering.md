@@ -2,7 +2,7 @@
 
 **Maturity: Draft.** Ranks 1–3 of the plan are built (§6.6). Consolidated on 25 September 2026 from the vanilla 2.31 eye resources (female first, male where cheap), the decompiled eye G-buffer, wetness-shell and deferred-lighting programs, the installed CCXL eye mods of the reference MO2 profile, and ArchiveXL 1.27.3. No claim here has runtime evidence. Grades follow the [knowledge rules](README.md): **[source]** (engine, framework or decompiled program), **[resource]**, **[wiki]** (Modding Docs at `be2f44ee`), **[runtime]**, **[hypothesis]**. Program GUIDs, SSA ranges, hashes and the extraction method are in the [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md).
 
-This page is rank 4 of the [head render plan](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort): the iris gradient, all 71 eye colours and the wetness shell. It answers which resources a V's eyes resolve to, what the game's programs do with them, how CCXL eye mods plug in, and how the Studio preview should reproduce it. [Materials and shaders](materials-and-shaders.md) holds the G-buffer and template background; the [CC file chain](cc-file-chain.md) holds the resolver rules.
+This page is rank 4 of the [head render plan](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort): the iris gradient, all 71 eye colours and the wetness shell. It answers which resources a V's eyes resolve to, what the game's programs do with them, how CCXL eye mods plug in, and how the Studio preview should reproduce it. [Materials and shaders](materials-and-shaders.md) holds the G-buffer and template background; the [CC file chain](cc-file-chain.md) holds the resolver rules. The evidence-level [eye shader reference](../research/materials/shader-eye.md) has every parameter, pass and program hash, the sibling templates, and the diagnosis of the preview's waxy eye.
 
 ## 1. What an eye choice resolves to
 
@@ -27,7 +27,7 @@ eyes_color option (71 definitions per body)            ── ArchiveXL fix: he_
 | Texture-only (50–55 Rebecca; 62–71 cyber eye, double eye, ring, stand clear, circle) | 16 | `eye.mt` (Eye) | `Albedo`, often `Normal` (`he_000_rebecca_n01`, `he_000_circle_n01` or flat `normal.xbm`) and `Roughness`; the two circle designs set the horizontal angles to ±3.6 | as above |
 | Multilayer (19–49, 56–61) | 37 | `engine\materials\multilayered.mt` (**Standard**) | a 20-layer `.mlsetup` (plastic and nylon layer templates) over one of three `eye_ml*.mlmask` | no iris refraction, no gradient, no second normal |
 
-All [resource]. Every vanilla eye material sets the same optical scalars: `RefractionIndex` 0.97, `RefractionAmount` 1, `IrisSize` 0.7374, `EyeRadius` 0.0152, `EyeParallaxPlane` 0.0134, `EyeHorizAngleRight/Left` +5/−5, `BubbleNormalTile` 0.6313, `Egg*` 1/1/0.4/0.2, `IrisCoordFactor` 0.1650, `IrisCoordMargin` 0.0202, `Specularity` 0, `RoughnessScale` 0.4934. Gradient materials set `BlickScale` 0.1, but no program reads it (§2.4). The full 71-row table is in the evidence note.
+All [resource]. Every vanilla eye material inherits the template's optical scalars unchanged (only the two circle designs override the horizontal angles): `RefractionIndex` 0.97, `RefractionAmount` 1, `IrisSize` 0.7374, `EyeRadius` 0.0152, `EyeParallaxPlane` 0.0134, `EyeHorizAngleRight/Left` +5/−5, `BubbleNormalTile` 0.6313, `Egg*` 1/1/0.4/0.2, `IrisCoordFactor` 0.1650, `IrisCoordMargin` 0.0202, `Specularity` 0, `RoughnessScale` 0.4934. Gradient materials set `BlickScale` 0.1, but no program reads it (§2.4). The full 71-row table is in the evidence note.
 
 **Gradient profiles** are 3-stop `CGradient`s [resource]. The six "classic" ones share a shape: dark grey (22,22,22) at 0, the colour at 0.786, white at 1 (brown (129,98,78), blue (107,148,202), light blue (130,192,229), green (118,168,88), grey (138,138,138), violet (169,126,213), yellow (151,125,3)). `eye_black` puts (81,81,81) at 0.594. `eye_red` is different: (22,8,0) at 0.207, (216,0,4) at 0.298, (255,135,0) at 0.576. Thirteen further profiles in the folder are used only by NPC materials.
 
@@ -42,7 +42,7 @@ All [resource]. Every vanilla eye material sets the same optical scalars: `Refra
 | `he_000_base_n01` (Normal) | RG packed, B = 0; strong iris relief (mean tilt 50–60° inside the iris), flat sclera | 0 | [resource] |
 | `he_000_base_rm01` (Roughness) | **R** only; ≈ 80/255 over the iris and pupil, ≈ 26/255 over the sclera, so after `RoughnessScale` 0.157 and 0.05 | 0 | [resource] |
 | `normal_bubble` (NormalBubble) | RG packed, ±1.5° ripple | 0 | [resource] |
-| `he_000_rebecca_n01` | a normal map stored as a **gamma colour** texture | **1** | [resource]; the engine therefore decodes it before the RG unpack [hypothesis, same rule as §2.3] |
+| `he_000_rebecca_n01` | a normal map stored as a **gamma colour** texture (`TCM_QualityColor`), flat texels 128/128/255 | **1** | [resource]. Decoded, the flat 128 would become a 54° tilt of the iris normal over the whole eye, shading every Rebecca eye lopsidedly; like the mask (§2.3) it argues for raw sampling [hypothesis] |
 | `eye_shadow_mask` (Mask) | **R** = occlusion (≈ 0 in the middle of the eye opening, 1 towards the lids and corners); **G** ≈ 106/255 everywhere (wet roughness 0.42); **B** = a thin arc along the lower lid margin, up to 44/255 (the tear line); A unused | 0 | [resource] |
 
 ### 1.3 The morph resource can replace the eye's normal map
@@ -93,7 +93,9 @@ Then the surface [source]:
 Three consequences for a renderer:
 
 - **Colour, normal and mask are sampled V-flipped** relative to the raw UV (`1 − v`), roughness is not [source]. The CCXL eye guide tells authors to invert the albedo on Y and to regenerate, not flip, the normal map [wiki: `ccxl-eye-textures.md` L267-271, image `inverted_y_03.png`]. The Studio's eye preview follows this rule (§6.6).
-- **The iris is a projection, not a texture on the sphere.** Inside the iris the coordinate comes entirely from where the refracted view ray meets a plane 13.4 mm from the eye centre, in the eye's own frame; the mesh UV only chooses the iris/sclera blend. At a straight view the limbus (UV radius 0.165) projects to about 0.151, a 9 % magnification; at grazing views the iris slides against the limbus.
+- **The iris is a projection, not a texture on the sphere.** Inside the iris the coordinate comes entirely from where the refracted view ray meets a plane 13.4 mm from the eye centre, in the eye's own frame; the mesh UV only chooses the iris/sclera blend. At a straight view the limbus (UV radius 0.165) projects to about 0.151, a 9 % magnification that comes from the `IrisSize` scale, not from bending; at grazing views the iris slides against the limbus.
+- **The refraction is almost pure parallax.** `RefractionIndex` 0.97 is an index ratio, an inner index of about 1.03 (a real cornea is about 1.38): at a 30° view the ray bends by about 1°, and the iris under the pupil shifts 1.0 mm instead of 1.04 mm [source, arithmetic].
+- **"Right" is the viewer's right.** Raw U > 0 takes the "Right" parameters, and that is the pupil at U 1.5, the character's left eye (`l_J_eye_JNT`) [source + resource].
 - **The eye axis is engine data.** The two per-eye vectors are not material parameters. Reading: they are the eye joint's forward and lateral axes; the ±5° then turns each iris axis about 5° outward, like the eye's angle kappa [hypothesis]. In the bind pose the eye joints' forward is their local −Y [resource: `boneRigMatrices`]. A wrong sign shifts the iris sideways by about 0.03 UV, a fifth of its radius.
 
 ### 2.3 The gradient coordinate: raw or decoded?
@@ -119,7 +121,7 @@ The eye has its own, cheaper BRDF in every clustered light variant that includes
 | Local lights | the same BRDF; area and tube lights take their representative point from the reflection about N1; per-light roughness offset as for Standard | Burley, Smith, pow5 |
 | Ambient (probes) | diffuse and specular both on **N1**, occlusion terms forced to 1 when a global flag is off | on the one normal |
 
-At normal incidence the eye's visibility term is half a Standard lobe's (0.125 against 0.25), so the cornea highlight is about half as bright as the same roughness on skin [source, inference from the formula]. Diffuse and specular leave the light in separate buffers, then are combined as for Standard; whether the SSS blur skips Eye pixels was not read. The global render option `Editor/Characters/Eyes` `DiffuseBoost` (vanilla 0.1) and `UseAOOnEyes` exist [community, Character Rendering Editor], but how they enter the programs is not decoded; `cb13[4]` scales specular for both classes and `cb6[9].z` gates the eye's occlusion bypass [source; meanings hypothesis].
+At normal incidence the eye's visibility term is half a Standard lobe's (0.125 against 0.25), so the cornea highlight is about half as bright as the same roughness on skin [source, inference from the formula]. Diffuse and specular leave the light in separate buffers, then are combined as for Standard. **Eye pixels are outside SSS**: the setup, blur and combine run on Subsurface pixels only [source] ([skin reference §6](../research/materials/shader-skin.md#6-lighting-the-subsurface-class-and-the-sss-pipeline)). In the ambient pass an Eye pixel's whole indirect result is multiplied by `1 + cb6[9].w`, and its occlusion terms are forced to 1 when the flag `cb6[9].z` is off; no other class gets either [source] ([eye reference §6.3](../research/materials/shader-eye.md#63-ambient-probes)). The global render options `Editor/Characters/Eyes` `DiffuseBoost` (vanilla 0.1) and `UseAOOnEyes` [community, Character Rendering Editor] match those two registers by role, which would make vanilla eye ambient 1.1× [hypothesis]. `cb13[4]` scales specular for both classes [source; meaning hypothesis]. The eyeball casts sun shadows; the shell does not [resource].
 
 **What this means visually.** The iris is shaded as a matte, relief-mapped disc lit only by direct light (Lambert on its own bumpy normal), while all reflections, the sharp catch lights and the environment, sit on a smooth cornea and a nearly mirror-like sclera (roughness 0.05, cornea 0.157). Ambient light does not see the iris relief.
 
@@ -267,6 +269,8 @@ In the browser (`?verify=1`, reference MO2 profile), three Vs resolved and drew:
 
 None of this has been compared with the game.
 
+**The waxy eye.** Comparing the preview with the programs, the look comes from three missing terms: the iris lit on the smooth sphere instead of its relief normal, a flat roughness of 0.18 (the game's sclera is 0.05 and its lobe carries half the energy), and no parallax. It is too rough rather than too glossy, and it is not a subsurface problem [hypothesis, from the comparison; [eye reference §9](../research/materials/shader-eye.md#9-the-waxy-eye-preview-artefact)]. Ranks 4–5 are the fix, with the eye's own roughness on by default.
+
 **Still open.** Rank 4 is the two-normal Eye light: Lambert on N2, GGX on N1 with the eye visibility and the exp2 Fresnel, and the `sunDir·N2` cut; the eyeball still uses the standard light and no normal map. Rank 5 is the refracted iris coordinate and the per-eye joint axes as uniforms, which `EYE_SURFACE` computes `uvC` for. Rank 6 is heterochromia's two components. Rank 7 is built (above). Test asks 9–12 remain the gates.
 
 ## Open questions
@@ -275,9 +279,9 @@ None of this has been compared with the game.
 2. What exactly are the per-eye `MaterialModifiersConsts` vectors (joint axes, look-at target, something else), and which way does the ±5° turn?
 3. Does the morph `baseTexture` really replace the material's `Normal` at runtime, and does ArchiveXL's fix apply to vanilla choices on every route?
 4. How is the runtime gradient atlas built (stop interpolation space, sample count, filtering)? Shared with hair profiles?
-5. What do `DiffuseBoost`, `UseAOOnEyes`, `cb13[4]` and `cb6[9].z` do to eyes, and do the SSS passes skip Eye pixels?
+5. Are `cb6[9].w` and `cb6[9].z` (the eye ambient factor and AO bypass) the `DiffuseBoost` and `UseAOOnEyes` options, and what is `cb13[4]`? (The SSS passes skip Eye pixels: answered.)
 6. Heterochromia: which chunk mask wins on the female left app, and does the vanilla eye entity in `partsValues` draw?
 
 ## Related pages
 
-[Head CC rendering](head-cc-rendering.md) · [Materials and shaders](materials-and-shaders.md) · [CC file chain](cc-file-chain.md) · [Mod loading](mod-loading.md) · [Creator lighting](creator-lighting.md) · [Eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) · [Experiment 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md) · [Modded eye resolution](../research/eye-artistry/modded-eye-resolution.md)
+[Head CC rendering](head-cc-rendering.md) · [Eye shader reference](../research/materials/shader-eye.md) · [Materials and shaders](materials-and-shaders.md) · [CC file chain](cc-file-chain.md) · [Mod loading](mod-loading.md) · [Creator lighting](creator-lighting.md) · [Eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) · [Experiment 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md) · [Modded eye resolution](../research/eye-artistry/modded-eye-resolution.md)

@@ -9,7 +9,7 @@ This page explains how Cyberpunk 2077 materials work well enough to:
 
 Hair is covered only at overview level here. See [hair shading](hair-shading.md) for the in-depth study.
 
-**Per-family references.** The systematic shader study keeps one evidence-level reference per template family, with every parameter, pass, program hash and grade: [skin](../research/materials/shader-skin.md) and [hair](../research/materials/shader-hair.md) so far (eye, decals and multilayered follow). The [shader fact index](../research/materials/shader-fact-index.md) maps each engine fact to the Studio preview materials and export compilers that rely on it, so a correction reaches all of them.
+**Per-family references.** The systematic shader study keeps one evidence-level reference per template family, with every parameter, pass, program hash and grade: [skin](../research/materials/shader-skin.md), [hair](../research/materials/shader-hair.md) and [eye](../research/materials/shader-eye.md) so far (decals and multilayered follow). The [shader fact index](../research/materials/shader-fact-index.md) maps each engine fact to the Studio preview materials and export compilers that rely on it, so a correction reaches all of them.
 
 **Evidence grades:**
 
@@ -281,8 +281,8 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | Template / pass | Pixel GUID | Documented in |
 |---|---|---|
 | `skin` `gbuffer_regular` pixel / vertex (wrinkle regions) | `12806642364631437234` / `7494393843130164436` | [skin reference](../research/materials/shader-skin.md), [saved-skin trace](../research/eye-artistry/saved-skin-shader-and-winner.md) |
-| `eye` `gbuffer_regular` | `14845425953312192161` | [eye/lip optics](../research/eye-artistry/eye-lip-optics-audit.md) |
-| `eye_gradient` `gbuffer_regular` / `gbuffer_velbuff_regular` | `10020572278408962832` / `776001972724306108` | [exp. 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md), [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) |
+| `eye` `gbuffer_regular` | `14845425953312192161` | [eye reference](../research/materials/shader-eye.md), [eye/lip optics](../research/eye-artistry/eye-lip-optics-audit.md) |
+| `eye_gradient` `gbuffer_regular` / `gbuffer_velbuff_regular` | `10020572278408962832` / `776001972724306108` | [eye reference](../research/materials/shader-eye.md), [exp. 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md), [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) |
 | `mesh_decal` `post_gbuffer` | `16098255505177109230` | [decal contract](../research/materials/mesh-decal-shader-contract.md) |
 | `mesh_decal_blendable` `post_gbuffer` | `3004271728282315156` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
 | `mesh_decal_wet_character` `post_gbuffer` | `17388524518779931857` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
@@ -294,7 +294,7 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | `mesh_decal_emissive_subsurface` `subsurface_emissive` / `highlights` | `8986576764202126900` / `7960168020925993542` | [glint feasibility](../research/materials/redengine-glint-feasibility.md) |
 | `metal_base_glitter` `gbuffer_regular` | `15760075574186250120` | [glitter investigation](../research/materials/glitter-shader-investigation.md) |
 | `metal_base` `gbuffer_regular` | `1846801220589112223` | [evidence note](../research/materials/shader-system/README.md) |
-| `eye_shadow` `transparent_back_face` | `14043594489545752539` | [evidence note](../research/materials/shader-system/README.md), [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) |
+| `eye_shadow` `transparent_back_face` | `14043594489545752539` | [eye reference](../research/materials/shader-eye.md), [evidence note](../research/materials/shader-system/README.md), [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) |
 | `multilayered_clear_coat` `unlit` | `5403688829342147459` | [evidence note](../research/materials/shader-system/README.md) |
 | `multilayered` `gbuffer_regular` (MeshSkinned and MeshStatic) | `4792354088802328889` | [multilayered evidence](../research/materials/multilayered-shader-evidence.md) |
 | static `m_surfaceCache_GenerateMultilayer` (compute) | `7318179378413828262` | [multilayered evidence](../research/materials/multilayered-shader-evidence.md) |
@@ -347,22 +347,23 @@ Every parameter, pass, program hash, the instance chains of the player head and 
 
 **Class:** Eye.
 
-**Passes:** opaque G-buffer, velocity, highlights. `eye.mt` defaults: `RoughnessScale` 0.4934, `RefractionIndex` 0.97, `EyeRadius` 0.0152 [resource].
+**Passes:** opaque G-buffer, velocity, cascade shadows (the eyeball casts sun shadows), depth, highlights and an editor pick pass; no translucency pass. `eye.mt` defaults: `RoughnessScale` 0.4934, `RefractionIndex` 0.97, `EyeRadius` 0.0152 [resource]. `eye_blendable` adds a braindance Fresnel rim to the colour and `eye_morph` a scripted wipe of the gradient; otherwise the four share one arithmetic [source] ([eye reference §2](../research/materials/shader-eye.md#2-the-templates)).
 
 | Parameter | Semantics | Grade |
 |---|---|---|
 | `Albedo`, `Normal` | Sampled at a **computed, view- and eye-parameter-dependent UV**. Normal is RG with reconstructed Z. | [source] [optics audit](../research/eye-artistry/eye-lip-optics-audit.md) |
 | `Roughness` | **R** × `RoughnessScale`, at the *original* UV, written to GBuffer2.y. The G channel is not used. | [source] |
 | `NormalBubble`, `BubbleNormalTile` | Cornea bulge normal (RG) | [source] |
-| `IrisMask`, `IrisColorGradient` (`eye_gradient`) | Mask **R** addresses the gradient row `(reg+0.5)/512` of a runtime gradient texture. Mask **A** lerps from Albedo to the gradient colour. | [source] [exp. 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md) |
-| `RefractionIndex/Amount`, `IrisSize`, `EyeParallaxPlane`, `EyeHorizAngleLeft/Right`, `Egg*`, `IrisCoord*` | Parallax/refraction UV construction | [source] (the parameters are read) |
+| `IrisMask`, `IrisColorGradient` (`eye_gradient`) | The engine binds `IrisColorGradient` as a row index into a 512-row runtime gradient atlas, sampled at `(mask R, (row + 0.5)/512)`: mask **R** is the position along the row. Mask **A** lerps from Albedo to the gradient colour. | [source] [exp. 014](../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md) |
+| `RefractionIndex/Amount`, `IrisSize`, `EyeParallaxPlane`, `EyeHorizAngleLeft/Right`, `Egg*`, `IrisCoord*` | Parallax/refraction UV construction and the analytic cornea bulge. The index ratio 0.97 bends the view ray by about 1° at 30°, so the effect is nearly pure parallax 1.8 mm under a virtual 15.2 mm sphere | [source] ([eye reference §5.3](../research/materials/shader-eye.md#53-eye-frame-refraction-and-parallax)) |
 | `Specularity` | Written to GBuffer2.x, the metalness slot; 0 in every vanilla and inspected mod material | [source] |
 | `Blick`, `BlickScale`, `SubsurfaceFactor`, `AntiLightbleed*` | Read by no pixel program of the eye family in any pass or vertex factory, and by no static program. `Blick` is a cubemap. Inert in 2.31 unless a CPU-side consumer exists | [source] ([eye rendering §2.4](eye-rendering.md#24-inert-parameters)) |
 
 **Gotchas:**
 
 - The Eye class stores a second vector, the iris normal, octahedral-encoded to 10 bits per axis in GBuffer2.zw plus two low bits each in GBuffer0.w and GBuffer1.w; GBuffer1.rgb holds the cornea normal. It disables the translucency term (§2.3). The full program, the 71 creator colours and the preview spec are on [eye rendering](eye-rendering.md).
-- `IrisMask` is a gamma texture, yet the gradient profiles are authored for its raw R range; whether the engine decodes it is open ([eye rendering §2.3](eye-rendering.md#23-the-gradient-coordinate-raw-or-decoded)).
+- `IrisMask` is a gamma texture, yet the gradient profiles are authored for its raw R range; the Rebecca eyes' normal map is a gamma texture too, and decoding its flat texels would tilt the iris normal 54° over the whole eye. Whether the engine decodes either is open ([eye rendering §2.3](eye-rendering.md#23-the-gradient-coordinate-raw-or-decoded)).
+- Eye pixels are outside the SSS passes; the ambient pass multiplies their indirect light by `1 + cb6[9].w` and can bypass their occlusion ([eye reference §6.3–6.4](../research/materials/shader-eye.md#63-ambient-probes)).
 - The Blender add-on samples eye roughness **G**, contradicting the compiled R [source]. CCXL eye guides note the eye UVs are Y-flipped [wiki] (`ccxl-eye-textures.md` L267-271).
 
 ### 4.3 Hair (`hair.mt` family) — overview only
@@ -383,7 +384,7 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, the [h
 
 **Pass:** `transparent_back_face`, forward-lit, `CULL_None`, blend `One/SrcAlpha`, i.e. out = highlight + dst·alpha [resource] [source].
 
-**Vertex factories:** `eye_shadow` has MeshSkinned; `eye_shadow_blendable` has only MeshStatic and MeshExtSkinned [resource].
+**Vertex factories:** `eye_shadow` has MeshSkinned; `eye_shadow_blendable` has only MeshStatic and MeshExtSkinned [resource]. The blendable's pixel program is identical to `eye_shadow`'s, and its Fresnel parameters are read by no program; it adds only a braindance glitch and fade on the vertex side [source] ([eye reference §7.1](../research/materials/shader-eye.md#71-eye_shadow_blendablemt)).
 
 | Parameter (reg) | Compiled semantics | Grade |
 |---|---|---|
@@ -537,7 +538,7 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 3. **Skin-profile table.** The table holds 8 slots per frame; `roughness0/1` and `lobeMix` form the dual-lobe specular kernel (§2.3), and the blur reads a per-slot kernel row of weights and offsets plus a per-channel strength colour ([skin reference §6.3](../research/materials/shader-skin.md#63-blur-and-combine)). Open: how the CPU builds those rows from `blurSize`, `diffuse` and `falloff`; what happens with more than 8 distinct `.sp` on screen; which lights set the per-light roughness byte, and to what (photo-mode lights in particular).
 4. **Metal ≥ 0.1 threshold.** The SSS blur and combine skip pixels whose blended metalness exceeds 0.1 [source]; the flag controlling the light's albedo = 1 path is unknown. Does metallic makeup over skin show a visible SSS seam at soft edges (the lifted metal ramp on the next candidate)? The preview switches its SSS stand-in off on the authored plate's blended metalness, so Metallic crosses it at about 15 % coverage over dielectric skin; the albedo = 1 path is not modelled.
 5. ~~**Eye second vector.**~~ **Answered [source]:** it is the iris normal from the `Normal` map at the refracted coordinate; the light uses it for Lambert diffuse and the specular horizon, and the cornea normal for specular and ambient. No program reads `Blick`, `SubsurfaceFactor` or `AntiLightbleed*`. Remaining eye questions are on [eye rendering](eye-rendering.md#open-questions).
-6. **`eye_shadow` as a gloss shell.** Is it usable as a glossy-makeup shell (sorting, `transparent_back_face` stage semantics, blink, cost)? (Its vanilla user is the eye mesh's wetness chunk.)
+6. **`eye_shadow` as a gloss shell.** Is it usable as a glossy-makeup shell (sorting, `transparent_back_face` stage semantics, blink, cost)? (Its vanilla user is the eye mesh's wetness chunk.) Known from the programs: only `eye_shadow` itself compiles for MeshSkinned; with `Intensity` 0 it adds a direct-light-only GGX highlight with no Fresnel and no environment reflection, so a wet look would show only under direct lights ([eye reference §7.2](../research/materials/shader-eye.md#72-the-shell-as-a-gloss-layer)).
 7. **Runtime gradient atlases.** Recover the atlas construction for `.gradient` and `.hp` (row assignment, colour space, filtering). This affects eyes, brows, lashes and hair.
 8. **Unmapped debris.** Recover the G-buffer render-target formats (8-bit vs 10-bit precision affects the sqrt encoding) and the meaning of the low 5 stencil bits.
 9. **Ray-tracing libraries.** Parse the ray-tracing libraries in `staticshader_final.cache`. Their names survive (`ShadeSurfaceWithLightSample*`, `GBuffer0..2`), which could confirm the BRDF and G-buffer semantics independently.
