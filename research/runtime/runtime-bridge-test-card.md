@@ -1,6 +1,6 @@
 # Runtime bridge test card
 
-**Status: the next session is [autonomy checks, the expression checks R1 and R2, then session 2 continued](#next-session-autonomy-checks-expression-checks-then-session-2-continued).** The first in-game runs of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 on 26 September 2026 passed the [script-call check](#script-call-check-first) and the [first-session checks](#first-session-bridge-checks), and ran session 2 semi-manually ([results](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial)). Since then the bridge can open photo mode with the player's own key, frame V without hand-tuned values, switch lights on, hide the cursor, keep the creator's row labels in step and press the creator's Confirm and Back, and it has two research commands for the [expression editor](../animation/expression-editor-design.md#8-runtime-questions-r1r5-through-the-bridge) (`face_rig_read`, `photo_expression_index`); all of it is built and tested offline only. Design and citations: [runtime bridge design](runtime-bridge-design.md); photo mode and the creator from script: [knowledge/photo-mode.md](../../knowledge/photo-mode.md). **Every pending in-game ask, ranked into sittings of 20–30 minutes, is in the [next-sessions plan](next-sessions-plan.md)**; this card keeps the bridge's own checks, conventions and build records.
+**Status: the next session is [autonomy checks, the expression checks R1 and R2, then session 2 continued](#next-session-autonomy-checks-expression-checks-then-session-2-continued).** The first in-game runs of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 on 26 September 2026 passed the [script-call check](#script-call-check-first) and the [first-session checks](#first-session-bridge-checks), and ran session 2 semi-manually ([results](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial)). Since then the bridge can open photo mode with the player's own key, frame V without hand-tuned values, switch lights on, hide the cursor, keep the creator's row labels in step and press the creator's Confirm and Back, and it has two research commands for the [expression editor](../animation/expression-editor-design.md#8-runtime-questions-r1r5-through-the-bridge) (`face_rig_read`, `photo_expression_index`); batch 3 adds opening the creator (`cc_open`), its camera (`cc_page`), vanilla rows by label, the clock with the creator open and a settings record (`game_options_read`) ([checks](#batch-3-checks-the-creator-from-gameplay-and-the-settings-record)); all of it is built and tested offline only. Design and citations: [runtime bridge design](runtime-bridge-design.md); photo mode and the creator from script: [knowledge/photo-mode.md](../../knowledge/photo-mode.md). **Every pending in-game ask, ranked into sittings of 20–30 minutes, is in the [next-sessions plan](next-sessions-plan.md)**; this card keeps the bridge's own checks, conventions and build records.
 
 **Who does what.** The maintainer starts MO2 and the game, loads a save, keeps the game window in front, and opens the character creator when asked (a mirror, or F12 with Character Customization Anywhere). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only the `XF Runtime Bridge` entry in the test profile.
 
@@ -8,6 +8,7 @@
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
 | [Next session: autonomy checks](#next-session-autonomy-checks-expression-checks-then-session-2-continued) | 15–20 min | V in the world in an open, quiet spot; the game window in front |
+| [Batch 3 checks](#batch-3-checks-the-creator-from-gameplay-and-the-settings-record) | 10–15 min | Only with the batch 3 build staged; V in normal play, no combat |
 | [Expression checks R1 and R2](#expression-checks-r1-and-r2) | 10–15 min | Directly after the autonomy checks, in photo mode; the photo-mode expression list (the Mega Pack's) as in the first session |
 | [Session 2 continued](#session-2-through-the-bridge) | about 40 min | Directly after the expression checks, same game |
 | [Kill switch and wrap-up](#kill-switch-and-wrap-up) | 3 min | End of the evening |
@@ -95,7 +96,22 @@ Each check proves one new bridge feature in the game before session 2's script r
 | A12 | C | `cc_confirm` | The creator closes and V keeps Gloss A in the world (`kept: true`); `game_status` shows `bridge_save_lock: true` | `creator_leave_disabled`: wrong build. `not_in_character_menu`: M presses Confirm |
 | A13 | M, C | With an XF Eye Artistry look on, M equips a full-head item that hides V's head in first person or all views (a full helmet or mask with `hide_Head`). C: `capture_screenshot {region: "face"}` in photo mode | The makeup hides with the head. If it floats in the air, the export's component prefix (`xfs_c<key>_makeup`) isn't covered by ArchiveXL's `hide_Head` rule ([clothing knowledge](../../knowledge/clothing.md)); record it for a rename decision | Record and carry on |
 
-Then run the [expression checks](#expression-checks-r1-and-r2), then session 2 continued (below). The kill-switch check with the cursor hidden is at the [wrap-up](#kill-switch-and-wrap-up).
+Then run the [expression checks](#expression-checks-r1-and-r2), then session 2 continued (below). The kill-switch check with the cursor hidden is at the [wrap-up](#kill-switch-and-wrap-up). With the batch 3 build staged, run its [checks](#batch-3-checks-the-creator-from-gameplay-and-the-settings-record) after A12, and A10 may open the creator with `cc_open` instead of F12.
+
+## Batch 3 checks: the creator from gameplay and the settings record
+
+Only with the batch 3 build ([build record](#build-record-batch-3-branch-build-not-staged)). Each check proves one new command before the session scripts rely on it; the scripts fall back to the player (a note, then `game_wait`) wherever a check fails.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| C1 | C | `game_options_read` | A `summary` with the upscaler and its mode, ray and path tracing, SSS quality, HDR and the camera effects matching the game's settings menu; `render_options.available: true` with values for the hair, skin, rim and eye options (a short `missing` list at most) | `available: false`: record the reason; the CET layer's log line `render options answered` shows whether CET saw the request |
+| C2 | C | V in normal play, no combat: `cc_open` | The creator opens by itself within about 2 s: `opened: true`, `edit_mode: "HairDresser"`, `saving_locked: true`; `game_status` shows `character_menu` and `bridge_save_lock: true`; the plugin log has `cc.open requested` then `switched to MenuScenario_CharacterCustomizationMirror`. Note whether V stands in the creator's own lit box, as at a mirror | `save_lock_not_held`: repeat once. `creator_open_timeout`: record the phase; M opens the creator with F12 |
+| C3 | C | `player_appearance {option: "piercings"}` | `menu.updating_finalized_state: true`, `edit_mode: "HairDresser"`; the bottom buttons show the mirror's labels (Back and Confirm, not Next) | Record the labels |
+| C4 | C | `cc_apply {option: "piercings", value: "09"}`, wait 1.5 s, `cc_apply {option: "piercings_color", value: "gold"}`, then `cc_page {page: "eyes"}`, wait 1 s, `capture_screenshot {region: "cc-eyes"}` | Style 9 in gold (`matched_by: "value"`, `value_label` names it); the camera moves to the head, then to the eyes zoom, and the `cc-eyes` crop frames both eyes and brows | A colour refused: read `player_appearance {option: "piercings_color"}` and note the value names. The zoom differs: record it |
+| C5 | C | `world_time_set {hours: 0}`, wait 2 s, `capture_screenshot {region: "cc-eyes"}`, then the result's undo | The clock changes with the screen open (`phase: "character_menu"`); the screen stays open and responsive. Compare the two captures (next-sessions plan 5.8) | Anything odd (flicker, the screen closing): run the undo, record it |
+| C6 | C | `cc_back`; `cc_open {mode: "ripperdoc"}`; `cc_apply {option: "eyes", value: "10"}`, capture; `cc_back` | The ripperdoc mode offers the eye-shape row (`edit_mode: "Ripperdoc"`, the apply succeeds); Back discards | `can't be changed on this screen`: record `edit_mode` |
+| C7 | C | `photo_open`, `photo_frame {target: "full-body", xf_preset: true}`, `photo_hud_hide {}`, wait 0.5 s, `capture_screenshot {region: "full-body"}`, then `photo_hud_hide {hidden: false}`, `photo_exit` | V from head to feet, centred (`converged: true`); preset 6 put the camera well back | Record the framing result and whether the camera moved lower or higher than V's middle |
+
 
 ## Expression checks R1 and R2
 
@@ -235,6 +251,19 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (batch 3, branch build, not staged)
+
+Built 27 September 2026 on `claude/bridge-batch3` at `5915567530378c42`, clean tree (`XFB_BUILD=5915567530378c42b16c1179e41e13bc0fc843af;dirty=0`), by `bun tools/package.ts`: batch 3 (`cc.open`, `cc.page`, `cc.apply` by value and slot, the clock with the creator open, `game.options.read`, XF camera preset 6) on top of the staged batch 2. On that commit: `xfb_selftest --unit` OK (150 checks), self-test 217 of 217, `bun test tools` 100 of 100, typecheck, redscript lint (against the installed 2.31 `final.redscripts`, SHA-256 `2119046f…ee86`) and Lua lint clean. The default zip carries no camera presets and keeps the bridge off, `allow_writes = false` and `allow_creator_leave = false`. A rebuild after merging gives new hashes.
+
+| Zip | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.2.0-writes.zip` | `a4375e8e6875a925e05025909a81daa38fb49fe6e9d661cd350ffe190b3fbb5d` |
+| `xf-runtime-bridge-0.2.0-diagnostic.zip` | `a1495145c64e5ca0842f98e654cff62ca7f4cf58741c426de0bfb93983fbaaf0` |
+| `xf-runtime-bridge-0.2.0.zip` (default) | `bc6583acf93f844e1a29e43a108c54bf0bb4358c5da83aef1fd2abfe8d4fcd47` |
+| (`XFRuntimeBridge.dll` inside each) | `1c949d05645b620b08b5d44e839b75516a26c17be2a83dc4e166c3eb9f341977` |
+
+**New in this build, watch in the session:** the CET layer polls the plugin four times a second for render-option requests (a `render options answered` debug line in the CET mod log per request); `cc_open` writes `cc.open requested` and, a frame or two later, `switched to MenuScenario_CharacterCustomizationMirror` into the plugin log; the session scripts no longer ask the player to open the creator or set vanilla rows.
 
 ## Build record (staged)
 

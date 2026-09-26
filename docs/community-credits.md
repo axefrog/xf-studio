@@ -34,7 +34,7 @@ By psiberx and contributors. [Codeware](https://github.com/psiberx/cp2077-codewa
 
 ### Cyber Engine Tweaks
 
-By yamashi and contributors. [GitHub](https://github.com/maximegmd/CyberEngineTweaks). Its source showed us exactly what a Lua mod can do: its events, its sandbox (including that it has no networking), its logging and how Lua reaches game and plugin functions. That is why the XF Runtime Bridge keeps its external link in a native plugin and uses CET only for reporting and an on-screen status. Its function-call code showed how native code must call game and script functions (a caller frame with a stand-in caller and a context that is never empty), which explained the bridge's first in-game crash; the bridge's own calls follow that recipe, reimplemented rather than copied (CET is MIT-licensed). CET is a runtime dependency of the bridge's Lua layer. Its property code showed that a Lua write to a field a game class doesn't have stays on the Lua side, which is why an older creator mod's settings may not reach the game on 2.31. Its resource-list loader showed how the game's own Oodle decompressor is called, which XF Studio's archive reader does from the user's game folder.
+By yamashi and contributors. [GitHub](https://github.com/maximegmd/CyberEngineTweaks). Its source showed us exactly what a Lua mod can do: its events, its sandbox (including that it has no networking), its logging and how Lua reaches game and plugin functions. That is why the XF Runtime Bridge keeps its external link in a native plugin and uses CET only for reporting and an on-screen status. Its function-call code showed how native code must call game and script functions (a caller frame with a stand-in caller and a context that is never empty), which explained the bridge's first in-game crash; the bridge's own calls follow that recipe, reimplemented rather than copied (CET is MIT-licensed). CET is a runtime dependency of the bridge's Lua layer. Its property code showed that a Lua write to a field a game class doesn't have stays on the Lua side, which is why an older creator mod's settings may not reach the game on 2.31. Its resource-list loader showed how the game's own Oodle decompressor is called, which XF Studio's archive reader does from the user's game folder. Its game-options interface is how the bridge's Lua layer reads the engine's hidden character render options for a settings record.
 
 ### RED4ext and RED4ext SDK
 
@@ -240,7 +240,7 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 ### Jack Humbert
 
-[Let There Be Flight](https://github.com/jackhumbert/let_there_be_flight) and [Mod Settings](https://github.com/jackhumbert/mod_settings). Their RED4ext plugins showed how to ship redscript through the plugin itself and declare its natives, and Let There Be Flight's player-attach wrapper is the pattern our bridge's redscript layer follows. Studied only.
+[Let There Be Flight](https://github.com/jackhumbert/let_there_be_flight) and [Mod Settings](https://github.com/jackhumbert/mod_settings). Their RED4ext plugins showed how to ship redscript through the plugin itself and declare its natives, and Let There Be Flight's player-attach wrapper is the pattern our bridge's redscript layer follows. Mod Settings' menu-scenario extensions showed that a mod can add its own event to the game's menu scenarios, which is how the bridge asks the idle menu to open the character creator. Studied only.
 
 ### Kala
 
