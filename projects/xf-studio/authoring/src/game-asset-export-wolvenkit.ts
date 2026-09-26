@@ -2,6 +2,7 @@ import { depotHash } from "./depot-path";
 import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type UncookRun } from "./game-asset-export";
 import { archiveSourceContains } from "./rdar-index-fs";
+import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS } from "./resolver-host";
 import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 
 /**
@@ -11,9 +12,27 @@ import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunErro
  */
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
-export function uncookArguments(archivePath: string, depotPaths: readonly string[], outDir: string, gameRoot: string | null): string[] {
-  return ["uncook", archivePath, "-o", outDir, "-r", depotPathRegex(depotPaths), "-u", "--uext", "png",
+export function uncookArguments(archivePath: string | readonly string[], depotPaths: readonly string[], outDir: string, gameRoot: string | null): string[] {
+  return ["uncook", ...(typeof archivePath === "string" ? [archivePath] : archivePath), "-o", outDir, "-r", depotPathRegex(depotPaths), "-u", "--uext", "png",
     "--mesh-export-type", "MeshOnly", ...(gameRoot ? ["-gp", gameRoot] : []), "-v", "Minimal"];
+}
+
+/**
+ * The selections of one export over `archives`: `depotPaths` split so each launch's whole command line (the CLI, every archive, the
+ * pattern and the flags, as Windows quotes them) stays within its limit, and each pattern within `MAX_PATTERN_CHARS` (PIPE-61).
+ */
+export function uncookSelections(cli: string, archives: readonly string[], depotPaths: readonly string[], outDir: string, gameRoot: string | null): string[][] {
+  const fixed = [cli, ...uncookArguments(archives, [], outDir, gameRoot)].reduce((sum, arg) => sum + commandLineArgumentLength(arg), 0);
+  const budget = Math.min(MAX_PATTERN_CHARS, COMMAND_LINE_LIMIT - 512 - fixed);
+  const selections: string[][] = [];
+  let current: string[] = [], size = depotPathRegex([]).length + 3;
+  for (const path of depotPaths) {
+    const escaped = depotPathRegex([path]).length - depotPathRegex([]).length + 1;
+    if (current.length && size + escaped > budget) { selections.push(current); current = []; size = depotPathRegex([]).length + 3; }
+    current.push(path); size += escaped;
+  }
+  if (current.length) selections.push(current);
+  return selections;
 }
 
 /** One resource by its depot hash (an archive without path names); WolvenKit writes `<hash>.<ext>`. */
@@ -22,11 +41,13 @@ export function uncookByHashArguments(archivePath: string, depotPath: string, ou
 }
 
 export function createWolvenKitUncook(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS): UncookRun {
-  return async ({ source, depotPaths, outDir, withMaterials, signal, byHash }) => {
-    const args = byHash ? uncookByHashArguments(source.archivePath, depotPaths[0]!, outDir)
-      : uncookArguments(source.archivePath, depotPaths, outDir, withMaterials ? source.gameRoot : null);
+  return async ({ source, sources, depotPaths, outDir, withMaterials, signal, byHash, lowPriority }) => {
+    const archives = (sources?.length ? sources : [source]).map(item => item.archivePath);
+    const gameRoot = withMaterials ? source.gameRoot : null;
+    const launches = byHash ? [uncookByHashArguments(source.archivePath, depotPaths[0]!, outDir)]
+      : uncookSelections(cli ?? "", archives, depotPaths, outDir, gameRoot).map(selection => uncookArguments(archives, selection, outDir, gameRoot));
     // WolvenKit logs per-file material warnings on success; the exporter checks the exported files instead.
-    try { await runWolvenKit(cli, args, { signal, timeoutMs, keep: 64_000 }); }
+    try { for (const args of launches) await runWolvenKit(cli, args, { signal, timeoutMs, keep: 64_000, lowPriority }); }
     catch (error) {
       if (!(error instanceof WolvenKitRunError)) throw error;
       const code = error.code === "tool_timeout" ? "tool_failed" : error.code;

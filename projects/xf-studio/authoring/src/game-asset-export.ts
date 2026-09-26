@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, utimesSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256 } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
@@ -76,8 +76,24 @@ export interface GameAssetExportSession {
   /** Remove the session's private work files (cache entries stay). */
   close(): void;
 }
+/** What one batch asks of one source (archive): the geometry, textures and masks to export from it. */
+export type ExportRequest = { readonly source: ExportSource; readonly geometry: readonly string[]; readonly textures: readonly string[]; readonly masks: readonly string[] };
+export type ExportAnswer = { geometry: Map<string, ExportedGeometry>; textures: Map<string, ExportedTexture>; masks: Map<string, ExportedMask>;
+  /** The tool failed on this source (its launch, retried alone when it shared one); what the cache already had is still answered. */
+  failed?: GameAssetExportError };
+export type ExportOptions = { /** Background work (a prefetch): the tool runs at a lower process priority. */ readonly lowPriority?: boolean };
+export type ExportKind = "geometry" | "textures" | "masks";
 export interface GameAssetExporter {
+  /** The exporting tool, for provenance records (also each session's). */
+  readonly tool?: ExportTool;
   open(source: ExportSource, signal?: AbortSignal): GameAssetExportSession;
+  /**
+   * Export every kind from every source in as few tool launches as possible (one, when the sources' requested resources don't
+   * collide): the answers in `requests` order. Missing resources are absent. Optional: a caller without it opens a session per source.
+   */
+  exportAll?(requests: readonly ExportRequest[], signal?: AbortSignal, options?: ExportOptions): Promise<ExportAnswer[]>;
+  /** Whether a usable cache entry exists for a resource (no hashing: its files are present at their recorded sizes). */
+  has?(kind: ExportKind, depotPath: string, source: ExportSource): boolean;
 }
 
 /** The one process call this module needs: uncook `depotPaths` from `source` into `outDir`, keeping depot-relative paths. */
@@ -87,7 +103,10 @@ export interface GameAssetExporter {
  * mods) list only hashes, so a path pattern finds nothing in them.
  */
 export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; outDir: string; withMaterials: boolean; signal?: AbortSignal;
-  byHash?: boolean }) => Promise<void>;
+  byHash?: boolean;
+  /** Every archive the launch reads (`exportAll`'s batch; `source` alone otherwise). Their requested resources never collide. */
+  sources?: readonly ExportSource[];
+  lowPriority?: boolean }) => Promise<void>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
   tool?: ExportTool;
@@ -143,7 +162,23 @@ function checkDepotPath(depotPath: string): string {
 }
 
 type EntryMeta = { schema: "xfs/game-asset-export-1"; version: number; depotPath: string; hash: string; source: string;
-  files: Record<string, { sha256: string; bytes: number }> };
+  files: Record<string, { sha256: string; bytes: number }>;
+  /**
+   * A partial geometry export (the GLB without its materials file) from clean runs, counted: served from the cache from the
+   * `PARTIAL_RUNS`th (a lasting property of that resource and WolvenKit build, as the resolver's `not-written` markers are).
+   */
+  partialRuns?: number };
+/** Clean runs that exported a mesh without its materials file before the partial export is served from the cache. */
+export const PARTIAL_RUNS = 2;
+/** Paths this process already marked as used (the disk budget evicts the least recently used by their modification time). */
+const touched = new Set<string>();
+/** Mark a cache entry (its `entry.json`, or a cache file) as used now, once per process. */
+export function touchUsed(path: string): void {
+  if (touched.has(path)) return;
+  if (touched.size > 50_000) touched.clear();
+  touched.add(path);
+  try { const now = new Date(); utimesSync(path, now, now); } catch { /* Advisory. */ }
+}
 
 /** Persistent per-resource cache in host-owned private storage. */
 export class GameAssetExportCache extends DerivedCache {
@@ -152,29 +187,48 @@ export class GameAssetExportCache extends DerivedCache {
     return createHash("sha256").update(`${GAME_ASSET_EXPORT_VERSION}|${this.tool.key}|${source.fingerprint}`).digest("hex").slice(0, 16);
   }
   entryDirectory(depotPath: string, source: ExportSource) { return this.entry(join("resources", `${depotHash(depotPath)}-${this.sourceKey(source)}`)); }
-  /** A verified entry's files, or null. Every file is re-hashed, so a damaged entry is never used. */
+  private meta(depotPath: string, source: ExportSource): EntryMeta | null {
+    try {
+      const meta = this.readJson(join(this.entryDirectory(depotPath, source), "entry.json")) as EntryMeta;
+      return meta.schema === "xfs/game-asset-export-1" && meta.version === GAME_ASSET_EXPORT_VERSION && meta.hash === depotHash(depotPath) &&
+        meta.source === this.sourceKey(source) ? meta : null;
+    } catch { return null; }
+  }
+  /**
+   * A verified entry's files, or null. Every file is re-hashed, so a damaged entry is never used. A partial geometry entry counts only
+   * from its `PARTIAL_RUNS`th clean run. A hit marks the entry as used (`touchUsed`).
+   */
   read(depotPath: string, source: ExportSource): Record<string, string> | null {
     const directory = this.entryDirectory(depotPath, source);
     try {
-      const meta = this.readJson(join(directory, "entry.json")) as EntryMeta;
-      if (meta.schema !== "xfs/game-asset-export-1" || meta.version !== GAME_ASSET_EXPORT_VERSION || meta.hash !== depotHash(depotPath) ||
-          meta.source !== this.sourceKey(source)) return null;
+      const meta = this.meta(depotPath, source);
+      if (!meta || (meta.partialRuns ?? PARTIAL_RUNS) < PARTIAL_RUNS) return null;
       const out: Record<string, string> = {};
       for (const [name, file] of Object.entries(meta.files)) {
         const path = join(directory, name);
         if (!existsSync(path) || statSync(path).size !== file.bytes || fileSha256(path) !== file.sha256) return null;
         out[name] = path;
       }
+      touchUsed(join(directory, "entry.json"));
       return out;
     } catch { return null; }
   }
-  /** Copy `files` (name → source path) into a new entry, replacing any older one atomically. */
-  write(depotPath: string, source: ExportSource, files: Record<string, string>): Record<string, string> {
+  /** Whether `read` would find the entry with `required` files (present at their recorded sizes, not re-hashed): a cheap readiness check. */
+  present(depotPath: string, source: ExportSource, required: readonly string[] = []): boolean {
+    const meta = this.meta(depotPath, source);
+    if (!meta || (meta.partialRuns ?? PARTIAL_RUNS) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
+    const directory = this.entryDirectory(depotPath, source);
+    return Object.entries(meta.files).every(([name, file]) => { try { return statSync(join(directory, name)).size === file.bytes; } catch { return false; } });
+  }
+  /** Clean runs so far that exported this resource only partly (0 when none). */
+  partialRuns(depotPath: string, source: ExportSource): number { return this.meta(depotPath, source)?.partialRuns ?? 0; }
+  /** Copy `files` (name → source path) into a new entry, replacing any older one atomically. `partialRuns` marks a partial geometry export. */
+  write(depotPath: string, source: ExportSource, files: Record<string, string>, partialRuns?: number): Record<string, string> {
     const directory = this.entryDirectory(depotPath, source);
     const staging = `${directory}.${process.pid}.${Date.now()}.tmp`;
     mkdirSync(staging, { recursive: true, mode: 0o700 });
     const meta: EntryMeta = { schema: "xfs/game-asset-export-1", version: GAME_ASSET_EXPORT_VERSION, depotPath, hash: depotHash(depotPath),
-      source: this.sourceKey(source), files: {} };
+      source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns } : {}) };
     for (const [name, from] of Object.entries(files)) {
       copyFileSync(from, join(staging, name));
       meta.files[name] = { sha256: fileSha256(from), bytes: statSync(from).size };
@@ -186,138 +240,205 @@ export class GameAssetExportCache extends DerivedCache {
   }
 }
 
+/** Most archives one `exportAll` launch reads (their paths share the command line with the selection). */
+export const MAX_SOURCES_PER_LAUNCH = 24;
+
 /** Exporter over one `UncookRun` implementation and a persistent cache. */
 export function createGameAssetExporter(cacheRoot: string, run: UncookRun, options: GameAssetExporterOptions = {}): GameAssetExporter {
   const tool = options.tool ?? UNKNOWN_TOOL;
   const cache = new GameAssetExportCache(cacheRoot, tool);
+  const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
+  const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean): ExportedGeometry => ({
+    depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: fileSha256(files.raw!),
+    glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
+    materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
+    complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached });
+  const present = (source: ExportSource, depotPaths: readonly string[]): Set<string> | null => {
+    if (!options.contains) return null;
+    try {
+      const found = options.contains(source, depotPaths.map(depotHash));
+      return new Set(depotPaths.filter(depotPath => found.has(depotHash(depotPath))));
+    } catch { return null; }
+  };
+  const emptyAnswer = (): ExportAnswer => ({ geometry: new Map(), textures: new Map(), masks: new Map() });
+  type Needed = { geometry: string[]; textures: string[]; masks: string[] };
+  const cachedLayers = (files: Record<string, string> | null) => {
+    if (!files) return null;
+    const layers: string[] = [];
+    for (let index = 0; files[`layer-${index}.png`]; index++) layers.push(files[`layer-${index}.png`]!);
+    return layers.length ? layers : null;
+  };
+  const storeTexture = (answer: ExportAnswer, source: ExportSource, depotPath: string, png: string, fresh: boolean) => {
+    const files = fresh ? cache.write(depotPath, source, { "texture.png": png }) : { "texture.png": png };
+    answer.textures.set(depotPath, { depotPath, hash: depotHash(depotPath), png: files["texture.png"]!, pngSha256: fileSha256(files["texture.png"]!), cached: !fresh });
+  };
+  const storeMask = (answer: ExportAnswer, source: ExportSource, depotPath: string, layers: string[], fresh: boolean) => {
+    const names = layers.map((_, index) => `layer-${index}.png`);
+    const files = fresh ? cache.write(depotPath, source, Object.fromEntries(names.map((name, index) => [name, layers[index]!]))) : null;
+    answer.masks.set(depotPath, { depotPath, hash: depotHash(depotPath), layers: files ? names.map(name => files[name]!) : layers, cached: !fresh });
+  };
+  /** What the cache already answers for a request; the rest is returned as needed. Only a complete (or lasting partial) entry is a hit. */
+  const fromCache = (request: ExportRequest, answer: ExportAnswer, decoded: string | null = null): Needed => {
+    const needed: Needed = { geometry: [], textures: [], masks: [] };
+    for (const depotPath of new Set(request.geometry)) {
+      checkDepotPath(depotPath);
+      const cached = cache.read(depotPath, request.source);
+      if (cached?.raw && cached["export.glb"]) answer.geometry.set(depotPath, geometryFiles(depotPath, cached, true));
+      else needed.geometry.push(depotPath);
+    }
+    for (const depotPath of new Set(request.textures)) {
+      checkDepotPath(depotPath);
+      const cached = cache.read(depotPath, request.source)?.["texture.png"];
+      // Textures WolvenKit decoded while resolving this session's materials are reused before a second launch.
+      const already = decoded && depotFile(decoded, pngFor(depotPath));
+      if (cached) storeTexture(answer, request.source, depotPath, cached, false);
+      else if (already && existsSync(already)) storeTexture(answer, request.source, depotPath, already, true);
+      else needed.textures.push(depotPath);
+    }
+    for (const depotPath of new Set(request.masks)) {
+      checkDepotPath(depotPath);
+      const cached = cachedLayers(cache.read(depotPath, request.source));
+      if (cached) storeMask(answer, request.source, depotPath, cached, false); else needed.masks.push(depotPath);
+    }
+    return needed;
+  };
+  /**
+   * Take one launch's outputs in `outDir` for a request's needed resources into the cache. Everything answered points into the cache,
+   * never into the launch's work folder (which is removed): a complete export as before, and a partial one (the GLB without its
+   * materials file) as a partial entry counting its clean runs (`PARTIAL_RUNS`). Returns the textures and masks not found by name.
+   */
+  const collect = (source: ExportSource, needed: Needed, outDir: string, answer: ExportAnswer): { textures: string[]; masks: string[] } => {
+    for (const depotPath of needed.geometry) {
+      const raw = depotFile(outDir, depotPath);
+      if (!existsSync(raw)) continue;
+      const files: Record<string, string> = { raw };
+      const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
+      if (existsSync(glb)) files["export.glb"] = glb;
+      if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
+      const complete = requiredGeometryFiles(depotPath).every(name => files[name]);
+      // Without a GLB there is nothing to serve; a GLB without its materials file is kept as a partial entry.
+      const written = complete ? cache.write(depotPath, source, files)
+        : files["export.glb"] ? cache.write(depotPath, source, files, cache.partialRuns(depotPath, source) + 1) : files;
+      answer.geometry.set(depotPath, geometryFiles(depotPath, written, false));
+    }
+    const unnamed = { textures: [] as string[], masks: [] as string[] };
+    for (const depotPath of needed.textures) {
+      const png = depotFile(outDir, pngFor(depotPath));
+      if (existsSync(png)) storeTexture(answer, source, depotPath, png, true); else unnamed.textures.push(depotPath);
+    }
+    for (const depotPath of needed.masks) {
+      const layers = maskLayerFiles(depotFile(outDir, depotPath));
+      if (layers.length) storeMask(answer, source, depotPath, layers, true); else unnamed.masks.push(depotPath);
+    }
+    return unnamed;
+  };
+  /**
+   * Not found by path: the archive may list hashes only. Ask for each missing texture or mask by its hash, but only when the source's
+   * own index says it is there: an unreadable index would otherwise cost one launch per resource that may not exist at all (PREV-55).
+   * WolvenKit selects one resource per `--hash` call, so the calls run a few at a time, each into its own folder.
+   */
+  const byHash = async (source: ExportSource, unnamed: { textures: string[]; masks: string[] }, outDir: string, answer: ExportAnswer, signal?: AbortSignal) => {
+    const all = [...unnamed.textures, ...unnamed.masks];
+    const inIndex = all.length ? present(source, all) : null;
+    const wanted = inIndex ? all.filter(depotPath => inIndex.has(depotPath)) : [];
+    await forEachLimited(wanted, BY_HASH_CONCURRENCY, async depotPath => {
+      const hashDir = join(outDir, "by-hash", depotHash(depotPath));
+      mkdirSync(hashDir, { recursive: true });
+      await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
+      if (/\.mlmask$/i.test(depotPath)) {
+        const layers = maskLayerFiles(join(hashDir, `${depotHash(depotPath)}.mlmask`));
+        if (layers.length) storeMask(answer, source, depotPath, layers, true);
+      } else {
+        const png = join(hashDir, `${depotHash(depotPath)}.png`);
+        if (existsSync(png)) storeTexture(answer, source, depotPath, png, true);
+      }
+    });
+  };
+  const anyNeeded = (needed: Needed) => needed.geometry.length + needed.textures.length + needed.masks.length > 0;
+  const neededPaths = (needed: Needed) => [...needed.geometry, ...needed.textures, ...needed.masks];
+
   return {
+    tool,
+    has(kind, depotPath, source) {
+      if (kind === "geometry") return cache.present(depotPath, source, ["raw", "export.glb"]);
+      if (kind === "textures") return cache.present(depotPath, source, ["texture.png"]);
+      return cache.present(depotPath, source, ["layer-0.png"]);
+    },
+    async exportAll(requests, signal, exportOptions = {}) {
+      const answers = requests.map(emptyAnswer);
+      const pending: { index: number; request: ExportRequest; needed: Needed; hashes: string[] }[] = [];
+      requests.forEach((request, index) => {
+        const needed = fromCache(request, answers[index]!);
+        if (anyNeeded(needed)) pending.push({ index, request, needed, hashes: neededPaths(needed).map(depotHash) });
+      });
+      if (!pending.length) return answers;
+      // One launch reads several archives when none of them holds a resource another is asked for (outputs are written by depot
+      // path, so two copies would overwrite each other) and they share the game folder. An unreadable index keeps an archive apart.
+      const holds = (source: ExportSource, hashes: readonly string[]) => {
+        if (!options.contains) return true;
+        try { return options.contains(source, hashes).size > 0; } catch { return true; }
+      };
+      const launches: (typeof pending)[] = [];
+      for (const item of pending) {
+        const fits = launches.find(group => group.length < MAX_SOURCES_PER_LAUNCH && group[0]!.request.source.gameRoot === item.request.source.gameRoot &&
+          group.every(other => resolve(other.request.source.archivePath).toLowerCase() !== resolve(item.request.source.archivePath).toLowerCase() &&
+            !holds(other.request.source, item.hashes) && !holds(item.request.source, other.hashes)));
+        if (fits) fits.push(item); else launches.push([item]);
+      }
+      const work = cache.createWork();
+      const lowPriority = exportOptions.lowPriority;
+      let serial = 0;
+      // One launch over a group; a tool failure of a shared launch is retried per source, so one archive can't fail the others.
+      const launch = async (group: typeof pending): Promise<void> => {
+        const outDir = join(work, `launch-${serial++}`);
+        mkdirSync(outDir, { recursive: true });
+        try {
+          await run({ source: group[0]!.request.source, sources: group.map(item => item.request.source),
+            depotPaths: [...new Set(group.flatMap(item => neededPaths(item.needed)))], outDir,
+            withMaterials: group.some(item => item.needed.geometry.length > 0), signal, lowPriority });
+        } catch (error) {
+          if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
+          if (group.length > 1) { for (const item of group) await launch([item]); return; }
+          answers[group[0]!.index]!.failed = error;
+          return;
+        }
+        for (const item of group) {
+          const unnamed = collect(item.request.source, item.needed, outDir, answers[item.index]!);
+          try { await byHash(item.request.source, unnamed, join(outDir, `source-${item.index}`), answers[item.index]!, signal); }
+          catch (error) {
+            if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
+            answers[item.index]!.failed = error;
+          }
+        }
+      };
+      try { for (const group of launches) await launch(group); }
+      finally { try { cache.remove(work); } catch { /* Best effort. */ } }
+      return answers;
+    },
     open(source, signal) {
       let work: string | null = null;
       const workDir = () => (work ??= cache.createWork());
       // Textures WolvenKit decoded while resolving materials are reused before a second uncook.
       const decoded = () => work ? join(work, "geometry") : null;
-      const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
-      const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean): ExportedGeometry => ({
-        depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: fileSha256(files.raw!),
-        glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
-        materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
-        complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached });
-      const present = (depotPaths: readonly string[]): Set<string> | null => {
-        if (!options.contains) return null;
-        try {
-          const found = options.contains(source, depotPaths.map(depotHash));
-          return new Set(depotPaths.filter(depotPath => found.has(depotHash(depotPath))));
-        } catch { return null; }
+      const one = async (kind: ExportKind, depotPaths: readonly string[]): Promise<ExportAnswer> => {
+        const answer = emptyAnswer();
+        const request: ExportRequest = { source, geometry: kind === "geometry" ? depotPaths : [], textures: kind === "textures" ? depotPaths : [],
+          masks: kind === "masks" ? depotPaths : [] };
+        const needed = fromCache(request, answer, kind === "textures" ? decoded() : null);
+        if (!anyNeeded(needed)) return answer;
+        const outDir = join(workDir(), kind);
+        mkdirSync(outDir, { recursive: true });
+        await run({ source, depotPaths: neededPaths(needed), outDir, withMaterials: kind === "geometry", signal });
+        const unnamed = collect(source, needed, outDir, answer);
+        await byHash(source, unnamed, outDir, answer, signal);
+        return answer;
       };
       return {
         tool,
-        present,
-        async geometry(depotPaths) {
-          const out = new Map<string, ExportedGeometry>();
-          const needed: string[] = [];
-          for (const depotPath of depotPaths) {
-            checkDepotPath(depotPath);
-            const cached = cache.read(depotPath, source);
-            // Only a complete entry is a hit; anything less runs the tool again.
-            if (cached && requiredGeometryFiles(depotPath).every(name => cached[name])) out.set(depotPath, geometryFiles(depotPath, cached, true));
-            else needed.push(depotPath);
-          }
-          if (!needed.length) return out;
-          const outDir = join(workDir(), "geometry");
-          mkdirSync(outDir, { recursive: true });
-          await run({ source, depotPaths: needed, outDir, withMaterials: true, signal });
-          for (const depotPath of needed) {
-            const raw = depotFile(outDir, depotPath);
-            if (!existsSync(raw)) continue;
-            const files: Record<string, string> = { raw };
-            const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
-            if (existsSync(glb)) files["export.glb"] = glb;
-            if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
-            // A partial export (WolvenKit can exit 0 with per-file failures) is reported but never cached.
-            const complete = requiredGeometryFiles(depotPath).every(name => files[name]);
-            out.set(depotPath, geometryFiles(depotPath, complete ? cache.write(depotPath, source, files) : files, false));
-          }
-          return out;
-        },
-        async textures(depotPaths) {
-          const out = new Map<string, ExportedTexture>();
-          const store = (depotPath: string, png: string, fresh: boolean) => {
-            const files = fresh ? cache.write(depotPath, source, { "texture.png": png }) : { "texture.png": png };
-            out.set(depotPath, { depotPath, hash: depotHash(depotPath), png: files["texture.png"]!, pngSha256: fileSha256(files["texture.png"]!), cached: !fresh });
-          };
-          const needed: string[] = [];
-          for (const depotPath of depotPaths) {
-            checkDepotPath(depotPath);
-            const cached = cache.read(depotPath, source)?.["texture.png"];
-            const already = decoded() && depotFile(decoded()!, pngFor(depotPath));
-            if (cached) store(depotPath, cached, false);
-            else if (already && existsSync(already)) store(depotPath, already, true);
-            else needed.push(depotPath);
-          }
-          if (!needed.length) return out;
-          const outDir = join(workDir(), "textures");
-          mkdirSync(outDir, { recursive: true });
-          await run({ source, depotPaths: needed, outDir, withMaterials: false, signal });
-          const unnamed: string[] = [];
-          for (const depotPath of needed) {
-            const png = depotFile(outDir, pngFor(depotPath));
-            if (existsSync(png)) store(depotPath, png, true); else unnamed.push(depotPath);
-          }
-          // Not found by path: the archive may list hashes only. Ask for each missing texture by its hash, but only when the
-          // source's own index says it is there: an unreadable index would otherwise cost one launch per texture for
-          // resources that may not exist at all (PREV-55). WolvenKit selects one resource per `--hash` call, so the calls
-          // run a few at a time, each into its own folder.
-          const inIndex = unnamed.length ? present(unnamed) : null;
-          const byHash = inIndex ? unnamed.filter(depotPath => inIndex.has(depotPath)) : [];
-          await forEachLimited(byHash, BY_HASH_CONCURRENCY, async depotPath => {
-            const hashDir = join(outDir, "by-hash", depotHash(depotPath));
-            mkdirSync(hashDir, { recursive: true });
-            await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
-            const png = join(hashDir, `${depotHash(depotPath)}.png`);
-            if (existsSync(png)) store(depotPath, png, true);
-          });
-          return out;
-        },
-        async masks(depotPaths) {
-          const out = new Map<string, ExportedMask>();
-          const store = (depotPath: string, layers: string[], fresh: boolean) => {
-            const names = layers.map((_, index) => `layer-${index}.png`);
-            const files = fresh ? cache.write(depotPath, source, Object.fromEntries(names.map((name, index) => [name, layers[index]!]))) : null;
-            out.set(depotPath, { depotPath, hash: depotHash(depotPath), layers: files ? names.map(name => files[name]!) : layers, cached: !fresh });
-          };
-          const cachedLayers = (files: Record<string, string> | null) => {
-            if (!files) return null;
-            const layers: string[] = [];
-            for (let index = 0; files[`layer-${index}.png`]; index++) layers.push(files[`layer-${index}.png`]!);
-            return layers.length ? layers : null;
-          };
-          const needed: string[] = [];
-          for (const depotPath of depotPaths) {
-            checkDepotPath(depotPath);
-            const cached = cachedLayers(cache.read(depotPath, source));
-            if (cached) store(depotPath, cached, false); else needed.push(depotPath);
-          }
-          if (!needed.length) return out;
-          const outDir = join(workDir(), "masks");
-          mkdirSync(outDir, { recursive: true });
-          await run({ source, depotPaths: needed, outDir, withMaterials: false, signal });
-          const unnamed: string[] = [];
-          for (const depotPath of needed) {
-            const layers = maskLayerFiles(depotFile(outDir, depotPath));
-            if (layers.length) store(depotPath, layers, true); else unnamed.push(depotPath);
-          }
-          // An archive that lists hashes only: one launch per mask it indexes (as for textures).
-          const inIndex = unnamed.length ? present(unnamed) : null;
-          const byHash = inIndex ? unnamed.filter(depotPath => inIndex.has(depotPath)) : [];
-          await forEachLimited(byHash, BY_HASH_CONCURRENCY, async depotPath => {
-            const hashDir = join(outDir, "by-hash", depotHash(depotPath));
-            mkdirSync(hashDir, { recursive: true });
-            await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
-            const layers = maskLayerFiles(join(hashDir, `${depotHash(depotPath)}.mlmask`));
-            if (layers.length) store(depotPath, layers, true);
-          });
-          return out;
-        },
+        present: depotPaths => present(source, depotPaths),
+        async geometry(depotPaths) { return (await one("geometry", depotPaths)).geometry; },
+        async textures(depotPaths) { return (await one("textures", depotPaths)).textures; },
+        async masks(depotPaths) { return (await one("masks", depotPaths)).masks; },
         close() { if (work) { try { cache.remove(work); } catch { /* Best effort. */ } work = null; } },
       };
     },

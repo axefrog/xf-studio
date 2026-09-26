@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { constants, setPriority } from "node:os";
 
 /** Process adapter shared by the host's external-tool runners. It interprets nothing about the tool's output. */
 export type ProcessStop = "cancelled" | "timeout";
@@ -19,6 +20,8 @@ export interface ProcessTreeOptions {
   readonly env?: Record<string, string | undefined>;
   /** Characters of stdout and of stderr to keep (the tail). */
   readonly keep?: number;
+  /** Run the process below normal priority (background work). */
+  readonly lowPriority?: boolean;
 }
 
 /** Stop a child and every process it started: `taskkill /T` on Windows, the process group elsewhere. */
@@ -38,6 +41,7 @@ export function runProcessTree(command: string, args: readonly string[], options
     if (options.signal?.aborted) { done({ exitCode: null, stdout: "", stderr: "", stopped: "cancelled" }); return; }
     const child = spawn(command, [...args], { cwd: options.cwd, env: options.env, windowsHide: true,
       detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+    if (options.lowPriority && child.pid) { try { setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* Advisory. */ } }
     let stdout = "", stderr = "", stopped: ProcessStop | null = null, settled = false;
     child.stdout!.on("data", (chunk: Buffer) => { stdout = (stdout + chunk.toString("utf8")).slice(-keep); });
     child.stderr!.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-keep); });

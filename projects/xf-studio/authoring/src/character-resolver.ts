@@ -393,6 +393,8 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
   let morphTexture: { texture: Provenance | null; parameter: string } | null = null;
   const morphRegions: Record<string, number> = {};
   if (component.morphResource) {
+    // A morph component names its base mesh too (usually the morph target's own): read it with the morph target, not after it.
+    if (component.mesh) ctx.graph.prefetchRef(component.mesh, "mesh");
     morph = await ctx.graph.morph(component.morphResource);
     morphProvenance = ctx.graph.provenance(component.morphResource, morph?.loaded.provenance.extractedSha256 ?? null);
     if (morph) {

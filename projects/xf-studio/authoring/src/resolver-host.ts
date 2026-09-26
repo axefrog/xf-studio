@@ -387,7 +387,12 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     try {
       const hashes = [...new Set(batch.flatMap(queue => [...queue.items.keys()]))];
       const archives = batch.map(queue => queue.archive.id);
-      this.log(`WolvenKit: extracting ${hashes.length} resource(s) from ${batch.length} archive(s)`);
+      const kinds = new Map<string, number>();
+      for (const queue of batch) for (const item of queue.items.values()) {
+        const kind = (item.ref.path ? /\.([a-z0-9]+)$/i.exec(item.ref.path)?.[1]?.toLowerCase() : null) ?? item.extension ?? "?";
+        kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+      }
+      this.log(`WolvenKit: extracting ${hashes.length} resource(s) (${[...kinds].map(([kind, count]) => `${count} ${kind}`).join(", ")}) from ${batch.length} archive(s)`);
       // Each output file by depot hash, with the folder it was written to and whether that step finished cleanly.
       const found = new Map<string, { file: string; path: string | null; bytes: number; clean: boolean }>();
       const walk = (root: string, folder: string, clean: boolean) => {
@@ -427,6 +432,8 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       for (const [hash, hit] of found) if (!existsSync(`${hit.file}.json`)) found.delete(hash);
       const rest = hashes.filter(hash => !found.has(hash));
       if (rest.length) {
+        const label = (hash: string) => batch.map(queue => queue.items.get(hash)?.ref.path).find(Boolean) ?? hash;
+        this.log(`WolvenKit: ${rest.length} resource(s) not serialized by name, extracting by hash: ${rest.slice(0, 4).map(label).join(", ")}${rest.length > 4 ? ", …" : ""}`);
         mkdirSync(raw, { recursive: true });
         writeFileSync(join(dir, "hashes.txt"), rest.join("\n") + "\n");
         finished(await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true, failure: /(?!)/ }), "unbundle");

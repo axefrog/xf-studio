@@ -35,7 +35,7 @@ import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPla
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
-import { archiveExportSource, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
+import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
 import { templateDefaults } from "./material-template";
@@ -179,17 +179,21 @@ export function templateIdentity(root: JsonObject | null | undefined): { name: s
  * keeps the name the engine finds programs by), and, for the templates the renderer draws, their parameter defaults.
  */
 async function loadTemplates(graph: ResourceGraph, templates: Iterable<Provenance>, cache: CharacterPreparationCache): Promise<void> {
+  // Read together, so templates not read yet share one extraction batch.
+  const wanted = new Map<string, Provenance>();
   for (const template of templates) {
     const key = refLabel(template.ref).toLowerCase();
-    if (cache.identities.has(key) || !/\.mt$/i.test(key)) continue;
+    if (!cache.identities.has(key) && /\.mt$/i.test(key)) wanted.set(key, template);
+  }
+  await Promise.all([...wanted].map(async ([key, template]) => {
     const loaded = await graph.load(template.ref, "mt");
     const identity = templateIdentity(loaded?.root);
     cache.identities.set(key, identity);
-    if (!renderTemplate(key, identity.name)) continue;
+    if (!renderTemplate(key, identity.name)) return;
     cache.defaults.set(key, loaded ? templateDefaults(loaded.root).map(([name, value]) => ({ name, kind: value.kind, value: paramText(value),
       setBy: `${refLabel(template.ref)} (template default)`,
       ...(value.kind === "resource" && value.ref ? { resource: graph.provenance(value.ref) } : {}) })) : []);
-  }
+  }));
 }
 
 type Located = { depotPath: string; archive: { id: string; name: string; provider: string } };
@@ -198,17 +202,6 @@ function locate(graph: ResourceGraph, ref: DepotRef): Located | null {
   const path = entry.path ?? graph.named(entry).path;
   if (!lookup.winner || !path) return null;
   return { depotPath: path, archive: { id: lookup.winner.id, name: lookup.winner.name, provider: lookup.winner.providerName } };
-}
-
-/** Group depot paths by winning archive so each archive is read by one tool call per kind. */
-function byArchive(items: readonly Located[]) {
-  const groups = new Map<string, { archive: Located["archive"]; paths: Set<string> }>();
-  for (const item of items) {
-    const group = groups.get(item.archive.id) ?? { archive: item.archive, paths: new Set<string>() };
-    group.paths.add(item.depotPath);
-    groups.set(item.archive.id, group);
-  }
-  return [...groups.values()];
 }
 
 /**
@@ -362,6 +355,189 @@ async function resolveThrough(graph: ResourceGraph, input: CharacterInput, cco: 
   return { resolved: { ...fresh, appearances }, reused };
 }
 
+/** A layer the renderer blends in: a visible opacity (a layer at zero opacity changes nothing; knowledge/materials-and-shaders.md §4.6). */
+const layerDraws = (opacity: number) => opacity > 0;
+
+/** What reading and exporting fresh parts needs from its preparation (or prefetch). */
+type GatherContext = {
+  graph: ResourceGraph;
+  cache: CharacterPreparationCache;
+  exporter: GameAssetExporter;
+  gameRoot: string;
+  storeRoot: string;
+  signal?: AbortSignal;
+  log: (message: string) => void;
+  /** Background work (a prefetch): WolvenKit runs at a lower priority. */
+  lowPriority?: boolean;
+};
+/** Where each fresh part's geometry, textures and masks come from, and the archives WolvenKit failed on. */
+type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<string, Located>; maskAt: Map<string, Located>;
+  toolFailures: Set<string>; toolLabel: string | undefined };
+
+const cancelledError = () => new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled.");
+
+/**
+ * Export located resources into the preparation cache's maps: every archive's geometry, textures and masks together, in as few
+ * WolvenKit launches as the exporter can make (`exportAll`: one, when the archives' requested resources don't collide), or a session
+ * per archive and kind for an exporter without it. What is kept never points into an exporter's work folder: a partial geometry export
+ * the exporter did not cache is kept in the content-addressed store.
+ */
+async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located }[], toolFailures: Set<string>): Promise<string | undefined> {
+  const { cache, exporter, signal, log } = ctx;
+  const into = (kind: ExportKind) => (kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks) as Map<string, unknown>;
+  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string> }>();
+  for (const { kind, at } of items) {
+    if (into(kind).has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) continue;
+    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>() };
+    group[kind].add(at.depotPath);
+    groups.set(at.archive.id, group);
+  }
+  if (!groups.size) return undefined;
+  const keep = (kind: ExportKind, archive: string, path: string, value: unknown) => {
+    let kept = value;
+    const geometry = value as { glb: string | null; complete: boolean };
+    // A partial export an exporter did not cache may live in its session's work folder, which is removed: keep the GLB in the
+    // content-addressed store, which outlives the session.
+    if (kind === "geometry" && geometry.glb && !geometry.complete && existsSync(geometry.glb))
+      kept = { ...geometry, glb: join(ctx.storeRoot, "files", store(ctx.storeRoot, geometry.glb, "glb").file) };
+    into(kind).set(`${archive}|${path.toLowerCase()}`, kept);
+  };
+  const failed = (error: unknown, archives: readonly Located["archive"][]) => {
+    if (!(error instanceof GameAssetExportError)) throw error;
+    if (error.code === "cancelled" || signal?.aborted) throw cancelledError();
+    if (error.code === "tool_missing" || error.code === "runtime_missing") throw new CharacterDetailError("character_tool_missing", TOOL_MISSING, error.message);
+    for (const archive of archives) { toolFailures.add(archive.id); log(`WolvenKit could not export from ${archive.name}: ${error.message}`); }
+  };
+  const list = [...groups.values()];
+  if (exporter.exportAll) {
+    try {
+      const answers = await exporter.exportAll(list.map(group => ({ source: archiveExportSource(group.archive.id, ctx.gameRoot),
+        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks] })), signal, { lowPriority: ctx.lowPriority });
+      answers.forEach((answer, index) => {
+        const archive = list[index]!.archive;
+        if (answer.failed) { failed(answer.failed, [archive]); return; }
+        for (const kind of ["geometry", "textures", "masks"] as const) for (const [path, value] of answer[kind]) keep(kind, archive.id, path, value);
+      });
+    } catch (error) { failed(error, list.map(group => group.archive)); }
+    return exporter.tool?.label;
+  }
+  let label: string | undefined;
+  for (const group of list) for (const kind of ["geometry", "textures", "masks"] as const) {
+    if (!group[kind].size) continue;
+    const session = exporter.open(archiveExportSource(group.archive.id, ctx.gameRoot), signal);
+    label ??= session.tool.label;
+    try { for (const [path, value] of await session[kind]([...group[kind]])) keep(kind, group.archive.id, path, value); }
+    catch (error) { failed(error, [group.archive]); }
+    finally { session.close(); }
+    if (signal?.aborted) throw cancelledError();
+  }
+  return label;
+}
+
+/**
+ * Read and export what fresh parts draw with (PREV-68: only what earlier preparations on this installation didn't). The reads a plan
+ * implies (hair and skin profiles, gradients, layer setups, each texture's colour flag) are asked for together, so they share one
+ * extraction batch, and the export of the parts' geometry, textures and masks runs alongside them. Only a layered chunk's own maps wait
+ * for its layer setup and templates; they are exported and read together afterwards.
+ */
+async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[]): Promise<Gathered> {
+  const { graph, cache, signal } = ctx;
+  const toolFailures = new Set<string>();
+  const geometryAt = new Map<PlannedComponent, Located>();
+  for (const component of fresh) {
+    const located = locate(graph, component.drawnFrom.ref);
+    if (located) geometryAt.set(component, located);
+  }
+  const textureAt = new Map<string, Located>(), maskAt = new Map<string, Located>();
+  for (const component of fresh) for (const material of component.materials) {
+    for (const provenance of Object.values(material.textures)) {
+      const located = locate(graph, provenance.ref);
+      if (located) textureAt.set(refLabel(provenance.ref).toLowerCase(), located);
+    }
+    const mask = material.layered?.mask;
+    const located = mask ? locate(graph, mask.ref) : null;
+    if (mask && located) maskAt.set(refLabel(mask.ref).toLowerCase(), located);
+  }
+  const firstTextures = new Set(textureAt.keys());
+  // A failure is held until the reads it runs beside have settled, so nothing is left running unobserved.
+  const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
+  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
+    ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures));
+
+  const readOnce = async <T>(into: Map<string, T | null>, provenance: Provenance, kind: string, read: (root: JsonObject, loaded: NonNullable<Awaited<ReturnType<ResourceGraph["load"]>>>) => T | null) => {
+    const key = refLabel(provenance.ref).toLowerCase();
+    if (into.has(key)) return;
+    const loaded = await graph.load(provenance.ref, kind);
+    into.set(key, loaded ? read(loaded.root, loaded) : null);
+  };
+  const gamma = (keys: Iterable<string>) => [...keys].filter(key => !cache.gamma.has(key)).map(async key => {
+    const loaded = await graph.load(refFromPath(key), "xbm");
+    cache.gamma.set(key, textureIsGamma(loaded?.root));
+  });
+  // Layered chunks: the winning setup, then its templates (requested as the setup arrives, graph `PREFETCH`).
+  const readLayered = async (chunk: PlannedChunk) => {
+    if (!chunk.layered) return;
+    const key = refLabel(chunk.layered.setup.ref).toLowerCase();
+    if (!cache.setups.has(key)) {
+      const loaded = await graph.load(chunk.layered.setup.ref, "mlsetup");
+      const values = loaded ? readSetup(loaded.root) : null;
+      cache.setups.set(key, values ? { values, source: { depotPath: refLabel(loaded!.ref), archive: loaded!.provenance.archive,
+        sha256: hexSha(loaded!.provenance.extractedSha256) } } : null);
+    }
+    await Promise.all((cache.setups.get(key)?.values.layers ?? []).map(async layer => {
+      if (!layer.template) return;
+      const templateKey = refLabel(layer.template).toLowerCase();
+      if (cache.layerTemplates.has(templateKey)) return;
+      const loaded = await graph.load(layer.template, "mltemplate");
+      const values = loaded ? readTemplate(loaded.root) : null;
+      cache.layerTemplates.set(templateKey, values ? { values, source: { depotPath: refLabel(loaded!.ref), archive: loaded!.provenance.archive,
+        sha256: hexSha(loaded!.provenance.extractedSha256) } } : null);
+    }));
+  };
+  const reads: Promise<void>[] = [...gamma(firstTextures)];
+  for (const component of fresh) for (const material of component.materials) {
+    for (const provenance of Object.values(material.profiles)) reads.push(readOnce(cache.profiles, provenance, "hp", (root, loaded) => {
+      const stops = hairProfileStops(root);
+      return stops ? { depotPath: refLabel(provenance.ref), archive: loaded.provenance.archive, sha256: hexSha(loaded.provenance.extractedSha256), ...stops } : null;
+    }));
+    for (const provenance of Object.values(material.skinProfiles)) reads.push(readOnce(cache.skinProfiles, provenance, "sp", (root, loaded) => {
+      const values = skinProfileValues(root);
+      return values ? { depotPath: refLabel(provenance.ref), archive: loaded.provenance.archive, sha256: hexSha(loaded.provenance.extractedSha256), ...values } : null;
+    }));
+    for (const provenance of Object.values(material.gradients)) reads.push(readOnce(cache.gradients, provenance, "gradient", (root, loaded) => {
+      const stops = gradientStops(root);
+      return stops ? { depotPath: refLabel(provenance.ref), archive: loaded.provenance.archive, sha256: hexSha(loaded.provenance.extractedSha256), stops } : null;
+    }));
+    reads.push(readLayered(material));
+  }
+  const readsDone = await settle(Promise.all(reads));
+  if (signal?.aborted) { await exportedFirst; throw cancelledError(); }
+  // A layered chunk's maps and microblends, known once its setup and templates are read.
+  const layered: Located[] = [];
+  for (const component of fresh) for (const material of component.materials) {
+    const setup = material.layered ? cache.setups.get(refLabel(material.layered.setup.ref).toLowerCase()) : null;
+    for (const layer of setup?.values.layers ?? []) {
+      if (!layerDraws(layer.opacity)) continue;
+      const template = layer.template ? cache.layerTemplates.get(refLabel(layer.template).toLowerCase()) : null;
+      for (const ref of [template?.values.textures.color, template?.values.textures.normal, template?.values.textures.roughness,
+        template?.values.textures.metalness, layer.microblend]) {
+        if (!ref?.path || !/\.xbm$/i.test(ref.path)) continue;
+        const key = refLabel(ref).toLowerCase(), located = locate(graph, ref);
+        if (!located || textureAt.has(key)) continue;
+        textureAt.set(key, located);
+        layered.push(located);
+      }
+    }
+  }
+  const later = [...textureAt.keys()].filter(key => !firstTextures.has(key));
+  const [exportedLater, laterReads] = await Promise.all([
+    settle(exportLocated(ctx, layered.map(at => ({ kind: "textures" as const, at })), toolFailures)), settle(Promise.all(gamma(later)))]);
+  const first = await exportedFirst;
+  for (const outcome of [first, exportedLater, readsDone, laterReads]) if ("error" in outcome) throw outcome.error;
+  const toolLabel = ("value" in first ? first.value : undefined) ?? ("value" in exportedLater ? exportedLater.value : undefined);
+  return { geometryAt, textureAt, maskAt, toolFailures, toolLabel };
+}
+
 export async function prepareCharacterDetails(options: PrepareCharacterOptions): Promise<CharacterDetailResult> {
   const { request, signal } = options;
   const log = options.log ?? (() => {});
@@ -444,124 +620,10 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   // A component whose plan is unchanged on this installation is served as it was (a tried choice changes only its own slot).
   const planKey = (component: PlannedComponent) => canonical(component);
   const fresh = plan.components.filter(component => !cache.components.has(planKey(component)));
-  const gameRoot = options.route.gameRoot;
-  const toolFailures = new Set<string>();
-  let toolLabel: string | undefined = cache.toolLabel;
-  const exportGroup = async <T>(kind: "geometry" | "textures" | "masks", group: ReturnType<typeof byArchive>[number], into: Map<string, T>): Promise<void> => {
-    const known = (path: string) => into.has(`${group.archive.id}|${path.toLowerCase()}`);
-    const paths = [...group.paths].filter(path => !known(path));
-    if (!paths.length) return;
-    const session = options.exporter.open(archiveExportSource(group.archive.id, gameRoot), signal);
-    toolLabel ??= session.tool.label;
-    cache.toolLabel = toolLabel;
-    try {
-      const exported = await session[kind](paths) as unknown as Map<string, T>;
-      for (const [path, value] of exported) {
-        let kept: T = value;
-        const geometry = value as unknown as { glb: string | null; complete: boolean };
-        // A partial export is never written to the exporter's cache, so its GLB lives in the session's work folder, which is
-        // removed as the session closes below: keep the GLB in the content-addressed store, which outlives the session.
-        if (kind === "geometry" && geometry.glb && !geometry.complete && existsSync(geometry.glb))
-          kept = { ...geometry, glb: join(options.storeRoot, "files", store(options.storeRoot, geometry.glb, "glb").file) } as unknown as T;
-        into.set(`${group.archive.id}|${path.toLowerCase()}`, kept);
-      }
-    } catch (error) {
-      if (error instanceof GameAssetExportError) {
-        if (error.code === "cancelled" || signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled.");
-        if (error.code === "tool_missing" || error.code === "runtime_missing") throw new CharacterDetailError("character_tool_missing", TOOL_MISSING, error.message);
-        toolFailures.add(group.archive.id);
-        log(`WolvenKit could not export from ${group.archive.name}: ${error.message}`);
-        return;
-      }
-      throw error;
-    } finally { session.close(); }
-  };
-  // Geometry: the resource whose blob draws, from its winning archive (ArchiveXL copies followed).
-  const geometryAt = new Map<PlannedComponent, Located>();
-  for (const component of fresh) {
-    const located = locate(graph, component.drawnFrom.ref);
-    if (located) geometryAt.set(component, located);
-  }
-  for (const group of byArchive([...geometryAt.values()])) { await exportGroup("geometry", group, cache.geometry); cancelled(); }
-  // Textures and hair profiles of the drawn chunks.
-  const textureAt = new Map<string, Located>();
-  for (const component of fresh) for (const material of component.materials)
-    for (const provenance of Object.values(material.textures)) {
-      const located = locate(graph, provenance.ref);
-      if (located) textureAt.set(refLabel(provenance.ref).toLowerCase(), located);
-    }
-  const readOnce = async <T>(into: Map<string, T | null>, provenance: Provenance, kind: string, read: (root: JsonObject, loaded: NonNullable<Awaited<ReturnType<ResourceGraph["load"]>>>) => T | null) => {
-    const key = refLabel(provenance.ref).toLowerCase();
-    if (into.has(key)) return;
-    const loaded = await graph.load(provenance.ref, kind);
-    into.set(key, loaded ? read(loaded.root, loaded) : null);
-  };
-  for (const component of fresh) for (const material of component.materials) {
-    for (const provenance of Object.values(material.profiles)) await readOnce(cache.profiles, provenance, "hp", (root, loaded) => {
-      const stops = hairProfileStops(root);
-      return stops ? { depotPath: refLabel(provenance.ref), archive: loaded.provenance.archive, sha256: hexSha(loaded.provenance.extractedSha256), ...stops } : null;
-    });
-    for (const provenance of Object.values(material.skinProfiles)) await readOnce(cache.skinProfiles, provenance, "sp", (root, loaded) => {
-      const values = skinProfileValues(root);
-      return values ? { depotPath: refLabel(provenance.ref), archive: loaded.provenance.archive, sha256: hexSha(loaded.provenance.extractedSha256), ...values } : null;
-    });
-    for (const provenance of Object.values(material.gradients)) await readOnce(cache.gradients, provenance, "gradient", (root, loaded) => {
-      const stops = gradientStops(root);
-      return stops ? { depotPath: refLabel(provenance.ref), archive: loaded.provenance.archive, sha256: hexSha(loaded.provenance.extractedSha256), stops } : null;
-    });
-  }
-  // Layered chunks: the winning setup and templates, then their maps, microblends and mask layers with the other textures.
-  const readLayered = async (chunk: PlannedChunk) => {
-    if (!chunk.layered) return;
-    const key = refLabel(chunk.layered.setup.ref).toLowerCase();
-    if (!cache.setups.has(key)) {
-      const loaded = await graph.load(chunk.layered.setup.ref, "mlsetup");
-      const values = loaded ? readSetup(loaded.root) : null;
-      cache.setups.set(key, values ? { values, source: { depotPath: refLabel(loaded!.ref), archive: loaded!.provenance.archive,
-        sha256: hexSha(loaded!.provenance.extractedSha256) } } : null);
-    }
-    for (const layer of cache.setups.get(key)?.values.layers ?? []) {
-      if (!layer.template) continue;
-      const templateKey = refLabel(layer.template).toLowerCase();
-      if (cache.layerTemplates.has(templateKey)) continue;
-      const loaded = await graph.load(layer.template, "mltemplate");
-      const values = loaded ? readTemplate(loaded.root) : null;
-      cache.layerTemplates.set(templateKey, values ? { values, source: { depotPath: refLabel(loaded!.ref), archive: loaded!.provenance.archive,
-        sha256: hexSha(loaded!.provenance.extractedSha256) } } : null);
-    }
-  };
-  for (const component of fresh) for (const material of component.materials) await readLayered(material);
-  /** A layer the renderer blends in: a visible opacity (a layer at zero opacity changes nothing; knowledge/materials-and-shaders.md §4.6). */
-  const layerDraws = (opacity: number) => opacity > 0;
-  const layerTextures = (chunk: PlannedChunk) => {
-    const setup = chunk.layered ? cache.setups.get(refLabel(chunk.layered.setup.ref).toLowerCase()) : null;
-    const out: DepotRef[] = [];
-    for (const layer of setup?.values.layers ?? []) {
-      if (!layerDraws(layer.opacity)) continue;
-      const template = layer.template ? cache.layerTemplates.get(refLabel(layer.template).toLowerCase()) : null;
-      for (const ref of [template?.values.textures.color, template?.values.textures.normal, template?.values.textures.roughness,
-        template?.values.textures.metalness, layer.microblend]) if (ref?.path && /\.xbm$/i.test(ref.path)) out.push(ref);
-    }
-    return out;
-  };
-  for (const component of fresh) for (const material of component.materials)
-    for (const ref of layerTextures(material)) {
-      const located = locate(graph, ref);
-      if (located) textureAt.set(refLabel(ref).toLowerCase(), located);
-    }
-  const maskAt = new Map<string, Located>();
-  for (const component of fresh) for (const material of component.materials) {
-    const mask = material.layered?.mask;
-    if (!mask) continue;
-    const located = locate(graph, mask.ref);
-    if (located) maskAt.set(refLabel(mask.ref).toLowerCase(), located);
-  }
-  for (const group of byArchive([...textureAt.values()])) { await exportGroup("textures", group, cache.textures); cancelled(); }
-  for (const group of byArchive([...maskAt.values()])) { await exportGroup("masks", group, cache.masks); cancelled(); }
-  await Promise.all([...textureAt.keys()].filter(key => !cache.gamma.has(key)).map(async key => {
-    const loaded = await graph.load(refFromPath(key), "xbm");
-    cache.gamma.set(key, textureIsGamma(loaded?.root));
-  }));
+  const gathered = await gatherParts({ graph, cache, exporter: options.exporter, gameRoot: options.route.gameRoot, storeRoot: options.storeRoot, signal, log }, fresh);
+  const { geometryAt, textureAt, maskAt, toolFailures } = gathered;
+  const toolLabel = cache.toolLabel ?? gathered.toolLabel;
+  if (toolLabel) cache.toolLabel = toolLabel;
   time(`read and export ${fresh.length} of ${plan.components.length} part(s)`);
   cancelled();
 

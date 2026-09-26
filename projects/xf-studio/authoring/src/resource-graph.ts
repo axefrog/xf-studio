@@ -423,6 +423,18 @@ export class ResourceGraph {
     return pending;
   }
 
+  /**
+   * Start reading a resource a consumer is about to need, so it joins the extraction batch of what is being read now instead of
+   * waiting for the read before it (a morph component's mesh while its morph target is read). Like `PREFETCH`, it changes when a
+   * resource is read, never what is read: the consumer's later `load` gets the same promise, and its ambiguities are recorded then.
+   */
+  prefetchRef(ref: DepotRef, extension: string | null): void {
+    if (!this.prefetch) return;
+    const named = this.named(ref);
+    if (this.loads.has(named.hash) || !this.exists(named.hash)) return;
+    this.read(named, extension).catch(() => {});
+  }
+
   /** Request the prefetchable resources a loaded resource names (see `PREFETCH`), once. */
   private expand(hash: string): void {
     const children = this.children.get(hash);
