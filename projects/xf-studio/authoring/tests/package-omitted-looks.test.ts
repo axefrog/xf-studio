@@ -9,9 +9,9 @@ import type { EditorSnapshot } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { describePackageCheck, originalPresetCount } from "../src/package-filter";
-import { COLLECTION_2 } from "../src/platform/api";
+import { COLLECTION_2, NOTHING_PACKAGED_REASON } from "../src/platform/api";
 import { emptyRecipe } from "../src/engines/layered-makeup/recipe";
-import { NO_EXPORTER_REASON, NO_EYE_MAKEUP_REASON, parseCollection } from "../src/preset-collection";
+import { NO_EXPORTER_REASON, parseCollection } from "../src/preset-collection";
 import { EYE_MAKEUP_PART_2 } from "../src/recipe-schema";
 import { fixedId } from "./fixtures/workspace-v1-fixtures";
 import { initialRecipe } from "./fixtures/eye-region";
@@ -50,21 +50,23 @@ test("Check, Build and the manifest report looks without eye makeup and other fe
   expect(sent.presets.map(preset => preset.name)).toEqual(["Eyes", "Eyes and hair", "Hair only"]);
   const check = realCheck(JSON.parse(JSON.stringify(sent)));
   expect(check.originalPresetCount).toBe(3);
-  // Parts no exporter packages are the platform's to report; a look without eye makeup is eye makeup's.
+  // Whole looks and parts no exporter packages are the platform's to report, once (PIPE-88): a look no feature packages
+  // anything of is left out whole, whichever feature it lacks; eye makeup lists only what it leaves out of its own part.
   expect(check.omissions).toEqual([
+    { kind: "preset", presetId: fixedId(53), presetName: "Hair only", reason: NOTHING_PACKAGED_REASON },
     { kind: "part", presetId: fixedId(52), presetName: "Eyes and hair", feature: "hair", reason: NO_EXPORTER_REASON },
     { kind: "part", presetId: fixedId(53), presetName: "Hair only", feature: "hair", reason: NO_EXPORTER_REASON },
   ]);
-  expect(check.products[0].features[0].omissions).toEqual([
-    { kind: "preset", presetId: fixedId(53), presetName: "Hair only", reason: NO_EYE_MAKEUP_REASON },
-  ]);
+  expect(check.products[0].features[0].omissions).toEqual([]);
+  // One product: it owns every omission.
+  expect(check.products[0].omissions).toEqual(check.omissions);
   // The report is not content: the packaged copy (and its hash) never carries it.
   const prepared = preparePackageCollection(sent);
   expect(prepared.packaged).not.toHaveProperty("omitted");
   expect(originalPresetCount(prepared.source)).toBe(3);
   const text = describePackageCheck(check);
   expect(text).toContain("left out the hair part of preset “Eyes and hair”");
-  expect(text).toContain("omitted whole preset “Hair only” because it has no eye makeup");
+  expect(text).toContain("omitted whole preset “Hair only” because nothing in it can be made into mod files yet");
   expect(outcome.ok && outcome.result.kind === "packageCheck" && outcome.result.result.originalPresetCount).toBe(3);
 });
 

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createModInstallTransport } from "../src/mod-install-transport";
+import { createModInstallTransport, declaredResources, installedDuplicates } from "../src/mod-install-transport";
 import { defaultLocalSettings } from "../src/local-settings";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
 
@@ -47,12 +47,14 @@ for (const route of ["direct", "mo2"] as const) {
     const f = fixture(route);
     try {
       f.candidate("first", "one");
-      mkdirSync(f.target, { recursive: true });
-      writeFileSync(join(f.target, "unrelated.archive"), "keep me");
+      // The game's folder is shared by every mod; an MO2 mod's folder is its own, so there the other file arrives later.
+      const unrelated = () => { mkdirSync(f.target, { recursive: true }); writeFileSync(join(f.target, "unrelated.archive"), "keep me"); };
+      if (route === "direct") unrelated();
       const plan = f.transport.preflight("first");
       expect(plan.route).toBe(route);
       expect(plan.files).toHaveLength(2);
       const receipt = f.transport.install("first");
+      if (route === "mo2") unrelated();
       expect(receipt.files.map(x => readFileSync(join(f.target, x.path.split("/").at(-1)!), "utf8")))
         .toEqual(["one-0", "one-1"]);
       expect(f.transport.receipt()?.candidateId).toBe("first");
@@ -269,5 +271,66 @@ test("a feature namespace already installed in another XF mod is refused (no dup
     // After the first mod is uninstalled, the move can be placed.
     f.transport.uninstall();
     expect(mo2.preflight("moved").files).toHaveLength(2);
+  } finally { f.cleanup(); }
+});
+
+test("an MO2 folder of the mod's name that XF Studio didn't create is never written into (PIPE-90)", () => {
+  const f = fixture("mo2");
+  try {
+    f.candidate("first", "one");
+    const folder = join(f.mo2, "mods", EYE_MAKEUP_MOD.modName);
+    // An empty tree (an interrupted first install) is fine; someone else's mod of that name is refused in plain words.
+    mkdirSync(join(folder, "archive", "pc", "mod"), { recursive: true });
+    expect(f.transport.preflight("first").route).toBe("mo2");
+    writeFileSync(join(folder, "readme.txt"), "someone else's mod");
+    expect(() => f.transport.preflight("first")).toThrow(`already has a mod called “${EYE_MAKEUP_MOD.modName}” that XF Studio didn't put there`);
+    expect(() => f.transport.install("first")).toThrow("didn't put there");
+    expect(readdirSync(join(folder, "archive", "pc", "mod"))).toEqual([]);
+    // Once installed (our receipt), later files beside ours don't make it foreign.
+    rmSync(join(folder, "readme.txt"));
+    f.transport.install("first");
+    writeFileSync(join(folder, "readme.txt"), "added later");
+    expect(f.transport.preflight("first").replacingOwned).toBe(true);
+  } finally { f.cleanup(); }
+});
+
+test("a renamed mod's name flows through the transport, checked as a folder name (PIPE-90)", () => {
+  const f = fixture("mo2");
+  try {
+    const folder = join(f.store, "night"), payload = join(folder, "archive", "pc", "mod");
+    mkdirSync(payload, { recursive: true });
+    const files = ["xfs_test.archive", "xfs_test.archive.xl"].map(name => {
+      writeFileSync(join(payload, name), name);
+      return { path: `archive/pc/mod/${name}`, sha256: digest(name), bytes: name.length };
+    });
+    writeFileSync(join(folder, "manifest.json"), JSON.stringify({ schema: "xfs/local-package-2", productId: "0ec3546e-3fac-43e7-8c19-a65d20383d41",
+      modName: "XF Night Looks", archive: "xfs_test", features: [{ feature: "eye-makeup", namespace: "xfs_test" }], files,
+      verifiedUnpackedFiles: 2, installed: false, gameRenderingVerified: false }));
+    expect(() => f.transport.preflight("night")).toThrow("this transfer places");
+    const named = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: "XF Night Looks" });
+    expect(named.preflight("night").target).toBe(join(f.mo2, "mods", "XF Night Looks", "archive", "pc", "mod"));
+    for (const unsafe of ["..", "a/b", "..\\x", " padded", "CON"])
+      expect(() => createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: unsafe }))
+        .toThrow("can't be used as a mod folder");
+  } finally { f.cleanup(); }
+});
+
+test("declared resources: what an ArchiveXL declaration registers, and installed mods holding part of a candidate (PIPE-90)", () => {
+  expect(declaredResources("customizations:\r\n  female: A\\B.inkcharcustomization\r\n  male:\r\n    - a\\c.inkcharcustomization\r\n" +
+    "resource:\r\n  scope:\r\n    player_customization.app:\r\n      - a\\b.app\r\n")).toEqual(["a/b.inkcharcustomization", "a/c.inkcharcustomization", "a/b.app"]);
+  expect(declaredResources("not: [yaml")).toEqual([]);
+  expect(declaredResources("candidate-1")).toEqual([]);
+  const f = fixture("mo2");
+  try {
+    const place = (name: string, text: string) => {
+      const dir = join(f.mo2, "mods", name, "archive", "pc", "mod");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "x.archive.xl"), text);
+      return { label: name, folder: dir };
+    };
+    const places = [place("Same looks", "customizations:\r\n  female:\r\n    - a\\b.inkcharcustomization\r\n    - z\\z.inkcharcustomization\r\n"),
+      place("Other looks", "customizations:\r\n  female: q\\r.inkcharcustomization\r\n"), { label: "Missing", folder: join(f.root, "none") }];
+    expect(installedDuplicates("customizations:\r\n  female: a\\b.inkcharcustomization\r\n", places)).toEqual(["Same looks"]);
+    expect(installedDuplicates("candidate-1", places)).toEqual([]);
   } finally { f.cleanup(); }
 });

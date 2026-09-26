@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { archiveXlText, MERGED_MOD_NAME, mergeXlFragments, modNameIssue, PACKAGE_PLAN_1, PackagePlanConflict, parsePackagePlan,
-  type ModPackagePlan } from "../src/platform/api";
-import { collectionProducts, editPackagePlan, normalizePackagePlan, packagePlanEditIssue, planProducts, productArchive,
-  renameCollectionId } from "../src/platform/core/package-plan";
+  readPackagePlan, type ModPackagePlan } from "../src/platform/api";
+import { collectionProducts, copyPackagePlan, editPackagePlan, normalizePackagePlan, packagePlanEditIssue, planProducts, productArchive,
+  } from "../src/platform/core/package-plan";
 
 const COLLECTION = "0ec3546e-3fac-43e7-8c19-a65d20383d41";
 const OTHER = "11111111-2222-4333-8444-555555555555";
@@ -44,6 +44,30 @@ test("two mods of one collection never share a folder name", () => {
   expect(products.map(p => p.modName)).toEqual(["XF Night", "XF Night (Party)"]);
 });
 
+test("the clash suffix is a valid mod name: a collection name a folder can't hold falls back to a number (PIPE-91)", () => {
+  const clash = plan([{ id: COLLECTION, name: "XF Night", features: [] }, { id: OTHER, name: "XF Night", features: ["lips"] }]);
+  const names = (collectionName: string, current = clash) =>
+    planProducts({ collectionId: COLLECTION, collectionName, features: [EYES, LIPS], plan: current }).map(p => p.modName);
+  // A collection called "Party: 2/3?" would have made "XF Night (Party: 2/3?)", which no mod manager can use as a folder.
+  expect(names("Party: 2/3?")).toEqual(["XF Night", "XF Night 2"]);
+  expect(names("x".repeat(90))).toEqual(["XF Night", "XF Night 2"]);
+  // A long name keeps within the limit when numbered.
+  const long = "L".repeat(80);
+  const numbered = names("Party: /", plan([{ id: COLLECTION, name: long, features: [] }, { id: OTHER, name: long, features: ["lips"] }]));
+  expect(numbered[1]).toBe(`${"L".repeat(78)} 2`);
+  for (const name of [...names("Party: 2/3?"), ...numbered]) expect(modNameIssue(name)).toBeUndefined();
+});
+
+test("renaming a mod to another mod's name is refused, not silently suffixed (PIPE-91)", () => {
+  const products = planProducts({ collectionId: COLLECTION, collectionName: "Looks", features: [EYES, LIPS],
+    plan: plan([{ id: OTHER, features: ["lips"] }]) });
+  expect(packagePlanEditIssue({ kind: "rename", productId: OTHER, name: " xf eye artistry " }, products, COLLECTION))
+    .toBe("Another mod of this collection is already called “XF Eye Artistry”. Choose a different name.");
+  // Its own current name, and any other name, are fine.
+  expect(packagePlanEditIssue({ kind: "rename", productId: OTHER, name: "XF Lip Artistry" }, products, COLLECTION)).toBeUndefined();
+  expect(packagePlanEditIssue({ kind: "rename", productId: OTHER, name: "XF Lips" }, products, COLLECTION)).toBeUndefined();
+});
+
 test("a feature in two mods is refused: its namespace may be present in only one XF mod", () => {
   const twice = plan([{ id: OTHER, features: ["lips"] }, { id: "22222222-2222-4333-8444-555555555555", features: ["lips"] }]);
   expect(() => planProducts({ collectionId: COLLECTION, collectionName: "Looks", features: [EYES, LIPS], plan: twice }))
@@ -52,6 +76,23 @@ test("a feature in two mods is refused: its namespace may be present in only one
   expect(error).toBeInstanceOf(PackagePlanConflict);
   expect(error!.code).toBe("namespace_duplicated");
   expect(error!.message).toContain("can go into only one mod");
+  // The person sees the feature's label, never its key (PIPE-93).
+  const labelled = (() => { try { planProducts({ collectionId: COLLECTION, collectionName: "Looks", features: [EYES, LIPS], plan: twice }); }
+    catch (e) { return e as PackagePlanConflict; } })();
+  expect(labelled!.message).toStartWith("Lip makeup is in two mods.");
+  expect(labelled!.message).not.toContain("lips");
+});
+
+test("a plan this build can't use is newer (a later schema, or fields it doesn't know) or damaged, never an exception (CORE-91)", () => {
+  expect(readPackagePlan(plan([{ id: OTHER, features: ["lips"] }]))).toEqual({ plan: plan([{ id: OTHER, features: ["lips"] }]) });
+  expect(readPackagePlan({ schema: "xfs/package-plan-2", products: [] })).toEqual({ issue: "newer" });
+  // The planned per-feature selector labels are a newer build's field: kept whole rather than dropped.
+  expect(readPackagePlan({ schema: PACKAGE_PLAN_1, products: [{ id: OTHER, features: ["lips"], selectorLabels: { lips: "Lips" } }] }))
+    .toEqual({ issue: "newer" });
+  expect(readPackagePlan({ schema: PACKAGE_PLAN_1, products: [], owner: "x" })).toEqual({ issue: "newer" });
+  for (const damaged of [null, "plan", [], { schema: PACKAGE_PLAN_1, products: [{ id: "nope", features: [] }] }, { schema: "other" },
+    plan([{ id: OTHER, features: ["lips"] }, { id: "22222222-2222-4333-8444-555555555555", features: ["lips"] }])])
+    expect(readPackagePlan(damaged)).toEqual({ issue: "damaged" });
 });
 
 test("stored plans are validated and kept canonical: only what differs from the default", () => {
@@ -90,11 +131,18 @@ test("plan edits: rename, split, assign and merge, each back to the default when
   expect(editPackagePlan(current, { kind: "rename", productId: COLLECTION, name: null }, products(current), COLLECTION)).toBeUndefined();
 });
 
-test("a saved copy's default mod is the copy's own", () => {
-  const copy = "44444444-2222-4333-8444-555555555555";
-  expect(renameCollectionId(plan([{ id: COLLECTION, name: "Mine", features: [] }, { id: OTHER, features: ["lips"] }]), COLLECTION, copy))
-    .toEqual(plan([{ id: copy, name: "Mine", features: [] }, { id: OTHER, features: ["lips"] }]));
-  expect(renameCollectionId(undefined, COLLECTION, copy)).toBeUndefined();
+test("a saved copy's mods are all the copy's own: its default mod and every split-off mod get new IDs (PIPE-89)", () => {
+  const copy = "44444444-2222-4333-8444-555555555555", fresh = "55555555-2222-4333-8444-555555555555";
+  const ids = [OTHER, fresh];
+  // A fresh ID that collides with one already in use is drawn again.
+  expect(copyPackagePlan(plan([{ id: COLLECTION, name: "Mine", features: [] }, { id: OTHER, name: "Lips", features: ["lips"] }]), COLLECTION, copy,
+    () => ids.shift()!)).toEqual(plan([{ id: copy, name: "Mine", features: [] }, { id: fresh, name: "Lips", features: ["lips"] }]));
+  // So the copy's split-off mod has its own archive, and never hides the original's in the mod manager.
+  expect(productArchive(copy, fresh)).not.toBe(productArchive(COLLECTION, OTHER));
+  expect(copyPackagePlan(undefined, COLLECTION, copy, () => fresh)).toBeUndefined();
+  // A plan this build can't read is kept as it came.
+  const kept = { kept: { schema: "xfs/package-plan-2" }, issue: "newer" as const };
+  expect(copyPackagePlan(kept, COLLECTION, copy, () => fresh)).toEqual(kept);
 });
 
 test("an in-memory collection's products come from the exporting features its looks hold", () => {

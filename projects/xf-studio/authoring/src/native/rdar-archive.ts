@@ -73,7 +73,8 @@ const hex = (bytes: Uint8Array) => Array.from(bytes, b => b.toString(16).padStar
 /**
  * The index block, decoded on demand: opening reads only the entry hashes (one pass), and an entry, its segments and its
  * dependencies are decoded when asked for. Game archives list entries sorted by hash, so a lookup is a binary search; an index
- * that is not sorted gets a map instead.
+ * that is not sorted gets a sorted order of its positions (4 bytes per entry) searched the same way. Of equal hashes, the last in
+ * index order wins.
  */
 export class RdarIndex {
   readonly crc: bigint;
@@ -85,7 +86,8 @@ export class RdarIndex {
   private readonly view: DataView;
   private readonly segmentsAt: number;
   private readonly dependenciesAt: number;
-  private readonly unsorted: Map<bigint, number> | null;
+  /** Positions in hash order (stable), when the index itself is not sorted. */
+  private readonly order: Uint32Array | null;
 
   /** Where segments must end: the smaller of the header's file size and the real file's size (when the caller knows it). */
   readonly dataEnd: number;
@@ -106,19 +108,29 @@ export class RdarIndex {
       this.hashes[i] = hash;
       if (i && hash <= this.hashes[i - 1]!) sorted = false;
     }
-    this.unsorted = sorted ? null : new Map(Array.from(this.hashes, (hash, i) => [hash, i] as [bigint, number]));
+    if (sorted) this.order = null;
+    else {
+      const hashes = this.hashes;
+      this.order = Uint32Array.from({ length: this.fileCount }, (_, i) => i).sort((a, b) => hashes[a]! < hashes[b]! ? -1 : hashes[a]! > hashes[b]! ? 1 : a - b);
+    }
   }
 
   /** Position of an entry by depot hash, or -1. */
   find(hash: bigint): number {
-    if (this.unsorted) return this.unsorted.get(hash) ?? -1;
-    let low = 0, high = this.fileCount - 1;
-    while (low <= high) {
-      const middle = (low + high) >>> 1, value = this.hashes[middle]!;
-      if (value === hash) return middle;
-      if (value < hash) low = middle + 1; else high = middle - 1;
+    const order = this.order;
+    if (!order) {
+      let low = 0, high = this.fileCount - 1;
+      while (low <= high) {
+        const middle = (low + high) >>> 1, value = this.hashes[middle]!;
+        if (value === hash) return middle;
+        if (value < hash) low = middle + 1; else high = middle - 1;
+      }
+      return -1;
     }
-    return -1;
+    // The first position whose hash is greater; the one before it is the last equal one, if any.
+    let low = 0, high = order.length;
+    while (low < high) { const middle = (low + high) >>> 1; if (this.hashes[order[middle]!]! <= hash) low = middle + 1; else high = middle; }
+    return low > 0 && this.hashes[order[low - 1]!] === hash ? order[low - 1]! : -1;
   }
 
   entryAt(i: number): RdarFileEntry {

@@ -18,7 +18,7 @@ export function eyeCheck(collection: { id: string }, options: { presets: Exporte
     packagedSha256: "test", details: { plateLiftsMm: [0.4], plateUv: null } };
   return { schema: PACKAGE_CHECK_2, ready: true, collectionId: collection.id, originalPresetCount: options.originalPresetCount ?? options.presets.length,
     omissions: [], collectionSha256: "source", products: [{ productId: collection.id, modName: "XF Eye Artistry", nameSource: "derived",
-      archive: "xfs_test", isDefault: true, features: [feature], requirements: feature.requirements }] };
+      archive: "xfs_test", isDefault: true, features: [feature], requirements: feature.requirements, omissions: [] }] };
 }
 
 /** A Build result for a Check result: each product as a verified private candidate at `root/<archive>`. */

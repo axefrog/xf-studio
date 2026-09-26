@@ -1,4 +1,5 @@
-// Regression tests for the native reader review at 5e64894 (NATIVE-01..16, research/authoring/code-health.md). Every hostile input
+// Regression tests for the native reader reviews at 5e64894 (NATIVE-01..16) and fa74f98 (NATIVE-18..23; the Oodle checks NATIVE-21/22
+// are in native-oodle.test.ts), research/authoring/code-health.md. Every hostile input
 // here reproduced a hang, a memory blow-up or a silent misread before the fixes; each must now be refused quickly with a typed
 // error, or decoded with the right note. Synthetic fixtures only (no game data).
 import { afterAll, expect, test } from "bun:test";
@@ -10,6 +11,7 @@ import { ArchiveChangedError, NativeArchive, NativeArchivePool } from "../src/na
 import { Cr2wFile } from "../src/native/cr2w-file";
 import { compareDocuments, HASH_ONLY_PATH } from "../src/native/document-diff";
 import { DecodeSession, DEFAULT_LIMITS, type NativeLimits } from "../src/native/limits";
+import { type DecodeWorker, type NativeDecodeOutcome, type WorkerDecodeMessage, WorkerDecoder, type WorkerDecoderOptions, type WorkerInit } from "../src/native/native-decode";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "../src/native/native-errors";
 import { parseLxrsNames } from "../src/native/rdar-archive";
 import { learnedKeysMemoSize } from "../src/native/red-defaults";
@@ -315,4 +317,159 @@ test("NATIVE-16: a watched property the file left out is reported with its path 
   expect(result.defaulted).toEqual([{ property: "rendChunk.renderMask", count: 2, paths: [
     ".Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos[1].renderMask",
     ".Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos[2].renderMask"] }]);
+});
+
+// NATIVE-18..23: the review at fa74f98.
+
+test("NATIVE-18: the string pool is capped, and its terminator index and entries are charged before they are allocated", () => {
+  // Over the pool cap: refused before the pool is scanned. The default cap refuses a pool of zeros one byte past it (the index
+  // was a JS array of 16 bytes per zero: 530 MB for a 32 MiB pool that compresses to KB).
+  refusedQuickly(() => new Cr2wFile(nameTable(new Uint8Array((1 << 20) + 1), []), new DecodeSession({ ...DEFAULT_LIMITS, maxStringPoolBytes: 1 << 20 })), NativeBudgetError, 500);
+  refusedQuickly(() => new Cr2wFile(nameTable(new Uint8Array(DEFAULT_LIMITS.maxStringPoolBytes + 1), [])), NativeBudgetError, 500);
+  // Under the pool cap, the terminators are charged 4 bytes each before their index is allocated.
+  const zeros = refusedQuickly(() => new Cr2wFile(nameTable(new Uint8Array(512 << 10), []), new DecodeSession({ ...DEFAULT_LIMITS, maxDecodedBytes: 1 << 20 })), NativeBudgetError, 500);
+  expect(zeros.message).toContain("terminator index");
+  // Many distinct one-byte entries (each a string and a slot, ~150 bytes) are budgeted by count, not only by their bytes.
+  const pool = new Uint8Array(200_000);
+  for (let i = 0; i < pool.length; i += 2) pool[i] = 0x61;
+  const offsets = Array.from({ length: 100_000 }, (_, i) => i * 2);
+  const many = refusedQuickly(() => new Cr2wFile(nameTable(pool, offsets), new DecodeSession({ ...DEFAULT_LIMITS, maxNames: 50_000 })), NativeBudgetError, 500);
+  expect(many.message).toContain("50000-name budget");
+  expect(new Cr2wFile(nameTable(pool, offsets)).session.usage.names).toBe(100_000);
+  // An ordinary pool reads as before, and its usage counts the index and each distinct entry once.
+  const file = new Cr2wFile(nameTable(text("abc\0def\0"), [0, 4, 0]));
+  expect(file.names).toEqual(["abc", "def", "abc"]);
+  expect(file.session.usage).toMatchObject({ decodedBytes: 2 * 4 + 3 + 3, names: 2 });
+});
+
+/** A worker the test drives by hand: it records what it is sent and emits what the test tells it to. */
+class FakeWorker implements DecodeWorker {
+  readonly sent: (WorkerInit | WorkerDecodeMessage)[] = [];
+  terminated = false;
+  private readonly listeners = new Map<string, ((event: any) => void)[]>();
+  postMessage(message: WorkerInit | WorkerDecodeMessage): void { this.sent.push(message); }
+  addEventListener(type: string, listener: (event: any) => void): void { this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]); }
+  terminate(): void { this.terminated = true; }
+  emit(type: "message" | "error" | "close", data?: unknown): void { for (const listener of this.listeners.get(type) ?? []) listener(type === "message" ? { data } : { message: data }); }
+  get lastDecode(): WorkerDecodeMessage { return this.sent.filter((message): message is WorkerDecodeMessage => message.type === "decode").at(-1)!; }
+}
+const answer = (tag: string): NativeDecodeOutcome => ({ ok: true, document: { tag }, extractedSha256: "", root: "CHairProfile", name: null, notes: [], defaulted: [] });
+const decodeRequest = (hash: string) => ({ archivePath: "a.archive", hash, needName: false });
+function fakeDecoder(options: Partial<WorkerDecoderOptions> = {}): { decoder: WorkerDecoder; workers: FakeWorker[] } {
+  const workers: FakeWorker[] = [];
+  const decoder = new WorkerDecoder({ decompressor: { test: "fake" }, roots: new Set(), identity: "test", ...options,
+    createWorker: () => { const worker = new FakeWorker(); workers.push(worker); return worker; } });
+  return { decoder, workers };
+}
+const settled = async (promise: Promise<unknown>) => { let done = false; void promise.then(() => { done = true; }); await Bun.sleep(5); return done; };
+
+test("NATIVE-19: a worker decoder hears only its current worker, and only the answer for the resource in progress", async () => {
+  const { decoder, workers } = fakeDecoder({ timeoutMs: 150 });
+  try {
+    const first = decoder.decode(decodeRequest("1"));
+    workers[0]!.emit("message", { type: "ready" });
+    const firstId = workers[0]!.lastDecode.id;
+    expect(await first).toMatchObject({ ok: false, kind: "over-budget" });
+    expect(workers[0]!.terminated).toBe(true);
+
+    const second = decoder.decode(decodeRequest("2"));
+    expect(workers.length).toBe(2);
+    workers[1]!.emit("message", { type: "ready" });
+    const secondId = workers[1]!.lastDecode.id;
+    expect(secondId).not.toBe(firstId);
+    // The replaced worker's late answer, even one carrying the new id, and its error and exit are ignored.
+    workers[0]!.emit("message", { type: "outcome", id: firstId, outcome: answer("late") });
+    workers[0]!.emit("message", { type: "outcome", id: secondId, outcome: answer("replaced") });
+    workers[0]!.emit("error", "late failure");
+    workers[0]!.emit("close");
+    // So is the current worker's answer for an earlier id.
+    workers[1]!.emit("message", { type: "outcome", id: firstId, outcome: answer("stale") });
+    expect(await settled(second)).toBe(false);
+    expect(workers[1]!.terminated).toBe(false);
+    workers[1]!.emit("message", { type: "outcome", id: secondId, outcome: answer("right") });
+    expect(await second).toMatchObject({ ok: true, document: { tag: "right" } });
+  } finally { decoder.close(); }
+});
+
+test("NATIVE-20: a worker that fails to start is not restarted for every request, and the decoder gives up after repeated failures", async () => {
+  const { decoder, workers } = fakeDecoder({ startTimeoutMs: 40, restartDelayMs: 150, maxStartFailures: 2 });
+  try {
+    // Never ready: the start timeout answers the resource `unavailable`, and the worker is ended.
+    const started = performance.now();
+    expect(await decoder.decode(decodeRequest("1"))).toMatchObject({ ok: false, kind: "unavailable", message: expect.stringContaining("did not start within 40 ms") });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(workers[0]!.terminated).toBe(true);
+    // Within the restart delay nothing is started; resources are answered at once.
+    expect(await decoder.decode(decodeRequest("2"))).toMatchObject({ ok: false, kind: "unavailable" });
+    expect(decoder.started).toBe(1);
+    // After it, one new start; a second failure (here `init-failed`) is the limit, so the decoder is off for the session.
+    await Bun.sleep(170);
+    const third = decoder.decode(decodeRequest("3"));
+    expect(decoder.started).toBe(2);
+    workers[1]!.emit("message", { type: "init-failed", message: "The Oodle library changed since it was checked." });
+    expect(await third).toMatchObject({ ok: false, kind: "unavailable", message: expect.stringContaining("off for this session") });
+    await Bun.sleep(170);
+    expect(await decoder.decode(decodeRequest("4"))).toMatchObject({ ok: false, kind: "unavailable" });
+    expect(decoder.started).toBe(2);
+  } finally { decoder.close(); }
+
+  // A worker that exits before it is ready is a start failure too; a later successful start resets the count, and a worker that
+  // dies after starting is replaced at once, as before.
+  const retried = fakeDecoder({ startTimeoutMs: 5000, restartDelayMs: 50, maxStartFailures: 2 });
+  try {
+    const first = retried.decoder.decode(decodeRequest("1"));
+    retried.workers[0]!.emit("close");
+    expect(await first).toMatchObject({ ok: false, kind: "unavailable" });
+    await Bun.sleep(70);
+    const second = retried.decoder.decode(decodeRequest("2"));
+    retried.workers[1]!.emit("message", { type: "ready" });
+    retried.workers[1]!.emit("message", { type: "outcome", id: retried.workers[1]!.lastDecode.id, outcome: answer("ok") });
+    expect(await second).toMatchObject({ ok: true });
+    const third = retried.decoder.decode(decodeRequest("3"));
+    retried.workers[1]!.emit("error", "crashed");
+    expect(await third).toMatchObject({ ok: false, kind: "internal" });
+    const fourth = retried.decoder.decode(decodeRequest("4"));
+    expect(retried.decoder.started).toBe(3);
+    retried.workers[2]!.emit("close");
+    expect(await fourth).toMatchObject({ ok: false, kind: "unavailable", message: expect.not.stringContaining("off for this session") });
+  } finally { retried.decoder.close(); }
+});
+
+/** An archive's bytes with its index entries in reverse order (so the index is not sorted), optionally repeating one hash. */
+function unsortedIndex(bytes: Uint8Array, repeatFirst = false): Uint8Array {
+  const out = bytes.slice(), view = new DataView(out.buffer);
+  const index = Number(view.getBigUint64(8, true)), count = view.getUint32(index + 16, true);
+  const entries = Array.from({ length: count }, (_, i) => bytes.slice(index + 28 + i * 56, index + 28 + (i + 1) * 56)).reverse();
+  entries.forEach((entry, i) => out.set(entry, index + 28 + i * 56));
+  if (repeatFirst) out.set(out.subarray(index + 28, index + 36), index + 28 + 56);
+  return out;
+}
+
+test("NATIVE-23: an archive index over its cap is refused before it is read, and a pool keeps a bounded total of index bytes", () => {
+  const root = temp();
+  const files = (tag: number) => Array.from({ length: 8 }, (_, i) => ({ path: `a\\${tag}_${i}.mi`, segments: [{ bytes: new Uint8Array([tag, i]) }] }));
+  const paths = [0, 1, 2, 3].map(tag => { const path = join(root, `${tag}.archive`); writeFileSync(path, syntheticArchive(files(tag))); return path; });
+  const indexSize = NativeArchive.open(paths[0]!, fakeDecompress).index.header.indexSize;
+  // One index over the cap: refused as over-budget, the decompressor never asked and nothing read.
+  refusedQuickly(() => NativeArchive.open(paths[0]!, fakeDecompress, { ...DEFAULT_LIMITS, maxIndexBytes: indexSize - 1 }), NativeBudgetError, 500);
+  expect(NativeArchive.open(paths[0]!, fakeDecompress, { ...DEFAULT_LIMITS, maxIndexBytes: indexSize }).size).toBe(8);
+  // A pool drops the least recently used indexes past its byte budget, and re-reads one when it is needed again.
+  const pool = new NativeArchivePool(fakeDecompress, 64, { ...DEFAULT_LIMITS, maxPooledIndexBytes: Math.floor(indexSize * 2.5) });
+  try {
+    for (const [tag, path] of paths.entries()) expect(pool.read(path, depotHash(`a\\${tag}_3.mi`))).toEqual(new Uint8Array([tag, 3]));
+    expect(pool.heldArchives).toBe(2);
+    expect(pool.heldIndexBytes).toBe(2 * indexSize);
+    expect(pool.read(paths[0]!, depotHash("a\\0_5.mi"))).toEqual(new Uint8Array([0, 5]));
+    expect(pool.heldIndexBytes).toBeLessThanOrEqual(indexSize * 2.5);
+  } finally { pool.close(); }
+  expect(pool.heldIndexBytes).toBe(0);
+  // An index that is not sorted is searched through a sorted order of positions (no map); of repeated hashes the last wins.
+  const unsorted = join(root, "unsorted.archive");
+  writeFileSync(unsorted, unsortedIndex(syntheticArchive(files(7))));
+  const archive = NativeArchive.open(unsorted, fakeDecompress);
+  for (let i = 0; i < 8; i++) expect(archive.read(depotHash(`a\\7_${i}.mi`))).toEqual(new Uint8Array([7, i]));
+  expect(archive.read(depotHash("a\\7_8.mi"))).toBeNull();
+  writeFileSync(unsorted, unsortedIndex(syntheticArchive(files(7)), true));
+  const repeated = NativeArchive.open(unsorted, fakeDecompress), first = repeated.index.entryAt(0).hash;
+  expect(repeated.index.find(BigInt(first))).toBe(1);
 });

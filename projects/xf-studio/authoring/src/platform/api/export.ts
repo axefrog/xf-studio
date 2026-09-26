@@ -52,6 +52,46 @@ export function modNameIssue(name: string): string | undefined {
   return undefined;
 }
 
+/** The plain words for a plan this build can't use: made by a newer version, or damaged. */
+export const NEWER_PLAN_MESSAGE = "This collection's mod packaging choices were made with a newer version of XF Studio. " +
+  "Update XF Studio to change them or to check and build its mods. Your collection is unchanged.";
+export const DAMAGED_PLAN_MESSAGE = "This collection's mod packaging choices are damaged, so XF Studio can't check or build its mods. " +
+  "Your looks are unchanged; import the collection again from a good copy to fix it.";
+/** Why a stored plan can't be used: a newer build wrote it (a later schema, or fields this build doesn't know), or it is damaged. */
+export type PackagePlanIssue = "newer" | "damaged";
+/**
+ * A stored plan this build can't use, kept exactly as it was stored (`kept`) so the collection still opens and saves
+ * it back unchanged (CORE-91). Nothing plans on it: `package.*` actions, Check and Build refuse it.
+ */
+export type KeptPackagePlan = { readonly kept: unknown; readonly issue: PackagePlanIssue };
+/** The reason code the export host refuses a kept plan with. */
+export const PLAN_ISSUE_CODE: Readonly<Record<PackagePlanIssue, string>> = { newer: "package_plan_newer", damaged: "package_plan_damaged" };
+export const PLAN_ISSUE_MESSAGE: Readonly<Record<PackagePlanIssue, string>> = { newer: NEWER_PLAN_MESSAGE, damaged: DAMAGED_PLAN_MESSAGE };
+/** An in-memory plan kept opaque (`readPackagePlan` said it can't be used). */
+export const isKeptPackagePlan = (value: unknown): value is KeptPackagePlan => !!value && typeof value === "object" && !Array.isArray(value) &&
+  Object.keys(value).length === 2 && "kept" in value && ((value as KeptPackagePlan).issue === "newer" || (value as KeptPackagePlan).issue === "damaged");
+/** The stored form of an in-memory plan: a kept plan goes back exactly as it came. */
+export const storedPackagePlan = (plan: ModPackagePlan | KeptPackagePlan): unknown =>
+  structuredClone(isKeptPackagePlan(plan) ? plan.kept : plan);
+
+const PLAN_KEYS = new Set(["schema", "products"]), PRODUCT_KEYS = new Set(["id", "name", "features"]);
+/**
+ * Read a stored plan without throwing. The rule (CORE-91): a later `xfs/package-plan-N` schema, or a
+ * `xfs/package-plan-1` plan holding any field this build doesn't know (the planned per-feature `selectorLabels`, say),
+ * was written by a newer build and is `newer`; anything else that doesn't parse is `damaged`. Unknown fields are never
+ * dropped: a plan that has them is kept whole, so a newer build's choices survive this build's saves.
+ */
+export function readPackagePlan(value: unknown): { plan: ModPackagePlan } | { issue: PackagePlanIssue } {
+  const input = value as { schema?: unknown; products?: unknown } | null;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return { issue: "damaged" };
+  const later = typeof input.schema === "string" && /^xfs\/package-plan-(\d+)$/.exec(input.schema);
+  if (later && Number(later[1]) > 1) return { issue: "newer" };
+  if (input.schema === PACKAGE_PLAN_1 && (Object.keys(input).some(key => !PLAN_KEYS.has(key)) || (Array.isArray(input.products) &&
+      input.products.some(product => !!product && typeof product === "object" && Object.keys(product).some(key => !PRODUCT_KEYS.has(key))))))
+    return { issue: "newer" };
+  try { return { plan: parsePackagePlan(input) }; } catch { return { issue: "damaged" }; }
+}
+
 /** A plan read from stored or imported data; throws with a plain message when it is damaged. */
 export function parsePackagePlan(value: unknown): ModPackagePlan {
   const input = value as { schema?: unknown; products?: unknown } | null;
@@ -80,11 +120,15 @@ export function parsePackagePlan(value: unknown): ModPackagePlan {
   return { schema: PACKAGE_PLAN_1, products };
 }
 
-/** A plan that puts one feature into two mods: refused, because a feature's namespace may exist in only one XF mod. */
+/**
+ * A plan that puts one feature into two mods: refused, because a feature's namespace may exist in only one XF mod.
+ * The message names the feature by its display label (`label`, e.g. "Eye makeup"), never its key (PIPE-93).
+ */
 export class PackagePlanConflict extends Error {
   readonly code = "namespace_duplicated";
-  constructor(readonly feature: string) {
-    super(`The ${feature} feature is in two mods. Each feature can go into only one mod, so its looks never appear twice in game.`);
+  constructor(readonly feature: string, label?: string) {
+    super(`${label ?? "Part of this collection"} is in two mods. Each part of a look can go into only one mod, so its looks never appear twice ` +
+      "in game. Choose one mod for it in Mod package.");
     this.name = "PackagePlanConflict";
   }
 }
@@ -170,9 +214,13 @@ export type SelectorPlacement = "own" | "vanilla";
 export type ExportInfo = { readonly exporterId: string; readonly brand: string; readonly selectorLabel: string;
   readonly selector: SelectorPlacement };
 
-/** Something Check, Build and the manifest report as left out, with the reason in plain words. */
+/**
+ * Something Check, Build and the manifest report as left out, with the reason in plain words (PIPE-88). In a result's
+ * and a product's `omissions` (decided once, by the host) a `preset` is a whole look no feature packages anything of;
+ * in a feature's own `omissions` it is that feature's part of a look another feature packages.
+ */
 export type ExportOmission =
-  /** A whole look this feature packages nothing of. */
+  /** A whole look (host lists), or this feature's part of a look another feature packages (a feature's list). */
   | { kind: "preset"; presetId: string; presetName: string; reason: string }
   /** A part of a look that no exporter packages (a feature without a mod exporter yet). */
   | { kind: "part"; presetId: string; presetName: string; feature: string; reason: string }
@@ -182,6 +230,8 @@ export type ExportOmission =
   | { kind: "feature"; feature: string; label: string; reason: string };
 /** Why a part of a look is left out when no registered exporter packages its feature. */
 export const NO_EXPORTER_REASON = "XF Studio can't make mod files for this part yet.";
+/** Why a whole look is left out when no feature explains it (it holds no part an exporter packages), or the features' reasons differ. */
+export const NOTHING_PACKAGED_REASON = "Nothing in it can be made into mod files yet.";
 /** An included item whose export adapter still needs in-game confirmation. */
 export type ExportExperimental = { presetId: string; presetName: string; layerId: string; layerName: string;
   finish: string; adapter: string; note: string };
@@ -232,9 +282,13 @@ export type FeatureOutcome<Plan = unknown> = {
   readonly xl: XlFragment;
 };
 
-/** A refusal an exporter or the export host decides, with its code (`no_exportable_content`, `invalid_collection`…). */
+/**
+ * A refusal an exporter or the export host decides, with its code (`no_exportable_content`, `invalid_collection`…).
+ * `message` is plain words for the person; `detail` holds technical facts (namespaces, depot paths) for the host log
+ * and diagnostics only, never the page (PIPE-93).
+ */
 export class ExportRefusal extends Error {
-  constructor(readonly code: string, message: string) { super(message); this.name = "ExportRefusal"; }
+  constructor(readonly code: string, message: string, readonly detail?: string) { super(message); this.name = "ExportRefusal"; }
 }
 /**
  * The builder found a host prerequisite stale (eye makeup: a cached plate whose recorded UV footprint
@@ -386,6 +440,11 @@ export type ProductCheck = {
   readonly isDefault: boolean;
   readonly features: readonly FeatureCheck[];
   readonly requirements: FrameworkRequirements;
+  /**
+   * The result's omissions this product owns (PIPE-88): its features left out whole, and the whole-look and part
+   * omissions of the looks its features package or report. One no built product owns goes to the first product.
+   */
+  readonly omissions: readonly ExportOmission[];
 };
 export const PACKAGE_CHECK_2 = "xfs/package-check-2";
 export const PACKAGE_BUILD_2 = "xfs/package-build-2";
@@ -399,7 +458,7 @@ export type PackageCheckResult = {
   /** Every look of the collection, packaged or not. */
   readonly originalPresetCount: number;
   readonly products: readonly ProductCheck[];
-  /** Parts no exporter packages and features with nothing to package. */
+  /** Whole looks no feature packages anything of, parts no exporter packages and features with nothing to package, each once. */
   readonly omissions: readonly ExportOmission[];
   /** SHA-256 of the collection snapshot the request carried (knobs removed). */
   readonly collectionSha256: string;
@@ -416,6 +475,18 @@ export type PackageBuildResult = Omit<PackageCheckResult, "schema" | "ready" | "
   readonly products: readonly ProductBuild[];
   readonly installed: false; readonly gameRenderingVerified: false;
 };
+
+/**
+ * Every omission of a result once, for presentations (PIPE-88): the result's own (whole looks, parts, features), then each
+ * feature's (its layers, and its part of a look another feature packages) with that feature's `label` when the result
+ * holds several features, so a person can tell whose layer was left out.
+ */
+export function resultOmissions(result: Pick<PackageCheckResult, "omissions" | "products">): { omission: ExportOmission; label?: string }[] {
+  const features = result.products.flatMap(product => product.features);
+  const several = new Set(features.map(feature => feature.feature)).size > 1;
+  return [...result.omissions.map(omission => ({ omission })),
+    ...features.flatMap(feature => feature.omissions.map(omission => ({ omission, ...(several ? { label: feature.label } : {}) })))];
+}
 
 /** Every look count a presentation says "N of M looks" with: the looks any feature of the result packages. */
 export function packagedLookCount(result: Pick<PackageCheckResult, "products">): number {

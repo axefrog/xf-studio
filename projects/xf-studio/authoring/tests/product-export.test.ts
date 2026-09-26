@@ -12,8 +12,11 @@ import { runProductCommand } from "../src/platform/export/product-builder";
 import { checkProducts } from "../src/platform/export/product-check";
 import { duplicatedNamespaces, readPackageManifest } from "../src/platform/export/manifest";
 import { verifyProductBuildResult } from "../src/platform/export/product-host";
-import { archiveXlText, PACKAGE_PLAN_1, type FeatureExporter, type PackageBuildResult, type PackageCheckResult } from "../src/platform/api";
+import { archiveXlText, ExportRefusal, NEWER_PLAN_MESSAGE, NOTHING_PACKAGED_REASON, PACKAGE_PLAN_1, resultOmissions, type FeatureExporter,
+  type PackageBuildResult, type PackageCheckResult } from "../src/platform/api";
+import { describePackageCheck } from "../src/package-filter";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
+import { EYE_MAKEUP_EXPORTER as EYE_EXPORTER } from "../src/features/eye-makeup/export";
 import { packagePlateRecord, type EyePlateManifest } from "../src/eye-plate-service";
 import { plateReachInput } from "../src/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, LIPS_EXPORTER, sha, writePlate } from "./fixtures/product-fixture";
@@ -33,6 +36,12 @@ function looks(packagePlan?: unknown) {
 }
 
 async function build(collection: unknown) {
+  const { result, calls, seen } = await buildWithPlan(collection);
+  return { result, calls, seen };
+}
+
+/** A Build through the real export host, and the host's own plan of it (which the result gate compares with). */
+async function buildWithPlan(collection: unknown) {
   const dir = resolve(root, crypto.randomUUID());
   mkdirSync(join(dir, "game"), { recursive: true });
   mkdirSync(join(dir, "tools"), { recursive: true });
@@ -48,9 +57,9 @@ async function build(collection: unknown) {
     buildRoot: join(dir, "build"), distRoot: join(dir, "dist"), tools: () => fakeTools(calls, packed), verifierTools: () => fakeVerifierTools(packed) }) as PackageBuildResult;
   // The host's own plan of the same snapshot on the same plate: the result gate must accept the builder's answer.
   const expected = checkProducts({ collection, exporters, diagnostics: false, preflight: false, collectionSha256: sha(source),
-    prerequisites: { [EYE_PLATE_PREREQUISITE]: { ...plateReachInput(FOOTPRINT), record: packagePlateRecord(manifest as unknown as EyePlateManifest) } } }).result;
+    prerequisites: { [EYE_PLATE_PREREQUISITE]: { ...plateReachInput(FOOTPRINT), record: packagePlateRecord(manifest as unknown as EyePlateManifest) } } });
   verifyProductBuildResult(result, expected, join(dir, "dist"));
-  return { result, calls, seen };
+  return { result, calls, seen, planned: expected, root: join(dir, "dist") };
 }
 
 test("by default two features merge into one XF Looks mod: one pack, one merged declaration, each feature verified on its subset", async () => {
@@ -110,8 +119,22 @@ test("namespace duplication is refused: a feature in two mods, or an installed m
     const outcome = LIPS_EXPORTER.plan(input);
     return { ...outcome, check: { ...outcome.check, namespace: `xfs_c${key(fixture.id)}` } };
   } };
-  expect(() => checkProducts({ collection: looks(), exporters: [eyeEntry(), { ...LIPS_ENTRY, exporter: clash }], prerequisites: {},
-    diagnostics: false, preflight: false, collectionSha256: "0" })).toThrow("use the same namespace");
+  const conflict = (() => { try { checkProducts({ collection: looks(), exporters: [eyeEntry(), { ...LIPS_ENTRY, exporter: clash }], prerequisites: {},
+    diagnostics: false, preflight: false, collectionSha256: "0" }); } catch (error) { return error as ExportRefusal; } })()!;
+  // The person sees the features' labels in plain words; the namespace is kept for the host log (PIPE-93).
+  expect(conflict).toMatchObject({ code: "package_conflict", message: expect.stringContaining("Eye makeup and Lip makeup would use the same names in the game's files") });
+  expect(String(conflict.message).includes("xfs_c")).toBe(false);
+  expect(conflict.detail).toBe(`eye-makeup and lips use the same namespace xfs_c${key(fixture.id)}.`);
+  // Two features writing one depot path: the same, with the path in the detail only.
+  const writes: FeatureExporter = { ...LIPS_EXPORTER as FeatureExporter, plan: input => {
+    const outcome = LIPS_EXPORTER.plan(input), eyes = EYE_EXPORTER.plan(input);
+    return { ...outcome, inventory: [...outcome.inventory, eyes.inventory[0]].sort() };
+  } };
+  const path = (() => { try { checkProducts({ collection: looks(), exporters: [eyeEntry(), { ...LIPS_ENTRY, exporter: writes }], prerequisites: {},
+    diagnostics: false, preflight: false, collectionSha256: "0" }); } catch (error) { return error as ExportRefusal; } })()!;
+  expect(String(path.message)).toContain("Eye makeup and Lip makeup would write the same game file");
+  expect(String(path.message).includes("/")).toBe(false);
+  expect(String(path.detail)).toContain("both write axefrog/");
 });
 
 test("a feature with nothing to package is reported and left out; the other still builds", () => {
@@ -140,4 +163,85 @@ test("the manifest reader accepts local-package-1 (eye makeup's one-feature form
     installed: true, gameRenderingVerified: false }, "eye-makeup")).toThrow();
   expect(() => readPackageManifest({ schema: "xfs/local-package-1", namespace: "xfs_c1", files: files("xfs_c2"), verifiedUnpackedFiles: 1,
     installed: false, gameRenderingVerified: false }, "eye-makeup")).toThrow("unexpected file");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Looks that hold one feature only, and omissions decided once (PIPE-88, PIPE-95)
+// ---------------------------------------------------------------------------------------------
+
+const HAIR_ONLY = "66666666-2222-4333-8444-555555555555";
+const glitter = (recipe: { layers: { finish: string }[] }) => ({ ...recipe, layers: recipe.layers.map(layer => ({ ...layer, finish: "glitter" })) });
+/**
+ * Mixed looks: [0] eye makeup and lips; [1] eye makeup only, none of it exportable; [2] lips only; [3] eye makeup
+ * (none exportable) and lips; and a hair-only look (no exporter).
+ */
+function mixed(packagePlan?: unknown) {
+  const [a, b, c, d] = fixture.presets as { id: string; name: string; revision: number; recipe: { layers: { finish: string }[] } }[];
+  const eye = (recipe: unknown) => ({ "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: recipe } });
+  const lips = { [LIPS]: { schema: "xfs/lips-part-1", body: { shades: ["#aa3355"] } } };
+  const look = (preset: typeof a, parts: Record<string, unknown>) => ({ id: preset.id, name: preset.name, revision: preset.revision, parts });
+  return { schema: "xfs/collection-2", id: fixture.id, name: fixture.name, ...(packagePlan ? { packagePlan } : {}), presets: [
+    look(a, { ...eye(a.recipe), ...lips }), look(b, eye(glitter(b.recipe))), look(c, lips), look(d, { ...eye(glitter(d.recipe)), ...lips }),
+    { id: HAIR_ONLY, name: "Hair only", revision: 1, parts: { hair: { schema: "xfs/hair-part-1", body: {} } } }] };
+}
+const check = (collection: unknown) => checkProducts({ collection, exporters: [eyeEntry(), LIPS_ENTRY], prerequisites: {}, diagnostics: false,
+  preflight: false, collectionSha256: "0" }).result;
+
+test("a whole look is left out only when no feature packages anything of it; a feature lists only its own (PIPE-88)", () => {
+  const [a, b, c, d] = fixture.presets as { id: string; name: string }[];
+  const result = check(mixed());
+  const whole = result.omissions.filter(item => item.kind === "preset").map(item => [item.presetId, item.kind === "preset" && item.reason]);
+  // The eye-makeup-only look with nothing exportable is left out whole, with eye makeup's reason; the hair-only look too.
+  expect(whole).toEqual([[b.id, "No active exportable layers remain."], [HAIR_ONLY, NOTHING_PACKAGED_REASON]]);
+  // The lips-only look is packaged by lips, so nobody reports it; before, eye makeup called it a whole look "with no eye makeup".
+  const [product] = result.products, [eyes, lips] = product.features;
+  expect(lips.presets.map(look => look.id)).toEqual([a.id, c.id, d.id]);
+  expect(eyes.presets.map(look => look.id)).toEqual([a.id]);
+  expect(eyes.omissions.filter(item => item.kind === "preset").map(item => item.presetId)).toEqual([d.id]);
+  expect(eyes.omissions.some(item => item.kind !== "feature" && item.presetId === c.id)).toBe(false);
+  // In words: the eye makeup of a look lips packages is left out, not the look; layers name their feature.
+  const words = describePackageCheck(result);
+  expect(words).toContain(`left out the eye makeup of preset “${d.name}”: no active exportable layers remain`);
+  expect(words).toContain(`omitted whole preset “${b.name}” because no exportable active layers remain`);
+  expect(words).toContain("omitted eye makeup layer");
+  expect(words).not.toContain(`“${c.name}” because it has no eye makeup`);
+  expect(resultOmissions(result).filter(item => item.label).every(item => item.label === "Eye makeup")).toBe(true);
+});
+
+test("each product's manifest records only its own features' and looks' omissions (PIPE-88)", async () => {
+  const [, b] = fixture.presets as { id: string }[];
+  const split = check(mixed({ schema: PACKAGE_PLAN_1, products: [{ id: OTHER, features: [LIPS] }] }));
+  const [eyes, lips] = split.products;
+  // The collection's omissions are listed once in the result; the eye-makeup mod owns its look and the looks no mod owns.
+  expect(eyes.omissions).toEqual(split.omissions);
+  expect(eyes.omissions.map(item => item.kind === "preset" || item.kind === "part" ? item.presetId : item.kind)).toEqual([b.id, HAIR_ONLY, HAIR_ONLY]);
+  expect(lips.omissions).toEqual([]);
+  // Built: the lips manifest no longer copies the eye-makeup mod's omissions.
+  const built = await build(mixed({ schema: PACKAGE_PLAN_1, products: [{ id: OTHER, features: [LIPS] }] }));
+  const manifests = built.result.products.map(product => JSON.parse(readFileSync(product.manifest, "utf8")));
+  expect(manifests.map(manifest => manifest.omissions.length)).toEqual([3, 0]);
+  expect(manifests.map(manifest => readPackageManifest(manifest, "eye-makeup").omissionCount))
+    .toEqual([3 + manifests[0].features[0].omissions.length, 0]);
+  // A feature left out whole belongs to its own mod; when that mod builds nothing, to the first mod.
+  const lipsless: FeatureExporter = { ...LIPS_EXPORTER as FeatureExporter, plan: () => { throw new ExportRefusal("no_exportable_content", "No lips."); } };
+  const refused = checkProducts({ collection: mixed({ schema: PACKAGE_PLAN_1, products: [{ id: OTHER, features: [LIPS] }] }),
+    exporters: [eyeEntry(), { ...LIPS_ENTRY, exporter: lipsless }], prerequisites: {}, diagnostics: false, preflight: false, collectionSha256: "0" }).result;
+  expect(refused.products.map(product => product.productId)).toEqual([fixture.id]);
+  expect(refused.products[0].omissions.some(item => item.kind === "feature" && item.feature === LIPS)).toBe(true);
+}, 90_000);
+
+test("the result gate checks each feature's plan hash against the host's own plan (PIPE-95)", async () => {
+  const { result, planned, root: dir } = await buildWithPlan(mixed());
+  verifyProductBuildResult(result, planned, dir);
+  const manifest = JSON.parse(readFileSync(result.products[0].manifest, "utf8"));
+  manifest.features[1].planSha256 = "0".repeat(64);
+  writeFileSync(result.products[0].manifest, JSON.stringify(manifest, null, 2) + "\n");
+  expect(() => verifyProductBuildResult(result, planned, dir)).toThrow("does not match this collection snapshot");
+}, 60_000);
+
+test("a package plan this build can't use refuses Check and Build with its own code (CORE-91)", () => {
+  const refusal = (packagePlan: unknown) => { try { check(mixed(packagePlan)); } catch (error) { return error as ExportRefusal; } };
+  expect(refusal({ schema: "xfs/package-plan-2", products: [] })).toMatchObject({ code: "package_plan_newer", message: NEWER_PLAN_MESSAGE });
+  expect(refusal({ schema: PACKAGE_PLAN_1, products: [{ id: OTHER, features: [LIPS], selectorLabels: {} }] })).toMatchObject({ code: "package_plan_newer" });
+  expect(refusal({ schema: PACKAGE_PLAN_1, products: [{ id: "x", features: [] }] })).toMatchObject({ code: "package_plan_damaged" });
 });

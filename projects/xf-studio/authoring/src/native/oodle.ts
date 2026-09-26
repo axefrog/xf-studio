@@ -16,14 +16,19 @@
  * call, the unthreaded mode). The output buffer gets 64 spare bytes, a margin some Oodle builds want past `rawLen`.
  *
  * Before loading, the library is checked: its SHA-256 is on the known list (game releases whose DLL was verified), or its
- * Authenticode signature is valid and its signer is CD PROJEKT S.A. (game 2.31's DLL is signed so). While checking and loading, the
- * file is held open without write or delete sharing, so it cannot be changed, replaced or renamed between the check and the load;
- * the identity comes from the same bytes that were checked. Anything else is refused with `OodleUnavailableError`, and the caller
- * uses WolvenKit instead.
+ * Authenticode signature is valid and its signer is CD PROJEKT S.A. (game 2.31's DLL is signed so). From the check to the load, the
+ * file is held open without write or delete sharing, so it cannot be changed, replaced or renamed, and neither can a folder above
+ * it. The bytes hashed are read through that handle, and the library is loaded by the handle's final path (junctions and links
+ * resolved), so a junction in the game folder repointed during the check cannot swap in another file. The one residual window is
+ * a drive letter redefined for the process's user between the check and the load, which needs code already running as that
+ * user. Anything else is refused with `OodleUnavailableError`, and the caller uses WolvenKit instead.
+ *
+ * `openGameOodle` never blocks the event loop (an unknown library's signature is checked by an asynchronous PowerShell call, up
+ * to 30 s); hosts use it. `loadGameOodle` is its blocking twin for command-line tools and workers.
  */
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Decompress } from "./kark";
 import { NativeDecompressError } from "./native-errors";
@@ -31,6 +36,9 @@ import { NativeDecompressError } from "./native-errors";
 /** Where the game keeps the library, relative to the game folder. */
 export const GAME_OODLE_LIBRARY = ["bin", "x64", "oo2ext_7_win64.dll"] as const;
 const OUTPUT_MARGIN = 64;
+/** The largest library file read for checking (game 2.31's is 1.2 MB). */
+const MAX_LIBRARY_BYTES = 64 * 2 ** 20;
+const AUTHENTICODE_TIMEOUT_MS = 30_000;
 
 /** SHA-256 of Oodle libraries shipped with game releases and checked to carry the CD PROJEKT S.A. signature. */
 export const KNOWN_OODLE_SHA256: Readonly<Record<string, string>> = {
@@ -40,6 +48,7 @@ export const KNOWN_OODLE_SHA256: Readonly<Record<string, string>> = {
 export const OODLE_SIGNER = "CD PROJEKT S.A.";
 
 export interface OodleLibrary {
+  /** The file that was checked and loaded: the final path of the held handle. */
   readonly path: string;
   /** Stable text for cache keys: a short SHA-256 of the library bytes that were checked (game 2.31's carries no version resource). */
   readonly identity: string;
@@ -56,8 +65,12 @@ export class OodleUnavailableError extends Error { override name = "OodleUnavail
 /** An Authenticode verdict: the signature status and the signer certificate's subject, for the file whose SHA-256 is `sha256`. */
 export interface AuthenticodeResult { readonly status: string; readonly subject: string; readonly sha256: string }
 
-/** Decides whether library bytes may be loaded: how they are trusted, or the reason to refuse them. */
-export type OodleVerifier = (path: string, sha256: string) => { readonly trustedBy: string } | { readonly refused: string };
+/** How library bytes are trusted, or the reason to refuse them. */
+export type OodleVerdict = { readonly trustedBy: string } | { readonly refused: string };
+/** Decides whether library bytes may be loaded; `path` is the held file's final path, `sha256` the hash of the bytes read through it. */
+export type OodleVerifier = (path: string, sha256: string) => OodleVerdict | Promise<OodleVerdict>;
+/** A verifier that answers at once (for `loadGameOodle`). */
+export type OodleVerifierSync = (path: string, sha256: string) => OodleVerdict;
 
 /** The value of attribute `key` (e.g. CN, O) in an X.500 subject. */
 export function subjectField(subject: string, key: string): string | null {
@@ -75,10 +88,10 @@ export function isPublisherSignature(result: AuthenticodeResult, sha256: string)
 }
 
 /**
- * The Authenticode verdict of a file, from Windows PowerShell's `Get-AuthenticodeSignature` (WinVerifyTrust, including the
- * certificate chain), with the SHA-256 PowerShell read in the same call so the caller can tie the verdict to its own bytes.
+ * Windows PowerShell's `Get-AuthenticodeSignature` (WinVerifyTrust, including the certificate chain), with the SHA-256 PowerShell
+ * read in the same call so the caller can tie the verdict to its own bytes.
  */
-export function authenticodeSignature(path: string): AuthenticodeResult {
+function authenticodeCommand(path: string): { shell: string; args: string[]; env: Record<string, string | undefined> } {
   const shell = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const script = "Import-Module Microsoft.PowerShell.Security, Microsoft.PowerShell.Utility; $p=$env:XFS_AUTHENTICODE_PATH;"
     + " $s=Get-AuthenticodeSignature -LiteralPath $p; $h=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash;"
@@ -86,36 +99,81 @@ export function authenticodeSignature(path: string): AuthenticodeResult {
   // A PSModulePath inherited from PowerShell 7 points Windows PowerShell 5.1 at modules it cannot load; let it use its own.
   const env: Record<string, string | undefined> = { ...process.env, XFS_AUTHENTICODE_PATH: path };
   for (const key of Object.keys(env)) if (key.toUpperCase() === "PSMODULEPATH") delete env[key];
-  const run = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script], { env, encoding: "utf8", timeout: 30_000, windowsHide: true });
-  if (run.status !== 0) throw new OodleUnavailableError(`The Oodle library's signature could not be checked (PowerShell exit ${run.status ?? run.error?.message}).`);
+  return { shell, args: ["-NoProfile", "-NonInteractive", "-Command", script], env };
+}
+
+function parseAuthenticode(stdout: string): AuthenticodeResult {
   let parsed: Partial<AuthenticodeResult>;
-  try { parsed = JSON.parse(run.stdout) as Partial<AuthenticodeResult>; }
+  try { parsed = JSON.parse(stdout) as Partial<AuthenticodeResult>; }
   catch { throw new OodleUnavailableError("The Oodle library's signature could not be checked (unreadable PowerShell output)."); }
   return { status: String(parsed.status ?? ""), subject: String(parsed.subject ?? ""), sha256: String(parsed.sha256 ?? "") };
 }
 
-/** Known hash first; otherwise a valid Authenticode signature by CD PROJEKT S.A. on the same bytes. */
-export const defaultOodleVerifier: OodleVerifier = (path, sha256) => {
-  if (Object.hasOwn(KNOWN_OODLE_SHA256, sha256)) return { trustedBy: "known-hash" };
-  const verdict = authenticodeSignature(path);
+/** The Authenticode verdict of a file, without blocking the event loop (up to 30 s). */
+export function authenticodeSignature(path: string): Promise<AuthenticodeResult> {
+  const { shell, args, env } = authenticodeCommand(path);
+  return new Promise((resolve, reject) => {
+    execFile(shell, args, { env, encoding: "utf8", timeout: AUTHENTICODE_TIMEOUT_MS, windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout) => {
+      if (error) { reject(new OodleUnavailableError(`The Oodle library's signature could not be checked (PowerShell ${error.killed ? "timed out" : `exit ${error.code ?? error.message}`}).`)); return; }
+      try { resolve(parseAuthenticode(stdout)); } catch (failure) { reject(failure); }
+    });
+  });
+}
+
+/** The Authenticode verdict of a file, blocking (command-line tools only). */
+export function authenticodeSignatureSync(path: string): AuthenticodeResult {
+  const { shell, args, env } = authenticodeCommand(path);
+  const run = spawnSync(shell, args, { env, encoding: "utf8", timeout: AUTHENTICODE_TIMEOUT_MS, windowsHide: true });
+  if (run.status !== 0) throw new OodleUnavailableError(`The Oodle library's signature could not be checked (PowerShell exit ${run.status ?? run.error?.message}).`);
+  return parseAuthenticode(run.stdout);
+}
+
+/** The verdict for bytes whose hash is not on the known list, from their Authenticode result. */
+function signatureVerdict(verdict: AuthenticodeResult, sha256: string): OodleVerdict {
   if (isPublisherSignature(verdict, sha256)) return { trustedBy: "authenticode" };
   if (!verdict.sha256 || !verdict.status) return { refused: "The Oodle library's signature could not be checked." };
   return { refused: verdict.sha256.toLowerCase() !== sha256 ? "The Oodle library changed while it was checked."
     : `The Oodle library is not signed by ${OODLE_SIGNER} (signature ${verdict.status || "missing"}).` };
-};
+}
+
+/** Known hash first; otherwise a valid Authenticode signature by CD PROJEKT S.A. on the same bytes (checked asynchronously). */
+export const defaultOodleVerifier: OodleVerifier = async (path, sha256) =>
+  Object.hasOwn(KNOWN_OODLE_SHA256, sha256) ? { trustedBy: "known-hash" } : signatureVerdict(await authenticodeSignature(path), sha256);
+
+/** `defaultOodleVerifier`, blocking while PowerShell checks an unknown library (command-line tools only). */
+export const defaultOodleVerifierSync: OodleVerifierSync = (path, sha256) =>
+  Object.hasOwn(KNOWN_OODLE_SHA256, sha256) ? { trustedBy: "known-hash" } : signatureVerdict(authenticodeSignatureSync(path), sha256);
 
 type Ffi = typeof import("bun:ffi");
 
+/** A file held open for reading with writes, deletes and renames denied. */
+export interface HeldFile {
+  /** The handle's final path: every junction and link resolved, in ordinary drive-letter form where it fits. */
+  readonly finalPath: string;
+  /** The file's bytes, read through the handle; refused past `maxBytes`. */
+  read(maxBytes: number): Uint8Array;
+  release(): void;
+}
+
+/** `\\?\C:\x` → `C:\x` and `\\?\UNC\host\share` → `\\host\share`, unless the short form would be too long for ordinary paths. */
+function ordinaryPath(path: string): string {
+  const short = path.startsWith("\\\\?\\UNC\\") ? `\\\\${path.slice(8)}` : path.startsWith("\\\\?\\") ? path.slice(4) : path;
+  return short.length < 260 ? short : path;
+}
+
 /**
- * Hold a file open for reading while denying writes, deletes and renames (Windows share mode FILE_SHARE_READ only). Returns the
- * release function.
+ * Hold a file open for reading while denying writes, deletes and renames (Windows share mode FILE_SHARE_READ only). Windows also
+ * refuses to rename a folder above a file held so.
  */
-export function holdFile(ffi: Ffi, path: string): () => void {
+export function holdFile(ffi: Ffi, path: string): HeldFile {
   const { FFIType } = ffi;
   const kernel32 = ffi.dlopen("kernel32.dll", {
     // Handles are pointer-sized; as i64 they come back as BigInt, so INVALID_HANDLE_VALUE is exactly -1n.
     CreateFileW: { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i64 },
     CloseHandle: { args: [FFIType.i64], returns: FFIType.i32 },
+    GetFileSizeEx: { args: [FFIType.i64, FFIType.ptr], returns: FFIType.i32 },
+    ReadFile: { args: [FFIType.i64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+    GetFinalPathNameByHandleW: { args: [FFIType.i64, FFIType.ptr, FFIType.u32, FFIType.u32], returns: FFIType.u32 },
   });
   const wide = Buffer.from(`${path}\0`, "utf16le");
   const GENERIC_READ = 0x80000000, FILE_SHARE_READ = 1, OPEN_EXISTING = 3, FILE_ATTRIBUTE_NORMAL = 0x80;
@@ -124,37 +182,59 @@ export function holdFile(ffi: Ffi, path: string): () => void {
     kernel32.close();
     throw new OodleUnavailableError("The game's Oodle library could not be opened for checking (it is in use or missing).");
   }
-  return () => { kernel32.symbols.CloseHandle(handle); kernel32.close(); };
+  const release = () => { kernel32.symbols.CloseHandle(handle); kernel32.close(); };
+  try {
+    // FILE_NAME_NORMALIZED | VOLUME_NAME_DOS (0): the drive-letter path with every reparse point resolved.
+    const name = new Uint16Array(32_768);
+    const length = kernel32.symbols.GetFinalPathNameByHandleW(handle, ffi.ptr(name), name.length, 0) as number;
+    if (!length || length >= name.length) throw new OodleUnavailableError("The game's Oodle library's location could not be resolved.");
+    const finalPath = ordinaryPath(Buffer.from(name.buffer, 0, length * 2).toString("utf16le"));
+    return {
+      finalPath,
+      read(maxBytes) {
+        const size = new BigInt64Array(1);
+        if (!kernel32.symbols.GetFileSizeEx(handle, ffi.ptr(size))) throw new OodleUnavailableError("The game's Oodle library could not be read.");
+        if (size[0]! > BigInt(maxBytes)) throw new OodleUnavailableError(`The game's Oodle library is larger than ${maxBytes} bytes.`);
+        const out = new Uint8Array(Number(size[0]));
+        const got = new Uint32Array(1);
+        // The handle is fresh and read only here, so it starts at the file's beginning.
+        for (let done = 0; done < out.length; done += got[0]!) {
+          if (!kernel32.symbols.ReadFile(handle, ffi.ptr(out.subarray(done)), out.length - done, ffi.ptr(got), null) || !got[0])
+            throw new OodleUnavailableError("The game's Oodle library could not be read.");
+        }
+        return out;
+      },
+      release,
+    };
+  } catch (error) { release(); throw error; }
 }
 
-/**
- * The game folder's Oodle library, or a typed error saying why it can't be used (not Windows x64, missing, untrusted, won't load).
- * `verify` decides trust (tests inject one); the default accepts known hashes and CD PROJEKT S.A. signatures.
- */
-export function loadGameOodle(gameRoot: string, options: { verify?: OodleVerifier } = {}): OodleLibrary {
+/** The held library and the hash of the bytes read through the handle, ready for a verdict. */
+interface Prepared { readonly ffi: Ffi; readonly held: HeldFile; readonly sha256: string }
+
+function prepare(gameRoot: string): Prepared {
   const path = join(gameRoot, ...GAME_OODLE_LIBRARY);
   if (process.platform !== "win32" || process.arch !== "x64") throw new OodleUnavailableError("The game's Oodle library runs on 64-bit Windows only.");
   if (!existsSync(path)) throw new OodleUnavailableError("The game folder has no Oodle library (bin/x64/oo2ext_7_win64.dll).");
   let ffi: Ffi;
   try { ffi = import.meta.require("bun:ffi") as Ffi; }
   catch (error) { throw new OodleUnavailableError(`Native libraries cannot be loaded here: ${(error as Error).message}`); }
-  const release = holdFile(ffi, path);
+  const held = holdFile(ffi, path);
+  try { return { ffi, held, sha256: createHash("sha256").update(held.read(MAX_LIBRARY_BYTES)).digest("hex") }; }
+  catch (error) { held.release(); throw error; }
+}
+
+/** Load the held library by its final path if the verdict trusts it (the caller releases the hold afterwards). */
+function load({ ffi, held, sha256 }: Prepared, verdict: OodleVerdict): OodleLibrary {
+  if ("refused" in verdict) throw new OodleUnavailableError(verdict.refused);
+  const { FFIType } = ffi;
   let library: { symbols: { OodleLZ_Decompress: (...args: unknown[]) => number | bigint }; close(): void };
-  let sha256: string, trustedBy: string;
   try {
-    // The file cannot change while held, so these bytes are the ones checked and then loaded.
-    sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");
-    const verdict = (options.verify ?? defaultOodleVerifier)(path, sha256);
-    if ("refused" in verdict) throw new OodleUnavailableError(verdict.refused);
-    trustedBy = verdict.trustedBy;
-    const { FFIType } = ffi;
-    try {
-      library = ffi.dlopen(path, {
-        OodleLZ_Decompress: { args: [FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.i64, FFIType.i32, FFIType.i32, FFIType.i32,
-          FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.i64, FFIType.i32], returns: FFIType.i64 },
-      }) as unknown as typeof library;
-    } catch (error) { throw new OodleUnavailableError(`The game's Oodle library could not be loaded: ${(error as Error).message}`); }
-  } finally { release(); }
+    library = ffi.dlopen(held.finalPath, {
+      OodleLZ_Decompress: { args: [FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.i64, FFIType.i32, FFIType.i32, FFIType.i32,
+        FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.i64, FFIType.i32], returns: FFIType.i64 },
+    }) as unknown as typeof library;
+  } catch (error) { throw new OodleUnavailableError(`The game's Oodle library could not be loaded: ${(error as Error).message}`); }
   const pointer = (view: Uint8Array) => ffi.ptr(view);
   const decompress: Decompress = (stored, size) => {
     if (!stored.length || !size) throw new NativeDecompressError("Empty Oodle stream.");
@@ -163,5 +243,23 @@ export function loadGameOodle(gameRoot: string, options: { verify?: OodleVerifie
     if (written !== size) throw new NativeDecompressError(`Oodle decompressed ${written} of ${size} bytes.`);
     return out.subarray(0, size);
   };
-  return { path, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy, decompress, close: () => library.close() };
+  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress, close: () => library.close() };
+}
+
+/**
+ * The game folder's Oodle library, or a typed error saying why it can't be used (not Windows x64, missing, untrusted, won't load),
+ * without blocking the event loop. `verify` decides trust (tests inject one); the default accepts known hashes and CD PROJEKT S.A.
+ * signatures. The file stays held while the verdict is awaited.
+ */
+export async function openGameOodle(gameRoot: string, options: { verify?: OodleVerifier } = {}): Promise<OodleLibrary> {
+  const prepared = prepare(gameRoot);
+  try { return load(prepared, await (options.verify ?? defaultOodleVerifier)(prepared.held.finalPath, prepared.sha256)); }
+  finally { prepared.held.release(); }
+}
+
+/** `openGameOodle`, blocking while PowerShell checks an unknown library's signature: for command-line tools and workers. */
+export function loadGameOodle(gameRoot: string, options: { verify?: OodleVerifierSync } = {}): OodleLibrary {
+  const prepared = prepare(gameRoot);
+  try { return load(prepared, (options.verify ?? defaultOodleVerifierSync)(prepared.held.finalPath, prepared.sha256)); }
+  finally { prepared.held.release(); }
 }

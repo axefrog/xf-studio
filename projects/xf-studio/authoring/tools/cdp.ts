@@ -3,7 +3,7 @@
  * Launches a throwaway Chrome profile and a disposable-data authoring server.
  * Never points at the active working draft or library.
  */
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
@@ -45,19 +45,73 @@ export async function startServer(port: number) {
   throw Error("Authoring server did not start");
 }
 
-export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark" } = {}) {
-  const debugPort = options.debugPort ?? 9333;
-  const profile = mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
-  const chrome: Subprocess = Bun.spawn([CHROME, "--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`,
-    `--window-size=${options.width ?? 1600},${options.height ?? 1000}`, "--no-first-run", "--no-default-browser-check",
-    "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", "about:blank"], { stdout: "ignore", stderr: "ignore" });
-  let targets: { type: string; webSocketDebuggerUrl: string }[] = [];
-  for (let i = 0; i < 80; i++) {
-    try { targets = await (await fetch(`http://127.0.0.1:${debugPort}/json`)).json(); if (targets.some(t => t.type === "page")) break; } catch { /* booting */ }
-    await Bun.sleep(150);
+export type PageTarget = { type: string; webSocketDebuggerUrl: string };
+/** How long, in total, one Chrome start may take to expose its page, and how many starts are tried. */
+export const PAGE_TARGET_LIMITS = { deadlineMs: 30_000, firstDelayMs: 100, maxDelayMs: 1_000, attempts: 3 };
+/**
+ * Wait for a started Chrome's page target: ask `targets` with a growing delay (bounded backoff) until it lists a page, the process
+ * ends, or the deadline passes. A busy machine (a full test suite beside other heavy work) can take many seconds to start Chrome, so
+ * the old fixed 12 s poll failed intermittently. Throws with what was last seen.
+ */
+export async function waitForPageTarget(targets: () => Promise<PageTarget[] | null>, alive: () => boolean,
+  limits: { deadlineMs: number; firstDelayMs: number; maxDelayMs: number } = PAGE_TARGET_LIMITS, sleep = (ms: number) => Bun.sleep(ms)): Promise<PageTarget> {
+  const start = Date.now();
+  let delay = limits.firstDelayMs, last = "Chrome's debugging port never answered";
+  for (;;) {
+    try {
+      const listed = await targets();
+      const page = listed?.find(target => target.type === "page");
+      if (page) return page;
+      if (listed) last = `Chrome listed ${listed.length} target(s), none a page`;
+    } catch (error) { last = `Chrome's debugging port didn't answer (${(error as Error)?.message ?? error})`; }
+    if (!alive()) throw Error(`Chrome exited before it exposed a page target (${last})`);
+    const left = limits.deadlineMs - (Date.now() - start);
+    if (left <= 0) throw Error(`Chrome did not expose a page target within ${Math.round(limits.deadlineMs / 1000)} s (${last})`);
+    await sleep(Math.min(delay, left));
+    delay = Math.min(limits.maxDelayMs, Math.ceil(delay * 1.5));
   }
-  const page = targets.find(t => t.type === "page");
-  if (!page) { chrome.kill(); throw Error("Chrome did not expose a page target"); }
+}
+/** The debugging port a Chrome started with `--remote-debugging-port=0` chose (its profile's `DevToolsActivePort`), or null yet. */
+function activePort(profile: string): number | null {
+  const file = join(profile, "DevToolsActivePort");
+  if (!existsSync(file)) return null;
+  const port = Number(readFileSync(file, "utf8").split(/\s+/)[0]);
+  return Number.isInteger(port) && port > 0 ? port : null;
+}
+/** Stop a Chrome and wait (briefly) until it has exited, so the next start never meets its port or profile. */
+async function stopChrome(chrome: Subprocess, profile: string): Promise<void> {
+  chrome.kill();
+  await Promise.race([chrome.exited, Bun.sleep(5_000)]);
+  try { rmSync(profile, { recursive: true, force: true }); } catch { /* A file Chrome still holds; the temp folder is cleaned later. */ }
+}
+/**
+ * Start a throwaway headless Chrome and connect to its page. Without `debugPort`, Chrome picks a free debugging port itself (read from
+ * its profile), so concurrent or back-to-back starts never collide on one. A start that exposes no page within its deadline, or exits,
+ * is stopped and tried again with a fresh profile, a bounded number of times, then fails with a clear message.
+ */
+async function startChrome(options: { width?: number; height?: number; debugPort?: number }) {
+  const failures: string[] = [];
+  for (let attempt = 1; attempt <= PAGE_TARGET_LIMITS.attempts; attempt++) {
+    const profile = mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
+    const chrome: Subprocess = Bun.spawn([CHROME, "--headless=new", `--remote-debugging-port=${options.debugPort ?? 0}`, `--user-data-dir=${profile}`,
+      `--window-size=${options.width ?? 1600},${options.height ?? 1000}`, "--no-first-run", "--no-default-browser-check",
+      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", "about:blank"], { stdout: "ignore", stderr: "ignore" });
+    try {
+      const page = await waitForPageTarget(async () => {
+        const port = options.debugPort ?? activePort(profile);
+        return port ? await (await fetch(`http://127.0.0.1:${port}/json`)).json() as PageTarget[] : null;
+      }, () => chrome.exitCode === null && !chrome.killed);
+      return { chrome, profile, page };
+    } catch (error) {
+      failures.push(`attempt ${attempt}: ${(error as Error).message}`);
+      await stopChrome(chrome, profile);
+    }
+  }
+  throw Error(`Chrome did not expose a page target after ${PAGE_TARGET_LIMITS.attempts} attempts (${CHROME}): ${failures.join("; ")}`);
+}
+
+export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark" } = {}) {
+  const { chrome, profile, page } = await startChrome(options);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });
   let id = 0;
@@ -152,7 +206,7 @@ export async function launch(url: string, options: { width?: number; height?: nu
       }
       throw Error(`Timed out waiting for ${expression}`);
     },
-    async close() { socket.close(); chrome.kill(); },
+    async close() { socket.close(); await stopChrome(chrome, profile); },
   };
   if (options.width) await session.viewport(options.width, options.height ?? 1000);
   if (options.scheme) await session.colorScheme(options.scheme);

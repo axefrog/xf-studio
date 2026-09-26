@@ -8,8 +8,9 @@ import type { PackageCheckResult } from "../api/export";
 /** What a worker checks: the collection (knobs removed), what each prerequisite last left, and the snapshot's hash. */
 export type CheckRequest = { readonly collection: unknown; readonly prerequisites: Readonly<Record<string, unknown>>;
   readonly collectionSha256: string };
+/** A failure's `message` is for the person; `detail` (a namespace, a depot path) is for the host log only (PIPE-93). */
 export type CheckOutcome = { kind: "success"; result: PackageCheckResult } |
-  { kind: "failure"; message: string; code: string };
+  { kind: "failure"; message: string; code: string; detail?: string };
 
 /** Fresh worker per Check prevents a stalled compiler from blocking the host. Never rejects. */
 export function runWorkerCheck(request: CheckRequest, workerPath: string, timeoutMs: number, signal?: AbortSignal): Promise<CheckOutcome> {
@@ -33,7 +34,8 @@ export function runWorkerCheck(request: CheckRequest, workerPath: string, timeou
     worker.onmessage = (event: MessageEvent<CheckOutcome>) => {
       const value = event.data;
       if (value?.kind === "success" && value.result?.ready === true) finish(value);
-      else if (value?.kind === "failure" && typeof value.message === "string" && typeof value.code === "string") finish(value);
+      else if (value?.kind === "failure" && typeof value.message === "string" && typeof value.code === "string")
+        finish({ kind: "failure", message: value.message, code: value.code, ...(typeof value.detail === "string" ? { detail: value.detail } : {}) });
       else finish({ kind: "failure", code: "package_check_worker_failed", message: "Package Check returned an invalid worker result. No result was published." });
     };
     worker.onerror = () => finish({ kind: "failure", code: "package_check_worker_failed", message: "Package Check worker failed. No result was published." });

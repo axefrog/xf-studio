@@ -2,6 +2,7 @@ import Electrobun, { BrowserWindow, PATHS, Utils } from "electrobun/main";
 import { resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { createDesktopServer } from "./server";
+import { logUnhandledRejections } from "../src/diagnostics/host-log";
 import { desktopVersionFromMetadata } from "./host";
 import { DesktopWorkspaceClose, desktopFlushScript } from "./workspace-close";
 import { createHostLog } from "./host-log";
@@ -61,6 +62,8 @@ try {
   throw error;
 }
 log.write(`Loopback server ready on 127.0.0.1:${app.port}.`);
+// A background failure nobody caught goes to the diagnostics log; it never closes the app (PREV-101).
+logUnhandledRejections();
 const origin = `http://127.0.0.1:${app.port}`;
 const window = new BrowserWindow({
   title: "XF Studio",

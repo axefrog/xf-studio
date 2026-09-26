@@ -2,12 +2,13 @@
  * Measures real resources against the native reader's budgets (src/native/limits.ts), so the caps can be derived from data and
  * re-derived after a game patch (R&D; read-only towards the game and mods). Three passes:
  *
- * 1. Every archive's index (game groups, the ArchiveXL bundle and, with `--mods`, every MO2 mod's `archive/pc/mod`): body, buffer
- *    and resource sizes and name-block lengths, read from the indexes alone.
- * 2. Every resource whose body is at least `--big` bytes (default 1 MiB): read and decompressed to learn its root class, so the
- *    largest resource of each verified root class is known.
+ * 1. Every archive's index (game groups, the ArchiveXL bundle and, with `--mods`, every MO2 mod's `archive/pc/mod`): index block,
+ *    body, buffer and resource sizes and name-block lengths, read from the indexes alone.
+ * 2. Every resource whose body is at least `--big` bytes (default 1 MiB): read and decompressed to learn its root class and string
+ *    pool size, so the largest resource of each verified root class and the largest pool are known (a smaller body holds a
+ *    smaller pool).
  * 3. With `--cache`, every resource of the resolver's JSON cache decoded with no caps: decoded bytes, values, JSON values, nesting,
- *    longest name, largest parsed buffer and decode time, plus the notes and watched-default reports the reader makes.
+ *    longest name, names, largest parsed buffer and decode time, plus the notes and watched-default reports the reader makes.
  *
  * With `--uncapped`, every resource decoded in passes 2 and 3 is also checked against `DEFAULT_LIMITS`: `defaults.overDefaults` lists
  * the caps real resources would pass (no resolver-cache resource may appear there), and `jsonValuesPerValuePastAllowance` is the
@@ -55,11 +56,17 @@ function checkDefaults(usage: NativeUsage, bytes: Uint8Array, root: string): voi
   if (usage.jsonNodes > L.maxJsonNodes || usage.jsonNodes > usage.nodes * L.maxJsonNodesPerValue + L.jsonNodesAllowance) over.push("JSON values");
   if (usage.depth > L.maxDepth) over.push("depth");
   if (usage.longestName > L.maxNameBytes) over.push("name");
+  if (usage.names > L.maxNames) over.push("names");
+  if (poolBytes(bytes) > L.maxStringPoolBytes) over.push("string pool");
   if (usage.largestBuffer > L.maxBufferBytes) over.push("buffer");
   if (usage.nodes) jsonPerValue = Math.max(jsonPerValue, (usage.jsonNodes - L.jsonNodesAllowance) / usage.nodes);
   for (const cap of over) overDefaults.set(`${root}: ${cap}`, (overDefaults.get(`${root}: ${cap}`) ?? 0) + 1);
 }
-const max = { body: 0, bodyStored: 0, buffer: 0, bufferStored: 0, resource: 0, segments: 0, nameBlock: 0, nameList: 0, entries: 0 };
+const max = { body: 0, bodyStored: 0, buffer: 0, bufferStored: 0, resource: 0, segments: 0, nameBlock: 0, nameList: 0, entries: 0, indexBytes: 0, indexGroup: "" };
+/** A CR2W file's string-pool size, from its header (table 0's count), whatever the caps: a pool is part of the body, so a body under `--big` has a smaller one. */
+const poolBytes = (bytes: Uint8Array) => bytes.length >= 52 && new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true) === 0x57325243
+  ? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(44, true) : 0;
+const pools = { big: 0, bigRoot: "", verified: 0, cached: 0 };
 const bigOnes: { archive: NativeArchive; group: string; hash: string; body: number; resource: number }[] = [];
 let entries = 0, unreadable = 0;
 const malformed = new Map<string, number>();
@@ -68,6 +75,7 @@ for (const { path, group } of archives) {
   let archive: NativeArchive;
   try { archive = NativeArchive.open(path, oodle.decompress, decodeLimits); } catch { unreadable++; continue; }
   max.entries = Math.max(max.entries, archive.index.fileCount);
+  if (archive.index.header.indexSize > max.indexBytes) { max.indexBytes = archive.index.header.indexSize; max.indexGroup = group; }
   max.nameBlock = Math.max(max.nameBlock, archive.index.header.customDataLength);
   if (archive.index.header.customDataLength) try { max.nameList = Math.max(max.nameList, archive.names().join("\0").length); } catch { /* not an LXRS block */ }
   for (let i = 0; i < archive.index.fileCount; i++) {
@@ -90,14 +98,16 @@ for (const { path, group } of archives) {
 const indexMs = performance.now() - started;
 
 // Pass 2: the root class of every big resource; the verified ones are decoded without caps too.
-type Usage = { decodedBytes: number; nodes: number; jsonNodes: number; depth: number; longestName: number; largestBuffer: number; ms: number };
+type Usage = { decodedBytes: number; nodes: number; jsonNodes: number; depth: number; longestName: number; names: number; largestBuffer: number; ms: number };
 type ClassRow = { count: number; body: number; resource: number; groups: Set<string>; usage: Usage; outcomes: Map<string, number> };
-const noUsage = (): Usage => ({ decodedBytes: 0, nodes: 0, jsonNodes: 0, depth: 0, longestName: 0, largestBuffer: 0, ms: 0 });
+const noUsage = (): Usage => ({ decodedBytes: 0, nodes: 0, jsonNodes: 0, depth: 0, longestName: 0, names: 0, largestBuffer: 0, ms: 0 });
 const byClass = new Map<string, ClassRow>();
 for (const item of bigOnes) {
   let root = "(unreadable)", bytes: Uint8Array | null = null;
   try { bytes = item.archive.read(item.hash)!; root = new Cr2wFile(bytes, new DecodeSession(decodeLimits)).exports[0]?.className ?? "(no exports)"; }
   catch (error) { if ((error as Error).name === "NativeBudgetError") root = "(over the read caps)"; }
+  if (bytes && poolBytes(bytes) > pools.big) { pools.big = poolBytes(bytes); pools.bigRoot = root; }
+  if (bytes && NATIVE_ROOTS.has(root)) pools.verified = Math.max(pools.verified, poolBytes(bytes));
   const row = byClass.get(root) ?? { count: 0, body: 0, resource: 0, groups: new Set<string>(), usage: noUsage(), outcomes: new Map<string, number>() };
   row.count++; row.body = Math.max(row.body, item.body); row.resource = Math.max(row.resource, item.resource); row.groups.add(item.group);
   byClass.set(root, row);
@@ -107,7 +117,7 @@ for (const item of bigOnes) {
   try {
     const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, decodeLimits);
     row.usage.ms = Math.max(row.usage.ms, performance.now() - start);
-    for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "largestBuffer"] as const) row.usage[key] = Math.max(row.usage[key], result.usage[key]);
+    for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "names", "largestBuffer"] as const) row.usage[key] = Math.max(row.usage[key], result.usage[key]);
     checkDefaults(result.usage, bytes, root);
     for (const note of result.notes) outcome = `decoded, note ${note.property}: ${note.stored} (RTTI ${note.rtti})`;
   } catch (error) { outcome = `${(error as Error).name}: ${(error as Error).message.replace(/[0-9]+/g, "N").slice(0, 100)}`; }
@@ -116,7 +126,7 @@ for (const item of bigOnes) {
 const verifiedBig = [...byClass].filter(([name]) => NATIVE_ROOTS.has(name));
 
 // Pass 3: the resolver cache, decoded without caps.
-const usage = { decodedBytes: 0, nodes: 0, jsonNodes: 0, depth: 0, longestName: 0, largestBuffer: 0, ms: 0, resourceBytes: 0 };
+const usage = { decodedBytes: 0, nodes: 0, jsonNodes: 0, depth: 0, longestName: 0, names: 0, largestBuffer: 0, ms: 0, resourceBytes: 0 };
 const notes = new Map<string, number>(), defaulted = new Map<string, number>();
 let cached = 0;
 if (cache) {
@@ -136,11 +146,12 @@ if (cache) {
       if (createHash("sha256").update(bytes).digest("hex") !== meta.extractedSha256) continue;
       cached++;
       usage.resourceBytes = Math.max(usage.resourceBytes, bytes.length);
+      pools.cached = Math.max(pools.cached, poolBytes(bytes));
       const start = performance.now();
       try {
         const result = readResource(bytes, oodle.decompress, { buffers: "trim" }, decodeLimits);
         usage.ms = Math.max(usage.ms, performance.now() - start);
-        for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "largestBuffer"] as const) usage[key] = Math.max(usage[key], result.usage[key]);
+        for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "names", "largestBuffer"] as const) usage[key] = Math.max(usage[key], result.usage[key]);
         checkDefaults(result.usage, bytes, "cached");
         for (const note of result.notes) notes.set(`${note.property}: ${note.stored} (RTTI ${note.rtti})`, (notes.get(`${note.property}: ${note.stored} (RTTI ${note.rtti})`) ?? 0) + 1);
         for (const row of result.defaulted) defaulted.set(row.property, (defaulted.get(row.property) ?? 0) + row.count);
@@ -156,7 +167,8 @@ const mib = (bytes: number) => Math.round(bytes / 2 ** 20 * 100) / 100;
 console.log(JSON.stringify({
   archives: archives.length, unreadable, entries, malformedEntries: Object.fromEntries(malformed), indexMs: Math.round(indexMs),
   indexMaxima: { bodyMiB: mib(max.body), bodyStoredMiB: mib(max.bodyStored), bufferMiB: mib(max.buffer), bufferStoredMiB: mib(max.bufferStored),
-    resourceMiB: mib(max.resource), segments: max.segments, entriesInOneArchive: max.entries, nameBlockMiB: mib(max.nameBlock), nameListMiB: mib(max.nameList) },
+    resourceMiB: mib(max.resource), segments: max.segments, entriesInOneArchive: max.entries, indexBytes: max.indexBytes, indexGroup: max.indexGroup, nameBlockMiB: mib(max.nameBlock), nameListMiB: mib(max.nameList) },
+  stringPoolBytes: { bigResources: pools.big, bigResourcesRoot: pools.bigRoot, bigVerifiedResources: pools.verified, smallerBodiesBelow: big, resolverCache: cache ? pools.cached : null },
   bigResources: { threshold: big, count: bigOnes.length,
     verifiedRootClasses: Object.fromEntries(verifiedBig.map(([name, row]) => [name, { count: row.count, bodyMiB: mib(row.body), resourceMiB: mib(row.resource), groups: [...row.groups],
       usage: { ...row.usage, decodedMiB: mib(row.usage.decodedBytes), largestBufferMiB: mib(row.usage.largestBuffer), ms: Math.round(row.usage.ms) }, outcomes: Object.fromEntries(row.outcomes) }])),
