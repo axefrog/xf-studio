@@ -5,7 +5,7 @@ import type { SavedV } from "../../save-reader";
 import { IdleAnimation } from "../../idle-animation";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "../../game-blink";
 import { composePreviewMotion } from "../../preview-motion";
-import { createEyeMaterial, eyeParameters } from "../../eye-material";
+import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../eye-material";
 import type { LoadedCoreDetail } from "../../core-detail-loader";
 import { morphTargetNames } from "../../head-skin-placement";
 import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "../../face-morphs";
@@ -139,6 +139,8 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   eyeColor.wrapS = eyeColor.wrapT = THREE.RepeatWrapping;
   eyeColor.needsUpdate = true;
   const coreEye = createEyeMaterial({ albedo: eyeColor }, eyeParameters({ scalars: {} }));
+  // Its tangent frame and per-eye vectors (the gaze rig below keeps this geometry).
+  prepareEyeballGeometry([eyes.geometry]);
   const eyeMat = coreEye.material;
   options.releases.push(() => { eyeMat.dispose(); for (const texture of coreEye.owned) texture.dispose(); });
   eyes.material = eyeMat;

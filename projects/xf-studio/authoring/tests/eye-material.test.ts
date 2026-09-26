@@ -62,7 +62,9 @@ describe("eye sampling rule", () => {
 
   test("the shader patch follows the same rule on this Three.js build", () => {
     const shader = patchEyeShader({ fragmentShader: THREE.ShaderLib.standard.fragmentShader });
-    expect(shader.fragmentShader).toContain("vec2 xfsEyeUvC = vec2( xfsEyeUv.x + ( xfsEyeUv.x > 0.0 ? -1.0 : 1.0 ), 1.0 - xfsEyeUv.y );");
+    expect(shader.fragmentShader).toContain("float xfsEyeFu = xfsEyeUv.x + ( xfsEyeLeft ? 1.0 : -1.0 );");
+    // Outside the iris the mesh coordinate, V-flipped; inside it the refracted iris-plane coordinate (ranks 4–5).
+    expect(shader.fragmentShader).toContain("vec2 xfsEyeUvC = mix( vec2( xfsEyeFu, 1.0 - xfsEyeUv.y ), xfsEyeUvI, xfsEyeIris * xfsEyeHasAxis );");
     expect(shader.fragmentShader).toContain("textureGrad( map, xfsEyeUvC");
     expect(shader.fragmentShader).toContain("textureGrad( xfsIrisMask, xfsEyeUvC");
     expect(shader.fragmentShader).toContain("texture2D( xfsEyeRoughness, vMapUv ).r * xfsEyeSurface.x");
@@ -122,22 +124,30 @@ describe("eye adapters", () => {
   test("a gradient eye: colour albedo, raw mask, data roughness, its own baked ramp; the handle switches the roughness", () => {
     requests.length = 0;
     const adapted = materialAdapter("base\\materials\\eye_gradient.mt")!.create(chunk("base\\materials\\eye_gradient.mt",
-      ["Albedo", "Roughness", "IrisMask", "Normal"], { gradients: gradient, scalars: { RoughnessScale: 0.5 } }), textures, mesh(), context());
-    expect(requests.sort()).toEqual(["Albedo:colour:repeat", "IrisMask:data:repeat", "Roughness:data:repeat"]);
+      ["Albedo", "Roughness", "IrisMask", "Normal", "NormalBubble"], { gradients: gradient, scalars: { RoughnessScale: 0.5 } }), textures, mesh(), context());
+    // Gamma-flagged data (the mask, and the normal when its resource is gamma) is read raw by default; the bubble is data.
+    expect(requests.sort()).toEqual(["Albedo:colour:repeat", "IrisMask:data:repeat", "Normal:data:repeat", "NormalBubble:data:repeat", "Roughness:data:repeat"]);
     const material = adapted.material as THREE.MeshStandardMaterial;
     expect(material.defines).toEqual({ XFS_EYE_GRADIENT: "" });
-    expect(material.customProgramCacheKey()).toBe("xfs-eye-1-gradient");
+    expect(material.customProgramCacheKey()).toBe("xfs-eye-2-gradient");
     expect(material.roughness).toBe(EYE_FLAT_ROUGHNESS);
+    expect(material.normalMap).toBeInstanceOf(THREE.Texture);
     const ramp = adapted.owned.find(t => t.name === "xfs_iris_gradient")!;
     expect(ramp.colorSpace).toBe(THREE.SRGBColorSpace);
     expect(ramp.wrapS).toBe(THREE.ClampToEdgeWrapping);
     const handle = adapted.eye as EyeballHandle;
-    expect(handle).toMatchObject({ role: "eyeball", gradient: true, hasSourceRoughness: true, sourceRoughness: false });
-    handle.setSourceRoughness(true);
-    expect(handle.sourceRoughness).toBe(true);
-    const shader = { uniforms: {} as Record<string, { value: unknown }>, vertexShader: "", fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    // The eye's own roughness is on by default (sclera ≈ 0.05 in vanilla); the switch turns the earlier flat gloss back on.
+    expect(handle).toMatchObject({ role: "eyeball", gradient: true, hasSourceRoughness: true, sourceRoughness: true });
+    const shader = { uniforms: {} as Record<string, { value: unknown }>, vertexShader: THREE.ShaderLib.standard.vertexShader,
+      fragmentShader: THREE.ShaderLib.standard.fragmentShader };
     material.onBeforeCompile(shader as never, {} as never);
     expect((shader.uniforms.xfsEyeSurface!.value as THREE.Vector3).toArray()).toEqual([0.5, 1, 0]);
+    handle.setSourceRoughness(false);
+    expect(handle.sourceRoughness).toBe(false);
+    expect((shader.uniforms.xfsEyeSurface!.value as THREE.Vector3).toArray()).toEqual([0.5, 0, 0]);
+    // The vertex program carries the per-eye vectors, skinned with the eye; the indirect light gets the eye's ambient factor.
+    expect(shader.vertexShader).toContain("xfsAxisObject = ( skinMatrix * vec4( xfsAxisObject, 0.0 ) ).xyz;");
+    expect(shader.uniforms.xfsEyeAmbient!.value as number).toBeCloseTo(1.1, 9);
     // A gradient template without its ramp is not drawn wrongly.
     expect(() => materialAdapter("base\\materials\\eye_gradient.mt")!.create(chunk("base\\materials\\eye_gradient.mt", ["Albedo", "IrisMask"]),
       textures, mesh(), context())).toThrow("IrisColorGradient");

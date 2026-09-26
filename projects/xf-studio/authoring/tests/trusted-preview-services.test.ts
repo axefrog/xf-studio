@@ -161,3 +161,28 @@ test("the preview services leave the tried piercing style to the character servi
   // The visibility preference always reaches the device (piercings arrive later with the record and follow it).
   expect(calls).toEqual(["piercings:true"]);
 });
+
+test("the eye's own roughness is on by default, also for a workspace that stored the retired opt-in off; turning it off is stored", () => {
+  const values: boolean[] = [];
+  const port = (): PreviewPort => ({ cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
+    endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {}, setWire: () => {},
+    setNormals: () => {}, setEyeOptics: enabled => values.push(enabled), setHair: () => {}, setEyeShape: () => {}, setPiercings: () => {}, setDetail: () => {} });
+  const motion: MotionPort = { available: false, blink: { available: false }, idle: undefined, setIdle: () => {}, setIdlePaused: () => {},
+    setIdleContributions: () => {}, setBlink: () => {}, animateBlink: () => {} } as unknown as MotionPort;
+  const start = (workspace: ReturnType<typeof freshWorkspace>) => createTrustedPreviewServices(workspace, {
+    savedAppearance: { apply: () => { throw Error("No save was supplied."); } }, preview: port(), motion }).finish().preview;
+  // A workspace from before: the retired `eyeOptics` stored off (its old default). It is kept as read and not used.
+  const legacy = freshWorkspace();
+  legacy.preview.eyeOptics = false;
+  const actions = start(legacy);
+  expect(values).toEqual([true]);
+  expect("eyeOwnRoughness" in actions.snapshot()).toBe(false);
+  actions.dispatch({ kind: "preview.setEyeOptics", enabled: false });
+  expect(values).toEqual([true, false]);
+  expect(actions.snapshot().eyeOwnRoughness).toBe(false);
+  // Stored off, it stays off.
+  const off = freshWorkspace();
+  off.preview.eyeOwnRoughness = false;
+  start(off);
+  expect(values.at(-1)).toBe(false);
+});

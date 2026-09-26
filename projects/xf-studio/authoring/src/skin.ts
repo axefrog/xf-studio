@@ -61,7 +61,8 @@ export function extendSkin(
       )
       .replace(
         "#include <skinnormal_vertex>",
-        `#ifdef USE_SKINNING\nmat4 fullNormal = bindMatrixInverse * fullSkin * bindMatrix;\nobjectNormal = (fullNormal * vec4(objectNormal,0.0)).xyz;\n#ifdef USE_TANGENT\nobjectTangent = (fullNormal * vec4(objectTangent,0.0)).xyz;\n#endif\n#endif`,
+        // Named `skinMatrix` like Three's own chunk, so code after it (the eye's axis, eye-material.ts) skins directions either way.
+        `#ifdef USE_SKINNING\nmat4 skinMatrix = bindMatrixInverse * fullSkin * bindMatrix;\nobjectNormal = (skinMatrix * vec4(objectNormal,0.0)).xyz;\n#ifdef USE_TANGENT\nobjectTangent = (skinMatrix * vec4(objectTangent,0.0)).xyz;\n#endif\n#endif`,
       )
       .replace(
         "#include <skinning_vertex>",
