@@ -337,6 +337,32 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     expect(storedCharacterOf({ origin: "save", choices: [{ part: "head", option: "a", choice: "b", extra: 1 }] })).toEqual({ origin: "save", choices: [] });
   });
 
+  test("a choice shows at once, before the host's view of it arrives, and the host's view then stands (optimistic selection)", async () => {
+    const creator = await port();
+    // The host answers views only when released, as a busy host does.
+    const held: (() => void)[] = [];
+    const view = creator.view.bind(creator);
+    creator.view = (request, signal) => new Promise(resolve => held.push(() => resolve(view(request, signal))));
+    const release = async () => { while (held.length) held.shift()!(); await settle(); };
+    const context = new CharacterContextActions({ creator, showSave: () => {} });
+    context.start(); await settle(); await release();
+    context.choices("head/eyes_color"); await settle();
+    const page = context.choices("head/eyes_color").choices, blue = page.find(choice => choice.key === "he__02_blue")!;
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    expect(context.viewCurrent()).toBe(false);
+    expect(context.view()?.values["head/eyes_color"]).toMatchObject({ choice: "he__02_blue", position: blue.position, set: true, label: blue.label });
+    expect(Object.isFrozen(context.view())).toBe(true);
+    expect(context.view()).toBe(context.view());
+    await release();
+    expect(context.viewCurrent()).toBe(true);
+    expect(context.view()?.values["head/eyes_color"]).toMatchObject({ choice: "he__02_blue", set: true });
+    // Reset shows the V's own at once too.
+    context.dispatch({ kind: "character.reset", part: "head", option: "eyes_color" });
+    expect(context.view()?.values["head/eyes_color"]).toMatchObject({ choice: "he__01_brown", set: false });
+    await release();
+    expect(context.view()?.values["head/eyes_color"]).toMatchObject({ choice: "he__01_brown", set: false });
+  });
+
   test("the action family has a descriptor per kind, records nothing in a look's history and is registered in the Studio", () => {
     expect(Object.keys(CHARACTER_CONTEXT_FAMILY.actions)).toEqual(["character.setOption", "character.setOptions", "character.hideOwnMakeup", "character.reset",
       "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.retry", "character.clearPreparedFiles", "character.undo", "character.redo",

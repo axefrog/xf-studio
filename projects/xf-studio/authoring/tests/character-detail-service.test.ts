@@ -107,6 +107,24 @@ describe("character record from the resolver", () => {
     expect(b.record.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
   });
 
+  test("PIPE-108: a failed launch keeps what the archive's other launches answered (a refused texture's fallback failing)", async () => {
+    // As the texture reader's wrapper answers when WolvenKit's fallback launch for textures both readers refused fails: the geometry
+    // and natively decoded textures are in the answer, beside the failure.
+    const base = fakeExporter();
+    const exporter: GameAssetExporter = { ...base, async exportAll(requests, signal) {
+      return Promise.all(requests.map(async request => {
+        const session = base.open(request.source, signal);
+        try {
+          return { geometry: await session.geometry(request.geometry), textures: await session.textures(request.textures), masks: await session.masks(request.masks),
+            failed: new GameAssetExportError("tool_failed", "the fallback launch for a refused texture failed") };
+        } finally { session.close(); }
+      }));
+    } };
+    const { record } = await prepare(REQUEST_A, exporter);
+    expect(record.components.length).toBeGreaterThan(0);
+    expect(record.components.some(component => component.slot === "hair")).toBe(true);
+  });
+
   test("the head skin: the resolved chain's inputs, the winning skin profile's values, and the tone per V", async () => {
     const a = (await prepare(REQUEST_A)).record, b = (await prepare(REQUEST_B)).record;
     const skinOf = (record: typeof a) => record.components.find(c => c.slot === "skin")!;
@@ -209,6 +227,11 @@ describe("character record from the resolver", () => {
       gradientEntriesRootToTip: [{ value: 2, color: { Red: 300, Green: 0, Blue: 0 } }] })).toEqual(
       { sampleCount: 127, id: [{ value: 0.5, color: [1, 2, 3] }], rootToTip: [{ value: 1, color: [255, 0, 0] }] });
     expect(hairProfileStops({ $type: "CHairProfile", sampleCount: 1, gradientEntriesID: [], gradientEntriesRootToTip: [] })).toBeNull();
+    // PIPE-110: an omitted sampleCount is its class default, 64 (vanilla purple_ombre.hp and liliac.hp omit it).
+    expect(hairProfileStops({ $type: "CHairProfile", gradientEntriesID: [{ value: 0, color: { Red: 1, Green: 2, Blue: 3 } }],
+      gradientEntriesRootToTip: [{ value: 1, color: { Red: 4, Green: 5, Blue: 6 } }] })?.sampleCount).toBe(64);
+    expect(skinProfileValues({ $type: "CSkinProfile" })).toEqual({ roughness0: 0.75, roughness1: 1.25, lobeMix: 0.8, blurSize: 1.2,
+      diffuse: [255, 255, 255], falloff: [255, 255, 255] });
     expect(skinProfileValues({ $type: "CSkinProfile", roughness0: 0.966365993, roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998,
       diffuse: { Red: 255, Green: 255, Blue: 255 }, falloff: { Red: 255, Green: 178, Blue: 165 } })).toEqual({ roughness0: 0.966365993,
       roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998, diffuse: [255, 255, 255], falloff: [255, 178, 165] });

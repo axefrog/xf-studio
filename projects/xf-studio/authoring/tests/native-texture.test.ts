@@ -176,11 +176,25 @@ test("textures the reader doesn't decode, or that disagree with themselves, are 
   expect(kind({ ...base, compression: "TCM_HalfHDR_Unsigned" })).toBe("unsupported");
   expect(kind({ width: 1, height: 1, rawFormat: "TRF_HDRFloat", data: new Uint8Array(16) })).toBe("unsupported");
   expect(kind({ ...base, noBlob: true })).toBe("unsupported");
-  expect(kind({ ...base, mips: [{ offset: 0, size: 31 }] })).toBe("malformed");
-  expect(kind({ ...base, mips: [{ offset: 40, size: 32 }] })).toBe("malformed");
-  expect(kind({ ...base, dataSize: 999 })).toBe("malformed");
+  // A table that doesn't fit its data is refused unless the data holds sizeInfo's whole chain (below).
+  const short = { ...base, data: base.data.subarray(0, 48) };
+  expect(kind({ ...short, mips: [{ offset: 0, size: 31 }] })).toBe("malformed");
+  expect(kind({ ...short, mips: [{ offset: 40, size: 32 }] })).toBe("malformed");
+  expect(kind({ ...base, dataSize: 999, data: new Uint8Array(40) })).toBe("malformed");
   expect(kind({ ...base, width: 32768, height: 8 })).toBe("over-budget");
   expect(kind({ ...base, width: 0 })).toBe("malformed");
+});
+
+test("PIPE-111: a mip table describing a smaller chain than sizeInfo, over data holding sizeInfo's whole chain, is read as WolvenKit does", () => {
+  // As a mod's 4096² BC7 cap mask: sizeInfo 4096², a table and data size of a 1024² chain, 22.4 MB of data holding the 4096² chain.
+  // Here: 8×8 BC1 whose table lists a 2×2 chain (8 + 8 bytes) while its 56 bytes hold the 8×8 chain.
+  const base = mipChain();
+  const layout = layoutOf({ ...base, mips: [{ offset: 0, size: 8 }, { offset: 8, size: 8 }], dataSize: 16 });
+  expect(layout.mipTable).toBe("derived");
+  expect(layout.mips).toEqual([{ width: 8, height: 8, offset: 0, size: 32 }, { width: 4, height: 4, offset: 32, size: 8 },
+    { width: 2, height: 2, offset: 40, size: 8 }, { width: 1, height: 1, offset: 48, size: 8 }]);
+  expect(decodeMip(layout, 0).data).toEqual(decodeMip(layoutOf(base), 0).data);
+  expect(layoutOf(base).mipTable).toBe("listed");
 });
 
 function textureArchive(files: Record<string, Uint8Array>): string {
