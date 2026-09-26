@@ -100,6 +100,15 @@ One prepared session once phases 1–4 exist, with a checklist, fixed camera pre
 5. One refit on a body mod, to check `{body}` resolution and body masking.
 6. Close-ups of garment edges (collar, waistband, boot tops) for the garment-support phase.
 
+## Provisional decisions (26 September 2026, coordinator; for the maintainer's review)
+
+Taken as executive decisions while the maintainer was away; each is the proposal below and can be revised.
+
+1. **EquipmentEx:** its saved outfits are not read from the save; outfits other mods apply are shown through the runtime bridge's "connect the game" snapshot.
+2. **Default dressing:** as saved, minus headwear and face items while the eye-makeup editor is open.
+3. **Nudity:** the Studio never shows more than the game's own uncensored mode would, and by default follows the game's default (underwear on). "Underwear only" is the lowest clothing state offered; anything further would be a separate, explicit setting and isn't planned.
+4. **Priority:** after `body-render` merges, phases 1–4 as one track, with 5 and 6 in parallel.
+
 ## Questions for the maintainer
 
 1. **EquipmentEx.** Reading its saved outfit (`EquipmentEx.OutfitState` in the save) would show outfits offline, but it means interpreting one mod's script data, which the resolver rule forbids for intake. Proposed default: don't read it; show the save's vanilla loadout plus the "connect the game" option. Is that right, or is EquipmentEx core enough to treat like a framework?
