@@ -7,12 +7,12 @@ import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { LookLibrary } from "../src/library-store";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe } from "../src/collection-workspace";
-import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { historyRecipes } from "./fixtures/looks";
 import { parseCollection, planCollection } from "../src/preset-collection";
-import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { recipeOf } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
+import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
 test("preset switching retains unsaved recipes, selections and Undo; structural operations preserve export identity", () => {
   const id = crypto.randomUUID(), original = { id: crypto.randomUUID(), name: "Original", revision: 1, recipe: initialRecipe() };

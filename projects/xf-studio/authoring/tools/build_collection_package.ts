@@ -16,6 +16,7 @@
 //     [--app-root <dir>] [--build-root <dir>] [--dist-root <dir>] [--output-root <dir>]
 import { resolve } from "node:path";
 import { PackageBuildError, runPackageCommand } from "../src/package-build-service";
+import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");
@@ -44,6 +45,7 @@ try {
   // In the source tree the code root is the authoring directory; the desktop bundle passes --app-root.
   // Build and dist default to the project's ignored folders.
   const result = await runPackageCommand({
+    region: EYE_MAKEUP_REGION,
     collection: values["--collection"], check: flags.has("--check"), diagnostics: flags.has("--diagnostics"),
     plate: values["--plate"], plateManifest: values["--plate-manifest"],
     wolvenkit: values["--wolvenkit"], gamepath: values["--gamepath"],

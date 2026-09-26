@@ -1,17 +1,18 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {initialRecipe,parseRecipe,raster} from "../src/engines/layered-makeup/recipe";
 import {recipeFile} from "../src/recipe-schema";
 import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes} from "../src/engines/layered-makeup/direct-glint-settings";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import {createMakeupStack} from "../src/engines/layered-makeup/render/makeup-stack";
 import {assessPreviewQuality} from "../src/preview-quality";
-import {UnsupportedMaterialError,compileFlatPreset} from "../src/engines/layered-makeup/preset-compiler";
-import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
+import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
+import { parseWorkspace } from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe, raster, compileFlatPreset, freshWorkspace, EYE_RASTER_REGION } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 test("direct-light model is explicit recipe-8 browser data and stays game-export gated",()=>{
   const recipe=initialRecipe();
@@ -78,7 +79,7 @@ test("direct-light model uses the cancellable mask worker without optical textur
   const layer=initialRecipe().layers[0]!;layer.finish="glitter";layer.flakes=defaultDirectGlintFlakes();
   const responses:RasterResponse[]=[];
   const worker=createRasterProcessor(r=>responses.push(r));
-  await worker.start({i:0,version:1,layer,size:64,bakeOptics:false});
+  await worker.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:false});
   const result=responses[0]!;expect(result.cancelled).not.toBe(true);
   if(result.cancelled)return;
   expect(result.data).toEqual(raster(layer,64));

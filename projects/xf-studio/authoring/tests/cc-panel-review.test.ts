@@ -435,7 +435,7 @@ describe("UI-72: the search runs on the host over every choice", () => {
 describe("CORE-74: the retired tried style is kept until the context stores choices", () => {
   test("written back as read while nothing is set, written empty once choices are stored", async () => {
     const { WorkspaceComposer } = await import("../src/workspace-composer");
-    const { freshWorkspace } = await import("../src/workspace-state");
+    const { freshWorkspace } = await import("./fixtures/eye-region");
     const initial = freshWorkspace();
     initial.preview.piercingStyle = "01"; initial.preview.piercingDefinition = "gold";
     let stored: ReturnType<CharacterContextActions["stored"]> | null = null;

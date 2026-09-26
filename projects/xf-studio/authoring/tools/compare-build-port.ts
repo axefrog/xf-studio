@@ -19,6 +19,7 @@ import { relative, resolve, sep } from "node:path";
 import { planCollection } from "../src/preset-collection";
 import { compileFlatPreset } from "../src/engines/layered-makeup/preset-compiler";
 import { encodeFlatDds, flatMipChain, type FlatMapChannel } from "../src/engines/layered-makeup/flat-mip-chain";
+import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
 
 const app = resolve(import.meta.dir, "..");
 const hq = resolve(app, "../../..");
@@ -47,7 +48,7 @@ async function compareMips(args: string[]) {
   const plan = planCollection(JSON.parse(readFileSync(collection, "utf8")));
   const jobs = [];
   for (const preset of plan.presets) {
-    const compiled = compileFlatPreset(preset.recipe, size);
+    const compiled = compileFlatPreset(preset.recipe, EYE_MAKEUP_REGION, size);
     const files: Record<string, string> = {};
     for (const channel of channels) {
       const file = resolve(out, `${preset.appearance}_${channel}.raw`);

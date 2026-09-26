@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { MotionActions, type MotionPort } from "../src/motion-actions";
 import { PreviewQualityActions } from "../src/preview-quality-actions";
 import { SavedAppearanceActions } from "../src/saved-appearance-actions";
-import { freshWorkspace } from "../src/workspace-state";
 import type { SavedV } from "../src/save-reader";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 test("motion service restores composition before clock, preserves pause phase and explains disabled actions", () => {
   const calls: string[] = [], preview = freshWorkspace().preview;

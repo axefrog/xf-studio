@@ -1,17 +1,18 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {initialRecipe,parseRecipe,raster} from "../src/engines/layered-makeup/recipe";
 import {defaultFlakes} from "../src/engines/layered-makeup/finish";
 import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/engines/layered-makeup/flake-field";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import {createMakeupStack} from "../src/engines/layered-makeup/render/makeup-stack";
 import {assessPreviewQuality} from "../src/preview-quality";
-import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
+import { parseWorkspace } from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";
-import {UnsupportedMaterialError,compileFlatPreset} from "../src/engines/layered-makeup/preset-compiler";
+import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe, raster, freshWorkspace, compileFlatPreset, EYE_RASTER_REGION } from "./fixtures/eye-region";
+import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 test("recipe-7 opt-in is strict while recipe-6 glitter preserves its legacy model",()=>{
   const recipe=initialRecipe(),layer=recipe.layers[0];layer.finish="glitter";
@@ -49,7 +50,7 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   layer.flakes={...defaultIrregularFlakes(),count:1000,radius:.003,color:"#f5df9f"};
   const result:RasterResponse[]=[];
   const processor=createRasterProcessor(x=>result.push(x));
-  await processor.start({i:0,version:1,layer,size:64,bakeOptics:true});
+  await processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:true});
   const first=result[0];expect(first.cancelled).not.toBe(true);
   if(first.cancelled)return;
   expect(first.data).toEqual(raster(layer,64));
@@ -63,7 +64,7 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   }
   expect(coloured).toBeGreaterThan(0);
   layer.color="#110033";layer.flakes.color="#ffffff";
-  await processor.start({i:0,version:2,layer,size:64,bakeOptics:false});
+  await processor.start({ region: EYE_RASTER_REGION,i:0,version:2,layer,size:64,bakeOptics:false});
   const second=result[1];expect(second.cancelled).not.toBe(true);
   if(second.cancelled)return;
   expect(second.optics).toBeUndefined();expect(second.albedo?.key).not.toBe(first.albedo?.key);
@@ -75,7 +76,7 @@ test("fine studio default reports bounded-region and resolved-coverage counts",a
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.flakes=defaultStudioIrregularFlakes();
   const results:RasterResponse[]=[];
   const worker=createRasterProcessor(r=>results.push(r));
-  await worker.start({i:0,version:1,layer,size:512,bakeOptics:true});
+  await worker.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:512,bakeOptics:true});
   const result=results[0];expect(result.cancelled).not.toBe(true);
   if(result.cancelled)return;
   expect(result.albedo?.data.length).toBe(512*512*4);
@@ -91,7 +92,7 @@ test("fine studio default reports bounded-region and resolved-coverage counts",a
   expect(coverage/painted).toBeGreaterThan(.06);
   expect(coverage/painted).toBeLessThan(.2);
   const outside={...layer,points:layer.points.map(p=>({...p,u:p.u-.2}))};
-  await worker.start({i:0,version:2,layer:outside,size:512,bakeOptics:false});
+  await worker.start({ region: EYE_RASTER_REGION,i:0,version:2,layer:outside,size:512,bakeOptics:false});
   expect(results).toHaveLength(2);
   expect(results[1]).toEqual({i:0,version:2,cancelled:true,error:expect.stringContaining("Fine Glitter supports the eye UV area")});
 });
@@ -102,7 +103,7 @@ test("cancelled candidate work never publishes a partial mask or albedo",async()
   const responses:RasterResponse[]=[],resumes:(()=>void)[]=[];
   let clock=0,finished=false;
   const processor=createRasterProcessor(x=>responses.push(x),()=>new Promise(resolve=>resumes.push(resolve)),()=>++clock*10);
-  const pending=processor.start({i:0,version:1,layer,size:64,bakeOptics:true}).then(()=>finished=true);
+  const pending=processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:true}).then(()=>finished=true);
   await Promise.resolve();expect(responses).toEqual([]);
   processor.cancel(1);
   while(!finished){resumes.shift()?.();await Promise.resolve();}
@@ -122,7 +123,7 @@ test("candidate material binds one complete RGBA albedo and disposes it on legac
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.flakes={...defaultIrregularFlakes(),count:0};
   const results:RasterResponse[]=[];
   const processor=createRasterProcessor(x=>results.push(x));
-  return processor.start({i:0,version:1,layer,size:32,bakeOptics:true}).then(()=>{
+  return processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:32,bakeOptics:true}).then(()=>{
     const result=results[0];if(result.cancelled)throw Error("Unexpected cancellation");
     stack.updateLayer(0,layer,result.optics,result.albedo);
     const material=stack.materials[0],albedo=material.map!;

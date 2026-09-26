@@ -5,12 +5,15 @@ import type { GlitterPreviewMeasurement } from "./presentation-status";
 import type { GlitterStats } from "./engines/layered-makeup/raster-processor";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import type { ReadonlyDeep } from "./read-only";
+import type { FineGlitterScope } from "./engines/layered-makeup/region";
 
 /** Trusted reads the service needs; the composition root supplies the live document and preview tier. */
 export type GlitterMeasurementPort = {
   layers(): readonly ReadonlyDeep<Layer>[];
   /** Current preview texture size; a measurement taken at another tier is historical. */
   size(): number;
+  /** The live feature's fine-Glitter scope (its region's), part of each optical identity. */
+  readonly fineGlitter: FineGlitterScope;
 };
 
 /**
@@ -25,7 +28,7 @@ export class GlitterMeasurements {
   constructor(private port: GlitterMeasurementPort) {}
 
   record(layer: ReadonlyDeep<Layer>, size: number, stats: GlitterStats) {
-    this.entries.set(layer.id, { opticalKey: previewOpticalKey(layer, size), maskKey: maskAlphaKey(layer, size), size, stats: { ...stats } });
+    this.entries.set(layer.id, { opticalKey: previewOpticalKey(layer, size, this.port.fineGlitter), maskKey: maskAlphaKey(layer, size), size, stats: { ...stats } });
   }
 
   /** Measurement for one layer, or undefined when it is not irregular Glitter or was never measured. */
@@ -36,7 +39,7 @@ export class GlitterMeasurements {
     return { layerId: layer.id, size: measured.size, maskCentres: measured.stats.maskCentres,
       regionRetained: measured.stats.regionRetained, coveredPixels: measured.stats.coveredPixels,
       dense: layer.flakes.count > FLAKE_LIMITS.count,
-      current: measured.opticalKey === previewOpticalKey(layer, size) && measured.maskKey === maskAlphaKey(layer, size) };
+      current: measured.opticalKey === previewOpticalKey(layer, size, this.port.fineGlitter) && measured.maskKey === maskAlphaKey(layer, size) };
   }
 
   /** Detached measurements for every measured irregular-Glitter layer, in stack order. */

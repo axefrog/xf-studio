@@ -9,8 +9,9 @@ import { DEFAULT_KEY_ANGLE, DEFAULT_KEY_ELEVATION, DEFAULT_STUDIO_EXPOSURE, DEFA
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/trusted-preview-services";
 import { WorkspaceComposer } from "../src/workspace-composer";
-import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 function port(options: { rig?: boolean } = {}) {
   const calls: string[] = [];

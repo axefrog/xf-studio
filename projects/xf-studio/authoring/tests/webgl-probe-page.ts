@@ -21,15 +21,17 @@ import { createFaceDecalMaterial, decalColourUnits, faceDecalParameters, forward
 import type { DecalKind } from "../src/render-templates";
 import { createLinearDisplay, linearTargetSupported } from "../src/linear-display";
 import { flatSurface } from "../src/engines/layered-makeup/finish-export";
-import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { accumulateComposite, EMPTY_COMPOSITE, plateSurface, type PlateComposite, type PlateTexel } from "../src/engines/layered-makeup/render/plate-blend";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters } from "../src/skin-material";
 import { stageBackdropPixels } from "../src/stage-backdrop";
 import { createStudioEnvironment } from "../src/studio-environment";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
 import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, layerMapUv, resolveSurface, type LayerAccumulator } from "../src/layered-material";
 import type { RenderLayer } from "../src/render-detail";
+import { initialRecipe } from "./fixtures/eye-region";
+import { createMakeupStack } from "./fixtures/eye-region";
 
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[];
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];

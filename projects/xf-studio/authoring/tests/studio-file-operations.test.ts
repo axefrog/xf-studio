@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
-import { initialRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
+import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 import { looks } from "./fixtures/looks";
@@ -9,6 +9,7 @@ import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-
 import { BUILD_NEEDS_SETUP } from "../src/alpha-availability";
 import { recipeFile } from "../src/recipe-schema";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe } from "./fixtures/eye-region";
 
 const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
   name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),

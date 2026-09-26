@@ -10,6 +10,7 @@ import type * as THREE from "three";
 import { invalidating, type FeatureRenderer, type FeatureRendererFactory, type SceneHostPort, type SurfaceUnderlay } from "../../../platform/api/scene";
 import { createMakeupStack, type LayeredMakeupSurface, type MakeupLayers } from "../../../engines/layered-makeup/render/makeup-stack";
 import { EYE_MAKEUP_ID } from "..";
+import { EYE_MAKEUP_REGION } from "../region";
 
 /** The core record's surface the eye makeup plate is (render-detail.ts `geometry.nodes.plate`). */
 export const EYE_PLATE_SURFACE = "plate";
@@ -30,7 +31,7 @@ function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
   if (!found) throw Error("The 3D preview has no eye plate.");
   const plate: THREE.SkinnedMesh = found;
   const detached: (() => void)[] = [];
-  const stack = createMakeupStack(plate, host.renderer.capabilities.getMaxAnisotropy(),
+  const stack = createMakeupStack(plate, host.renderer.capabilities.getMaxAnisotropy(), EYE_MAKEUP_REGION.fineGlitter,
     mesh => { detached.push(host.attach(mesh, { beside: plate })); });
   // The skin under the authored plate, which the plate blends over and lights once with the skin's own light (plate-blend.ts): read on
   // the drawn head, like the face decals' underlay, once per skin change and only when a layer first needs it. A plate not over the

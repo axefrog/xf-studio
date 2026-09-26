@@ -1,0 +1,13 @@
+{
+  // Typechecks the repository's experiment scripts (`experiments/<id>/*.ts`), many of which import the authoring
+  // code, as part of `bun run check`. They live outside this project, so `three` resolves to this project's types.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "three": ["./node_modules/@types/three"],
+      "three/addons/*": ["./node_modules/@types/three/examples/jsm/*"]
+    }
+  },
+  // Tracked scripts only: each experiment's ignored `generated/` output is never needed.
+  "include": ["../../../experiments/*/*.ts"]
+}

@@ -5,16 +5,16 @@ import { AuthoringGestures } from "../src/authoring-gestures";
 import { CollectionApplication } from "../src/collection-application";
 import { CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { eyeMakeupPort } from "../src/authoring-eye-makeup";
 import { looks } from "./fixtures/looks";
 import type { PresetCollection } from "../src/preset-collection";
-import { RecipeActions } from "../src/engines/layered-makeup/recipe-actions";
 import { StudioApplication } from "../src/studio-application";
 import { StudioFileOperations } from "../src/studio-file-operations";
-import { freshWorkspace } from "../src/workspace-state";
 import { recipeFile } from "../src/recipe-schema";
 import { registeredEditing } from "./gesture-test-adapter";
 import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { RecipeActions } from "../src/authoring-eye-makeup";
+import { freshWorkspace } from "./fixtures/eye-region";
+import { eyeMakeupPort } from "./fixtures/eye-region";
 
 function fixture() {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);

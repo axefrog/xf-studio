@@ -5,8 +5,8 @@ import { cancelsGesture } from "../src/gesture-cancel";
 import { IRREGULAR_RANGE_MESSAGE } from "../src/engines/layered-makeup/recipe-actions";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { freshWorkspace } from "../src/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 export function coreFixture() {
   const workspace = freshWorkspace();

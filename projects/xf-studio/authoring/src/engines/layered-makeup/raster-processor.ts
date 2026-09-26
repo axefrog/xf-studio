@@ -1,11 +1,13 @@
 import { createRasterJob, type Layer } from "./recipe";
 import { createFlakeJob, defaultFlakes, isIrregular, type FlakeMaps } from "./finish";
 import { createFlakeCatalogueJob, createRegionFlakeCatalogueJob, createFlakeBakeJob, createFlakeColourJob,
-  FLAKE_LIMITS, STUDIO_FINE_REGIONS } from "./flake-field";
+  FLAKE_LIMITS } from "./flake-field";
 import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
 import {isDirectGlint} from "./direct-glint-settings";
+import type { RasterRegion } from "./region";
 
-export type RasterRequest = { i: number; version: number; layer: Layer; size: number; bakeOptics?: boolean };
+/** One layer's raster. `region` is the plain-data part of the layer's region (its mirror and fine-Glitter scope). */
+export type RasterRequest = { i: number; version: number; layer: Layer; size: number; region: RasterRegion; bakeOptics?: boolean };
 export type GlitterStats={generated:number;regionRetained:number;maskCentres:number;
   paintedPixels:number;coveredPixels:number;quarterCoveragePixels:number;halfCoveragePixels:number};
 export type RasterResponse = { i: number; version: number } & (
@@ -38,7 +40,8 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
         }
       };
       try {
-        const start = now(), layer = snapshot.layer, size = snapshot.size;
+        const start = now(), layer = snapshot.layer, size = snapshot.size, region = snapshot.region;
+        const fineRegions = region.fineGlitter.regions;
         const candidate=layer.flakes;
         const irregular = layer.enabled && layer.finish === "glitter" && isIrregular(candidate);
         const alphaKey = irregular ? maskAlphaKey(layer,size) : undefined;
@@ -53,7 +56,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
             return pixel===size*size;
           }},4096);
         } else {
-          const job = createRasterJob(layer, size);
+          const job = createRasterJob(layer, size, region.mirror);
           await drain(job,16);
           data = job.data;
         }
@@ -61,7 +64,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
           glitterStats:GlitterStats|undefined;
         if (!token.cancelled && irregular) {
           const settings=candidate as import("./flake-field").IrregularFlakes;
-          const opticalKey=studioIrregularOpticalKey(settings,size), fine=settings.count>FLAKE_LIMITS.count;
+          const opticalKey=studioIrregularOpticalKey(settings,size,region.fineGlitter), fine=settings.count>FLAKE_LIMITS.count;
           let centres=cachedCentres?.key===opticalKey?cachedCentres.uv:undefined;
           if (fine) {
             // Fixed atlas scope keeps the optical key independent of shape.
@@ -72,13 +75,13 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
               const end=Math.min(size*size,pixel+work);
               for(;pixel<end;pixel++)if(data[pixel*4+3]){
                 const x=pixel%size,y=Math.floor(pixel/size);
-                if(!STUDIO_FINE_REGIONS.some(r=>x/size>=r.minU&&(x+1)/size<=r.maxU &&
+                if(!fineRegions.some(r=>x/size>=r.minU&&(x+1)/size<=r.maxU &&
                   y/size>=r.minV&&(y+1)/size<=r.maxV)){outside=true;break;}
               }
               return pixel===size*size || outside;
             }},4096);
             if (!token.cancelled && outside) {
-              post({i:token.i,version:token.version,cancelled:true,error:"Fine Glitter supports the eye UV area; move or narrow this shape before previewing it."});
+              post({i:token.i,version:token.version,cancelled:true,error:`Fine Glitter supports ${region.wording.area}; move or narrow this shape before previewing it.`});
               return;
             }
           }
@@ -86,7 +89,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
           if (snapshot.bakeOptics || !coverage) {
             await pause();
             if (!token.cancelled) {
-              const catalogueJob=fine ? createRegionFlakeCatalogueJob(settings,STUDIO_FINE_REGIONS)
+              const catalogueJob=fine ? createRegionFlakeCatalogueJob(settings,fineRegions)
                 : createFlakeCatalogueJob(settings);
               await drain(catalogueJob,128);
               await pause();

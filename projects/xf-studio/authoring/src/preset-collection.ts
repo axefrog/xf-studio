@@ -4,8 +4,8 @@ import { accentConstants, parseExportDiagnostics, surfaceKey, type ExportDiagnos
 import { checkRegionPlan } from "./glitter-region";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
-import type { Recipe, RecipeFile } from "./engines/layered-makeup/recipe";
-import { EYE_MAKEUP_FEATURE, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readRecipeFile, recipeFile } from "./recipe-schema";
+import type { Recipe } from "./engines/layered-makeup/recipe";
+import { EYE_MAKEUP_FEATURE, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readRecipeFile, recipeFile, type RecipeFile } from "./recipe-schema";
 import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 
 /**

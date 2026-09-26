@@ -10,14 +10,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { derivePlateDocuments } from "../../src/eye-plate-cut";
-import { bakeCollection } from "../../src/package-bake";
-import { preparePackageCollection } from "../../src/package-filter";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../../src/package-resources";
 import { liftPlate } from "../../src/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../eye-plate-fixture";
 import { plateWindow } from "../window-fixture";
 import { COLLECTION_FIXTURES, readFixture } from "./capture-plan-golden";
 import { digest } from "./workspace-observable";
+import { bakeCollection, preparePackageCollection } from "./eye-exporter";
 
 /** Ordinary fixtures: the committed collections whose presets carry no glitter knob (the plan golden covers all of them). */
 export const ORDINARY_FIXTURES = COLLECTION_FIXTURES.filter(path =>

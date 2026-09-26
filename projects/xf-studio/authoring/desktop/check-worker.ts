@@ -1,5 +1,6 @@
 import { parseCollection } from "../src/preset-collection";
 import { preflightPackageCollection } from "../src/package-preflight";
+import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
 import { parsePlateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import type { CheckRequest } from "./check-runner";
 
@@ -16,7 +17,7 @@ self.onmessage = (event: MessageEvent<CheckRequest>) => {
     return;
   }
   try {
-    const { packagedCollectionJson: _snapshot, ...result } = preflightPackageCollection(collection, plate);
+    const { packagedCollectionJson: _snapshot, ...result } = preflightPackageCollection(collection, EYE_MAKEUP_REGION, plate);
     self.postMessage({ kind: "success", result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Package Check failed.";

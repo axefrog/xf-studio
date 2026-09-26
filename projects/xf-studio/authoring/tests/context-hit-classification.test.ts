@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { createUVEditor } from "../src/uv-editor";
 import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
 import type { ViewportHit } from "../src/viewport-attachment";
+import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /** A closed square with zero Bézier arms and no warps, so shape coverage is the square itself. */
 const square = (layer: Layer, u: number, v: number, size = .2) => {
@@ -43,7 +44,7 @@ test("head-view context hits: controls, makeup of any visible layer, head, then 
     let frame = () => {};
     const viewer = { renderer: { domElement: canvas }, scene, camera, plate, head, eyes, controls: { enabled: true },
       onFrame: (fn: () => void) => { frame = fn; } };
-    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
+    const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], { region: EYE_REGION,
       layer: () => selected, layers: () => recipe.layers, selected: () => 0, select: () => {},
       selectedField: () => undefined, selectField: () => {}, begin: () => {}, apply: () => false, cancel: () => {}, message: () => {},
     });
@@ -102,7 +103,7 @@ test("UV-view context hits: selected makeup, other visible makeup, empty UV spac
     const selected = square(recipe.layers[0], .3, .2, .08), other = square(recipe.layers[1], .45, .2, .08);
     recipe.layers = [selected, other];
     const element = () => ({ setAttribute() {}, disabled: false, textContent: "" }) as any;
-    const editor = createUVEditor(canvas, { both: element(), single: element(), other: element(), fit: element(), note: element() }, {
+    const editor = createUVEditor(canvas, { both: element(), single: element(), other: element(), fit: element(), note: element() }, { region: EYE_REGION,
       recipe: () => recipe, layer: () => selected, selected: () => 0, selectedField: () => undefined,
       select: () => {}, selectField: () => {}, canvases: () => [], albedo: () => undefined,
       begin: () => {}, apply: () => false, cancel() {}, persist() {}, message() {},

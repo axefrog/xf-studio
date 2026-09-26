@@ -3,8 +3,8 @@ import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength
 import type { Finish, Flakes } from "./finish";
 import type {IrregularFlakes} from "./flake-field";
 import type {DirectGlintFlakes} from "./direct-glint-settings";
-import { LAYER_MODELS, RECIPE_FILE_SCHEMAS, schemaRank, type LayerModelRegistry, type RecipeFileSchema,
-  type RecipeSchema } from "./layer-models";
+import type { LayerModel, LayerModelRegistry } from "./layer-models";
+import { mirrored, type Mirror } from "./region";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
@@ -46,94 +46,24 @@ export type Layer = {
   softness: Softness;
 };
 /**
- * The in-memory recipe: eye makeup's part (`xfs/eye-makeup-part-2`). It has no recipe-level
- * schema: each layer's optical models name themselves and are validated by the model registry
- * (`layer-models.ts`), so choosing a model on one layer never changes the recipe as a whole.
+ * The in-memory recipe: a feature's layered-makeup part (eye makeup's is `xfs/eye-makeup-part-2`). It has no
+ * recipe-level schema: each layer's optical models name themselves and are validated by the feature's model
+ * registry (`layer-models.ts`), so choosing a model on one layer never changes the recipe as a whole. Older
+ * portable forms (eye makeup's recipe files) are read by the feature's own lineage (`recipe-schema.ts`).
  */
 export type Recipe = {
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
-export type { RecipeSchema } from "./layer-models";
-/**
- * A recipe file (`xfs/recipe-N`), and the body of `xfs/eye-makeup-part-1`: a recipe with the
- * schema that gates its layer models. Writers use the oldest schema that holds it (`recipeFile`).
- */
-export type RecipeFile = { schema: RecipeSchema } & Recipe;
 // Operational import/preview budget, separate from preset catalogue size.
 export const MAX_LAYERS = 32;
 export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
-export function initialRecipe(): Recipe {
-  return {
-    uv: "gltf-uv0-top-left",
-    layers: Array.from({ length: 4 }, (_, i) => convertToBezier({
-      id: `layer-${i + 1}`,
-      name: ["Petal wash", "Fine wing", "Inner light", "Accent"][i],
-      enabled: i === 0,
-      color: ["#905774", "#201b29", "#d4ae86", "#328c94"][i],
-      finish: i === 2 ? "regular" : "matte",
-      opacity: 0.85,
-      strength: { mode: "smooth-boundary", blend: DEFAULT_STRENGTH_BLEND },
-      softness: { mode: "uniform" },
-      feather: i === 1 ? 0.0015 : 0.012,
-      symmetry: true,
-      pathMode: "catmull-rom",
-      points: (i === 1
-        ? [
-            [0.31, 0.241],
-            [0.36, 0.231],
-            [0.423, 0.242],
-            [0.454, 0.255],
-            [0.392, 0.249],
-            [0.345, 0.246],
-          ]
-        : [
-            [0.303, 0.231],
-            [0.33, 0.206],
-            [0.378, 0.206],
-            [0.427, 0.229],
-            [0.439, 0.253],
-            [0.369, 0.235],
-          ]
-      ).map(([u, v]) => ({ u, v, weight: 1 })),
-      fields: [{ id: `layer-${i + 1}-field-1`, u: 0.342, v: 0.223, du: 0, dv: 0, radius: 0.07 }],
-    })),
-  };
-}
-/** Starting contour for a newly added or reset layer. Keep the historical
- * four-layer startup recipe above intact for existing drafts and examples. */
-export function newLayerTemplate(): Layer {
-  const base = initialRecipe().layers[0];
-  return convertToBezier({
-    ...base,
-    feather: 0.006,
-    points: [
-      [0.311, 0.236], // inner lid tip
-      [0.335, 0.215], // inner upper edge
-      [0.402, 0.214], // outer upper edge
-      [0.434, 0.246], // outer lid tip
-    ].map(([u, v]) => ({ u, v, weight: 1 })),
-    fields: [],
-    pathMode: "catmull-rom",
-  });
-}
-/** A recipe with no layers: the eye-makeup part of a new preset. */
+/** A recipe with no layers: the part of a new preset. */
 export const emptyRecipe = (): Recipe => ({ uv: "gltf-uv0-top-left", layers: [] });
-/** First-run authored content. Historical initialRecipe remains a sample/test fixture. */
-export function starterRecipe(): Recipe {
-  const layer = newLayerTemplate();
-  return { uv: "gltf-uv0-top-left", layers: [
-    { ...layer, id: "layer-1", name: "Eye makeup" },
-  ] };
-}
 export const DEFAULT_SHIFT = { color: "#3fd4c2", strength: 0.6 } as const;
-export const RECIPE_FILE_MESSAGE = `Expected an XF Studio recipe with up to ${MAX_LAYERS} layers, or a legacy four-layer recipe.`;
-/**
- * Read a recipe: a recipe file of any schema (`eye-artistry/recipe-1`, `xfs/recipe-2`…`11`), which
- * migrates on read exactly as it always has, or an in-memory recipe (an `xfs/eye-makeup-part-2`
- * body, which has no `schema`). Returns the in-memory recipe (a copy).
- */
+/** Why a value is not a recipe (a feature's own readers may name their older forms instead). */
+export const RECIPE_MESSAGE = `Expected an XF Studio recipe with up to ${MAX_LAYERS} layers.`;
 /**
  * The look history's chunks of a recipe (feature-module platform §3): its header (the recipe with its
  * layer count in place of the layers, so key order survives), then one chunk per layer. An edit of
@@ -147,50 +77,41 @@ export function joinRecipe(chunks: readonly unknown[]): Recipe {
   if (!header || typeof header !== "object" || header.layers !== layers.length) throw Error("A step of this look's Undo history is damaged.");
   return { ...header, layers } as Recipe;
 }
-export function parseRecipe(value: unknown, models: LayerModelRegistry = LAYER_MODELS): Recipe {
-  return withoutSchema(readRecipe(value, "any", models));
-}
 /**
- * Read a recipe file only, keeping its schema as the in-memory recipe used to (older schemas
- * become `xfs/recipe-7`; 8–11 stay). The collection-1 readers use it, so their output is unchanged.
+ * Read an in-memory recipe (a copy), validating every layer against the feature's `models`. A value with a
+ * `schema` is not an in-memory recipe (older portable forms are the feature's to read, with `readLayers`).
+ * `invalid` is the message when the value is not a recipe at all.
  */
-export function parseRecipeFile(value: unknown, models: LayerModelRegistry = LAYER_MODELS): RecipeFile {
-  return readRecipe(value, "file", models) as RecipeFile;
-}
-/** Read an `xfs/eye-makeup-part-2` body only: an in-memory recipe, with no `schema`. */
-export function parseRecipePart(value: unknown, models: LayerModelRegistry = LAYER_MODELS): Recipe {
-  return readRecipe(value, "part", models);
-}
-/** The in-memory form of a parsed recipe file: the same copy without its `schema`. */
-function withoutSchema(recipe: Recipe & { schema?: unknown }): Recipe {
-  if (!("schema" in recipe)) return recipe;
-  const { schema: _schema, ...rest } = recipe;
-  return rest;
+export function parseRecipe(value: unknown, models: LayerModelRegistry, invalid = RECIPE_MESSAGE): Recipe {
+  const r = value as { uv: Recipe["uv"]; layers: unknown[] } | null;
+  if (!r || typeof r !== "object" || "schema" in r || r.uv !== "gltf-uv0-top-left" || !Array.isArray(r.layers) ||
+    r.layers.length > MAX_LAYERS)
+    throw Error(invalid);
+  return structuredClone({ ...r, layers: readLayers(r.layers, models) }) as Recipe;
 }
 
-// Bound imported work before it reaches raster loops; imports are atomic.
-function readRecipe(value: unknown, form: "any" | "file" | "part", models: LayerModelRegistry): Recipe & { schema?: RecipeSchema } {
+/**
+ * The structural forms a recipe's layers use. The current form has them all; a feature's older portable forms
+ * (eye makeup's `xfs/recipe-N` files) may predate some, and its lineage says which (`recipe-schema.ts`):
+ * `fields` several named warp fields (else one unnamed `field`), `strength` pigment strength modes (else
+ * nearest-knot weights), `path` Bézier paths (else Catmull–Rom only), `softness` per-point edge softness.
+ */
+export type RecipeForms = Readonly<{ fields: boolean; strength: boolean; path: boolean; softness: boolean }>;
+export const CURRENT_FORMS: RecipeForms = Object.freeze({ fields: true, strength: true, path: true, softness: true });
+
+/**
+ * Validate and copy a recipe's layers, bounding imported work before it reaches raster loops (imports are
+ * atomic). `holds` limits which registered models the layers may hold (an older form's gate); without it every
+ * registered model is valid and an unregistered model ID is named as a newer build's (`NewerDataError`).
+ */
+export function readLayers(input: readonly unknown[], models: LayerModelRegistry, forms: RecipeForms = CURRENT_FORMS,
+  holds?: (model: LayerModel) => boolean): Layer[] {
   type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"]; softness?: Softness };
-  const r = value as { schema: RecipeFileSchema; uv: Recipe["uv"]; layers: ImportedLayer[] };
-  // A file names its schema; an in-memory recipe (part-2) has none and takes the newest structural forms.
-  const file = !!r && typeof r === "object" && "schema" in r;
-  if (
-    !r ||
-    (file ? form === "part" || !RECIPE_FILE_SCHEMAS.includes(r.schema) : form === "file") ||
-    r.uv !== "gltf-uv0-top-left" ||
-    !Array.isArray(r.layers) ||
-    r.layers.length > MAX_LAYERS ||
-    (r.schema === "eye-artistry/recipe-1" && r.layers.length !== 4)
-  )
-    throw Error(RECIPE_FILE_MESSAGE);
   const num = (x: unknown, a: number, b: number) =>
     typeof x === "number" && Number.isFinite(x) && x >= a && x <= b;
-  // Structural forms by schema: a file uses its schema's; part-2 uses the newest (recipe-11's).
-  const rank = file ? schemaRank(r.schema) : RECIPE_FILE_SCHEMAS.length - 1;
-  const since = (schema: RecipeFileSchema) => rank >= schemaRank(schema);
   const ids = new Set<string>();
   const layers: Layer[] = [];
-  for (const l of r.layers) {
+  for (const l of input as ImportedLayer[]) {
     if (
       !l ||
       typeof l !== "object" ||
@@ -212,8 +133,8 @@ function readRecipe(value: unknown, form: "any" | "file" | "part", models: Layer
     )
       throw Error("Invalid layer settings.");
     ids.add(l.id);
-    // Each optical block is validated by its own model; a file holds only the models its schema does.
-    models.check(l, file ? r.schema : undefined);
+    // Each optical block is validated by its own model; an older form holds only the models its gate allows.
+    models.check(l, holds);
     if (
       !Array.isArray(l.points) ||
       l.points.length < 3 ||
@@ -223,7 +144,7 @@ function readRecipe(value: unknown, form: "any" | "file" | "part", models: Layer
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentSoftness = since("xfs/recipe-6");
+    const currentSoftness = forms.softness;
     if (!currentSoftness && ("softness" in l || l.points.some(p => "feather" in p)))
       throw Error("Ambiguous edge softness format.");
     let softness: Softness = {mode: "uniform"};
@@ -238,7 +159,7 @@ function readRecipe(value: unknown, form: "any" | "file" | "part", models: Layer
       if (l.points.some(p => (s.mode === "boundary" || "feather" in p) && !num(p.feather, MIN_FEATHER, MAX_FEATHER)))
         throw Error("Point edge softness is outside the supported range.");
     }
-    const currentPath = since("xfs/recipe-5");
+    const currentPath = forms.path;
     if (!currentPath && ("pathMode" in l || l.points.some(p => "handles" in p)))
       throw Error("Ambiguous path format.");
     const pathMode = currentPath ? l.pathMode : "catmull-rom";
@@ -263,7 +184,7 @@ function readRecipe(value: unknown, form: "any" | "file" | "part", models: Layer
           throw Error("Aligned handles must point in opposite directions.");
       }
     }
-    const currentStrength = since("xfs/recipe-4");
+    const currentStrength = forms.strength;
     if (!currentStrength && "strength" in l) throw Error("Ambiguous pigment strength format.");
     let strength: Strength = { mode: "legacy-nearest" };
     if (currentStrength) {
@@ -275,7 +196,7 @@ function readRecipe(value: unknown, form: "any" | "file" | "part", models: Layer
         throw Error("Invalid pigment strength settings.");
       strength = s;
     }
-    const current = since("xfs/recipe-3");
+    const current = forms.fields;
     if (current ? "field" in l : "fields" in l)
       throw Error("Ambiguous vector field format.");
     const fields = current ? l.fields : [{ ...l.field, id: `${l.id.slice(0, 72)}-field-1` }];
@@ -301,10 +222,7 @@ function readRecipe(value: unknown, form: "any" | "file" | "part", models: Layer
     const { field: _legacyField, fields: _fields, ...settings } = l;
     layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode, softness });
   }
-  if (!file) return structuredClone({ ...(r as object), layers }) as Recipe;
-  // Recipe 8–11 keep their schema; older files hold nothing recipe-7 does not.
-  const schema: RecipeSchema = schemaRank(r.schema) >= schemaRank("xfs/recipe-8") ? r.schema as RecipeSchema : "xfs/recipe-7";
-  return structuredClone({ ...r, schema, layers });
+  return layers;
 }
 export function curve(points: Point[], steps = 10): Point[] {
   if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);
@@ -356,14 +274,16 @@ export function warpFields(u: number, v: number, fields: readonly Field[]): [num
   }
   return [u - du, v - dv];
 }
+/** One layer's coverage at (u, v); a symmetric layer also covers its reflection across the feature's `mirror`. */
 export function coverage(
   u: number,
   v: number,
   l: Layer,
+  mirror: Mirror,
   polygon = curve(l.points),
 ): number {
   if (!l.enabled) return 0;
-  return preparedCoverage(u, v, l, polygon, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon).width);
+  return preparedCoverage(u, v, l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon).width);
 }
 function prepareLayerStrength(l: Layer, polygon: Point[]): PigmentStrength | undefined {
   // Keep the legacy arithmetic for uniform knots, including its last-bit linear
@@ -381,10 +301,10 @@ function prepareLayerSoftness(l: Layer, polygon: Point[]): {maxWidth: number; wi
   const field = preparePigmentStrength(polygon.map(p => ({...p, weight: ((p.feather ?? l.feather) - min) / span})), l.softness.blend);
   return {maxWidth: max, width: (u,v) => min + span * field(u,v)};
 }
-function preparedCoverage(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength, softness?: number | PigmentStrength): number {
-  return l.symmetry
-    ? Math.max(coverageAt(u, v, l, polygon, strength, softness), coverageAt(1 - u, v, l, polygon, strength, softness))
-    : coverageAt(u, v, l, polygon, strength, softness);
+function preparedCoverage(u: number, v: number, l: Layer, polygon: Point[], mirror: Mirror, strength?: PigmentStrength, softness?: number | PigmentStrength): number {
+  if (!l.symmetry) return coverageAt(u, v, l, polygon, strength, softness);
+  const [mu, mv] = mirrored(mirror)(u, v);
+  return Math.max(coverageAt(u, v, l, polygon, strength, softness), coverageAt(mu, mv, l, polygon, strength, softness));
 }
 function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength, softness?: number | PigmentStrength): number {
   [u, v] = warpFields(u, v, l.fields);
@@ -419,7 +339,7 @@ function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?:
 /** Raster-only preparation. Keep coverageAt above as the independent scalar
  * reference: these bounds skip only samples whose exact feather result is
  * already zero or one, without approximating either boundary integral. */
-function prepareRasterCoverage(l:Layer,polygon:Point[],strength:PigmentStrength|undefined,
+function prepareRasterCoverage(l:Layer,polygon:Point[],mirror:Mirror,strength:PigmentStrength|undefined,
   softness:{maxWidth:number;width:number|PigmentStrength}) {
   // Match the scalar loop's closing edge first, including nearest-edge ties.
   const edges=polygon.map((b,i)=>{
@@ -456,10 +376,19 @@ function prepareRasterCoverage(l:Layer,polygon:Point[],strength:PigmentStrength|
     }
     return x*x*(3-2*x)*(strength?strength(u,v):weight)*l.opacity;
   }
-  return l.symmetry?(u:number,v:number)=>Math.max(at(u,v),at(1-u,v)):at;
+  if(!l.symmetry)return at;
+  const twice=2*mirror.centre;
+  return mirror.axis==="u"?(u:number,v:number)=>Math.max(at(u,v),at(twice-u,v)):(u:number,v:number)=>Math.max(at(u,v),at(u,twice-v));
+}
+/** A symmetric layer's padded bounds grown to hold its reflection across `mirror`. */
+function mirroredBounds(b:{minU:number;maxU:number;minV:number;maxV:number},mirror:Mirror){
+  const twice=2*mirror.centre;
+  if(mirror.axis==="u"){const a=b.minU;b.minU=Math.min(b.minU,twice-b.maxU);b.maxU=Math.max(b.maxU,twice-a);}
+  else{const a=b.minV;b.minV=Math.min(b.minV,twice-b.maxV);b.maxV=Math.max(b.maxV,twice-a);}
+  return b;
 }
 // Alpha-only design: white RGB provides colour-independent masks and clean edges.
-export function createRasterJob(l: Layer, size: number) {
+export function createRasterJob(l: Layer, size: number, mirror: Mirror) {
   if (!Number.isInteger(size) || size < 1 || size > 4096) throw Error("Invalid raster size.");
   l = structuredClone(l);
   const data = new Uint8ClampedArray(size * size * 4);
@@ -468,24 +397,17 @@ export function createRasterJob(l: Layer, size: number) {
     data[i] = data[i + 1] = data[i + 2] = 255;
   const strength = prepareLayerStrength(l, polygon);
   const softness = prepareLayerSoftness(l, polygon);
-  const sample=prepareRasterCoverage(l,polygon,strength,softness);
+  const sample=prepareRasterCoverage(l,polygon,mirror,strength,softness);
   const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
-  let minU = Math.min(...polygon.map((p) => p.u)) - pad,
-    maxU = Math.max(...polygon.map((p) => p.u)) + pad;
-  if (l.symmetry) {
-    const a = minU;
-    minU = Math.min(minU, 1 - maxU);
-    maxU = Math.max(maxU, 1 - a);
-  }
-  const y0 = Math.floor(
-      clamp(Math.min(...polygon.map((p) => p.v)) - pad) * size,
-    ),
-    y1 = Math.ceil(clamp(Math.max(...polygon.map((p) => p.v)) + pad) * size);
+  const bounds = { minU: Math.min(...polygon.map((p) => p.u)) - pad, maxU: Math.max(...polygon.map((p) => p.u)) + pad,
+    minV: Math.min(...polygon.map((p) => p.v)) - pad, maxV: Math.max(...polygon.map((p) => p.v)) + pad };
+  const { minU, maxU, minV, maxV } = l.symmetry ? mirroredBounds(bounds, mirror) : bounds;
+  const y0 = Math.floor(clamp(minV) * size), y1 = Math.ceil(clamp(maxV) * size);
   const x0 = Math.floor(clamp(minU) * size), x1 = Math.ceil(clamp(maxU) * size);
-  // At power-of-two sizes both pixel-centre coordinates and 1-u are exact
+  // A mirror across u = 1/2 at power-of-two sizes: both pixel-centre coordinates and 1-u are exact
   // binary fractions. Symmetric pairs therefore invoke identical two samples
-  // in reverse order. Reuse that result; arbitrary sizes retain scalar sampling.
-  const paired=l.symmetry&&(size&(size-1))===0;
+  // in reverse order. Reuse that result; other mirrors and arbitrary sizes retain scalar sampling.
+  const paired=l.symmetry&&mirror.axis==="u"&&mirror.centre===.5&&(size&(size-1))===0;
   const workX0=paired?Math.min(x0,size-x1):x0,workX1=paired?Math.ceil(size/2):x1;
   let x = workX0, y = y0, pendingIndex=-1,pendingAlpha=0;
   let done = !l.enabled || x0 >= x1 || y0 >= y1;
@@ -515,16 +437,16 @@ export function createRasterJob(l: Layer, size: number) {
 
 /** One layer's coverage at authored (u, v), with the raster's own per-sample arithmetic, prepared once for
  * point queries (the package filter's plate-reach test). 0 for a disabled layer. */
-export function layerCoverageSampler(l: Layer): (u: number, v: number) => number {
+export function layerCoverageSampler(l: Layer, mirror: Mirror): (u: number, v: number) => number {
   if (!l.enabled) return () => 0;
   l = structuredClone(l);
   const polygon = curve(l.points);
-  return prepareRasterCoverage(l, polygon, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon));
+  return prepareRasterCoverage(l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon));
 }
 
 // Synchronous compiler/export callers retain the same exact pixel arithmetic.
-export function raster(l: Layer, size: number): Uint8ClampedArray<ArrayBuffer> {
-  const job = createRasterJob(l, size);
+export function raster(l: Layer, size: number, mirror: Mirror): Uint8ClampedArray<ArrayBuffer> {
+  const job = createRasterJob(l, size, mirror);
   job.advance(Infinity);
   return job.data;
 }
@@ -536,27 +458,27 @@ export function raster(l: Layer, size: number): Uint8ClampedArray<ArrayBuffer> {
  * coverage in alpha. The recipe and every editor or preview path keep using head UV.
  */
 export function rasterWindow(l: Layer, width: number, height: number,
-  window: { u0: number; u1: number; v0: number; v1: number }): Uint8ClampedArray<ArrayBuffer> {
+  area: { u0: number; u1: number; v0: number; v1: number }, mirror: Mirror): Uint8ClampedArray<ArrayBuffer> {
   if (![width, height].every(n => Number.isInteger(n) && n >= 1 && n <= 8192)) throw Error("Invalid raster size.");
-  if (!(window.u1 > window.u0 && window.v1 > window.v0)) throw Error("Invalid raster window.");
+  if (!(area.u1 > area.u0 && area.v1 > area.v0)) throw Error("Invalid raster window.");
   l = structuredClone(l);
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < data.length; i += 4) data[i] = data[i + 1] = data[i + 2] = 255;
   if (!l.enabled) return data;
   const polygon = curve(l.points);
   const strength = prepareLayerStrength(l, polygon), softness = prepareLayerSoftness(l, polygon);
-  const sample = prepareRasterCoverage(l, polygon, strength, softness);
+  const sample = prepareRasterCoverage(l, polygon, mirror, strength, softness);
   const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
-  let minU = Math.min(...polygon.map(p => p.u)) - pad, maxU = Math.max(...polygon.map(p => p.u)) + pad;
-  if (l.symmetry) { const a = minU; minU = Math.min(minU, 1 - maxU); maxU = Math.max(maxU, 1 - a); }
-  const minV = Math.min(...polygon.map(p => p.v)) - pad, maxV = Math.max(...polygon.map(p => p.v)) + pad;
-  const du = (window.u1 - window.u0) / width, dv = (window.v1 - window.v0) / height;
+  const bounds = { minU: Math.min(...polygon.map(p => p.u)) - pad, maxU: Math.max(...polygon.map(p => p.u)) + pad,
+    minV: Math.min(...polygon.map(p => p.v)) - pad, maxV: Math.max(...polygon.map(p => p.v)) + pad };
+  const { minU, maxU, minV, maxV } = l.symmetry ? mirroredBounds(bounds, mirror) : bounds;
+  const du = (area.u1 - area.u0) / width, dv = (area.v1 - area.v0) / height;
   // Texels whose centre lies in the padded bounds; the rest stay zero exactly as `raster` leaves them.
-  const x0 = Math.max(0, Math.floor((clamp(minU) - window.u0) / du)), x1 = Math.min(width, Math.ceil((clamp(maxU) - window.u0) / du));
-  const y0 = Math.max(0, Math.floor((clamp(minV) - window.v0) / dv)), y1 = Math.min(height, Math.ceil((clamp(maxV) - window.v0) / dv));
+  const x0 = Math.max(0, Math.floor((clamp(minU) - area.u0) / du)), x1 = Math.min(width, Math.ceil((clamp(maxU) - area.u0) / du));
+  const y0 = Math.max(0, Math.floor((clamp(minV) - area.v0) / dv)), y1 = Math.min(height, Math.ceil((clamp(maxV) - area.v0) / dv));
   for (let y = y0; y < y1; y++) {
-    const v = window.v0 + (y + .5) * dv;
-    for (let x = x0; x < x1; x++) data[(y * width + x) * 4 + 3] = Math.round(255 * sample(window.u0 + (x + .5) * du, v));
+    const v = area.v0 + (y + .5) * dv;
+    for (let x = x0; x < x1; x++) data[(y * width + x) * 4 + 3] = Math.round(255 * sample(area.u0 + (x + .5) * du, v));
   }
   return data;
 }

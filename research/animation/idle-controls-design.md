@@ -25,6 +25,8 @@ The bake and clip provenance are already recorded in [CC idle research](cc-idle.
 
 ## Exact integration points
 
+The locations are the code as inspected on 23 September 2026; the legacy `src/main.ts` shell has since been retired. <!-- historical-paths -->
+
 | Location | Change and invariant |
 |---|---|
 | `authoring/src/idle-animation.ts`: `update`, `setEnabled`, `seek` | Introduce paused and body/facial contribution state. Split time advancement from pose application, or guard only elapsed advancement. Seek must still apply immediately while paused. Contribution changes must reapply at the same time. Disable clears elapsed and paused state and restores exact captured locals; preserve subset preferences for the next enable. Repeated identical enable calls should not accidentally restart playback. |
@@ -36,6 +38,8 @@ The bake and clip provenance are already recorded in [CC idle research](cc-idle.
 | `authoring/public/index.html` | Pause/Resume button plus the two named checkboxes near the existing idle toggle. Disable unavailable controls clearly when assets fail. Keep user preferences recoverable rather than rewriting them on load failure. |
 
 The existing `setTime` loop approach already clamps frame increments to 0.1 seconds. Preserve that suspension policy unless deliberately changing it; resume should not accumulate all wall time spent paused or in a suspended tab. Sanitize non-finite delta inputs while touching the clock boundary.
+
+<!-- /historical-paths -->
 
 ## Meaningful verification
 

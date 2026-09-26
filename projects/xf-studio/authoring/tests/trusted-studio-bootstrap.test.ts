@@ -5,8 +5,8 @@ import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedStudioBootstrap } from "../src/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment } from "../src/viewport-attachment";
-import { freshWorkspace } from "../src/workspace-state";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 test("a presentation mounts from trusted services without any page controls", async () => {
   expect(typeof document).toBe("undefined");

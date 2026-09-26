@@ -1,6 +1,6 @@
+import { preparePackageCollection } from "./fixtures/eye-exporter";
 // A collection carrying a valid diagnostic glitter knob, for the hosts' PIPE-70 tests: the package library alone would
 // honour it, so only a host's own parsing keeps it from the Glitter route.
-import { preparePackageCollection } from "../src/package-filter";
 
 type Collection = { presets: { id: string; recipe: { layers: { id: string; symmetry: boolean }[] } }[] };
 

@@ -33,13 +33,14 @@ export function finishLabel(finish: Finish) {
   const name = canonicalFinish(finish);
   return name === "regular" ? "satin" : name === "iridescent" ? "colour-shifting" : name;
 }
-export function finishDescription(finish: Finish) {
+/** A finish's description; `surface` names where the region's makeup sits ("the lid"). */
+export function finishDescription(finish: Finish, surface: string) {
   return {
     matte: "Soft colour with little shine.",
     regular: "A smooth, gentle sheen without individual sparkles.",
     metallic: "A continuous metallic sheen without separate flakes.",
     glossy: "A smooth, wet-looking shine over colour. In game this is one sharp reflection; there is no separate clear coat.",
-    iridescent: "A duochrome: the colour turns toward a chosen shift colour as the lid curves away from view. Multichrome is still to come.",
+    iridescent: `A duochrome: the colour turns toward a chosen shift colour as ${surface} curves away from view. Multichrome is still to come.`,
     shimmer: "Fine reflective facets that sparkle close up and merge into a soft sheen at a distance.",
     glitter:
       "Distinct reflective flakes — an experimental glitter approximation.",

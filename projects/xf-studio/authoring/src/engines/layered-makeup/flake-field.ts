@@ -12,16 +12,11 @@ export const FLAKE_SUBSAMPLES = Object.freeze([Object.freeze([.25, .25]), Object
 export const FLAKE_SUBSAMPLES_16 = Object.freeze(Array.from({length: 16}, (_, i) => Object.freeze([(i % 4 + .5) / 4, (Math.floor(i / 4) + .5) / 4])));
 export type FlakeNormalStudyMode="surface-average"|"covered-average";
 export const defaultIrregularFlakes = (): IrregularFlakes => ({model: "irregular-planar-1", count: 16000, radius: .0012, spread: .7, tilt: .35, seed: 2077, color: "#f5df9f"});
-/** Browser-editor default, calibrated to the bounded fine-eye experiment. The
- * legacy 16k study default above remains reproducible as a separate fixture. */
+/** Browser-editor default, calibrated to the bounded fine-Glitter experiment (on the eye plate). The
+ * legacy 16k study default above remains reproducible as a separate fixture. Dense (fine) settings are
+ * generated only inside a region's fine-Glitter scope (region.ts). */
 export const defaultStudioIrregularFlakes = (): IrregularFlakes => ({model:"irregular-planar-1",count:350000,
   radius:.00045,spread:.7,tilt:.35,seed:2077,color:"#d6b69e"});
-/** The two regions cover the authored eye plate with margin. They are a
- * deliberate operational scope, not an image-space crop or a procedural tile. */
-export const STUDIO_FINE_REGIONS: readonly FlakeRegion[] = Object.freeze([
-  Object.freeze({minU:.20,maxU:.50,minV:.12,maxV:.36}),
-  Object.freeze({minU:.50,maxU:.80,minV:.12,maxV:.36}),
-]);
 export function validStudioIrregularSettings(value: unknown): value is IrregularFlakes {
   if (!value || typeof value!=="object" || Array.isArray(value)) return false;
   const p=value as IrregularFlakes;
