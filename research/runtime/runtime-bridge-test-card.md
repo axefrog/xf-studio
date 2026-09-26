@@ -85,6 +85,16 @@ Before it, the coordinator restages the `-writes` zip from the build record belo
 | S7 | C | `world_pause {paused: true}` and leave the world frozen; then `bridge_kill` | The world freezes, then moves again when the kill switch's restore runs (`RestoreAfterKill … "world_unfrozen":true … "save_lock_kept":true` and `evt=bridge.kill_restored` in the log); the CET label turns red. |
 | S8 | M | Load the safety save, quit to desktop. | Clean exit. Report "script-call check passed" (or the crash) to the coordinator, who then continues with the first session below in a new game start. |
 
+**Result, 26 September 2026 (build `c31156a`, game 2.31): passed.**
+
+| Step | Outcome |
+|---|---|
+| S2 | `script.call_context context=entEntity caller=$XFBridge route=InternalExecute tweakdb_getint=native_member tdbid_tostringdebug=native_member`: 2.31 registers both natives that crashed as member functions [runtime]. |
+| S3 | `script.describe` at the main menu returned `tweak_marker: 1`; the log shows `DescribeJson step: TweakDBInterface.GetInt next` then `script.returned … ok=true`. `has_player` was `true` at the main menu (the main menu has a player puppet at about `(0.01, 3.62, 0.01)`), not `false` as expected above. |
+| S5 | `script.describe`, `player_appearance` (female body and brain, `LifePaths.Corporate`, hair tag `Short`) and `photo_state` (91 menu items seen, FOV 43.0) all answered. |
+| S6 | `world_time_set` 21:00 moved the clock from 705,706 s to 766,800 s and took the save lock (`saving_locked: true`); the undo restored 705,706 s exactly. `capture.screenshot` worked through `printwindow` on the 3840×1600 window (downscaled to 1280×533). |
+| S7 | `world_pause` reported `frozen: true`; `bridge.kill` ran `RestoreAfterKill` once (`world_unfrozen: true`, `save_lock_kept: true`, `evt=bridge.kill_restored`); the CET label turned red. The freeze itself wasn't visible: nothing moved in view indoors. **Next time, check freeze and unfreeze with NPCs or traffic in view.** |
+
 ## First session: bridge checks
 
 Tool names are the MCP names; the CLI takes the dotted name (`bridge_ping` is `bun tools/bridge-client.ts run bridge.ping`). Every result carries a correlation id (`cid`) that also appears in the plugin log. Stop at the first unexpected result in steps 1–4 and send the red4ext logs.

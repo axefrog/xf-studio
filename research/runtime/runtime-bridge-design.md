@@ -155,7 +155,7 @@ Outside the game, one catalogue (`tools/api/catalogue.ts`) defines every command
    - RED4ext.SDK's own `ExecuteGlobalFunction`: `cpPlayerSystem` (`Scripting/Utils-inl.hpp`).
 4. **Not the thread or the engine phase** [runtime, source]: the calls ran on the main thread in the Running state tick, where CET's Lua runs too (§3.3), and `Status` worked there.
 
-**The fix** [offline; in game unverified]. Every call, to a native or a script function, goes through `CallFunction` (`native/src/plugin/ScriptCall.cpp`), which follows CET's recipe:
+**The fix** [runtime: script-call check passed on 26 September 2026, build `c31156a`, see the [test card](runtime-bridge-test-card.md#script-call-check-first)]. Every call, to a native or a script function, goes through `CallFunction` (`native/src/plugin/ScriptCall.cpp`), which follows CET's recipe:
 - a caller frame whose bytecode passes each argument by pointer: `ExternalVar` (`0x1B`) with the type and value pointers, then `ParamEnd` (`0x26`) (`core/ScriptFrame.cpp`, unit-tested byte for byte; opcodes from redscript's `crates/io/src/instr.rs`);
 - that frame's function set to a named dummy, `$XFBridge`, so a script error names the bridge as the caller;
 - the engine's internal execute (SDK hash `CBaseFunction_InternalExecute`, present in the 2.31 address library and used by the installed CET), with a context that is never null: the object for a member function, otherwise one `entEntity` instance made once and held by a handle that is never released;

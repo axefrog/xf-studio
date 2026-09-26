@@ -33,6 +33,8 @@ Why `exe+0x1e28769` happens (confidence high): the game's address library (`bin/
 
 **Reading a game crash offset:** the address library lists symbol names for a few engine functions (84 of its entries, including `rtti::Function::InternalCall` and `InternalCallNative`) with `section:offset` addresses; with the section base (`.text` at RVA `0x1000`) it turns a crash offset into "inside function X". `dumpbin /disasm /range:` on the installed executable (read only) then shows the faulting instruction's context.
 
+The fix, giving every call a context and a caller frame as CET does, passed its in-game check on 26 September 2026: the calls that crashed three times returned normally [runtime] ([test card](../research/runtime/runtime-bridge-test-card.md#script-call-check-first)).
+
 ### 2.2 The crash after a crash
 
 On this profile a crash is often followed by a second one at the next launch, before the main menu, and the launch after that works. The launch-time crashes fault at the same game offset (`exe+0xe6abad`) each time, which suggests one repeatable cause rather than chance. [hypothesis]: a file the game or a mod writes while running (a cache, settings or state file) is left half-written by the crash, read and rejected badly at the next start, then rewritten cleanly. Testable by listing files in the game folder, MO2's `overwrite/` and `%LOCALAPPDATA%\CD Projekt Red\` whose modification time falls between a crash and the failed launch.
