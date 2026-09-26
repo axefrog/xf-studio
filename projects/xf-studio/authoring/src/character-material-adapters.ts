@@ -3,7 +3,7 @@ import { createDoubleDiffuseDecalMaterial, doubleDiffuseParameters } from "./bro
 import { hairMaterialFromScalars, type ProfileEncoding } from "./hair-colour-model";
 import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL,
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
-import type { DetailSlot, RenderChunkMaterial, RenderTexture } from "./render-detail";
+import { decalFamilySlot, type DetailSlot, type RenderChunkMaterial, type RenderTexture } from "./render-detail";
 import { bakeOrder, bakeSurface, createLayeredMaterial, layeredBakeExtent, layeredGlobals, stackProblems, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
 import { createSkinMaterial, skinBaseTexels, skinParameters, skinRoughness, type SkinImage, type SkinMaterialHandle, type SkinParameters,
@@ -40,10 +40,15 @@ export type AdapterContext = {
    * the colour is read on whichever head the scene draws (head-skin-placement.ts).
    */
   underlay?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => THREE.BufferAttribute;
-  /** Face details: the skin colour and roughness under each vertex of a decal mesh, read on the drawn head; throws when unavailable. */
-  surface?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => DecalSurfaceUnderlay;
-  /** The resolved skin, when the skin was loaded first. */
+  /**
+   * Face and body details: the skin colour and roughness under each vertex of a decal mesh, read on the drawn head (or the body's skins,
+   * `skins`); throws when unavailable.
+   */
+  surface?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null, skins?: readonly ResolvedSkinSurface[]) => DecalSurfaceUnderlay;
+  /** The resolved skin, when the skin was loaded first (for the body: its first skin part, whose light the body's decals take). */
   skin?: ResolvedSkinSurface;
+  /** The body: every skin part loaded before its decals (the body, its feet and arms), which the decals read the skin under them on. */
+  skins?: readonly ResolvedSkinSurface[];
   /** How hair profile stops are decoded (knowledge/hair-shading.md §3). */
   profileEncoding: ProfileEncoding;
 };
@@ -248,7 +253,7 @@ const faceDecal: MaterialAdapter = {
     let underlay = false, surface: DecalSurfaceUnderlay["evidence"] | undefined;
     if (context.surface) {
       try {
-        const under = context.surface(mesh, context.skin ?? null);
+        const under = context.surface(mesh, context.skin ?? null, context.skins);
         mesh.geometry.setAttribute("xfsUnderlay", under.colour);
         mesh.geometry.setAttribute("xfsUnderRoughness", under.roughness);
         mesh.geometry.setAttribute("xfsUnderMetalness", under.metalness);
@@ -355,10 +360,10 @@ export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter
 
 /**
  * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that
- * template. On the face every member of the decal family goes through the one decal material.
+ * template. On the face and the body every member of the decal family goes through the one decal material.
  */
 export function materialAdapter(template: string | null, templateName?: string | null, slot?: DetailSlot): MaterialAdapter | undefined {
   const inputs = renderTemplate(template, templateName);
   if (!inputs) return undefined;
-  return slot === "face" && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
+  return slot && decalFamilySlot(slot) && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
 }

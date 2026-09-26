@@ -85,7 +85,7 @@ test("far narrow-FOV framing survives reload but out-of-range orbit does not", (
   const state = freshWorkspace();
   state.preview.camera = { position: [.03, 1.69, -3.02], target: [.03, 1.69, .005], fov: 10 };
   expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.camera).toEqual(state.preview.camera);
-  state.preview.camera.position[2] = -4;
+  state.preview.camera.position[2] = -5.5;
   expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.camera).toBeUndefined();
 });
 

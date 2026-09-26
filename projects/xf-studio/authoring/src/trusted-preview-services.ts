@@ -49,6 +49,7 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
       motion.restore();
       const preview = new PreviewActions(initial, ports.preview);
       ports.preview.setPiercings(initial.piercings);
+      ports.preview.setBody?.(initial.body ?? true);
       if (initial.camera) preview.dispatch({ kind: "camera.restore", camera: initial.camera });
       return { preview, motion };
     },

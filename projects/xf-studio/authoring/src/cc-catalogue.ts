@@ -137,6 +137,8 @@ export interface CcOption {
   readonly enabled: boolean;
   readonly editTags: readonly string[];
   readonly censorFlag: string;
+  /** The censorship rule (cco-model.ts `censor`): what the game does with this option while it censors the flag; absent when none. */
+  readonly censor?: { readonly flag: string; readonly action: "activate" | "deactivate" };
   /** Switchers whose choices name this option: it is active only through them (rule R5). */
   readonly controlledBy: readonly string[];
   /** Consumer groups that list it (`TPP`, `face`, `hairs`, …). */
@@ -286,7 +288,8 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
       category: presentation?.randomizeCategory ?? "Body", categoryExplicit: presentation?.categoryExplicit ?? false,
       uiSlot: option.uiSlot, uiSlots: option.type === "switcher" ? [...option.uiSlots] : [],
       link: option.link ? { key: option.link, controller: option.linkController } : null, hidden: option.hidden, enabled: option.enabled,
-      editTags: [...option.editTags], censorFlag: presentation?.censorFlag ?? "0", controlledBy: controlledBy.get(id) ?? [],
+      editTags: [...option.editTags], censorFlag: presentation?.censorFlag ?? "0", ...(option.censor ? { censor: { ...option.censor } } : {}),
+      controlledBy: controlledBy.get(id) ?? [],
       groups: groups.get(id) ?? [], app: option.type === "appearance" && option.resource ? { ...option.resource } : null,
       useThumbnails: presentation?.useThumbnails ?? false, defaultChoice, choices, provenance: provenance(option.definedBy),
       targets: option.type === "switcher" ? [...new Set(option.options.flatMap(choice => choice.names))] : [],

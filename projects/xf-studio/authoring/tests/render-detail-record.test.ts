@@ -57,19 +57,27 @@ const character = (): CharacterDetail => ({
           { template: null, opacity: 0, matTile: 1, tilingMultiplier: 1, offsetU: 0, offsetV: 0, mbTile: 1, microblendContrast: 1, microblendNormalStrength: 0,
             microblendOffsetU: 0, microblendOffsetV: 0, colorScale: [1, 1, 1], normalStrength: 0, roughLevelsIn: [1, 0], roughLevelsOut: [1, 0],
             metalLevelsIn: [1, 0], metalLevelsOut: [1, 0], colorMaskLevelsIn: [0, 1], colorMaskLevelsOut: [0, 1], names: { colorScale: "None?",
-              normalStrength: "None?", roughLevelsIn: "None?", roughLevelsOut: "None?", metalLevelsIn: "None?", metalLevelsOut: "None?" }, textures: {} }] } })) }],
+              normalStrength: "None?", roughLevelsIn: "None?", roughLevelsOut: "None?", metalLevelsIn: "None?", metalLevelsOut: "None?" }, textures: {} }] } })) },
+    // A body part: the body skin with the breast shape the resolver applied to it (the body's own shapes, not the head's).
+    { id: "body:body_color:t0_body:6", slot: "body", option: "body_color", definition: "t0_000_body__03_senna", component: "t0_body",
+    geometry: { ...resource(`${sha("e")}.glb`, "e"), depotPath: "base\\body.morphtarget", depotHash: "6", morphTargets: true },
+    morphs: ["breast_big_breast"], renderChunks: 8, chunks: [0, 1], materials: [0, 1].map(chunk => ({ chunk, name: "skin1", template: "base\\materials\\skin.mt",
+      templateName: "skin", materialPriority: "EMP_Normal", scalars: { TintScale: 0.7 }, colours: {}, textures: { Albedo: texture() }, profiles: {}, skinProfiles: {},
+      gradients: {} })) }],
   slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "face", state: "shown", label: "lipstick (red)" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
-    { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" }],
+    { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" },
+    { slot: "body", state: "shown", label: "body, arms, underwear" }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
   geometry: { ...resource("head.glb"), nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" }, morphs: [] },
   textures: Object.fromEntries(["head.albedo", "head.normal", "head.roughness", "eyes.albedo"].map(slot => [slot, resource("head-color.png")])) });
 
 describe("render record versions", () => {
-  test("v7 carries the character record with its piercings and layered stacks, and no choices to try; parsing is lossless and idempotent", () => {
+  test("v8 carries the character record with its piercings, layered stacks and body (with its own shapes), and no choices to try; parsing is lossless and idempotent", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-7");
-    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-8");
+    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body"]);
+    expect(parseCharacterDetail(record).components.find(item => item.slot === "body")?.morphs).toEqual(["breast_big_breast"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(parseRenderDetail(record)).toEqual(record);
     // The retired tried-choice fields are not read (PIPE-82): every creator choice is the character context's.
@@ -85,13 +93,13 @@ describe("render record versions", () => {
     const shown = (r: CharacterDetail) => r.slots.filter(slot => slot.state === "shown").map(slot => slot.slot);
     // An over-long layer CName breaks only its piercing part: the part is left out, the slot says so, and the V is shown.
     const cname = parse(r => { (r.components[4]!.materials[0]!.layered!.layers[0]!.names as { colorScale: string }).colorScale = "c".repeat(130); });
-    expect(cname.components.map(item => item.slot)).toEqual(["skin", "face", "hair", "eyes"]);
+    expect(cname.components.map(item => item.slot)).toEqual(["skin", "face", "hair", "eyes", "body"]);
     expect(cname.slots.find(slot => slot.slot === "piercings")).toMatchObject({ state: "unavailable" });
-    expect(shown(cname)).toEqual(["skin", "face", "hair", "eyes"]);
+    expect(shown(cname)).toEqual(["skin", "face", "hair", "eyes", "body"]);
     // More parts than a record carries: the first ones are kept, and the note says the rest were left out.
     const many = parse(r => { const part = r.components[4]!; r.components.push(...Array.from({ length: 100 }, (_, i) => ({ ...part, id: `${part.id}:${i}` }))); });
     expect(many.components.length).toBe(RECORD_LIMITS.components);
-    expect(many.provenance.notes.at(-1)).toMatch(/beyond the first 96 \(9\)/);
+    expect(many.provenance.notes.at(-1)).toMatch(/beyond the first 96 \(10\)/);
   });
 
   test("a layered stack is checked; what breaks a rule is left out alone", () => {
@@ -114,7 +122,7 @@ describe("render record versions", () => {
     expect(() => parse(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
   });
 
-  test("v1 stays the core head, and a v7 reader accepts it under every version; v2 to v6 characters are refused plainly, as a version error", () => {
+  test("v1 stays the core head, and a v8 reader accepts it under every version; v2 to v7 characters are refused plainly, as a version error", () => {
     expect(parseRenderDetail(core())).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: CHARACTER_DETAIL_SCHEMA })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-2" })).toMatchObject({ detail: "core-head" });
@@ -122,8 +130,10 @@ describe("render record versions", () => {
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-5" })).toMatchObject({ detail: "core-head" });
     // A newer record (a host updated while the page ran) is a version error the page words, not a silent failure.
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-8" })).toThrow(RenderDetailVersionError);
-    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-8" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-9" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-9" })).toThrow(RenderDetailVersionError);
+    // A v7 character record (no body slot) is prepared again, never read.
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
     expect(() => parseRenderDetail({ ...core(), schema: "xfs/elsewhere" })).toThrow("unsupported record version");
     // A v6 character record (with choices to try) is prepared again, never read (PIPE-82).
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-6" })).toThrow(RenderDetailVersionError);
@@ -178,6 +188,12 @@ describe("render record versions", () => {
     expect(bad(r => { (face(r).materials[0] as { materialPriority: string }).materialPriority = "front"; })).toThrow("part left out");
     expect(bad(r => { delete (face(r).materials[0] as { templateName?: unknown }).templateName; })).toThrow("part left out");
     expect(bad(r => { (face(r).materials[0] as { templateName: string }).templateName = "mesh_decal/x"; })).toThrow("part left out");
+    // The body: its outcome is part of the frame; its shapes are a short list of shape-key names.
+    const body = (r: CharacterDetail) => r.components.find(item => item.slot === "body")!;
+    expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "body"); })).toThrow("slot outcomes");
+    expect(bad(r => { (body(r) as { morphs: unknown }).morphs = "breast"; })).toThrow("part left out");
+    expect(bad(r => { body(r).morphs = Array.from({ length: 17 }, (_, i) => `m${i}`); })).toThrow("part left out");
+    expect(bad(r => { body(r).morphs = ["../x"]; })).toThrow("part left out");
   });
 });
 
@@ -212,14 +228,18 @@ describe("rendering boundary", () => {
     String.raw`makeup_(?:lips|eyes|freckles|cheeks)_\d|pimples_\d|personal_slot|scars_\d|tattoo_\d|\bxfea|axefrog|eye.artistry.ccxl|_emp_front|` +
     String.raw`red_08|cheeks_red|frecles|freckles_brown|lips_color__|makeup_color__|` +
     // Piercings: no particular style, part or colour (the creator slot `piercings_color` and switcher `piercings` are the game's rules).
-    String.raw`piercings_\d\d|earring__\d\d|earring_\d\d|i0_000_pwa|i1_000_pwa`, "i");
+    String.raw`piercings_\d\d|earring__\d\d|earring_\d\d|i0_000_pwa|i1_000_pwa|` +
+    // The body: no particular body, arms, feet or nails resource, and no particular tattoo, nail colour, anatomy or size choice (the
+    // consumer groups `TPP_Body` and `holstered_default_tpp` and the creator slots are the game's rules).
+    String.raw`t0_000_p[wm]a|a0_000_p[wm]a|l0_000_p[wm]a|tx_000_p[wm]a|body_tattoo_\d|body_scars_\d|nails_\w+__multilayer|nails_beige|genitals_0\d|nipples_0\d|breast_(?:big|small)|female_00\d`, "i");
   test("the face-detail identifiers the boundary looks for: particular choices and packs, never the game's slots or templates", () => {
     for (const offending of ["xfea_layer1_e04", "base\\axefrog\\xf-eye-artistry-ccxl\\xfea.mesh", "makeupLips_glossy_08", "makeupCheeks_09",
       "hx_000_pwa__basehead_makeup_lips_01", "mesh_decal__emp_front.mt", "cyberware_03", "facial_tattoo_02", "lips_color__06_red_02.mi",
-      "piercings_09", "piercings_12", "i0_000_pwa__earring__03_black", "i0_000__earring_14.app", "i1_000_pwa_earring__basehead_01.ent"])
+      "piercings_09", "piercings_12", "i0_000_pwa__earring__03_black", "i0_000__earring_14.app", "i1_000_pwa_earring__basehead_01.ent",
+      "t0_000_pwa_base__full.morphtarget", "a0_000_pwa_base__nails_01_red_heart__multilayer", "body_tattoo_01", "genitals_04", "t0_000_wa_base__full_breast_big"])
       expect(PER_MOD.test(offending)).toBe(true);
     for (const allowed of ["makeupLips_color", "makeupEyes_color", "cyberware", "facial_tattoo", "mesh_decal", "mesh_decal_double_diffuse", "EMP_Front", "face", "TPP",
-      "piercings_color", "piercings", "multilayered.mt"])
+      "piercings_color", "piercings", "multilayered.mt", "TPP_Body", "holstered_default_tpp", "body_color", "underpants", "nails_color", "flat_feet"])
       expect(PER_MOD.test(allowed)).toBe(false);
   });
 

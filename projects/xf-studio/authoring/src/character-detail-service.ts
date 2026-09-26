@@ -29,19 +29,20 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
+import { decodePng, encodePng, type RgbaImage } from "./png";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
-import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
+import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
   type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
@@ -55,7 +56,7 @@ import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolut
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair and piercings" },
+  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair, piercings and body" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -104,8 +105,8 @@ export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
     message: string, readonly detail = "") { super(message); }
 }
-const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair and piercings aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes, hair and piercings aren't shown yet. The head still works.";
+const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown. The head still works.";
+const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown yet. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -284,6 +285,63 @@ export function storeChunkGeometry(storeRoot: string, file: string, chunks: read
   writeFileSync(staging, JSON.stringify(result), { mode: 0o600 });
   renameSync(staging, key);
   return result;
+}
+
+/**
+ * The largest texture side the preview is served (PREV-body): larger game textures (a body texture mod's 8192² skin maps) are halved
+ * until they fit, so one V's maps stay within the record's texel budget and a GPU's memory. Every vanilla head, face and eye map is at
+ * most 4096², so those are served as exported.
+ */
+export const SERVED_TEXTURE_MAX = 4096;
+/** 1: 2×2 box means of the stored bytes per halving (like a mip level), alpha kept when the source has any. */
+export const SCALED_TEXTURE_VERSION = 1;
+/** An image halved by 2×2 box means of its bytes (odd edges repeat their last texel). */
+export function halveImage(image: RgbaImage): RgbaImage {
+  const width = Math.max(1, image.width >> 1), height = Math.max(1, image.height >> 1), data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const x0 = Math.min(image.width - 1, x * 2), x1 = Math.min(image.width - 1, x * 2 + 1);
+    const y0 = Math.min(image.height - 1, y * 2), y1 = Math.min(image.height - 1, y * 2 + 1);
+    for (let k = 0; k < 4; k++) {
+      const at = (xx: number, yy: number) => image.data[(yy * image.width + xx) * 4 + k]!;
+      data[(y * width + x) * 4 + k] = (at(x0, y0) + at(x1, y0) + at(x0, y1) + at(x1, y1) + 2) >> 2;
+    }
+  }
+  return { width, height, data };
+}
+/**
+ * The served copy of an exported texture larger than `SERVED_TEXTURE_MAX` on a side: halved until it fits, keyed in the store by the
+ * export's hash, the limit and `SCALED_TEXTURE_VERSION`, so it is made once. Returns null when the texture fits as it is.
+ */
+export function storeScaledTexture(storeRoot: string, file: string, size: { width: number; height: number }, max = SERVED_TEXTURE_MAX):
+  { file: string; sha256: string; size: { width: number; height: number } } | null {
+  if (size.width <= max && size.height <= max) return null;
+  const stamp = fileStamp(file), known = hashed.get(file);
+  let source = known?.stamp === stamp ? known.sha256 : null, bytes: Uint8Array | null = null;
+  if (!source) { bytes = new Uint8Array(readFileSync(file)); source = sha256(bytes); }
+  const key = join(storeRoot, "scaled", `${source}-${max}-v${SCALED_TEXTURE_VERSION}.json`);
+  try {
+    const kept = JSON.parse(readFileSync(key, "utf8")) as { file: string; sha256: string; size: { width: number; height: number } };
+    if (STORE_FILE.test(kept.file) && existsSync(join(storeRoot, "files", kept.file))) return kept;
+  } catch { /* Not made yet. */ }
+  let image = decodePng(bytes ?? new Uint8Array(readFileSync(file)));
+  while (image.width > max || image.height > max) image = halveImage(image);
+  let alpha = false;
+  for (let i = 3; i < image.data.length && !alpha; i += 4) alpha = image.data[i] !== 255;
+  const stored = storeBytes(storeRoot, encodePng(image, { alpha }), "png");
+  const result = { file: stored.file, sha256: stored.sha256, size: { width: image.width, height: image.height } };
+  mkdirSync(join(storeRoot, "scaled"), { recursive: true, mode: 0o700 });
+  const staging = `${key}.${process.pid}.tmp`;
+  writeFileSync(staging, JSON.stringify(result), { mode: 0o600 });
+  renameSync(staging, key);
+  return result;
+}
+
+/** An exported PNG's size from its header, without reading the whole file (null when it isn't a PNG). */
+function pngFileSize(file: string): { width: number; height: number } | null {
+  const handle = openSync(file, "r");
+  try { const head = new Uint8Array(24); readSync(handle, head, 0, 24, 0); return pngSize(head); }
+  catch { return null; }
+  finally { closeSync(handle); }
 }
 
 /** A served component as the writing step made it, with the notes it earned and the texels its distinct textures take. */
@@ -722,6 +780,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     input = plainV();
   }
   cancelled();
+  // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
+  input = previewInput(input);
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
   trace.event("character", "resolved", resolutionTrace(resolved), RESOLUTION_TRACE_OPTIONS);
   cancelled();
@@ -775,7 +835,18 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     const key = refLabel(ref).toLowerCase(), at = textureAt.get(key) ?? locate(graph, ref) ?? undefined;
     const png = at ? cache.textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png : undefined;
     if (!at || !png) return { why: at ? "not exported" : "not in any mounted archive" };
-    const stored = store(options.storeRoot, png, "png"), size = stored.size;
+    // A texture larger than the preview is served (a body texture mod's 8K maps) is served halved until it fits; others as exported.
+    const exported = pngFileSize(png);
+    let stored: { file: string; sha256: string; size: { width: number; height: number } | null };
+    if (exported && (exported.width > SERVED_TEXTURE_MAX || exported.height > SERVED_TEXTURE_MAX)) {
+      let scaled: ReturnType<typeof storeScaledTexture> = null;
+      try { scaled = storeScaledTexture(options.storeRoot, png, exported); }
+      catch (error) { return { why: `too large to prepare (${String((error as Error)?.message ?? error).slice(0, 120)})` }; }
+      if (!scaled) return { why: "unreadable image" };
+      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the preview uses it at ${scaled.size.width}×${scaled.size.height}.`);
+      stored = scaled;
+    } else stored = store(options.storeRoot, png, "png");
+    const size = stored.size;
     if (!size) return { why: "unreadable image" };
     if (!spend(stored.file, size.width * size.height)) return { why: "over the preview's texture budget" };
     componentTextures.set(stored.file, size.width * size.height);
@@ -904,7 +975,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       // A chunk missing an input its adapter can't draw without is left out rather than drawn wrongly. An optional input
       // (the adapter falls back to the template's neutral value) or one recorded for a later adapter only earns a note.
       const inputs = renderTemplate(material.template, material.templateName);
-      const required = new Set(inputs ? templateRequired(inputs, component.slot === "face") : unread.map(entry => entry.param));
+      const required = new Set(inputs ? templateRequired(inputs, decalFamilySlot(component.slot)) : unread.map(entry => entry.param));
       const words = (entries: typeof unread) => entries.map(entry => entry.why ? `${entry.param} (${entry.why})` : entry.param).join(", ");
       const blocking = unread.filter(entry => required.has(entry.param)), optional = unread.filter(entry => !required.has(entry.param));
       if (blocking.length) {
@@ -923,7 +994,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       dropped(component, `none of its ${component.materials.length} chunk(s) could be drawn, because an input they need couldn't be read.`);
       return "export";
     }
-    if (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
+    if (!decalFamilySlot(component.slot) && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
       dropped(component, "its chunks use only materials the preview can't draw yet.");
       return "export";
     }
@@ -938,7 +1009,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
         sources: [{ depotPath: located.depotPath, archive: located.archive.name, provider: located.archive.provider,
           ...(hexSha(component.drawnFrom.extractedSha256) ? { sha256: hexSha(component.drawnFrom.extractedSha256)! } : {}) }] },
       renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
-      ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}) };
+      ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}),
+      ...(component.morphs ? { morphs: component.morphs } : {}) };
   };
   let reusedComponents = 0;
   for (const component of plan.components) {
@@ -1072,7 +1144,7 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
       return { bodyGender: request.bodyGender, origin: "ui-state" as const, appearances: derived.appearances, morphs: derived.morphs };
     }));
     // Every request resolves at once, so each level of their chains is one extraction batch.
-    const resolved = await Promise.all(inputs.map(input => input ? resolveThrough(graph, input, cco, cache).then(result => result.resolved) : null));
+    const resolved = await Promise.all(inputs.map(input => input ? resolveThrough(graph, previewInput(input), cco, cache).then(result => result.resolved) : null));
     cancelled();
     await loadTemplates(graph, resolved.flatMap(entry => entry ? entry.appearances.flatMap(appearance => appearance.components.flatMap(component =>
       component.materials.map(material => material.template).filter((template): template is Provenance => !!template))) : []), cache);

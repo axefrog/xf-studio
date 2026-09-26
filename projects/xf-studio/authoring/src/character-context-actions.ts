@@ -324,10 +324,13 @@ export class CharacterContextActions {
     return page?.choices.find(item => item.key === change.choice && (!change.activates || sameSet(item.activates, change.activates)))?.position ?? null;
   }
 
-  /** The request the preview prepares: the head of the shown V with the choices set on it (a masculine V shows the default V). */
+  /**
+   * The request the preview prepares: the shown V (head, body and arms) with the choices set on it (a masculine V shows the default V).
+   * The host keeps the body parts its third-person consumers read (character-detail-plan.ts `previewInput`).
+   */
   detailRequest(): CharacterRequest {
     if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
-    return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, ["head"]);
+    return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices);
   }
   /** The whole state as the host interprets it (every part). */
   request(): CharacterRequest {

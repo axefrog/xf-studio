@@ -17,8 +17,11 @@
 // one hidden, over two layer templates, and an `.mlmask`), each drawing chunks 0 and 2 of a three-chunk earring through its chunk mask;
 // and a jewellery "framework" archive that replaces style 12's `.app` at its vanilla path with inline slot components (two zero-chunk
 // placeholders and one slot an item archive fills with its own morph target over a linked mesh), keeping the vanilla part.
+// Body: the third-person body skin (a morph component with a breast shape, listed twice in its appearance), its censored twin, the
+// game's underwear cover (a decal), a nipple part and genitals the cover sits over, flat and lifted feet, a first-person body, the default
+// arms (skin plus a layered personal-link chunk), arm-cyberware arms in another holster state, and nails with a length shape.
 // No private save, game file or real mod name is used.
-import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphtarget, tex, appearanceOption,
+import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphOption, morphtarget, tex, appearanceOption,
   switcherOption, fixtureInstallation, type FixtureArchive } from "./resolver-fixtures";
 import type { XlDocument } from "../src/archivexl-config";
 import { ccoPath } from "../src/character-resolver";
@@ -79,11 +82,28 @@ export const P = {
   paintTpl: "base\\surfaces\\fixture_paint.mltemplate", metalD: "base\\surfaces\\tex\\metal_d.xbm", metalN: "base\\surfaces\\tex\\metal_n.xbm",
   metalR: "base\\surfaces\\tex\\metal_r.xbm", paintD: "base\\surfaces\\tex\\paint_d.xbm", microblend: "base\\surfaces\\microblends\\default.xbm",
   slotMorph: (n: number) => `fixture_jewellery\\slots\\slot${n}.morphtarget`, slotMesh: "fixture_jewellery\\slots\\slot2_linked.mesh",
+  bodyApp: "base\\fixture\\body\\body_full.app", bodyCensoredApp: "base\\fixture\\body\\body_full_censored.app",
+  bodyMorph: "base\\fixture\\body\\body.morphtarget", bodyMesh: "base\\fixture\\body\\body.mesh", bodyD: "base\\fixture\\body\\tex\\body_d.xbm",
+  bodyN: "base\\fixture\\body\\tex\\body_n.xbm", coverApp: "base\\fixture\\body\\cover.app", coverMesh: "base\\fixture\\body\\cover.mesh",
+  coverD: "base\\fixture\\body\\tex\\cover_d.xbm", nippleApp: "base\\fixture\\body\\nipples.app", genitalsApp: "base\\fixture\\body\\genitals.app",
+  partMesh: "base\\fixture\\body\\part.mesh", flatFeetApp: "base\\fixture\\body\\feet_flat.app", liftedFeetApp: "base\\fixture\\body\\feet_lifted.app",
+  flatFeetMesh: "base\\fixture\\body\\feet_flat.mesh", liftedFeetMesh: "base\\fixture\\body\\feet_lifted.mesh",
+  fppBodyApp: "base\\fixture\\body\\fpp_torso.app", fppBodyMesh: "base\\fixture\\body\\fpp_torso.mesh",
+  armsApp: "base\\fixture\\arms\\arms_full.app", armsMesh: "base\\fixture\\arms\\arms_hq.mesh", strongArmsApp: "base\\fixture\\arms\\strong_arms.app",
+  strongArmsMesh: "base\\fixture\\arms\\strong_arms.mesh", nailsApp: "base\\fixture\\arms\\nails.app", nailsMorph: "base\\fixture\\arms\\nails.morphtarget",
+  nailsMesh: "base\\fixture\\arms\\nails.mesh", nailsD: "base\\fixture\\arms\\tex\\nails_d.xbm",
 } as const;
+/** The body's chunk mask: chunk 2 (the calves, which the feet draw) hidden. */
+export const BODY_MASK = "18446744073709551611";
+/** Body definitions, as the vanilla creator names them (tone-linked). */
+export const BODY = { pale: "t0_000_body__01_ca_pale", feet: "l0_000_feet__01_ca_pale", arms: "a0_000_arms__01_ca_pale", nails: "a0_000_nails__beige",
+  cover: "female_001" } as const;
 /** Piercing definitions, as the vanilla creator names them. */
 export const PIERCING = { silver: "i0_000_pwa__earring__01_silver", black: "i0_000_pwa__earring__03_black" } as const;
 /** The earring's chunk mask: chunks 0 and 2 of three. */
 export const EARRING_MASK = "18446744073709551613";
+/** The creator's censorship rule on the body options. */
+const censored = (action: "Activate" | "Deactivate") => ({ censorFlag: "Censor_Nudity", censorFlagAction: action });
 /** Face-detail definitions, as the vanilla creator names them. */
 export const FACE = { lipsRed: "hx_000_pwa__basehead__makeup_lips_05__06_red", cheeksRed: "hx_000_pwa__morphs_makeup_freckles_01__03_red",
   frecklesBrown: "hx_000_pwa__morphs_makeup_freckles_01__03_light_brown", tattooSenna: "hx_000_pwa__tattoo_02__03_ca_senna",
@@ -210,7 +230,28 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
     ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02"],
       face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
-        "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }),
+        "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }, {
+      body: { options: [
+        appearanceOption("body_color", P.bodyApp, [BODY.pale], { uiSlot: "body_color", hidden: 1, link: "skin color", ...censored("Deactivate") }),
+        appearanceOption("body_color_censored", P.bodyCensoredApp, [BODY.pale], { uiSlot: "body_color", hidden: 1, link: "skin color", ...censored("Activate") }),
+        appearanceOption("nipples_01", P.nippleApp, ["nipples__01_ca_pale"], { uiSlot: "nipples", hidden: 1, ...censored("Deactivate") }),
+        appearanceOption("genitals_04", P.genitalsApp, ["genitals_none__01_ca_pale"], { uiSlot: "genitals", hidden: 1, ...censored("Deactivate") }),
+        appearanceOption("underpants", P.coverApp, [BODY.cover], { uiSlot: "underpants", hidden: 1, ...censored("Activate") }),
+        morphOption("breast", ["breast_small", "breast_big"], { link: "breast_size", linkController: 1, ...censored("Deactivate") }),
+        appearanceOption("lifted_feet", P.liftedFeetApp, [BODY.feet], { uiSlot: "lifted_feet", hidden: 1, link: "skin color" }),
+        appearanceOption("flat_feet", P.flatFeetApp, [BODY.feet], { uiSlot: "flat_feet", hidden: 1, link: "skin color" }),
+        appearanceOption("fpp_body_color", P.fppBodyApp, [BODY.pale], { uiSlot: "fpp_body_color", hidden: 1, link: "skin color", ...censored("Deactivate") }),
+      ], groups: { TPP_Body: ["body_color", "body_color_censored", "nipples_01", "underpants"], FPP_Body: ["fpp_body_color", "underpants"],
+        genitals: ["genitals_04"], breast: ["breast"], lifted_feet: ["lifted_feet"], flat_feet: ["flat_feet"],
+        character_creation: ["body_color", "nipples_01", "genitals_04", "underpants", "lifted_feet"] } },
+      arms: { options: [
+        appearanceOption("h_default_arms_colors_tpp", P.armsApp, [BODY.arms], { hidden: 1, link: "skin color" }),
+        appearanceOption("h_strong_arms_colors_base_tpp", P.strongArmsApp, [BODY.arms], { hidden: 1, link: "skin color" }),
+        appearanceOption("nails_color_tpp", P.nailsApp, [BODY.nails], { uiSlot: "nails_color", link: "nails_color", linkController: 1 }),
+        morphOption("nails_l", ["nails_long_l"], { link: "nails_size", linkController: 1 }),
+        morphOption("nails_r", ["nails_long_r"], { link: "nails_size", hidden: 1 }),
+      ], groups: { holstered_default_tpp: ["h_default_arms_colors_tpp", "nails_color_tpp"], holstered_strong_tpp: ["h_strong_arms_colors_base_tpp"],
+        nails: ["nails_l", "nails_r"], character_customization: ["h_default_arms_colors_tpp", "nails_l", "nails_r", "nails_color_tpp"] } } }),
     // Skin: the type's .app names the tone's mesh appearance on the one head morph component (plus a part the preview doesn't draw).
     [P.skinApp1]: app(toneAppearances("").map(entry => ({ ...entry, components: [...entry.components, meshComponent("seam_fix", P.shadowMesh)] }))),
     // Skin type 3 also brings the personal-link decal, as every vanilla skin type does.
@@ -347,6 +388,41 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
     [P.capMt]: template([tParam("MaskTexture", P.white), sParam("DepthThreshold", 0.5)]),
     [P.browD]: xbm(true), [P.browDs]: xbm(true), [P.grad]: xbm(true), [P.lashAlpha]: xbm(false), [P.white]: xbm(false), [P.grey]: xbm(false),
     [P.strandA]: xbm(false), [P.strandId]: xbm(false), [P.strandG]: xbm(false), [P.capMask]: xbm(false), [P.hp]: profile(60),
+    // The body: one morph component listed twice in its appearance (the same part twice draws once), a breast shape, the calves hidden.
+    [P.bodyApp]: app([{ name: BODY.pale, components: [morphComponent("t0_body", P.bodyMorph, "pale", BODY_MASK), morphComponent("t0_body", P.bodyMorph, "pale", BODY_MASK)] }]),
+    [P.bodyCensoredApp]: app([{ name: BODY.pale, components: [morphComponent("t0_body", P.bodyMorph, "pale_censored", BODY_MASK)] }]),
+    [P.bodyMorph]: morphtarget(P.bodyMesh, 3, [["breast_small", "breast"], ["breast_big", "breast"]]),
+    [P.bodyMesh]: mesh({ appearances: [{ name: "pale", chunkMaterials: ["skin", "skin", "skin"] }, { name: "pale_censored", chunkMaterials: ["skin_censored", "skin_censored", "skin_censored"] }],
+      entries: [{ name: "skin", local: true, index: 0 }, { name: "skin_censored", local: true, index: 1 }],
+      local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)]), instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])] }),
+    // The game's underwear cover: a decal over the body.
+    [P.coverApp]: app([{ name: BODY.cover, components: [meshComponent("i0_cover", P.coverMesh)] }]),
+    [P.coverMesh]: mesh({ appearances: [{ name: "default", chunkMaterials: ["cover"] }], entries: [{ name: "cover", local: true, index: 0 }],
+      local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.coverD), scalar("DiffuseAlpha", 1)])], chunks: 1 }),
+    // Parts the cover sits over.
+    [P.nippleApp]: app([{ name: "nipples__01_ca_pale", components: [meshComponent("i0_nipples", P.partMesh)] }]),
+    [P.genitalsApp]: app([{ name: "genitals_none__01_ca_pale", components: [meshComponent("i0_genitals", P.partMesh)] }]),
+    [P.partMesh]: mesh({ appearances: [{ name: "default", chunkMaterials: ["skin"] }], entries: [{ name: "skin", local: true, index: 0 }],
+      local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])], chunks: 1 }),
+    [P.flatFeetApp]: app([{ name: BODY.feet, components: [meshComponent("l0_feet_flat", P.flatFeetMesh, "pale")] }]),
+    [P.liftedFeetApp]: app([{ name: BODY.feet, components: [meshComponent("l0_feet_lifted", P.liftedFeetMesh, "pale")] }]),
+    ...Object.fromEntries([P.flatFeetMesh, P.liftedFeetMesh, P.fppBodyMesh].map(path => [path, mesh({ appearances: [{ name: "pale", chunkMaterials: ["skin", "skin"] }],
+      entries: [{ name: "skin", local: true, index: 0 }], local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])], chunks: 2 })])),
+    [P.fppBodyApp]: app([{ name: BODY.pale, components: [meshComponent("t0_fpp_torso", P.fppBodyMesh, "pale")] }]),
+    // The default arms: two skin chunks and a layered personal-link chunk; arm-cyberware arms belong to another holster state.
+    [P.armsApp]: app([{ name: BODY.arms, components: [meshComponent("a0_arms", P.armsMesh, "pale")] }]),
+    [P.armsMesh]: mesh({ appearances: [{ name: "pale", chunkMaterials: ["skin", "skin", "link"] }],
+      entries: [{ name: "skin", local: true, index: 0 }, { name: "link", local: false, index: 0 }],
+      local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])], external: [P.silverMi], chunks: 3 }),
+    [P.strongArmsApp]: app([{ name: BODY.arms, components: [meshComponent("a0_strong_arms", P.strongArmsMesh, "pale")] }]),
+    [P.strongArmsMesh]: mesh({ appearances: [{ name: "pale", chunkMaterials: ["skin"] }], entries: [{ name: "skin", local: true, index: 0 }],
+      local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])], chunks: 1 }),
+    // Nails: a morph component with the length shape of its hand.
+    [P.nailsApp]: app([{ name: BODY.nails, components: [morphComponent("a0_nails_l", P.nailsMorph, "beige")] }]),
+    [P.nailsMorph]: morphtarget(P.nailsMesh, 1, [["nails_long_l", "nails_l"]]),
+    [P.nailsMesh]: mesh({ appearances: [{ name: "beige", chunkMaterials: ["nails"] }], entries: [{ name: "nails", local: true, index: 0 }],
+      local: [instance(P.skinMt, [tex("Albedo", P.nailsD), tex("Normal", P.bodyN), tex("Roughness", P.skinRm)])] }),
+    [P.bodyD]: xbm(true), [P.bodyN]: xbm(false), [P.coverD]: xbm(true), [P.nailsD]: xbm(true),
   } };
   // An ArchiveXL-style bundle: the null morph whose empty `baseTexture` its patch copies onto the fix copy.
   const bundle: FixtureArchive = { virtualPath: "red4ext/plugins/ArchiveXL/Bundle/ArchiveXL.archive", files: {
@@ -418,10 +494,13 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
   } };
 }
 
-/** Save-shaped requests (option, `.app` hash and definition per consumer group), like the save reader produces. */
-const saved = (items: [string, string, string, string][]): CharacterRequest => ({ schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: "female",
-  appearances: items.map(([group, option, path, definition]) => ({ part: "head" as const, group, option, app: depotHash(path), definition })),
-  morphs: [{ part: "head", group: "TPP", region: "nose", target: "h012" }] });
+/** Save-shaped requests (option, `.app` hash and definition per consumer group, head part unless named), like the save reader produces. */
+type SavedRequest = Extract<CharacterRequest, { source: "save" }>;
+const saved = (items: ([string, string, string, string] | [string, string, string, string, "body" | "arms"])[],
+  morphs: SavedRequest["morphs"] = [{ part: "head", group: "TPP", region: "nose", target: "h012" }]): SavedRequest => ({
+  schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: "female",
+  appearances: items.map(([group, option, path, definition, part]) => ({ part: part ?? "head" as const, group, option, app: depotHash(path), definition })),
+  morphs });
 /**
  * V "A": skin type 1 in pale, brow style 1, lashes, hair 1 (with its FPP twin in its own group), the gradient blue eye, red lipstick
  * and red blush (listed in the creator group too, as saves repeat them).
@@ -445,3 +524,19 @@ export const eyeRequest = (definition: string) => saved([["TPP", "eyes_color", P
 /** A save-shaped request for one piercing choice alone (the other slots none). */
 export const piercingRequest = (option: "piercings_01" | "piercings_12", definition: string) =>
   saved([["face", option, option === "piercings_01" ? P.earringApp1 : P.earringApp12, definition]]);
+/**
+ * V "A" with her body, as a save lists it: the body skin and its censored twin, nipples and the underwear cover in the third-person body
+ * group, genitals, both feet groups, the first-person body, the default and the strong arms' holster groups, nails, and the big breast and
+ * long left nail shapes.
+ */
+export const BODY_REQUEST = saved([...REQUEST_A.appearances.map(entry => [entry.group, entry.option,
+  Object.values(P).find(path => typeof path === "string" && depotHash(path) === entry.app) as string, entry.definition] as [string, string, string, string]),
+  ["TPP_Body", "body_color", P.bodyApp, BODY.pale, "body"], ["TPP_Body", "body_color_censored", P.bodyCensoredApp, BODY.pale, "body"],
+  ["TPP_Body", "nipples_01", P.nippleApp, "nipples__01_ca_pale", "body"], ["TPP_Body", "underpants", P.coverApp, BODY.cover, "body"],
+  ["FPP_Body", "fpp_body_color", P.fppBodyApp, BODY.pale, "body"], ["FPP_Body", "underpants", P.coverApp, BODY.cover, "body"],
+  ["genitals", "genitals_04", P.genitalsApp, "genitals_none__01_ca_pale", "body"],
+  ["lifted_feet", "lifted_feet", P.liftedFeetApp, BODY.feet, "body"], ["flat_feet", "flat_feet", P.flatFeetApp, BODY.feet, "body"],
+  ["holstered_default_tpp", "h_default_arms_colors_tpp", P.armsApp, BODY.arms, "arms"], ["holstered_default_tpp", "nails_color_tpp", P.nailsApp, BODY.nails, "arms"],
+  ["holstered_strong_tpp", "h_strong_arms_colors_base_tpp", P.strongArmsApp, BODY.arms, "arms"]],
+  [...REQUEST_A.morphs, { part: "body", group: "breast", region: "breast", target: "breast_big" },
+    { part: "arms", group: "nails", region: "nails_l", target: "nails_long_l" }]);

@@ -376,13 +376,14 @@ test("the contour point limit refuses insertion with a structured issue", () => 
 
 test("camera and UV navigation commands are view-only and bounded", async () => {
   const { navigateCamera } = await import("../src/camera-navigation");
+  const { MAX_CAMERA_DISTANCE } = await import("../src/camera-framing");
   const state = { position: [0, 0, 1], target: [0, 0, 0], fov: 30 };
   const orbited = navigateCamera(state, { kind: "orbit", yaw: Math.PI / 2, pitch: 0 });
   expect(orbited.position[0]).toBeCloseTo(1, 9); expect(Math.hypot(...orbited.position)).toBeCloseTo(1, 9);
   const flipped = navigateCamera(state, { kind: "orbit", yaw: 0, pitch: 10 });
   expect(flipped.position[1]).toBeLessThan(1); expect(flipped.position[1]).toBeGreaterThan(.99);
   expect(Math.hypot(...navigateCamera(state, { kind: "dolly", factor: .001 }).position)).toBeCloseTo(.1, 9);
-  expect(Math.hypot(...navigateCamera(state, { kind: "dolly", factor: 100 }).position)).toBeCloseTo(3.5, 9);
+  expect(Math.hypot(...navigateCamera(state, { kind: "dolly", factor: 100 }).position)).toBeCloseTo(MAX_CAMERA_DISTANCE, 9);
   const panned = navigateCamera(state, { kind: "pan", dx: .5, dy: 0 });
   expect(panned.target[0]).toBeCloseTo(panned.position[0], 9); expect(panned.target[0]).not.toBe(0);
   expect(navigateCamera(state, { kind: "dolly", factor: -1 })).toEqual(state);

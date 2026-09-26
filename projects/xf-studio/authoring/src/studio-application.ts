@@ -709,7 +709,7 @@ export class StudioApplication {
       { kind: "field.select", layerId: target.layerId, fieldId: target.id },
       { kind: "field.clear", layerId: target.layerId, fieldId: target.id },
       { kind: "field.remove", layerId: target.layerId, fieldId: target.id }];
-    if (target.kind === "viewport") actions = [{ kind: "camera.front" }, { kind: "quality.rebuild" }];
+    if (target.kind === "viewport") actions = [{ kind: "camera.front" }, { kind: "camera.body" }, { kind: "quality.rebuild" }];
     return actions.map(action => ({ action, capability: this.capability(action),
       undo: this.routes.undoPolicy(action), async: false }));
   }

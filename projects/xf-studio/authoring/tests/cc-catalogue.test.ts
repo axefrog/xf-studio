@@ -89,7 +89,9 @@ describe("creator catalogue from the merged resource", () => {
     expect(status("head", "piercings_00")).toEqual(["rendered", "piercings"]);
     expect(status("head", "teeth")).toEqual(["conditional", "face"]);
     expect(status("head", "scars")).toEqual(["conditional", "face"]);
-    expect(status("body", "breast")).toEqual(["not-rendered", null]);
+    // The body draws since the body render: its skin (consumed by the third-person body group) and its shape.
+    expect(status("body", "breast")).toEqual(["rendered", "body"]);
+    expect(status("body", "body_color")).toEqual(["rendered", "body"]);
     const teeth = coverage.get("head/teeth")!;
     expect(refineCoverage(teeth, [{ drawn: false }]).status).toBe("not-rendered");
     expect(refineCoverage(teeth, [{ drawn: true }]).status).toBe("rendered");

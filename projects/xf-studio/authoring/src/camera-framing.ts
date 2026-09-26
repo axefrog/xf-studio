@@ -1,11 +1,22 @@
-/** Orbit bounds shared by controls and workspace validation. */
+/** Orbit bounds shared by controls and workspace validation (far enough to frame the whole body at the default lens). */
 export const MIN_CAMERA_DISTANCE = .1;
-export const MAX_CAMERA_DISTANCE = 3.5;
+export const MAX_CAMERA_DISTANCE = 5;
 
 export type Point3 = readonly [number, number, number];
 
 export function frontCameraDistance(fov: number, aspect: number): number {
   return Math.max(.55, .13 / (Math.tan(fov * Math.PI / 360) * aspect));
+}
+
+/**
+ * The whole-body view: the orbit target at the body's middle height, and a margin around a standing V about 1.9 m tall and 1.7 m
+ * wide at the hands (the arms' bind pose), in the neutral space the head views use.
+ */
+export const BODY_FRAME = Object.freeze({ targetHeight: .93, halfHeight: .97, halfWidth: .85, margin: 1.06 });
+/** The orbit distance that fits the whole body in a view of this vertical field of view (degrees) and aspect. */
+export function bodyCameraDistance(fov: number, aspect: number): number {
+  const half = Math.tan(fov * Math.PI / 360);
+  return Math.max(BODY_FRAME.halfHeight / half, BODY_FRAME.halfWidth / (half * Math.max(aspect, 1e-3))) * BODY_FRAME.margin;
 }
 
 /**

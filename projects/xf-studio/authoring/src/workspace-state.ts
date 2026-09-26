@@ -29,6 +29,11 @@ export type PreviewState = {
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
   /**
+   * Whether the V's body shows (body, arms, hands, feet and their decals). Absent means shown: it is written only once the viewer
+   * changes it, so a workspace that never did keeps its stored bytes.
+   */
+  body?: boolean;
+  /**
    * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`): a switcher choice and a definition of the option
    * it activates. Read so an untouched workspace writes it back unchanged, and so the character context can turn it into the matching
    * Piercings choices once the catalogue is ready (CORE-74); nothing writes new values here.
@@ -156,6 +161,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
     for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
+    if (typeof p.body === "boolean") state.preview.body = p.body;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;

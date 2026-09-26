@@ -46,11 +46,11 @@ export const COLLECTION_FAMILY: SystemFamily<CollectionStudioAction, ActionScope
 export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PREVIEW_ID> = Object.freeze({
   owner: "system", id: PREVIEW_ID, label: "Preview", needsScene: true, thrown: "unavailable",
   actions: actionTable<PreviewAction, ActionScope>(ACTION_DESCRIPTORS, {
-    "camera.front": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
+    "camera.front": true, "camera.body": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
     "camera.navigate": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
     "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
     "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
-    "preview.setEyeShape": true, "preview.setPiercings": true,
+    "preview.setEyeShape": true, "preview.setPiercings": true, "preview.setBody": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
     "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true },
     { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" },

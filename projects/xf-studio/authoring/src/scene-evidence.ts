@@ -101,5 +101,8 @@ export function characterDetailsEvidence(input: {
     components: loaded?.components.map(item => ({ slot: item.component.slot, option: item.component.option, definition: item.component.definition,
       component: item.component.component, geometry: item.component.geometry.depotPath, visible: item.root.visible,
       chunks: item.meshes.map(mesh => mesh.name), templates: [...new Set(item.component.materials.map(material => material.template))],
-      vertices: item.meshes.reduce((n, mesh) => n + mesh.geometry.getAttribute("position").count, 0) })) ?? [] };
+      vertices: item.meshes.reduce((n, mesh) => n + mesh.geometry.getAttribute("position").count, 0),
+      // The body's own shapes (breast size, nail length) as applied, and its bones (which join the idle rig by name).
+      ...(item.component.slot === "body" ? { morphs: item.meshes.flatMap(mesh => Object.entries(mesh.morphTargetDictionary ?? {})
+        .filter(([, index]) => (mesh.morphTargetInfluences?.[index] ?? 0) > 0).map(([name]) => name)), bones: item.bones.length } : {}) })) ?? [] };
 }

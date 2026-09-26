@@ -190,3 +190,26 @@ test("clock rejects nonfinite/negative increments and caps suspension catch-up a
   idle.seek(NaN); expect(idle.time).toBe(0);
   idle.seek(-1); expect(idle.time).toBe(0);
 });
+
+test("a flat helper joint of a driven skeleton follows the rig segment it sits on; a still bone and a lone bone stay unbound", () => {
+  // The clip's rig: an arm and its forearm, the arm turning a quarter about z at t = 1.
+  const source = new THREE.Group(), arm = new THREE.Bone(), fore = new THREE.Bone();
+  arm.name = "Arm"; fore.name = "ForeArm"; arm.position.set(0.2, 1.4, 0); fore.position.set(0, -0.3, 0); arm.add(fore); source.add(arm);
+  const quarter = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2).toArray();
+  const clip = new THREE.AnimationClip("idle", 2, [new THREE.QuaternionKeyframeTrack("Arm.quaternion", [0, 1, 2], [0, 0, 0, 1, ...quarter, 0, 0, 0, 1])]);
+  // The body's export: every joint flat under its armature, a helper joint on the arm with no joint parent, and a rigid part's still bone.
+  const armature = new THREE.Group(), joint = (name: string, x: number, y: number, z: number) => {
+    const bone = new THREE.Bone(); bone.name = name; bone.position.set(x, y, z); armature.add(bone); return bone; };
+  const tArm = joint("Arm", 0.2, 1.4, 0), tFore = joint("ForeArm", 0.2, 1.1, 0), helper = joint("l_twist_JNT", 0.2, 1.25, 0.02);
+  const still = joint("xfs_rigid_part", 0.2, 1.25, 0); still.userData.xfsStill = true;
+  const lone = new THREE.Bone(); lone.name = "lone_JNT"; lone.position.set(0.2, 1.25, 0); new THREE.Group().add(lone);
+  armature.updateMatrixWorld(true); lone.parent!.updateMatrixWorld(true);
+  const idle = new IdleAnimation(source, clip, [tArm, tFore, helper, still, lone], {});
+  expect(idle.unmapped.sort()).toEqual(["lone_JNT", "xfs_rigid_part"]);
+  expect(idle.bindings.find(binding => binding.bone === helper)!.driver).toBe(arm);
+  idle.setEnabled(true); idle.seek(1); armature.updateMatrixWorld(true);
+  // Around the arm's pivot a quarter turn: (0, −0.15, 0.02) from it becomes (0.15, 0, 0.02).
+  const at = helper.getWorldPosition(new THREE.Vector3());
+  expect(at.x).toBeCloseTo(0.35, 5); expect(at.y).toBeCloseTo(1.4, 5); expect(at.z).toBeCloseTo(0.02, 5);
+  expect(still.getWorldPosition(new THREE.Vector3()).toArray()).toEqual([0.2, 1.25, 0]);
+});

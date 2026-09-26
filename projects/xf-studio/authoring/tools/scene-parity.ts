@@ -4,7 +4,10 @@
  * the 1K and 2K preview sizes, in an isolated `?verify=1` workspace with disposable data and a throwaway Chrome profile.
  *
  *   bun tools/scene-parity.ts capture <out dir under evidence/screenshots> [port]
- *   bun tools/scene-parity.ts compare <after dir> <base dir> [<another base dir> …]
+ *   bun tools/scene-parity.ts compare <after dir> <base dir> [<another base dir> …] [--ignore x0,y0,x1,y1]
+ *
+ * `--ignore` leaves one rectangle of every frame out of the comparison (inclusive pixel bounds), for a deliberate change to the viewport's
+ * overlaid controls (a new toolbar button) that is not the 3D view; the report names it.
  *
  * Capture the code before the change (twice or more: the first creator frame can differ between runs of the same build by a few pixels
  * one step apart) and after it, then compare: every frame after must match one of the base captures pixel for pixel (PREV-98). Outputs
@@ -15,13 +18,18 @@ import { resolve } from "node:path";
 import { decodePng } from "../src/png";
 import { launch, startServer } from "./cdp";
 
-const [mode, first, second, ...more] = process.argv.slice(2);
+const argv = process.argv.slice(2), ignoreAt = argv.indexOf("--ignore");
+const ignore = ignoreAt >= 0 ? argv.splice(ignoreAt, 2)[1]!.split(",").map(Number) as [number, number, number, number] : null;
+if (ignore && (ignore.length !== 4 || ignore.some(n => !Number.isInteger(n)))) throw Error("--ignore takes x0,y0,x1,y1");
+const [mode, first, second, ...more] = argv;
 
 /** How two frames differ: `size` when their sizes do, else the differing pixels and the largest channel step. */
 function difference(a: ReturnType<typeof decodePng>, b: ReturnType<typeof decodePng>) {
   if (a.width !== b.width || a.height !== b.height) return { size: `${a.width}x${a.height} vs ${b.width}x${b.height}`, pixels: -1, max: 0 };
   let pixels = 0, max = 0;
   for (let i = 0; i < a.data.length; i += 4) {
+    const x = (i >> 2) % a.width, y = Math.floor((i >> 2) / a.width);
+    if (ignore && x >= ignore[0] && x <= ignore[2] && y >= ignore[1] && y <= ignore[3]) continue;
     const d = Math.max(Math.abs(a.data[i]! - b.data[i]!), Math.abs(a.data[i + 1]! - b.data[i + 1]!), Math.abs(a.data[i + 2]! - b.data[i + 2]!));
     if (d) { pixels++; max = Math.max(max, d); }
   }
@@ -42,7 +50,8 @@ if (mode === "compare") {
     console.log(`${file.padEnd(40)} ${match ? `identical to ${bases.length > 1 ? match.base : "the base"}`
       : nearest ? `DIFFERS: ${nearest.pixels} pixels, max ${nearest.max} (nearest ${nearest.base})` : `DIFFERS: size ${results[0]!.size}`}`);
   }
-  console.log(`${frames.length} frames, ${failed} match none of ${bases.length} base capture${bases.length > 1 ? "s" : ""}`);
+  console.log(`${frames.length} frames, ${failed} match none of ${bases.length} base capture${bases.length > 1 ? "s" : ""}` +
+    (ignore ? ` (pixels ${ignore[0]}–${ignore[2]} × ${ignore[1]}–${ignore[3]} left out)` : ""));
   process.exit(failed ? 1 : 0);
 }
 

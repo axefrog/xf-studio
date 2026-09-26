@@ -43,10 +43,52 @@ export class IdleAnimation {
     this.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
   }
   private readonly ancestry: Record<string, string | null>;
+  /** The clip rig's bone segments at rest (a joint to each child joint), for placing helper joints the export gives no parent. */
+  private segments?: { name: string; from: THREE.Vector3; to: THREE.Vector3 | null }[];
+  /**
+   * The driven joint whose rest segment lies nearest a point (within 0.25 m), or null. The body's helper, muscle and twist joints
+   * (`l_deltoid_…_JNT`, `l_Wrist_0_JNT`) are exported as direct children of the armature with no joint parent, and the game drives them
+   * by rig constraints the preview doesn't have; each moves rigidly with the limb segment it sits on (the forearm's twist joints with
+   * the forearm) [hypothesis: an approximation of the game's corrective joints].
+   */
+  private nearestDriver(point: THREE.Vector3): string | null {
+    if (!this.segments) {
+      const rest = (object: THREE.Object3D) => new THREE.Vector3().setFromMatrixPosition(this.drivers.get(object.name)!.inverseBind.clone().invert());
+      this.segments = [];
+      this.source.traverse(object => {
+        if (!(object instanceof THREE.Bone) || this.drivers.get(object.name)?.driver !== object) return;
+        const children = object.children.filter(child => child instanceof THREE.Bone && this.drivers.get(child.name)?.driver === child);
+        const from = rest(object);
+        if (!children.length) this.segments!.push({ name: object.name, from, to: null });
+        for (const child of children) this.segments!.push({ name: object.name, from, to: rest(child) });
+      });
+    }
+    let best: string | null = null, bestDistance = 0.25;
+    const line = new THREE.Line3(), closest = new THREE.Vector3();
+    for (const segment of this.segments) {
+      const distance = segment.to ? line.set(segment.from, segment.to).closestPointToPoint(point, true, closest).distanceTo(point)
+        : segment.from.distanceTo(point);
+      if (distance < bestDistance) { bestDistance = distance; best = segment.name; }
+    }
+    return best;
+  }
   private bind(targets: readonly THREE.Object3D[]) {
     for (const bone of targets) {
       let name: string | null = bone.name;
+      // A bone neither clip drives follows its nearest driven ancestor: by the binding's ancestry (the head's joints), else by its own
+      // skeleton's parents, else (a helper joint the export left without a joint parent) the rig segment it sits on (`nearestDriver`).
       const seen = new Set<string>();
+      if (!this.drivers.has(bone.name) && !Object.hasOwn(this.ancestry, bone.name)) {
+        let node: THREE.Object3D | null = bone.parent;
+        while (node instanceof THREE.Bone && !this.drivers.has(node.name) && !Object.hasOwn(this.ancestry, node.name)) node = node.parent;
+        bone.updateWorldMatrix(true, false);
+        // Only a joint of a skeleton the clip drives (a sibling joint is driven by name: the body's exports list every joint flat under the
+        // armature) takes the nearest segment; a bone kept still on purpose (a rigid part with no bone to follow: character-detail-loader.ts
+        // `bindRigid`) stays unbound.
+        const drivenSkeleton = !!bone.parent?.children.some(other => other instanceof THREE.Bone && this.drivers.has(other.name));
+        name = node instanceof THREE.Bone ? node.name : bone.userData.xfsStill || !(drivenSkeleton || bone.userData.xfsFollow) ? null
+          : this.nearestDriver(new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld));
+      }
       while (name && !this.drivers.has(name) && !seen.has(name)) {
         seen.add(name); name = this.ancestry[name] ?? null;
       }

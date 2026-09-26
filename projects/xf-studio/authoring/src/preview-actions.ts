@@ -9,10 +9,11 @@ import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO
   STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioExposure, validStudioLightValue, type StudioLightKey, type StudioLights, type StudioSetupId } from "./studio-lighting";
 
 export type PreviewConfig = Pick<PreviewState,
-  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" |
+  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" |
   "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
 export type PreviewAction =
   | { kind: "camera.front" }
+  | { kind: "camera.body" }
   | { kind: "camera.setFov"; degrees: number }
   | { kind: "camera.endFovGesture" }
   | { kind: "camera.restore"; camera: CameraState }
@@ -31,6 +32,7 @@ export type PreviewAction =
   | { kind: "preview.resetStudioLighting" }
   | { kind: "preview.setEyeShape"; index: number }
   | { kind: "preview.setPiercings"; enabled: boolean }
+  | { kind: "preview.setBody"; enabled: boolean }
   | { kind: "preview.setSurfaceControls" | "preview.setWire" | "preview.setNormals" | "preview.setEyeOptics" | "preview.setHair"; enabled: boolean }
   | { kind: "preview.setDetail"; detail: "brows" | "lashes"; enabled: boolean };
 export type PreviewActionResult = { limited?: boolean };
@@ -53,6 +55,8 @@ export type PreviewPort = {
   setSurfaceControls(enabled: boolean): void; setWire(enabled: boolean): void; setNormals(enabled: boolean): void;
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
+  /** The V's body (visibility preference) and the whole-body view (true when the lens is too narrow to fit it). Absent on a head-only preview. */
+  setBody?(enabled: boolean): void; frameBody?(): boolean;
   eyeShapeOptions?(): EyeShapeOptions;
   setDetail(detail: "brows" | "lashes", enabled: boolean): void;
   availability?(target: "brows" | "lashes" | "hair"): string | undefined;
@@ -64,6 +68,7 @@ export type PreviewPort = {
   onLightingStatus?(listener: () => void): () => void;
 };
 const NO_CREATOR = "Creator lighting is unavailable in this preview.";
+const NO_BODY = "This preview shows the head only.";
 const CREATOR_FIXED = "Creator lighting uses the game's own lights and fixed exposure. Switch to Studio lighting to adjust this.";
 const NO_STUDIO_RIG = "Studio light controls are unavailable in this preview.";
 const STUDIO_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setKeyAngle", "preview.setStudioLight",
@@ -78,7 +83,7 @@ export class PreviewActions {
   constructor(initial: PreviewState, private port: PreviewPort) {
     this.state = { surface: initial.surface, wire: initial.wire, brows: initial.brows,
       lashes: initial.lashes, hair: initial.hair, normals: initial.normals, eyeOptics: initial.eyeOptics,
-      eyeShape: initial.eyeShape, piercings: initial.piercings,
+      eyeShape: initial.eyeShape, piercings: initial.piercings, ...(initial.body === undefined ? {} : { body: initial.body }),
       exposure: initial.exposure, lightAngle: initial.lightAngle,
       lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting }, studioLights: { ...initial.studioLights } };
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
@@ -156,6 +161,9 @@ export class PreviewActions {
       if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
         && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure) return refusal("unavailable", "The calibration is already at its defaults.");
     }
+    if ((action.kind === "camera.body" && !this.port.frameBody) || (action.kind === "preview.setBody" && !this.port.setBody))
+      return refusal("unavailable", NO_BODY);
+    if (action.kind === "preview.setBody" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
     if (action.kind === "camera.creatorFraming") {
       if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
       if (action.page !== "face" && action.page !== "hair") return refusal("invalid_value", "That creator page does not exist.");
@@ -174,6 +182,7 @@ export class PreviewActions {
     let limited: boolean | undefined;
     switch (action.kind) {
       case "camera.front": limited = this.port.front(); break;
+      case "camera.body": limited = this.port.frameBody!(); break;
       case "camera.setFov": limited = this.port.setFov(action.degrees); break;
       case "camera.endFovGesture": this.port.endFovGesture(); break;
       case "camera.restore": this.port.restoreCamera(action.camera); break;
@@ -200,6 +209,7 @@ export class PreviewActions {
       case "preview.resetStudioLighting": this.applyStudioStage(DEFAULT_STUDIO_STAGE); break;
       case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;
       case "preview.setPiercings": this.port.setPiercings(action.enabled); this.state.piercings = action.enabled; break;
+      case "preview.setBody": this.port.setBody!(action.enabled); this.state.body = action.enabled; break;
       case "preview.setSurfaceControls": this.port.setSurfaceControls(action.enabled); this.state.surface = action.enabled; break;
       case "preview.setWire": this.port.setWire(action.enabled); this.state.wire = action.enabled; break;
       case "preview.setNormals": this.port.setNormals(action.enabled); this.state.normals = action.enabled; break;

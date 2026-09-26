@@ -85,8 +85,26 @@ const GLBS_PER_KIND = 4;
  */
 const PRIVATE_GLB_TIMEOUT_MS = 30_000;
 
-// Brows, lashes and hair come from resolved character records (exported from the winning archives).
-derivedCharacterTest("resolved brow, lash and hair GLBs retain their facial targets, all skin sets and normalized totals", async () => {
+/** A facial shape key as WolvenKit names it (`h091_eyes`): the head's 105, the eye component's 21. */
+const FACIAL_TARGET = /^h\d{3}_(?:eyes|nose|mouth|jaw|ear)$/;
+/**
+ * A body part's shape keys (knowledge/body-rendering.md): its own shapes (the breast size on the body, its tattoos and scars; the nail
+ * length on each hand's nails), never the face's; a mesh with shape keys has at least one.
+ */
+function checkBodyTargets(buffer: ArrayBuffer) {
+  const view = new DataView(buffer), n = view.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, n)));
+  for (const mesh of json.meshes) {
+    const targets = mesh.primitives[0].targets;
+    if (!targets) continue;
+    const names: string[] = mesh.extras?.targetNames ?? [];
+    expect(names.length, `${mesh.name} names its shape keys`).toBe(targets.length);
+    expect(names.filter(name => FACIAL_TARGET.test(name)), `${mesh.name} carries no facial shape`).toEqual([]);
+  }
+}
+
+// Brows, lashes, hair and the body come from resolved character records (exported from the winning archives).
+derivedCharacterTest("resolved brow, lash, hair and body GLBs retain their shape keys, all skin sets and normalized totals", async () => {
   const records = derivedCharacterRecords();
   const slots = new Set<string>();
   // Many V's share a component's GLB: each distinct file (and morph expectation) is checked once, up to GLBS_PER_KIND of each slot
@@ -99,12 +117,17 @@ derivedCharacterTest("resolved brow, lash and hair GLBs retain their facial targ
     if (!byKind.has(kind)) byKind.set(kind, new Map());
     byKind.get(kind)!.set(path, morphs);
   }
-  const checks = [...byKind.values()].flatMap(files => [...files].sort(([a], [b]) => a.localeCompare(b)).slice(0, GLBS_PER_KIND));
-  for (const [path, morphs] of checks)
-    // Head decals and lashes carry the head's 105 face targets or the eye component's 21.
-    // Some chunks (the eyeball beside the lashes) have four influences only; the export keeps what the game has.
-    // Plain skinned meshes (hair) may carry a garment-support shape, which is not a facial target.
-    checkSkinnedGlb(await Bun.file(path).arrayBuffer(), morphs ? [105, 21] : null, undefined, false);
+  const checks = [...byKind].flatMap(([kind, files]) => [...files].sort(([a], [b]) => a.localeCompare(b)).slice(0, GLBS_PER_KIND)
+    .map(([path, morphs]) => ({ path, morphs, body: kind.startsWith("body|") })));
+  for (const { path, morphs, body } of checks) {
+    const buffer = await Bun.file(path).arrayBuffer();
+    // Head decals and lashes carry the head's 105 face targets or the eye component's 21; a body part its own shapes (checked by name).
+    // Some chunks (the eyeball beside the lashes, the feet's lower chunks) have four influences only; the export keeps what the game has.
+    // Plain skinned meshes (hair, arms, feet, the underwear cover) may carry a garment-support shape, which is not a facial target. A body
+    // part exported without its skin (a nails mod's mesh) has no weights to check.
+    checkSkinnedGlb(buffer, morphs && !body ? [105, 21] : null, undefined, false);
+    if (body) checkBodyTargets(buffer);
+  }
   expect(slots.size).toBeGreaterThan(0);
   expect(checks.length).toBeGreaterThan(0);
 }, PRIVATE_GLB_TIMEOUT_MS);
