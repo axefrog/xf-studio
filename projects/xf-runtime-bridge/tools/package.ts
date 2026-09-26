@@ -103,6 +103,7 @@ function stage(variant: Variant) {
   if (variant === "writes") {
     config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
     if (!/^allow_writes = true$/m.test(config)) throw new Error("writes config did not allow writes");
+    if (!/^allow_write_classes = photo, world, character$/m.test(config)) throw new Error("writes config must allow all three write classes");
     const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
     config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
     if (!config.includes(warning)) throw new Error("writes config lost its warning");
@@ -129,6 +130,7 @@ function stage(variant: Variant) {
     variant,
     bridge_enabled: variant !== "default",
     allow_writes: variant === "writes",
+    write_classes: variant === "writes" ? ["photo", "world", "character"] : [],
     commit: builtCommit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {

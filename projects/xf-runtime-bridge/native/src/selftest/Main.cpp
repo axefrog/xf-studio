@@ -4,7 +4,7 @@
 // limit, game-thread marshalling and kill switch the plugin uses. Game-thread methods return
 // clearly marked simulated values; nothing here proves anything about the game itself.
 //
-// Usage: xfb_selftest --runtime-dir <dir> [--seconds N] [--allow-writes] [--no-pump]
+// Usage: xfb_selftest --runtime-dir <dir> [--seconds N] [--allow-writes] [--write-classes <list>] [--no-pump]
 //        xfb_selftest --unit        (in-process checks only; no pipe)
 
 #include <Windows.h>
@@ -22,7 +22,10 @@
 #include "core/Log.hpp"
 #include "core/Params.hpp"
 #include "core/Win32.hpp"
+#include "core/Writes.hpp"
 
+#include <functional>
+#include <map>
 #include <mutex>
 
 int RunUnitTests();
@@ -55,6 +58,7 @@ int wmain(int argc, wchar_t** argv)
     std::wstring runtimeDir;
     int seconds = 30;
     bool allowWrites = false;
+    std::wstring writeClasses = L"photo,world,character";
     bool pump = true;
     for (int i = 1; i < argc; ++i)
     {
@@ -74,6 +78,10 @@ int wmain(int argc, wchar_t** argv)
         else if (arg == L"--allow-writes")
         {
             allowWrites = true;
+        }
+        else if (arg == L"--write-classes" && i + 1 < argc)
+        {
+            writeClasses = argv[++i];
         }
         else if (arg == L"--no-pump")
         {
@@ -99,6 +107,9 @@ int wmain(int argc, wchar_t** argv)
     xfb::Config config;
     config.bridgeEnabled = true;
     config.allowWrites = allowWrites;
+    // The same parser as the plugin's config.ini ([bridge] allow_write_classes).
+    config.writeClasses =
+        xfb::ParseConfig("[bridge]\nallow_write_classes = " + xfb::win32::Narrow(writeClasses) + "\n").writeClasses;
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
 
@@ -178,16 +189,21 @@ int wmain(int argc, wchar_t** argv)
                          }});
 
     // Phase-2 methods, simulated: the same names, access classes and parameter checks
-    // (core/Params.cpp) as the plugin, with a simulated game phase instead of the game.
-    // selftest.phase switches the simulated phase so clients can test phase refusals.
+    // (core/Params.cpp) as the plugin, and the same write logic (core/Writes.cpp: undo
+    // parameters, the light sequence, the kill switch's once-only restore), with a simulated game
+    // (phase, photo-mode attributes, freeze, clock) instead of the game. selftest.phase switches
+    // the simulated phase so clients can test phase refusals.
     struct Simulated
     {
         std::mutex mutex;
         std::string phase = "gameplay";
         bool hudHidden = false;
+        bool frozen = false;
         int32_t clock = 12 * 3600;
+        std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
     };
     static Simulated sim;
+    static xfb::writes::RestoreOnce restore;
     const auto phase = [] {
         std::scoped_lock _(sim.mutex);
         return sim.phase;
@@ -198,17 +214,27 @@ int wmain(int argc, wchar_t** argv)
             throw xfb::MethodError(aCode, std::string("simulated: the game is in '") + phase() + "'");
         }
     };
-    const auto simulatedAttributes = [](const std::vector<xfb::params::Attribute>& aAttributes, const char* aMethod) {
-        json undo = json::object();
-        for (const auto& attribute : aAttributes)
+    // One simulated attribute change, answered like XFPhoto.SetAttribute.
+    const auto simulatedSet = [](int32_t aKey, float aValue) {
+        std::scoped_lock _(sim.mutex);
+        if (sim.phase != "photo_mode")
         {
-            undo[attribute.name] = 0;
+            throw xfb::MethodError("not_in_photo_mode", "simulated: photo mode is not open");
         }
-        return json{{"simulated", true},
-                    {"applied", xfb::params::AttributesJson(aAttributes)},
-                    {"undo", {{"method", aMethod}, {"params", undo}}}};
+        const float before = sim.attributes[aKey];
+        sim.attributes[aKey] = aValue;
+        return json{{"simulated", true}, {"key", aKey}, {"before", before}, {"before_known", true}, {"after", aValue}};
+    };
+    // Marks the write for the kill switch's restore, like the plugin's WriteMethod wrapper.
+    const auto simWrite = [](const char* aName, xfb::Access aAccess, xfb::RunOn aRunOn, const char* aSummary,
+                             std::function<json(const xfb::MethodContext&)> aFn) {
+        return xfb::MethodSpec{aName, aAccess, aRunOn, aSummary, [aFn](const xfb::MethodContext& aContext) {
+                                   restore.MarkWrite();
+                                   return aFn(aContext);
+                               }};
     };
     namespace p = xfb::params;
+    namespace w = xfb::writes;
     dispatcher.Register({"selftest.phase", xfb::Access::Read, xfb::RunOn::BridgeThread,
                          "Sets the simulated game phase (self-test only).", [](const xfb::MethodContext& aContext) {
                              std::scoped_lock _(sim.mutex);
@@ -218,10 +244,13 @@ int wmain(int argc, wchar_t** argv)
     dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
                          [phase](const xfb::MethodContext& aContext) {
                              p::RequireOnly(aContext.params, {});
+                             std::scoped_lock _(sim.mutex);
                              return json{{"simulated", true},
-                                         {"phase", phase()},
-                                         {"player_present", phase() == "gameplay" || phase() == "photo_mode"},
-                                         {"photo_mode_active", phase() == "photo_mode"},
+                                         {"phase", sim.phase},
+                                         {"player_present", sim.phase == "gameplay" || sim.phase == "photo_mode"},
+                                         {"photo_mode_active", sim.phase == "photo_mode"},
+                                         {"world_frozen", sim.frozen},
+                                         {"ui_hidden", sim.hudHidden},
                                          {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}}};
                          }});
     dispatcher.Register({"player.appearance", xfb::Access::Read, xfb::RunOn::GameThread,
@@ -249,99 +278,139 @@ int wmain(int argc, wchar_t** argv)
                              }
                              return out;
                          }});
-    dispatcher.Register({"photo.enter", xfb::Access::Write, xfb::RunOn::BridgeThread, "Opens photo mode (simulated).",
-                         [phase](const xfb::MethodContext& aContext) {
-                             p::RequireOnly(aContext.params, {});
-                             std::scoped_lock _(sim.mutex);
-                             if (sim.phase != "gameplay" && sim.phase != "photo_mode")
-                             {
-                                 throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
-                             }
-                             const bool changed = sim.phase != "photo_mode";
-                             sim.phase = "photo_mode";
-                             return json{{"simulated", true}, {"changed", changed}, {"active", true},
-                                         {"undo", {{"method", "photo.exit"}, {"params", json::object()}}}};
-                         }});
-    dispatcher.Register({"photo.exit", xfb::Access::Write, xfb::RunOn::BridgeThread, "Leaves photo mode (simulated).",
-                         [](const xfb::MethodContext& aContext) {
-                             p::RequireOnly(aContext.params, {});
-                             std::scoped_lock _(sim.mutex);
-                             const bool changed = sim.phase == "photo_mode";
-                             if (changed)
-                             {
-                                 sim.phase = "gameplay";
-                             }
-                             return json{{"simulated", true}, {"changed", changed}, {"active", false},
-                                         {"undo", {{"method", "photo.enter"}, {"params", json::object()}}}};
-                         }});
-    dispatcher.Register({"photo.camera.set", xfb::Access::Write, xfb::RunOn::GameThread, "Camera (simulated).",
-                         [requirePhase, simulatedAttributes](const xfb::MethodContext& aContext) {
-                             const auto request = p::ParseCamera(aContext.params);
-                             requirePhase("photo_mode", "not_in_photo_mode");
-                             if (request.reset)
-                             {
-                                 return json{{"simulated", true}, {"reset", json::array()}};
-                             }
-                             return simulatedAttributes(request.attributes, "photo.camera.set");
-                         }});
-    dispatcher.Register({"photo.light.set", xfb::Access::Write, xfb::RunOn::BridgeThread, "Light (simulated).",
-                         [requirePhase, simulatedAttributes](const xfb::MethodContext& aContext) {
-                             const auto request = p::ParseLight(aContext.params);
-                             requirePhase("photo_mode", "not_in_photo_mode");
-                             auto out = simulatedAttributes(request.attributes, "photo.light.set");
-                             out["light"] = request.light;
-                             out["undo"]["params"]["light"] = request.light;
-                             return out;
-                         }});
-    dispatcher.Register({"photo.hud.hide", xfb::Access::Write, xfb::RunOn::GameThread, "Photo UI (simulated).",
-                         [requirePhase](const xfb::MethodContext& aContext) {
-                             const bool hidden = p::ParseHudHidden(aContext.params);
-                             requirePhase("photo_mode", "not_in_photo_mode");
-                             std::scoped_lock _(sim.mutex);
-                             const bool was = sim.hudHidden;
-                             sim.hudHidden = hidden;
-                             return json{{"simulated", true}, {"hidden", hidden}, {"was_hidden", was},
-                                         {"undo", {{"method", "photo.hud.hide"}, {"params", {{"hidden", was}}}}}};
-                         }});
-    dispatcher.Register({"photo.expression.set", xfb::Access::Write, xfb::RunOn::GameThread, "Expression (simulated).",
-                         [requirePhase](const xfb::MethodContext& aContext) {
-                             const auto face = p::ParseExpression(aContext.params);
-                             requirePhase("photo_mode", "not_in_photo_mode");
-                             return json{{"simulated", true}, {"key", p::key::kExpression}, {"before", 0}, {"after", face},
-                                         {"undo", {{"method", "photo.expression.set"}, {"params", {{"faceId", 0}}}}}};
-                         }});
-    dispatcher.Register({"cc.apply", xfb::Access::Write, xfb::RunOn::GameThread, "Character option (simulated).",
-                         [requirePhase](const xfb::MethodContext& aContext) {
-                             const auto request = p::ParseCharacterApply(aContext.params);
-                             requirePhase("character_menu", "not_in_character_menu");
-                             if (request.index >= 13)
-                             {
-                                 throw xfb::MethodError("bad_params", "simulated: option has values 0 to 12");
-                             }
-                             return json{{"simulated", true}, {"option", request.option}, {"before", 0}, {"after", request.index},
-                                         {"undo", {{"method", "cc.apply"}, {"params", {{"option", request.option}, {"index", 0}}}}}};
-                         }});
-    dispatcher.Register({"world.time.set", xfb::Access::Write, xfb::RunOn::GameThread, "Clock (simulated).",
-                         [requirePhase](const xfb::MethodContext& aContext) {
-                             const auto request = p::ParseTime(aContext.params);
-                             requirePhase("gameplay", "not_in_gameplay");
-                             std::scoped_lock _(sim.mutex);
-                             const auto before = sim.clock;
-                             sim.clock = request.totalSeconds >= 0 ? request.totalSeconds
-                                                                   : request.hours * 3600 + request.minutes * 60 + request.seconds;
-                             return json{{"simulated", true}, {"before_total_seconds", before}, {"after_total_seconds", sim.clock},
-                                         {"undo", {{"method", "world.time.set"}, {"params", {{"total_seconds", before}}}}}};
-                         }});
-    dispatcher.Register({"world.pause", xfb::Access::Write, xfb::RunOn::GameThread, "World freeze (simulated).",
-                         [requirePhase](const xfb::MethodContext& aContext) {
-                             const bool paused = p::ParsePause(aContext.params);
-                             if (paused)
-                             {
-                                 requirePhase("gameplay", "not_in_gameplay");
-                             }
-                             return json{{"simulated", true}, {"frozen", paused},
-                                         {"undo", {{"method", "world.pause"}, {"params", {{"paused", !paused}}}}}};
-                         }});
+    dispatcher.Register(simWrite("photo.enter", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Opens photo mode (simulated).",
+                                 [](const xfb::MethodContext& aContext) {
+                                     p::RequireOnly(aContext.params, {});
+                                     std::scoped_lock _(sim.mutex);
+                                     if (sim.phase != "gameplay" && sim.phase != "photo_mode")
+                                     {
+                                         throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                     }
+                                     const bool changed = sim.phase != "photo_mode";
+                                     if (changed)
+                                     {
+                                         sim.attributes.clear(); // photo mode opens with its defaults
+                                     }
+                                     sim.phase = "photo_mode";
+                                     return json{{"simulated", true}, {"changed", changed}, {"active", true},
+                                                 {"undo", {{"method", "photo.exit"}, {"params", json::object()}}}};
+                                 }));
+    dispatcher.Register(simWrite("photo.exit", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Leaves photo mode (simulated).",
+                                 [](const xfb::MethodContext& aContext) {
+                                     p::RequireOnly(aContext.params, {});
+                                     std::scoped_lock _(sim.mutex);
+                                     const bool changed = sim.phase == "photo_mode";
+                                     if (changed)
+                                     {
+                                         sim.phase = "gameplay";
+                                         sim.hudHidden = false; // leaving photo mode always shows its menu again
+                                     }
+                                     return json{{"simulated", true}, {"changed", changed}, {"active", false},
+                                                 {"undo", {{"method", "photo.enter"}, {"params", json::object()}}}};
+                                 }));
+    dispatcher.Register(simWrite("photo.camera.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Camera (simulated).",
+                                 [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseCamera(aContext.params);
+                                     requirePhase("photo_mode", "not_in_photo_mode");
+                                     if (request.reset)
+                                     {
+                                         json resets = json::array();
+                                         for (const auto key : p::CameraKeys())
+                                         {
+                                             resets.push_back(simulatedSet(key, 0.0f));
+                                         }
+                                         return w::CameraResetResult(resets);
+                                     }
+                                     json applied = json::array();
+                                     for (const auto& attribute : request.attributes)
+                                     {
+                                         auto result = simulatedSet(attribute.key, attribute.value);
+                                         result["name"] = attribute.name;
+                                         applied.push_back(result);
+                                     }
+                                     std::vector<std::string> unknown;
+                                     json out{{"simulated", true}, {"applied", applied}};
+                                     w::AttachUndo(out, "photo.camera.set", w::UndoParams(applied, &unknown), unknown);
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("photo.light.set", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Light (simulated).",
+                                 [requirePhase, simulatedSet, &queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseLight(aContext.params);
+                                     requirePhase("photo_mode", "not_in_photo_mode");
+                                     w::LightOps ops;
+                                     ops.set = simulatedSet;
+                                     ops.settle = [&queue] {
+                                         if (!w::WaitTicks(queue, 3, std::chrono::milliseconds(1000)))
+                                         {
+                                             throw xfb::MethodError("timeout", "simulated: no game ticks");
+                                         }
+                                     };
+                                     auto out = w::LightSet(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("photo.hud.hide", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Photo UI (simulated).",
+                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                     const bool hidden = p::ParseHudHidden(aContext.params);
+                                     requirePhase("photo_mode", "not_in_photo_mode");
+                                     std::scoped_lock _(sim.mutex);
+                                     const bool was = sim.hudHidden;
+                                     sim.hudHidden = hidden;
+                                     return json{{"simulated", true}, {"hidden", hidden}, {"was_hidden", was},
+                                                 {"undo", {{"method", "photo.hud.hide"}, {"params", {{"hidden", was}}}}}};
+                                 }));
+    dispatcher.Register(simWrite("photo.expression.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Expression (simulated).",
+                                 [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
+                                     const auto face = p::ParseExpression(aContext.params);
+                                     requirePhase("photo_mode", "not_in_photo_mode");
+                                     return w::ExpressionResult(simulatedSet(p::key::kExpression, static_cast<float>(face)));
+                                 }));
+    dispatcher.Register(simWrite("cc.apply", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Character option (simulated).",
+                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseCharacterApply(aContext.params);
+                                     requirePhase("character_menu", "not_in_character_menu");
+                                     if (request.index >= 13)
+                                     {
+                                         throw xfb::MethodError("bad_params", "simulated: option has values 0 to 12");
+                                     }
+                                     return json{{"simulated", true}, {"option", request.option}, {"before", 0}, {"after", request.index},
+                                                 {"undo", {{"method", "cc.apply"}, {"params", {{"option", request.option}, {"index", 0}}}}}};
+                                 }));
+    dispatcher.Register(simWrite("world.time.set", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Clock (simulated).",
+                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseTime(aContext.params);
+                                     requirePhase("gameplay", "not_in_gameplay");
+                                     std::scoped_lock _(sim.mutex);
+                                     const auto before = sim.clock;
+                                     sim.clock = request.totalSeconds >= 0 ? request.totalSeconds
+                                                                           : request.hours * 3600 + request.minutes * 60 + request.seconds;
+                                     return json{{"simulated", true}, {"before_total_seconds", before}, {"after_total_seconds", sim.clock},
+                                                 {"undo", {{"method", "world.time.set"}, {"params", {{"total_seconds", before}}}}}};
+                                 }));
+    dispatcher.Register(simWrite("world.pause", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "World freeze (simulated).",
+                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                     const bool paused = p::ParsePause(aContext.params);
+                                     if (paused)
+                                     {
+                                         requirePhase("gameplay", "not_in_gameplay");
+                                     }
+                                     std::scoped_lock _(sim.mutex);
+                                     const bool was = sim.frozen;
+                                     sim.frozen = paused;
+                                     return w::PauseResult(json{{"simulated", true}, {"frozen", paused}, {"was_frozen", was}});
+                                 }));
+    // The kill switch's restore, simulated like XFBridgeActions.RestoreAfterKill: unfreeze and
+    // show the photo-mode menu; the save lock would stay.
+    const auto simulatedRestore = [] {
+        std::scoped_lock _(sim.mutex);
+        json out{{"simulated", true}, {"world_unfrozen", sim.frozen}, {"photo_ui_shown", sim.hudHidden}};
+        sim.frozen = false;
+        sim.hudHidden = false;
+        xfb::log::Info("bridge.kill_restored", xfb::SerializeJson(out), "kill-restore");
+    };
+    const auto restoreFailed = [](const std::string& aWhat) {
+        xfb::log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
+    };
 
     if (!bridge.Start(error))
     {
@@ -356,8 +425,14 @@ int wmain(int argc, wchar_t** argv)
         if (pump)
         {
             queue.Drain(4); // the plugin does this once per engine tick
+            restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+    // The loop ends as soon as the kill switch fires; the plugin's next tick would restore here.
+    if (pump)
+    {
+        restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
     }
 
     queue.Close();

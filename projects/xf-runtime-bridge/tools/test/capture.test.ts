@@ -2,13 +2,13 @@
 // (tools/test/synthetic-window.ps1). No game involved.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join, parse } from "node:path";
 import { captureWindow, CaptureError, recrop } from "../capture/capture.ts";
 import { decodePng, downscaleArea, encodePng, fitSize } from "../capture/image.ts";
 import { resolveRegion } from "../capture/regions.ts";
 import type { Pixels } from "../capture/win32.ts";
-import { openSyntheticWindow, tempDir, type Synthetic } from "./helpers.ts";
+import { openSyntheticWindow, projectDir, tempDir, type Synthetic } from "./helpers.ts";
 
 const at = (p: Pixels, x: number, y: number) => Array.from(p.rgb.subarray((y * p.width + x) * 3, (y * p.width + x) * 3 + 3));
 const close = (actual: number[], expected: number[], tolerance = 2) => actual.every((v, i) => Math.abs(v - expected[i]) <= tolerance);
@@ -149,10 +149,57 @@ for (const [w, h] of [
 }
 
 describe("capture refusals", () => {
+  const tinyPng = () => encodePng({ width: 1, height: 1, rgb: new Uint8Array(3) });
+  const refusedAsOutside = (fn: () => unknown) => expect(fn).toThrow(/Only captures saved in the XF capture folder/);
+
   test("recrop refuses files outside the capture folder", () => {
     const outside = join(tempDir("xfb-outside-"), "x.full.png");
-    writeFileSync(outside, encodePng({ width: 1, height: 1, rgb: new Uint8Array(3) }));
-    expect(() => recrop({ path: outside, root: tempDir("xfb-root-") })).toThrow(CaptureError);
+    writeFileSync(outside, tinyPng());
+    refusedAsOutside(() => recrop({ path: outside, root: tempDir("xfb-root-") }));
+  });
+
+  test("recrop refuses a file on another drive (relative() returns an absolute path there)", () => {
+    // The capture root is in the temp folder (C:) and the file under the project's ignored build
+    // folder (D: on the development machine). On a one-drive machine this is a plain outside check.
+    const root = tempDir("xfb-root-");
+    const otherDir = join(projectDir, "build");
+    if (parse(otherDir).root.toLowerCase() === parse(root).root.toLowerCase()) console.warn("recrop cross-drive test: temp and project share a drive");
+    mkdirSync(otherDir, { recursive: true });
+    const dir = mkdtempSync(join(otherDir, "xfb-otherdrive-"));
+    const file = join(dir, "x.full.png");
+    writeFileSync(file, tinyPng());
+    try {
+      refusedAsOutside(() => recrop({ path: file, root }));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("recrop refuses UNC and device paths before touching the file system", () => {
+    const root = tempDir("xfb-root-");
+    for (const path of [String.raw`\\127.0.0.1\c$\x.full.png`, "//127.0.0.1/share/x.full.png", String.raw`\\?\C:\x.full.png`, String.raw`\\.\pipe\x.full.png`, String.raw` \\host\s\x.full.png`]) {
+      const started = performance.now();
+      refusedAsOutside(() => recrop({ path, root }));
+      expect(performance.now() - started).toBeLessThan(200); // no SMB connection attempt
+    }
+  });
+
+  test("recrop refuses .. and a junction inside the folder that leads out of it", () => {
+    const root = tempDir("xfb-root-");
+    const outsideDir = tempDir("xfb-outside-");
+    writeFileSync(join(outsideDir, "x.full.png"), tinyPng());
+    refusedAsOutside(() => recrop({ path: join(root, "..", parse(outsideDir).base, "x.full.png"), root }));
+    symlinkSync(outsideDir, join(root, "link"), "junction");
+    refusedAsOutside(() => recrop({ path: join(root, "link", "x.full.png"), root }));
+    refusedAsOutside(() => recrop({ path: root, root }));
+  });
+
+  test("recrop accepts a relative path inside the folder and writes beside it", () => {
+    const root = tempDir("xfb-root-");
+    mkdirSync(join(root, "session"));
+    writeFileSync(join(root, "session", "shot.full.png"), encodePng({ width: 4, height: 4, rgb: new Uint8Array(48) }));
+    const record = recrop({ path: join("session", "shot.full.png"), root });
+    expect(record.full.path.toLowerCase().startsWith(join(root, "session").toLowerCase())).toBe(true);
   });
 
   test("a missing window is a plain error", () => {

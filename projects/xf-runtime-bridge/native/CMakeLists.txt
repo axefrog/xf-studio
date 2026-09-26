@@ -97,6 +97,7 @@ add_library(xfb_core STATIC
   src/core/PipeServer.cpp
   src/core/Session.cpp
   src/core/Win32.cpp
+  src/core/Writes.cpp
 )
 target_include_directories(xfb_core PUBLIC src PRIVATE "${XFB_GENERATED_DIR}")
 add_dependencies(xfb_core xfb_build_info)

@@ -53,16 +53,43 @@ std::optional<int64_t> Integer(const json& aParams, const char* aKey, int64_t aM
     {
         return std::nullopt;
     }
-    if (!it->is_number_integer() && !(it->is_number_float() && std::floor(it->get<double>()) == it->get<double>()))
+    const auto outOfRange = [&] {
+        Bad(std::string("'") + aKey + "' must be between " + std::to_string(aMin) + " and " + std::to_string(aMax));
+    };
+    // Range-checked in the value's own type before any conversion: a huge unsigned value would wrap
+    // in int64_t, and converting an out-of-range double to an integer is undefined behaviour.
+    if (it->is_number_unsigned())
+    {
+        const auto value = it->get<uint64_t>();
+        if (aMax < 0 || value > static_cast<uint64_t>(aMax) || static_cast<int64_t>(value) < aMin)
+        {
+            outOfRange();
+        }
+        return static_cast<int64_t>(value);
+    }
+    if (it->is_number_integer())
+    {
+        const auto value = it->get<int64_t>();
+        if (value < aMin || value > aMax)
+        {
+            outOfRange();
+        }
+        return value;
+    }
+    if (!it->is_number_float())
     {
         Bad(std::string("'") + aKey + "' must be a whole number");
     }
-    const auto value = it->is_number_integer() ? it->get<int64_t>() : static_cast<int64_t>(it->get<double>());
-    if (value < aMin || value > aMax)
+    const double value = it->get<double>();
+    if (!std::isfinite(value) || std::floor(value) != value)
     {
-        Bad(std::string("'") + aKey + "' must be between " + std::to_string(aMin) + " and " + std::to_string(aMax));
+        Bad(std::string("'") + aKey + "' must be a whole number");
     }
-    return value;
+    if (value < static_cast<double>(aMin) || value > static_cast<double>(aMax))
+    {
+        outOfRange();
+    }
+    return static_cast<int64_t>(value);
 }
 
 std::optional<bool> Boolean(const json& aParams, const char* aKey)
@@ -200,6 +227,39 @@ CameraRequest ParseCamera(const json& aParams)
     return request;
 }
 
+std::string CameraParamName(int32_t aKey)
+{
+    switch (aKey)
+    {
+    case key::kFov:
+        return "fov";
+    case key::kRoll:
+        return "roll";
+    case key::kFocalDistance:
+        return "focal_distance";
+    case key::kAperture:
+        return "aperture";
+    case key::kDepthOfField:
+        return "dof";
+    case key::kAutofocus:
+        return "autofocus";
+    case key::kLookAt:
+        return "look_at";
+    case key::kLookAtPart:
+        return "look_at_part";
+    case key::kSubjectYaw:
+        return "subject.yaw";
+    case key::kSubjectLeftRight:
+        return "subject.left_right";
+    case key::kSubjectNearFar:
+        return "subject.near_far";
+    case key::kSubjectUpDown:
+        return "subject.up_down";
+    default:
+        return {};
+    }
+}
+
 std::vector<int32_t> CameraKeys()
 {
     return {key::kFov,         key::kRoll,     key::kFocalDistance, key::kAperture,     key::kDepthOfField,
@@ -210,9 +270,11 @@ std::vector<int32_t> CameraKeys()
 LightRequest ParseLight(const json& aParams)
 {
     RequireOnly(aParams,
-                {"light", "brightness", "range", "inner_angle", "outer_angle", "hue", "saturation", "luminosity"});
+                {"light", "brightness", "range", "inner_angle", "outer_angle", "hue", "saturation", "luminosity",
+                 "select_after"});
     LightRequest request;
     request.light = static_cast<int32_t>(Integer(aParams, "light", 1, 3).value_or(1));
+    request.selectAfter = static_cast<int32_t>(Integer(aParams, "select_after", 1, 3).value_or(0));
     Add(request.attributes, aParams, "brightness", key::kLightBrightness, 0, 100);
     Add(request.attributes, aParams, "range", key::kLightRange, 0, 100);
     Add(request.attributes, aParams, "inner_angle", key::kLightInnerAngle, 0, 180);

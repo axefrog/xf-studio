@@ -16,11 +16,14 @@ const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/core/Dis
   .join("\n");
 const selftestSource = readFileSync(join(projectDir, "native/src/selftest/Main.cpp"), "utf8");
 
-/** Access class the plugin registers for a method: "write" for WriteMethod(...), else from Access::X. */
+/** The access class a method is registered with in C++ source, as the tools name it ("write-photo"). */
 function nativeAccess(source: string, method: string): string | null {
-  if (new RegExp(`WriteMethod\\("${method.replaceAll(".", "\\.")}"`).test(source)) return "write";
-  const match = new RegExp(`\\{"${method.replaceAll(".", "\\.")}",\\s*(?:xfb::)?Access::(\\w+)`).exec(source);
-  return match ? match[1].toLowerCase() : null;
+  const name = method.replaceAll(".", "\\.");
+  const match =
+    new RegExp(`WriteMethod\\("${name}",\\s*Access::(\\w+)`).exec(source) ??
+    new RegExp(`simWrite\\("${name}",\\s*xfb::Access::(\\w+)`).exec(source) ??
+    new RegExp(`\\{"${name}",\\s*(?:xfb::)?Access::(\\w+)`).exec(source);
+  return match ? match[1].replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : null;
 }
 
 function walk(schema: JsonSchema, visit: (schema: JsonSchema, path: string) => void, path = "input") {
@@ -74,7 +77,8 @@ describe("catalogue", () => {
   test("every bridge command exists in the plugin and the self-test host with the matching access class", () => {
     for (const command of CATALOGUE.filter((c) => c.bridge)) {
       const method = command.bridge!.method;
-      const expected = command.permission === "read" ? "read" : command.permission === "control" ? "control" : "write";
+      // The native access classes are the same as the tools' permission classes (RB-26).
+      const expected = command.permission;
       expect(nativeAccess(pluginSource, method), `plugin ${method}`).toBe(expected);
       expect(nativeAccess(selftestSource, method) ?? nativeAccess(pluginSource, method), `selftest ${method}`).toBe(expected);
     }
@@ -94,6 +98,17 @@ describe("catalogue", () => {
     expect(readOnly.every((t) => ["read", "control"].includes(String(t._meta?.["xf/permission"])))).toBe(true);
     expect(readOnly.some((t) => t.name === "bridge_kill")).toBe(true);
     expect(readOnly.some((t) => t.name === "cc_apply")).toBe(false);
+  });
+
+  test("input checks accept own schema keys only: inherited names such as constructor are unknown", () => {
+    const camera = findCommand("photo.camera.set")!;
+    for (const key of ["constructor", "toString", "hasOwnProperty", "__proto__", "valueOf"]) {
+      const input = JSON.parse(`{"${key}": 1, "fov": 20}`);
+      expect(validate(camera.input, input), key).toContain(`"${key}" is not a known option.`);
+    }
+    const required: JsonSchema = { type: "object", properties: { toString: { type: "string" as const } }, required: ["toString"], additionalProperties: false };
+    expect(validate(required, {})).toEqual(['"toString" is required.']);
+    expect(validate(required, { toString: "x" })).toEqual([]);
   });
 
   test("camera presets expand into valid photo.camera.set input", () => {

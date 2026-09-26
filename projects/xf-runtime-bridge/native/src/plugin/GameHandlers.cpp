@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "core/Params.hpp"
+#include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
 
@@ -363,41 +364,14 @@ json SetPhotoAttributes(const std::vector<params::Attribute>& aAttributes, const
     return applied;
 }
 
-// {"fov": before, "subject": {"yaw": before}} from applied attributes: the parameters that undo them.
-json UndoParams(const json& aApplied)
-{
-    json undo = json::object();
-    for (const auto& item : aApplied)
-    {
-        const auto name = item.value("name", std::string());
-        const auto before = item.value("before", 0.0);
-        if (name.rfind("subject.", 0) == 0)
-        {
-            undo["subject"][name.substr(8)] = before;
-        }
-        else if (name == "dof" || name == "autofocus")
-        {
-            undo[name] = before != 0.0;
-        }
-        else if (name == "look_at" || name == "look_at_part" || name == "faceId")
-        {
-            undo[name] = static_cast<int64_t>(before);
-        }
-        else
-        {
-            undo[name] = before;
-        }
-    }
-    return undo;
-}
-
 json GameStatus(const MethodContext& aContext)
 {
     params::RequireOnly(aContext.params, {});
     auto& state = Get();
     json out{{"plugin_game_state", GameStateName(state.gameState.load())},
              {"game_version", {{"product", state.gameProductVersion}, {"file", state.gameFileVersion}}},
-             {"allow_writes", state.config.allowWrites}};
+             {"allow_writes", state.config.allowWrites},
+             {"write_classes", WriteClassList(state.config)}};
     if (!state.queue.IsPumping())
     {
         out["phase"] = state.gameState.load() == 3 ? "shutting_down" : "starting";
@@ -599,34 +573,38 @@ json PhotoCameraSet(const MethodContext& aContext)
                 }
             }
         }
-        return json{{"reset", reset}};
+        return writes::CameraResetResult(reset);
     }
     const auto applied = SetPhotoAttributes(request.attributes, aContext.cid);
-    return json{{"applied", applied}, {"undo", {{"method", "photo.camera.set"}, {"params", UndoParams(applied)}}}};
+    std::vector<std::string> unknown;
+    json out{{"applied", applied}};
+    writes::AttachUndo(out, "photo.camera.set", writes::UndoParams(applied, &unknown), unknown);
+    return out;
 }
 
 // Selecting a light and changing its values happen a few frames apart: photo mode loads the
 // newly selected light's values into the sliders after the switch (Photo Mode Preferences waits
-// two frames for the same reason, init.lua:767-790).
+// two frames for the same reason, init.lua:767-790). The wait counts game ticks, not time, so it
+// holds at any frame rate; the sequence and its undo are core/Writes.cpp (unit-tested).
+constexpr uint64_t kLightSettleTicks = 3;
+
 json PhotoLightSet(const MethodContext& aContext)
 {
     const auto request = params::ParseLight(aContext.params);
     const auto cid = aContext.cid;
     auto& queue = Get().queue;
-    const auto select = RunGameTask(
-        queue, Timeout(),
-        [cid, light = request.light] { return SetPhotoAttribute(params::key::kLightSelect, static_cast<float>(light - 1), cid); },
-        "photo.light.select");
-    if (select.value("before", 0.0) != select.value("after", 0.0))
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    }
-    const auto attributes = request.attributes;
-    const auto applied = RunGameTask(
-        queue, Timeout(), [cid, attributes] { return SetPhotoAttributes(attributes, cid); }, "photo.light.set");
-    auto undo = UndoParams(applied);
-    undo["light"] = request.light;
-    return json{{"light", request.light}, {"applied", applied}, {"undo", {{"method", "photo.light.set"}, {"params", undo}}}};
+    writes::LightOps ops;
+    ops.set = [&queue, cid](int32_t aKey, float aValue) {
+        return RunGameTask(queue, Timeout(), [cid, aKey, aValue] { return SetPhotoAttribute(aKey, aValue, cid); },
+                           aKey == params::key::kLightSelect ? "photo.light.select" : "photo.light.set");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, kLightSettleTicks, Timeout()))
+        {
+            throw MethodError("timeout", "photo mode didn't load the selected light's values in time");
+        }
+    };
+    return writes::LightSet(request, ops);
 }
 
 json PhotoHudHide(const MethodContext& aContext)
@@ -640,9 +618,7 @@ json PhotoHudHide(const MethodContext& aContext)
 json PhotoExpressionSet(const MethodContext& aContext)
 {
     const auto face = params::ParseExpression(aContext.params);
-    auto result = SetPhotoAttribute(params::key::kExpression, static_cast<float>(face), aContext.cid);
-    result["undo"] = {{"method", "photo.expression.set"}, {"params", {{"faceId", static_cast<int64_t>(result.value("before", 0.0))}}}};
-    return result;
+    return writes::ExpressionResult(SetPhotoAttribute(params::key::kExpression, static_cast<float>(face), aContext.cid));
 }
 
 json CharacterApply(const MethodContext& aContext)
@@ -673,17 +649,16 @@ json WorldTimeSet(const MethodContext& aContext)
 json WorldPause(const MethodContext& aContext)
 {
     bool paused = params::ParsePause(aContext.params);
-    auto result = CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid);
-    result["undo"] = {{"method", "world.pause"}, {"params", {{"paused", !paused}}}};
-    return result;
+    return writes::PauseResult(CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid));
 }
 
 // Wraps a write method: marks that the bridge changed something (so the kill switch restores it)
 // and logs the change with its reversal.
-MethodSpec WriteMethod(std::string aName, RunOn aRunOn, std::string aSummary, json (*aFn)(const MethodContext&))
+MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::string aSummary,
+                       json (*aFn)(const MethodContext&))
 {
-    return {aName, Access::Write, aRunOn, std::move(aSummary), [aName, aFn](const MethodContext& aContext) {
-                Get().writesUsed.store(true);
+    return {aName, aAccess, aRunOn, std::move(aSummary), [aName, aFn](const MethodContext& aContext) {
+                Get().restore.MarkWrite();
                 auto result = aFn(aContext);
                 log::Info("write.done",
                           "method=" + aName + " undo=" + SerializeJson(result.contains("undo") ? result["undo"] : json("none")),
@@ -695,20 +670,8 @@ MethodSpec WriteMethod(std::string aName, RunOn aRunOn, std::string aSummary, js
 
 void RestoreAfterKill()
 {
-    auto& state = Get();
-    if (!state.writesUsed.load() || state.restoreDone.exchange(true))
-    {
-        return;
-    }
-    try
-    {
-        const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
-        log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
-    }
-    catch (const std::exception& e)
-    {
-        log::Warn("bridge.kill_restore_failed", std::string("what=") + e.what(), "kill-restore");
-    }
+    const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
+    log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
 }
 
 void RegisterMethods(Dispatcher& aDispatcher)
@@ -759,21 +722,21 @@ void RegisterMethods(Dispatcher& aDispatcher)
                           &PhotoState});
 
     // Phase 2. Writes (refused unless allow_writes = true); each logs its reversal.
-    aDispatcher.Register(WriteMethod("photo.enter", RunOn::BridgeThread, "Opens photo mode (needs Codeware).", &PhotoEnter));
-    aDispatcher.Register(WriteMethod("photo.exit", RunOn::BridgeThread, "Leaves photo mode.", &PhotoExit));
-    aDispatcher.Register(WriteMethod("photo.camera.set", RunOn::GameThread,
+    aDispatcher.Register(WriteMethod("photo.enter", Access::WritePhoto, RunOn::BridgeThread, "Opens photo mode (needs Codeware).", &PhotoEnter));
+    aDispatcher.Register(WriteMethod("photo.exit", Access::WritePhoto, RunOn::BridgeThread, "Leaves photo mode.", &PhotoExit));
+    aDispatcher.Register(WriteMethod("photo.camera.set", Access::WritePhoto, RunOn::GameThread,
                                      "Photo-mode camera and subject settings (FOV, roll, focus, DOF, V's placement), or reset.",
                                      &PhotoCameraSet));
-    aDispatcher.Register(WriteMethod("photo.light.set", RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
+    aDispatcher.Register(WriteMethod("photo.light.set", Access::WritePhoto, RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
                                      &PhotoLightSet));
-    aDispatcher.Register(WriteMethod("photo.hud.hide", RunOn::GameThread, "Hides or shows the photo-mode interface.", &PhotoHudHide));
-    aDispatcher.Register(WriteMethod("photo.expression.set", RunOn::GameThread, "Sets V's photo-mode expression by its value.",
+    aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface.", &PhotoHudHide));
+    aDispatcher.Register(WriteMethod("photo.expression.set", Access::WritePhoto, RunOn::GameThread, "Sets V's photo-mode expression by its value.",
                                      &PhotoExpressionSet));
-    aDispatcher.Register(WriteMethod("cc.apply", RunOn::GameThread,
+    aDispatcher.Register(WriteMethod("cc.apply", Access::WriteCharacter, RunOn::GameThread,
                                      "Sets one character-creator option on the open appearance screen (never confirms).",
                                      &CharacterApply));
-    aDispatcher.Register(WriteMethod("world.time.set", RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
-    aDispatcher.Register(WriteMethod("world.pause", RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
+    aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread, "Sets the in-game clock (gameplay only).", &WorldTimeSet));
+    aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
 
     // A write-class probe with no game effect: proves the write gate and audit log in game.
     aDispatcher.Register({"diag.write_probe", Access::Write, RunOn::GameThread,

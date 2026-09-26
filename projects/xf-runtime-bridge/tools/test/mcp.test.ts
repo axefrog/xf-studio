@@ -4,12 +4,15 @@
 // proves nothing about the game.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { spawnSync } from "node:child_process";
 import { CATALOGUE, toolName } from "../api/catalogue.ts";
+import { parsePermissionFlags } from "../mcp/server.ts";
+import { acquireSessionLock, LOCK_FILE, readSessionLock } from "../session-lock.ts";
 import { BridgeClient } from "../bridge-lib.ts";
 import { decodePng } from "../capture/image.ts";
 import { openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
@@ -134,13 +137,24 @@ describe("MCP server against a bridge with writes allowed", () => {
     const applied = json(result).result.applied as { name: string; value: number }[];
     expect(applied.map((a) => a.name).sort()).toEqual(["fov", "subject.up_down", "subject.yaw"]);
     expect(json(result).result.undo.method).toBe("photo.camera.set");
+    const presetResult = result;
 
     result = await call(mcp, "photo_camera_set", { fov: 500 });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("at most 180");
 
+    // Each undo restores what the call changed (RB-18): the camera values the preset changed, the
+    // light's values and the menu's light selection (light 1 was selected when photo mode opened).
+    expect(json(presetResult).result.undo.params).toEqual({ fov: 0, subject: { up_down: 0, yaw: 0 } });
+    result = await call(mcp, "photo_camera_set", { reset: true });
+    const resetUndo = json(result).result.undo;
+    expect(resetUndo).toMatchObject({ method: "photo.camera.set", params: { fov: 15, subject: { yaw: 180 } } });
+    expect(resetUndo.params.subject.up_down).toBeCloseTo(0.1, 5);
+
     result = await call(mcp, "photo_light_set", { light: 2, brightness: 40, hue: 200 });
-    expect(json(result).result.undo.params.light).toBe(2);
+    expect(json(result).result.undo).toEqual({ method: "photo.light.set", params: { light: 2, brightness: 0, hue: 0, select_after: 1 } });
+    result = await call(mcp, "photo_light_set", json(result).result.undo.params);
+    expect(json(result).result.selected).toBe(1);
     result = await call(mcp, "photo_hud_hide", {});
     expect(json(result).result.undo).toEqual({ method: "photo.hud.hide", params: { hidden: false } });
     result = await call(mcp, "photo_expression_set", { faceId: 9 });
@@ -160,7 +174,11 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(json(result).result.after_total_seconds).toBe(12 * 3600);
     result = await call(mcp, "world_pause", { paused: true });
     expect(json(result).result.undo).toEqual({ method: "world.pause", params: { paused: false } });
-    await call(mcp, "world_pause", { paused: false });
+    // Pausing again changes nothing, so there is nothing to undo (RB-18: from the previous state).
+    result = await call(mcp, "world_pause", { paused: true });
+    expect(json(result).result.undo).toBeNull();
+    result = await call(mcp, "world_pause", { paused: false });
+    expect(json(result).result.undo).toEqual({ method: "world.pause", params: { paused: true } });
   });
 
   test("cc_apply works while the appearance screen is open", async () => {
@@ -193,9 +211,10 @@ describe("MCP server permissions, no bridge, and captures", () => {
   let synthetic: Synthetic;
   let mcp: Mcp;
   const root = tempDir("xfb-mcp-cap-");
+  const noBridgeDir = tempDir("xfb-mcp-none-");
   beforeAll(async () => {
     synthetic = await openSyntheticWindow(3840, 1600);
-    mcp = await startMcp(["--read-only", "--runtime-dir", tempDir("xfb-mcp-none-"), "--capture-root", join(root, "captures"), "--capture-hwnd", String(synthetic.hwnd)]);
+    mcp = await startMcp(["--read-only", "--runtime-dir", noBridgeDir, "--capture-root", join(root, "captures"), "--capture-hwnd", String(synthetic.hwnd)]);
   });
   afterAll(async () => {
     await mcp?.close();
@@ -209,6 +228,29 @@ describe("MCP server permissions, no bridge, and captures", () => {
     const refused = await call(mcp, "photo_enter");
     expect(refused.isError).toBe(true);
     expect(text(refused)).toContain('no tool called "photo_enter"');
+  });
+
+  test("while a session runner holds its lock, bridge tools refuse plainly; captures still work", async () => {
+    // A live process that isn't this one: the test runner's parent.
+    writeFileSync(join(noBridgeDir, LOCK_FILE), JSON.stringify({ pid: process.ppid, script: "session-2", started_at: new Date().toISOString() }));
+    try {
+      const refused = await call(mcp, "game_status");
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain("A scripted session (session-2");
+      expect(text(refused)).toContain("session_running");
+      const wait = await call(mcp, "game_wait", { phase: ["gameplay"], timeout_ms: 1000 });
+      expect(text(wait)).toContain("session_running");
+      const shot = await call(mcp, "capture_screenshot", { region: "eyes", name: "during-session" });
+      expect(shot.isError).toBeFalsy();
+      const kill = await call(mcp, "bridge_kill");
+      expect(text(kill)).not.toContain("session_running");
+      // A lock whose process has gone is stale and ignored.
+      writeFileSync(join(noBridgeDir, LOCK_FILE), JSON.stringify({ pid: 0x3ffffff0, script: "old", started_at: "" }));
+      expect(text(await call(mcp, "game_status"))).toContain("no_bridge");
+    } finally {
+      rmSync(join(noBridgeDir, LOCK_FILE), { force: true });
+    }
+    expect(text(await call(mcp, "game_status"))).toContain("no_bridge");
   });
 
   test("without a running bridge, game tools explain how to start it", async () => {
@@ -241,4 +283,60 @@ describe("MCP server permissions, no bridge, and captures", () => {
     expect(recropped.isError).toBeFalsy();
     expect(json(recropped).result.crop).toMatchObject({ width: 800, height: 320 });
   }, 30000);
+});
+
+describe("MCP permission flags", () => {
+  test("--read-only and --allow are exclusive; an empty or missing --allow list is refused", () => {
+    expect(parsePermissionFlags([])).toEqual({});
+    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "control"] });
+    for (const args of [["--read-only", "--allow", "read"], ["--allow", "read", "--read-only"], ["--allow", ""], ["--allow", " , "], ["--allow"], ["--allow", "--no-inline-images"], ["--allow", "read", "--allow", "write-world"], ["--allow", "read,constructor"], ["--allow", "read,write-everything"]]) {
+      expect("error" in parsePermissionFlags(args), args.join(" ")).toBe(true);
+    }
+  });
+
+  test("a partial --allow list exposes exactly those classes, plus the kill switch", async () => {
+    expect(parsePermissionFlags(["--allow", "read, write-photo"])).toEqual({ allow: ["read", "write-photo", "control"] });
+    const mcp = await startMcp(["--allow", "read,write-photo", "--runtime-dir", tempDir("xfb-mcp-partial-")]);
+    try {
+      const { tools } = await mcp.client.listTools();
+      const expected = CATALOGUE.filter((c) => ["read", "write-photo", "control"].includes(c.permission)).map((c) => toolName(c.name));
+      expect(tools.map((t) => t.name).sort()).toEqual(expected.sort());
+      expect(tools.some((t) => t.name === "world_time_set" || t.name === "cc_apply")).toBe(false);
+      expect(tools.some((t) => t.name === "bridge_kill")).toBe(true);
+      const refused = await call(mcp, "world_pause", { paused: true });
+      expect(refused.isError).toBe(true);
+    } finally {
+      await mcp.close();
+    }
+  }, 20000);
+
+  test("the server refuses to start on conflicting flags, in plain words", () => {
+    const run = spawnSync(process.execPath, [join(projectDir, "tools", "mcp-server.ts"), "--read-only", "--allow", "read,write-photo"], { encoding: "utf8", timeout: 15000 });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain("not both");
+    const empty = spawnSync(process.execPath, [join(projectDir, "tools", "mcp-server.ts"), "--allow", ""], { encoding: "utf8", timeout: 15000 });
+    expect(empty.status).toBe(2);
+  }, 30000);
+});
+
+describe("session runner lock", () => {
+  test("one runner at a time; a stale lock is taken over; release removes only its own lock", () => {
+    const dir = tempDir("xfb-lock-");
+    const first = acquireSessionLock(dir, "session-2");
+    expect("release" in first).toBe(true);
+    expect(readSessionLock(dir)?.pid).toBe(process.pid);
+    (first as { release: () => void }).release();
+    expect(existsSync(join(dir, LOCK_FILE))).toBe(false);
+
+    writeFileSync(join(dir, LOCK_FILE), JSON.stringify({ pid: process.ppid, script: "other", started_at: "" }));
+    const blocked = acquireSessionLock(dir, "session-3");
+    expect("heldBy" in blocked && blocked.heldBy.script).toBe("other");
+
+    writeFileSync(join(dir, LOCK_FILE), JSON.stringify({ pid: 0x3ffffff0, script: "gone", started_at: "" }));
+    expect(readSessionLock(dir)).toBeNull();
+    const taken = acquireSessionLock(dir, "session-3");
+    expect("release" in taken).toBe(true);
+    expect(readSessionLock(dir)?.script).toBe("session-3");
+    (taken as { release: () => void }).release();
+  });
 });

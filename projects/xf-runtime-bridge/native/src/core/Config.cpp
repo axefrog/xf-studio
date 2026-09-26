@@ -101,6 +101,36 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.allowWrites);
         }
+        else if (key == "bridge.allow_write_classes")
+        {
+            // A comma-separated list; an unknown name is ignored with a warning, so a typo can
+            // only take a class away, never add one. An empty value allows none.
+            config.writeClasses = 0;
+            std::string rest = value;
+            while (!rest.empty())
+            {
+                const auto comma = rest.find(',');
+                const auto name = Lower(Trim(rest.substr(0, comma)));
+                rest = comma == std::string::npos ? std::string() : rest.substr(comma + 1);
+                if (name == "photo")
+                {
+                    config.writeClasses |= kWritePhoto;
+                }
+                else if (name == "world")
+                {
+                    config.writeClasses |= kWriteWorld;
+                }
+                else if (name == "character")
+                {
+                    config.writeClasses |= kWriteCharacter;
+                }
+                else if (!name.empty())
+                {
+                    config.warnings.push_back("line " + std::to_string(lineNumber) + ": unknown write class '" +
+                                              name.substr(0, 32) + "' ignored (photo, world, character)");
+                }
+            }
+        }
         else if (key == "bridge.request_timeout_ms")
         {
             ok = ParseU32(value, 100, 30000, config.requestTimeoutMs);
@@ -163,11 +193,34 @@ std::string DescribeConfig(const Config& aConfig)
     text += "file_found=" + std::string(aConfig.fileFound ? "true" : "false");
     text += " bridge.enabled=" + std::string(aConfig.bridgeEnabled ? "true" : "false");
     text += " bridge.allow_writes=" + std::string(aConfig.allowWrites ? "true" : "false");
+    std::string classes;
+    for (const auto& name : WriteClassList(aConfig))
+    {
+        classes += (classes.empty() ? "" : ",") + name;
+    }
+    text += " bridge.allow_write_classes=" + (classes.empty() ? std::string("<none>") : classes);
     text += " bridge.request_timeout_ms=" + std::to_string(aConfig.requestTimeoutMs);
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));
     text += " capture.root=" + (aConfig.captureRoot.empty() ? std::string("<default>") : std::string("<custom>"));
     return text;
+}
+std::vector<std::string> WriteClassList(const Config& aConfig)
+{
+    std::vector<std::string> out;
+    if (aConfig.writeClasses & kWritePhoto)
+    {
+        out.emplace_back("photo");
+    }
+    if (aConfig.writeClasses & kWriteWorld)
+    {
+        out.emplace_back("world");
+    }
+    if (aConfig.writeClasses & kWriteCharacter)
+    {
+        out.emplace_back("character");
+    }
+    return out;
 }
 } // namespace xfb

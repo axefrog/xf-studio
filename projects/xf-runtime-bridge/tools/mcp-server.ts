@@ -4,16 +4,18 @@
 // (%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json); while the game isn't running every
 // game tool answers "the game bridge isn't running".
 //
-//   bun tools/mcp-server.ts [--allow read,write-photo,...] [--read-only] [--no-inline-images]
+//   bun tools/mcp-server.ts [--allow read,write-photo,... | --read-only] [--no-inline-images]
+//
+// --read-only and --allow are exclusive, an empty --allow is refused, and the kill switch
+// (control) is always exposed.
 //
 // --runtime-dir <dir> and --capture-hwnd <window handle> exist for the tests only (the plugin
 // always uses the default folder, and captures normally target the game process).
 // Registration: see the README ("MCP server").
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { PERMISSIONS, type Permission } from "./api/catalogue.ts";
 import { CommandApi } from "./api/command-api.ts";
-import { createMcpServer } from "./mcp/server.ts";
+import { createMcpServer, parsePermissionFlags } from "./mcp/server.ts";
 
 const args = process.argv.slice(2);
 const option = (name: string) => {
@@ -21,17 +23,12 @@ const option = (name: string) => {
   return index >= 0 ? args[index + 1] : undefined;
 };
 
-let allow: Permission[] | undefined;
-if (args.includes("--read-only")) allow = ["read", "control"];
-const allowText = option("--allow");
-if (allowText) {
-  allow = allowText.split(",").map((p) => p.trim()) as Permission[];
-  const unknown = allow.filter((p) => !(p in PERMISSIONS));
-  if (unknown.length) {
-    process.stderr.write(`unknown permission class(es): ${unknown.join(", ")}; known: ${Object.keys(PERMISSIONS).join(", ")}\n`);
-    process.exit(2);
-  }
+const flags = parsePermissionFlags(args);
+if ("error" in flags) {
+  process.stderr.write(flags.error + "\n");
+  process.exit(2);
 }
+const allow = flags.allow;
 
 const hwnd = option("--capture-hwnd");
 const api = new CommandApi({

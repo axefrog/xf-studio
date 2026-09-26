@@ -32,14 +32,22 @@
 
 namespace xfb
 {
+// The same classes as the tools' permission classes (tools/api/catalogue.ts). Every write class is
+// refused unless [bridge] allow_writes = true, and then only if allow_write_classes lists it.
 enum class Access
 {
-    Read,    // observes; never changes the game
-    Write,   // changes the game; refused unless [bridge] allow_writes = true
-    Control  // changes only the bridge itself (bridge.kill); always allowed, never touches the game
+    Read,           // observes; never changes the game
+    Write,          // a write outside the three classes (diagnostic probes); needs allow_writes only
+    WritePhoto,     // photo mode only; gone when it closes
+    WriteWorld,     // clock and freeze
+    WriteCharacter, // the mirror screen's options
+    Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };
 
 std::string_view AccessName(Access aAccess);
+bool IsWrite(Access aAccess);
+// The config bit for a write class (0 for Read, Write and Control).
+uint32_t WriteClassBit(Access aAccess);
 
 enum class RunOn
 {
