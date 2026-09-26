@@ -123,6 +123,42 @@ json CameraResetResult(json aResets)
     return out;
 }
 
+json CameraReset(const std::vector<int32_t>& aKeys, const std::function<json(int32_t aKey)>& aReset)
+{
+    json resets = json::array();
+    json errors = json::array();
+    for (const auto key : aKeys)
+    {
+        try
+        {
+            resets.push_back(aReset(key));
+        }
+        catch (const MethodError& e)
+        {
+            if (e.code != "unavailable")
+            {
+                errors.push_back({{"name", params::CameraParamName(key)}, {"key", key}, {"code", e.code}, {"message", e.what()}});
+            }
+        }
+    }
+    if (resets.empty() && !errors.empty())
+    {
+        std::string message = "nothing was reset: ";
+        for (size_t i = 0; i < errors.size(); ++i)
+        {
+            message += (i ? "; " : "") + errors[i]["name"].get<std::string>() + ": " + errors[i]["message"].get<std::string>();
+        }
+        throw MethodError(errors[0]["code"].get<std::string>(), message);
+    }
+    auto out = CameraResetResult(resets);
+    if (!errors.empty())
+    {
+        out["partial"] = true;
+        out["errors"] = errors;
+    }
+    return out;
+}
+
 json PauseResult(json aScript)
 {
     const auto was = aScript.find("was_frozen");

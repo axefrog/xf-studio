@@ -736,12 +736,16 @@ public abstract class XFCharacter {
     if !GameInstance.IsValid(game) {
       return XFJson.Fail("game_not_ready", "no game instance yet");
     }
+    // Step lines (debug) before the calls that crashed the first in-game run from a null script
+    // context; flushed as written, so after a crash the last one names the call.
+    XFBridgeLog.Debug(cid, "Appearance step: CharacterCustomizationSystem.GetState next");
     let system = GameInstance.GetCharacterCustomizationSystem(game);
     let state = system.GetState();
     let menuOpen = XFBridgeActions.CharacterMenuOpen();
     let out = "{\"ok\":true,\"character_menu_open\":" + XFJson.Flag(menuOpen);
     if IsDefined(state) {
       out += ",\"state\":{\"body_male\":" + XFJson.Flag(state.IsBodyGenderMale()) + ",\"brain_male\":" + XFJson.Flag(state.IsBrainGenderMale());
+      XFBridgeLog.Debug(cid, "Appearance step: TDBID.ToStringDEBUG next");
       out += ",\"life_path\":" + XFJson.Str(TDBID.ToStringDEBUG(state.GetLifePath()));
       out += ",\"hair_tags\":[";
       let tags: array<CName> = [n"Short", n"Long", n"Dreads", n"Buzz"];
@@ -762,6 +766,7 @@ public abstract class XFCharacter {
       out += ",\"state\":null";
     }
     if menuOpen {
+      XFBridgeLog.Debug(cid, "Appearance step: GetUnitedOptions next");
       let options = system.GetUnitedOptions(true, true, true);
       if StrLen(option) > 0 {
         let match = XFCharacter.Find(options, option);

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <functional>
 #include <limits>
@@ -22,6 +23,7 @@
 #include "core/GameThreadQueue.hpp"
 #include "core/Log.hpp"
 #include "core/Params.hpp"
+#include "core/ScriptFrame.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
 
@@ -438,6 +440,40 @@ void UndoTests()
               reset.dump());
         const auto nothing = w::CameraResetResult(json::array({json{{"key", 1}, {"before", 15}, {"after", 15}}}));
         Check("a reset that changed nothing has no undo", nothing["undo"].is_null(), nothing.dump());
+
+        // RB-29: a failing key doesn't stop the reset; the answer is partial with an undo.
+        const auto partial = w::CameraReset({1, 2, 3}, [](int32_t aKey) -> json {
+            if (aKey == 2)
+            {
+                throw xfb::MethodError("write_mismatch", "the menu showed another value");
+            }
+            if (aKey == 3)
+            {
+                throw xfb::MethodError("unavailable", "not in this menu");
+            }
+            return json{{"key", aKey}, {"before", 30}, {"after", 15}, {"before_known", true}};
+        });
+        Check("reset: a failed key is reported and the others still reset",
+              partial.value("partial", false) && partial["errors"].size() == 1 && partial["errors"][0]["name"] == "roll" &&
+                  partial["errors"][0]["code"] == "write_mismatch" && partial["reset"].size() == 1 &&
+                  partial["undo"]["params"] == json{{"fov", 30.0}},
+              partial.dump());
+        std::string allFailed;
+        try
+        {
+            w::CameraReset({1, 2}, [](int32_t) -> json { throw xfb::MethodError("failed", "no"); });
+        }
+        catch (const xfb::MethodError& e)
+        {
+            allFailed = e.code + "|" + e.what();
+        }
+        Check("reset: nothing reset and a failure throws, naming every key",
+              allFailed.rfind("failed|nothing was reset", 0) == 0 && allFailed.find("fov") != std::string::npos &&
+                  allFailed.find("roll") != std::string::npos,
+              allFailed);
+        const auto skipped = w::CameraReset({3}, [](int32_t) -> json { throw xfb::MethodError("unavailable", "no"); });
+        Check("reset: keys photo mode doesn't offer are skipped quietly",
+              !skipped.contains("partial") && skipped["reset"].empty() && skipped["undo"].is_null(), skipped.dump());
     }
 }
 
@@ -682,6 +718,46 @@ void ParamsTests()
           p::ParseLight(json::parse(R"({"light":2,"hue":1,"select_after":1})")).selectAfter == 1 &&
               ParamsCode([] { p::ParseLight(json::parse(R"({"light":2,"hue":1,"select_after":4})")); }) == "bad_params");
 }
+
+// The caller frame's parameter code for native -> script calls (plugin/ScriptCall.cpp), byte for
+// byte as Cyber Engine Tweaks writes it (RTTIHelper::ExecuteFunction): ExternalVar, type, value
+// per argument, Nop for an omitted optional, then ParamEnd.
+void ScriptFrameTests()
+{
+    namespace s = xfb::script;
+    int typeA = 0;
+    int typeB = 0;
+    int valueA = 1;
+    float valueB = 2.0f;
+    uint8_t code[s::kCodeCapacity]{};
+    const std::vector<s::Arg> two{{&typeA, &valueA, false}, {&typeB, &valueB, false}};
+    const auto size = s::BuildParamCode(two, code, sizeof(code));
+    const auto pointerAt = [&](size_t aAt) {
+        const void* p = nullptr;
+        std::memcpy(&p, code + aAt, sizeof(p));
+        return p;
+    };
+    Check("two arguments take 2 x 17 bytes plus ParamEnd", size == 35 && s::CodeSize(two) == 35, std::to_string(size));
+    Check("each argument is ExternalVar (0x1B), then its type and value pointers",
+          code[0] == 0x1B && pointerAt(1) == &typeA && pointerAt(9) == &valueA && code[17] == 0x1B &&
+              pointerAt(18) == &typeB && pointerAt(26) == &valueB);
+    Check("the code ends with ParamEnd (0x26)", code[34] == 0x26);
+
+    const auto none = s::BuildParamCode({}, code, sizeof(code));
+    Check("no arguments is just ParamEnd", none == 1 && code[0] == 0x26);
+
+    const std::vector<s::Arg> omitted{{nullptr, nullptr, true}, {&typeA, &valueA, false}};
+    const auto withNop = s::BuildParamCode(omitted, code, sizeof(code));
+    Check("an omitted optional argument is a Nop", withNop == 19 && code[0] == 0x00 && code[1] == 0x1B && code[18] == 0x26);
+
+    Check("an argument without a value is refused", s::BuildParamCode({{&typeA, nullptr, false}}, code, sizeof(code)) == 0);
+    Check("an argument without a type is refused", s::BuildParamCode({{nullptr, &valueA, false}}, code, sizeof(code)) == 0);
+    const std::vector<s::Arg> many(16, s::Arg{&typeA, &valueA, false});
+    Check("15 arguments fit the 264-byte buffer, 16 do not",
+          s::BuildParamCode(std::vector<s::Arg>(15, s::Arg{&typeA, &valueA, false}), code, sizeof(code)) == 256 &&
+              s::BuildParamCode(many, code, sizeof(code)) == 0);
+    Check("a short buffer is refused, never overrun", s::BuildParamCode(two, code, 34) == 0);
+}
 } // namespace
 
 int RunUnitTests()
@@ -697,6 +773,7 @@ int RunUnitTests()
     WaitTicksTests();
     WriteClassTests();
     ParamsTests();
+    ScriptFrameTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }
