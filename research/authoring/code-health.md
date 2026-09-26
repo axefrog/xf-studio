@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `024d960` | 2026-09-27 | Bridge batch 3 (cc.open, time in the creator, cc.apply value matching, game.options.read and the CET answer path, full-body preset, cc.page) | 0 High, 2 Medium, 7 Low (RB-42..50). Write gates, packaging split, the menu-event route, OptionsExchange bounds and the natives are sound. Rebuild the packages before staging (RB-50) |
 | `15941da`, `26d0dea` | 2026-09-27 | Native texture decoder (BCn, xbm, texture worker, export split) and the framework arm fix (substitution check, garment-data repair) | 0 High, 0 Medium, 9 Low (NATIVE-54..57, PIPE-107..109, plus two latent parts of PIPE-109). Header bounds, worker lifecycle, cache identity, colour flags, BC4 rounding, flips and the layering are sound |
 | `17d2585` | 2026-09-27 | Native catalogue merge (creator texts read natively, WolvenKit optional until export, Oodle release, degraded rule, R12) | 0 High, 2 Medium, 6 Low (NATIVE-46..53). Oodle lifecycle, payload gate, language keys, retry rules, the degraded rule, R12 and the boundary are sound. Fixed in claude/cleanup-native-catalogue |
 | `536bff3` | 2026-09-27 | UI polish merge, above all the first feature that writes into the user's MO2 profile and game folder (Add to my mod manager) | 1 High, 6 Medium, 8 Low (INSTALL-01..12, UI-98..100). Separator placement, BOM/CRLF, consent tokens, ownership refusals, path and link checks, framework safety and the architecture are sound. All fixed in claude/cleanup-install |
@@ -71,6 +72,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| RB-42 | Med | Runtime bridge | On a timeout `cc.open` answers "nothing opened" without checking whether the menu already took the request, so the creator can open after the client was told it didn't (`Writes.cpp:371-375`, `GameHandlers.cpp:1008-1016`) | Open |
+| RB-44 | Med | Runtime bridge | `cc.apply`'s `value` matching also substring-matches numbers, so "12" can match internal `h012` (on-screen shape 13) and report `matched_by:"value"`, silently recording the wrong choice (`XFRuntimeBridgeActions.reds:1249-1283`) | Open |
 | PIPE-103 | High | Character host | Two open pages following different Vs (the person's own tab and a `?verify=1` tab, or a stale tab) livelock the host: each POST superseded the other page's preparation (`CharacterDetailHost.request` kept one run for everyone), whose page then polled `unknown` and asked again, so neither V was ever prepared and the host kept a core busy (observed at `ec01c30`: a `default`/`save` prepare pair every 1.3 s, 500+ requests) | **Fixed** (claude/fix-prepare-loop, 27 Sep; see below) |
 | PIPE-104 | Med | Character export | A cold export of a body texture mod's 8K maps (`base\4k\common\body\wa\textures\n02_naked.xbm`, `d02_naked.xbm`, `wa_base_rm02.xbm`, `fullbody_overlay_d01.xbm`: 8192²) runs WolvenKit's full-size PNG conversion, which peaked at 7.9 GB private in one `WolvenKit.CLI` (killed twice under an 8 GB guard), took 33 s, and then 25 s more on the host halving them to the served 4096 (`scaleTextures`). Proposal: decode `.xbm` natively and serve the largest mip within `SERVED_TEXTURE_MAX` (an 8K texture carries its 4K mip), so neither WolvenKit nor the halving runs | Fixed in claude/native-textures (see below) |
 | PIPE-105 | Low | Clothing | A clothed V's first preparation reads every item factory (`factoryTable`: the game's six plus every `.xl` factory, 642 on the reference route) through WolvenKit: 35 s and 10 launches. The native reader refuses every one (`C2dArray has N bytes of data after its properties that this reader does not decode`: the `compiledHeaders`/`compiledData` tail). Later preparations read them from WolvenKit's JSON cache in 0.4 s. Proposal: decode `C2dArray`'s compiled tail natively, verified with `tools/native-cr2w-diff.ts` on the cached factories, then add it to `NATIVE_ROOTS` | Open |
@@ -391,6 +394,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **PIPE-107:** with the texture reader off, textures still leave the geometry launch and cost a second WolvenKit launch.
   - **PIPE-108:** a failed WolvenKit fallback launch for refused textures marks the whole archive failed, dropping its geometry and native textures (`native-texture-export.ts:197`, `character-detail-service.ts:614`).
   - **PIPE-109:** the substitution check trusts an answer whose no-game copy's file is missing, the repair's with-game attempt skips the check without a `.mesh`, `collect` gets the game-folder flag per request rather than per launch (latent), and old cache entries without `rawChecked` are trusted.
+
+- **RB-43, RB-45..50** (bridge batch 3 review at `024d960`), Open:
+  - **RB-43:** if `ops.open` or `ops.phase` throws during the wait, the open request isn't cancelled and can still fire for up to 3 s.
+  - **RB-45:** `cc.open` doesn't check that the player is V (Johnny sections), and accepts any save lock as proof of its own.
+  - **RB-46:** stage-2 refusals don't say that saving stays locked until a save is loaded.
+  - **RB-47:** an oversized value or answer makes the options read refuse the whole answer, reported as "didn't answer within 3 s".
+  - **RB-48:** any in-process script can answer the pending options request first (accepted in-process trust; document it).
+  - **RB-49:** no offline or card coverage of `cc.open`'s refusals or of the kill switch during `cc.open`.
+  - **RB-50:** the checked-in build and `dist/` zips are batch 2 under the same version; rebuild (and bump the version) before staging.
 
 ## New subsystems since last review
 
