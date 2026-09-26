@@ -223,6 +223,11 @@ export interface MorphDescriptor { readonly part: CcoPart; readonly group: strin
 
 /** Option state keyed by option name: definition name, morph name or switcher choice `localizedName`. */
 export type UiOptionState = Readonly<Record<string, string>>;
+/**
+ * Switcher choices by position, keyed by option name, for a choice its name alone doesn't pick: the creator chooses by position, so two
+ * mods' same-named choices are different choices there (CORE-70). A position overrides the name in `UiOptionState`.
+ */
+export type SwitcherPicks = Readonly<Record<string, number>>;
 
 /**
  * Rule R5, UI option state → descriptors:
@@ -235,12 +240,12 @@ export type UiOptionState = Readonly<Record<string, string>>;
  * - **Links** [hypothesis]: a link follower takes its appearance controller's choice index.
  * Each group then lists its active options.
  */
-export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): {
+export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState, picks?: SwitcherPicks): {
   appearances: AppearanceDescriptor[]; morphs: MorphDescriptor[]; ambiguities: Ambiguity[]; rules: RuleNote[];
 } {
   const appearances: AppearanceDescriptor[] = [], morphs: MorphDescriptor[] = [], ambiguities: Ambiguity[] = [];
   for (const part of CCO_PARTS) {
-    const found = partDescriptors(cco, part, state, r5Roots(cco, part));
+    const found = partDescriptors(cco, part, state, r5Roots(cco, part), picks);
     appearances.push(...found.appearances); morphs.push(...found.morphs); ambiguities.push(...found.ambiguities);
   }
   return { appearances, morphs, ambiguities, rules: R5_RULES() };
@@ -299,15 +304,16 @@ export function r5Roots(cco: CcoResource, part: CcoPart): CcoOption[] {
  * the part's R5 roots) through each active switcher's current choice. The one implementation: `descriptorsFromUiState` and the
  * character context (which shows each row's active option) both use it (CORE-57).
  */
-export function activeOptionNames(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[] = r5Roots(cco, part)): Set<string> {
+export function activeOptionNames(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[] = r5Roots(cco, part),
+  picks?: SwitcherPicks): Set<string> {
   const byName = new Map(cco.parts[part].options.filter(o => o.name).map(option => [option.name, option]));
   const active = new Set<string>();
   const activate = (option: CcoOption, depth = 0) => {
     if (depth > 16 || active.has(option.name)) return;
     active.add(option.name);
     if (option.type !== "switcher") return;
-    const wanted = state[option.name];
-    const choice = switcherChoiceNamed(option, wanted) ?? option.options[option.defaultIndex] ?? option.options[0];
+    const wanted = state[option.name], pick = picks?.[option.name];
+    const choice = (pick !== undefined ? option.options[pick] : undefined) ?? switcherChoiceNamed(option, wanted) ?? option.options[option.defaultIndex] ?? option.options[0];
     for (const name of choice?.names ?? []) { const target = byName.get(name); if (target) activate(target, depth + 1); }
   };
   for (const option of roots) activate(option);
@@ -315,12 +321,12 @@ export function activeOptionNames(cco: CcoResource, part: CcoPart, state: UiOpti
 }
 
 /** R5 for one part from the given roots: activation through switchers, link indices, definitions, then each group's listing. */
-function partDescriptors(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[]) {
+function partDescriptors(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[], picks?: SwitcherPicks) {
   const appearances: AppearanceDescriptor[] = [], morphs: MorphDescriptor[] = [], ambiguities: Ambiguity[] = [];
   {
     const { options, groups } = cco.parts[part];
     const byName = new Map(options.filter(o => o.name).map(option => [option.name, option]));
-    const active = activeOptionNames(cco, part, state, roots);
+    const active = activeOptionNames(cco, part, state, roots, picks);
     const linkIndex = new Map<string, number>();
     for (const option of options) {
       if (option.type !== "appearance" || !option.linkController || !option.link || !active.has(option.name)) continue;

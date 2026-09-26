@@ -347,10 +347,14 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
       perSection } };
 }
 
-/** Index a catalogue by option ID and by `(part, name)`. */
+/** A switcher choice's activated options as one order-free key (a choice's identity across installations). */
+export const activationKey = (names: readonly string[]) => [...names].sort().join("\u0000");
+
+/** Index a catalogue by option ID and by `(part, name)`; a switcher's choices also by the options they activate (PIPE-83). */
 export class CatalogueIndex {
   private readonly byId: ReadonlyMap<string, CcOption>;
   private readonly keys = new WeakMap<CcOption, Map<string, CcChoice>>();
+  private readonly activations = new WeakMap<CcOption, Map<string, CcChoice[]>>();
   private readonly families = new Map<string, CcOption[]>();
   constructor(readonly catalogue: CcCatalogue) {
     this.byId = new Map(catalogue.options.map(option => [option.id, option]));
@@ -375,6 +379,20 @@ export class CatalogueIndex {
       this.keys.set(option, keys);
     }
     return keys.get(key);
+  }
+  /** A switcher's choices that activate exactly `names` (in any order), in choice order. */
+  activating(option: CcOption, names: readonly string[]): readonly CcChoice[] {
+    let byKey = this.activations.get(option);
+    if (!byKey) {
+      byKey = new Map();
+      for (const choice of option.choices) {
+        const key = activationKey(choice.activates);
+        const list = byKey.get(key);
+        if (list) list.push(choice); else byKey.set(key, [choice]);
+      }
+      this.activations.set(option, byKey);
+    }
+    return byKey.get(activationKey(names)) ?? [];
   }
   /** Every option sharing a link key (controllers and followers, any part), in catalogue order. */
   family(key: string): readonly CcOption[] { return this.families.get(key) ?? []; }

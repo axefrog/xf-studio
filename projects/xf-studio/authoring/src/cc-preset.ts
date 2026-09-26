@@ -17,10 +17,15 @@
  */
 import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
+import { CREATOR_LIMITS, isCreatorName, isModName, isPresetName } from "./creator-names";
 
 export const CC_PRESET_SCHEMA = "xfs/cc-preset-1" as const;
-/** `bytes` counts the file's UTF-8 bytes; `depth` and `nodes` bound what unknown fields may hold. */
-export const CC_PRESET_LIMITS = Object.freeze({ bytes: 1024 * 1024, entries: 8192, text: 512, name: 120, depth: 16, nodes: 20_000 });
+/**
+ * `bytes` counts the file's UTF-8 bytes; names follow the shared creator rule (creator-names.ts, PIPE-79); `depth` and `nodes` bound
+ * what unknown fields may hold.
+ */
+export const CC_PRESET_LIMITS = Object.freeze({ bytes: CREATOR_LIMITS.presetBytes, entries: CREATOR_LIMITS.presetEntries, text: CREATOR_LIMITS.name,
+  name: CREATOR_LIMITS.presetName, depth: 16, nodes: 20_000 });
 
 export type CcPresetValue =
   | { readonly kind: "appearance"; readonly definition: string; readonly app: string | null }
@@ -42,12 +47,17 @@ export interface CcPreset {
   readonly bodyGender: BodyGender;
   readonly name: string | null;
   readonly values: readonly CcPresetEntry[];
-  /** Entries of a kind this version doesn't know, kept verbatim with their position among the values. */
-  readonly unknownEntries: readonly { readonly at: number; readonly entry: unknown }[];
+  /**
+   * Entries kept verbatim with their position among the values: of a kind this version doesn't know, or (`unusable`) of a known kind
+   * whose name is longer than the shared rule allows, so it can't be carried to the host (PIPE-79). Both are written back unchanged.
+   */
+  readonly unknownEntries: readonly { readonly at: number; readonly entry: unknown; readonly unusable?: true }[];
   readonly extra: Readonly<Record<string, unknown>>;
 }
 
 const PARTS: readonly CcoPart[] = ["head", "body", "arms"];
+/** A known entry whose name is only too long: kept verbatim and reported, never refused (PIPE-79). */
+class TooLong extends Error {}
 const ENTRY_KEYS = new Set(["part", "option", "definition", "app", "morph", "choice", "activates", "mod", "resource"]);
 const TOP_KEYS = new Set(["schema", "bodyGender", "name", "values"]);
 
@@ -55,21 +65,22 @@ const fail = (message: string): never => { throw Error(`This character preset ca
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const own = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 /**
- * A creator identifier (a CName): no control characters and no backslash (a Windows path separator), bounded. `/` is legal
- * in a CName, so it is kept (CORE-53). Empty is the `None` choice.
+ * A creator identifier (a CName) by the shared rule (creator-names.ts): no control characters and no backslash (a Windows path
+ * separator), bounded. `/` is legal in a CName, so it is kept (CORE-53). Empty is the `None` choice. A name that is only too long
+ * makes its entry unusable here rather than the file unreadable.
  */
 function ident(value: unknown, what: string, allowEmpty = false): string {
-  if (typeof value !== "string" || value.length > CC_PRESET_LIMITS.text || /[\u0000-\u001f\\]/.test(value) || (!allowEmpty && !value))
-    return fail(`${what} is not a valid creator name.`);
-  return value;
+  if (isCreatorName(value, allowEmpty)) return value;
+  if (typeof value === "string" && value.length > CREATOR_LIMITS.name && !/[\u0000-\u001f\u007f\\]/.test(value)) throw new TooLong();
+  return fail(`${what} is not a valid creator name.`);
 }
 const hash = (value: unknown, what: string): string =>
   typeof value === "string" && /^\d{1,20}$/.test(value) && BigInt(value) <= 18446744073709551615n ? BigInt(value).toString() : fail(`${what} is not a resource hash.`);
 /** A mod's name as a mod manager shows it: never a path. */
 function modName(value: unknown): string {
-  if (typeof value !== "string" || !value || value.length > CC_PRESET_LIMITS.text || /[\u0000-\u001f\\/]|^[A-Za-z]:/.test(value))
-    return fail("a mod name is invalid.");
-  return value;
+  if (isModName(value)) return value;
+  if (typeof value === "string" && value.length > CREATOR_LIMITS.modName && !/[\u0000-\u001f\u007f\\/]|^[A-Za-z]:/.test(value)) throw new TooLong();
+  return fail("a mod name is invalid.");
 }
 
 /** A copy of an unknown JSON value into prototype-free objects, within the preset's depth and size bounds. */
@@ -88,6 +99,10 @@ function copyUnknown(value: unknown, budget: Budget, depth = 0): unknown {
   return fail("it holds a value JSON can't carry.");
 }
 
+/** A known entry, null for an unknown kind, or "unusable" for a known entry whose name is only too long. */
+function readEntry(item: unknown, budget: Budget): CcPresetEntry | null | "unusable" {
+  try { return parseEntry(item, budget); } catch (error) { if (error instanceof TooLong) return "unusable"; throw error; }
+}
 function parseEntry(item: unknown, budget: Budget): CcPresetEntry | null {
   if (!isRecord(item)) return fail("a value is not an object.");
   const kinds = ["definition", "morph", "choice"].filter(key => own(item, key));
@@ -101,7 +116,7 @@ function parseEntry(item: unknown, budget: Budget): CcPresetEntry | null {
     app: item.app === undefined ? null : hash(item.app, "an appearance resource") };
   else if (kinds[0] === "morph") value = { kind: "morph", morph: ident(item.morph, "a morph target", true) };
   else {
-    if (item.activates !== undefined && (!Array.isArray(item.activates) || item.activates.length > 64)) fail("a switcher value's options are invalid.");
+    if (item.activates !== undefined && (!Array.isArray(item.activates) || item.activates.length > CREATOR_LIMITS.activates)) fail("a switcher value's options are invalid.");
     value = { kind: "switcher", choice: ident(item.choice, "a switcher choice", true),
       activates: ((item.activates as unknown[] | undefined) ?? []).map(name => ident(name, "an activated option")) };
   }
@@ -117,14 +132,14 @@ export function parseCcPreset(value: unknown): CcPreset {
   if (value.schema !== CC_PRESET_SCHEMA) fail(typeof value.schema === "string" && value.schema.startsWith("xfs/cc-preset-")
     ? "it was made by a newer XF Studio." : "it is not a character preset.");
   if (value.bodyGender !== "female" && value.bodyGender !== "male") fail("its body type is missing.");
-  if (value.name !== undefined && (typeof value.name !== "string" || value.name.length > CC_PRESET_LIMITS.name || /[\u0000-\u001f]/.test(value.name)))
-    fail("its name is invalid.");
+  if (value.name !== undefined && !isPresetName(value.name)) fail("its name is invalid.");
   if (!Array.isArray(value.values) || value.values.length > CC_PRESET_LIMITS.entries) fail("its values are missing or too many.");
   const budget = new Budget();
-  const values: CcPresetEntry[] = [], unknownEntries: { at: number; entry: unknown }[] = [];
+  const values: CcPresetEntry[] = [], unknownEntries: { at: number; entry: unknown; unusable?: true }[] = [];
   (value.values as unknown[]).forEach((item, at) => {
-    const entry = parseEntry(item, budget);
-    if (entry) values.push(entry); else unknownEntries.push({ at, entry: copyUnknown(item, budget, 1) });
+    const entry = readEntry(item, budget);
+    if (entry && entry !== "unusable") values.push(entry);
+    else unknownEntries.push({ at, entry: copyUnknown(item, budget, 1), ...(entry === "unusable" ? { unusable: true as const } : {}) });
   });
   const seen = new Set<string>();
   for (const entry of values) {
@@ -172,7 +187,7 @@ export function serializeCcPresetEntry(item: CcPresetEntry): Record<string, unkn
 
 /** Would the reader accept this entry as written (CORE-53)? A writer leaves out what it would refuse, instead of refusing the file. */
 export function presetEntryWritable(item: CcPresetEntry): boolean {
-  try { return !!parseEntry(serializeCcPresetEntry(item), new Budget()); } catch { return false; }
+  try { const read = readEntry(serializeCcPresetEntry(item), new Budget()); return !!read && read !== "unusable"; } catch { return false; }
 }
 
 /** The stored form: known fields in a fixed order, then the kept unknown ones. */

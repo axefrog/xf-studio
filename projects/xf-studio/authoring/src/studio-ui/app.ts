@@ -370,6 +370,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     file("package.build", "Build mod files", "Mod package", { kind: "package.build" }, { icon: "package", keywords: "archive build" }),
     file("savedV.import", "Load V from a save…", "Character", { kind: "savedV.import" }, { icon: "character" }),
     file("savedV.export", "Export appearance data", "Character", { kind: "savedV.export" }, { icon: "export" }),
+    act("character.hideOwnMakeup", "Hide my V's own makeup", "Character", { kind: "character.hideOwnMakeup" }, { icon: "eye", keywords: "makeup off creator options" }),
+    act("character.resetAll", "Reset every creator change", "Character", { kind: "character.resetAll" }, { icon: "reset", keywords: "creator options undo back to my v" }),
     // Viewport keys work while that viewport has focus; the palette names the scope.
     act("camera.front", "Front view", "View", { kind: "camera.front" }, { icon: "front", shortcut: `${shortcutLabel("head.front")} in Head` }),
     ...(["both", "single", "other", "fit"] as const).map(command => ({ id: `uv.${command}`, title: `UV: ${{ both: "Both eyes", single: "Single eye", other: "Other eye", fit: "Fit shape" }[command]}`,

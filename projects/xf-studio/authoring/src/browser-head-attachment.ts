@@ -12,6 +12,7 @@ import { createBrowserCreatorDevice } from "./browser-cc-catalogue-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { CharacterDetailActions } from "./character-detail-actions";
 import { CharacterContextActions, type CreatorPort } from "./character-context-actions";
+import { followCharacter } from "./character-follow";
 import type { createBrowserPreviewDevice } from "./browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
 import type { MotionActions } from "./motion-actions";
@@ -104,23 +105,22 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));
     // The character context: its V is the restored save (or the default V), with the workspace's stored choices on it. A save loaded
     // later becomes its V as one undoable step; its Undo shows an earlier V through the saved-V service.
-    const saved = savedAppearance;
+    // Its Try again also retries a V whose preparation failed (PREV-86). An earlier build's tried piercing style (the retired preview
+    // fields) becomes Piercings choices once the catalogue is ready (CORE-74).
+    const saved = savedAppearance, retired = ports.workspace.preview;
     const characterContext = new CharacterContextActions({ creator: ports.creator ?? createBrowserCreatorDevice(),
-      showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); } },
-    { stored: ports.workspace.preview.character, save: savedAppearance.snapshot().savedV });
+      showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); },
+      details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry() } },
+    { stored: retired.character, save: savedAppearance.snapshot().savedV,
+      legacy: retired.piercingStyle && retired.piercingDefinition ? { style: retired.piercingStyle, definition: retired.piercingDefinition } : undefined });
     releases.push(() => characterContext.dispose());
     ports.attach({ characterContext });
     releases.push(() => ports.attach({ characterContext: undefined }));
     releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));
-    // The shown details and the head's facial shape follow the context's V and choices.
-    let faces = "";
-    const follow = () => {
-      void characterDetails.setCharacter(characterContext.detailRequest());
-      const view = characterContext.view(), key = JSON.stringify(view?.faceMorphs ?? null);
-      if (view && key !== faces && view.bodyGender === "female") { faces = key; scene.setFaceMorphs(view.faceMorphs); }
-    };
-    releases.push(characterContext.subscribe(follow), characterContext.subscribe(ports.changed), characterContext.subscribe(ports.persist));
-    follow();
+    // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts).
+    releases.push(followCharacter({ context: characterContext, details: characterDetails, savedV: savedAppearance,
+      setFaceMorphs: morphs => scene.setFaceMorphs(morphs) }));
+    releases.push(characterContext.subscribe(ports.changed), characterContext.subscribe(ports.persist));
     characterContext.start();
     const cameraMoved = () => ports.persist();
     scene.controls.addEventListener("change", cameraMoved);

@@ -73,12 +73,14 @@
   "savedV.clear",
   "character.setOption",
   "character.setOptions",
+  "character.hideOwnMakeup",
   "character.reset",
   "character.resetAll",
   "character.useDefault",
   "character.loadSave",
   "character.loadPreset",
   "character.keepChanges",
+  "character.retry",
   "character.undo",
   "character.redo"
  ],
@@ -2013,13 +2015,18 @@
      "required": true,
      "from": "input",
      "minLength": 1,
-     "maxLength": 127
+     "maxLength": 255
     },
     "choice": {
      "type": "string",
      "required": true,
      "from": "input",
-     "maxLength": 127
+     "maxLength": 255
+    },
+    "activates": {
+     "type": "object",
+     "required": false,
+     "from": "input"
     }
    }
   },
@@ -2043,6 +2050,14 @@
     }
    }
   },
+  "character.hideOwnMakeup": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
   "character.reset": {
    "scope": [
     "viewport"
@@ -2065,7 +2080,7 @@
      "required": true,
      "from": "input",
      "minLength": 1,
-     "maxLength": 127
+     "maxLength": 255
     }
    }
   },
@@ -2124,6 +2139,14 @@
    }
   },
   "character.keepChanges": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "character.retry": {
    "scope": [
     "viewport"
    ],
@@ -2812,6 +2835,15 @@
    "async": false
   },
   {
+   "id": "character.hideOwnMakeup",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "character.reset",
    "family": "action",
    "scope": [
@@ -2858,6 +2890,15 @@
   },
   {
    "id": "character.keepChanges",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.retry",
    "family": "action",
    "scope": [
     "viewport"

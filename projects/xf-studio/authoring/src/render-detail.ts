@@ -35,11 +35,15 @@
  *   the host words (no index sentinel). A reader drops one bad component, choice or override, with a note, instead of refusing the whole
  *   record, and the host runs this reader over its own output before writing it, so what it writes always parses. A v6 reader refuses v2
  *   to v5 character records.
+ * - `xfs/render-detail-7`: the record no longer lists the `choices` a viewer may try or the `override` the host applied: every creator
+ *   choice is the character context's (character-context.ts), which the host derives into the V before planning (CORE-58, PIPE-82). A
+ *   v7 reader refuses v2 to v6 character records, so a page and a host of different versions say so (the version-skew notice).
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-6" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-7" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
-export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5"];
+export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5",
+  "xfs/render-detail-6"];
 
 /**
  * A record from a host of another version: older (a retired schema) or newer (a schema this reader doesn't know yet). It means the host
@@ -56,14 +60,8 @@ const newerSchema = (schema: unknown) => {
   return !!match && Number(match[1]) > Number(CHARACTER_DETAIL_SCHEMA.split("-").pop());
 };
 
-/**
- * The one rule for a creator name that a record, a request and the workspace carry (an option, a definition, a switcher choice): 1 to 127
- * characters, no control characters and none of `\ / < > "`. The host filters with it before writing and the browser parses with it, so the
- * two never disagree (PIPE-40). CNames themselves are unbounded; a longer one can't be tried and is left out with a note.
- */
+/** The longest CName a layer's value names are kept to in a record (the host cuts longer ones before writing; PIPE-40). */
 export const CHOICE_NAME_MAX = 127;
-export const isChoiceName = (value: unknown): value is string =>
-  typeof value === "string" && /^[^\u0000-\u001f\u007f\\/<>"]{1,127}$/.test(value);
 /** A plain label the host words for the presentation: 1 to 127 characters, no control characters. */
 export const isChoiceLabel = (value: unknown): value is string => typeof value === "string" && /^[^\u0000-\u001f\u007f]{1,127}$/.test(value);
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
@@ -172,9 +170,6 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings";
 /** Record and load order: the skin first, so decals over it can blend against the resolved skin colour. */
 export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"];
-/** Slots whose creator choice a viewer may try out in the viewport without changing the V (the host resolves the choice). */
-export type ChoiceSlot = "piercings";
-export const CHOICE_SLOTS: readonly ChoiceSlot[] = ["piercings"];
 /** A texture as the game stores it: raw decoded channels, plus the resource's own colour flag. */
 export type RenderTexture = RenderResource & { depotPath: string; width: number; height: number; isGamma: boolean };
 export type RenderProfileStop = { value: number; color: [number, number, number] };
@@ -233,16 +228,6 @@ export type RenderLayer = {
 /** A `multilayered.mt` chunk's layer stack: the `.mlsetup` (in stored order, bottom first) and the `.mlmask` it is masked by. */
 export type RenderLayered = { setup: RenderSourceRef; mask: (RenderSourceRef & { layers: number }) | null; ratio: number; useNormal: boolean;
   layers: RenderLayer[] };
-/** One definition (a colour) of the option a choice drives, with its plain label. */
-export type RenderChoiceDefinition = { name: string; label: string };
-/**
- * One creator choice a viewer may try: a switcher choice (a style), identified by its `localizedName` as the creator merges it, its plain
- * label, and the definitions (colours) of the option it drives, in the creator's order.
- */
-export type RenderChoiceOption = { choice: string; label: string; definitions: RenderChoiceDefinition[] };
-export type RenderChoices = { slot: ChoiceSlot; options: RenderChoiceOption[] };
-/** A viewer's choice the host applied in place of the V's own for one slot: a switcher choice and a definition of the option it drives. */
-export type RenderOverride = { slot: ChoiceSlot; choice: string; definition: string };
 export type RenderChunkMaterial = {
   chunk: number;
   /** The mesh appearance's material name for this chunk. */
@@ -303,19 +288,14 @@ export type CharacterDetail = {
   detail: "character";
   identity: string;
   origin: "game-files";
-  character: { source: "default" | "save"; bodyGender: "female" | "male";
-    /** The viewer's choice the host resolved in place of the V's own (a piercing style tried in the viewport). */
-    override?: RenderOverride };
+  character: { source: "default" | "save"; bodyGender: "female" | "male" };
   provenance: { label: string; notes: string[]; tool?: string };
   components: RenderComponent[];
   slots: DetailSlotState[];
-  /** What a viewer may try per choice slot: the creator's options on this installation (vanilla and custom alike). */
-  choices: RenderChoices[];
 };
 
 /** A framework that fills slots with inline components (one per filled slot) can bring many parts to one piercing choice. */
-export const RECORD_LIMITS = Object.freeze({ components: 96, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, options: 64,
-  definitions: 64, notes: 64,
+export const RECORD_LIMITS = Object.freeze({ components: 96, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, notes: 64,
   /**
    * Decoded texels one record may serve, over every distinct texture (PIPE-43): about four times what the reference save's skin, hair,
    * face details, eyes and piercings take together. The host leaves textures beyond it out with a note; the loader refuses a record
@@ -464,43 +444,6 @@ function layered(value: unknown, what: string): RenderLayered {
     ratio: finite(item.ratio, `${what} ratio`), useNormal: item.useNormal, layers: item.layers.map((entry, index) => layer(entry, `${what} ${index}`)) };
 }
 
-/**
- * The choices a viewer may try. Tolerant (PIPE-40): an entry that breaks a rule is left out and counted, never the record; one oddly
- * named creator option must not hide the V. A slot listed twice keeps its first entry.
- */
-function choices(value: unknown, dropped: (what: string) => void): RenderChoices[] {
-  if (!Array.isArray(value)) { if (value !== undefined) dropped("the list of choices to try"); return []; }
-  const seen = new Set<string>(), out: RenderChoices[] = [];
-  for (const entry of value.slice(0, CHOICE_SLOTS.length * 2) as RenderChoices[]) {
-    if (!entry || !CHOICE_SLOTS.includes(entry.slot) || seen.has(entry.slot) || !Array.isArray(entry.options)) { dropped("a list of choices to try"); continue; }
-    seen.add(entry.slot);
-    const names = new Set<string>(), options: RenderChoiceOption[] = [];
-    for (const option of entry.options as RenderChoiceOption[]) {
-      if (options.length >= LIMITS.options) { dropped(`a ${entry.slot} choice beyond the first ${LIMITS.options}`); continue; }
-      if (!option || !isChoiceName(option.choice) || names.has(option.choice) || !isChoiceLabel(option.label) || !Array.isArray(option.definitions)) {
-        dropped(`a ${entry.slot} choice`); continue;
-      }
-      const definitions: RenderChoiceDefinition[] = [], known = new Set<string>();
-      for (const definition of option.definitions.slice(0, LIMITS.definitions) as RenderChoiceDefinition[]) {
-        if (definition && isChoiceName(definition.name) && !known.has(definition.name) && isChoiceLabel(definition.label)) {
-          known.add(definition.name); definitions.push({ name: definition.name, label: definition.label });
-        } else dropped(`a ${entry.slot} colour`);
-      }
-      if (option.definitions.length > LIMITS.definitions) dropped(`${entry.slot} colours beyond the first ${LIMITS.definitions}`);
-      if (!definitions.length) { dropped(`a ${entry.slot} choice without colours`); continue; }
-      names.add(option.choice);
-      options.push({ choice: option.choice, label: option.label, definitions });
-    }
-    out.push({ slot: entry.slot, options });
-  }
-  return out;
-}
-function override(value: unknown): RenderOverride | null {
-  const item = value as RenderOverride;
-  return item && CHOICE_SLOTS.includes(item.slot) && isChoiceName(item.choice) && isChoiceName(item.definition)
-    ? { slot: item.slot, choice: item.choice, definition: item.definition } : null;
-}
-
 function component(value: unknown, index: number): RenderComponent {
   const item = value as RenderComponent, what = `component ${index}`;
   if (!DETAIL_SLOTS.includes(item?.slot)) fail(`${what} slot is invalid.`);
@@ -526,7 +469,7 @@ function component(value: unknown, index: number): RenderComponent {
 
 /**
  * Parse of a character record: an unexpected field shape never reaches the loader. The record's frame (schema, origin, character, slot
- * outcomes) is strict; its parts are not all-or-nothing (PIPE-40): a component, a choice or the applied override that breaks a rule is
+ * outcomes) is strict; its parts are not all-or-nothing (PIPE-40): a component that breaks a rule is
  * left out with a note, and a slot left with nothing to show becomes unavailable with one plain line. Components beyond
  * `RECORD_LIMITS.components` are left out the same way. A record of another version throws `RenderDetailVersionError`. Parsing its own
  * output again changes nothing, which the host relies on (it writes this parser's output).
@@ -541,8 +484,6 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
   if (doc.character.bodyGender !== "female" && doc.character.bodyGender !== "male") fail("body gender is invalid.");
   const left: string[] = [];
   const dropped = (what: string) => { left.push(what); };
-  const applied = doc.character.override === undefined ? null : override(doc.character.override);
-  if (doc.character.override !== undefined && !applied) dropped("the tried choice");
   if (!Array.isArray(doc.components)) fail("components are invalid.");
   const components: RenderComponent[] = [], ids = new Set<string>();
   doc.components.forEach((item, index) => {
@@ -568,7 +509,6 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     }
     return { slot, state: entry.state, label, ...(message === undefined ? {} : { message }) };
   });
-  const listed = choices(doc.choices, dropped);
   const notes = Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(entry => text(entry, "note")) : [];
   if (left.length) {
     const counts = new Map<string, number>();
@@ -576,10 +516,10 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     notes.push(`Left out of the prepared details: ${[...counts].slice(0, 6).map(([what, n]) => n > 1 ? `${what} (${n})` : what).join(", ")}${counts.size > 6 ? " and more" : ""}.`.slice(0, 500));
   }
   return { schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: text(doc.identity, "identity"), origin: "game-files",
-    character: { source: doc.character.source, bodyGender: doc.character.bodyGender, ...(applied ? { override: applied } : {}) },
+    character: { source: doc.character.source, bodyGender: doc.character.bodyGender },
     provenance: { label: text(doc.provenance?.label, "provenance label"), notes: notes.slice(-LIMITS.notes),
       ...(doc.provenance?.tool === undefined ? {} : { tool: text(doc.provenance.tool, "provenance tool") }) },
-    components, slots, choices: listed };
+    components, slots };
 }
 
 /** Version dispatch: a v1 record is a core head; a v2 to v5 record is a core head, and a v5 record may be a character. */

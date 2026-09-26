@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { buildCatalogue, readCcoWithPresentation } from "../src/cc-catalogue";
 import { type CcoResource } from "../src/cco-model";
 import { type CharacterChoice, type CharacterSource, deriveCharacter } from "../src/character-context";
-import { detailSlotOf, piercingLabel, slotChoices } from "../src/character-detail-plan";
+import { detailSlotOf, piercingLabel } from "../src/character-detail-plan";
 import { CharacterRequestVersionError, DEFAULT_CHARACTER, parseCharacterRequest, sameCharacter, savedOfRequest, type CharacterRequest } from "../src/character-detail-request";
 import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character-detail-service";
 import { loadMergedCco } from "../src/character-resolver";
@@ -121,17 +121,12 @@ describe("piercings from the creator's slot, groups and chunk masks", () => {
   });
 });
 
-describe("creator choices a viewer may try", () => {
-  test("the piercing styles are the creator's switcher choices with the colours they drive, in switcher order, without Off; one label each", async () => {
+describe("creator choices on the piercings", () => {
+  test("a piercing reads as the creator's style and its colour; the record lists no choices to try (PIPE-82)", async () => {
     const cco = await loadMergedCco(detailFixture().installation().graph, "female");
-    const { options: choices, notes } = slotChoices(cco.merged.cco, "piercings");
-    expect(notes).toEqual([]);
-    expect(choices.map(entry => [entry.choice, entry.label])).toEqual([["01", "Style 01"], ["12", "Style 12"]]);
-    expect(choices[0]!.definitions).toEqual([{ name: PIERCING.silver, label: "Silver" }, { name: PIERCING.black, label: "Black" }]);
     expect(piercingLabel(cco.merged.cco, "piercings_12", PIERCING.black)).toBe("style 12, black");
-    // The record carries them.
     const record = await prepare(DEFAULT_CHARACTER);
-    expect(record.choices).toEqual([{ slot: "piercings", options: choices }]);
+    expect("choices" in record).toBe(false);
   });
 
   test("a piercing chosen in the context replaces the V's own on its slot, in every group the creator lists it in; one not offered is reported", async () => {
@@ -179,32 +174,15 @@ describe("creator choices a viewer may try", () => {
     expect(detailSlotOf(cco).get("piercings_01_lip")).toBe("piercings");
   });
 
-  test("creator names that break the record's rule are left out with a note, never sent to the page (PIPE-40)", () => {
-    const cco = { label: "t", version: 1, parts: { body: { options: [], groups: [] }, arms: { options: [], groups: [] }, head: {
-      options: [
-        { type: "switcher" as const, name: "piercings", uiSlot: "piercings", uiSlots: ["piercings_color"], link: "", linkController: false, hidden: false, enabled: true,
-          index: 0, defaultIndex: 0, localizedName: "", editTags: [], definedBy: "", options: [
-            { names: ["piercings_(ccxl)"], index: 0, localizedName: "piercings_(ccxl)", providedBy: "" },
-            { names: ["long"], index: 1, localizedName: "x".repeat(200), providedBy: "" },
-            { names: ["unnamed"], index: 2, localizedName: "", providedBy: "" }] },
-        ...[["piercings_(ccxl)", ["a colour with spaces", "y".repeat(200)]], ["long", ["c"]], ["unnamed", ["d"]]].map(([name, definitions]) => ({ type: "appearance" as const,
-          name: name as string, uiSlot: "piercings_color", link: "", linkController: false, hidden: false, enabled: false, index: 0, defaultIndex: 0, localizedName: "",
-          editTags: [], definedBy: "", resource: { path: "a.app", hash: "1" }, definitions: (definitions as string[]).map((definition, index) =>
-            ({ name: definition, index, localizedName: "", tags: [], providedBy: "" })) })),
-      ], groups: [{ name: "face", options: ["piercings_(ccxl)", "long", "unnamed"] }] } } };
-    const { options, notes } = slotChoices(cco, "piercings");
-    expect(options).toEqual([{ choice: "piercings_(ccxl)", label: "Piercings (ccxl)", definitions: [{ name: "a colour with spaces", label: "A colour with spaces" }] }]);
-    expect(notes).toHaveLength(3);
-    expect(notes.join(" ")).toMatch(/can't offer to try/);
-  });
-
   test("requests: v4 carries the creator choices, parsed strictly; v1–v3 requests without a tried choice still parse; the same V ignores choices", () => {
     const choices: CharacterChoice[] = [{ part: "head", option: "piercings", choice: "12" }, { part: "head", option: "piercings_12", choice: PIERCING.black }];
     const chosen: CharacterRequest = { ...REQUEST_A, choices };
     expect(parseCharacterRequest(JSON.parse(JSON.stringify(chosen)))).toEqual(chosen);
     expect(parseCharacterRequest({ ...DEFAULT_CHARACTER, choices })).toEqual({ ...DEFAULT_CHARACTER, choices });
     expect(() => parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], extra: 1 }] })).toThrow("creator choice");
-    expect(() => parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], option: "x".repeat(200) }] })).toThrow("creator choice");
+    // The shared name rule (PIPE-79): 255 characters pass, a longer name is refused.
+    expect(parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], option: "x".repeat(255) }] }).choices![0]!.option).toHaveLength(255);
+    expect(() => parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], option: "x".repeat(256) }] })).toThrow("creator choice");
     // A creator name with parentheses or spaces is an ordinary name.
     expect(parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], choice: "piercings_(ccxl) 2" }] })).toMatchObject({ choices: [{ choice: "piercings_(ccxl) 2" }] });
     expect(parseCharacterRequest({ schema: "xfs/character-request-1", source: "default", bodyGender: "female" })).toEqual(DEFAULT_CHARACTER);

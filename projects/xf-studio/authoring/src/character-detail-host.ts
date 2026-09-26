@@ -9,7 +9,7 @@ import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
 import { installations, type InstallationRegistry } from "./installation-registry";
-import { CreatorCatalogueHost } from "./cc-catalogue-service";
+import { CreatorCatalogueHost, structuralInput } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
 import { routeIdentity, routeStamps } from "./route-fingerprint";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
@@ -36,8 +36,10 @@ import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
  * that was degraded by a failure that may not repeat is served, but not kept as the final answer: the next request for it prepares
  * again (PIPE-53).
  *
- * It also owns the installation's creator catalogue (`creator`, cc-catalogue-service.ts), which interprets a request's creator
- * choices for the preparation and answers the Character panel.
+ * It also owns the installation's creator catalogue (`creator`, cc-catalogue-service.ts), which answers the Character panel. A
+ * preparation doesn't wait for that catalogue: it interprets a request's creator choices from the merged creator resource it loads
+ * itself (`structuralInput`, PIPE-80), and a V whose choices can't be interpreted is shown without them, with one plain line in the
+ * ready state's `message`.
  */
 export const CHARACTER_DETAIL_STATE_SCHEMA = "xfs/character-detail-state-1" as const;
 export type CharacterDetailPhase = "preparing" | "ready" | "failed" | "unknown";
@@ -48,7 +50,7 @@ export type CharacterDetailState = {
   /** Identity of the request this state answers. */
   key: string;
   phase: CharacterDetailPhase;
-  /** One plain line for the person using the app. */
+  /** One plain line for the person using the app (when ready: what the V is shown without, or empty). */
   message: string;
   progress: { index: number; total: number; label: string } | null;
   /** The record file name (under `/assets/character/`) once ready. */
@@ -157,7 +159,7 @@ export class CharacterDetailHost {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
       started = Date.now();
       return (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
-        derive: request.choices?.length ? derived => this.creator.inputFor(derived) : undefined,
+        derive: request.choices?.length ? structuralInput : undefined,
         resolverCache: this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"), exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
@@ -167,7 +169,7 @@ export class CharacterDetailHost {
     const begun = this.running ? this.running.promise.then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
     const promise = begun
       .then(result => {
-        this.set({ key, phase: "ready", message: "", progress: null, record: result.recordFile });
+        this.set({ key, phase: "ready", message: result.note ?? "", progress: null, record: result.recordFile });
         if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
       })

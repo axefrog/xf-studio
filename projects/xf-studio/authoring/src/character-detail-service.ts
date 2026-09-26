@@ -15,8 +15,10 @@
  * through the resolver (layered-setup.ts), their maps and microblends exported like any texture, and the `.mlmask` exported as one
  * raw image per mask layer.
  *
- * A request's creator choices (the character context, character-context.ts) are interpreted by the host's creator catalogue
- * (`derive`) into the V's descriptors; a request without choices is the default V or the save as stored.
+ * A request's creator choices (the character context, character-context.ts) are interpreted into the V's descriptors (`derive`: the
+ * host's structural catalogue of the merged creator resource this preparation loads, cc-catalogue-service.ts `structuralInput`;
+ * PIPE-80); a request without choices is the default V or the save as stored. When the choices can't be interpreted, the V is shown
+ * without them and the result says so in one plain line (`note`), and the host prepares it again next time.
  *
  * Preparations on one installation share a `CharacterPreparationCache` (the host keeps it per installation fingerprint): a changed
  * choice on the same V re-plans from what earlier preparations already resolved, read and exported, and resolves and exports only what
@@ -72,13 +74,17 @@ export type PrepareCharacterOptions = {
    */
   cache?: CharacterPreparationCache;
   /**
-   * The V's descriptors for a request with creator choices, interpreted with the installed creator catalogue (the host's
-   * `CreatorCatalogueHost.inputFor`). Without it, a request's choices are ignored with a log line.
+   * The V's descriptors for a request with creator choices, interpreted from the merged creator resource this preparation loaded (the
+   * host's `structuralInput`). Without it, a request's choices are ignored with a log line.
    */
-  derive?: (request: CharacterRequest, installation: Installation) => Promise<CharacterInput>;
+  derive?: (request: CharacterRequest, cco: Awaited<ReturnType<typeof loadMergedCco>>) => CharacterInput | Promise<CharacterInput>;
 };
-/** `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). */
-export type CharacterDetailResult = { record: CharacterDetail; recordFile: string; degraded: boolean };
+/**
+ * `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). `note`: one plain line about
+ * what the V is shown without (its creator choices, when they couldn't be interpreted; PIPE-80).
+ */
+export type CharacterDetailResult = { record: CharacterDetail; recordFile: string; degraded: boolean; note?: string };
+const CHOICES_LEFT_OUT = "Your creator changes couldn't be applied, so your V is shown without them. Try again, or undo the last change.";
 
 export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
@@ -393,16 +399,25 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   let cco: Awaited<ReturnType<typeof loadMergedCco>>;
   try { cco = await loadMergedCco(graph, request.bodyGender); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).message); }
-  let input: CharacterInput;
-  if (request.choices?.length && options.derive) {
-    // The creator choices a person set, interpreted with the installed catalogue (rule R5; the save's own descriptors where nothing changed).
-    try { input = await options.derive(request, installation); }
-    catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
-  } else if (request.source === "default") {
-    if (request.choices?.length) log("Creator choices were sent without the creator catalogue; showing the V without them.");
+  // The V as stored (a save's descriptors) or the default V: what is shown when there are no choices, or they can't be interpreted.
+  const plainV = (): CharacterInput => {
+    if (request.source !== "default") return inputFromCharacterRequest(request);
     const derived = descriptorsFromUiState(cco.merged.cco, {});
-    input = { bodyGender: request.bodyGender, origin: "ui-state", appearances: derived.appearances, morphs: derived.morphs };
-  } else input = inputFromCharacterRequest(request);
+    return { bodyGender: request.bodyGender, origin: "ui-state", appearances: derived.appearances, morphs: derived.morphs };
+  };
+  let input: CharacterInput, choicesNote: string | undefined, choicesFailed = false;
+  if (request.choices?.length && options.derive) {
+    // The creator choices a person set, interpreted from the merged resource just loaded (rule R5; the save's own descriptors where
+    // nothing changed). Choices that can't be interpreted leave the V as it is, with a plain line, instead of failing it (PIPE-80).
+    try { input = await options.derive(request, cco); }
+    catch (error) {
+      log(`The creator choices couldn't be interpreted; showing the V without them: ${(error as Error)?.stack ?? error}`);
+      input = plainV(); choicesNote = CHOICES_LEFT_OUT; choicesFailed = true;
+    }
+  } else {
+    if (request.choices?.length) log("Creator choices were sent without the creator catalogue; showing the V without them.");
+    input = plainV();
+  }
   cancelled();
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
   cancelled();
@@ -543,7 +558,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   cancelled();
 
   progress("writing");
-  const notes: string[] = [...plan.choiceNotes];
+  const notes: string[] = [];
   const components: RenderComponent[] = [];
   /** Decoded texels of the distinct textures served so far, against the record's budget (PIPE-43). */
   const served = new Map<string, number>();
@@ -725,7 +740,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: [...new Set(notes)].slice(0, 32).map(line => line.slice(0, 500)), ...(toolLabel ? { tool: toolLabel } : {}) },
-    components, slots: [...slots.values()], choices: plan.choices,
+    components, slots: [...slots.values()],
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
   // with a note here, not discovered by the page.
@@ -741,12 +756,12 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     renameSync(staging, target);
   }
   time("write");
-  const degraded = toolFailures.size > 0 || transientFailures(installation) > transientBefore;
+  const degraded = choicesFailed || toolFailures.size > 0 || transientFailures(installation) > transientBefore;
   if (degraded) {
     cache.forget(mark);
     log("Some files couldn't be read this time (WolvenKit or a resource failed in a way that may not repeat); the V will be prepared again next time.");
   }
   log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
-  return { record, recordFile: recordName, degraded };
+  return { record, recordFile: recordName, degraded, ...(choicesNote ? { note: choicesNote } : {}) };
 }
