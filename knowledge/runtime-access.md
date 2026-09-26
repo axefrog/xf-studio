@@ -1,6 +1,6 @@
 # Runtime access: RED4ext, redscript, CET and the XF bridge
 
-**Maturity: Draft.** This page covers how each Cyberpunk 2077 mod type gets code into the running game, where each one logs, and how XF Studio's local bridge reaches the game. It is consolidated from source reading of RED4ext 1.30.0, RED4ext.SDK 1.0.0, redscript 0.5.31, CET 1.37.1, TweakXL 1.11.4 and psiberx's plugins, plus the offline build and self-test of [`projects/xf-runtime-bridge`](../projects/xf-runtime-bridge/README.md). **No claim here has runtime evidence yet**; the [test card](../research/runtime/runtime-bridge-test-card.md) collects it. The full citations, capability matrix and phase-2 plan are in the [runtime bridge design](../research/runtime/runtime-bridge-design.md).
+**Maturity: Draft.** This page covers how each Cyberpunk 2077 mod type gets code into the running game, where each one logs, and how XF Studio's local bridge reaches the game. It is consolidated from source reading of RED4ext 1.30.0, RED4ext.SDK 1.0.0, redscript 0.5.31, CET 1.37.1, TweakXL 1.11.4 and psiberx's plugins, plus the decompiled 2.31 scripts and the offline build, self-test and tests of [`projects/xf-runtime-bridge`](../projects/xf-runtime-bridge/README.md). **No claim here has runtime evidence yet**; the [first-session test card](../research/runtime/runtime-bridge-test-card.md) collects it. The full citations, capability matrix and phase-2 plan are in the [runtime bridge design](../research/runtime/runtime-bridge-design.md).
 
 ## 1. Load order and entry points
 
@@ -27,6 +27,10 @@
 - **Don't `FlushFileBuffers` a named pipe before disconnecting.** It waits until the client reads, which a client can simply not do [offline: held a stop 12 s]. `DisconnectNamedPipe` discards unread data, so give a client a short, bounded window to read a final reply instead [doc] Microsoft `DisconnectNamedPipe`.
 - **`node:net` can't choose a pipe client's impersonation level or query the server PID.** Use `CreateFileW` with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION` and `GetNamedPipeServerProcessId` (through `bun:ffi` in Bun), or .NET's `NamedPipeClientStream` with `TokenImpersonationLevel.Identification` [offline].
 - **`redscript-cli lint` exits 0 even on errors,** so parse its output for them. It also doesn't check `@wrapMethod` parameter lists on `cb` methods [offline].
+- **Check a pre-2.3 RTTI dump against the 2.31 script bundle before relying on a signature.** `TimeSystem.SetPausedState` has no parameters in 2.31, although the dump lists two [source].
+- **`PhotoModeMenuListItem.ForceValue` silently selects the first option for an option value it doesn't know.** Validate against the option data the menu set up (`OnSetupOptionSelector`) before calling it [source] 2.31 photo-mode scripts.
+- **A photo-mode expression is selected by its option data (the `faceId`), not its position in the menu** [source]; the first session and session 3 check this in game.
+- **`PrintWindow` with `PW_RENDERFULLCONTENT` returns black for a window that is entirely off-screen,** while legacy `WM_PRINT` works there but not for DirectX content; capture the game on-screen [offline].
 
 ## 3. Logging locations
 
@@ -57,11 +61,35 @@
   - `GetPlayer;GameInstance` → `entEntity.GetWorldPosition`;
   - `ScriptGameInstance.GetPhotoModeSystem` → `gamePhotoModeSystem.IsPhotoModeActive`.
 
-  These names and signatures come from the pre-2.3 `red-dump-json`, so they are [source] for existence and [unverified] on 2.31.
+  These names and signatures come from the pre-2.3 `red-dump-json`, so they are [source] for existence and [unverified] on 2.31. Phase-2 game access goes through our redscript actions layer instead (plugin → redscript statics by name), which lints against the installed 2.31 bundle.
 - **Clients:** Bun (`bun:ffi` calls kernel32, [offline] Bun 1.4.2) and PowerShell 7 (`NamedPipeClientStream`). Both open the pipe at the Identification impersonation level. Both check the server PID against `session.json` before sending the token. `node:net` can do neither, which is why the Bun client doesn't use it.
 
-## 5. What agents can and cannot do yet
+## 5. Phase 2: commands, writes and captures
 
+- **One catalogue, many frontends.** Every command (name, plain text, JSON Schema input, permission class, undo note) is defined once in `tools/api/catalogue.ts`; the MCP server, the CLI's `run` and the session runner derive from it, so a command added once appears everywhere [offline]. Permission classes: `read`, `write-photo`, `write-world`, `write-character`, `control`.
+- **Writes are gated twice.** The tools can withhold classes (`--read-only`, `--allow`), and the game refuses every write unless `allow_writes = true` in the plugin's config, which only the `-writes` build sets for the test profile [offline].
+- **Every write is reversible and recorded.** It takes a save lock first, logs `write.done … undo=` and returns `undo {method, params}`; the kill switch undoes a freeze, a hidden photo-mode menu and the save lock [offline in the self-test host].
+- **Photo mode is driven through its own menu.** `GetMenuItem(key)` and `ForceValue` reach `OnAttributeUpdated`, with values checked against the ranges the menu set up; keys come from four photo-mode mods' source ([design §3.2](../research/runtime/runtime-bridge-design.md#32-protocol-1)) [source]. Opening photo mode from a script needs Codeware's `QuestsSystem.ExecuteNode` with `questOpenPhotoMode_NodeType` [source; hypothesis outside quests].
+- **Character options change only in the open mirror screen,** through `ApplyChangeToOption` as its own controls do; the bridge never confirms (`ReFinalizeState`), and Back discards [source].
+- **The world clock and a freeze:** `SetGameTimeByHMS` / `SetGameTimeBySeconds`, and time dilation 0 on the world and V as the mirror screen does [source].
+- **Captures** are external (`PrintWindow` or the screen), cropped to named regions sized in window heights so they frame the same area on 16:9 and 21:9, saved at full resolution and returned downscaled with an exact area filter [offline].
+
+| API | Grade | Status |
+|---|---|---|
+| `gameuiPhotoModeMenuController.GetMenuItem` / `PhotoModeMenuListItem.ForceValue` / `OnAttributeUpdated` | [source] 2.31 | Used for camera, lights, expression |
+| `gameuiPhotoModeMenuController.OnExitConfirmed(Bool)` | [source] 2.31 | Used for `photo.exit` |
+| Protected `OnFadeVisibility(Float)` through an added method | [source] 2.31 | Used for `photo.hud.hide` |
+| Codeware `QuestsSystem.ExecuteNode` + `questOpenPhotoMode_NodeType` | [source]; outside quests [hypothesis] | Used for `photo.enter`; the player's key is the fallback |
+| `gameuiICharacterCustomizationSystem.ApplyChangeToOption`, `GetUnitedOptions` | [source] 2.31 | Used in the mirror screen only |
+| `ReFinalizeState` (Confirm), `CancelFinalizedStateUpdate` (Back) | [source] 2.31 | Never called by the bridge |
+| `TimeSystem.SetGameTimeByHMS`, `SetGameTimeBySeconds`, `SetTimeDilation`, `SetTimeDilationOnLocalPlayerZero` | [source] 2.31 | Used for the clock and the freeze |
+| `TimeSystem.SetPausedState()` | [source] 2.31, no parameters | Not used |
+| `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a load or the kill switch; blocking autosaves in practice [unverified] |
+| Autosave triggers: vendor, ripperdoc and perk exits (`MenuUIUtils.RequestAutoSave`), fast travel, legendary loot, drop points, quest checkpoints, the timed autosave setting | [source] 2.31 | Why sessions start with a manual save and end by loading it |
+
+## 6. What agents can and cannot do yet
+
+- **Built, untested in game:** the phase-2 commands above, through MCP, the CLI or a session script.
 - **Verified to exist (still untested in game):**
   - reading photo-mode state, camera transform and FOV;
   - time of day, pause and dilation, teleport;
@@ -71,7 +99,7 @@
   - quitting through `ExitGame`.
 - **No API found:**
   - taking a game screenshot to a chosen file;
-  - opening photo mode without input;
+  - opening photo mode without input, other than Codeware's quest-node route;
   - opening the mirror screen from gameplay;
   - saving to a chosen slot.
 - **Capture paths:** capture is external for now (window capture after post-processing). The lossless, before-effects route is an optional ReShade add-on (6.7.x headers, full add-on build only), which must never change the user's preset.
@@ -84,7 +112,9 @@ Details and citations: [design §7](../research/runtime/runtime-bridge-design.md
 2. Can CET call a redscript class that a plugin added with `scripts->Add`, as the Lua global `Module_Class`?
 3. When does a `ScriptableSystem`'s `OnAttach` first run: at the main menu or on the first save load?
 4. Do the RTTI names from the pre-2.3 dump still match on 2.31? Settle this with a fresh RTTIDumper run.
-5. Does GDI window capture return the game image in its fullscreen mode, or only in borderless windowed mode?
+5. Does window capture return the game image in its fullscreen mode, or only in borderless windowed mode?
+6. Does the Codeware quest node open photo mode outside a quest, and does the save lock hold off autosaves?
+7. Do the photo-mode keys from mod source match this install, and which keys switch lights on and set film grain and chromatic aberration?
 
 ## Related pages
 

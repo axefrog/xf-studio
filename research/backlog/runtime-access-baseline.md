@@ -1,6 +1,6 @@
 # Runtime access baseline (R&D)
 
-**Status: baseline built and self-tested offline; first game session prepared, not run.** The code is in [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md), the design and citations in [runtime bridge design](../runtime/runtime-bridge-design.md), the consolidated answers in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session in the [test card](../runtime/runtime-bridge-test-card.md).
+**Status: phase 2 built and tested offline (command catalogue, MCP server, CLI, session runner, captures, writes behind `allow_writes`); first game session prepared, not run.** The code is in [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md), the design and citations in [runtime bridge design](../runtime/runtime-bridge-design.md), the consolidated answers in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session in the [test card](../runtime/runtime-bridge-test-card.md).
 
 ## Goal
 
@@ -22,15 +22,16 @@ Prove that agents can build, load and debug each kind of Cyberpunk 2077 mod the 
 - **Offline checks:**
   - The plugin builds cleanly with `/W4`.
   - The redscript layer lints against the game's script bundle, and the Lua layer parses.
-- **Package:** install-layout zips (default and diagnostic) are written to the ignored `dist/`. Nothing is installed.
+- **Package:** install-layout zips (default, diagnostic and `-writes` for the test profile) are written to the ignored `dist/`. Nothing is installed.
+- **Phase 2:** one command catalogue behind a stdio MCP server, the CLI and a JSON session runner; external window capture with region crops and downscaling; photo-mode, mirror-screen and clock writes with undo, a save lock and restore on kill; scripts for sessions 2 and 3. See the [project README](../../projects/xf-runtime-bridge/README.md).
 - **Logs:** `tools/capture_session.py` also collects the bridge's logs.
 
 ## Next
 
-1. Run the [test card](../runtime/runtime-bridge-test-card.md) in a dedicated MO2 profile, then turn the design's unverified rows into runtime evidence.
+1. Run the [first-session test card](../runtime/runtime-bridge-test-card.md) in the test profile, then session 2 through the bridge; turn the design's unverified rows into runtime evidence and calibrate the camera presets.
 2. Take a fresh 2.31 RTTI dump (RTTIDumper) to re-check every signature in the capability matrix.
-3. Build phase-2 read methods: photo-mode open/close events, camera transform and FOV, save list, and session-ready events.
-4. Only after the maintainer's decisions: add write methods for time, pause, weather, teleport and a fixed camera, with an optional ReShade before-effects capture add-on. Then run the automated finish-board session.
+3. Later reads and writes: camera transform, save list, session-ready events, weather, teleport and a fixed camera, with an optional ReShade before-effects capture add-on; then the automated finish-board session.
+4. Host the MCP module in the desktop app ([AI integration](ai-integration-mcp.md)).
 
 ## Constraints
 

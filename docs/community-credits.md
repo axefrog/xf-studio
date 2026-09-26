@@ -30,7 +30,7 @@ By psiberx and contributors. [GitHub](https://github.com/psiberx/cp2077-archive-
 
 ### Codeware and TweakXL
 
-By psiberx and contributors. [Codeware](https://github.com/psiberx/cp2077-codeware), [TweakXL](https://github.com/psiberx/cp2077-tweak-xl). Their release notes and compatibility statements helped us choose stable framework versions for runtime testing. Their source, and psiberx's shared plugin framework within it, taught us how a well-built RED4ext plugin is structured, logs and ships its scripts, how to declare natives for redscript, and how TweakXL loads and types YAML tweaks, which shaped the XF Runtime Bridge; its TweakXL data marker is an optional runtime use. No code is copied.
+By psiberx and contributors. [Codeware](https://github.com/psiberx/cp2077-codeware), [TweakXL](https://github.com/psiberx/cp2077-tweak-xl). Their release notes and compatibility statements helped us choose stable framework versions for runtime testing. Their source, and psiberx's shared plugin framework within it, taught us how a well-built RED4ext plugin is structured, logs and ships its scripts, how to declare natives for redscript, and how TweakXL loads and types YAML tweaks, which shaped the XF Runtime Bridge; its TweakXL data marker is an optional runtime use. Codeware's quest-system access is how the bridge asks the game to open photo mode, an optional runtime use. No code is copied.
 
 ### Cyber Engine Tweaks
 
@@ -107,6 +107,10 @@ By the Mermaid contributors. [GitHub](https://github.com/mermaid-js/mermaid-cli)
 ### luaparse
 
 By Oskar Schöldström and contributors. [GitHub](https://github.com/fstirlitz/luaparse). We use it (MIT) as a development tool to syntax-check the XF Runtime Bridge's Lua layer offline.
+
+### MCP TypeScript SDK
+
+By Anthropic and the Model Context Protocol contributors. [GitHub](https://github.com/modelcontextprotocol/typescript-sdk). The XF Runtime Bridge's MCP server, which lets an AI client drive in-game tests through the bridge, is built on it, and its client runs our end-to-end tests. It is a development dependency (MIT) of the bridge's tools.
 
 ### Fengari
 
@@ -248,11 +252,11 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ### Photo-mode pose and tool mods
 
-[Photo Mode Pose Selector](https://www.nexusmods.com/cyberpunk2077/mods/32633) (cjsu, per its Nexus description), [Photo Mode Unlocker XL](https://www.nexusmods.com/cyberpunk2077/mods/4319) (SilverEzredes, per its tweak file), [Ziva Photoshoot Posepack](https://www.nexusmods.com/cyberpunk2077/mods/8463) (EzioMaverick, per its tweak file), [Action Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/8698), [Dancy - Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/18007) and [Multi Pose Pack Framework](https://www.nexusmods.com/cyberpunk2077/mods/4098). Together they showed how poses reach photo mode (animation sets added to the photo-mode entities or scopes, plus pose and category records), how the menu's lists can be widened, and which menu attributes select V's and NPCs' expressions, which a future in-game test can drive directly. Photo Mode Pose Selector's small redscript system, which records the photo-mode V puppet when photo mode sets it up, showed us how to find that puppet from the CET console. Studied only.
+[Photo Mode Pose Selector](https://www.nexusmods.com/cyberpunk2077/mods/32633) and [Photo Mode Preferences](https://www.nexusmods.com/cyberpunk2077/mods/32736) (both by cjsu, per their Nexus descriptions), [Photo Mode Unlocker XL](https://www.nexusmods.com/cyberpunk2077/mods/4319) (SilverEzredes, per its tweak file), [Ziva Photoshoot Posepack](https://www.nexusmods.com/cyberpunk2077/mods/8463) (EzioMaverick, per its tweak file), [Action Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/8698), [Dancy - Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/18007) and [Multi Pose Pack Framework](https://www.nexusmods.com/cyberpunk2077/mods/4098). Together they showed how poses reach photo mode (animation sets added to the photo-mode entities or scopes, plus pose and category records), how the menu's lists can be widened, and which menu attributes select V's and NPCs' expressions, which a future in-game test can drive directly. Photo Mode Pose Selector's small redscript system, which records the photo-mode V puppet when photo mode sets it up, showed us how to find that puppet from the CET console. Photo Mode Preferences and Photo Mode Pose Selector showed which menu attribute numbers drive the camera, V's placement, lights and expressions and how to set them through the menu's own items, which the XF Runtime Bridge's photo-mode commands use; Photo Mode Preferences also showed that settings re-applied as photo mode opens can race other changes. Studied only.
 
 ### psiberx
 
-[Photo Mode Ex](https://github.com/psiberx/cp2077-photomode-ex), [Equipment-EX](https://github.com/psiberx/cp2077-equipment-ex), [Cyberware-EX](https://github.com/psiberx/cp2077-cyberware-ex), [Red Hot Tools](https://github.com/psiberx/cp2077-red-hot-tools) and [CET Kit](https://github.com/psiberx/cp2077-cet-kit). Their source taught us how photo mode works internally, how scriptable systems and wrapped methods are written, how script logging is captured, and how to detect sessions and photo mode from Lua. psiberx also exported the scripting RTTI dump we use to check native function names offline. Studied only.
+[Photo Mode Ex](https://github.com/psiberx/cp2077-photomode-ex), [Equipment-EX](https://github.com/psiberx/cp2077-equipment-ex), [Cyberware-EX](https://github.com/psiberx/cp2077-cyberware-ex), [Red Hot Tools](https://github.com/psiberx/cp2077-red-hot-tools) and [CET Kit](https://github.com/psiberx/cp2077-cet-kit). Their source taught us how photo mode works internally, how scriptable systems and wrapped methods are written, how script logging is captured, and how to detect sessions and photo mode from Lua. Photo Mode Ex and Equipment-EX also confirmed photo-mode attribute numbers the bridge uses, and Photo Mode Ex showed that depth of field can persist into saves, which the bridge's session scripts avoid. psiberx also exported the scripting RTTI dump we use to check native function names offline. Studied only.
 
 ### xBaebsae
 
