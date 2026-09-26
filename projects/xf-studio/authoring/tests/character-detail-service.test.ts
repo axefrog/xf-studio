@@ -209,6 +209,11 @@ describe("character record from the resolver", () => {
       gradientEntriesRootToTip: [{ value: 2, color: { Red: 300, Green: 0, Blue: 0 } }] })).toEqual(
       { sampleCount: 127, id: [{ value: 0.5, color: [1, 2, 3] }], rootToTip: [{ value: 1, color: [255, 0, 0] }] });
     expect(hairProfileStops({ $type: "CHairProfile", sampleCount: 1, gradientEntriesID: [], gradientEntriesRootToTip: [] })).toBeNull();
+    // PIPE-110: an omitted sampleCount is its class default, 64 (vanilla purple_ombre.hp and liliac.hp omit it).
+    expect(hairProfileStops({ $type: "CHairProfile", gradientEntriesID: [{ value: 0, color: { Red: 1, Green: 2, Blue: 3 } }],
+      gradientEntriesRootToTip: [{ value: 1, color: { Red: 4, Green: 5, Blue: 6 } }] })?.sampleCount).toBe(64);
+    expect(skinProfileValues({ $type: "CSkinProfile" })).toEqual({ roughness0: 0.75, roughness1: 1.25, lobeMix: 0.8, blurSize: 1.2,
+      diffuse: [255, 255, 255], falloff: [255, 255, 255] });
     expect(skinProfileValues({ $type: "CSkinProfile", roughness0: 0.966365993, roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998,
       diffuse: { Red: 255, Green: 255, Blue: 255 }, falloff: { Red: 255, Green: 178, Blue: 165 } })).toEqual({ roughness0: 0.966365993,
       roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998, diffuse: [255, 255, 255], falloff: [255, 178, 165] });

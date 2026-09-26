@@ -9,18 +9,22 @@
  *    null handles and buffers, empty references (flag `Soft` for `raRef`), the zero member of an enum, "0" for a bitfield, and a
  *    struct of its own defaults.
  */
+import classDefaults from "./rtti-class-defaults.json";
 import learned from "./rtti-defaults.json";
 import { RedObject } from "./red-model";
 import { emptyReference } from "./red-values";
 import { baseClasses, enumMembers, kindOf } from "./rtti";
 
 const table = learned as unknown as Record<string, Record<string, unknown>>;
+const classTable = classDefaults as unknown as Record<string, Record<string, unknown>>;
 
-/** The learned default of `type.property` (or of a base class's), or undefined. */
+/** The known default of `type.property` (learned, else the class default; the class's own, else a base class's), or undefined. */
 export function learnedDefault(type: string, property: string): unknown {
   for (const name of baseClasses(type)) {
     const row = table[name];
     if (row && Object.hasOwn(row, property)) return row[property];
+    const own = classTable[name];
+    if (own && Object.hasOwn(own, property)) return own[property];
   }
   return undefined;
 }

@@ -6,6 +6,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hairProfileStops } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { ArchiveChangedError, NativeArchive, NativeArchivePool } from "../src/native/archive-reader";
 import { Cr2wFile } from "../src/native/cr2w-file";
@@ -14,7 +15,7 @@ import { DecodeSession, DEFAULT_LIMITS, type NativeLimits } from "../src/native/
 import { type DecodeWorker, type NativeDecodeOutcome, type WorkerDecodeMessage, WorkerDecoder, type WorkerDecoderOptions, type WorkerInit } from "../src/native/native-decode";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "../src/native/native-errors";
 import { parseLxrsNames } from "../src/native/rdar-archive";
-import { learnedKeysMemoSize } from "../src/native/red-defaults";
+import { learnedDefault, learnedKeysMemoSize } from "../src/native/red-defaults";
 import { readPackage } from "../src/native/red-package";
 import { Cursor, decoderCacheSize, readVarString } from "../src/native/red-values";
 import { readResource, readResourceJson } from "../src/native/resource-document";
@@ -317,6 +318,22 @@ test("NATIVE-16: a watched property the file left out is reported with its path 
   expect(result.defaulted).toEqual([{ property: "rendChunk.renderMask", count: 2, paths: [
     ".Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos[1].renderMask",
     ".Data.RootChunk.renderResourceBlob.Data.header.renderChunkInfos[2].renderMask"] }]);
+});
+
+test("PIPE-110: a property no sampled file left out reads as its class default, not the type's zero", () => {
+  // Vanilla purple_ombre.hp stores its two gradients and leaves sampleCount (class default 64) out.
+  const stop = (value: number) => v.struct([prop("value", "Float", v.f32(value)), prop("color", "Color", v.struct([prop("Red", "Uint8", v.u8(200))]))]);
+  const file = new Cr2wBuilder();
+  file.export("CHairProfile", [prop("gradientEntriesID", "array:rendGradientEntry", v.array([stop(0), stop(1)])),
+    prop("gradientEntriesRootToTip", "array:rendGradientEntry", v.array([stop(0), stop(1)]))]);
+  const root = readResource(file.build(), fakeDecompress).document.Data.RootChunk as any;
+  expect(root.sampleCount).toBe(64);
+  expect(hairProfileStops(root)?.sampleCount).toBe(64);
+  // Learned values still win where both are known, and an omitted quaternion `r` is 1 (identity), not 0.
+  expect(learnedDefault("CMaterialTemplate", "canBeMasked")).toBe(1);
+  expect(learnedDefault("Quaternion", "r")).toBe(1);
+  expect(learnedDefault("CSkinProfile", "roughness1")).toBe(1.25);
+  expect(learnedDefault("CHairProfile", "gradientEntriesID")).toBeUndefined();
 });
 
 // NATIVE-18..23: the review at fa74f98.
