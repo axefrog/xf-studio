@@ -6,7 +6,7 @@ import { CharacterDetailHost, characterRequestKey, installationFingerprint, type
 import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
 import type { DetailLimit, SlotLimits } from "../src/detail-limits";
 import type { DetailSlot } from "../src/render-detail";
-import { CacheRun, CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes,
+import { CacheRun, CENSORED_BODY, CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes,
   skinProfileValues, storeScaledTexture, templateIdentity, textureIsGamma, withCacheRun } from "../src/character-detail-service";
 import { DEFAULT_CHARACTER } from "../src/character-detail-request";
 import { readChoiceManifest } from "../src/choice-manifest";
@@ -14,7 +14,7 @@ import { depotHash } from "../src/depot-path";
 import { decodePng, encodePng } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
-import { parseCharacterDetail } from "../src/render-detail";
+import { parseCharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
 import { BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
@@ -70,7 +70,7 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-9");
+    expect(record.schema).toBe("xfs/render-detail-10");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
@@ -547,6 +547,37 @@ describe("the body in the character record", () => {
     const cover = body.at(-1)!.materials[0]!;
     expect(cover.textures.DiffuseTexture!.depotPath).toBe(P.coverD);
     expect(Object.keys(cover.textures).sort()).toEqual(["DiffuseTexture", "MetalnessTexture", "NormalAlphaTex", "NormalTexture", "RoughnessTexture", "SecondaryMask"]);
+  });
+
+  // ---- PIPE-97: the host fails closed when a cover can't be served ----
+  test("PIPE-97: the covered skin and its cover are served with their markers; the censored twin is not", async () => {
+    const { record } = await prepare(BODY_REQUEST);
+    expect(record.components.filter(c => c.slot === "body").map(c => [c.option, c.censor ?? null])).toEqual([["body_color", "covered"], ["flat_feet", null],
+      ["h_default_arms_colors_tpp", null], ["nails_color_tpp", null], ["underpants", "cover"]]);
+  });
+
+  test("PIPE-97: a cover the host can't serve (its texture unread) swaps the covered skin for the game's censored skin", async () => {
+    const { record } = await prepare(BODY_REQUEST, fakeExporter({ missing: [P.coverD] }));
+    const body = record.components.filter(c => c.slot === "body");
+    expect(body.some(c => c.censor === "covered" || c.option === "body_color" || c.option === "underpants")).toBe(false);
+    expect(body.map(c => c.option)).toEqual(["body_color_censored", "flat_feet", "h_default_arms_colors_tpp", "nails_color_tpp"]);
+    expect(body[0]!.materials.map(m => m.name)).toEqual(["skin_censored", "skin_censored"]);
+    expect(record.slots.find(s => s.slot === "body")!.message).toBe(CENSORED_BODY);
+  });
+
+  test("PIPE-97: with no censored twin to stand in, a cover the host can't serve withdraws the whole body", async () => {
+    const request = { ...BODY_REQUEST, appearances: BODY_REQUEST.appearances.filter(item => item.option !== "body_color_censored") };
+    const { record } = await prepare(request, fakeExporter({ missing: [P.coverD] }));
+    expect(record.components.some(c => c.slot === "body")).toBe(false);
+    expect(record.slots.find(s => s.slot === "body")).toMatchObject({ state: "unavailable", message: UNCOVERED_BODY });
+    // The head is served as ever.
+    expect(record.components.filter(c => c.slot !== "body").map(c => c.slot)).toEqual((await prepare(REQUEST_A)).record.components.map(c => c.slot));
+  });
+
+  test("PREV-108: a body turned off is neither resolved nor served, and its clothes neither", async () => {
+    const { record } = await prepare({ ...BODY_REQUEST, body: false });
+    expect(record.components.some(c => c.slot === "body" || c.slot === "clothing")).toBe(false);
+    expect(record.slots.filter(s => s.slot === "body" || s.slot === "clothing").map(s => [s.state, s.label])).toEqual([["none", "Hidden"], ["none", "Hidden"]]);
   });
 
   test("a texture larger than the preview is served halved until it fits, once, by 2×2 means of its bytes", () => {

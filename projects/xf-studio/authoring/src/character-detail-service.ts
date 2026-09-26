@@ -32,11 +32,11 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
-import { resolveClothing, type ResolvedClothing } from "./clothing-resolver";
+import { type ClothingFailure, resolveClothing, type ResolvedClothing } from "./clothing-resolver";
 import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
@@ -47,7 +47,7 @@ import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
-  type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
+  type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
@@ -785,19 +785,22 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     input = plainV();
   }
   cancelled();
-  // What V wears first: the feet group and the items' overrides of the body follow from it.
-  const clothing = await dress(graph, request, options, log);
+  // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off (or a male one, which the
+  // preview doesn't draw yet) is neither dressed nor resolved (PREV-108, PIPE-98).
+  const scope = bodyScopeOf(request);
+  const dressed = scope === "drawn" ? await dress(graph, request, options, log) : null;
+  const clothing = dressed && !("failed" in dressed) ? dressed : null;
   cancelled();
   const bodyState = { feet: clothing?.feet ?? "flat" } as const;
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
-  input = previewInput(input, bodyState);
+  input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
   trace.event("character", "resolved", resolutionTrace(resolved), RESOLUTION_TRACE_OPTIONS);
   cancelled();
   const templates = [...resolved.appearances.flatMap(entry => entry.components), ...clothingComponents(clothing)].flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template));
   await loadTemplates(graph, templates, cache);
-  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, clothing);
+  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, cache.defaults, cache.identities, bodyState, dressed, scope);
   time("resolve and plan");
   cancelled();
 
@@ -816,7 +819,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   };
   // A component whose plan is unchanged on this installation is served as it was (a tried choice changes only its own slot).
   const planKey = (component: PlannedComponent) => canonical(component);
-  const fresh = plan.components.filter(component => !cache.components.has(planKey(component)));
+  const fresh = [...plan.components, ...plan.censoredBody].filter(component => !cache.components.has(planKey(component)));
   const gathered = await gatherParts({ graph, cache, exporter: options.exporter, gameRoot: options.route.gameRoot, storeRoot: options.storeRoot, signal, log }, fresh);
   const { geometryAt, textureAt, maskAt, toolFailures } = gathered;
   const toolLabel = cache.toolLabel ?? gathered.toolLabel;
@@ -1019,15 +1022,17 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
           ...(hexSha(component.drawnFrom.extractedSha256) ? { sha256: hexSha(component.drawnFrom.extractedSha256)! } : {}) }] },
       renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
       ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}),
-      ...(component.morphs ? { morphs: component.morphs } : {}), ...(component.garment ? { garment: component.garment } : {}) };
+      ...(component.morphs ? { morphs: component.morphs } : {}), ...(component.garment ? { garment: component.garment } : {}),
+      ...(component.censor ? { censor: component.censor } : {}) };
   };
   let reusedComponents = 0;
-  for (const component of plan.components) {
+  /** Serve one planned component (as before when its plan is unchanged), or say why it can't be (null). */
+  const serve = (component: PlannedComponent): RenderComponent | null => {
     const key = planKey(component), known = cache.components.get(key);
     // An unchanged plan on this installation is served as before, while its textures still fit the record's budget.
     if (known && [...known.textures].every(([file, texels]) => spend(file, texels))) {
-      components.push(known.component); notes.push(...known.notes); reusedComponents++;
-      continue;
+      notes.push(...known.notes); reusedComponents++;
+      return known.component;
     }
     componentNotes = []; componentTextures = new Map();
     let built: ReturnType<typeof build>;
@@ -1039,10 +1044,26 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       built = "export";
     }
     notes.push(...componentNotes);
-    if (typeof built === "string") { failSlot(component.slot, built); continue; }
-    components.push(built);
+    if (typeof built === "string") { failSlot(component.slot, built); return null; }
     cache.components.set(key, { component: built, notes: componentNotes, textures: componentTextures });
+    return built;
+  };
+  // Fail closed (PIPE-97): the underwear covers are served first, so the texture budget never leaves one out while the parts it covers
+  // are served; if one can't be served, the covered skin is replaced by the game's censored skin, and without that the body isn't shown.
+  const coverParts = new Map(plan.components.filter(component => component.censor === "cover").map(component => [component, serve(component)] as const));
+  const coversServed = [...coverParts.values()].every(item => !!item);
+  const firstCovered = plan.components.find(component => component.censor === "covered");
+  const toServe = coversServed || !firstCovered ? plan.components
+    : plan.components.flatMap(component => component === firstCovered ? plan.censoredBody : component.censor === "covered" ? [] : [component]);
+  const censoredServed = new Set<RenderComponent>();
+  for (const component of toServe) {
+    const item = coverParts.has(component) ? coverParts.get(component)! : serve(component);
+    if (!item) continue;
+    components.push(item);
+    if (plan.censoredBody.includes(component)) censoredServed.add(item);
   }
+  const bodyWithdrawn = !coversServed && !!firstCovered && !censoredServed.size;
+  if (bodyWithdrawn) for (let i = components.length - 1; i >= 0; i--) if (components[i]!.slot === "body") components.splice(i, 1);
   if (cache.components.size > 2048) for (const key of [...cache.components.keys()].slice(0, 512)) cache.components.delete(key);
   if (overBudget) notes.push(`${overBudget} texture(s) are over what the preview can load for one V, so the parts that need them are drawn without them.`);
   for (const [slot, why] of partial) {
@@ -1056,6 +1077,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   }
   // A slot whose components all failed is unavailable; one with some drawn stays shown.
   for (const [slot, state] of slots) if (state.state === "shown" && !components.some(item => item.slot === slot)) unavailable(slot, "export");
+  if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
+  else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
   if (summary.scanGaps.length) notes.push("Some installed mod files could not be read; the resolved details may differ from the game.");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
@@ -1102,19 +1125,25 @@ const clothingComponents = (clothing: ResolvedClothing | null) => clothing?.garm
 
 /**
  * What a request's V wears (clothing-resolver.ts), or null without clothing. The item records come from the installation's TweakDB and the
- * cooked visual-tag preset (clothing-host.ts). A failure leaves V without clothes, with a log line, rather than failing the V.
+ * cooked visual-tag preset (clothing-host.ts). A failure leaves V without clothes, with a log line and a plain outcome (PIPE-100), rather
+ * than failing the V; nothing about it is kept, so the next preparation tries again.
  */
 async function dress(graph: ResourceGraph, request: CharacterRequest, options: { route: CharacterRoute; resolverCache: string }, log: (message: string) => void):
-  Promise<ResolvedClothing | null> {
+  Promise<ResolvedClothing | ClothingFailure | null> {
   if (!request.clothing) return null;
   try {
-    const ports = clothingPorts(graph, options.route.gameRoot, options.resolverCache, log);
+    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log);
     return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
   } catch (error) {
     log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);
-    return null;
+    return { failed: "unresolved" };
   }
 }
+
+/** Whether a request's body is drawn: off by the viewer's Body switch, or a male V's (not drawn yet), else drawn. */
+export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : request.bodyGender === "male" ? "male" : "drawn";
+/** A body whose covered skin was replaced by the game's censored skin because its underwear couldn't be served (PIPE-97). */
+export const CENSORED_BODY = "The underwear the game draws on your V couldn't be prepared, so the body is shown in the game's censored look.";
 
 /** The most notes a record's provenance carries. */
 export const RECORD_NOTE_CAP = 32;
@@ -1172,18 +1201,20 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
       return { bodyGender: request.bodyGender, origin: "ui-state" as const, appearances: derived.appearances, morphs: derived.morphs };
     }));
     // Every request resolves at once, so each level of their chains is one extraction batch.
-    const clothes = await Promise.all(requests.map(request => dress(graph, request, options, log)));
+    const clothes = await Promise.all(requests.map(request => bodyScopeOf(request) === "drawn" ? dress(graph, request, options, log) : null));
     cancelled();
-    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: clothes[index]?.feet ?? "flat" }), cco, cache,
-      clothes[index]?.overrides).then(result => result.resolved) : null));
+    const scopes = requests.map(bodyScopeOf);
+    const worn = clothes.map(entry => entry && !("failed" in entry) ? entry : null);
+    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: worn[index]?.feet ?? "flat" },
+      scopes[index] === "drawn"), cco, cache, worn[index]?.overrides).then(result => result.resolved) : null));
     cancelled();
-    await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(clothes[index] ?? null)]
+    await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(worn[index] ?? null)]
       .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
     const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
-      { feet: clothes[index]?.feet ?? "flat" }, clothes[index] ?? null) : null);
+      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index]) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
-    for (const plan of plans) for (const component of plan?.components ?? []) {
+    for (const plan of plans) for (const component of [...plan?.components ?? [], ...plan?.censoredBody ?? []]) {
       const key = canonical(component);
       if (!cache.components.has(key)) fresh.set(key, component);
     }

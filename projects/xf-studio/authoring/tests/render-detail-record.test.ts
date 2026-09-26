@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS, parseCharacterDetail, parseCoreDetail, parseRenderDetail, RECORD_LIMITS, RENDER_DETAIL_SCHEMA, RenderDetailVersionError,
-  type CharacterDetail } from "../src/render-detail";
+  type CharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
 
 const sha = (c: string) => c.repeat(64);
 const resource = (file: string, c = "a") => ({ file, sha256: sha(c), sources: [{ depotPath: "base\\x.mesh", archive: "basegame.archive", provider: "Installed game" }] });
@@ -75,7 +75,7 @@ const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identit
 describe("render record versions", () => {
   test("v9 carries the character record with its piercings, layered stacks and body (with its own shapes), and no choices to try; parsing is lossless and idempotent", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-9");
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-10");
     expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"]);
     expect(parseCharacterDetail(record).components.find(item => item.slot === "body")?.morphs).toEqual(["breast_big_breast"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
@@ -122,7 +122,7 @@ describe("render record versions", () => {
     expect(() => parse(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
   });
 
-  test("v1 stays the core head, and a v9 reader accepts it under every version; v2 to v8 characters are refused plainly, as a version error", () => {
+  test("v1 stays the core head, and a v10 reader accepts it under every version; v2 to v9 characters are refused plainly, as a version error", () => {
     expect(parseRenderDetail(core())).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: CHARACTER_DETAIL_SCHEMA })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-2" })).toMatchObject({ detail: "core-head" });
@@ -130,10 +130,10 @@ describe("render record versions", () => {
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-5" })).toMatchObject({ detail: "core-head" });
     // A newer record (a host updated while the page ran) is a version error the page words, not a silent failure.
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-10" })).toThrow(RenderDetailVersionError);
-    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-10" })).toThrow(RenderDetailVersionError);
-    // A v8 character record (no clothing slot) is prepared again, never read.
-    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-8" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-11" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-11" })).toThrow(RenderDetailVersionError);
+    // A v9 character record (a body without censorship parts) is prepared again, never read.
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-9" })).toThrow(RenderDetailVersionError);
     // A v7 character record (no body slot) is prepared again, never read.
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
     expect(() => parseRenderDetail({ ...core(), schema: "xfs/elsewhere" })).toThrow("unsupported record version");
@@ -292,4 +292,49 @@ test("a slot label or message built from long mod names is cut with a note, neve
   expect(label).toMatch(/^a very long mod supplied face detail name 0, .* and \d+ more$/);
   expect(clampedList(["short", "names"])).toBe("short, names");
   expect(clampedList(["y".repeat(400)]).length).toBeLessThanOrEqual(SLOT_LABEL_MAX);
+});
+
+// ---- PIPE-97: the record reader fails closed on the underwear floor ----
+describe("the underwear floor in the record (PIPE-97)", () => {
+  const bodyPart = (id: string, option: string, censor?: "cover" | "covered") => ({ ...structuredClone(character().components.at(-1)!), id, option,
+    ...(censor ? { censor } : {}) });
+  const withBody = (parts: object[]) => ({ ...character(), components: [...character().components.filter(c => c.slot !== "body"), ...parts] });
+  const bodySlot = (record: CharacterDetail) => record.slots.find(slot => slot.slot === "body")!;
+
+  test("a covered skin with its cover parses as it is, the markers kept", () => {
+    const record = parseCharacterDetail(withBody([bodyPart("body:skin:1", "body_color", "covered"), bodyPart("body:cover:2", "underpants", "cover")]));
+    expect(record.components.filter(c => c.slot === "body").map(c => c.censor)).toEqual(["covered", "cover"]);
+    expect(bodySlot(record).state).toBe("shown");
+    expect(parseCharacterDetail(record)).toEqual(record);
+  });
+
+  test("a cover the reader drops (a broken entry) withdraws the covered skin and the whole body, in plain words", () => {
+    const broken = { ...bodyPart("body:cover:2", "underpants", "cover"), chunks: [99] };
+    const record = parseCharacterDetail(withBody([bodyPart("body:skin:1", "body_color", "covered"), bodyPart("body:feet:3", "flat_feet"), broken]));
+    expect(record.components.some(c => c.slot === "body")).toBe(false);
+    expect(bodySlot(record)).toEqual({ slot: "body", state: "unavailable", label: "body, arms, underwear", message: UNCOVERED_BODY });
+    expect(record.provenance.notes.at(-1)).toContain("the body, because the underwear the game draws on it couldn't be read");
+    // The other slots are untouched.
+    expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "hair", "eyes", "piercings"]);
+  });
+
+  test("a covered skin with no cover in the record at all is withdrawn", () => {
+    const record = parseCharacterDetail(withBody([bodyPart("body:skin:1", "body_color", "covered")]));
+    expect(record.components.some(c => c.slot === "body")).toBe(false);
+    expect(bodySlot(record).message).toBe(UNCOVERED_BODY);
+  });
+
+  test("covers are kept within the part cap: the parts cut are others, never the cover the kept skin needs", () => {
+    const many = Array.from({ length: RECORD_LIMITS.components + 5 }, (_, i) => bodyPart(`body:tattoo:${i}`, `tattoo_${i}`));
+    const record = parseCharacterDetail(withBody([bodyPart("body:skin:1", "body_color", "covered"), ...many, bodyPart("body:cover:2", "underpants", "cover")]));
+    expect(record.components.length).toBe(RECORD_LIMITS.components);
+    expect(record.components.filter(c => c.censor).map(c => c.censor)).toEqual(["covered", "cover"]);
+    expect(record.provenance.notes.at(-1)).toContain(`a part beyond the first ${RECORD_LIMITS.components}`);
+  });
+
+  test("a censorship marker off the body, or of an unknown kind, drops the part", () => {
+    const record = parseCharacterDetail({ ...character(), components: character().components.map(c => c.slot === "hair" ? { ...c, censor: "cover" }
+      : c.slot === "body" ? { ...c, censor: "exposed" } : c) });
+    expect(record.components.some(c => c.slot === "hair" || c.slot === "body")).toBe(false);
+  });
 });

@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
-  type RenderResource, type RenderTexture } from "./render-detail";
+  type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "./render-detail";
 import { renderTemplate } from "./render-templates";
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
@@ -486,6 +486,23 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
       }
     }
   } catch (error) { releaseAll(); throw error; }
+  // Fail closed (PIPE-97): a cover that didn't load (a failed part, or one over the texture budget) takes the parts it covers with it, and
+  // with them the body, which is reported unavailable; what this load made of it is released now.
+  const { kept, withdrawn } = withdrawUncoveredBody(components, item => item.component, record.components.filter(item => item.censor === "cover").length);
+  if (withdrawn) {
+    const leaving = components.filter(item => !kept.includes(item));
+    const staying = geometriesOf(kept.map(item => item.root));
+    for (const item of leaving) {
+      // A part taken over from the shown details stays theirs to release; the rest is this load's.
+      if (!borrowed.has(item)) { releaseDetailObject(item.root, staying); ledger.release(ledger.parts.get(item)); }
+      borrowed.delete(item);
+    }
+    components.splice(0, components.length, ...kept);
+    for (let i = limits.length - 1; i >= 0; i--) if (limits[i]!.slot === "body") limits.splice(i, 1);
+    for (let i = problems.length - 1; i >= 0; i--) if (problems[i]!.slot === "body") problems.splice(i, 1);
+    problems.push({ slot: "body", message: UNCOVERED_BODY });
+    notes.push("body: its underwear couldn't be loaded, so the body is not shown.");
+  }
   // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
   const shown = new Set(components.map(item => item.component.slot));
   const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&

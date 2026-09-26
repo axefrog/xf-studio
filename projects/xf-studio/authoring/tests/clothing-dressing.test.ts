@@ -96,7 +96,7 @@ describe("Clothing setting", () => {
     const garment = (area: ResolvedGarment["area"], label: string, names: string[], layers: Record<string, number>, status: ResolvedGarment["status"] = "drawn"): ResolvedGarment =>
       ({ area, item: "5", status, hiddenBy: null, gap: status === "unresolved" ? { code: "item-unknown", detail: "" } : null, label, record: null, rootEntity: null,
         rootAppearance: null, app: null, definition: "d", tags: [], components: names.map(component), layers });
-    const clothing: ResolvedClothing = { overrides: NO_OVERRIDES, feet: "lifted", feetState: "Lifted", gaps: [], ambiguities: [],
+    const clothing: ResolvedClothing = { overrides: NO_OVERRIDES, feet: "lifted", feetState: "Lifted", bodyType: "base_body", gaps: [], ambiguities: [],
       garments: [garment("OuterChest", "coat", ["t2_coat"], { t2_coat: 1120 }), garment("InnerChest", "shirt", ["t1_shirt"], { t1_shirt: -930 }),
         garment("Face", "glasses", [], {}, "unresolved")] };
     const plan = planClothing(clothing, new Map(), new Map());
@@ -115,7 +115,7 @@ describe("Clothing setting", () => {
       geometry: { ...resource("g.glb"), depotPath: "x.mesh", depotHash: "1", morphTargets: false }, renderChunks: 1, chunks: [0],
       materials: [{ chunk: 0, name: "m", template: null, templateName: null, materialPriority: null, scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} }],
       ...(garment ? { garment } : {}) });
-    const record = (components: object[]) => ({ schema: "xfs/render-detail-9", detail: "character", identity: "i", origin: "game-files",
+    const record = (components: object[]) => ({ schema: "xfs/render-detail-10", detail: "character", identity: "i", origin: "game-files",
       character: { source: "save", bodyGender: "female" }, provenance: { label: "l", notes: [] }, components,
       slots: ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"].map(slot => ({ slot, state: "none", label: "None" })) });
     const parsed = parseCharacterDetail(record([component("clothing", { area: "Legs", item: "102", layer: 60 })]));

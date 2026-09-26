@@ -16,6 +16,8 @@
  *   the fallback; a bare path or list means English) and Extension.cpp Configure (a unit with `extend` appends its paths
  *   to the named unit, the `.xl` file name, and is dropped).
  * - `factories`: FactoryIndex/Config.cpp and Extension.cpp Configure (a path or list; each existing factory is loaded after the game's own);
+ * - `player.bodyTypes`: PuppetState/Config.cpp (a name or list; Configure registers each as the body tag `Body:<name>`, which the player
+ *   entity's tags or components carry when that body is installed: `GetBodyType`);
  * - `overrides.tags`: Garment/Config.cpp `GarmentOverrideConfig::LoadYAML` (tag → component name or prefix → `{hide|show: chunks | mask}`,
  *   a chunk list, or a numeric mask) and ChunkMask.hpp (a hide list keeps every other chunk; `hide: 0` hides the whole component).
  * The installed ArchiveXL may be older than this source; each rule is still read from the installed files.
@@ -83,6 +85,8 @@ export interface ArchiveXlConfig {
   readonly factories: readonly { readonly path: string; readonly declaredBy: string }[];
   /** Visual tag → chunk-mask rules, every file's in load order (ArchiveXL's bundled `VisualTags.xl` among them). */
   readonly tagRules: ReadonlyMap<string, readonly XlTagRule[]>;
+  /** Body types body mods declare (`player.bodyTypes`), in load order; the player entity names the one installed (`Body:<name>`). */
+  readonly bodyTypes: readonly { readonly name: string; readonly declaredBy: string }[];
   readonly issues: readonly string[];
 }
 
@@ -137,9 +141,11 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   const localization: { name: string; declaredBy: string; onscreens: Map<string, string[]>; fallback: string | null; extend: string | null }[] = [];
   const factories: { path: string; declaredBy: string }[] = [];
   const tagRules = new Map<string, XlTagRule[]>();
+  const bodyTypes: { name: string; declaredBy: string }[] = [];
 
   for (const { id, document } of documents) {
     if (!isMap(document)) continue;
+    if (isMap(document.player)) for (const name of list(document.player.bodyTypes)) bodyTypes.push({ name, declaredBy: id });
     if (isMap(document.localization)) {
       const unit = { name: id.split(/[\\/]/).pop()!, declaredBy: id, onscreens: new Map<string, string[]>(), fallback: null as string | null,
         extend: scalar(document.localization.extend) };
@@ -254,7 +260,7 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   }
   const texts: XlLocalization[] = localization.filter(unit => !unit.extend && unit.onscreens.size)
     .map(({ name, declaredBy, onscreens, fallback }) => ({ name, declaredBy, onscreens, fallback }));
-  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, factories, tagRules, issues };
+  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, factories, tagRules, bodyTypes, issues };
 }
 
 export const inScope = (config: ArchiveXlConfig, scopePath: string, hash: string) =>

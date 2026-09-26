@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
 import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { bodyOptionDraws, choiceLabel, planCharacterDetails, previewInput, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
+import { bodyOptionDraws, censorRole, choiceLabel, planCharacterDetails, previewInput, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
 import { templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
-import { refFromPath, refLabel } from "../src/depot-path";
+import { depotHash, refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
@@ -332,6 +332,81 @@ describe("resolver selection for the body", () => {
       .toEqual([true, false, true, false, false, true, true]);
     expect(cco.parts.body.options.find(option => option.name === "underpants")!.censor).toEqual({ flag: "Censor_Nudity", action: "activate" });
     expect(cco.parts.body.options.find(option => option.name === "flat_feet")!.censor).toBeUndefined();
+  });
+
+  // ---- PIPE-97: the underwear floor fails closed in the plan ----
+  const bodyOf = (result: Awaited<ReturnType<typeof plan>>["plan"]) => result.components.filter(c => c.slot === "body");
+  const bodySlot = (result: Awaited<ReturnType<typeof plan>>["plan"]) => result.slots.find(slot => slot.slot === "body")!;
+  const withoutBody = (drop: (item: typeof BODY_REQUEST.appearances[number]) => boolean) => ({ ...BODY_REQUEST, appearances: BODY_REQUEST.appearances.filter(item => !drop(item)) });
+
+  test("PIPE-97: the cover is marked a cover and ordered last; the uncensored skin is marked covered; the censored twin waits beside it", async () => {
+    const { plan: result } = await plan(BODY_REQUEST);
+    const body = bodyOf(result);
+    expect(body.map(c => [c.option, c.censor ?? null])).toEqual([["body_color", "covered"], ["flat_feet", null], ["h_default_arms_colors_tpp", null],
+      ["nails_color_tpp", null], ["underpants", "cover"]]);
+    // The game's own censored skin is planned (for the host), never drawn while the cover is.
+    expect(result.censoredBody.map(c => [c.option, c.component, c.censor ?? null])).toEqual([["body_color_censored", "t0_body", null]]);
+    expect(result.censoredBody[0]!.materials.map(m => m.name)).toEqual(["skin_censored", "skin_censored"]);
+  });
+
+  test("PIPE-97: a request or save without the cover's descriptor draws the game's censored skin, never the uncensored one", async () => {
+    const { plan: result } = await plan(withoutBody(item => item.option === "underpants"));
+    const body = bodyOf(result);
+    expect(body.some(c => c.censor === "covered" || c.option === "body_color")).toBe(false);
+    expect(body.map(c => c.option)).toEqual(["body_color_censored", "flat_feet", "h_default_arms_colors_tpp", "nails_color_tpp"]);
+    expect(result.censoredBody).toEqual([]);
+    expect(bodySlot(result).message).toBe("The underwear the game draws on your V couldn't be read, so the body is shown in the game's censored look.");
+  });
+
+  test("PIPE-97: a cover the game files don't give (its appearance missing) draws the censored skin too", async () => {
+    const gone = depotHash("base\\fixture\\body\\gone.app");
+    const request = { ...BODY_REQUEST, appearances: BODY_REQUEST.appearances.map(item => item.option === "underpants" ? { ...item, app: gone } : item) };
+    const { plan: result } = await plan(request);
+    expect(bodyOf(result).map(c => c.option)).toEqual(["body_color_censored", "flat_feet", "h_default_arms_colors_tpp", "nails_color_tpp"]);
+    expect(bodySlot(result).message).toContain("censored look");
+    expect(bodySlot(result).message).toContain("underwear");
+  });
+
+  test("PIPE-97: with neither the cover nor the censored twin, no body is drawn at all, in plain words", async () => {
+    const { plan: result } = await plan(withoutBody(item => item.option === "underpants" || item.option === "body_color_censored"));
+    expect(bodyOf(result)).toEqual([]);
+    expect(bodySlot(result)).toEqual({ slot: "body", state: "unavailable", label: "body",
+      message: "XF Studio couldn't read the underwear the game draws on your V, so the body isn't shown." });
+  });
+
+  test("PIPE-98: a descriptor the creator resource doesn't define never draws; a twin shares the slot and link and is an appearance", async () => {
+    const extra = { ...BODY_REQUEST, appearances: [...BODY_REQUEST.appearances, { part: "body" as const, group: "TPP_Body", option: "not_in_creator",
+      app: depotHash(P.nippleApp), definition: "nipples__01_ca_pale" }] };
+    expect(bodyOf((await plan(extra)).plan).some(c => c.option === "not_in_creator")).toBe(false);
+    const rule = (action: "activate" | "deactivate") => ({ flag: "Censor_Nudity", action });
+    const options = [{ name: "skin", uiSlot: "body_color", link: "skin color", censor: rule("deactivate") },
+      { name: "skin_censored", uiSlot: "body_color", link: "other link", censor: rule("activate") },
+      { name: "cover", uiSlot: "underpants", censor: rule("activate") },
+      { name: "morph", uiSlot: "body_color", type: "morph", link: "skin color", censor: rule("activate") }];
+    // Another link, or a morph, is no twin: the skin is left out as covered by the underwear, the other link's option is a cover.
+    expect(options.map(option => censorRole(options, option.name))).toEqual(["hidden", "cover", "cover", "plain"]);
+    expect(censorRole(options, "missing")).toBe("unknown");
+    expect(bodyOptionDraws(options, "missing")).toBe(false);
+    const twins = [{ ...options[0]!, type: "appearance" }, { ...options[1]!, link: "skin color", type: "appearance" }];
+    expect(twins.map(option => censorRole(twins, option.name))).toEqual(["uncensored", "censored"]);
+  });
+
+  test("PIPE-98: a male V's body is refused in plain words; a body turned off is neither planned nor dressed", async () => {
+    const { resolved, plan: female } = await plan(BODY_REQUEST);
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    const male = planCharacterDetails({ ...resolved, bodyGender: "male" }, cco);
+    expect(male.components.some(c => c.slot === "body")).toBe(false);
+    expect(male.slots.find(slot => slot.slot === "body")).toEqual({ slot: "body", state: "unavailable", label: "body",
+      message: "XF Studio doesn't draw a male V's body yet, so it isn't shown." });
+    const hidden = planCharacterDetails(resolved, cco, new Map(), new Map(), undefined, null, "hidden");
+    expect(hidden.components.some(c => c.slot === "body" || c.slot === "clothing")).toBe(false);
+    expect(hidden.slots.filter(slot => slot.slot === "body" || slot.slot === "clothing").map(slot => slot.label)).toEqual(["Hidden", "Hidden"]);
+    expect(bodyOf(female).length).toBeGreaterThan(0);
+    // The request for a body turned off keeps only the head's descriptors.
+    const input = inputFromCharacterRequest(BODY_REQUEST as Extract<typeof BODY_REQUEST, { source: "save" }>);
+    expect(previewInput(input, undefined, false).appearances.every(a => a.part === "head")).toBe(true);
+    expect(previewInput(input, undefined, false).morphs.every(m => m.part === "head")).toBe(true);
   });
 
   test("only what the preview draws is resolved: every head descriptor, and the body parts its third-person consumers read", () => {
