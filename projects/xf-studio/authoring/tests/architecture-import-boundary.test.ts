@@ -546,7 +546,7 @@ test("diagnostics' pure half is DOM- and host-free, and only composition roots i
   // The servers and the desktop host (outside src/) construct the endpoint; in src/, nothing does.
   expect(importers("diagnostics/host-endpoint")).toEqual([]);
   expect(importers("diagnostics/browser-device")).toEqual(["studio-startup"]);
-  const outside = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  const outside = (path: string) => sourceText(fileURLToPath(new URL(`../${path}`, import.meta.url)));
   expect(imports(outside("server.ts"))).toContain("./src/diagnostics/host-endpoint");
   expect(imports(outside("desktop/server.ts"))).toContain("../src/diagnostics/host-endpoint");
   // The rule fails on the violations it names: a pure module loading the file system or the host log, or reading the window.
