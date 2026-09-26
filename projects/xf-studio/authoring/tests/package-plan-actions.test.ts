@@ -45,9 +45,9 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   // Splitting needs a second feature; the refusal says so plainly.
   expect(f.svc.actionCapability({ kind: "package.split", feature: "eye-makeup" }))
     .toMatchObject({ available: false, code: "unavailable", reason: "Eye makeup is already a mod of its own." });
-  expect(f.svc.actionCapability({ kind: "package.rename", productId: ID, name: "a/b" })).toMatchObject({ available: false, code: "invalid_value" });
+  expect(f.svc.actionCapability({ kind: "package.rename", productId: ID, modName: "a/b" })).toMatchObject({ available: false, code: "invalid_value" });
   expect(f.svc.persistence()?.dirty).toBe(false);
-  f.svc.dispatch({ kind: "package.rename", productId: ID, name: "My looks" });
+  f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "My looks" });
   expect(f.svc.summary().draft!.products[0]).toMatchObject({ modName: "My looks", nameSource: "plan" });
   // A mod name is part of the collection: the draft now has unsaved changes.
   expect(f.svc.persistence()).toMatchObject({ dirty: true, structureDirty: true, dirtyPresets: [] });
@@ -60,7 +60,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(alphaParseCollection(JSON.parse(JSON.stringify(stored)), false, value => value as never).presets).toHaveLength(1);
   expect(STUDIO_PARTS.readCollection(JSON.parse(JSON.stringify(stored))).packagePlan).toEqual(stored.packagePlan);
   // An empty name goes back to the default: the plan disappears again.
-  f.svc.dispatch({ kind: "package.rename", productId: ID, name: "" });
+  f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "" });
   expect(f.svc.snapshot()!.collection.packagePlan).toBeUndefined();
   expect(f.svc.summary().draft!.products[0]).toMatchObject({ modName: "XF Eye Artistry", nameSource: "derived" });
 });
@@ -89,7 +89,7 @@ test("with two exporting features: split into its own mod, rename, assign back a
   actions.dispatch({ kind: "package.split", feature: "hair" });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Artistry", ["hair"]]]);
   expect(actions.summary().products[1].id).toBe(NEW);
-  actions.dispatch({ kind: "package.rename", productId: NEW, name: "XF Hair Only" });
+  actions.dispatch({ kind: "package.rename", productId: NEW, modName: "XF Hair Only" });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Only", ["hair"]]]);
   expect(actions.check({ kind: "package.assign", feature: "hair", productId: NEW }))
     .toMatchObject({ available: false, reason: "Hair is already in that mod." });

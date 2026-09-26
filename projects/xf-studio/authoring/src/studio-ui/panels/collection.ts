@@ -314,7 +314,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const mods = h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" });
   let modsSignature = "";
   const renameMod = (product: PackageProductSummary, anchor: Element) => {
-    const make = (name: string) => ({ kind: "package.rename" as const, productId: product.id, name });
+    const make = (modName: string) => ({ kind: "package.rename" as const, productId: product.id, modName });
     openValuePopover({ kind: "text", label: "Mod name (as it appears in your mod manager)", value: product.modName, maxLength: 80 }, anchor,
       { title: "Rename mod", apply: "Rename", validate: value => port.authoring.capability(make(String(value))),
         commit: value => { if (rt.dispatch(make(String(value)))) rt.feedback.announce(`Mod renamed to ${String(value).trim() || "its default name"}`); } });
@@ -322,8 +322,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const modMenu = (product: PackageProductSummary, products: readonly PackageProductSummary[], anchor: Element) => {
     const items: MenuItem[] = [{ kind: "action", label: "Rename…", icon: "rename", run: () => renameMod(product, anchor) }];
     if (product.nameSource === "plan") items.push({ kind: "action", label: "Use the default name", icon: "reset",
-      capability: port.authoring.capability({ kind: "package.rename", productId: product.id, name: "" }),
-      run: () => { rt.dispatch({ kind: "package.rename", productId: product.id, name: "" }); } });
+      capability: port.authoring.capability({ kind: "package.rename", productId: product.id, modName: "" }),
+      run: () => { rt.dispatch({ kind: "package.rename", productId: product.id, modName: "" }); } });
     // Moving features between mods is offered only where there is something to move.
     if (product.features.length > 1) for (const feature of product.features) items.push({ kind: "action", label: `Make ${feature.label.toLowerCase()} a mod of its own`,
       icon: "export", capability: port.authoring.capability({ kind: "package.split", feature: feature.id }),

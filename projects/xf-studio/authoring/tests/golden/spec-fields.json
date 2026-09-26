@@ -297,7 +297,7 @@
      "name": {}
     },
     "layer/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -743,7 +743,7 @@
      "name": {}
     },
     "point/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -1186,7 +1186,7 @@
      "name": {}
     },
     "viewport/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -1629,7 +1629,7 @@
      "name": {}
     },
     "collection/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -2072,7 +2072,7 @@
      "name": {}
     },
     "preset/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -2723,7 +2723,7 @@
      "name": {}
     },
     "layer/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -3176,7 +3176,7 @@
      "name": {}
     },
     "point/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -3619,7 +3619,7 @@
      "name": {}
     },
     "viewport/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -4062,7 +4062,7 @@
      "name": {}
     },
     "collection/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -4505,7 +4505,7 @@
      "name": {}
     },
     "preset/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -5157,7 +5157,7 @@
      "name": {}
     },
     "layer/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -5611,7 +5611,7 @@
      "name": {}
     },
     "point/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -6054,7 +6054,7 @@
      "name": {}
     },
     "viewport/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -6497,7 +6497,7 @@
      "name": {}
     },
     "collection/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -6940,7 +6940,7 @@
      "name": {}
     },
     "preset/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -7591,7 +7591,7 @@
      "name": {}
     },
     "layer/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -8044,7 +8044,7 @@
      "name": {}
     },
     "point/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -8487,7 +8487,7 @@
      "name": {}
     },
     "viewport/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -8930,7 +8930,7 @@
      "name": {}
     },
     "collection/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -9373,7 +9373,7 @@
      "name": {}
     },
     "preset/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -10024,7 +10024,7 @@
      "name": {}
     },
     "layer/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -10477,7 +10477,7 @@
      "name": {}
     },
     "point/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -10920,7 +10920,7 @@
      "name": {}
     },
     "viewport/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -11363,7 +11363,7 @@
      "name": {}
     },
     "collection/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -11806,7 +11806,7 @@
      "name": {}
     },
     "preset/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -12460,7 +12460,7 @@
      "name": {}
     },
     "layer/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -12916,7 +12916,7 @@
      "name": {}
     },
     "point/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -13359,7 +13359,7 @@
      "name": {}
     },
     "viewport/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -13802,7 +13802,7 @@
      "name": {}
     },
     "collection/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"
@@ -14245,7 +14245,7 @@
      "name": {}
     },
     "preset/package.rename": {
-     "name": {
+     "modName": {
       "minLength": 0,
       "maxLength": 80,
       "unit": "characters"

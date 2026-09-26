@@ -39,7 +39,7 @@ export const COLLECTION_FAMILY: SystemFamily<CollectionStudioAction, ActionScope
     "preset.edit": true, "preset.select": true, "collection.rename": true,
     "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true,
     "package.rename": true, "package.assign": true, "package.split": true, "package.merge": true },
-    { "preset.edit": { "rename.name": "characters", "move.to": "index" }, "package.rename": { name: "characters" } }),
+    { "preset.edit": { "rename.name": "characters", "move.to": "index" }, "package.rename": { modName: "characters" } }),
 });
 
 /** Camera and viewing: device-backed, so it needs the scene and a failure after the gate is `unavailable`. */

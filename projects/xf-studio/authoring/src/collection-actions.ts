@@ -16,7 +16,7 @@ const isPackagePlanAction = (action: CollectionAction): action is PackagePlanAct
 /** The plan edit an action asks for (`newId` is filled by the session before it applies). */
 export function packagePlanEdit(action: PackagePlanAction, newId = ""): PackagePlanEdit {
   switch (action.kind) {
-    case "package.rename": return { kind: "rename", productId: action.productId, name: action.name.trim() ? action.name : null };
+    case "package.rename": return { kind: "rename", productId: action.productId, name: action.modName.trim() ? action.modName : null };
     case "package.assign": return { kind: "assign", feature: action.feature, productId: action.productId };
     case "package.split": return { kind: "split", feature: action.feature, newId: action.newId ?? newId };
     case "package.merge": return { kind: "merge", productId: action.productId, intoId: action.intoId };
@@ -37,11 +37,11 @@ export type CollectionAction =
   | { kind: "collection.saved"; result: StoredCollection; sourceId: string }
   /**
    * The package plan (feature-module platform §6): which features ship in which XF mod. `package.rename` names a mod
-   * (an empty name goes back to the name that follows its features); `package.assign` moves a feature into an existing
+   * (an empty `modName` goes back to the name that follows its features); `package.assign` moves a feature into an existing
    * mod; `package.split` moves one into a new mod of its own (`newId` from the host's ID source); `package.merge` puts
    * everything of one mod into another.
    */
-  | { kind: "package.rename"; productId: string; name: string }
+  | { kind: "package.rename"; productId: string; modName: string }
   | { kind: "package.assign"; feature: string; productId: string }
   | { kind: "package.split"; feature: string; newId?: string }
   | { kind: "package.merge"; productId: string; intoId: string };
@@ -174,7 +174,7 @@ export class CollectionActions {
       const products = this.products();
       if (!products.length) return refusal("unavailable", "No look in this collection has anything XF Studio can make into mod files yet.");
       const issue = packagePlanEditIssue(packagePlanEdit(action, "00000000-0000-4000-8000-000000000000"), products, state.collection.id, this.labels());
-      if (issue) return refusal(action.kind === "package.rename" && action.name.trim() ? "invalid_value" : "unavailable", issue);
+      if (issue) return refusal(action.kind === "package.rename" && action.modName.trim() ? "invalid_value" : "unavailable", issue);
       if (action.kind === "package.split" && action.newId && (action.newId === state.collection.id || products.some(p => p.id === action.newId)))
         return refusal("invalid_value", "That mod ID is already in use.");
     }
