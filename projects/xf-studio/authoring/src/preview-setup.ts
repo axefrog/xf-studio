@@ -15,7 +15,7 @@ import { gameDetectionNote, type InstallDetectionActions } from "./install-detec
 import type { LocalSetupActions } from "./local-setup-actions";
 import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
 import { previewView, shouldAutoStart, type PreviewCardAction, type PreviewPreparationActions, type PreviewState } from "./preview-preparation";
-import { wolvenKitConsent, wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions, type WolvenKitSetupState } from "./wolvenkit-setup";
+import { wolvenKitCard, wolvenKitConsent, wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions, type WolvenKitSetupState } from "./wolvenkit-setup";
 
 export type PreviewSetupAction =
   | { kind: "previewSetup.show" } | { kind: "previewSetup.dismiss" } | { kind: "previewSetup.refresh" }
@@ -66,6 +66,13 @@ export type PreviewSetupSnapshot = {
   /** Counts requests to show the card (from the head pane or a menu); the card takes focus only then. */
   showRequests: number;
   autostart: boolean;
+  /**
+   * The one next step towards WolvenKit, for anything that needs it while the card isn't showing it (the V's details or the creator's
+   * labels waiting for WolvenKit; NATIVE-46, NATIVE-47): WolvenKit's own next step (its download consent, the WolvenKit found on this
+   * computer, .NET, or where it is set), or where it is set when WolvenKit's own state doesn't know it is missing. Null while it downloads
+   * or installs.
+   */
+  wolvenKitStep: PreviewSetupButton | null;
 };
 
 export type PreviewSetupPort = {
@@ -165,7 +172,7 @@ export class PreviewSetupActions {
       later: { label: "Not now", action: { kind: "previewSetup.consentClose" } },
     } : null;
     return structuredClone({ card, consent, head: this.headView(state, wolvenKit, view, card), setupRequests: this.setupRequests,
-      showRequests: this.showRequests, autostart: this.port.autostart.get() });
+      showRequests: this.showRequests, autostart: this.port.autostart.get(), wolvenKitStep: this.wolvenKitStep(wolvenKit) });
   }
 
   capability(action: PreviewSetupAction): PreviewSetupCapability {
@@ -352,6 +359,13 @@ export class PreviewSetupActions {
     // A step's own failure stays until the next step, or until the host moves on.
     if (this.notice && this.notice.key === `${state?.phase}|${wolvenKit?.phase}`) return this.notice.text;
     return null;
+  }
+  private wolvenKitStep(wolvenKit: WolvenKitSetupState | null): PreviewSetupButton | null {
+    if (!wolvenKit || wolvenKit.phase === "downloading" || wolvenKit.phase === "installing") return null;
+    const setup: PreviewSetupButton = { label: `Open ${this.port.setupPlace}`, action: { kind: "previewSetup.openSetup" } };
+    if (wolvenKit.phase === "ready") return setup;
+    const primary = wolvenKitCard(wolvenKit, this.port.setupPlace).primary;
+    return primary ? this.button(primary.label, primary.action, wolvenKit) : setup;
   }
   private button(label: string, action: PreviewCardAction, wolvenKit: WolvenKitSetupState | null): PreviewSetupButton {
     return { label, action: cardAction(action, wolvenKit) };

@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/cc-catalogue";
+import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/cc-catalogue-host";
 import { CreatorCatalogueHost, CreatorFailedError, structuralInput } from "../src/cc-catalogue-service";
 import { createCreatorHandler } from "../src/cc-catalogue-server";
 import { choicePage, makeupOff, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/cc-panel";
@@ -143,6 +144,96 @@ describe("PIPE-78: a failing catalogue build", () => {
     expect(retries).toBe(1);
     expect(context.snapshot()).toMatchObject({ phase: "ready", retry: false });
     expect(context.capability({ kind: "character.retry" })).toMatchObject({ available: false });
+  });
+});
+
+describe("NATIVE-46 and NATIVE-51: labels that may read next time, and the game's language", () => {
+  /** A service whose builds say which labels couldn't be read (`labels`), or throw (`fail`). */
+  async function labelled(options: { labels: () => CatalogueLabels | null; fail?: () => boolean; now?: () => number; language?: () => string | null }) {
+    const source = await fixtureSource(true);
+    let builds = 0;
+    const host = new CreatorCatalogueHost({ route: () => ({ gameRoot: root, launchRoute: "direct", wolvenKitCli: null }), fingerprint: () => "one",
+      resolverCache: join(root, "resolver"), open: () => ({}) as never, now: options.now, language: options.language ?? (() => "en-us"),
+      load: async () => { builds++; if (options.fail?.()) throw Error("worker down again"); return { source, catalogue: source.catalogue, labels: options.labels(),
+        evidence: { language: { code: "en-us", from: "default" }, texts: [], tweakDb: null, customResources: 1 } }; } });
+    return { host, builds: () => builds };
+  }
+
+  test("a catalogue whose labels may read next time is served with its line, not kept as final: after the backoff a question builds it again", async () => {
+    let now = 0, labels: CatalogueLabels | null = { next: "retry", message: LABELS_RETRY };
+    const { host, builds } = await labelled({ labels: () => labels, now: () => now });
+    host.state("female"); await settle();
+    const first = host.state("female");
+    expect(first).toMatchObject({ phase: "ready", message: LABELS_RETRY, next: "retry" });
+    // Inside the backoff: served as it is.
+    await host.page("female", "head/eyes_color", 0);
+    expect(builds()).toBe(1);
+    // After it, a question builds again; the labels now read, so the panel has another identity and no line.
+    labels = null; now = 10_001;
+    const page = await host.page("female", "head/eyes_color", 0);
+    expect(builds()).toBe(2);
+    const second = host.state("female");
+    expect(second).toEqual({ phase: "ready", message: "", panel: expect.anything() });
+    expect(second.panel!.identity).not.toBe(first.panel!.identity);
+    expect(page!.identity).toBe(second.panel!.identity);
+    // Final now: never built again.
+    now = 1e9;
+    await host.page("female", "head/eyes_color", 0);
+    expect(builds()).toBe(2);
+  });
+
+  test("Try again builds at once and shows it as preparing; a rebuild that fails keeps the catalogue the panel had", async () => {
+    let failing = false;
+    const { host, builds } = await labelled({ labels: () => ({ next: "retry", message: LABELS_RETRY }), fail: () => failing });
+    host.state("female"); await settle();
+    const before = host.state("female");
+    failing = true;
+    expect(host.retry("female").phase).toBe("preparing");
+    await settle();
+    expect(builds()).toBe(2);
+    expect(host.state("female")).toMatchObject({ phase: "ready", next: "retry", panel: { identity: before.panel!.identity } });
+    await expect(host.view(DEFAULT_CHARACTER)).resolves.toMatchObject({ identity: before.panel!.identity });
+  });
+
+  test("labels only WolvenKit could read are said with that next step; Try again isn't offered for them", async () => {
+    const { host, builds } = await labelled({ labels: () => ({ next: "wolvenkit", message: LABELS_NEED_WOLVENKIT }) });
+    host.state("female"); await settle();
+    expect(host.state("female")).toMatchObject({ phase: "ready", message: LABELS_NEED_WOLVENKIT, next: "wolvenkit" });
+    expect(host.retry("female").phase).toBe("ready");
+    await settle();
+    expect(builds()).toBe(1);
+  });
+
+  test("the context shows the labels' line with its next step, and offers Try again only for labels that may read next time", async () => {
+    const source = await fixtureSource(true);
+    const { port: base } = await port(source);
+    let next: "retry" | "wolvenkit" | null = "retry", retries = 0;
+    const answer = async (gender: "female" | "male", signal: AbortSignal) => {
+      const state = await base.panel(gender, signal);
+      return next ? { ...state, message: next === "retry" ? LABELS_RETRY : LABELS_NEED_WOLVENKIT, next } : state;
+    };
+    const creatorPort: CreatorPort = { ...base, panel: answer, retry: async (gender, signal) => { retries++; next = null; return answer(gender, signal); } };
+    const context = new CharacterContextActions({ creator: creatorPort, showSave: () => {} });
+    context.start(); await settle();
+    expect(context.snapshot()).toMatchObject({ phase: "ready", message: LABELS_RETRY, next: "retry", retry: true });
+    context.dispatch({ kind: "character.retry" }); await settle();
+    expect(retries).toBe(1);
+    expect(context.snapshot()).toMatchObject({ phase: "ready", message: "", next: null, retry: false });
+    next = "wolvenkit";
+    context.start(true); await settle();
+    expect(context.snapshot()).toMatchObject({ phase: "ready", message: LABELS_NEED_WOLVENKIT, next: "wolvenkit", retry: false });
+  });
+
+  test("a language changed in the game's settings builds the catalogue again (NATIVE-51)", async () => {
+    let language = "en-us";
+    const { host, builds } = await labelled({ labels: () => null, language: () => language });
+    host.state("female"); await settle();
+    await host.page("female", "head/eyes_color", 0);
+    expect(builds()).toBe(1);
+    language = "fr-fr";
+    expect(host.state("female").phase).toBe("preparing");
+    await settle();
+    expect(builds()).toBe(2);
   });
 });
 

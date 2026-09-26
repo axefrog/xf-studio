@@ -288,3 +288,52 @@ test("a host of another version is reported with the version-skew code, not as s
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ code: "unsupported_version", request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA });
 });
+
+test("a V waiting for WolvenKit names the need, isn't reported as a failure, asks again now and then, and is prepared once WolvenKit is set up (NATIVE-47)", async () => {
+  const events: string[] = [];
+  let setUp = false, waits = 0;
+  const NEED = "XF Studio needs WolvenKit to turn your V's own skin into the 3D view, and it isn't set up yet.";
+  const port: CharacterDetailPort = {
+    request: async request => {
+      events.push(request.choices?.length ? "request:choice" : "request");
+      return setUp ? { key: JSON.stringify(request), phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` }
+        : { key: "k", phase: "failed", message: NEED, progress: null, record: null, need: "wolvenkit" };
+    },
+    poll: async () => { throw Error("unused"); },
+    show: async () => { events.push("show"); return { slots: [{ slot: "hair", state: "shown", label: "Long" }] }; },
+    clear: () => { events.push("clear"); },
+    // The third question finds WolvenKit set up.
+    wait: async () => { if (++waits === 2) setUp = true; },
+  };
+  const details = new CharacterDetailActions(port);
+  const publishes: string[] = [];
+  details.subscribe(() => { const s = details.snapshot(); publishes.push(`${s.phase}:${s.need ?? "-"}`); });
+  await details.setCharacter(REQUEST_A);
+  expect(events.filter(event => event === "request").length).toBe(3);
+  expect(details.snapshot()).toMatchObject({ phase: "ready", need: null });
+  // Said once while it waited (not on every question), then prepared.
+  expect(publishes).toEqual(["preparing:-", "failed:wolvenkit", "ready:-"]);
+
+  // A change on the shown V while WolvenKit is gone again: the V stays, the change waits with the same need.
+  setUp = false; waits = 0;
+  const change = { ...REQUEST_A, choices: [{ part: "head", option: "hairstyle", choice: "long" }] } as CharacterRequest;
+  await details.setCharacter(change);
+  expect(details.snapshot()).toMatchObject({ phase: "ready", updating: false, need: null });
+  expect(events.filter(event => event === "request:choice").length).toBe(3);
+});
+
+test("while it waits for WolvenKit the status says so with the need, and Try again is offered", async () => {
+  let resolveWait!: () => void;
+  const port: CharacterDetailPort = {
+    request: async () => ({ key: "k", phase: "failed", message: "Needs WolvenKit.", progress: null, record: null, need: "wolvenkit" }),
+    poll: async () => { throw Error("unused"); }, show: async () => { throw Error("unused"); }, clear: () => {},
+    wait: (_ms, signal) => new Promise<void>(resolve => { resolveWait = resolve; signal.addEventListener("abort", () => resolve(), { once: true }); }),
+  };
+  const details = new CharacterDetailActions(port);
+  void details.setCharacter(REQUEST_A);
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(details.snapshot()).toMatchObject({ phase: "failed", message: "Needs WolvenKit.", need: "wolvenkit" });
+  expect(details.failed()).toBe(true);
+  details.dispose();
+  resolveWait();
+});

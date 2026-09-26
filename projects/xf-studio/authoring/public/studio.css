@@ -588,8 +588,10 @@ span.category { border-color: transparent; background: transparent; padding-left
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 2px solid var(--accent); }
 .viewport-tools { display: flex; gap: 1px; background: var(--stage-chip); padding: 2px; }
 .viewport-detail-status { position: absolute; top: calc(var(--sp-4) + 34px); left: var(--sp-4); max-width: min(46ch, 60%); margin: 0; pointer-events: none;
-  display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-xs); line-height: 1.35; color: var(--stage-text-muted); background: var(--stage-chip); padding: 5px 8px; }
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); font-size: var(--fs-xs); line-height: 1.35; color: var(--stage-text-muted); background: var(--stage-chip); padding: 5px 8px; }
 .viewport-detail-status[hidden] { display: none; }
+.viewport-detail-text { flex: 1 1 16ch; min-width: 0; }
+.viewport-detail-status .btn { pointer-events: auto; flex: none; }
 .viewport-detail-status[data-tone="progress"]::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--stage-updating); animation: pulse 1s steps(2) infinite; }
 .viewport-tools .btn.ghost { color: var(--stage-text-muted); }
 .viewport-tools .btn.ghost:hover:not(:disabled) { background: var(--stage-hover); color: var(--stage-strong); }

@@ -48,7 +48,9 @@ export function createBrowserCreatorDevice(transport: Fetch = (url, init) => fet
     if (value.phase !== "ready") return { phase: value.phase, message: typeof value.message === "string" ? value.message : "" };
     const panel = read(() => readCcPanel(value.panel));
     mods = panel.mods.length;
-    return { phase: "ready", message: "", panel };
+    // Labels the host couldn't read, and their next step (NATIVE-46).
+    const next = value.next === "retry" || value.next === "wolvenkit" ? value.next : undefined;
+    return next && typeof value.message === "string" ? { phase: "ready", message: value.message.slice(0, 400), next, panel } : { phase: "ready", message: "", panel };
   };
   return {
     panel: (gender: BodyGender, signal: AbortSignal) => state(fetcher(`${CREATOR_ENDPOINT}?gender=${gender}`, { signal })),
@@ -78,7 +80,7 @@ export function createBrowserCreatorDevice(transport: Fetch = (url, init) => fet
       const value = await answer<{ schema?: unknown; states?: unknown; stopped?: unknown; busy?: unknown }>(await post({ kind: "prefetch", request, option,
         positions: [...positions], ...(focus !== null ? { focus } : {}) }, signal));
       if (value?.schema !== PREFETCH_SCHEMA || typeof value.states !== "string" || !/^[?nqfrx]*$/.test(value.states)) throw Error(SKEW);
-      return { states: value.states, stopped: value.stopped === "time" || value.stopped === "disk" ? value.stopped : null, busy: value.busy === true };
+      return { states: value.states, stopped: value.stopped === "time" || value.stopped === "disk" || value.stopped === "setup" ? value.stopped : null, busy: value.busy === true };
     },
     async stopPrefetch() { await answer(await post({ kind: "prefetchStop" })); },
     async preparedFiles(signal) {

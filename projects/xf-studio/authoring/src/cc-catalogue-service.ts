@@ -8,12 +8,18 @@
  * - a portable preset of the choices a person set, checked for personal data before it is written (CORE-56);
  * - the creator choices an earlier build's tried piercing style stands for (CORE-74).
  *
- * The installation fingerprint (the route, its stamps, WolvenKit's identity and the registry's generation) decides when a catalogue
- * is stale; a new one is built on the next question. One build runs at a time per body gender; everyone asking waits for it.
+ * The installation fingerprint (the route, its stamps, WolvenKit's identity and the registry's generation) and the game's on-screen
+ * language (its own settings; NATIVE-51) decide when a catalogue is stale; a new one is built on the next question. One build runs at a
+ * time per body gender; everyone asking waits for it.
  *
  * **A failed build is kept** (PIPE-78): its entry stays, per fingerprint, with the plain failure. Reading the state never builds again;
  * a question that needs the catalogue builds again only after a backoff (10 s, doubling, at most 10 minutes), and `retry` (the panel's
  * Try again) builds again at once. A changed fingerprint (a mod installed, the setup fixed) starts afresh.
+ *
+ * **Labels that may read next time** (NATIVE-46): a catalogue whose texts met a failure that may pass (`labels.next: "retry"`) is
+ * served, with one plain line and Try again, but not kept as final: a question after the same backoff builds it again (a failed rebuild
+ * keeps serving it), and Try again builds at once. Labels only WolvenKit could read while it isn't set up are said plainly with that
+ * next step (`labels.next: "wolvenkit"`); setting WolvenKit up changes the fingerprint, so the catalogue is built again then.
  *
  * The preparation doesn't wait for this catalogue: it derives a V with choices from a structural catalogue of the merged creator
  * resource it already loads (`structuralInput`: no texts, no TweakDB; PIPE-80).
@@ -21,7 +27,7 @@
  */
 import { createHash } from "node:crypto";
 import { type BodyGender, buildCatalogue, CatalogueIndex, userFacing } from "./cc-catalogue";
-import { type CatalogueLoad, loadCreatorCatalogue } from "./cc-catalogue-host";
+import { type CatalogueLabels, type CatalogueLoad, currentGameLanguage, loadCreatorCatalogue } from "./cc-catalogue-host";
 import { choicePage, type CcChoicePage, type CcChoiceSearch, type CcPanel, type CreatorState, type CreatorValue, type CreatorView, panelProjection,
   searchChoices } from "./cc-panel";
 import { type CcPreset, type CcPresetEntry, writeCcPreset } from "./cc-preset";
@@ -44,6 +50,8 @@ export type CreatorHostOptions = {
   load?: (installation: Installation, route: CreatorRoute, gender: BodyGender) => Promise<CatalogueLoad>;
   /** Test seam over the clock (ms). */
   now?: () => number;
+  /** The game's on-screen language, part of the catalogue's key (default: the game's own settings, `currentGameLanguage`). */
+  language?: () => string | null;
   log?: (message: string) => void;
 };
 
@@ -53,10 +61,14 @@ type Loaded = {
   mods: Map<string, number>;
   /** `recoverSave` of the last few saves (a save's interpretation is the costliest step of a view). */
   recovered: Map<string, ReturnType<typeof recoverSave>>;
+  /** Labels that couldn't be read, and the next step (NATIVE-46). */
+  labels: CatalogueLabels | null;
 };
 type Entry = { fingerprint: string; promise: Promise<Loaded>; loaded: Loaded | null; error: string | null;
-  /** Failed builds in a row for this fingerprint, and when a question may build again. */
+  /** Failed (or retryable-label) builds in a row for this fingerprint, and when a question may build again. */
   failures: number; retryAt: number };
+/** A catalogue whose labels may read next time (NATIVE-46). */
+const retryable = (loaded: Loaded | null) => loaded?.labels?.next === "retry";
 
 const NEEDS_SETUP = "Your game's character-creator options appear once your game folder is set up.";
 const PREPARING = "Reading your game's character-creator options…";
@@ -108,30 +120,47 @@ export function structuralInput(request: CharacterRequest, loaded: MergedCreator
 
 export class CreatorCatalogueHost {
   private readonly entries = new Map<BodyGender, Entry>();
+  /** Builds so far (part of each panel's identity). */
+  private builds = 0;
   constructor(private readonly options: CreatorHostOptions) {}
   private now() { return this.options.now?.() ?? Date.now(); }
 
+  /** The catalogue's key: the installation fingerprint and the game's on-screen language (NATIVE-51). */
+  private key(): string {
+    return `${this.options.fingerprint()}\n${(this.options.language ?? currentGameLanguage)() ?? ""}`;
+  }
+  private backoff(entry: Entry): void {
+    entry.failures++;
+    entry.retryAt = this.now() + Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (entry.failures - 1));
+  }
+
   /**
-   * The catalogue for a body gender on the current installation: built once, rebuilt when the fingerprint changes. A failed build is
-   * built again only after its backoff, or at once with `force` (PIPE-78).
+   * The catalogue for a body gender on the current installation: built once, rebuilt when the key changes. A failed build is built again
+   * only after its backoff, or at once with `force` (PIPE-78); so is one whose labels may read next time, which is served meanwhile and
+   * kept when the rebuild fails (NATIVE-46).
    */
   ensure(gender: BodyGender, force = false): Promise<Loaded> {
     const route = this.options.route();
     if (!route) return Promise.reject(new CreatorSetupError());
-    const fingerprint = this.options.fingerprint();
+    const fingerprint = this.key();
     const known = this.entries.get(gender);
     const same = known?.fingerprint === fingerprint;
-    if (known && same && !known.error) return known.promise;
-    if (known && same && !force && this.now() < known.retryAt) return Promise.reject(new CreatorFailedError());
+    if (known && same && !known.error && (!retryable(known.loaded) || (!force && this.now() < known.retryAt))) return known.promise;
+    if (known && same && known.error && !force && this.now() < known.retryAt) return Promise.reject(new CreatorFailedError());
+    // The catalogue served until a rebuild of it succeeds: one whose labels may read next time.
+    const previous = same && retryable(known!.loaded) ? known!.loaded : null;
     const entry: Entry = { fingerprint, promise: null as unknown as Promise<Loaded>, loaded: null, error: null, failures: same ? known!.failures : 0, retryAt: 0 };
-    entry.promise = this.build(route, gender, fingerprint).then(loaded => { entry.loaded = loaded; entry.failures = 0; return loaded; },
-      error => {
-        entry.error = (error as Error)?.message ?? String(error);
-        entry.failures++;
-        entry.retryAt = this.now() + Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (entry.failures - 1));
-        this.options.log?.(`Creator options were not read (attempt ${entry.failures}): ${(error as Error)?.stack ?? error}`);
-        throw new CreatorFailedError();
-      });
+    entry.promise = this.build(route, gender, fingerprint).then(loaded => {
+      entry.loaded = loaded;
+      if (retryable(loaded)) this.backoff(entry); else entry.failures = 0;
+      return loaded;
+    }, error => {
+      this.backoff(entry);
+      this.options.log?.(`Creator options were not read (attempt ${entry.failures}): ${(error as Error)?.stack ?? error}`);
+      if (previous) { entry.loaded = previous; return previous; }
+      entry.error = (error as Error)?.message ?? String(error);
+      throw new CreatorFailedError();
+    });
     entry.promise.catch(() => {});
     this.entries.set(gender, entry);
     return entry.promise;
@@ -144,26 +173,39 @@ export class CreatorCatalogueHost {
     const load = await (this.options.load ?? ((inst: Installation, r: CreatorRoute, g: BodyGender) => loadCreatorCatalogue({ installation: inst,
       gameRoot: r.gameRoot, cacheDir: this.options.resolverCache, log: this.options.log }, g)))(installation, route, gender);
     const index = new CatalogueIndex(load.catalogue);
-    const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}`).digest("hex").slice(0, 24);
+    // A rebuild that read labels the last one couldn't is another identity, so the panel takes it up (NATIVE-46).
+    const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}\n` +
+      `${load.labels?.next ?? ""}\n${++this.builds}`).digest("hex").slice(0, 24);
     const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity);
     this.options.log?.(`Creator options (${gender}) read in ${((performance.now() - started) / 1000).toFixed(1)} s: ${panel.counts.options} options, ` +
       `${panel.counts.choices} choices, ${JSON.stringify(panel).length} bytes to the panel.`);
-    return { source: { catalogue: load.catalogue, cco: load.source.cco, index }, panel, mods, recovered: new Map() };
+    return { source: { catalogue: load.catalogue, cco: load.source.cco, index }, panel, mods, recovered: new Map(), labels: load.labels ?? null };
   }
 
-  /** The panel's state for a body gender, starting the first build for this installation when needed; never builds again, never waits. */
+  /**
+   * The panel's state for a body gender, starting the first build for this installation when needed; never builds again, never waits.
+   * A ready catalogue whose labels couldn't all be read says so in `message`, with its next step (`next`).
+   */
   state(gender: BodyGender): CreatorState {
     if (!this.options.route()) return { phase: "failed", message: NEEDS_SETUP };
     const known = this.entries.get(gender);
-    if (!known || known.fingerprint !== this.options.fingerprint()) this.ensure(gender).catch(() => {});
+    if (!known || known.fingerprint !== this.key()) this.ensure(gender).catch(() => {});
     const entry = this.entries.get(gender);
-    if (entry?.loaded) return { phase: "ready", message: "", panel: entry.loaded.panel };
+    if (entry?.loaded) {
+      const labels = entry.loaded.labels;
+      return labels ? { phase: "ready", message: labels.message, next: labels.next, panel: entry.loaded.panel } : { phase: "ready", message: "", panel: entry.loaded.panel };
+    }
     if (entry?.error) return { phase: "failed", message: FAILED };
     return { phase: "preparing", message: PREPARING };
   }
-  /** Try again now (the panel's Try again): a failed build starts again at once; anything else answers as `state`. */
+  /**
+   * Try again now (the panel's Try again): a failed build, or one whose labels may read next time, starts again at once (the panel follows
+   * it as preparing); anything else answers as `state`.
+   */
   retry(gender: BodyGender): CreatorState {
-    if (this.options.route() && this.entries.get(gender)?.error) this.ensure(gender, true).catch(() => {});
+    const entry = this.entries.get(gender);
+    // The rebuild shows as preparing until it ends; a failed one keeps the catalogue the panel had.
+    if (this.options.route() && (entry?.error || retryable(entry?.loaded ?? null))) this.ensure(gender, true).catch(() => {});
     return this.state(gender);
   }
 

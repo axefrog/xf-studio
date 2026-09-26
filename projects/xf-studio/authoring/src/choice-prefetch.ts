@@ -34,8 +34,11 @@ export const CHOICE_PREFETCH_SCHEMA = "xfs/choice-prefetch-1" as const;
  * The page reads a string of these, one per position it asked about.
  */
 export type ChoiceFetchState = "?" | "n" | "q" | "f" | "r" | "x";
-/** `failed`: an unexpected failure stopped the job (the page shows its choices as not prepared, without naming a reason). */
-export type PrefetchStop = "time" | "disk" | "failed" | null;
+/**
+ * `failed`: an unexpected failure stopped the job (the page shows its choices as not prepared, without naming a reason). `setup`: nothing
+ * can be prepared until WolvenKit is set up (NATIVE-48).
+ */
+export type PrefetchStop = "time" | "disk" | "failed" | "setup" | null;
 export type PrefetchAnswer = {
   schema: typeof CHOICE_PREFETCH_SCHEMA;
   option: string;
@@ -60,6 +63,8 @@ export type PrefetchDeps = {
   preparedBytes(): Promise<number>;
   /** After a batch: keep the prepared files within their budget. */
   afterBatch?(): Promise<void>;
+  /** Nothing can be prepared until something is set up (WolvenKit): the job stops as `setup` before its first batch (NATIVE-48). */
+  needsSetup?(): boolean;
   log?(message: string): void;
   /** A batch or the job failed for a reason other than being stopped (the host's diagnostics hook). */
   failed?(error: unknown): void;
@@ -261,6 +266,7 @@ export class ChoicePrefetcher {
         await this.deps.foregroundIdle();
         if (!live()) return;
         if (this.now() - job.startedAt > this.limits.timeMs) { job.stopped = "time"; break; }
+        if (this.deps.needsSetup?.()) { job.stopped = "setup"; break; }
         const size = Math.min(this.limits.maxBatch ?? this.limits.batch, this.limits.batch * 2 ** job.batches);
         const batch = this.queued(job, "q").slice(0, size);
         if (!batch.length) break;
