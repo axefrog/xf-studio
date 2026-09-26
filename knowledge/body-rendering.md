@@ -108,7 +108,7 @@ The [clothing render plan](../research/backlog/clothing-render.md#coordination-w
 
 ## Open questions
 
-1. Does the game draw the body's helper and twist joints from rig constraints (which the preview approximates rigidly), and which rig resource holds them?
+1. ~~Which rig resource drives the body's helper and twist joints?~~ **Mostly answered [resource]:** the photo-mode puppet's `deformations` animated component, `woman_base_deformations.rig` with `woman_base_deformations.animgraph`: point, orient, aim, twist and spline constraints plus bounce nodes over 114 named helper joints ([poses §4](poses.md#4-how-photo-mode-plays-a-pose)). Still open: what each node computes, and how far the preview's rigid approximation is from it in strong poses.
 2. How does the game move the underwear cover over a changed breast shape: its garment-support data, or a morph the preview doesn't read?
 3. Does the running game draw exactly the parts §1 lists for a V without clothing (for example, no seam-fix component at the shoulders)?
 4. ~~Does the arms' holster state follow equipped arm cyberware alone?~~ **Mostly answered [resource] [source]:** the equipped `ArmsCW` item's `holsteredItem` names the group through its `appearanceName` (§1.1). Still open: the native step from that item to the group, how the drawn state picks the `unholstered_*` groups, and which state the creator puppet uses (default by the same rule [hypothesis]).
