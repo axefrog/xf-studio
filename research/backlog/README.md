@@ -68,7 +68,7 @@ In order:
 4. Hair design
 5. Facial expressions and idles (static/animated; varied idle animations)
 
-   Feasibility, editor options, export plan and runtime questions: [expressions and idles brief](expressions-and-idles-brief.md).
+   Feasibility, editor options, export plan and runtime questions: [expressions and idles brief](expressions-and-idles-brief.md). Phased design for static photo-mode expressions (the decided first scope): [expression editor design](../animation/expression-editor-design.md).
 6. Tattoos
 7. Full body customisation
 8. World integration: quest design, area design
