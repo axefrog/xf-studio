@@ -100,6 +100,10 @@ By the Mermaid contributors. [GitHub](https://github.com/mermaid-js/mermaid-cli)
 
 By Oskar Schöldström and contributors. [GitHub](https://github.com/fstirlitz/luaparse). We use it (MIT) as a development tool to syntax-check the XF Runtime Bridge's Lua layer offline.
 
+### Fengari
+
+By Benoit Giannangeli, Daurnimator and contributors. [GitHub](https://github.com/fengari-lua/fengari). A Lua virtual machine written in JavaScript; we use it (MIT) as a development tool to run prepared CET console snippets against stand-in game objects before an in-game session.
+
 ### Microsoft platform tools and documentation
 
 By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/DXIL.rst) let us read the game's compiled shaders, the [Xbox store listing](https://www.xbox.com/en-us/games/store/cyberpunk-2077/bx3m8l83bbrw) and [Xbox Wire](https://news.xbox.com/en-us/2026/03/03/xbox-game-pass-march-2026-wave-1/) showed that Cyberpunk 2077 has no Xbox app edition for Windows, and the [WebView2 debugging documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-visual-studio-code) enabled automated testing of the packaged desktop window. WebView2 is a platform dependency of the desktop app; its [distribution guidance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution) shaped the one-click install, and the installer includes Microsoft's unmodified Evergreen WebView2 bootstrapper, packaged as that guidance allows.
@@ -152,7 +156,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### Appearance Menu Mod
 
-By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Studied only.
+By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Its observer on the photo-mode setup is how we learned to catch the photo-mode puppet from Lua. Studied only.
 
 ### Arkhe
 
@@ -224,7 +228,7 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ### Photo-mode pose and tool mods
 
-[Photo Mode Pose Selector](https://www.nexusmods.com/cyberpunk2077/mods/32633), [Photo Mode Unlocker XL](https://www.nexusmods.com/cyberpunk2077/mods/4319) (SilverEzredes, per its tweak file), [Ziva Photoshoot Posepack](https://www.nexusmods.com/cyberpunk2077/mods/8463) (EzioMaverick, per its tweak file), [Action Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/8698), [Dancy - Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/18007) and [Multi Pose Pack Framework](https://www.nexusmods.com/cyberpunk2077/mods/4098). Together they showed how poses reach photo mode (animation sets added to the photo-mode entities or scopes, plus pose and category records), how the menu's lists can be widened, and which menu attributes select V's and NPCs' expressions, which a future in-game test can drive directly. Studied only.
+[Photo Mode Pose Selector](https://www.nexusmods.com/cyberpunk2077/mods/32633) (cjsu, per its Nexus description), [Photo Mode Unlocker XL](https://www.nexusmods.com/cyberpunk2077/mods/4319) (SilverEzredes, per its tweak file), [Ziva Photoshoot Posepack](https://www.nexusmods.com/cyberpunk2077/mods/8463) (EzioMaverick, per its tweak file), [Action Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/8698), [Dancy - Pose Pack](https://www.nexusmods.com/cyberpunk2077/mods/18007) and [Multi Pose Pack Framework](https://www.nexusmods.com/cyberpunk2077/mods/4098). Together they showed how poses reach photo mode (animation sets added to the photo-mode entities or scopes, plus pose and category records), how the menu's lists can be widened, and which menu attributes select V's and NPCs' expressions, which a future in-game test can drive directly. Photo Mode Pose Selector's small redscript system, which records the photo-mode V puppet when photo mode sets it up, showed us how to find that puppet from the CET console. Studied only.
 
 ### psiberx
 

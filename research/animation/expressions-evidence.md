@@ -100,6 +100,61 @@ Across all 1,000 installed mod folders only the Mega Pack touches `PhotoModeFace
 
 Screenshots inspected are editor illustrations, not runtime proof.
 
+## Session 3 probes
+
+26 September 2026. Evidence behind the CET console lines in [session 3 Part D](../../experiments/022-session-3/README.md#part-d-expression-console-checks-optional), which answer the brief's R1 and R2. Every name below was checked against source, a type dump or game data; none has been run in the game yet. Grades: [source] read in the named code, [resource] game data or decompiled game scripts, [offline] run here against stand-ins, [hypothesis] untested inference.
+
+### Sources
+
+| Source | Version | Used for |
+|---|---|---|
+| Cyber Engine Tweaks | local clone `9a8522f` (1.37.1 plus 9 commits); 1.37.1 installed | Console, sandbox, property access, conversions, observers |
+| Codeware | local clone at tag v1.20.4 (`613a1cb8`); 1.20.5 installed | Entity and component additions |
+| RTTI dump | `red-dump-json` `a8e52990` (psiberx's RTTIDumper export, from before game 2.3) | Class properties and native function signatures |
+| RED4ext.SDK | `ad727771` | Resource path hashing |
+| Decompiled scripts | as in [sources](#sources-and-versions) (2.31) | Photo-mode scripts, `AnimationControllerComponent` helpers |
+| REDmod tweak sources | as in [sources](#sources-and-versions) | Records and slots |
+| Photo Mode Pose Selector | 1.2.0.0 (MO2 `meta.ini`), by cjsu | Its V-puppet system |
+| Appearance Menu Mod | 2.12.5 installed | Photo-mode puppet observer; feature idiom |
+| luaparse 0.3.1, fengari 0.1.5 | `D:/Dev/tools` | LuaJIT syntax check; mock run |
+
+### API names
+
+| Name used | What it does | Grade and citation |
+|---|---|---|
+| Console input | One line per command (single-line ImGui input); runs in the console sandbox, whose globals persist until restart | [source] CET `overlay/widgets/Console.cpp:85-126`, `Scripting.cpp:638-655` |
+| `print` | Writes to the console and `scripting.log`; that logger flushes only on warnings or at exit, and the console sandbox has no `spdlog` | [source] CET `Scripting.cpp:46, 111-126`, `Utils.cpp:98-120`, `LuaSandbox.cpp:163, 632-670` |
+| `ObserveAfter(class, method, fn)` | Available in the console; hooks a script function by swapping its body at call time | [source] CET `Scripting.cpp:375-390`, `FunctionOverride.cpp:560-680`; registering it after start-up from the console is [hypothesis] |
+| `PhotoModePlayerEntityComponent.SetupInventory` and field `fakePuppet` | Runs as photo mode sets up each puppet; stores the puppet, then gives it `Items.PlayerWaPhotomodeHead` / `PlayerMaPhotomodeHead` in the head's placement slot | [resource] decompiled `photoModePlayerEntity.script`; AMM observes the same method and reads `self.fakePuppet` (`init.lua:393-400`) |
+| `Character.Player_Puppet_Photomode` | V's photo-mode puppet record | [resource] REDmod `photomode.tweak:14-16`, `player_photomode_record.tweak:4` |
+| `PhotoModePoseSelectorTargetBridge.PMPSPhotoModeVTargetSystem:GetPhotoModeV()` | Fallback: Pose Selector's record of photo-mode V | [source] its `r6/scripts/PhotoModePoseSelector/PhotoModeVTargetBridge.reds` |
+| `GetMod("AppearanceMenuMod").Tools.photoModePuppet` | Second fallback | [source] AMM 2.12.5 `init.lua:179`, `Modules/tools.lua:839-861` (it can also hold the player, so the snippet checks the record) |
+| `AttachmentSlots.TppHead` | Placement slot of `PlayerWaTppHead`, inherited by the photo-mode head | [resource] REDmod `base_values.tweak:608-625, 755-758` |
+| `TransactionSystem:GetItemInSlot(obj, slotID)` | Returns the `ItemObject` in a slot | [source] dump `gameTransactionSystem`; used by `AnimationControllerComponent.ApplyFeatureToReplicateOnHeldItems` [resource] |
+| `Entity:GetComponents()`, `Entity:GetTemplatePath()`, `IComponent.appearancePath`, `IComponent.appearanceName` | Codeware additions | [source] Codeware `scripts/Entity/Entity.reds`, `src/App/Entity/EntityEx.hpp`, `ComponentEx.hpp` |
+| `GetClassName`, `GetName`, `FindComponentByName`, `GetRecordID`, `GetItemID`, `TDBID.ToStringDEBUG`, `ItemID.GetTDBID` | Identification | [source] dump (`IScriptable`, `entIComponent`, `entEntity`, `gamePuppetBase`, `gameItemObject`); [resource] decompiled `orphans.script` for the two statics |
+| `entAnimatedComponent.facialSetup` (raRef), `.graph` and `.rig` (rRef), `.animations`; `entAnimationSetupExtensionComponent.animations`; `animAnimSetup.gameplay/.cinematics`; `animAnimSetupEntry.priority/.animSet` | The fields R1 prints | [source] dump; Codeware `scripts/Base/Addons/AnimatedComponent.reds` and `Base/Imports/anim*.reds` agree |
+| Reading those fields from Lua | CET reads any RTTI property by name. An raRef becomes a `ResourceAsyncReference` whose `.hash` is a 64-bit number; an rRef has no converter and comes back as an opaque value, so the graph and rig paths can't be read directly. `GameDump` calls the type's own text conversion, whose output for an rRef is unknown | [source] CET `reverse/Type.cpp:229-250`, `RTTIHelper.cpp:930-947`, `Scripting.cpp:202-208, 438-441, 783-788`, `reverse/ResourceAsyncReference.cpp`, `reverse/LuaRED.h:12-15` |
+| Hash labels | A resource hash is FNV-1a64 of the lower-cased, backslashed path. Our implementation reproduces WolvenKit's `base\characters\head.mesh` vector and the EP1 face-rig hash in [CC file chain](../../knowledge/cc-file-chain.md); the labels come from paths in the intake | [source] SDK `ResourcePath.hpp:70-125`; [offline] |
+| `NewObject("handle:AnimFeature_PhotomodeFacial")`, `.facialPoseIndex` | The photo-mode face input (`Int32`) | [resource] decompiled `orphans.script:48825-48828`; [source] dump; CET `Scripting.cpp:410`; AMM uses the same idiom for `AnimFeature_FacialReaction` (`tools.lua:2386-2389`) |
+| `AnimationControllerComponent.ApplyFeature(obj, name, feature, delay)`, `.PushEvent(obj, name)` | Queue an `AnimInputSetterAnimFeature` or `AnimExternalEvent` on the entity, and on its child items when it is an item | [resource] decompiled `animationControllerComponent.script:30-70` |
+| `Class.Func(...)` versus `obj:Func(...)` | CET picks static overloads for the first form and member ones for the second, so the static `ApplyFeature` is called, not the component's private one | [source] CET `RTTIHelper.cpp:264-290, 357-400` |
+| Which entity the game gives the photo-mode feature to | The puppet has the `AnimationControllerComponent`; the face graph runs on the head item. R2 tries the puppet, then the head item | [hypothesis] |
+
+### Offline findings
+
+- The face rig is on the photo-mode head **item**, not the puppet. The head's own `player_wa_tpp_head.ent` has a placeholder `face_rig` (demo_vicky facial setup, `woman_average_sermo.animgraph`, demo_vicky rig, no sets) beside the photo-mode `.app`'s `face_rig` (male player setup, photo-mode graph). Which one runs is what R1 settles [resource].
+- In the photo-mode `.app` the `face_rig` component's own animation list is empty; its sets live in the sibling `man_face_base_animations` and `PhotomodeAnimations` components, so R1 prints every component on the head item [resource].
+- With the Mega Pack, menu position and faceId differ for 188 of the 192 new faces it lists. "Static: Sleeping" is at position 56 (from 0) with faceId 60, and CSV row 56 is "Static: Skeptical", so the menu check in R2 tells faceId from position. The Mega Pack CSV's Index equals row position for all 217 rows, so whether Index values may be sparse needs a test CSV (brief R5) [resource].
+- The three lines parse as LuaJIT (luaparse). Run in fengari against stand-ins shaped like CET's objects, they found V by each route, printed the expected labels, sent R2 to each target and reported a missing V cleanly [offline]. That checks the Lua, not CET or the game.
+
+### Open until the session
+
+- Whether an observer registered from the console after start-up fires (the Pose Selector and AMM fallbacks cover it).
+- How CET presents Codeware's `appearancePath`; the snippet tries both shapes and prints `unreadable` otherwise.
+- Whether photo mode reapplies its own face index every frame, which would undo `XF.face` on either target.
+- What `GameDump` prints for an rRef (hence optional and last).
+
 ## Commands
 
 ```powershell
