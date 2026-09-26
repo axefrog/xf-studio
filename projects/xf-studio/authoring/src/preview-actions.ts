@@ -23,6 +23,7 @@ type PreviewActionBody =
   | { kind: "camera.endFovGesture" }
   | { kind: "camera.restore"; camera: CameraState }
   | { kind: "camera.navigate"; command: CameraNavigation }
+  | { kind: "camera.back" | "camera.forward" }
   | { kind: "camera.creatorFraming"; page: CreatorCameraPage }
   | { kind: "preview.setLightingPreset"; preset: LightingPreset }
   | { kind: "preview.setCreatorLighting"; key: "intensity"; value: IntensityForm }
@@ -179,6 +180,8 @@ export class PreviewActions {
     // The device computes framing for the view it draws; other views get cameras of their own with more than one visible view (P4).
     if (action.kind.startsWith("camera.") && this.target(action.view) !== this.shown) return refusal("unavailable", "That view isn't shown.");
     const state = this.fields(action.view);
+    if ((action.kind === "camera.back" || action.kind === "camera.forward") && !this.graph.cameraTrail(this.target(action.view))[action.kind === "camera.back" ? "back" : "forward"])
+      return refusal("invalid_value", action.kind === "camera.back" ? "The camera hasn't jumped anywhere yet." : "There is no later camera position to go forward to.");
     if (action.kind === "camera.setFov" && (!Number.isFinite(action.degrees) || action.degrees < 10 || action.degrees > 90))
       return refusal("invalid_value", "Field of view must be between 10° and 90°.");
     if (action.kind === "camera.navigate") {
@@ -264,6 +267,7 @@ export class PreviewActions {
         case "camera.setFov": limited = this.port.setFov(action.degrees); this.moved(view); break;
         case "camera.endFovGesture": this.port.endFovGesture(); break;
         case "camera.restore": this.jump(view, "Saved camera", () => { this.port.restoreCamera(action.camera); }); break;
+        case "camera.back": case "camera.forward": this.cameraStep(action.kind === "camera.back" ? "back" : "forward", view); break;
         case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command)); this.moved(view); break;
         case "camera.creatorFraming":
           this.jump(view, action.page === "face" ? "Creator face camera" : "Creator hair camera",

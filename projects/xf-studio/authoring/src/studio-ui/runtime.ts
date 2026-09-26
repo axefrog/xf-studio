@@ -9,8 +9,22 @@ import type { Feedback, FeedbackAction } from "./feedback";
 import { AnchorRegistry } from "./guidance/anchors";
 import { activitySource, viewCatalogue, type ViewCatalogue } from "./views/contribution";
 import { SHELL_VIEW } from "./views/shell";
+import type { StudioModule } from "../platform/api";
 
 export type Port = StudioPresentationPort<HTMLElement>;
+
+/**
+ * Which Studio modules show (view-graph-design.md §4.2): the person's choice in the UI preferences, else each manifest's default.
+ * Presentation state only: the application is handed it (as a view-tool filter), never reads it.
+ */
+export function shownModules(port: Pick<Port, "preferences" | "views">): string[] {
+  const chosen = port.preferences.snapshot().modules ?? {};
+  return port.views.modules().filter(module => chosen[module.id] ?? module.shownByDefault).map(module => module.id);
+}
+/** The filter every derived view-tool list uses: the shown modules and whether research tools show. */
+export function toolFilter(port: Pick<Port, "preferences" | "views">) {
+  return { modules: shownModules(port), research: !!port.preferences.snapshot().researchTools };
+}
 type Ret<T extends (...args: never[]) => unknown> = ReturnType<T>;
 
 /** Reads for one paint. Each getter touches the port at most once per frame. */
@@ -46,6 +60,12 @@ export class Frame {
   get modInstall() { return this.once("modInstall", () => this.port.modInstall.snapshot()); }
   get preferences() { return this.once("preferences", () => this.port.preferences.snapshot()); }
   get history() { return this.once("history", () => this.port.authoring.historyTimeline()); }
+  /** The shown modules and the research preference: the filter of every derived view-tool list (view-graph-design.md §3.9). */
+  get toolFilter() { return this.once("toolFilter", () => toolFilter(this.port)); }
+  /** The focused view's derived tools (the main view while there is one). */
+  get viewTools() { return this.once("viewTools", () => this.port.views.tools(undefined, this.toolFilter)); }
+  /** The view graph: views, what they share, the focus and the View and lighting history. */
+  get views() { return this.once("views", () => this.port.views.snapshot()); }
 }
 export type FrameState = Frame;
 /** How a dispatch reports: `success` is recorded, a failure toasts unless `quiet` (with `failure` instead of its reason). */
@@ -69,6 +89,9 @@ export class StudioRuntime {
   readonly eyeMakeup: EyeMakeupFacade;
   readonly finishes: Ret<EyeMakeupFacade["finishCatalogue"]>;
   private listeners = new Set<() => void>();
+  /** The Studio modules, each module's panels, and showing or hiding one (the shell sets this once the dock exists). */
+  modules: { list: readonly StudioModule[]; panels(module: StudioModule): string[]; set(id: string, shown: boolean): void } =
+    { list: [], panels: () => [], set: () => {} };
   /**
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
    *   composition root handed `mountStudio`.
@@ -78,6 +101,10 @@ export class StudioRuntime {
     this.eyeMakeup = port.feature("eye-makeup");
     this.finishes = this.eyeMakeup.finishCatalogue();
   }
+  /** Which Studio modules show (the person's choice, else each manifest's default). */
+  shownModules() { return shownModules(this.port); }
+  /** The filter of every derived view-tool list: the shown modules and the research preference. */
+  toolFilter() { return toolFilter(this.port); }
   /** Eye makeup's live editor view (cheap, cached and read-only). */
   get editor() { return this.eyeMakeup.view(); }
   /** Descriptor limits drive control ranges, so the view keeps no copy of domain constants. */

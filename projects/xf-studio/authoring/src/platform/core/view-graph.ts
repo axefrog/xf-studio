@@ -8,7 +8,7 @@
  * look history, where continuous edits coalesce into one step. Camera navigation records nothing; a camera jump records a step
  * and leaves a Back/Forward trail on its camera node, so a shared camera shares its trail.
  */
-import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, validViewId, type GraphNode, type SceneKind, type StoredNode,
+import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, validViewId, viewPanelId, type GraphNode, type SceneKind, type StoredNode,
   type ViewGraphChange, type ViewGraphData, type ViewGraphRules, type ViewGraphSnapshot, type ViewHistoryState, type ViewId,
   type ViewRecord, type ViewSlot } from "../api/view-graph";
 
@@ -140,7 +140,7 @@ export class ViewGraph {
   snapshot(): ViewGraphSnapshot {
     return { focused: this.focus, views: this.views.map(view => ({ ...clone(view),
       shared: VIEW_SLOTS.filter(slot => this.views.some(other => other !== view && other[slot] === view[slot])),
-      sceneKind: this.nodes.get(view.scene)!.kind as SceneKind })) };
+      sceneKind: this.nodes.get(view.scene)!.kind as SceneKind, panel: viewPanelId(view.id) })) };
   }
   viewIds(): ViewId[] { return this.views.map(view => view.id); }
   has(view: ViewId) { return this.views.some(item => item.id === view); }

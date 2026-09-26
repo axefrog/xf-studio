@@ -6,3 +6,4 @@ export * from "./document";
 export * from "./history";
 export * from "./export";
 export * from "./view-graph";
+export * from "./module";

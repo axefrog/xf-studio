@@ -5,7 +5,8 @@ import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
 import type { Layer, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
-import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget } from "./studio-application";
+import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
+import type { StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "./platform/api";
@@ -129,6 +130,19 @@ export type StudioPresentationPort<Slot> = {
     snapshot(): ReadonlyDeep<ReturnType<UIPreferenceActions["snapshot"]>>;
   };
   readonly previewReadiness: { snapshot(): Readonly<PreviewReadiness> };
+  /**
+   * The view graph and the Studio modules (view-graph-design.md §3, §4): the views and what they share, the View and lighting
+   * history, the registered modules, and each view's derived tools and summaries. Module visibility and the research preference
+   * are the presentation's (UI preferences), passed in as `filter`; the application never reads them.
+   */
+  readonly views: {
+    snapshot(): ReadonlyDeep<ReturnType<StudioApplication["views"]>>;
+    modules(): readonly StudioModule[];
+    tools(view: ViewId | undefined, filter: ViewToolFilter): readonly ViewToolEntry[];
+    summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
+    /** Turn a view's tool on or off (`view.setTool` through the registry). */
+    setTool(view: ViewId | undefined, tool: string, enabled: boolean): StudioDispatchResult;
+  };
   /** The registered feature modules, in catalogue order (feature-module platform §4). */
   features(): readonly FeatureInfo[];
   /** One feature's facade: typed for the features in `PresentationFeatures`, undefined for an unregistered ID. */
@@ -311,6 +325,12 @@ export function createStudioPresentation<Slot>(sources: {
     dispatch: action => p.dispatch(action),
   };
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
+  const views: StudioPresentationPort<Slot>["views"] = Object.freeze({
+    snapshot: () => a.views(), modules: () => a.modules(),
+    tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
+    summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
+    setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
+  });
   const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {
     snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),
     dispatch: action => sources.localSetup!.dispatch(action),
@@ -362,7 +382,7 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, features: () => infos, feature, localSetup: Object.freeze(localSetup),
+    previewReadiness, views, features: () => infos, feature, localSetup: Object.freeze(localSetup),
     installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),

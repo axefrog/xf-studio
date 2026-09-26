@@ -16,6 +16,8 @@ import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
 import type { ViewId } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
+import type { ViewAction, ViewActions } from "./view-actions";
+import type { StudioModule, ViewSummaryContribution, ViewToolContribution, ViewToolFilter } from "./platform/api";
 import type { Layer, Point, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { EyeMakeupPort, EyeMakeupSpec } from "./authoring-eye-makeup";
@@ -48,6 +50,7 @@ export type StudioOwnerActions = {
   quality: QualityAction;
   savedV: SavedAppearanceAction;
   characterContext: CharacterContextAction;
+  views: ViewAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
 /**
@@ -68,6 +71,11 @@ export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
   { kind: "field"; layerId: string; id: string } | { kind: "viewport"; view?: ViewId } | { kind: "file" } | { kind: "workspace" };
+/**
+ * One tool of one view, ready to render (view-graph-design.md §3.9): the contribution, whether it shows (Idle hides without an idle),
+ * whether it is on, the action it dispatches now and that action's capability. `label` may name its next step ("Pause idle").
+ */
+export type ViewToolEntry = ViewToolContribution & { shown: boolean; on?: boolean; action: StudioAction; capability: StudioCapability };
 /** The platform's reason codes and capability shape (`platform/api`). */
 export type StudioReasonCode = ReasonCode;
 export type StudioCapability = Capability;
@@ -101,7 +109,9 @@ type Services = { document: AuthoringDocument;
   /** Which V the makeup is shown on and every creator choice set on it (character-context-actions.ts). */
   characterContext?: CharacterContextActions;
   /** The view graph (view-graph-design.md §3.3): which views exist, for actions that name one. */
-  views?: ViewGraph };
+  views?: ViewGraph;
+  /** The views family over the graph and the composition's modules and view tools (view-actions.ts). */
+  viewActions?: ViewActions };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -159,7 +169,7 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails, s.characterContext])
+    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -472,6 +482,43 @@ export class StudioApplication {
     return excluded ? { exportable: false, reason: excluded.reason, blockedBy: "preset" } : alone;
   }
   glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
+  /** The registered Studio modules in catalogue order (the Modules menu's rows; visibility is the presentation's). */
+  modules(): readonly StudioModule[] { return structuredClone(this.services.viewActions?.registration.modules ?? []); }
+  /** The views, what each shares, the focus and the View and lighting history (view-graph-design.md §3). Detached. */
+  views() { return this.services.viewActions?.snapshot() ?? null; }
+  /**
+   * A view's tools (design §3.9): the platform's and the shown modules' tools for its scene kind, each with its current state, the
+   * action it dispatches and that action's capability. `filter` is the presentation's module visibility and research preference,
+   * which the application is given, never reads. Every toolbar, view menu, palette entry and Display toggle renders this one list.
+   */
+  viewTools(view: string | undefined, filter: ViewToolFilter): ViewToolEntry[] {
+    const actions = this.services.viewActions, graph = this.services.views;
+    if (!actions || !graph) return [];
+    const id = view !== undefined && graph.has(view) ? view : graph.focused();
+    return actions.tools(id, filter).map(tool => this.resolveTool(id, tool));
+  }
+  /** The shown modules' summaries for a view's scene kind (its crumb after the preset), in module order. */
+  viewSummaries(view: string | undefined, filter: Pick<ViewToolFilter, "modules">): ViewSummaryContribution[] {
+    return structuredClone(this.services.viewActions?.summaries(view, filter) ?? []);
+  }
+  private resolveTool(view: string, tool: ViewToolContribution): ViewToolEntry {
+    const entry = (action: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry =>
+      ({ ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra });
+    // A module's toggle lives in the view's tools node.
+    if (tool.state === "tools") {
+      const on = this.services.viewActions!.toolOn(view, tool.id);
+      return entry({ kind: "view.setTool", view, tool: tool.id, enabled: !on }, { on });
+    }
+    // The character's motion: play, pause and resume the idle; hidden where the head has no idle.
+    if (tool.id === "motion.idle") {
+      const motion = this.services.motion?.snapshot();
+      const playing = !!motion?.idle && !motion.idlePaused;
+      return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
+        { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
+    }
+    // The camera's framing commands: the tool's ID is the action it dispatches on this view.
+    return entry({ kind: tool.id, view } as StudioAction);
+  }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
@@ -652,6 +699,10 @@ export class StudioApplication {
       savedV: {
         capability: action => app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
         dispatch: action => app.services.savedV!.dispatch(action),
+      },
+      views: {
+        capability: action => app.services.viewActions?.capability(action) ?? missing("Views are still loading."),
+        dispatch: action => app.services.viewActions!.dispatch(action),
       },
       // Before the 3D preview is ready there is no context yet: a creator change is refused as `not_ready` (CORE-64).
       characterContext: {

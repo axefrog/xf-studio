@@ -2,7 +2,7 @@ import type { StudioAction, StudioCapability, StudioTarget } from "../studio-app
 import type { StudioBoundContext } from "../studio-context-targets";
 import { chordLabel, keyBindingById, shortcutLabel, TARGET_LABELS } from "../input-bindings";
 import type { ViewportHostKind } from "../viewport-attachment";
-import type { IconName } from "./icons";
+import { isIconName, type IconName } from "./icons";
 import { menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem, type MenuSection } from "./menu";
 import type { StudioRuntime } from "./runtime";
 
@@ -160,16 +160,11 @@ function viewSection(rt: StudioRuntime, kind: ViewportHostKind): MenuSection {
       run: () => { port.viewport.uvCommand(id); } });
     return { label: "UV view", items: [command("both", "Both eyes"), command("single", "Single eye"), command("other", "Other eye"), command("fit", "Fit shape")] };
   }
-  const preview = port.authoring.previewState().preview;
-  return { label: "Head view", items: [
-    { kind: "action", label: "Front view", icon: "front", shortcut: shortcutLabel("head.front"), capability: port.authoring.capability({ kind: "camera.front" }), run: () => { rt.dispatch({ kind: "camera.front" }); } },
-    { kind: "action", label: "Whole body view", icon: "body", capability: port.authoring.capability({ kind: "camera.body" }), run: () => { rt.dispatch({ kind: "camera.body" }); } },
-    { kind: "action", label: "Surface controls", icon: "handles", checked: !!preview?.surface,
-      capability: port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }),
-      run: () => { rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }); } },
-    { kind: "action", label: "Plate wireframe", icon: "wire", checked: !!preview?.wire,
-      capability: port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }),
-      run: () => { rt.dispatch({ kind: "preview.setWire", enabled: !preview?.wire }); } }] };
+  // The same derived tool list as the view's toolbar (view-graph-design.md §3.9): research tools only with research tools on.
+  return { label: "Head view", items: port.views.tools(undefined, rt.toolFilter()).filter(tool => tool.shown).map(tool => ({
+    kind: "action" as const, label: tool.label, icon: isIconName(tool.icon) ? tool.icon : "dot",
+    ...(tool.binding ? { shortcut: shortcutLabel(tool.binding) } : {}), ...(tool.state === "tools" ? { checked: !!tool.on } : {}),
+    capability: tool.capability, run: () => { rt.dispatch(tool.action); } })) };
 }
 
 /**

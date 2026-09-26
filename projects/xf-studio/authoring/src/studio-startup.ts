@@ -37,7 +37,7 @@ import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { UIPreferenceActions } from "./ui-preferences";
-import { createStudioViewGraph, storedViewGraph } from "./preview-view-graph";
+import { storedViewGraph } from "./preview-view-graph";
 import { DiagnosticsActions } from "./diagnostics/actions";
 import { createBrowserDiagnostics } from "./diagnostics/browser-device";
 import { pageFailure, setPageDiagnostics } from "./diagnostics/page-sink";
@@ -105,8 +105,6 @@ async function start(host: StudioHost, root: HTMLElement) {
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
-  // The view graph (view-graph-design.md §3.3): every view's camera, light, display, scene and tool state, for the whole session.
-  const views = createStudioViewGraph(workspace.preview, workspace.views);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
@@ -148,6 +146,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
+  // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
+  const views = core.views;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS,
     onContext: event => event === "lost" ? diagnostics.contextLost("3D head view") : diagnostics.contextRestored("3D head view") });
@@ -182,7 +182,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       statusSource.changed();
     },
   });
-  core.app.attach({ quality: previewDevice.coordinator.quality, views });
+  core.app.attach({ quality: previewDevice.coordinator.quality });
   previewDevice.coordinator.quality.subscribe(persist);
   const fieldHooks = {
     selectedField: () => core.presentation.selectedField()?.id,

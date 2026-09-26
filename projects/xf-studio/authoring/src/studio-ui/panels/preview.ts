@@ -141,16 +141,17 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const studioControls = h("div", { class: "section" }, setups, exposure.element, angle.element, elevation.element, keyStrength.element,
     environmentStrength.element, fillStrength.element, rimStrength.element, neutral.element, h("div", { class: "row" }, resetStudio));
   const normals = new Toggle({ label: "Preview normal map", onChange: enabled => rt.dispatch({ kind: "preview.setNormals", enabled }) });
-  const surface = new Toggle({ label: "Surface controls on the head", onChange: enabled => rt.dispatch({ kind: "preview.setSurfaceControls", enabled }) });
-  const wire = new Toggle({ label: "Plate wireframe", onChange: enabled => rt.dispatch({ kind: "preview.setWire", enabled }) });
+  // The view's tool toggles (view-graph-design.md §3.9): the shown modules' tools, derived like the toolbar, one Toggle each.
+  const toolToggles = h("div", { class: "view-tool-toggles" });
+  const toggles = new Map<string, Toggle>();
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
     section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section("Light", preset.element, presetNote, studioControls),
     diagnostics,
-    section("Display", surface.element, normals.element, h("div", { class: "research-only" }, wire.element, optics.element, opticsNote)),
-    note("Camera and light are workspace preferences: they persist locally and never enter recipes, Undo or export."));
+    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)),
+    note("Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export. Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
@@ -204,7 +205,13 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       for (const node of element.querySelectorAll<HTMLElement>(".research-only")) node.hidden = !research;
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
-      normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
+      normals.update(!!preview?.normals, loading);
+      const tools = frame.viewTools.filter(tool => tool.kind === "toggle" && tool.state === "tools");
+      for (const tool of tools) if (!toggles.has(tool.id)) toggles.set(tool.id, new Toggle({ label: tool.label,
+        onChange: enabled => { rt.report("view.setTool", rt.port.views.setTool(undefined, tool.id, enabled)); } }));
+      const wanted = tools.map(tool => toggles.get(tool.id)!.element);
+      if (wanted.length !== toolToggles.children.length || wanted.some((node, index) => toolToggles.children[index] !== node)) toolToggles.replaceChildren(...wanted);
+      for (const tool of tools) toggles.get(tool.id)!.update(!!tool.on, ready ? { disabled: !tool.capability.available, reason: tool.capability.reason } : loading);
       optics.update(preview?.eyeOwnRoughness ?? true, loading);
       const eye = assets.eyeOptics;
       setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the preview's even gloss." : eye.active

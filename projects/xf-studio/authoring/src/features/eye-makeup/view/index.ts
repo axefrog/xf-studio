@@ -17,4 +17,7 @@ export { EYE_MAKEUP_GRANDFATHERED_PANELS, EYE_MAKEUP_PANEL_META, EYE_MAKEUP_VIEW
 export const EYE_MAKEUP_VIEW_BINDING = featureView(EYE_MAKEUP_VIEW, {
   panels: { layers: layersPanel, uv: uvPanel, finish: finishPanel, shape: shapePanel, edge: edgePanel, warp: warpPanel },
   commands: eyeMakeupCommands,
+  // Eye makeup's crumb and readiness badge in a character view (view-graph-design.md §2.14): its selected layer, and its textures.
+  summary: ctx => ({ text: ctx.facade.view().layer()?.name, empty: "No layer selected" }),
+  readiness: ctx => ctx.readiness(),
 });

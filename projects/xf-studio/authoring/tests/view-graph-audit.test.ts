@@ -9,6 +9,9 @@ import { fileURLToPath } from "node:url";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
 import { imports, resolveFrom } from "./fixtures/import-scan";
 import { codeOnly } from "./fixtures/code-scan";
+import { readFileSync } from "node:fs";
+import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
+import { moduleRegistrySnapshot } from "./fixtures/capture-module-registry-golden";
 
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 /** Every src module as a src-relative name without its extension (`platform/scene/scene-host`). */
@@ -29,15 +32,14 @@ const SCENE_HOST_IMPORTERS = ["browser-character-detail-device", "browser-scene-
  * adapter, the gesture sources and the adapter messages by view and host IDs; what is left are the binding scopes (a view kind
  * `view3d` scope and module-registered flat views, P6) and the head panel's key description.
  */
-const FIXED_VIEWPORT_KINDS = ["input-bindings", "studio-ui/panels/viewports"];
+const FIXED_VIEWPORT_KINDS = ["input-bindings"];
 const VIEWPORT_KIND_UNION = /"head"\s*\|\s*"uv"|"uv"\s*\|\s*"surface"|"surface"\s*\|\s*"uv"/;
 
 /**
  * Shell presentation modules that name eye makeup's viewport tools (Surface controls, Plate wireframe) by action kind. Phase 2 makes
  * them eye makeup's view-tool contribution, so the head toolbar, its context menu, the palette and Camera & light derive them.
  */
-const SHELL_NAMES_FEATURE_TOOLS = ["studio-ui/app", "studio-ui/panels/preview", "studio-ui/panels/viewports", "studio-ui/style-guide/reference",
-  "studio-ui/target-menus"];
+const SHELL_NAMES_FEATURE_TOOLS: string[] = [];
 const FEATURE_TOOL_KINDS = /preview\.setSurfaceControls|preview\.setWire\b/;
 
 test("only the listed modules outside platform/scene import the scene host (view-graph ratchet)", () => {
@@ -96,4 +98,40 @@ test("rule 5: only the view graph service stores camera, light, display and tool
     "other": `class Q { read() { return this.state.exposure === 1; } }` })).toEqual(["preview-actions"]);
   // The graph service is the owner, and preview actions read it.
   expect(text("preview-actions")).toMatch(/private readonly graph: ViewGraph/);
+});
+
+/**
+ * Rule 3 (from P2): studio-ui names no module's view tool, summary or readiness. The toolbar, the view's menu, the palette's View
+ * entries and Camera & light › Display render `port.views`; the crumb and badge render what the shown modules' views contribute.
+ */
+const moduleToolIds = () => STUDIO_MODULE_REGISTRATION.tools.filter(tool => tool.module !== "platform").map(tool => tool.id);
+const namesModuleTool = (source: string, ids: readonly string[]) => ids.filter(id => source.includes(`"${id}"`) || source.includes(`'${id}'`) || source.includes(`\`${id}\``));
+
+test("rule 3: studio-ui names no module's view tool (P2)", () => {
+  const shell = modules().filter(name => name.startsWith("studio-ui/"));
+  expect(shell.flatMap(name => namesModuleTool(text(name), moduleToolIds()).map(id => `${name}: ${id}`))).toEqual([]);
+  expect(namesModuleTool(`rt.port.views.setTool(undefined, "eye-makeup.surface", true)`, moduleToolIds())).toEqual(["eye-makeup.surface"]);
+  expect(SHELL_NAMES_FEATURE_TOOLS).toEqual([]);
+});
+
+/**
+ * Rule 6 (from P2): module visibility is presentation state. No application, platform or feature core module reads
+ * `UIPreferences.modules`; the presentation hands the derivation a filter.
+ */
+const READS_MODULE_VISIBILITY = /\b(?:[pP]references|uiPreferences)\b(?:\(\))?(?:\.snapshot\(\))?\??\.modules\b/;
+const visibilityReaders = (sources: Record<string, string>) => Object.entries(sources)
+  .filter(([name, source]) => !name.startsWith("studio-ui/") && !/^features\/[^/]+\/view\//.test(name) && name !== "ui-preferences")
+  .filter(([, source]) => READS_MODULE_VISIBILITY.test(codeOnly(source))).map(([name]) => name);
+
+test("rule 6: no application, platform or feature module reads the modules preference (P2)", () => {
+  expect(visibilityReaders(Object.fromEntries(modules().map(name => [name, text(name)])))).toEqual([]);
+  expect(visibilityReaders({ "studio-application": `const shown = this.preferences.snapshot().modules;`,
+    "platform/core/view-tools": `if (workspace.uiPreferences.modules?.["eye-makeup"]) return;`,
+    "studio-ui/app": `const chosen = port.preferences.snapshot().modules ?? {};` })).toEqual(["studio-application", "platform/core/view-tools"]);
+});
+
+/** Rule 7 (from P2): the module registry's IDs are pinned (a golden snapshot), beside its completeness check (view-modules.test.ts). */
+test("rule 7: the module registry matches its golden snapshot", () => {
+  const golden = JSON.parse(readFileSync(new URL("./golden/module-registry.json", import.meta.url), "utf8"));
+  expect(moduleRegistrySnapshot()).toEqual(golden);
 });

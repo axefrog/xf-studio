@@ -1,3 +1,5 @@
+import type { ModuleRegistration } from "./platform/api";
+import { createViewServices } from "./view-actions";
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { AuthoringDocument } from "./authoring-document";
 import { eyeMakeupPort, RecipeActions, type EyeMakeupGestures, type EyeMakeupSpec } from "./authoring-eye-makeup";
@@ -22,7 +24,9 @@ import type { WorkspaceState } from "./workspace-state";
  */
 export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel;
   /** The live feature's layered-makeup region (eye makeup's), which its port, catalogues and edits use. */
-  readonly region: LayeredMakeupRegion };
+  readonly region: LayeredMakeupRegion;
+  /** The Studio modules and every view tool (view-graph-design.md §3.9); absent in fixtures (only the platform's tools). */
+  readonly modules?: ModuleRegistration };
 
 /** Trusted, DOM-free authoring composition. The presentation receives only StudioApplication. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
@@ -72,7 +76,9 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   // gate first and reports failures as typed results, so hosts wire nothing here.
   const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed, revert,
     action => specOf(action.kind).label(action));
-  const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls,
+  // The view graph (view-graph-design.md §3.3): every view's camera, light, display, scene and tool state, for the whole session.
+  const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules);
+  const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls, views, viewActions,
     ...(ports.newId ? { newId: ports.newId } : {}) }, registry);
-  return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, undo, history, documents };
+  return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, undo, history, documents, views };
 }

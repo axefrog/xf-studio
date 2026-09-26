@@ -57,7 +57,7 @@ export type ViewGraphRules = { readonly codecs: { readonly [S in ViewSlot]: Node
 /** A detached read of the graph for presentations: each view with its nodes, and which of them other views share. */
 export type ViewGraphSnapshot = {
   readonly focused: ViewId;
-  readonly views: readonly (ViewRecord & { readonly shared: readonly ViewSlot[]; readonly sceneKind: SceneKind })[];
+  readonly views: readonly (ViewRecord & { readonly shared: readonly ViewSlot[]; readonly sceneKind: SceneKind; /** The dock panel that shows it. */ readonly panel: string })[];
 };
 
 /** What changed in one graph commit, for the devices that draw it and the views that repaint. */

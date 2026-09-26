@@ -61,6 +61,9 @@ export const ACTION_DESCRIPTORS = {
   "camera.navigate": inView("viewport", "workspace", "none", { command: input("object") }, {
     orbit: { yaw: input("number"), pitch: input("number") }, dolly: { factor: input("number", .01, 100) },
     pan: { dx: input("number", -10, 10), dy: input("number", -10, 10) } }),
+  // The camera's Back/Forward trail (view-graph-design.md §3.6): where it was before its last jump.
+  "camera.back": inView("viewport", "workspace", "none"),
+  "camera.forward": inView("viewport", "workspace", "none"),
   "camera.creatorFraming": inView("viewport", "workspace", "none", { page: enumerated(Object.keys(CREATOR_PAGE_DISTANCE)) }),
   "preview.setLightingPreset": inView("viewport", "workspace", "none", { preset: enumerated(LIGHTING_PRESETS) }),
   "preview.setCreatorLighting": inView("viewport", "workspace", "none", { key: enumerated(["intensity", "cone", "exposure"]), value: input("number|string") }, {
@@ -96,6 +99,11 @@ export const ACTION_DESCRIPTORS = {
   "savedV.clear": desc("viewport", "workspace", "none"),
   // The character context's family (character-context.ts): creator choices record their own history, never a look's.
   ...CHARACTER_CONTEXT_DESCRIPTORS,
+  // The views family (view-actions.ts): view tools in a view's tools node, and the View and lighting history (never a look's).
+  "view.setTool": desc("viewport", "workspace", "none", { view: { type: "string", required: false, from: "target" }, tool: target("string"),
+    enabled: input("boolean") }),
+  "view.undo": desc("workspace", "workspace", "none"),
+  "view.redo": desc("workspace", "workspace", "none"),
 } satisfies Record<StudioAction["kind"], ActionDescriptor>;
 
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],

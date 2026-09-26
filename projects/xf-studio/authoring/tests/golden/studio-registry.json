@@ -48,6 +48,8 @@
   "camera.endFovGesture",
   "camera.restore",
   "camera.navigate",
+  "camera.back",
+  "camera.forward",
   "camera.creatorFraming",
   "preview.setLightingPreset",
   "preview.setCreatorLighting",
@@ -94,7 +96,10 @@
   "character.setClothing",
   "character.setClothingArea",
   "character.undoClothing",
-  "character.redoClothing"
+  "character.redoClothing",
+  "view.setTool",
+  "view.undo",
+  "view.redo"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -1585,6 +1590,34 @@
     }
    }
   },
+  "camera.back": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
+  "camera.forward": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "camera.creatorFraming": {
    "scope": [
     "viewport"
@@ -2529,6 +2562,46 @@
    "effect": "workspace",
    "undo": "none",
    "payload": {}
+  },
+  "view.setTool": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    },
+    "tool": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "view.undo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "view.redo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
   }
  },
  "registry": [
@@ -2970,6 +3043,24 @@
    "async": false
   },
   {
+   "id": "camera.back",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.forward",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "camera.creatorFraming",
    "family": "action",
    "scope": [
@@ -3388,6 +3479,33 @@
    "family": "action",
    "scope": [
     "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.setTool",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.undo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.redo",
+   "family": "action",
+   "scope": [
+    "workspace"
    ],
    "undo": "none",
    "async": false
