@@ -71,7 +71,7 @@
 - **One catalogue, many frontends.** Every command (name, plain text, JSON Schema input, permission class, undo note) is defined once in `tools/api/catalogue.ts`; the MCP server, the CLI's `run` and the session runner derive from it, so a command added once appears everywhere [offline]. Permission classes: `read`, `write-photo`, `write-world`, `write-character`, `control`.
 - **Writes are gated twice.** The tools can withhold classes (`--read-only` or `--allow`, never both), and the game refuses every write unless `allow_writes = true` in the plugin's config, which only the `-writes` build sets for the test profile, and then each class (photo, world, character) unless `allow_write_classes` lists it [offline].
 - **Every write is reversible and recorded.** It takes a save lock first, logs `write.done … undo=` and returns `undo {method, params}` for exactly what it changed (null when nothing changed or an earlier value is unknown); the kill switch undoes a freeze and a hidden photo-mode menu and keeps the save lock until a save is loaded [unverified]; no queued write can run after it [offline].
-- **Photo mode is driven through its own menu.** `GetMenuItem(key)` and `ForceValue` reach `OnAttributeUpdated`, with values checked against the ranges the menu set up; keys come from four photo-mode mods' source ([design §3.2](../research/runtime/runtime-bridge-design.md#32-protocol-1)) [source]. Opening photo mode from a script needs Codeware's `QuestsSystem.ExecuteNode` with `questOpenPhotoMode_NodeType` [source; hypothesis outside quests].
+- **Photo mode is driven through its own menu.** `GetMenuItem(key)` and `ForceValue` reach `OnAttributeUpdated`, with values checked against the ranges the menu set up; keys come from four photo-mode mods' source ([design §3.2](../research/runtime/runtime-bridge-design.md#32-protocol-1)) [source]. Codeware's `QuestsSystem.ExecuteNode` with `questOpenPhotoMode_NodeType` opens only a **restricted** photo mode (first person, no V tab), so the full photo mode still needs the player's key [runtime]; the routes and why are in [photo mode §2](photo-mode.md#2-opening-photo-mode).
 - **Character options change only in the open mirror screen,** through `ApplyChangeToOption` as its own controls do; the bridge never confirms (`ReFinalizeState`), and Back discards [source].
 - **The world clock and a freeze:** `SetGameTimeByHMS` / `SetGameTimeBySeconds`, and time dilation 0 on the world and V as the mirror screen does [source].
 - **Captures** are external (`PrintWindow` or the screen), cropped to named regions sized in window heights so they frame the same area on 16:9 and 21:9, saved at full resolution and returned downscaled with an exact area filter [offline].
@@ -81,7 +81,7 @@
 | `gameuiPhotoModeMenuController.GetMenuItem` / `PhotoModeMenuListItem.ForceValue` / `OnAttributeUpdated` | [source] 2.31 | Used for camera, lights, expression |
 | `gameuiPhotoModeMenuController.OnExitConfirmed(Bool)` | [source] 2.31 | Used for `photo.exit` |
 | Protected `OnFadeVisibility(Float)` through an added method | [source] 2.31 | Used for `photo.hud.hide` |
-| Codeware `QuestsSystem.ExecuteNode` + `questOpenPhotoMode_NodeType` | [source]; outside quests [hypothesis] | Used for `photo.enter`; the player's key is the fallback |
+| Codeware `QuestsSystem.ExecuteNode` + `questOpenPhotoMode_NodeType` | [source]; opens a restricted photo mode [runtime] | Used for `photo.enter`; to be replaced ([bridge autonomy](../research/backlog/bridge-autonomy.md)); the player's key opens the full one |
 | `gameuiICharacterCustomizationSystem.ApplyChangeToOption`, `GetUnitedOptions` | [source] 2.31 | Used in the mirror screen only |
 | `ReFinalizeState` (Confirm), `CancelFinalizedStateUpdate` (Back) | [source] 2.31 | Never called by the bridge |
 | `TimeSystem.SetGameTimeByHMS`, `SetGameTimeBySeconds`, `SetTimeDilation`, `SetTimeDilationOnLocalPlayerZero` | [source] 2.31 | Used for the clock and the freeze |
@@ -101,9 +101,9 @@
   - quitting through `ExitGame`.
 - **No API found:**
   - taking a game screenshot to a chosen file;
-  - opening photo mode without input, other than Codeware's quest-node route;
-  - opening the mirror screen from gameplay;
+  - opening the full photo mode without input (Codeware's quest-node route opens a restricted one; [photo mode](photo-mode.md));
   - saving to a chosen slot.
+- **Found, not built:** opening the creator from gameplay by switching to `MenuScenario_CharacterCustomizationMirror`, as Character Customization Anywhere does [source] ([photo mode §3](photo-mode.md#3-opening-confirming-and-leaving-the-character-creator)).
 - **Capture paths:** capture is external for now (window capture after post-processing). The lossless, before-effects route is an optional ReShade add-on (6.7.x headers, full add-on build only), which must never change the user's preset.
 
 Details and citations: [design §7](../research/runtime/runtime-bridge-design.md#7-autonomy-capability-matrix).
@@ -115,8 +115,8 @@ Details and citations: [design §7](../research/runtime/runtime-bridge-design.md
 3. When does a `ScriptableSystem`'s `OnAttach` first run: at the main menu or on the first save load?
 4. Do the RTTI names from the pre-2.3 dump still match on 2.31? Settle this with a fresh RTTIDumper run.
 5. Does window capture return the game image in its fullscreen mode, or only in borderless windowed mode?
-6. Does the Codeware quest node open photo mode outside a quest, and does the save lock hold off autosaves?
-7. Do the photo-mode keys from mod source match this install, and which keys switch lights on and set film grain and chromatic aberration?
+6. ~~Does the Codeware quest node open photo mode outside a quest?~~ Yes, but restricted to first person [runtime]. Does the save lock hold off autosaves?
+7. ~~Do the photo-mode keys from mod source match this install?~~ Yes; light on/off is 44, chromatic aberration 13, grain 25 [runtime] ([photo mode §8.1](photo-mode.md#81-photo-mode-attributes-worth-knowing)).
 
 ## Related pages
 
