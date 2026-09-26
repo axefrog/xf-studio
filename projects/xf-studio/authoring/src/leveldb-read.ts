@@ -12,6 +12,12 @@
  * above the recorded log number). When the MANIFEST can't be read (another process holds it open), every table and log
  * present is read instead and the newest sequence number of each key wins; that is right unless a stale table survived a
  * compaction that dropped a deletion, so the result says which way it was read.
+ *
+ * **Bounded (VORTEX-02).** The files are another program's and may be damaged: a Snappy block may claim any length, a table's
+ * index may point at one block many times or at overlapping ranges, and prefix-compressed keys can grow with every entry. So a
+ * block's claimed length is checked against what its compressed bytes can hold and against `maxBlockBytes` before anything is
+ * allocated, each distinct block is decoded once, every allocation is counted against one `maxDecodedBytes` budget for the whole
+ * read, and a file that passes it is reported as a gap rather than read further.
  */
 
 export interface LevelDbFile { readonly name: string; readonly bytes: Uint8Array | null }
@@ -27,6 +33,33 @@ export interface LevelDbRead {
 }
 
 type Entry = { key: Uint8Array; value: Uint8Array | null; seq: bigint };
+
+/** What one read may decode. */
+export type LevelDbLimits = {
+  /** Largest block a Snappy header may claim (LevelDB writes blocks of about 4 KB). */
+  readonly maxBlockBytes: number;
+  /** Everything one read allocates while decoding (decompressed blocks and expanded keys), over all its files. */
+  readonly maxDecodedBytes: number;
+};
+export const LEVELDB_BLOCK_BYTES = 64 * 1024 * 1024;
+/** Defaults: a block of at most 64 MB, and a read budget of 16 times the input bytes, at least 64 MB and at most 1 GB. */
+export const leveldbLimits = (inputBytes: number): LevelDbLimits => ({ maxBlockBytes: LEVELDB_BLOCK_BYTES,
+  maxDecodedBytes: Math.min(1024 * 1024 * 1024, Math.max(64 * 1024 * 1024, 16 * inputBytes)) });
+/** Snappy's best case is a 3-byte copy tag for 64 bytes, so a block can't hold more than 22 times its compressed size. */
+const SNAPPY_RATIO = 22;
+
+/** The allocation budget of one read. */
+export class DecodeBudget {
+  private spentBytes = 0;
+  constructor(readonly limit: number) {}
+  get spent() { return this.spentBytes; }
+  spend(bytes: number, what: string) {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.spentBytes + bytes > this.limit)
+      throw Error(`${what} would pass the ${this.limit}-byte decoding budget`);
+    this.spentBytes += bytes;
+  }
+}
+const unbounded = () => new DecodeBudget(Number.MAX_SAFE_INTEGER);
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 
 class Cursor {
@@ -53,10 +86,16 @@ class Cursor {
   fixed32() { const view = this.take(4); return new DataView(view.buffer, view.byteOffset, 4).getUint32(0, true); }
 }
 
-/** Snappy block decompression (the raw format, not the framing format). */
-export function snappyDecompress(input: Uint8Array): Uint8Array {
+/**
+ * Snappy block decompression (the raw format, not the framing format). The claimed length is checked against what the input can
+ * hold and against `maxLength`, and spent from `budget`, before the output is allocated.
+ */
+export function snappyDecompress(input: Uint8Array, maxLength = LEVELDB_BLOCK_BYTES, budget: DecodeBudget = unbounded()): Uint8Array {
   const cursor = new Cursor(input);
   const length = cursor.varint32();
+  if (length > maxLength) throw Error(`snappy block claims ${length} bytes, more than the ${maxLength}-byte limit`);
+  if (length > input.length * SNAPPY_RATIO) throw Error(`snappy block claims ${length} bytes, more than ${input.length} compressed bytes can hold`);
+  budget.spend(length, "a snappy block");
   const out = new Uint8Array(length);
   let o = 0;
   while (!cursor.done) {
@@ -66,6 +105,7 @@ export function snappyDecompress(input: Uint8Array): Uint8Array {
       let len = tag >> 2;
       if (len >= 60) { const bytes = len - 59; len = 0; for (let i = 0; i < bytes; i++) len |= cursor.byte() << (8 * i); }
       len += 1;
+      if (len <= 0 || o + len > length) throw Error("bad snappy literal");
       out.set(cursor.take(len), o); o += len;
       continue;
     }
@@ -128,14 +168,15 @@ function readWriteBatches(bytes: Uint8Array, problems: string[]): Entry[] {
   return out;
 }
 
-function readBlock(bytes: Uint8Array, offset: number, size: number): Uint8Array {
-  if (offset + size + 5 > bytes.length) throw Error("block outside the table");
+function readBlock(bytes: Uint8Array, offset: number, size: number, limits: LevelDbLimits, budget: DecodeBudget): Uint8Array {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(size) || offset + size + 5 > bytes.length) throw Error("block outside the table");
   const data = bytes.subarray(offset, offset + size), type = bytes[offset + size]!;
   if (type === 0) return data;
-  if (type === 1) return snappyDecompress(data);
+  if (type === 1) return snappyDecompress(data, limits.maxBlockBytes, budget);
   throw Error(`unsupported block compression ${type}`);
 }
-function blockEntries(block: Uint8Array): { key: Uint8Array; value: Uint8Array }[] {
+/** A block's entries. Each key is expanded from its shared prefix only after its sizes are checked, and spent from `budget`. */
+function blockEntries(block: Uint8Array, budget: DecodeBudget): { key: Uint8Array; value: Uint8Array }[] {
   if (block.length < 4) throw Error("short block");
   const view = new DataView(block.buffer, block.byteOffset, block.length);
   const restarts = view.getUint32(block.length - 4, true);
@@ -147,26 +188,37 @@ function blockEntries(block: Uint8Array): { key: Uint8Array; value: Uint8Array }
   while (!cursor.done) {
     const shared = cursor.varint32(), unshared = cursor.varint32(), valueLength = cursor.varint32();
     if (shared > last.length) throw Error("bad shared key length");
+    const suffix = cursor.take(unshared), value = cursor.take(valueLength);
+    budget.spend(shared + unshared, "a block's keys");
     const key = new Uint8Array(shared + unshared);
-    key.set(last.subarray(0, shared)); key.set(cursor.take(unshared), shared);
-    out.push({ key, value: cursor.take(valueLength) });
+    key.set(last.subarray(0, shared)); key.set(suffix, shared);
+    out.push({ key, value });
     last = key;
   }
   return out;
 }
 const MAGIC = 0xdb4775248b80fb57n;
-/** Every internal entry of one table file. */
-export function readTable(bytes: Uint8Array): Entry[] {
+/**
+ * Every internal entry of one table file. Each distinct data block is decoded once, however many index entries point at it, and all
+ * decoding is spent from `budget` (VORTEX-02).
+ */
+export function readTable(bytes: Uint8Array, limits: LevelDbLimits = leveldbLimits(bytes.length),
+  budget: DecodeBudget = new DecodeBudget(limits.maxDecodedBytes)): Entry[] {
   if (bytes.length < 48) throw Error("table shorter than its footer");
   const footer = new Cursor(bytes, bytes.length - 48);
   footer.varint(); footer.varint(); // metaindex handle (filters; not needed)
   const indexOffset = Number(footer.varint()), indexSize = Number(footer.varint());
   if (new DataView(bytes.buffer, bytes.byteOffset + bytes.length - 8, 8).getBigUint64(0, true) !== MAGIC) throw Error("not a LevelDB table");
   const out: Entry[] = [];
-  for (const { value: handle } of blockEntries(readBlock(bytes, indexOffset, indexSize))) {
+  const decoded = new Set<string>();
+  for (const { value: handle } of blockEntries(readBlock(bytes, indexOffset, indexSize, limits, budget), budget)) {
     const h = new Cursor(handle);
     const offset = Number(h.varint()), size = Number(h.varint());
-    for (const { key, value } of blockEntries(readBlock(bytes, offset, size))) {
+    // A block listed again adds nothing: its entries are already here.
+    const id = `${offset}:${size}`;
+    if (decoded.has(id)) continue;
+    decoded.add(id);
+    for (const { key, value } of blockEntries(readBlock(bytes, offset, size, limits, budget), budget)) {
       if (key.length < 8) throw Error("internal key without trailer");
       const trailer = new DataView(key.buffer, key.byteOffset + key.length - 8, 8).getBigUint64(0, true);
       out.push({ key: key.subarray(0, key.length - 8), value: (trailer & 0xffn) === 1n ? value : null, seq: trailer >> 8n });
@@ -200,9 +252,14 @@ export function readManifest(bytes: Uint8Array): { tables: Set<number>; logNumbe
 
 const numberOf = (name: string) => Number(/^(\d+)\.(?:ldb|sst|log)$/i.exec(name)?.[1] ?? NaN);
 
-/** Read a LevelDB directory's live key/value pairs from its files (never its LOCK). */
-export function readLevelDb(files: readonly LevelDbFile[]): LevelDbRead {
+/**
+ * Read a LevelDB directory's live key/value pairs from its files (never its LOCK). Decoding is bounded by `limits` (by default
+ * `leveldbLimits` of the files' total size); a file that passes the budget is a gap.
+ */
+export function readLevelDb(files: readonly LevelDbFile[],
+  limits: LevelDbLimits = leveldbLimits(files.reduce((sum, file) => sum + (file.bytes?.length ?? 0), 0))): LevelDbRead {
   const gaps: string[] = [];
+  const budget = new DecodeBudget(limits.maxDecodedBytes);
   const byName = new Map(files.map(file => [file.name.toUpperCase(), file]));
   let mode: LevelDbRead["mode"] = "all-files";
   let liveTables: Set<number> | null = null, logNumber = 0;
@@ -230,7 +287,7 @@ export function readLevelDb(files: readonly LevelDbFile[]): LevelDbRead {
     if (!file.bytes) { gaps.push(`${file.name} could not be read.`); continue; }
     try {
       if (isLog) { const problems: string[] = []; readWriteBatches(file.bytes, problems).forEach(add); gaps.push(...problems.map(p => `${file.name}: ${p}`)); logsRead++; }
-      else { readTable(file.bytes).forEach(add); tablesRead++; }
+      else { readTable(file.bytes, limits, budget).forEach(add); tablesRead++; }
     } catch (error) { gaps.push(`${file.name}: ${(error as Error).message}`); }
   }
   if (liveTables) for (const number of liveTables)

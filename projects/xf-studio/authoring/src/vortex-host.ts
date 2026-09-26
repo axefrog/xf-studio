@@ -6,11 +6,17 @@
  * Two entry points:
  * - `readVortexManifests(gameRoot)`: cheap (one folder listing and the manifests), used by source discovery on every
  *   route to attribute game-folder files to the Vortex mods that deployed them.
- * - `inspectVortexSetup(gameRoot, env)`: the whole picture for diagnostics and first-run detection: which Vortex
+ * - `inspectVortexSetup(gameRoot, env, options)`: the whole picture for diagnostics and first-run detection: which Vortex
  *   installation deployed, its staging folder, active profile, each mod's name, version and Nexus ids, and whether the
- *   deployment is out of date.
+ *   deployment is out of date. Asynchronous and bounded (VORTEX-05): the state files are read without blocking the host, at most
+ *   `STATE_TOTAL_BYTES` together, and never past the caller's deadline (a problem report's time budget); a read is kept for the
+ *   same files, so preparing a report again doesn't read them again.
+ *
+ * Paths the game folder's manifest names are only reported, never opened, unless they are on a local drive (VORTEX-06): a
+ * `vortex.deployment.json` anyone can write must not make the host open a network share.
  */
-import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { readLevelDb, type LevelDbFile, type LevelDbRead } from "./leveldb-read";
 import type { WatchedPath } from "./source-discovery";
@@ -21,7 +27,24 @@ import { readVortexGameState, resolveVortexInstallPath, stateFromPairs, type Vor
 /** Vortex's id for Cyberpunk 2077 [source: cyberpunk2077_ext_redux `src/index.metadata.ts`]. */
 export const VORTEX_CYBERPUNK_GAME_ID = "cyberpunk2077";
 const MANIFEST_BYTES = 256 * 1024 * 1024;
-const STATE_FILE_BYTES = 512 * 1024 * 1024;
+/** The largest state file read, and the most read from one data folder together (database files or one backup). */
+export const STATE_FILE_BYTES = 256 * 1024 * 1024;
+export const STATE_TOTAL_BYTES = 512 * 1024 * 1024;
+
+/** How a state read is bounded. */
+export type VortexReadOptions = {
+  /** Stop reading state files at this time (on `now`'s clock); what isn't read by then is a gap. */
+  deadline?: number;
+  now?: () => number;
+  /** Most bytes read from one data folder's state (default `STATE_TOTAL_BYTES`). */
+  maxStateBytes?: number;
+};
+
+/**
+ * A folder XF Studio may open: an absolute path on a local drive (`C:\…`, or `/…` off Windows). A network share (`\\server\…`,
+ * `//server/…`) or a device path (`\\?\…`, `\\.\…`) is never opened for Vortex (VORTEX-06).
+ */
+export const isLocalFolder = (path: string) => /^[A-Za-z]:[\\/]/.test(path) || (path.startsWith("/") && !path.startsWith("//"));
 
 const lstatOrNull = (path: string) => { try { return lstatSync(path); } catch { return null; } };
 
@@ -81,43 +104,78 @@ export interface VortexStateRead {
 
 /** Observed in experiment 023: while Vortex runs, its MANIFEST and newest log can't be opened by another program. */
 const RUNNING_NOTE = "Vortex appears to be running: it keeps its newest changes in files no other program can open until it closes, so mods installed or enabled since it started may be missing.";
+const LARGE_NOTE = "Vortex's state is larger than XF Studio reads, so some of it was left out.";
+const TIME_NOTE = "Vortex's state couldn't all be read in the time a problem report allows, so some of it was left out.";
 
-/** Read one Vortex data folder's state for a game: the database files when they read cleanly, else the newest JSON backup. */
-export function readVortexStateFolder(folder: { path: string; kind: "user" | "shared" }, gameId: string): VortexStateRead | null {
+/** Reads kept by folder and the files' names, sizes and times, so the same files are not read and decoded again. */
+const stateReads = new Map<string, { stamp: string; read: VortexStateRead | null }>();
+const STATE_READS_KEPT = 4;
+
+/**
+ * Read one Vortex data folder's state for a game: the database files when they read cleanly, else the newest JSON backup when it
+ * is more complete: when the database lists no mods, or when the backup was written after the newest database file read (VORTEX-08).
+ * Asynchronous and bounded by `options` (VORTEX-05).
+ */
+export async function readVortexStateFolder(folder: { path: string; kind: "user" | "shared" }, gameId: string,
+  options: VortexReadOptions = {}): Promise<VortexStateRead | null> {
+  const now = options.now ?? Date.now, limit = options.maxStateBytes ?? STATE_TOTAL_BYTES;
+  const late = () => options.deadline !== undefined && now() >= options.deadline;
   const dbDir = join(folder.path, "state.v2");
-  let database: { read: LevelDbRead; game: VortexGameState } | null = null;
-  let names: string[] = [];
-  try { names = readdirSync(dbDir); } catch { /* no database here */ }
-  if (names.length) {
-    const files: LevelDbFile[] = names.filter(name => name.toUpperCase() !== "LOCK" && !/^LOG(\.old)?$/i.test(name)).map(name => {
-      try {
-        const path = join(dbDir, name), stat = statSync(path);
-        return { name, bytes: stat.isFile() && stat.size <= STATE_FILE_BYTES ? new Uint8Array(readFileSync(path)) : null };
-      } catch { return { name, bytes: null }; }
-    });
-    const read = readLevelDb(files);
-    const { state, problems } = stateFromPairs(read.entries);
-    const notes = files.some(file => !file.bytes) ? [RUNNING_NOTE] : [];
-    database = { read: { ...read, gaps: [...notes, ...read.gaps, ...problems.slice(0, 5)] }, game: readVortexGameState(state, gameId) };
-    if (!database.read.gaps.length) return { folder: folder.path, kind: folder.kind, source: "database", databaseMode: read.mode, gaps: [], backupTimeMs: null, current: true, game: database.game };
-  }
-  // Vortex keeps the database's newest writes in files it holds open while running; a backup may then be more complete.
   const backups = join(folder.path, "temp", "state_backups_full");
-  let newest: { path: string; time: number } | null = null;
-  try {
-    for (const name of readdirSync(backups).filter(name => name.toLowerCase().endsWith(".json"))) {
-      const time = statSync(join(backups, name)).mtimeMs;
-      if (!newest || time > newest.time) newest = { path: join(backups, name), time };
+  const listing = async (dir: string, keep: (name: string) => boolean) => {
+    let names: string[] = [];
+    try { names = (await readdir(dir)).filter(keep).sort(); } catch { /* none here */ }
+    return Promise.all(names.map(async name => {
+      try { const info = await stat(join(dir, name)); return { name, path: join(dir, name), file: info.isFile(), size: info.size, time: info.mtimeMs }; }
+      catch { return { name, path: join(dir, name), file: false, size: 0, time: 0 }; }
+    }));
+  };
+  const dbListing = await listing(dbDir, name => name.toUpperCase() !== "LOCK" && !/^LOG(\.old)?$/i.test(name));
+  const backupListing = (await listing(backups, name => name.toLowerCase().endsWith(".json"))).filter(entry => entry.file);
+  const stamp = JSON.stringify([gameId, limit, dbListing.map(entry => [entry.name, entry.file, entry.size, entry.time]),
+    backupListing.map(entry => [entry.name, entry.size, entry.time])]);
+  const kept = stateReads.get(folder.path);
+  if (kept?.stamp === stamp) return kept.read;
+  let complete = true;
+  const read = await (async (): Promise<VortexStateRead | null> => {
+    let database: { read: LevelDbRead; game: VortexGameState; time: number } | null = null;
+    if (dbListing.length) {
+      const notes = new Set<string>();
+      let total = 0, time = 0;
+      const files: LevelDbFile[] = [];
+      for (const entry of dbListing) {
+        if (!entry.file) { notes.add(RUNNING_NOTE); files.push({ name: entry.name, bytes: null }); continue; }
+        if (entry.size > STATE_FILE_BYTES || total + entry.size > limit) { notes.add(LARGE_NOTE); files.push({ name: entry.name, bytes: null }); continue; }
+        if (late()) { notes.add(TIME_NOTE); complete = false; files.push({ name: entry.name, bytes: null }); continue; }
+        try { files.push({ name: entry.name, bytes: new Uint8Array(await readFile(entry.path)) }); total += entry.size; time = Math.max(time, entry.time); }
+        catch { notes.add(RUNNING_NOTE); files.push({ name: entry.name, bytes: null }); }
+      }
+      const levelDb = readLevelDb(files);
+      const { state, problems } = stateFromPairs(levelDb.entries);
+      // A file listed but left unread shows as a gap of its own; the notes say why.
+      database = { read: { ...levelDb, gaps: [...notes, ...levelDb.gaps, ...problems.slice(0, 5)] }, game: readVortexGameState(state, gameId), time };
+      if (!database.read.gaps.length) return { folder: folder.path, kind: folder.kind, source: "database", databaseMode: levelDb.mode, gaps: [], backupTimeMs: null, current: true, game: database.game };
     }
-  } catch { /* no backups */ }
-  if (newest && (!database || !database.game.mods.size)) {
-    try {
-      const game = readVortexGameState(JSON.parse(readFileSync(newest.path, "utf8")), gameId);
-      return { folder: folder.path, kind: folder.kind, source: "backup", databaseMode: null,
-        gaps: database ? [...database.read.gaps, "The database could not be read completely; this is Vortex's last state backup."] : [], backupTimeMs: newest.time, current: false, game };
-    } catch { /* fall through */ }
+    // Vortex keeps the database's newest writes in files it holds open while running; a backup may then be more complete: when the
+    // database lists no mods, or when the backup is newer than every database file that could be read (VORTEX-08).
+    const newest = backupListing.reduce<(typeof backupListing)[number] | null>((best, entry) => !best || entry.time > best.time ? entry : best, null);
+    if (newest && (!database || !database.game.mods.size || newest.time > database.time) && newest.size <= Math.min(STATE_FILE_BYTES, limit)) {
+      if (late()) complete = false;
+      else try {
+        const game = readVortexGameState(JSON.parse(await readFile(newest.path, "utf8")), gameId);
+        return { folder: folder.path, kind: folder.kind, source: "backup", databaseMode: null,
+          gaps: database ? [...database.read.gaps, "The database could not be read completely; this is Vortex's last state backup."] : [], backupTimeMs: newest.time, current: false, game };
+      } catch { /* fall through */ }
+    }
+    return database ? { folder: folder.path, kind: folder.kind, source: "database", databaseMode: database.read.mode, gaps: database.read.gaps, backupTimeMs: null, current: false, game: database.game } : null;
+  })();
+  // A read cut short by the deadline is not kept: the next report, with time to spare, reads the rest.
+  if (complete) {
+    stateReads.delete(folder.path);
+    stateReads.set(folder.path, { stamp, read });
+    while (stateReads.size > STATE_READS_KEPT) stateReads.delete(stateReads.keys().next().value!);
   }
-  return database ? { folder: folder.path, kind: folder.kind, source: "database", databaseMode: database.read.mode, gaps: database.read.gaps, backupTimeMs: null, current: false, game: database.game } : null;
+  return read;
 }
 
 export interface VortexSetup {
@@ -142,13 +200,18 @@ export interface VortexSetup {
 
 const sameFolder = (a: string | null, b: string | null) => !!a && !!b && a.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase() === b.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
 
-/** The whole read-only picture of a Vortex-managed game folder. */
-export function inspectVortexSetup(gameRoot: string, env: (name: string) => string | undefined, gameId = VORTEX_CYBERPUNK_GAME_ID): VortexSetup {
+/** The whole read-only picture of a Vortex-managed game folder, bounded by `options` (VORTEX-05). */
+export async function inspectVortexSetup(gameRoot: string, env: (name: string) => string | undefined, options: VortexReadOptions = {},
+  gameId = VORTEX_CYBERPUNK_GAME_ID): Promise<VortexSetup> {
   const manifestRead = readVortexManifests(gameRoot);
   const problems = [...manifestRead.problems];
   const deployment = manifestRead.deployment;
   const primary = deployment?.manifests.find(row => row.modType === "")?.manifest ?? deployment?.manifests[0]?.manifest ?? null;
-  const states = vortexDataFolders(env).map(folder => readVortexStateFolder(folder, gameId)).filter((row): row is VortexStateRead => !!row);
+  const states: VortexStateRead[] = [];
+  for (const folder of vortexDataFolders(env)) {
+    const row = await readVortexStateFolder(folder, gameId, options);
+    if (row) states.push(row);
+  }
   // The installation that deployed is the one whose instance id the manifest carries; otherwise the one managing this folder.
   const state = states.find(row => primary?.instance && row.game.instanceId === primary.instance)
     ?? states.find(row => sameFolder(row.game.gamePath, gameRoot)) ?? null;
@@ -156,8 +219,10 @@ export function inspectVortexSetup(gameRoot: string, env: (name: string) => stri
   const stagingPath = primary?.stagingPath ?? (state && userData
     ? resolveVortexInstallPath(state.game.installPathSetting, gameId, userData, env("USERNAME") ?? "", join, isAbsolute) : null);
   let stagingMarker: VortexSetup["stagingMarker"] = null;
-  if (stagingPath) try {
-    const marker = JSON.parse(readFileSync(join(stagingPath, "__vortex_staging_folder"), "utf8"));
+  // The staging folder may come from the game folder's manifest, which anyone can write: only a local folder is opened (VORTEX-06).
+  if (stagingPath && !isLocalFolder(stagingPath)) problems.push("The staging folder isn't on a local drive, so XF Studio didn't look inside it.");
+  else if (stagingPath) try {
+    const marker = JSON.parse(await readFile(join(stagingPath, "__vortex_staging_folder"), "utf8"));
     stagingMarker = { instance: typeof marker?.instance === "string" ? marker.instance : null, game: typeof marker?.game === "string" ? marker.game : null };
   } catch { /* absent or unreadable */ }
   if (primary?.gameId && primary.gameId !== gameId) problems.push(`The deployment manifest belongs to Vortex game "${primary.gameId}".`);

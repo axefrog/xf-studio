@@ -1,7 +1,7 @@
 // The diagnostics cleanup (code-health DIAG-01..04, 06..09, 12): what a saved report may hold, redaction of names the shared
 // patterns can't see the end of, a log that never throws, a V's resolution that survives its size, and the page's forwards.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -297,8 +297,14 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
   writeFileSync(join(game, "mods", "My RED Mod", "archives", "red.archive"), "red");
   // Where the game never loads archives from: a same-named file there must not be found by walking the game folder.
   writeFileSync(join(game, "bin", "x64", "deep", "stray.archive"), "stray");
+  // Deployed by Vortex, and still the file it deployed: the manifest's time is the file's (VORTEX-03).
+  const DEPLOYED_MS = 1727000000000;
+  utimesSync(join(mods, "vortexed.archive"), DEPLOYED_MS / 1000, DEPLOYED_MS / 1000);
   writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ version: 1, instance: "i1", gameId: "cyberpunk2077",
-    files: [{ relPath: "archive\\pc\\mod\\vortexed.archive", source: "Vortexed Mod-1-0", time: 1 }] }));
+    files: [{ relPath: "archive\\pc\\mod\\vortexed.archive", source: "Vortexed Mod-1-0", time: DEPLOYED_MS },
+      { relPath: "archive\\pc\\mod\\replaced.archive", source: "Replaced Mod-2-0", time: DEPLOYED_MS }] }));
+  // Listed by the manifest, but replaced by hand since.
+  writeFileSync(join(mods, "replaced.archive"), "someone else's bytes");
   const settings: LocalSettings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" };
   const winners = [
     { archive: "basegame_4_appearance.archive", provider: "Installed game", group: "content", alternatives: ["a.archive (mod, Installed game)"] },
@@ -319,6 +325,45 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
     expect(byName.get("red.archive (in the game folder)")!.archives[0]).toMatchObject({ bytes: 3, identifiedBy: "sha-256" });
     // The game folder isn't walked: a file outside the load folders stays not found.
     expect(byName.get("stray.archive (in the game folder)")!.archives[0]).toMatchObject({ bytes: null, identifiedBy: "not found" });
+  });
+
+  test("a file replaced since Vortex deployed it is its own game-folder entry, never credited to the Vortex mod (VORTEX-03)", async () => {
+    // Provider named either way: the game folder, or (by source discovery) the Vortex mod's staging name.
+    for (const provider of ["Installed game", "Replaced Mod-2-0"]) {
+      const found = await involvedMods([{ archive: "replaced.archive", provider, group: "mod", alternatives: [] }], settings, none);
+      expect(found.map(mod => [mod.name, mod.kind, mod.source?.site ?? null])).toEqual(
+        provider === "Installed game" ? [["replaced.archive (in the game folder)", "game-folder", null]] : [["Replaced Mod-2-0", "unknown", null]]);
+    }
+    const kept = await involvedMods([{ archive: "vortexed.archive", provider: "Vortexed Mod-1-0", group: "mod", alternatives: [] }], settings, none);
+    expect(kept.map(mod => [mod.name, mod.kind])).toEqual([["Vortexed Mod-1-0", "vortex-mod"]]);
+  });
+
+  test("on the MO2 route, an MO2 mod stays an MO2 mod when a leftover manifest names a Vortex mod of the same name (VORTEX-04)", async () => {
+    const mo2 = join(root, "split-mo2");
+    mkdirSync(join(mo2, "mods", "Vortexed Mod-1-0", "archive", "pc", "mod"), { recursive: true });
+    mkdirSync(join(mo2, "profiles", "Default"), { recursive: true });
+    writeFileSync(join(mo2, "mods", "Vortexed Mod-1-0", "archive", "pc", "mod", "vortexed.archive"), "the MO2 mod's copy");
+    writeFileSync(join(mo2, "mods", "Vortexed Mod-1-0", "meta.ini"), "[General]\nmodid=4242\nfileid=77\nversion=3.0\n");
+    const onMo2: LocalSettings = { ...settings, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Default" };
+    const found = await involvedMods([{ archive: "vortexed.archive", provider: "Vortexed Mod-1-0", group: "mod", alternatives: [] }], onMo2, none);
+    expect(found.map(mod => [mod.name, mod.kind, mod.version, mod.status])).toEqual([["Vortexed Mod-1-0", "mo2-mod", "3.0", "re-downloadable"]]);
+    expect(found[0]!.archives[0]!.path).toBe(join(mo2, "mods", "Vortexed Mod-1-0", "archive", "pc", "mod", "vortexed.archive"));
+  });
+
+  test("a hash still running when the budget ends stops there, and is finished in the background (DIAG-24)", async () => {
+    const big = join(mods, "big.archive");
+    writeFileSync(big, Buffer.alloc(8 * 1024 * 1024, 7));
+    // A clock that moves a millisecond each time it is read: the budget ends while the file's first chunks are hashed.
+    let clock = 0;
+    const now = () => clock++;
+    const first = await involvedMods([{ archive: "big.archive", provider: "Installed game", group: "mod", alternatives: [] }], settings, none,
+      { hashBudgetMs: 4, now });
+    expect(first[0]!.archives[0]).toMatchObject({ sha256: null, identifiedBy: "size and date" });
+    // It was stopped part-way, not read to the end: fewer clock reads than the file has chunks.
+    expect(clock).toBeLessThan(12);
+    await hashingSettled();
+    const again = await involvedMods([{ archive: "big.archive", provider: "Installed game", group: "mod", alternatives: [] }], settings, none, { hashBudgetMs: 0 });
+    expect(again[0]!.archives[0]).toMatchObject({ identifiedBy: "sha-256", sha256: new Bun.CryptoHasher("sha256").update(readFileSync(big)).digest("hex") });
   });
 
   test("out of time, archives are identified by size and date, with progress, and the next report has their hashes", async () => {

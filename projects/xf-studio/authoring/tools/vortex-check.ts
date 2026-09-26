@@ -1,6 +1,7 @@
 /** Read-only Vortex check for one game folder: is it Vortex-managed, which installation and profile deployed it, which mod
  * each deployed file came from (with Nexus ids when Vortex's state is readable), and whether the deployment is out of date.
- * Never starts Vortex and writes nothing. Paths are left out of the output, which names mods and files only.
+ * Never starts Vortex and writes nothing. Paths and the Vortex profile's name are left out of the output (testers paste it into
+ * public reports, VORTEX-07), which names mods and files only.
  *
  * bun tools/vortex-check.ts --game-root <absolute> [--files]
  */
@@ -13,7 +14,7 @@ const args = process.argv.slice(2);
 const at = args.indexOf("--game-root");
 const gameRoot = at >= 0 ? args[at + 1] : undefined;
 if (!gameRoot) throw Error("Usage: bun tools/vortex-check.ts --game-root <absolute> [--files]");
-const setup = inspectVortexSetup(gameRoot, name => process.env[name]);
+const setup = await inspectVortexSetup(gameRoot, name => process.env[name]);
 const scan = discoverSources({ ...defaultLocalSettings(), gameRoot, launchRoute: "direct" });
 const gameFiles = scan.candidates.filter(c => c.provider === "game").map(c => ({ virtualPath: c.virtualPath, modifiedMs: c.modifiedMs }));
 const report = setup.deployment ? compareWithDeployment(setup.deployment, gameFiles, ["archive/pc/"], setup.state?.game.mods ?? null, setup.state?.current ?? false) : null;
@@ -25,7 +26,7 @@ console.log(JSON.stringify({
   manifests: setup.manifests.map(({ instance: _instance, ...row }) => ({ ...row, deploymentTime: row.deploymentTimeMs ? new Date(row.deploymentTimeMs).toISOString() : null })),
   state: setup.state ? { location: setup.state.kind, source: setup.state.source, databaseMode: setup.state.databaseMode, current: setup.state.current, gaps: setup.state.gaps,
     backupTime: setup.state.backupTimeMs ? new Date(setup.state.backupTimeMs).toISOString() : null,
-    profile: game?.profile?.name ?? game?.profile?.id ?? null, profileActive: game?.profileActive, installedMods: game?.mods.size,
+    profileFound: !!game?.profile, profileActive: game?.profileActive, installedMods: game?.mods.size,
     deploymentMethod: game?.deploymentMethod } : null,
   instanceMatches: setup.instanceMatches, managesThisFolder: setup.managesThisFolder, stagingMarkerFound: !!setup.stagingMarker,
   archiveFolder: report ? { deployedFilesByMod: Object.fromEntries([...mods].sort(([a], [b]) => a.localeCompare(b)).map(([id, count]) => {
