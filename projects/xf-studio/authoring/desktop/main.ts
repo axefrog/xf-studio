@@ -9,8 +9,8 @@ import { detectWebView2, WEBVIEW2_DOWNLOAD_URL } from "./webview2";
 import { ensureWebView2 } from "./webview2-install";
 import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS } from "./startup-watchdog";
 
-// The packaged app has no console: startup facts and failures go to desktop.log
-// in the app's data folder, and the user never faces a silent blank window.
+// The packaged app has no console: startup facts and failures go to the structured
+// diagnostics log in the app's data folder, and the user never faces a silent blank window.
 const log = createHostLog(Utils.paths.userData);
 let metadata: unknown;
 try { metadata = JSON.parse(readFileSync(resolve(PATHS.RESOURCES_FOLDER, "version.json"), "utf8")); }
@@ -44,7 +44,7 @@ const webView2 = runtime.ready ? runtime.status : detectWebView2();
 log.write(`WebView2 ${webView2.version ?? "fixed"} via ${webView2.source}${runtime.ready && runtime.installed ? " (installed just now)" : ""}.`);
 
 async function fatal(message: string, detail: string, error?: unknown) {
-  log.write(`${message} ${error instanceof Error ? error.stack ?? error.message : error ?? ""}`);
+  log.failure(message, error);
   await Utils.showMessageBox({ type: "error", title: "XF Studio", message, detail, buttons: ["Close"] });
   Utils.quit(1);
 }
@@ -54,13 +54,12 @@ let app: ReturnType<typeof createDesktopServer>;
 try {
   app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"),
     resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"), undefined, undefined, undefined,
-    { openExternal: url => Utils.openExternal(url) });
+    { openExternal: url => Utils.openExternal(url), webView2: webView2.version });
 } catch (error) {
   await fatal("XF Studio couldn't start.", `Your data folder may be unavailable: ${Utils.paths.userData}. ` +
     `Details are in ${log.path}.`, error);
   throw error;
 }
-app.onReport(message => log.write(message));
 log.write(`Loopback server ready on 127.0.0.1:${app.port}.`);
 const origin = `http://127.0.0.1:${app.port}`;
 const window = new BrowserWindow({

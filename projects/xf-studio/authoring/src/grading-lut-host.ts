@@ -23,6 +23,7 @@ import { CREATOR_ENVIRONMENT, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_FILE, GRADIN
 import type { Installation, InstallationOptions } from "./resolver-host";
 import { InstallationRegistry, installations } from "./installation-registry";
 import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
+import { hostFailure, hostTrace } from "./diagnostics/host-log";
 
 export { GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT } from "./grading-lut";
 
@@ -185,10 +186,12 @@ export class GradingLutHost {
         // A transient failure that left the neutral grade says so plainly, and when XF Studio tries again.
         const source = result.failure !== null && result.source.kind === "neutral" ? { ...result.source, note: failureNote(result.failure, retry) } : result.source;
         entry.state = { schema: GRADING_LUT_STATE_SCHEMA, phase: "ready", source, file: result.file };
+        hostTrace().event("lut", "prepared", { source, file: result.file, failure: result.failure === null ? null : String(result.failure) });
       })
       .catch(error => {
         if (error instanceof Superseded || controller.signal.aborted) return;
         this.options.log?.(`Colour grading LUT not prepared: ${(error as Error)?.stack ?? error}`);
+        hostFailure("lut", "lut_failed", "The creator lighting's colour grading couldn't be prepared, so a neutral grade is shown.", error, "warn");
         entry.state = { schema: GRADING_LUT_STATE_SCHEMA, phase: "ready", file: null, source: neutralSource(failureNote(error, this.scheduleRetry(entry))) };
       });
   }

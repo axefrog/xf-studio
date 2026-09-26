@@ -73,4 +73,4 @@ writeFileSync(resolve(root, "XFStudio-first-run.wsb"), `<Configuration>
 `);
 console.log(`Prepared ${basename(zip)} (SHA-256 ${digest}).`);
 console.log(`WebView2: ${network && !installWebView2 ? "not installed; networking on so the app's own prompt can install it" : installWebView2 ? "installed from Microsoft inside the sandbox (networking on)" : hostWebView2 ? `host runtime ${hostWebView2} mapped read-only` : "none (the sandbox default)"}; ${keepOpen ? "stays open" : "shuts down when done"}.`);
-console.log("Open artifacts/sandbox-trial/XFStudio-first-run.wsb; report.json, desktop.log and screenshots land in artifacts/sandbox-trial/results/.");
+console.log("Open artifacts/sandbox-trial/XFStudio-first-run.wsb; report.json, diagnostics-log.jsonl and screenshots land in artifacts/sandbox-trial/results/.");

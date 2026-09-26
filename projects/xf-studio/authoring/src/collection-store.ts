@@ -4,6 +4,7 @@ import { LibraryError } from "./library-store";
 import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection } from "./platform/api";
 import { NEWER_LOOKS_LIBRARY_MESSAGE } from "./collection-workspace";
 import type { PartRegistry } from "./platform/core/document";
+import { hostFailure } from "./diagnostics/host-log";
 
 /**
  * Why a save that needs `xfs/collection-2` is refused. The released 0.1.0-alpha.1 lists a library
@@ -141,7 +142,7 @@ export async function collectionRequest(request: Request, library: CollectionLib
     return json(library.save(value), 200);
   } catch (e) {
     if (e instanceof LibraryError) return json({ error: e.message }, e.status);
-    console.error("Collection request failed", e);
+    hostFailure("library", "collection_request_failed", "The collection library couldn't be read or written.", e);
     return json({ error: "Collection unavailable; your browser draft is still available." }, 500);
   }
 }

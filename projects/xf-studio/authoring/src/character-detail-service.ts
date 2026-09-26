@@ -46,6 +46,8 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, parseCharacterDe
 import { renderTemplate, templateRequired } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
+import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
+import { resolutionTrace } from "./diagnostics/resolution-trace";
 
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
@@ -68,6 +70,8 @@ export type PrepareCharacterOptions = {
   signal?: AbortSignal;
   progress?: (step: CharacterDetailStep, index: number, total: number, label: string) => void;
   log?: (message: string) => void;
+  /** The rolling diagnostics window (docs/diagnostics.md): the request, the resolution and the outcome, as references. */
+  trace?: DiagnosticTrace;
   /**
    * What earlier preparations on the same installation made (the host's, per installation fingerprint). Without one, everything is
    * resolved, read and exported afresh, and the installation is opened with `open`.
@@ -388,6 +392,11 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
   const { graph, summary } = installation;
+  // The rolling diagnostics window (docs/diagnostics.md): the request, what the installation looks like, the resolution and the outcome.
+  const trace = options.trace ?? NO_TRACE;
+  graph.trace = trace;
+  trace.event("character", "prepare", { source: request.source, bodyGender: request.bodyGender, choices: request.choices ?? [],
+    appearances: request.source === "save" ? request.appearances.length : 0, installation: summary });
   // What this preparation adds to the cache, and the fetcher's count of failures that may not repeat: if it grows, or WolvenKit fails
   // on an archive, the preparation is degraded and what it added is forgotten (PIPE-53).
   const mark = cache.mark(), transientBefore = transientFailures(installation);
@@ -420,6 +429,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   }
   cancelled();
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
+  trace.event("character", "resolved", resolutionTrace(resolved));
   cancelled();
   const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template)));
@@ -805,5 +815,9 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   }
   log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
+  trace.event("character", "prepared", { record: recordName, degraded, note: choicesNote ?? null, timings, slots: record.slots,
+    components: record.components.map(item => ({ slot: item.slot, option: item.option, definition: item.definition, component: item.component,
+      geometry: item.geometry.depotPath, sources: item.geometry.sources.map(source => ({ path: source.depotPath, archive: source.archive ?? null, provider: source.provider ?? null })), chunks: item.chunks })),
+    loadErrors: [...graph.loadErrors].slice(0, 50), ambiguities: [...graph.observedAmbiguities.values()].slice(0, 50) });
   return { record, recordFile: recordName, degraded, ...(choicesNote ? { note: choicesNote } : {}) };
 }

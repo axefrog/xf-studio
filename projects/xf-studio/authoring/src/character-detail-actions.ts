@@ -16,6 +16,7 @@ import { sameCharacter, type CharacterRequest } from "./character-detail-request
 import type { DetailSlot, DetailSlotState } from "./render-detail";
 import { DETAIL_SLOTS } from "./render-detail";
 import { withSlotLimits, type DetailLimit, type DetailNotice, type SlotLimits } from "./detail-limits";
+import { pageFailure } from "./diagnostics/page-sink";
 
 /** The host's preparation state (character-detail-host.ts), as the transport returns it. */
 export type HostCharacterState = {
@@ -123,8 +124,9 @@ export class CharacterDetailActions {
     }
     return this.follow(request, controller.signal, sameV).catch(error => {
       if (controller.signal.aborted || this.disposed) return;
-      console.error(error);
       const notice = (error as { notice?: DetailNotice })?.notice ?? null;
+      // Logged with a reference; shown with "Report this problem" unless it's a known notice (a host of another version).
+      pageFailure("character", sameV ? "change_failed" : "details_failed", sameV ? UPDATE_FAILED : FAILED, error, { notify: !notice, source: "Your V" });
       if (sameV && !notice) {
         // The shown V stays as it was; the change is explained, not silently reverted (CORE-63). `retry` tries it again.
         if (this.current?.controller === controller) this.current = null;
@@ -150,6 +152,8 @@ export class CharacterDetailActions {
     }
     if (signal.aborted) return;
     if (state.phase === "failed" || !state.record) {
+      // The host logged its failure with the details; this links the notice to it (docs/diagnostics.md).
+      if (!updating) pageFailure("character", "details_not_prepared", state.message || FAILED, undefined, { notify: true, source: "Your V" });
       if (updating) throw Object.assign(Error(state.message || "The change could not be prepared."), { plain: state.message ? `${UPDATE_FAILED} ${state.message}` : UPDATE_FAILED });
       this.port.clear();
       this.shown = null;
