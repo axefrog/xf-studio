@@ -1,13 +1,14 @@
 import { shortcutLabel } from "../input-bindings";
 import type { CollectionOutcome, CollectionRequest } from "../collection-service";
 import type { ValueSchema } from "../studio-action-descriptors";
-import type { StudioAction } from "../studio-application";
+import type { StudioAction, StudioDispatchResult } from "../studio-application";
 import type { StudioFileAction, StudioFileOutcome } from "../studio-file-operations";
 import type { EyeMakeupFacade, StudioPresentationPort } from "../studio-presentation";
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
 import { AnchorRegistry } from "./guidance/anchors";
-import { activitySource } from "./views";
+import { activitySource, viewCatalogue, type ViewCatalogue } from "./views/contribution";
+import { SHELL_VIEW } from "./views/shell";
 
 export type Port = StudioPresentationPort<HTMLElement>;
 type Ret<T extends (...args: never[]) => unknown> = ReturnType<T>;
@@ -44,9 +45,11 @@ export class Frame {
   get history() { return this.once("history", () => this.port.authoring.historyTimeline()); }
 }
 export type FrameState = Frame;
+/** How a dispatch reports: `success` is recorded, a failure toasts unless `quiet` (with `failure` instead of its reason). */
+export type DispatchFeedback = { success?: string; quiet?: boolean; failure?: string };
 
-/** The activity-log source an action kind reports under, from the view contributions (`views/`). */
-export const sourceLabel = (kind: string) => activitySource(kind);
+/** The shell's catalogue alone: what a runtime built without a composition (fixtures) reports under. */
+const SHELL_CATALOGUE = viewCatalogue([SHELL_VIEW]);
 
 /** Shared presentation services. Holds no authored state of its own. */
 export class StudioRuntime {
@@ -59,7 +62,11 @@ export class StudioRuntime {
   readonly finishes: Ret<EyeMakeupFacade["finishCatalogue"]>;
   readonly glitterModels: Ret<EyeMakeupFacade["glitterModelCatalogue"]>;
   private listeners = new Set<() => void>();
-  constructor(readonly port: Port, readonly feedback: Feedback) {
+  /**
+   * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
+   *   composition root handed `mountStudio`.
+   */
+  constructor(readonly port: Port, readonly feedback: Feedback, readonly views: ViewCatalogue = SHELL_CATALOGUE) {
     this.descriptors = port.authoring.actionDescriptors();
     this.eyeMakeup = port.feature("eye-makeup");
     this.finishes = this.eyeMakeup.finishCatalogue();
@@ -75,16 +82,24 @@ export class StudioRuntime {
   }
   /** The catalogue's finish a layer's stored finish name means (its ID, or a stored alias such as older recipes' `satin`). */
   finishOf(finish: string) { return this.finishes.find(item => item.id === finish || item.stored.includes(finish)); }
+  /** The activity-log source an action kind reports under, from the view contributions. */
+  sourceLabel(kind: string) { return activitySource(kind, this.views); }
   /** Validated dispatch. Failures surface their typed reason; nothing is retried silently. */
-  dispatch(action: StudioAction, options: { success?: string; quiet?: boolean; failure?: string } = {}) {
-    const result = this.port.authoring.dispatch(action);
+  dispatch(action: StudioAction, options: DispatchFeedback = {}) {
+    return this.report(action.kind, this.port.authoring.dispatch(action), options);
+  }
+  /**
+   * The feedback for a dispatch result, however it was dispatched (the port, or a feature's facade):
+   * a failure toasts its typed reason unless quiet, a success records `options.success`. Returns whether it succeeded.
+   */
+  report(kind: string, result: StudioDispatchResult, options: DispatchFeedback = {}) {
     if (!result.ok) {
       // Something not available yet is information, not an error.
-      if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : result.code === "asset_unavailable" ? "info" : "error", sourceLabel(action.kind),
+      if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : result.code === "asset_unavailable" ? "info" : "error", this.sourceLabel(kind),
         options.failure ?? result.message);
       return false;
     }
-    if (options.success) this.feedback.record("success", sourceLabel(action.kind), options.success);
+    if (options.success) this.feedback.record("success", this.sourceLabel(kind), options.success);
     return true;
   }
   async file(action: StudioFileAction, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<StudioFileOutcome> {

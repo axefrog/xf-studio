@@ -1,4 +1,4 @@
-import { PANEL_IDS, type StudioPanelId } from "../layout-defaults";
+import type { StudioPanelId } from "../layout-defaults";
 
 /**
  * Named guidance anchors. Tours, spotlights and help point at these stable IDs, never at CSS
@@ -31,17 +31,27 @@ export type AnchorInfo = Readonly<{ id: AnchorId; label: string; panel?: StudioP
 
 export const panelAnchor = (panel: StudioPanelId): PanelAnchorId => `panel.${panel}`;
 
-/** Every anchor a tour may name: the control anchors plus one per panel. */
-export function anchorCatalogue(): AnchorInfo[] {
+const panelAnchorInfo = (panel: StudioPanelId): AnchorInfo => ({ id: panelAnchor(panel), label: `${panel} panel`, panel });
+/** Every anchor a tour may name: the control anchors plus one per contributed panel (`panelIds`, from the catalogue). */
+export function anchorCatalogue(panelIds: readonly StudioPanelId[]): AnchorInfo[] {
   return [
     ...Object.entries(CONTROL_ANCHORS).map(([id, info]) => ({ id: id as ControlAnchorId, label: info.label,
       ...("panel" in info ? { panel: info.panel as StudioPanelId } : {}) })),
-    ...PANEL_IDS.map(panel => ({ id: panelAnchor(panel), label: `${panel} panel`, panel })),
+    ...panelIds.map(panelAnchorInfo),
   ];
 }
-const INFO = new Map(anchorCatalogue().map(info => [info.id, info]));
-export const isAnchorId = (id: string): id is AnchorId => INFO.has(id as AnchorId);
-export const anchorInfo = (id: AnchorId): AnchorInfo | undefined => INFO.get(id);
+const CONTROL_INFO = new Map(anchorCatalogue([]).map(info => [info.id, info]));
+/** A panel's anchor is `panel.<panel ID>`; panel IDs are lower-case words, dot-separated for a feature's panels. */
+const PANEL_ANCHOR = /^panel\.([a-z][\w-]*(?:\.[a-z][\w-]*)?)$/;
+/**
+ * A control anchor, or any panel's anchor. Which panels exist is the catalogue's to say (the shell registers
+ * one anchor per contributed panel; guidance tests check tours against the composed catalogue).
+ */
+export const isAnchorId = (id: string): id is AnchorId => CONTROL_INFO.has(id as AnchorId) || PANEL_ANCHOR.test(id);
+export const anchorInfo = (id: AnchorId): AnchorInfo | undefined => {
+  const panel = PANEL_ANCHOR.exec(id)?.[1];
+  return panel ? panelAnchorInfo(panel) : CONTROL_INFO.get(id);
+};
 
 /** Anything with a layout box; `HTMLElement` in the app, plain objects in tests. */
 export type AnchorTarget = { readonly isConnected: boolean; getBoundingClientRect(): { left: number; top: number; width: number; height: number } };

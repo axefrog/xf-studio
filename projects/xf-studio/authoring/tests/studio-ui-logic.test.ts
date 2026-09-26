@@ -5,7 +5,10 @@ import { convertToBezier } from "../src/engines/layered-makeup/bezier-path";
 import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { matchCommands } from "../src/studio-ui/commands";
 import { libraryState } from "../src/studio-ui/panels/collection";
-import { Frame, sourceLabel, type Port } from "../src/studio-ui/runtime";
+import { Frame, type Port } from "../src/studio-ui/runtime";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
+import { activitySource } from "../src/studio-ui/views/contribution";
+const sourceLabel = (kind: string) => activitySource(kind, STUDIO_CATALOGUE);
 import { studioShortcut } from "../src/studio-ui/shortcuts";
 import { CONTEXT_LABELS, undoHint } from "../src/studio-ui/target-menus";
 

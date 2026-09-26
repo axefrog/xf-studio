@@ -14,6 +14,8 @@ on:
       - "projects/xf-studio/authoring/public/studio.css"
       - "projects/xf-studio/authoring/tools/build-style-guide.ts"
       - "projects/xf-studio/authoring/src/studio-ui/**"
+      - "projects/xf-studio/authoring/src/features/*/view/**"
+      - "projects/xf-studio/authoring/src/compose/views.ts"
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
@@ -24,6 +26,8 @@ on:
       - "projects/xf-studio/authoring/public/studio.css"
       - "projects/xf-studio/authoring/tools/build-style-guide.ts"
       - "projects/xf-studio/authoring/src/studio-ui/**"
+      - "projects/xf-studio/authoring/src/features/*/view/**"
+      - "projects/xf-studio/authoring/src/compose/views.ts"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

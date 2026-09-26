@@ -1,4 +1,7 @@
-import type { FinishDescriptor } from "../../engines/layered-makeup/finish-catalogue";
+import type { EyeMakeupFacade } from "../../studio-presentation";
+
+/** A finish as the port's finish catalogue publishes it. */
+type FinishDescriptor = ReturnType<EyeMakeupFacade["finishCatalogue"]>[number];
 
 /**
  * Help and tour words about which finishes can go into a mod, built from the finish catalogue the port

@@ -149,7 +149,8 @@ test("Hint overlays never take layout space: they cannot resize a viewport canva
   expect(rule(".uv-stage")).toMatch(/--uv-safe-bottom: calc\(var\(--sp-4\) \+ var\(--hint-strip-max\)/);
   expect(css).toContain('@property --uv-safe-bottom { syntax: "<length>"');
   // Both viewport panels mount their strips inside those overlays, never as layout children.
-  const panels = readFileSync(resolve(import.meta.dir, "../src/studio-ui/panels/viewports.ts"), "utf8");
+  const panels = readFileSync(resolve(import.meta.dir, "../src/studio-ui/panels/viewports.ts"), "utf8") +
+    readFileSync(resolve(import.meta.dir, "../src/features/eye-makeup/view/uv.ts"), "utf8");
   expect(panels.match(/h\("div", \{ class: "viewport-bottom" \}, hints\.strip/g)?.length).toBe(2);
   expect(panels).not.toMatch(/element\.append\([^)]*hints\.strip/);
 });

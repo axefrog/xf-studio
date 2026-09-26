@@ -9,12 +9,12 @@ import { readFileSync } from "node:fs";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { group, locate, parseTree, split, type DockTree } from "../src/studio-ui/dock/layout";
 import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
-import { CLOSED_PANEL_HOMES, defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
-import { PANEL_META } from "../src/studio-ui/panel-meta";
-import { activitySource, PANEL_IDS, STUDIO_CATALOGUE, STUDIO_VIEWS, viewCatalogue } from "../src/studio-ui/views";
-import type { ViewContribution } from "../src/studio-ui/views/contribution";
-import { EYE_MAKEUP_GRANDFATHERED_PANELS, EYE_MAKEUP_VIEW } from "../src/studio-ui/views/eye-makeup";
-import { PANEL_FACTORIES } from "../src/studio-ui/views/panels";
+import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
+import { PANEL_IDS, PANEL_META, STUDIO_CATALOGUE, STUDIO_VIEWS } from "../src/compose/views";
+import { activitySource as sourceIn, viewCatalogue, type ViewContribution } from "../src/studio-ui/views/contribution";
+const activitySource = (kind: string) => sourceIn(kind, STUDIO_CATALOGUE);
+import { EYE_MAKEUP_GRANDFATHERED_PANELS, EYE_MAKEUP_VIEW } from "../src/features/eye-makeup/view/contribution";
+import { PANEL_FACTORIES } from "../src/compose/view-panels";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
 
 /** The factory layouts exactly as the hand-kept `layout-defaults.ts` built them before step 5 (481c3ad). */
@@ -39,9 +39,9 @@ const area = { x: 0, y: 0, w: 1600, h: 900 };
 
 test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts and homes exactly", () => {
   expect([...PANEL_IDS] as string[]).toEqual(GRANDFATHERED);
-  expect(defaultWide()).toEqual(BEFORE.wide());
-  expect(defaultCompact()).toEqual(BEFORE.compact());
-  expect(CLOSED_PANEL_HOMES).toEqual({ help: ["finish", "layers"] });
+  expect(defaultWide(STUDIO_CATALOGUE)).toEqual(BEFORE.wide());
+  expect(defaultCompact(STUDIO_CATALOGUE)).toEqual(BEFORE.compact());
+  expect(STUDIO_CATALOGUE.homes).toEqual({ help: ["finish", "layers"] });
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");
@@ -57,7 +57,7 @@ test("a dock layout saved before step 5 restores unchanged", () => {
   const layers = locate(wide, "layers")!.group; layers.panels = ["layers"];
   wide = { ...wide, floating: [{ id: "w-history", x: 900, y: 120, w: 320, h: 400, node: group(["history"], "history", "g-history") }] };
   const saved = JSON.parse(JSON.stringify(serializeDockState({ wide, compact: BEFORE.compact() })));
-  const restored = restoreDockPreference(saved, area);
+  const restored = restoreDockPreference(saved, area, STUDIO_CATALOGUE);
   expect(restored.recovered).toBe(true);
   expect(restored.state).toEqual(saved.state);
 });
@@ -85,7 +85,7 @@ test("a second feature's view slots into the shell's layouts, and a saved layout
   expect(catalogue.ids.slice(10, 13)).toEqual(["warp", "hair.strands", "character"]);
   expect(locate(defaultWide(catalogue), "hair.strands")!.group.panels).toEqual(
     ["finish", "shape", "edge", "warp", "hair.strands", "character", "lighting", "motion", "quality"]);
-  expect(activitySource("hair.setColour", catalogue)).toBe("Hair");
+  expect(sourceIn("hair.setColour", catalogue)).toBe("Hair");
   // A layout saved before the feature existed keeps its arrangement; the new panel joins its default group.
   const saved = BEFORE.wide();
   const restored = parseTree(JSON.parse(JSON.stringify(saved)), catalogue.ids, defaultWide(catalogue))!;

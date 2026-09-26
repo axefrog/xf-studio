@@ -2,7 +2,6 @@ import { shortcutLabel } from "../../input-bindings";
 import type { TourRecord } from "../../ui-preferences";
 import type { Command } from "../commands";
 import { isTextInput } from "../dom";
-import { PANEL_IDS } from "../layout-defaults";
 import type { Frame, StudioRuntime } from "../runtime";
 import { panelAnchor } from "./anchors";
 import { GuidanceService, type GuidanceAction, type GuidanceCapability, type GuidanceEnvironment, type StepButton } from "./engine";
@@ -19,7 +18,7 @@ export function guidanceFacts(rt: StudioRuntime): GuidanceFacts {
     edit: `${history.steps.length}:${history.current}:${history.steps[history.current]?.id ?? history.startId}`,
     presets: port.library.summary().draft?.presets.length ?? 0,
     lighting: port.authoring.previewState().preview?.lightingPreset ?? null,
-    visiblePanels: PANEL_IDS.filter(id => rt.dock.isVisible(id)),
+    visiblePanels: rt.views.ids.filter(id => rt.dock.isVisible(id)),
   };
 }
 
@@ -76,6 +75,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     facts: () => guidanceFacts(rt),
     anchor: id => rt.anchors.state(id),
     panelVisible: panel => rt.dock.isVisible(panel),
+    panelTitle: panel => rt.views.meta[panel]?.title ?? panel,
     capability: command => commandCapability(rt, command),
     record,
   };

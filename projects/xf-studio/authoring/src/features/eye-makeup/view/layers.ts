@@ -1,20 +1,21 @@
-import { chordsLabel, keyBindingById, shortcutLabel } from "../../input-bindings";
-import { applyCapability, button, emptyState, note } from "../controls";
-import { h, pct, setAttr, setText } from "../dom";
-import { icon } from "../icons";
-import { ItemList } from "../item-list";
-import type { StudioRuntime } from "../runtime";
-import { layerMenu } from "../target-menus";
-import type { PanelController } from "./collection";
-import { PANEL_META } from "../panel-meta";
+import { chordsLabel, keyBindingById, shortcutLabel } from "../../../input-bindings";
+import { applyCapability, button, emptyState, note } from "../../../studio-ui/controls";
+import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
+import { icon } from "../../../studio-ui/icons";
+import { ItemList } from "../../../studio-ui/item-list";
+import type { StudioRuntime } from "../../../studio-ui/runtime";
+import { layerMenu } from "../../../studio-ui/target-menus";
+import type { PanelController } from "../../../studio-ui/panels/collection";
+import { eyeMakeupActions } from "./actions";
+import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 export function layersPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const count = h("span", { class: "count" });
   const add = button({ label: "Add layer", icon: "plus", small: true,
-    onClick: () => { if (rt.dispatch({ kind: "layer.edit", command: { kind: "add" } })) rt.feedback.announce("Layer added at the front and selected"); } });
+    onClick: () => { if (eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "add" } })) rt.feedback.announce("Layer added at the front and selected"); } });
   const duplicate = button({ label: "Duplicate selected layer", icon: "duplicate", iconOnly: true, small: true, variant: "ghost", onClick: () => {
-    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });
+    const layer = rt.editor.layer(); if (layer) eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });
   } });
   const more = button({ label: "Selected layer actions", icon: "more", iconOnly: true, small: true, variant: "ghost", onClick: event => {
     const layer = rt.editor.layer(); if (layer) layerMenu(rt, layer.id, event.currentTarget as Element, event.currentTarget as Element);
@@ -22,11 +23,11 @@ export function layersPanel(rt: StudioRuntime): PanelController {
   const toVisual = (index: number) => rt.editor.recipe().layers.length - 1 - index;
   const list = new ItemList<{ id: string; name: string; meta: string }>({
     label: "Layers, front first", noun: "layer", maxLength: 80,
-    onSelect: id => rt.dispatch({ kind: "layer.select", layerId: id }),
-    onMove: (id, visual) => rt.dispatch({ kind: "layer.edit", command: { kind: "move", id, to: toVisual(visual) } }),
-    onRename: (id, name) => rt.dispatch({ kind: "layer.edit", command: { kind: "rename", id, name } }),
+    onSelect: id => eyeMakeupActions(rt).dispatch({ kind: "layer.select", layerId: id }),
+    onMove: (id, visual) => eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "move", id, to: toVisual(visual) } }),
+    onRename: (id, name) => eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "rename", id, name } }),
     onDelete: id => removeLayer(id),
-    onDuplicate: id => rt.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id } }),
+    onDuplicate: id => eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "duplicate", id } }),
     onMenu: (id, anchor, invoker) => layerMenu(rt, id, anchor, invoker),
     decorate: (item, row, selected) => {
       const layer = rt.editor.recipe().layers.find(entry => entry.id === item.id);
@@ -35,7 +36,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
         const eye = h("button", { class: "icon-btn small visibility", type: "button" });
         eye.addEventListener("click", () => {
           const current = rt.editor.recipe().layers.find(entry => entry.id === item.id);
-          if (current) rt.dispatch({ kind: "layer.setEnabled", id: item.id, enabled: !current.enabled });
+          if (current) eyeMakeupActions(rt).dispatch({ kind: "layer.setEnabled", id: item.id, enabled: !current.enabled });
         });
         row.lead.append(eye, h("span", { class: "swatch", "aria-hidden": "true" }));
         row.trailing.append(h("span", { class: "finish-flag", "aria-hidden": "true" }),
@@ -69,11 +70,11 @@ export function layersPanel(rt: StudioRuntime): PanelController {
   });
   function removeLayer(id: string) {
     const name = rt.editor.recipe().layers.find(layer => layer.id === id)?.name ?? "Layer";
-    if (rt.dispatch({ kind: "layer.edit", command: { kind: "remove", id } }))
+    if (eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "remove", id } }))
       rt.feedback.toast("info", "Layers", `Removed “${name}”.`, [rt.undoAction()]);
   }
   const empty = emptyState("No layers in this preset", "Layers stack like makeup: the top of the list is applied last and appears in front.",
-    button({ label: "Add layer", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) }));
+    button({ label: "Add layer", icon: "plus", variant: "primary", onClick: () => eyeMakeupActions(rt).dispatch({ kind: "layer.edit", command: { kind: "add" } }) }));
   const noPreset = emptyState("No preset selected", "Layers belong to a preset. Add or select one to edit its layers.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
   // A look made with a newer XF Studio: say what happened, that it is safe, and the one next step.
@@ -89,7 +90,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
   rt.anchors.register("layers.add", add);
   rt.anchors.register("layers.list", list.element);
   return {
-    spec: { id: "layers", ...PANEL_META["layers"], element },
+    spec: { id: "layers", ...EYE_MAKEUP_PANEL_META.layers, element },
     update(frame) {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
       // Without a loaded library the document's layers remain editable; only a loaded, empty collection has no preset.
@@ -105,8 +106,8 @@ export function layersPanel(rt: StudioRuntime): PanelController {
         const descriptor = rt.finishOf(layer.finish);
         return { id: layer.id, name: layer.name, meta: `${descriptor?.label.split(" /")[0] ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
       }), active?.id);
-      applyCapability(add, rt.addLayerCapability());
-      applyCapability(duplicate, active ? port.authoring.contextCapability({ kind: "layer", id: active.id },
+      applyCapability(add, eyeMakeupActions(rt).addLayerCapability());
+      applyCapability(duplicate, active ? eyeMakeupActions(rt).contextCapability({ kind: "layer", id: active.id },
         { kind: "layer.edit", command: { kind: "duplicate", id: active.id } }) : { available: false, reason: "Select a layer first." });
       applyCapability(more, active ? { available: true } : { available: false, reason: "Select a layer first." });
     },

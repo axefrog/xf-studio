@@ -41,6 +41,8 @@ export type FeatureFacade<A extends { kind: string } = { kind: string }> = Featu
    */
   locked(): string | undefined;
   capability(action: A): StudioCapability;
+  /** The action's capability on a concrete target (a layer, a point, a warp field): what that target's controls show. */
+  contextCapability(target: StudioTarget, action: A): StudioCapability;
   dispatch(action: A): StudioDispatchResult;
   limitsFor(target: StudioTarget, kind: A["kind"], variant?: string): Record<string, FieldLimit>;
   choicesFor(target: StudioTarget, kind: A["kind"], field: string, base?: Record<string, unknown>):
@@ -225,6 +227,7 @@ export function createStudioPresentation<Slot>(sources: {
       kinds: () => a.actionKinds().filter(own),
       editable: () => a.featureEditable(info.id), locked: () => a.featureLocked(info.id),
       capability: action => own(action.kind) ? a.capability(action as never) : foreign,
+      contextCapability: (target, action) => own(action.kind) ? a.contextCapability(target, action as never) : foreign,
       dispatch: action => own(action.kind) ? a.dispatch(action as never) : { ok: false, code: foreign.code, message: foreign.reason },
       limitsFor: (target, kind, variant) => own(kind) ? a.limitsFor(target, kind as never, variant) : {},
       choicesFor: (target, kind, field, base) => own(kind) ? a.choicesFor(target, kind as never, field, base) : [],

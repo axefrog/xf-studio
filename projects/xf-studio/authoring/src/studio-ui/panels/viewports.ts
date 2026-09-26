@@ -1,7 +1,7 @@
 import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel } from "../../input-bindings";
 import { ViewportInputHints } from "../input-hints";
 import type { ViewportHostKind } from "../../viewport-attachment";
-import { Segmented, button, applyCapability } from "../controls";
+import { button, applyCapability } from "../controls";
 import { h, setAttr, setText, isTextInput } from "../dom";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
@@ -11,7 +11,7 @@ import { PANEL_META } from "../panel-meta";
 import { DETAIL_NOTICE_TEXT } from "./preview";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
-function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (event: MouseEvent) => void) {
+export function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (event: MouseEvent) => void) {
   let down: { x: number; y: number } | undefined;
   target.addEventListener("pointerdown", event => { if (event.button === 2) down = { x: event.clientX, y: event.clientY }; }, true);
   target.addEventListener("contextmenu", event => {
@@ -24,7 +24,7 @@ function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (eve
   });
 }
 /** Accessible viewport description generated from its key bindings. */
-const keyDescription = (scope: "head" | "uv") => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
+export const keyDescription = (scope: "head" | "uv") => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
   .map(binding => `${chordsLabel(binding)} ${binding.label.toLowerCase()}`).join(", ")}. ${shortcutLabel("shell.shortcuts")} lists every mouse and keyboard binding.`;
 
 function readinessBadge() {
@@ -151,53 +151,6 @@ export function headPanel(rt: StudioRuntime): PanelController {
       setText(detailStatus, detailText);
       const draft = frame.library.draft, presetName = draft?.presets.find(preset => preset.id === draft.selected)?.name;
       setText(context, [presetName, frame.layer?.name].filter(Boolean).join(" › ") || "No layer selected");
-    },
-  };
-}
-
-export function uvPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port;
-  const slot = h("div", { class: "viewport-slot uv-slot" });
-  const modes = new Segmented<"both" | "single">({ label: "UV view", showLabel: false, compact: true, options: [
-    { value: "both", label: "Both eyes" }, { value: "single", label: "Single eye" }], onSelect: mode => { port.viewport.uvCommand(mode); } });
-  const other = button({ label: "Other eye", small: true, variant: "ghost", onClick: () => { port.viewport.uvCommand("other"); } });
-  const fit = button({ label: "Fit shape", icon: "target", small: true, variant: "ghost", onClick: () => { port.viewport.uvCommand("fit"); } });
-  const warning = h("div", { class: "uv-warning", hidden: true },
-    `Selected point is outside this view · ${shortcutLabel("uv.fit")}: fit shape · ${shortcutLabel("uv.other")}: other eye`);
-  const element = h("div", { class: "viewport-panel uv", tabindex: "0", "aria-label": `UV map editor. ${keyDescription("uv")}` });
-  const hints = new ViewportInputHints(rt, "uv", slot, element);
-  // The canvas fills the stage. Warning and hints are overlays: they never take layout space, so a
-  // hint change can never resize the canvas (the stage's --uv-safe-* insets keep Fit clear of them).
-  const stage = h("div", { class: "uv-stage" }, slot,
-    h("div", { class: "viewport-top" }, warning), h("div", { class: "viewport-bottom" }, hints.strip));
-  element.append(h("div", { class: "uv-toolbar" }, modes.element, other, fit), stage, hints.tip);
-  port.viewport.attach("uv", slot);
-  rt.anchors.register("uv.canvas", stage);
-  let hintsShown: boolean | undefined;
-  contextMenuGate("uv", slot, event => viewportMenu(rt, "uv", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
-  element.addEventListener("keydown", event => {
-    if (event.target !== element) return;
-    const binding = keyBinding("uv", event);
-    if (binding?.id === "uv.menu") { event.preventDefault(); viewportMenu(rt, "uv", element, undefined, element); }
-    else if (binding?.action.kind === "view") port.viewport.uvCommand(binding.action.id.slice(3) as "both" | "single" | "other" | "fit");
-  });
-  return {
-    spec: { id: "uv", ...PANEL_META["uv"], element,
-      visibility: visible => { if (visible) requestAnimationFrame(() => port.viewport.resize("uv")); } },
-    update(frame) {
-      const view = frame.viewport.uv.view;
-      modes.update(view?.mode, value => port.viewport.uvCommandCapability(value));
-      applyCapability(other, port.viewport.uvCommandCapability("other"));
-      applyCapability(fit, port.viewport.uvCommandCapability("fit"));
-      const selection = frame.viewport.uv.selection;
-      warning.hidden = !(selection?.point && !selection.point.visible);
-      hints.update(frame);
-      // Hidden hints free their reserved band; the editor reads the new insets on the next draw.
-      if (frame.preferences.inputHints !== hintsShown) {
-        hintsShown = frame.preferences.inputHints;
-        stage.dataset.hints = hintsShown ? "on" : "off";
-        port.viewport.resize("uv");
-      }
     },
   };
 }
