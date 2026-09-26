@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `536bff3` | 2026-09-27 | UI polish merge, above all the first feature that writes into the user's MO2 profile and game folder (Add to my mod manager) | 1 High, 6 Medium, 8 Low (INSTALL-01..12, UI-98..100). Separator placement, BOM/CRLF, consent tokens, ownership refusals, path and link checks, framework safety and the architecture are sound. Fix track queued |
 | `36b5c87` | 2026-09-27 | Second pass on the production native reader (resolver-host fallbacks, decoder lifetime, ledger keys, R11–R13, worker cost) | 0 High, 2 Medium, 4 Low (NATIVE-40..45), none repeating NATIVE-26..34. The past-count loop bounds, widened roots, ledger key, `forgetDefaulted` and worker failure paths are sound. Fixes queued for claude/native-catalogue |
 | `e09391e` | 2026-09-27 | Native reader in production (resolver integration, shared decoder, markers, notes) | 0 High, 1 Medium, 9 Low (NATIVE-26..34, PIPE-102). Cache identity, fallback kinds, the arrays-to-record-end rule against hostile files, worker bundling and the boundary are sound; no render changes beyond the intended fixes. Fixes in claude/native-catalogue |
 | `1a575a1`–`363373a` | 2026-09-27 | In-depth UI/UX review (backlog track 7): every panel and flow against the "it just works" policy, accessibility and UI boundaries; code, style guide, acceptance screenshots and one running check | 0 High, 8 Medium, 10 Low (UI-80..97). UI-03, UI-10, UI-14, UI-15, UI-04 and UI-57 still open. Docking, menus and palette reasons, the WolvenKit consent, 3D preview setup, Character panel status and problem reports are sound. Fixes in claude/ui-polish |
@@ -68,6 +69,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| INSTALL-01 | High | Install | Add to my mod manager has no verify or isolated-server guard: the settings store ignores `XFAS_DATA_DIR`, so an agent or acceptance run under `?verify=1` can write into the user's real MO2 profile or game folder, with its install record in a throwaway folder (`server.ts:40,61-62`, `studio-startup.ts:110`) | Open |
+| INSTALL-02 | Med | Install | An interrupted install is never recovered: nothing calls `transport.recover()`, so a leftover journal (e.g. the game holding the old `.archive` during an update) blocks every later plan, and "Restart XF Studio" does nothing (`mod-install-host.ts:67-96`, `mod-install-transport.ts:396-411`; reproduced) | Open |
+| INSTALL-03 | Med | Install | Removing the mod normally (MO2 remove, or deleting the files) leaves the install record, and every later plan refuses with no way forward (`mod-install-transport.ts:291`, `mod-install-host.ts:65`; reproduced) | Open |
+| INSTALL-04 | Med | Install | Install ownership is per host data folder, so localhost and the desktop app each call the other's install "a mod XF Studio didn't put there" (`server.ts:62`, `desktop/server.ts:169`; reproduced) | Open |
+| INSTALL-05 | Med | Install | `modlist.txt` is decoded as UTF-8 with no round-trip check: invalid bytes become U+FFFD, lone-LF rows become CRLF and trailing spaces are stripped, so an ANSI row like `+Café Mod` is corrupted and MO2 drops it (`mod-install-host.ts:167,218`, `mo2-placement.ts:106-120`; reproduced) | Open |
+| INSTALL-06 | Med | Install | The duplicate scan reads every mod folder, enabled or not, yet advises "switch that off", so a disabled old copy blocks the install permanently (`mod-install-host.ts:156-159,202-211`; reproduced) | Open |
+| UI-98 | Med | Presentation | Game & tools saves every change to the real `%LOCALAPPDATA%\XF Studio` settings with no isolation under `?verify` or an isolated data folder, so UI tests can change where the user's next build and install go (`panels/game-setup.ts`) | Open |
 | NATIVE-40 | Med | Native reader | A transient native failure followed by a permanent WolvenKit refusal never marks the preparation degraded: the check reads `fetcher.stats.transient`, which counts WolvenKit only, so a V is served "ready" without the part, cached for the session, and the choice shows "prepared" (`character-detail-service.ts:506-509`, `resolver-host.ts:630`, `native-fetch-port.ts:200-204`; reproduced at the fetcher level) | Open |
 | NATIVE-41 | Med | Native reader | Rule R12 draws render chunks whose `renderMask` the file omits, but an omitted property equals its class default and WolvenKit's `rendChunk` default mask is 0 ("not drawn"), so a mod chunk hidden in game would draw in the preview (`resource-graph.ts:222-286`; not reproduced, no cached resource omits it) | Open |
 | NATIVE-26 | Med | Native reader | A decoder open that failed transiently (Authenticode check timeout after a patch, the DLL briefly locked) is cached under the Oodle stamp for the whole process, so WolvenKit reads everything (~90 s cold) until restart (`installation-registry.ts:151`, `resolver-host.ts:664`) | Open (claude/native-catalogue) |
@@ -376,6 +384,16 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **NATIVE-43:** `isCached` counts ledger markers even when this session's decoder is unavailable, so a choice shows "prepared" and then runs a cold WolvenKit pass (`resolver-host.ts:641-643`).
   - **NATIVE-44:** a native answer's host-side copy and re-serialisation sit outside the worker's budgets (a crafted resource could stall the host and spike its heap), and the decode queue is FIFO with no cancellation, so a stopped prefetch still runs ahead of a person's change (`native-decode.ts:175-177,256-262`, `resource-graph.ts:616`).
   - **NATIVE-45:** the 16-warning cap is per fetcher and fetchers are recreated on reopen, so fallback warnings can crowd earlier failures out of the log; reader notes can crowd the over-budget and unread-mod-files notes out of the 32-note cap.
+
+- **INSTALL-07..12, UI-99..100** (install review at `536bff3`), Open:
+  - **INSTALL-07:** the consent token doesn't cover the framework-derived placement, so the row can land in a different section from the one reviewed.
+  - **INSTALL-08:** the temp mod list isn't flushed before rename; a read-only or linked `modlist.txt` is found only after files are copied; a missing one gives the generic message.
+  - **INSTALL-09:** a failed first install leaves an empty `mods/<name>/archive/pc/mod` tree that MO2 adds on its next refresh.
+  - **INSTALL-10:** the MO2-open check fails open when `tasklist` errors; the checks and the `.xl` duplicate scan run synchronously on the server thread.
+  - **INSTALL-11:** a mod name ending in `_separator` gives a 500 instead of a rename step.
+  - **INSTALL-12:** a test fixture comment states the framework order backwards (code and assertions are right).
+  - **UI-99:** the install sheet picks its next step by matching host prose; the plan should carry a structured next step.
+  - **UI-100:** the legacy-folder refusal is jargon with no action (the reference MO2 still has the diagnostic `XF Studio` folder), and a Vortex-deployed copy is told to rename files, which breaks Vortex's state.
 
 ## New subsystems since last review
 
