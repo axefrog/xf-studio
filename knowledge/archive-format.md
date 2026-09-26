@@ -2,7 +2,7 @@
 
 **Maturity: Draft.** How a game `.archive` stores resources, how a resource's CR2W bytes encode its objects, and how XF Studio's native reader (R&D, not yet used by the app) turns them into the same JSON documents the resolver reads from WolvenKit. Everything here was checked against game 2.31's own archives and installed mods, with WolvenKit CLI 9.0.1 as the reference. It is offline evidence: it says what the files hold, not what the engine does with them.
 
-Grades follow the [knowledge base legend](README.md#rules-for-knowledge-pages). **[resource]** here means the native reader decoded the bytes and the result matched WolvenKit's output, byte for byte or leaf for leaf; **[source]** means the layout is described in a community tool or SDK listed under [Sources](#sources), and this page only restates format facts. XF Studio's reader is written from those facts and from the bytes. It contains no code from WolvenKit, which is GPL-3.0 and serves only as a documentation source and a test oracle.
+Grades follow the [knowledge base](README.md) legend. **[resource]** here means the native reader decoded the bytes and the result matched WolvenKit's output, byte for byte or leaf for leaf; **[source]** means the layout is described in a community tool or SDK listed under [Sources](#sources), and this page only restates format facts. XF Studio's reader is written from those facts and from the bytes. It contains no code from WolvenKit, which is GPL-3.0 and serves only as a documentation source and a test oracle.
 
 ```mermaid
 flowchart LR
