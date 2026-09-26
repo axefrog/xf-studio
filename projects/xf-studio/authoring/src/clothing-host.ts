@@ -9,12 +9,13 @@
  *   [{entityPathHash, appearancesToTags: [{appearanceName, visualTags}], commonVisualTags}]}` [resource]. It holds the vanilla items'
  *   hide tags (`hide_T1`, `hide_T1part`, …) that their `.app`s don't carry, which answers the knowledge page's open question 2. WolvenKit
  *   9.0.1 doesn't serialize it, so it is decoded by the Studio's native reader (native/), from the archive that wins its path, and kept
- *   as a compact table in the resolver cache per archive identity. The decode runs in the route's native decode worker, the one the
- *   resolver reads through (resolver-host.ts `ResolverFetcher.nativeDecoder`, `routePresetDecoder`), with the preset's root class and a
- *   longer time budget for this one request; a route without that decoder opens a worker for the read (`workerPresetDecoder`). Either
- *   way the game's Oodle library is checked asynchronously and the 13 MB document is decoded off the host's event loop (NATIVE-25). Only
- *   a worker that can't start falls back to decoding in this process, after the same asynchronous check. A failure is logged and not
- *   kept, so the next preparation tries again (PIPE-100).
+ *   as a compact table in the resolver cache per archive identity. The decode runs in a worker of its own, opened for the read and closed
+ *   after it (`workerPresetDecoder`): the 13 MB document takes far longer than any resource the resolver reads, so it never holds up the
+ *   route's decode queue (NATIVE-31), and it is read once per archive identity. The game's Oodle library is checked asynchronously and
+ *   the document decoded off the host's event loop (NATIVE-25). Only a worker that can't start falls back to decoding in this process,
+ *   after the same asynchronous check. A failure is logged once and remembered per archive identity (NATIVE-31): one that would repeat
+ *   (the file is refused) for the session, one that may pass (the worker or the file system was down) for `PRESET_RETRY_MS`, so a
+ *   preparation neither decodes it again each time nor keeps a passing failure (PIPE-100).
  * - **Failures** are never silent: an unreadable TweakDB makes `records` answer null (each item then says the records couldn't be read).
  */
 import { createHash } from "node:crypto";
@@ -23,7 +24,8 @@ import { join } from "node:path";
 import type { ClothingPorts, ItemRecord } from "./clothing-resolver";
 import { refFromPath } from "./depot-path";
 import { NativeArchive } from "./native/archive-reader";
-import type { NativeDecodeOutcome, NativeDecoder } from "./native/native-decode";
+import type { NativeDecodeOutcome } from "./native/native-decode";
+import type { NativeFailureKind } from "./native/native-errors";
 import { openNativeDecoderAsync } from "./native/native-fetch-port";
 import { openGameOodle } from "./native/oodle";
 import { readResourceJson } from "./native/resource-document";
@@ -73,13 +75,14 @@ export function itemRecords(blob: TweakDbBlob, items: readonly string[]): Map<st
   return out;
 }
 
+const NOT_A_PRESET = "Not an appearance-name visual tag preset.";
 /** A preset table: entity path hash → appearance name → tags (the entity's common tags included under `*`). */
 export type PresetTable = Map<string, Map<string, string[]>>;
 /** The table of a decoded preset document (the native reader's JSON). */
 export function presetTable(document: unknown): PresetTable {
   const table: PresetTable = new Map();
   const data = (document as { Data?: { RootChunk?: { root?: { Data?: unknown } } } })?.Data?.RootChunk?.root?.Data;
-  if (!isObject(data) || data.$type !== "gameAppearanceNameVisualTagsPreset") throw Error("Not an appearance-name visual tag preset.");
+  if (!isObject(data) || data.$type !== "gameAppearanceNameVisualTagsPreset") throw Error(NOT_A_PRESET);
   const tags = (value: unknown) => isObject(value) ? asArray(value.tags).map(cname).filter(Boolean) : [];
   for (const preset of asArray(data.presets)) {
     if (!isObject(preset) || typeof preset.entityPathHash !== "string") continue;
@@ -96,11 +99,25 @@ export const PRESET_PATHS = { base: "base\\entities\\appearancename_visualtags.j
 const PRESET_CACHE_VERSION = 1;
 /** Tables read this session by preset identity, and reads in flight (a prefetch batch dresses many requests at once: one read). */
 const presets = new Map<string, PresetTable>();
+let now = () => Date.now();
+/** Test seam: the clock the failure memory reads; forgets the tables and failures this session remembers. */
+export const resetPresetMemory = (clock: () => number = () => Date.now()) => { now = clock; failed.clear(); presets.clear(); };
 const reading = new Map<string, Promise<PresetTable | null>>();
 /** The preset's root class, the one the worker is asked to decode. */
 const PRESET_ROOT = "JsonResource";
 /** The largest preset read takes well under a few seconds; the budget only stops a runaway decode. */
 const PRESET_DECODE_TIMEOUT_MS = 120_000;
+
+/** A preset read that failed, with the native failure's kind. */
+class PresetReadError extends Error { constructor(readonly kind: NativeFailureKind, message: string) { super(message); } }
+/** How long a failed preset read that may pass (the worker or the file system was down, a reader bug) is left before it is tried again. */
+export const PRESET_RETRY_MS = 60_000;
+/** Preset reads that failed this session, per preset identity: when, and whether the failure would repeat (the file is refused). */
+const failed = new Map<string, { at: number; lasting: boolean }>();
+const LASTING_FAILURES: ReadonlySet<NativeFailureKind> = new Set(["not-indexed", "not-verified", "unsupported", "malformed", "decompress", "over-budget"]);
+/** Whether a failed read would fail again: the file was refused, or its document isn't a preset. */
+const lastingFailure = (error: unknown) => error instanceof PresetReadError ? LASTING_FAILURES.has(error.kind)
+  : error instanceof Error && error.message === NOT_A_PRESET;
 
 /** How the preset's document is decoded: from an archive (its path) and a depot hash to the native reader's JSON document. */
 export type PresetDecoder = (archivePath: string, hash: string) => Promise<unknown>;
@@ -118,19 +135,10 @@ export function workerPresetDecoder(gameRoot: string, script?: string | URL): Pr
   };
 }
 
-/**
- * Decode through the route's own native decoder (the worker the resolver reads through), asking it for the preset's root class and the
- * preset's time budget for this one request, so the host runs one decode worker per route rather than one more per preset read.
- */
-export function routePresetDecoder(decoder: NativeDecoder, gameRoot: string): PresetDecoder {
-  return async (archivePath, hash) =>
-    presetDocument(await decoder.decode({ archivePath, hash, needName: false, roots: [PRESET_ROOT], timeoutMs: PRESET_DECODE_TIMEOUT_MS }), gameRoot, archivePath, hash);
-}
-
 /** A decode's document; a worker that can't start (`unavailable`) is answered by decoding here, after the asynchronous library check. */
 async function presetDocument(outcome: NativeDecodeOutcome, gameRoot: string, archivePath: string, hash: string): Promise<unknown> {
   if (outcome.ok) return outcome.document;
-  if (outcome.kind !== "unavailable") throw Error(`${outcome.kind}: ${outcome.message}`);
+  if (outcome.kind !== "unavailable") throw new PresetReadError(outcome.kind, `${outcome.kind}: ${outcome.message}`);
   const oodle = await openGameOodle(gameRoot);
   try {
     const archive = NativeArchive.open(archivePath, oodle.decompress);
@@ -159,6 +167,9 @@ export async function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir:
   if (known) return known;
   const pending = reading.get(identity);
   if (pending) return pending;
+  // A failure is remembered: one that would repeat for the session, one that may pass for a while (NATIVE-31).
+  const failure = failed.get(identity);
+  if (failure && (failure.lasting || now() - failure.at < PRESET_RETRY_MS)) return null;
   const read = (async (): Promise<PresetTable | null> => {
     const file = join(cacheDir, "clothing", `visual-tag-preset-${identity}.json`);
     try {
@@ -174,6 +185,7 @@ export async function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir:
       return table;
     } catch (error) {
       log(`The game's item visual tags (${path}) couldn't be read: ${(error as Error)?.message ?? error}`);
+      failed.set(identity, { at: now(), lasting: lastingFailure(error) });
       return null;
     }
   })();
@@ -186,15 +198,14 @@ export async function presetOf(graph: ResourceGraph, gameRoot: string, cacheDir:
 }
 
 /**
- * The clothing resolver's ports for one installation. The preset is decoded by `decode`, else through the route's native decoder
- * (`routeDecoder`), else by a worker opened for the read (`decodeWorker`: the native decode worker a packaged host ships).
+ * The clothing resolver's ports for one installation. The preset is decoded by `decode`, else by a worker opened for the read
+ * (`decodeWorker`: the native decode worker a packaged host ships).
  */
 export async function clothingPorts(graph: ResourceGraph, gameRoot: string, cacheDir: string, log?: (message: string) => void,
-  options: { decodeWorker?: string | URL; decode?: PresetDecoder; routeDecoder?: NativeDecoder | null } = {}): Promise<ClothingPorts & { tweakDb: string | null; preset: boolean }> {
+  options: { decodeWorker?: string | URL; decode?: PresetDecoder } = {}): Promise<ClothingPorts & { tweakDb: string | null; preset: boolean }> {
   const tweakDb = (() => { try { return tweakDbOf(gameRoot, graph.depot.plan.ep1Installed); } catch (error) { log?.(`The game's TweakDB couldn't be read: ${(error as Error).message}`); return null; } })();
   if (!tweakDb) log?.("The game's TweakDB couldn't be found, so worn items can't be read.");
-  const preset = await presetOf(graph, gameRoot, cacheDir, log, options.decode
-    ?? (options.routeDecoder ? routePresetDecoder(options.routeDecoder, gameRoot) : workerPresetDecoder(gameRoot, options.decodeWorker)));
+  const preset = await presetOf(graph, gameRoot, cacheDir, log, options.decode ?? workerPresetDecoder(gameRoot, options.decodeWorker));
   return {
     tweakDb: tweakDb?.source ?? null, preset: !!preset,
     // Without the TweakDB no item can be read: the whole answer says so (PIPE-100).

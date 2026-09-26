@@ -11,12 +11,12 @@ import { planCharacterDetails } from "../src/character-detail-plan";
 import { loadMergedCco, resolveCharacter } from "../src/character-resolver";
 import { refFromPath } from "../src/depot-path";
 import { hostDiagnosticsAt, withDiagnostics } from "../src/diagnostics/host-log";
-import { InstallationRegistry } from "../src/installation-registry";
+import { InstallationRegistry, NATIVE_RETRY_MS } from "../src/installation-registry";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import type { NativeDecodeOutcome, NativeDecoder } from "../src/native/native-decode";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "../src/native/native-errors";
 import { inProcessDecoder, NativeFirstFetcher, type NativeReader, nativeReaderIdentity, TRANSIENT_NATIVE_FAILURES } from "../src/native/native-fetch-port";
-import { installationView, type NativeRoute, openInstallation, type InstallationOptions } from "../src/resolver-host";
+import { installationView, NativeAnswerFiles, type NativeRoute, openInstallation, type InstallationOptions } from "../src/resolver-host";
 import { forgetDefaulted, jsonPathSteps, ResourceGraph, type ResourceFetchPort } from "../src/resource-graph";
 import { detailFixture, P, REQUEST_A } from "./character-detail-fixtures";
 import { inputFromCharacterRequest } from "../src/character-detail-request";
@@ -118,7 +118,7 @@ test("a route with a native decoder reads natively first; WolvenKit answers only
     // The damaged material is logged in plain words (a class the reader doesn't read is only counted).
     const logged = diagnostics.log.tail().filter(entry => entry.area === "resolver");
     expect(logged.map(entry => [entry.code, entry.level])).toEqual([["native_fallback", "warn"]]);
-    expect(logged[0]!.message).toContain("couldn't read basegame_9_fixture.archive: base\\fixture\\broken.mi itself (malformed), so WolvenKit read it instead");
+    expect(logged[0]!.message).toContain("couldn't read basegame_9_fixture.archive: base\\fixture\\broken.mi itself (malformed), so WolvenKit will read it instead");
   });
 });
 
@@ -241,6 +241,9 @@ test("each fallback is logged by kind (bounded), a reader bug as a failure; expe
     const logged = diagnostics.log.tail().filter(entry => entry.area === "resolver");
     expect(logged.map(entry => [entry.code, entry.level])).toEqual([["native_internal", "warn"], ["native_fallback", "warn"], ["native_fallback", "warn"]]);
     expect(logged.map(entry => entry.details?.codes?.[0])).toEqual([undefined, "over-budget", "unavailable"]);
+    // A reader bug carries the reader's own stack (the worker's), not the host's (NATIVE-32).
+    expect(logged[0]!.details?.stack).toContain("TypeError: x\n    at f");
+    expect(logged[0]!.message).toContain("so WolvenKit will read it instead");
     expect(installation.fetcher.nativeStats!.byKind).toMatchObject({ internal: 1, "over-budget": 1, "not-indexed": 1, unavailable: 1 });
   });
 });
@@ -293,6 +296,101 @@ test("the registry opens one native decoder per game folder, shares it across ro
   const summary = (await real.acquire(setup.options)).summary.nativeReader!;
   expect(summary.state).toBe("off");
   real.clear();
+});
+
+test("a decoder that couldn't open for a reason that may pass is tried again after a while; a lasting reason isn't (NATIVE-26)", async () => {
+  const setup = gameFolder();
+  let clock = 0, opened = 0, answer: "transient" | "decoder" | "permanent" = "transient";
+  const registry = new InstallationRegistry({ now: () => clock, nativeStamp: () => "dll|1", openNative: async () => {
+    opened++;
+    if (answer === "transient") return { decoder: null, reason: "The Oodle library's signature could not be checked (PowerShell timed out).", permanent: false };
+    if (answer === "permanent") return { decoder: null, reason: "The game folder has no Oodle library.", permanent: true };
+    return route(`retry-${opened}`);
+  } });
+  const first = await registry.acquire(setup.options);
+  expect(first.fetcher.native).toBeNull();
+  const generation = registry.generation(setup.options);
+  answer = "decoder";
+  clock += NATIVE_RETRY_MS - 1;
+  expect((await registry.acquire(setup.options)).fetcher.native).toBeNull();
+  expect(opened).toBe(1);
+  // Due: the decoder opens, and the route is opened again with it (its answers may differ: its generation moves on).
+  clock += 1;
+  const second = await registry.acquire(setup.options);
+  expect(opened).toBe(2);
+  expect(second.fetcher.native!.identity).toBe(nativeReaderIdentity("retry-2"));
+  expect(registry.generation(setup.options)).toBe(generation + 1);
+  registry.clear();
+
+  const lasting = new InstallationRegistry({ now: () => clock, nativeStamp: () => "dll|1", openNative: async () => { opened++; return { decoder: null, reason: "none", permanent: true }; } });
+  opened = 0;
+  await lasting.acquire(setup.options);
+  clock += 10 * NATIVE_RETRY_MS;
+  expect((await lasting.acquire(setup.options)).fetcher.native).toBeNull();
+  expect(opened).toBe(1);
+});
+
+test("a changed game library reopens the routes with the new decoder, a closed decoder answers `unavailable`, and unused folders' decoders close (NATIVE-28, NATIVE-33)", async () => {
+  const a = gameFolder(), b = gameFolder();
+  let stamp = "dll|1", opened = 0;
+  const decoders: NativeDecoder[] = [];
+  const registry = new InstallationRegistry({ maxRoutes: 1, nativeStamp: () => stamp, openNative: async () => {
+    opened++; const decoder = inProcessDecoder(readerOver(`d${opened}`)); decoders.push(decoder); return { decoder };
+  } });
+  const one = await registry.acquire(a.options);
+  expect(one.fetcher.native!.identity).toBe(nativeReaderIdentity("d1"));
+  // Only the library changes (no watched file does): the route opens again with the new decoder.
+  stamp = "dll|2";
+  const two = await registry.acquire(a.options);
+  await Bun.sleep(0);
+  expect(two.fetcher.native!.identity).toBe(nativeReaderIdentity("d2"));
+  // A preparation still holding the old route reads with WolvenKit, as when the reader is down: `unavailable`, never a reader bug.
+  const old = await one.fetcher.native!.decoder.decode({ archivePath: a.archive, hash: refFromPath("base\\fixture\\a.hp").hash, needName: false });
+  expect(old).toMatchObject({ ok: false, kind: "unavailable" });
+  fakeWolvenKit(one.fetcher);
+  await one.graph.load(refFromPath("base\\fixture\\a.hp"), "hp");
+  expect(one.fetcher.nativeStats!.byKind).toMatchObject({ unavailable: 1, internal: 0 });
+  // Another game folder takes the only route slot: the first folder's decoder is closed.
+  const other = await registry.acquire(b.options);
+  await Bun.sleep(0);
+  expect(other.fetcher.native!.identity).toBe(nativeReaderIdentity("d3"));
+  expect(await decoders[1]!.decode({ archivePath: a.archive, hash: "1", needName: false })).toMatchObject({ ok: false, kind: "unavailable" });
+  expect(await decoders[2]!.decode({ archivePath: b.archive, hash: refFromPath("base\\fixture\\a.hp").hash, needName: false })).toMatchObject({ ok: true });
+  registry.clear();
+});
+
+test("a decoder off for the session doesn't keep a failed read retryable (NATIVE-29)", async () => {
+  const archive = { id: "x.archive", name: "x.archive" } as MountedArchive, ref = refFromPath("base\\x.mi");
+  const lastingFallback: ResourceFetchPort = { fetch: async () => null, transient: () => false };
+  const off: NativeDecoder = { identity: "t", close() {}, decode: async () => ({ ok: false, kind: "unavailable", message: "off for this session", lasting: true }) };
+  const down: NativeDecoder = { identity: "t", close() {}, decode: async () => ({ ok: false, kind: "unavailable", message: "starting again in a minute" }) };
+  const offPort = new NativeFirstFetcher(off, lastingFallback), downPort = new NativeFirstFetcher(down, lastingFallback);
+  await offPort.fetch(archive, ref, "mi"); await downPort.fetch(archive, ref, "mi");
+  expect(offPort.transient(archive, ref)).toBe(false);
+  expect(downPort.transient(archive, ref)).toBe(true);
+});
+
+test("an answer marker removed by Clear is written again; markers of another reader identity are pruned (NATIVE-27)", async () => {
+  const setup = gameFolder();
+  const installation = openInstallation({ ...setup.options, native: route("marker-1") });
+  const archive = installation.plan.archives[0]!, hash = refFromPath("base\\fixture\\a.hp").hash;
+  const folder = join(setup.options.cacheDir, "native");
+  const ledger = new NativeAnswerFiles(setup.options.cacheDir, nativeReaderIdentity("marker-1"));
+  ledger.add(archive, hash);
+  await Bun.sleep(20);
+  expect(readdirSync(folder).length).toBe(1);
+  rmSync(folder, { recursive: true, force: true });
+  expect(ledger.has(archive, hash)).toBe(false);
+  ledger.add(archive, hash);
+  await Bun.sleep(20);
+  expect(ledger.has(archive, hash)).toBe(true);
+  // Another reader identity on the same folder: the first reader's markers can never answer again, so they go.
+  const next = new NativeAnswerFiles(setup.options.cacheDir, nativeReaderIdentity("marker-2"));
+  await Bun.sleep(50);
+  expect(readdirSync(folder)).toEqual([]);
+  next.add(archive, hash);
+  await Bun.sleep(20);
+  expect(next.has(archive, hash)).toBe(true);
 });
 
 test("the plan carries a part's reader notes to the record: a value stored with an older type, a render mask left out", async () => {

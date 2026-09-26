@@ -52,7 +52,7 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot,
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
-import type { Installation, InstallationOptions, ResolverFetcher } from "./resolver-host";
+import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
@@ -1170,9 +1170,8 @@ async function dress(graph: ResourceGraph, request: CharacterRequest, options: {
   Promise<ResolvedClothing | ClothingFailure | null> {
   if (!request.clothing) return null;
   try {
-    // The preset is decoded by the route's native decode worker when the resolver reads through one (one worker per route).
-    const routeDecoder = (graph.port as Partial<Pick<ResolverFetcher, "nativeDecoder">>).nativeDecoder ?? null;
-    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker, routeDecoder });
+    // The preset is decoded once per archive identity, in a worker of its own (clothing-host.ts; NATIVE-31, PIPE-102).
+    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker });
     return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
   } catch (error) {
     log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);

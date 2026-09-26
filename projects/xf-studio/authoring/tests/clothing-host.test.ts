@@ -1,11 +1,10 @@
 // The clothing host's ports (PIPE-101): item records from a synthetic TweakDB blob (every value type the resolver reads), the save's
-// record IDs, the cooked preset's table, and the preset read's failure and cache paths (NATIVE-25, PIPE-100). Asset-free.
-import { afterAll, describe, expect, test } from "bun:test";
+// record IDs, the cooked preset's table, and the preset read's failure and cache paths (NATIVE-25, NATIVE-31, PIPE-100). Asset-free.
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clothingPorts, itemRecords, PRESET_PATHS, presetOf, presetTable, routePresetDecoder, tweakIdOf } from "../src/clothing-host";
-import type { NativeDecodeRequest, NativeDecoder } from "../src/native/native-decode";
+import { clothingPorts, itemRecords, PRESET_PATHS, PRESET_RETRY_MS, presetOf, presetTable, resetPresetMemory, tweakIdOf } from "../src/clothing-host";
 import { depotHash, fnv1a64 } from "../src/depot-path";
 import type { ResourceGraph } from "../src/resource-graph";
 import { TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/tweakdb-flats";
@@ -113,7 +112,9 @@ describe("item records from the TweakDB (PIPE-101)", () => {
   });
 });
 
-describe("the cooked visual-tag preset (PIPE-101, NATIVE-25, PIPE-100)", () => {
+describe("the cooked visual-tag preset (PIPE-101, NATIVE-25, NATIVE-31, PIPE-100)", () => {
+  let clock = 0;
+  afterEach(() => resetPresetMemory());
   const document = { Data: { RootChunk: { $type: "JsonResource", root: { Data: { $type: "gameAppearanceNameVisualTagsPreset", presets: [
     { entityPathHash: "123", commonVisualTags: { tags: [{ $value: "Common" }] },
       appearancesToTags: [{ appearanceName: { $value: "t2_coat_&Female&TPP" }, visualTags: { tags: [{ $value: "Large" }, { $value: "hide_T1part" }] } }] },
@@ -131,7 +132,8 @@ describe("the cooked visual-tag preset (PIPE-101, NATIVE-25, PIPE-100)", () => {
   const graphOver = (file: string) => ({ depot: { plan: { ep1Installed: false } }, exists: () => false,
     locate: (ref: { hash: string }) => ({ lookup: { winner: ref.hash === depotHash(PRESET_PATHS.base) ? { id: file, name: "basegame_4_gamedata.archive" } : null } }) }) as unknown as ResourceGraph;
 
-  test("a failed read is logged and not kept: the next call reads again; a good read is kept, on disk too; reads in flight are shared", async () => {
+  test("a failed read that may pass is logged once and tried again after a while; a good read is kept, on disk too; reads in flight are shared", async () => {
+    resetPresetMemory(() => clock);
     const archive = join(root, "failing.archive"), cache = join(root, "cache-a");
     writeFileSync(archive, "archive bytes");
     const logs: string[] = [];
@@ -144,6 +146,10 @@ describe("the cooked visual-tag preset (PIPE-101, NATIVE-25, PIPE-100)", () => {
     };
     expect(await presetOf(graphOver(archive), root, cache, line => logs.push(line), decode)).toBeNull();
     expect(logs.at(-1)).toContain("couldn't be read: the worker couldn't start");
+    // Remembered for a while: no second decode, no second log line (NATIVE-31).
+    expect(await presetOf(graphOver(archive), root, cache, line => logs.push(line), decode)).toBeNull();
+    expect([calls, logs.length]).toEqual([1, 1]);
+    clock += PRESET_RETRY_MS;
     fail = false;
     // Two at once (a prefetch batch dressing several requests): one read.
     const [a, b] = await Promise.all([presetOf(graphOver(archive), root, cache, () => {}, decode), presetOf(graphOver(archive), root, cache, () => {}, decode)]);
@@ -167,20 +173,21 @@ describe("the cooked visual-tag preset (PIPE-101, NATIVE-25, PIPE-100)", () => {
     expect(calls).toBe(1);
   });
 
-  test("through the route's native decoder: one request for the preset's root class with the preset's budget; the decoder stays open", async () => {
-    const archive = join(root, "route.archive");
-    writeFileSync(archive, "route bytes");
-    const asked: NativeDecodeRequest[] = [];
-    let closed = false;
-    const decoder: NativeDecoder = { identity: "route", close: () => { closed = true; },
-      decode: async request => { asked.push(request); return { ok: true, document, extractedSha256: "", root: "JsonResource", name: null, notes: [], defaulted: [] }; } };
-    const ports = await clothingPorts(graphOver(archive), join(root, "no-game"), join(root, "cache-d"), () => {}, { routeDecoder: decoder });
-    expect(ports.presetTags("123", "t2_coat_&Female&TPP")).toEqual(["Common", "Large", "hide_T1part"]);
-    expect(asked).toEqual([{ archivePath: archive, hash: depotHash(PRESET_PATHS.base), needName: false, roots: ["JsonResource"], timeoutMs: 120_000 }]);
-    expect(closed).toBe(false);
-    // A refusal is the decode's failure (logged by presetOf, tried again next time), not a silent empty table.
-    const refusing: NativeDecoder = { identity: "route", close() {}, decode: async () => ({ ok: false, kind: "malformed", message: "bad bytes" }) };
-    expect(routePresetDecoder(refusing, root)(archive, "1")).rejects.toThrow("malformed: bad bytes");
+  test("a failure that would repeat (a document that isn't a preset) is remembered for the session, per archive identity (NATIVE-31)", async () => {
+    resetPresetMemory(() => clock);
+    const archive = join(root, "refused.archive");
+    writeFileSync(archive, "refused bytes");
+    let calls = 0;
+    const decode = async () => { calls++; return { Data: { RootChunk: { root: { Data: { $type: "Something" } } } } }; };
+    const logs: string[] = [];
+    expect(await presetOf(graphOver(archive), root, join(root, "cache-d"), line => logs.push(line), decode)).toBeNull();
+    clock += 10 * PRESET_RETRY_MS;
+    expect(await presetOf(graphOver(archive), root, join(root, "cache-d"), line => logs.push(line), decode)).toBeNull();
+    expect([calls, logs.length]).toEqual([1, 1]);
+    // Another archive identity (the file changed) reads again.
+    writeFileSync(archive, "changed refused bytes");
+    expect(await presetOf(graphOver(archive), root, join(root, "cache-d"), () => {}, decode)).toBeNull();
+    expect(calls).toBe(2);
   });
 
   test("without a TweakDB the records port answers null, so every item says the records couldn't be read", async () => {

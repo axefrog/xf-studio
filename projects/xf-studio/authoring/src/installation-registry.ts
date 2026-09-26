@@ -30,8 +30,12 @@
  * Native reader. Each game folder gets one native decoder (resolver-host.ts `openNativeRoute`: a worker that reads resources with the
  * game's own Oodle library), opened asynchronously before the route's first open and shared by every route and view on that folder, so
  * resources are read natively first and WolvenKit runs only for what the native reader can't answer. If it can't be opened, the route
- * reads with WolvenKit alone and the reason goes to the diagnostics log in plain words. A changed Oodle library (a game update) opens a
- * new decoder; `clear` closes them all.
+ * reads with WolvenKit alone and the reason goes to the diagnostics log in plain words; a reason that may pass (a signature check that
+ * timed out, a library in use) is tried again after `NATIVE_RETRY_MS` (NATIVE-26), a lasting one (not Windows x64, no library, a
+ * library not signed by the publisher) only when the library changes. A changed Oodle library (a game update) or a decoder that opened
+ * on a retry opens the folder's routes again with it, and moves their generation on. A decoder is closed when its folder's library
+ * changes, when no route on its folder is open any more (NATIVE-33), and by `clear`; a route still holding a closed one reads with
+ * WolvenKit until it is opened again (the decoder answers `unavailable`, NATIVE-28).
  *
  * Views. Resources are extracted into a cache folder chosen by each consumer; each folder gets its own resource graph
  * and fetcher over the shared archives (`installationView`). A view's graph remembers what it read (its shapes of meshes,
@@ -50,7 +54,8 @@ import { routeIdentity, type LaunchRouteSettings } from "./route-fingerprint";
 import { pathStamp, readListingStamp, type WatchedPath } from "./source-discovery";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
-export type InstallationRoute = LaunchRouteSettings & { readonly wolvenKitCli: string };
+/** A launch route and WolvenKit, or null while WolvenKit isn't set up (the route then reads with the native reader alone). */
+export type InstallationRoute = LaunchRouteSettings & { readonly wolvenKitCli: string | null };
 /**
  * The JSON the views' graphs keep, summed over every open route and cache folder (PIPE-55). The reference setup's three Vs and a
  * few piercing styles keep far less; beyond it the least recently used graphs start afresh.
@@ -64,10 +69,15 @@ export const PROBLEM_TTL_MS = 60_000;
 const CHECK_CONCURRENCY = 64;
 /** How many dropped routes keep their watch lists (PIPE-52). */
 const MAX_RETIRED = 8;
+/** How long a native decoder that couldn't be opened for a reason that may pass is left before it is tried again (NATIVE-26). */
+export const NATIVE_RETRY_MS = 60_000;
 
 type View = { graph: ResourceGraph; fetcher: Installation["fetcher"]; usedAt: number };
 type Entry = {
   core: Installation | null;
+  /** The game folder (its native decoder is shared by the folder's routes) and the native route the installation was opened with. */
+  gameRoot: string;
+  native: NativeRoute | null;
   /** The options it was opened with (to recompute its key: a WolvenKit changed in place gives another). */
   route: InstallationRoute | null;
   views: Map<string, View>;
@@ -108,6 +118,7 @@ export type InstallationRegistryOptions = {
   problemTtlMs?: number;
 };
 
+const NOT_USED: NativeRoute = { decoder: null, reason: "XF Studio's own reader is not used here.", permanent: true };
 const folderKey = (path: string) => process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
 const defaultStamp = async (path: string) => { try { return pathStamp(await lstat(path)); } catch { return pathStamp(null); } };
 const problemsOf = (core: Installation): string | null => {
@@ -119,8 +130,8 @@ const problemsOf = (core: Installation): string | null => {
 
 /** The registry key of a route: its settings, the WolvenKit path and WolvenKit's identity. */
 export function installationRouteKey(route: InstallationRoute): string {
-  return canonicalJson({ route: routeIdentity(route), cli: folderKey(route.wolvenKitCli),
-    tool: wolvenKitIdentityKey(wolvenKitIdentity(route.wolvenKitCli)) });
+  return canonicalJson({ route: routeIdentity(route), cli: route.wolvenKitCli ? folderKey(route.wolvenKitCli) : null,
+    tool: wolvenKitIdentityKey(route.wolvenKitCli ? wolvenKitIdentity(route.wolvenKitCli) : null) });
 }
 
 export class InstallationRegistry {
@@ -129,8 +140,11 @@ export class InstallationRegistry {
   private readonly generations = new Map<string, number>();
   /** Watch lists of routes dropped to make room, by key, until the route is opened again (PIPE-52). */
   private readonly retired = new Map<string, readonly WatchedPath[]>();
-  /** One native decoder per game folder, with the stamp of the Oodle library it was opened for. */
-  private readonly natives = new Map<string, { stamp: string; route: Promise<NativeRoute> }>();
+  /**
+   * One native decoder per game folder, with the stamp of the Oodle library it was opened for, the outcome once settled and when it
+   * settled (a failure that may pass is tried again after `NATIVE_RETRY_MS`).
+   */
+  private readonly natives = new Map<string, { stamp: string; route: Promise<NativeRoute>; settled: NativeRoute | null; at: number }>();
   /** The built native decode worker, when the host is bundled (the desktop app); by default the worker's source next to its module. */
   private nativeWorker: URL | string | undefined;
   private clock = 0;
@@ -145,10 +159,10 @@ export class InstallationRegistry {
    * goes to the diagnostics log: which reader is used, or in plain words why WolvenKit reads everything.
    */
   private native(gameRoot: string): Promise<NativeRoute> {
-    if (this.options.openNative === false) return Promise.resolve({ decoder: null, reason: "XF Studio's own reader is not used here." });
+    if (this.options.openNative === false) return Promise.resolve(NOT_USED);
     const key = folderKey(gameRoot), stamp = (this.options.nativeStamp ?? nativeRouteStamp)(gameRoot);
     const known = this.natives.get(key);
-    if (known?.stamp === stamp) return known.route;
+    if (known?.stamp === stamp && !this.retryDue(known)) return known.route;
     if (known) void known.route.then(route => route.decoder?.close());
     this.stats.nativeOpens++;
     const open = this.options.openNative ?? (root => openNativeRoute(root, { script: this.nativeWorker }));
@@ -157,10 +171,39 @@ export class InstallationRegistry {
       if (route.decoder) log?.info("resolver", "native_reader_on", "XF Studio reads your game files itself; WolvenKit runs only for files it can't read.",
         { codes: [route.decoder.identity] });
       else log?.warn("resolver", "native_reader_off", `XF Studio can't read your game files itself here, so WolvenKit reads them (slower the first time). ${route.reason}`);
+      const entry = this.natives.get(key);
+      if (entry?.route === pending) { entry.settled = route; entry.at = this.now(); }
       return route;
     });
-    this.natives.set(key, { stamp, route });
+    const pending = route;
+    this.natives.set(key, { stamp, route, settled: null, at: 0 });
     return route;
+  }
+
+  /** Whether a decoder that couldn't be opened for a reason that may pass is due to be tried again (NATIVE-26). */
+  private retryDue(known: { settled: NativeRoute | null; at: number }): boolean {
+    const settled = known.settled;
+    return !!settled && !settled.decoder && !settled.permanent && this.now() - known.at >= NATIVE_RETRY_MS;
+  }
+
+  /**
+   * Whether the game folder's decoder is no longer the one this installation was opened with: its library changed, or a decoder that
+   * failed for a reason that may pass opened on a retry (NATIVE-26, NATIVE-28).
+   */
+  private async nativeChanged(entry: Entry): Promise<boolean> {
+    if (this.options.openNative === false || !entry.core) return false;
+    const current = await this.native(entry.gameRoot);
+    return current !== entry.native && (!!current.decoder || !!entry.native?.decoder);
+  }
+
+  /** Close the decoders of game folders no route uses any more (NATIVE-33). */
+  private closeUnusedNatives(): void {
+    const used = new Set([...this.entries.values()].filter(entry => entry.core || entry.opening).map(entry => folderKey(entry.gameRoot)));
+    for (const [key, known] of this.natives) {
+      if (used.has(key)) continue;
+      this.natives.delete(key);
+      void known.route.then(route => route.decoder?.close());
+    }
   }
 
   private now() { return this.options.now?.() ?? Date.now(); }
@@ -183,7 +226,8 @@ export class InstallationRegistry {
     const key = installationRouteKey(options);
     let entry = this.entries.get(key);
     if (!entry) {
-      entry = { core: null, route: null, views: new Map(), checking: null, opening: null, usedAt: 0, openedAt: 0, vouchedAt: null, reusedAt: -Infinity, problems: null, expired: undefined };
+      entry = { core: null, gameRoot: options.gameRoot, native: null, route: null, views: new Map(), checking: null, opening: null, usedAt: 0, openedAt: 0,
+        vouchedAt: null, reusedAt: -Infinity, problems: null, expired: undefined };
       this.entries.set(key, entry);
     }
     entry.usedAt = ++this.clock;
@@ -194,6 +238,13 @@ export class InstallationRegistry {
       const vouched = entry.vouchedAt !== null && now - entry.vouchedAt < (this.options.checkFreshMs ?? CHECK_FRESH_MS) && entry.reusedAt < entry.vouchedAt;
       entry.vouchedAt = null;
       if (!vouched) await this.validate(key, entry);
+      // Another decoder for the game folder (its library changed, or one opened on a retry): open the route again with it.
+      if (entry.core && !entry.opening && await this.nativeChanged(entry) && entry.core) {
+        entry.core = null; entry.views.clear(); entry.vouchedAt = null;
+        this.bump(key);
+        this.stats.changed++;
+      }
+      if (entry.opening) return this.view(entry, await entry.opening, options);
       if (entry.core) { entry.reusedAt = this.now(); this.stats.reused++; return this.view(entry, entry.core, options); }
     }
     return this.view(entry, await this.open(key, entry, options), options);
@@ -223,8 +274,7 @@ export class InstallationRegistry {
   /** Forget every opened route and close the native decoders (tests, or a host shutting down). */
   clear(): void {
     this.entries.clear(); this.retired.clear();
-    for (const { route } of this.natives.values()) void route.then(opened => opened.decoder?.close());
-    this.natives.clear();
+    this.closeUnusedNatives();
   }
 
   private bump(key: string): void { this.generations.set(key, (this.generations.get(key) ?? 0) + 1); }
@@ -303,11 +353,12 @@ export class InstallationRegistry {
       // Dropped earlier to make room: anything changed since (even during this open) moves the generation on (PIPE-52).
       await this.checkRetired(key);
       this.retired.delete(key);
-      entry.core = core; entry.route = { ...options }; entry.problems = problems;
+      entry.core = core; entry.native = native; entry.gameRoot = options.gameRoot; entry.route = { ...options }; entry.problems = problems;
       entry.openedAt = this.now(); entry.vouchedAt = null;
       entry.views = new Map([[folderKey(options.cacheDir), { graph: core.graph, fetcher: core.fetcher, usedAt: ++this.clock }]]);
       this.forgetLeftBehind(key);
       this.evict(key);
+      this.closeUnusedNatives();
       return core;
     })();
     entry.opening = opening;
