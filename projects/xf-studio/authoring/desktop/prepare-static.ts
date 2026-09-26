@@ -40,4 +40,12 @@ const check = await Bun.build({
 });
 if (!check.success || check.outputs.length !== 1)
   throw Error(check.logs.map(String).join("\n") || "Desktop Check worker did not bundle.");
-console.log(`Prepared ${result.outputs.length} browser bundles, one Bun Check worker and seven allowlisted static files (including the licence, notices and boot watchdog).`);
+// The resolver's native decode worker (src/native/native-decode-worker.ts): the bundled host can't start it from its source URL, so
+// it is built beside the Check worker, and the desktop server hands its path to the installation registry (`useNativeWorker`).
+const decode = await Bun.build({
+  entrypoints: [resolve(authoring, "src", "native", "native-decode-worker.ts")], target: "bun",
+  outdir: output,
+});
+if (!decode.success || decode.outputs.length !== 1)
+  throw Error(decode.logs.map(String).join("\n") || "Desktop native decode worker did not bundle.");
+console.log(`Prepared ${result.outputs.length} browser bundles, two Bun workers (Check, native decode) and seven allowlisted static files (including the licence, notices and boot watchdog).`);

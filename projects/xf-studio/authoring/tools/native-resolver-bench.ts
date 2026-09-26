@@ -1,14 +1,15 @@
 /**
  * End-to-end cold resolve bench (R&D; read-only towards the game and MO2): resolves one character twice, each in its own process
- * with its own fresh temporary resolver cache, once through the production WolvenKit fetcher alone and once through the
- * native-first prototype (`src/native/native-fetch-port.ts`, which falls back to that same WolvenKit fetcher per resource). It
- * reports open and resolve times, WolvenKit launches and how many resources each reader answered, then compares the two
- * resolved characters leaf by leaf.
+ * with its own fresh temporary resolver cache, once through the WolvenKit fetcher alone and once through the production
+ * native-first route (resolver-host.ts `ResolverFetcher` over `NativeFirstFetcher`, which falls back to that same WolvenKit fetcher
+ * per resource; strict, so a reader bug fails the run). It reports open and resolve times, WolvenKit launches and how many resources
+ * each reader answered, then compares the two resolved characters leaf by leaf.
  *
  *   bun tools/native-resolver-bench.ts (--save <sav.dat | appearance.json> | --ui-state <state.json>) \
  *     [--game <root>] [--mo2 <instance> --profile <name> | --direct] [--wolvenkit <WolvenKit.CLI.exe>] [--order native-first] [--worker] [--keep]
  *
- * `--worker` decodes in a worker with a time budget per resource (native-decode.ts `WorkerDecoder`) instead of in-process.
+ * `--worker` decodes in a worker with a time budget per resource (native-decode.ts `WorkerDecoder`, as the Studio's hosts do) instead
+ * of in-process; `--worker-script <file>` starts that worker from a built bundle (the desktop app's `native-decode-worker.js`).
  *
  * Paths default to the Studio's local settings (game folder, launch route, MO2 instance and profile, WolvenKit CLI). The caches
  * live under the OS temp folder and are removed afterwards unless `--keep`. The printed summary names no mods; the per-run
@@ -21,9 +22,9 @@ import { descriptorsFromUiState } from "../src/cco-model";
 import { type CharacterInput, inputFromSave, loadMergedCco, resolveCharacter } from "../src/character-resolver";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import type { NativeDecoder } from "../src/native/native-decode";
-import { inProcessDecoder, NativeFirstFetcher, type NativeFetchStats, openNativeDecoder, openNativeReader } from "../src/native/native-fetch-port";
-import { ResourceGraph } from "../src/resource-graph";
-import { openInstallation } from "../src/resolver-host";
+import { inProcessDecoder, type NativeFetchStats, openNativeDecoder, openNativeReader } from "../src/native/native-fetch-port";
+import type { ResourceGraph } from "../src/resource-graph";
+import { type NativeRoute, openInstallation } from "../src/resolver-host";
 import { readSavedV } from "../src/save-reader";
 
 const args = Bun.argv.slice(2);
@@ -76,23 +77,18 @@ async function runOnce(mode: Mode, cacheDir: string, out: string): Promise<void>
   const profile = direct ? null : option("profile") ?? settings.mo2ProfileId;
   const cli = resolve(option("wolvenkit") ?? settings.wolvenKitCli ?? "");
   const started = performance.now();
-  const installation = openInstallation({ gameRoot, launchRoute: direct ? "direct" : "mo2", mo2Root, mo2ProfileId: profile, wolvenKitCli: cli, cacheDir });
-  const openMs = performance.now() - started;
-
-  let graph = installation.graph, nativeStats: RunReport["native"];
-  let nativeFetcher: NativeFirstFetcher | null = null, readerIdentity = "", close = () => {};
-  const decoderKind = flag("worker") ? "worker" as const : "in-process" as const;
+  let nativeStats: RunReport["native"], native: NativeRoute | null = null, readerIdentity = "", close = () => {};
+  const decoderKind = flag("worker") || option("worker-script") ? "worker" as const : "in-process" as const;
   if (mode === "native") {
     let decoder: NativeDecoder | null = null, reason = "";
-    if (decoderKind === "worker") { const opened = openNativeDecoder(gameRoot); decoder = opened.decoder; if (!opened.decoder) reason = opened.reason; }
+    if (decoderKind === "worker") { const opened = openNativeDecoder(gameRoot, { script: option("worker-script") ?? undefined }); decoder = opened.decoder; if (!opened.decoder) reason = opened.reason; }
     else { const opened = openNativeReader(gameRoot); decoder = opened.reader ? inProcessDecoder(opened.reader) : null; if (!opened.reader) reason = opened.reason; }
-    if (decoder) {
-      nativeFetcher = new NativeFirstFetcher(decoder, installation.fetcher, { strict: true });
-      graph = new ResourceGraph(installation.depot, installation.xl, nativeFetcher);
-      readerIdentity = decoder.identity;
-      close = () => decoder.close();
-    } else nativeStats = { readerIdentity: "", decoder: decoderKind, unavailable: reason };
+    if (decoder) { native = { decoder, strict: true }; readerIdentity = decoder.identity; close = () => decoder.close(); }
+    else nativeStats = { readerIdentity: "", decoder: decoderKind, unavailable: reason };
   }
+  const installation = openInstallation({ gameRoot, launchRoute: direct ? "direct" : "mo2", mo2Root, mo2ProfileId: profile, wolvenKitCli: cli, cacheDir, native });
+  const openMs = performance.now() - started;
+  const graph = installation.graph;
 
   const resolveStart = performance.now();
   let result = await resolveInput(graph);
@@ -107,7 +103,7 @@ async function runOnce(mode: Mode, cacheDir: string, out: string): Promise<void>
     settle = { ms: performance.now() - settleStart, cliCalls: again.fetcher.stats.cliCalls, extracted: again.fetcher.stats.extracted,
       transient: again.fetcher.stats.transient, failures: again.fetcher.stats.failures };
   }
-  if (nativeFetcher) nativeStats = { ...nativeFetcher.stats, readerIdentity, decoder: decoderKind };
+  if (installation.fetcher.nativeStats) nativeStats = { ...installation.fetcher.nativeStats, readerIdentity, decoder: decoderKind };
   close();
 
   const stats = installation.fetcher.stats, size = folderSize(join(cacheDir, "json"));
