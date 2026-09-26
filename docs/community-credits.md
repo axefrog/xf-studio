@@ -38,7 +38,7 @@ By yamashi and contributors. [GitHub](https://github.com/maximegmd/CyberEngineTw
 
 ### RED4ext and RED4ext SDK
 
-By wopss and contributors. [RED4ext](https://github.com/wopss/RED4ext), [RED4ext SDK](https://github.com/wopss/RED4ext.SDK). RED4ext's releases set our framework baseline, and the SDK's resource-depot declarations clarified which parts of archive lookup order the game leaves unspecified. Its character-customization type declarations showed that the creator tracks an active flag per option. A dump of the game's scripting type information, exported for us by psiberx with his fork of wopss's RED4.RTTIDumper, named the puppet-preview controller and camera classes that led us to the character creator's scene and camera. The loader's source and the SDK's examples taught us the plugin contract, game-state callbacks, per-plugin logging and native function registration behind the XF Runtime Bridge, which is built against the SDK (MIT) and needs RED4ext at runtime. The SDK's resource-path declaration documents the path clean-up behind the game's resource hashes, which XF Studio's archive reader follows. The SDK's reconstruction of how the engine runs native functions, together with the function names in the address library RED4ext ships, let us pin the bridge's first in-game crash to a missing call context.
+By wopss and contributors. [RED4ext](https://github.com/wopss/RED4ext), [RED4ext SDK](https://github.com/wopss/RED4ext.SDK). RED4ext's releases set our framework baseline, and the SDK's resource-depot declarations clarified which parts of archive lookup order the game leaves unspecified. Its character-customization type declarations showed that the creator tracks an active flag per option. A dump of the game's scripting type information, exported for us by psiberx with his fork of wopss's RED4.RTTIDumper, named the puppet-preview controller and camera classes that led us to the character creator's scene and camera. The loader's source and the SDK's examples taught us the plugin contract, game-state callbacks, per-plugin logging and native function registration behind the XF Runtime Bridge, which is built against the SDK (MIT) and needs RED4ext at runtime. The SDK's resource-path declaration documents the path clean-up behind the game's resource hashes, which XF Studio's archive reader follows. Its generated layouts of the hair-profile resource and its gradient entries let us find the game's hair-profile bake in the executable. The SDK's reconstruction of how the engine runs native functions, together with the function names in the address library RED4ext ships, let us pin the bridge's first in-game crash to a missing call context.
 
 ### redscript
 
@@ -83,6 +83,10 @@ By the Blender Foundation and contributors. [blender.org](https://www.blender.or
 ### Bun
 
 By the Bun contributors. [GitHub](https://github.com/oven-sh/bun). Bun runs XF Studio's local service, its SQLite library and our test suites, and hosts the desktop shell's main process. Used as a runtime dependency.
+
+### Capstone
+
+By Nguyen Anh Quynh and contributors. [Website](https://www.capstone-engine.org), [GitHub](https://github.com/capstone-engine/capstone). Disassembling the game's executable with it showed where the hair lighting options get their default values and which shader constants they feed, and how the game bakes hair-colour profiles. Used as a research tool only; BSD-3-Clause-licensed.
 
 ### dxil-spirv
 

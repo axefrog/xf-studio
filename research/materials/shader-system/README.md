@@ -94,6 +94,18 @@ In the lifted `.hlsl`, read `_N` as SSA `%N` of that program's `.ll`. Loops stay
 - three validation programs;
 - the decompile path's coverage, equivalence check and limits.
 
+## Reading the executable
+
+Some inputs to the shaders are set by CPU code, not by any resource: GameOption defaults, the constant-buffer copies, and baked lookup rows. `exe_hair.py` reads them from the 2.31 `Cyberpunk2077.exe` with the Capstone disassembler (`<XF_TOOLS_DIR>/capstone/<version>/site`). The method: find the option's group string, follow its code references to the static initialiser, which holds the default, minimum and maximum, then find the code that reads the option's value. For hair this gives every option's default and its `cb0` register, and the `.hp` profile bake ([hair reference §6.4, §7](../shader-hair.md#64-option-values-and-registers-executable)).
+
+```powershell
+python research/materials/shader-system/exe_hair.py options    # defaults, ranges and value addresses
+python research/materials/shader-system/exe_hair.py fill       # which cb0 register each option feeds
+python research/materials/shader-system/exe_hair.py dis 0xaeb374 0xaeb690   # the profile bake
+```
+
+Addresses are RVAs of the 2.31 executable; another build moves them, but the method still applies.
+
 ## Programs examined in this pass
 
 | Program | Role | Pixel/compute DXBC SHA-256 |
@@ -106,6 +118,7 @@ In the lifted `.hlsl`, read `_N` as SSA `%N` of that program's `.ll`. Loops stay
 | `metal_base` `gbuffer_regular` MeshSkinned pixel `1846801220589112223` | Standard opaque G-buffer writer | `6b59ca6d02f54992f8ea6a13ed2680b80d7c4bc4ef6fc16d1c8b2f457caf0be9` |
 | `eye_shadow` `transparent_back_face` MeshSkinned pixel `14043594489545752539` | Forward-lit transparent shell | `54e65aa46e0c224a3dcd35fc90d81c61fa30e47c2486392300902e64636266e0` |
 | `multilayered_clear_coat` `unlit` MeshSkinned pixel `5403688829342147459` | Forward clear-coat pass | `2d4cb586c3c9a9a489a131dfa6523d39da94eab7fc167bee53d3edc7dcaddad5` |
+| static, unnamed by the index, pixel `16447472454040542875` (and seven variants, [hair reference §1](../shader-hair.md#1-pinned-inputs)) | Ambient and reflection composite; its Hair branch is the hair environment path | `02b8959f89a1196ebad6aa486be99f11dfb9af46d9451e0078f8e729900488cb` |
 
 ## Observations
 
