@@ -21,12 +21,11 @@ import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { writeFileAtomic } from "./derived-cache";
 import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
-import { raiseLowPriority } from "./process-tree";
 import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
 import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
-import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
+import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
 export interface InstallationOptions {
   readonly gameRoot: string;
@@ -229,7 +228,7 @@ export async function foregroundExtraction<T>(cacheDir: string, work: () => Prom
   const lane = laneFor(cacheDir);
   lane.foreground++;
   // A resource this work needs may be in a background batch already: that batch must not run at background priority now.
-  raiseLowPriority();
+  raiseBackgroundWolvenKit();
   try { return await work(); } finally { lane.foreground--; }
 }
 /** Run `work` as background work on a cache folder: its batches run below normal priority, unless foreground work runs too. */

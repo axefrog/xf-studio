@@ -3,7 +3,7 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } fro
 import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { readPeFileVersion } from "./pe-version";
-import { runProcessTree, type ProcessTreeResult } from "./process-tree";
+import { raiseLowPriority, runProcessTree, type ProcessTreeResult } from "./process-tree";
 
 /**
  * Process adapter: the one place XF Studio starts WolvenKit CLI. It owns the success policy
@@ -72,6 +72,9 @@ const runLabel = (cli: string, args: readonly string[]) => `${basename(cli)} ${a
  * measurements and the prepare log: most of a first-time choice's time is launches, and each costs seconds before doing any work.
  */
 export const wolvenKitRunStats = { launches: 0, ms: 0, byCommand: new Map<string, { launches: number; ms: number }>() };
+
+/** Raise every WolvenKit run started with `lowPriority` that is still running to normal priority (foreground work may wait on it). */
+export const raiseBackgroundWolvenKit = (): void => raiseLowPriority();
 
 /** Run one WolvenKit command; abort or timeout stops the whole process tree. */
 export async function runWolvenKit(cli: string | null, args: readonly string[], options: WolvenKitRunOptions): Promise<WolvenKitRun> {
