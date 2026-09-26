@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { builtModsOf, ModInstallActions, type BuiltMod, type ModInstallPlan } from "../src/mod-install-actions";
 
 const plan = (over: Partial<ModInstallPlan> = {}): ModInstallPlan => ({ schema: "xfs/mod-install-plan-1", candidateId: "c1", modName: "XF Eye Artistry",
-  route: "mo2", place: "Mod Organizer 2 (profile “Main”)", changes: ["Add the mod …"], notes: [], blocked: null, replacing: false, token: "t1", ...over });
+  route: "mo2", place: "Mod Organizer 2 (profile “Main”)", changes: ["Add the mod …"], notes: [], blocked: null, next: null, replacing: false, token: "t1", ...over });
 
 function fixture(answers: Record<string, { ok: boolean; status?: number; data: unknown }[]>, builds: BuiltMod[] = [{ product: "p1", candidateId: "c1", modName: "XF Eye Artistry" }]) {
   const sent: unknown[] = [];

@@ -1,6 +1,7 @@
 import Electrobun, { BrowserWindow, PATHS, Utils } from "electrobun/main";
 import { resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { machineInstallReceiptsRoot } from "../src/host-state";
 import { createDesktopServer } from "./server";
 import { logUnhandledRejections } from "../src/diagnostics/host-log";
 import { desktopVersionFromMetadata } from "./host";
@@ -56,6 +57,8 @@ try {
   app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"),
     resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"), undefined, undefined, undefined,
     { openExternal: url => Utils.openExternal(url), webView2: webView2.version, nativeDecodeWorker: resolve(viewRoot, "native-decode-worker.js"),
+      // Install receipts are per user on this computer, shared with localhost (INSTALL-04).
+      installReceipts: machineInstallReceiptsRoot(),
       revealPath: path => { Utils.showItemInFolder(path); return true; },
       pickFolder: async start => (await Utils.openFileDialog({ startingFolder: start ?? "~/", canChooseFiles: false, canChooseDirectory: true,
         allowsMultipleSelection: false }))[0] || null });

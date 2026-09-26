@@ -1,9 +1,13 @@
 import { LocalSetupActions, type FolderPicker } from "./local-setup-actions";
 
-/** The page's settings service over `/api/local-settings`; `pickFolder` is the host's native folder picker, when it has one. */
-export function createBrowserLocalSetup(options: { pickFolder?: FolderPicker } = {}) {
+/**
+ * The page's settings service over `/api/local-settings`; `pickFolder` is the host's native folder picker, when it has one. A
+ * verification workspace uses its own copy (`/api/verification/local-settings`), so a test never changes the real settings (UI-98).
+ */
+export function createBrowserLocalSetup(options: { pickFolder?: FolderPicker; verification?: boolean } = {}) {
+  const endpoint = options.verification ? "/api/verification/local-settings" : "/api/local-settings";
   return new LocalSetupActions(async (method, body) => {
-    const response = await fetch("/api/local-settings", { method,
+    const response = await fetch(endpoint, { method,
       headers: body ? { "Content-Type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined });
     return { ok: response.ok, status: response.status, data: await response.json() };

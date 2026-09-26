@@ -11,7 +11,7 @@ let current: { close(): void } | null = null;
  * and, when it can't be done now, why with the one next step (a button where there is one). The primary button is the consent
  * to that plan; nothing is added until it is pressed. Acts only through `port.modInstall`.
  */
-export function openModInstallSheet(rt: StudioRuntime, product: string, options: { openSetup(): void }) {
+export function openModInstallSheet(rt: StudioRuntime, product: string, options: { openSetup(): void; rename?(): void }) {
   current?.close();
   const port = rt.port, install = port.modInstall;
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -23,12 +23,13 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
   const status = h("p", { class: "install-status", role: "status", "aria-live": "polite" });
   const setup = button({ label: "Open Game & tools", icon: "settings", small: true, onClick: () => { close(); options.openSetup(); } });
   const again = button({ label: "Check again", icon: "refresh", small: true, onClick: () => void review() });
+  const rename = button({ label: "Rename the mod", icon: "rename", small: true, onClick: () => { close(); options.rename?.(); } });
   const add = button({ label: "Add", icon: "package", variant: "primary", onClick: () => void apply() });
   const cancel = button({ label: "Cancel", variant: "quiet", onClick: () => close() });
   const dialog = h("dialog", { class: "sheet install-sheet", "aria-labelledby": titleId },
     h("div", { class: "sheet-head" }, title,
       h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => close() }, icon("close"))),
-    where, changes, notes, h("div", { class: "install-state" }, status, again, setup),
+    where, changes, notes, h("div", { class: "install-state" }, status, again, rename, setup),
     h("div", { class: "report-foot" }, add, h("span", { class: "grow" }), cancel));
   let said = "";
 
@@ -66,10 +67,12 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     const blocked = plan?.blocked ?? null;
     setText(status, busy === "modInstall.apply" ? "Adding your mod…" : said || blocked || "");
     status.className = `install-status${said || blocked ? " warning" : ""}`;
-    // The one next step as a button: Game & tools when that's what's missing, Check again otherwise.
-    const needsSetup = !!blocked && /Game & tools/.test(blocked);
-    setup.hidden = !needsSetup;
-    again.hidden = !blocked || needsSetup;
+    // The one next step as a button, as the plan names it (UI-99): Game & tools, renaming the mod, or Check again once the
+    // person has done what it says. A refused Add offers Check again.
+    const next = blocked ? plan!.next : said ? "retry" : null;
+    setup.hidden = next !== "setup";
+    rename.hidden = next !== "rename" || !options.rename;
+    again.hidden = next !== "retry" && !(next === "rename" && !options.rename);
     applyCapability(again, busy ? { available: false, reason: "Wait a moment." } : { available: true });
     setText(add.querySelector("span")!, plan ? plan.route === "mo2" ? "Add to Mod Organizer 2" : "Add to the game folder" : "Add");
     applyCapability(add, install.capability({ kind: "modInstall.apply", product }));

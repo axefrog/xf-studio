@@ -16,6 +16,11 @@ import { MOD_INSTALL_DESCRIPTORS } from "./studio-action-descriptors";
 export const MOD_INSTALL_PLAN = "xfs/mod-install-plan-1" as const;
 export const MOD_INSTALL_RESULT = "xfs/mod-install-result-1" as const;
 export type ModInstallRoute = "mo2" | "direct";
+/**
+ * The one next step a blocked plan offers as a button (UI-99): open Game & tools, rename the mod in Mod package, or check again
+ * once the person has done what `blocked` says. Null when there is nothing to press (a test workspace).
+ */
+export type ModInstallNextStep = "setup" | "rename" | "retry" | null;
 /** What the host's `install` would do, in plain words, and whether it can now (mod-install-host.ts). */
 export type ModInstallPlan = {
   schema: typeof MOD_INSTALL_PLAN;
@@ -30,6 +35,8 @@ export type ModInstallPlan = {
   notes: string[];
   /** Why it can't be done now, with the one next step; null when it can. Nothing is changed while it is set. */
   blocked: string | null;
+  /** The button for the next step while `blocked`; null when it isn't blocked or nothing can be pressed. */
+  next: ModInstallNextStep;
   /** Whether this replaces the files XF Studio added for this mod before. */
   replacing: boolean;
   /** Ties consent to this plan: `install` refuses when anything named here changed since. */

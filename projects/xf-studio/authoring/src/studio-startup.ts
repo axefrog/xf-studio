@@ -50,7 +50,7 @@ export type StudioHost = {
   previewPreparation: PreviewPreparationActions;
   /** The host's WolvenKit setup service (download with consent, .NET check). */
   wolvenKitSetup: WolvenKitSetupActions;
-  /** The host's settings service; the desktop shares its Build setup dialog's instance. */
+  /** The host's settings service; the desktop shares its Build setup dialog's instance (the verification copy under `?verify`). */
   localSetup?: LocalSetupActions;
   /** Opens a named official page (WolvenKit's, or XF Studio's own); without it the page opens in a new browser tab. */
   openLink?: (link: WolvenKitLink | ProjectLink) => Promise<void>;
@@ -104,10 +104,12 @@ async function start(host: StudioHost, root: HTMLElement) {
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
-  const localSetup = host.localSetup ?? createBrowserLocalSetup();
+  // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
+  const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
-  const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]));
+  const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
+    verification ? "/api/verification/mod-install" : "/api/mod-install");
   // Whether the 3D preview may start preparing by itself; a workspace preference (per verification scope).
   let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;

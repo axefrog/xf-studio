@@ -5,7 +5,8 @@ import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { createPackageHandler, localCandidateStore, localEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
-import { createModInstallHandler, explorerReveal, installReceiptsRoot, ModInstallHost, windowsProcessRunning } from "./src/mod-install-host";
+import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/mod-install-host";
+import { localHostState, verificationInstallReceipts, verificationSettingsDirectory } from "./src/host-state";
 import { STUDIO_EXPORTERS } from "./src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "./src/features/eye-makeup";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
@@ -16,6 +17,7 @@ import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
+import type { LocalSettings } from "./src/local-settings";
 import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview-core-host";
 import { createPreviewCoreHandler } from "./src/preview-core-server";
@@ -26,7 +28,10 @@ import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-serve
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
 import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
-const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
+// Settings and install receipts follow an isolated data folder (XFAS_DATA_DIR, XFS_SETTINGS_DIR); an isolated server never reads or
+// writes the person's real settings and doesn't add mods (src/host-state.ts, INSTALL-01).
+const state = localHostState(resolve(import.meta.dir, "data"));
+const dataRoot = state.dataRoot;
 mkdirSync(dataRoot, { recursive: true });
 // One structured log and rolling detail window in data/diagnostics/ (docs/diagnostics.md); routine events still print here.
 const diagnostics = hostDiagnosticsAt(dataRoot, { echo: consoleEcho });
@@ -37,14 +42,17 @@ const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
-const localSettings = new LocalSettingsStore();
+const localSettings = new LocalSettingsStore(state.settingsDirectory);
+// A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
+const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
 // WolvenKit: XFS_PACKAGE_WOLVENKIT, then Local setup, then XF Studio's own copy (downloaded only with consent).
 const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
   configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: diagnostics.log.logger("wolvenkit") });
-const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: true,
+const settingsFeatures = (settings: LocalSettings) => ({ updater: false, installer: true,
   wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
-  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) }),
-  () => wolvenKit.managedExecutable());
+  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) });
+const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable());
+const verificationSettingsRequest = createLocalSettingsHandler(verificationSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable());
 const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
 const detectionRequest = createInstallDetectionHandler(undefined, { settings: () => {
   const settings = localSettings.load().settings;
@@ -58,11 +66,17 @@ const packageRequest = createPackageHandler(action => localPackageAdapter({ expo
   prerequisites: tools => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(tools) }) }));
 // "Add to my mod manager" (UI-82): a verified build from dist/ into the MO2 profile or game folder Local setup names, only after
 // the person accepted its plan. Receipts and the previous mod list stay in the private data folder.
-const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ candidateStore: localCandidateStore(),
-  receiptsRoot: installReceiptsRoot(dataRoot),
-  settings: () => { const settings = localSettings.load().settings; return { ...settings, gameRoot: packageToolPaths(settings).gamepath }; },
-  mo2Running: () => windowsProcessRunning("ModOrganizer.exe"), frameworkMods: settings => profileFrameworkMods(settings), reveal: explorerReveal }),
-(code, message, error) => { hostFailure("install", code, message, error); });
+// Receipts are per user on this computer (shared with the desktop app); an isolated server keeps its own and adds nothing.
+const installHost = (store: LocalSettingsStore, receiptsRoot: string, readOnly: string | undefined, legacy: string[] = []) =>
+  () => new ModInstallHost({ candidateStore: localCandidateStore(), receiptsRoot, legacyReceiptsRoots: legacy, readOnly,
+    settings: () => { const settings = store.load().settings; return { ...settings, gameRoot: packageToolPaths(settings).gamepath }; },
+    running: () => windowsRunningApps(), ansiCodePage: systemAnsiCodePage, frameworkMods: settings => profileFrameworkMods(settings), reveal: explorerReveal });
+const installLog = (code: string, message: string, error: unknown) => { hostFailure("install", code, message, error); };
+const modInstallRequest = createModInstallHandler(installHost(localSettings, state.installReceipts, state.installs ? undefined : READ_ONLY_TEST_SERVER,
+  state.legacyInstallReceipts), installLog);
+// A verification workspace plans against its own settings and never adds anything (INSTALL-01).
+const verificationModInstallRequest = createModInstallHandler(installHost(verificationSettings, verificationInstallReceipts(dataRoot),
+  READ_ONLY_VERIFICATION), installLog);
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
 const previewCacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache"));
@@ -130,7 +144,9 @@ const server = Bun.serve({
     if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(request);
     if (url.pathname === "/api/package") return packageRequest(request);
     if (url.pathname === "/api/mod-install") return modInstallRequest(request);
+    if (url.pathname === "/api/verification/mod-install") return verificationModInstallRequest(request);
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
+    if (url.pathname === "/api/verification/local-settings") return verificationSettingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);

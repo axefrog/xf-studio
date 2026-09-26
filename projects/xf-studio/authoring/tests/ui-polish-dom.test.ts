@@ -65,7 +65,7 @@ describe("refusals and unavailable actions (UI-80, UI-84, UI-15)", () => {
 // ---- The Mod package panel over real application services and fake host transports ----
 
 const PLAN = (over: Partial<ModInstallPlan> = {}): ModInstallPlan => ({ schema: "xfs/mod-install-plan-1", candidateId: "c1", modName: "XF Eye Artistry",
-  route: "mo2", place: "Mod Organizer 2 (profile “Main”)", blocked: null, replacing: false, token: "t1", notes: [],
+  route: "mo2", place: "Mod Organizer 2 (profile “Main”)", blocked: null, next: null, replacing: false, token: "t1", notes: [],
   changes: ["Add the mod “XF Eye Artistry” to Mod Organizer 2, with its 2 files in D:\\MO2\\mods\\XF Eye Artistry\\archive\\pc\\mod.",
     "Add “XF Eye Artistry” to the profile “Main”, switched on. At the bottom of the \"Looks\" section, where Mod Organizer puts newly installed mods.",
     "Nothing else in your mod list changes."], ...over });
@@ -180,12 +180,15 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   });
 
   test("a blocked plan says why, offers the one next step, and can't be accepted", async () => {
-    const h = await packageHarness({ plan: PLAN({ blocked: "Choose your Mod Organizer 2 instance and profile in Game & tools first." }) });
+    const h = await packageHarness({ plan: PLAN({ blocked: "Choose your Mod Organizer 2 instance and profile in Game & tools first.", next: "setup" }) });
     buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
     expect(await until(() => !!openSheet()?.querySelector(".install-status")?.textContent, h.paint)).toBe(true);
     const sheet = openSheet()!;
     expect(text(sheet.querySelector(".install-status")!)).toBe("Choose your Mod Organizer 2 instance and profile in Game & tools first.");
+    // The plan names its next step (UI-99): the sheet never guesses it from the words.
     expect(buttonNamed(sheet, "Open Game & tools")!.hidden).toBe(false);
+    expect(buttonNamed(sheet, "Check again")!.hidden).toBe(true);
+    expect(buttonNamed(sheet, "Rename the mod")!.hidden).toBe(true);
     const consent = buttonNamed(sheet, "Add to Mod Organizer 2")!;
     expect(consent.getAttribute("aria-disabled")).toBe("true");
     consent.click();
@@ -193,6 +196,19 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     expect(h.sentInstall.filter(body => (body as { action: string }).action === "install")).toEqual([]);
     buttonNamed(sheet, "Close")!.click();
     h.panel.spec.element.remove();
+  });
+
+  test("a blocked plan's next step is the button it names: rename the mod, or check again (UI-99, UI-100)", async () => {
+    for (const [next, shown] of [["rename", "Rename the mod"], ["retry", "Check again"]] as const) {
+      const h = await packageHarness({ plan: PLAN({ blocked: "Mod Organizer 2 still has an early test copy of this mod: the mod “XF Studio”. " +
+        "Remove that mod in Mod Organizer 2 (right-click it, then Remove mod), then choose Check again.", next }) });
+      buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
+      expect(await until(() => !!openSheet()?.querySelector(".install-status")?.textContent, h.paint)).toBe(true);
+      const sheet = openSheet()!;
+      for (const name of ["Open Game & tools", "Check again", "Rename the mod"]) expect(buttonNamed(sheet, name)!.hidden).toBe(name !== shown);
+      buttonNamed(sheet, "Close")!.click();
+      h.panel.spec.element.remove();
+    }
   });
 
   test("a failed Build offers a problem report, never a log path; an ordinary refusal needs no report (UI-94)", async () => {

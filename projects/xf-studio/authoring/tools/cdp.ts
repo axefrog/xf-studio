@@ -3,10 +3,11 @@
  * Launches a throwaway Chrome profile and a disposable-data authoring server.
  * Never points at the active working draft or library.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { localSettingsDirectory } from "../src/local-settings-store";
 
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const root = resolve(import.meta.dir, "..");
@@ -33,10 +34,17 @@ export type Session = {
   close(): Promise<void>;
 };
 
-export async function startServer(port: number) {
+/**
+ * A disposable-data authoring server. Its settings and install receipts live in that throwaway folder (host-state.ts), so nothing
+ * a check does reaches the person's real settings, and it never adds a mod (INSTALL-01). `settings: "copy"` (the default) starts
+ * it from a copy of the real settings, read once, so looks that need the game (the 3D head, hair, brows) still load.
+ */
+export async function startServer(port: number, options: { settings?: "copy" | "empty" } = {}) {
   const data = mkdtempSync(join(tmpdir(), "xfs-ui-data-"));
-  const server = Bun.spawn(["bun", "server.ts"], { cwd: root, env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data },
-    stdout: "pipe", stderr: "pipe" });
+  const real = join(localSettingsDirectory(), "settings.json");
+  if ((options.settings ?? "copy") === "copy" && existsSync(real)) copyFileSync(real, join(data, "settings.json"));
+  const server = Bun.spawn(["bun", "server.ts"], { cwd: root, env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data,
+    XFS_SETTINGS_DIR: "", XFS_MOD_INSTALL: "off" }, stdout: "pipe", stderr: "pipe" });
   for (let i = 0; i < 120; i++) {
     try { const response = await fetch(`http://127.0.0.1:${port}/health`); if (response.ok) return { server, data }; } catch { /* booting */ }
     await Bun.sleep(250);
