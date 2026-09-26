@@ -124,6 +124,12 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         {
             log::Debug("game.drained", "tasks=" + std::to_string(ran));
         }
+        // Kill switch: the queue is closed by then, so the undo runs here directly, once.
+        if (state.bridge && state.bridge->GetDispatcher().IsKilled() && state.writesUsed.load() &&
+            !state.restoreDone.load())
+        {
+            RestoreAfterKill();
+        }
         return false;
     });
 }

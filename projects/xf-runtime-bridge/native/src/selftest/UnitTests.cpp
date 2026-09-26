@@ -8,11 +8,13 @@
 #include <chrono>
 #include <cstdio>
 #include <string>
+#include <functional>
 #include <thread>
 
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
 #include "core/Log.hpp"
+#include "core/Params.hpp"
 
 namespace
 {
@@ -222,6 +224,54 @@ void QueueTests()
               std::to_string(waited) + " ms");
     }
 }
+// Phase-2 parameter checks: each refusal is bad_params with a plain message; accepted input is
+// turned into the attribute keys the redscript layer receives.
+std::string ParamsCode(const std::function<void()>& aParse)
+{
+    try
+    {
+        aParse();
+        return "ok";
+    }
+    catch (const xfb::MethodError& e)
+    {
+        return e.code;
+    }
+}
+
+void ParamsTests()
+{
+    namespace p = xfb::params;
+    const auto camera = p::ParseCamera(json::parse(R"({"fov":20,"subject":{"yaw":180,"up_down":-2},"dof":false})"));
+    Check("camera params map to attribute keys (fov 1, dof 26, subject yaw 7, up/down 37)",
+          camera.attributes.size() == 4 && camera.attributes[0].key == 1 && camera.attributes[0].value == 20.0f &&
+              camera.attributes[1].key == 26 && camera.attributes[1].value == 0.0f && camera.attributes[2].key == 7 &&
+              camera.attributes[2].name == "subject.yaw" && camera.attributes[3].key == 37);
+    Check("camera refuses an unknown parameter", ParamsCode([] { p::ParseCamera(json::parse(R"({"zoom":2})")); }) == "bad_params");
+    Check("camera refuses fov out of bounds", ParamsCode([] { p::ParseCamera(json::parse(R"({"fov":500})")); }) == "bad_params");
+    Check("camera refuses reset combined with values",
+          ParamsCode([] { p::ParseCamera(json::parse(R"({"reset":true,"fov":30})")); }) == "bad_params");
+    Check("camera refuses an empty request", ParamsCode([] { p::ParseCamera(json::object()); }) == "bad_params");
+    Check("camera accepts reset alone", p::ParseCamera(json::parse(R"({"reset":true})")).reset);
+    const auto light = p::ParseLight(json::parse(R"({"light":2,"hue":200,"brightness":50})"));
+    Check("light params select light 2 and map brightness 47, hue 51",
+          light.light == 2 && light.attributes.size() == 2 && light.attributes[0].key == 47 && light.attributes[1].key == 51);
+    Check("light refuses light 4", ParamsCode([] { p::ParseLight(json::parse(R"({"light":4,"hue":1})")); }) == "bad_params");
+    Check("expression needs a whole faceId", ParamsCode([] { p::ParseExpression(json::parse(R"({"faceId":2.5})")); }) == "bad_params");
+    Check("cc.apply needs option and index", ParamsCode([] { p::ParseCharacterApply(json::parse(R"({"option":"XF"})")); }) == "bad_params");
+    Check("cc.apply refuses control characters in the option name",
+          ParamsCode([] { p::ParseCharacterApply(json::parse("{\"option\":\"a\\u0001\",\"index\":1}")); }) == "bad_params");
+    const auto time = p::ParseTime(json::parse(R"({"hours":0,"minutes":30})"));
+    Check("time accepts hour 0", time.hours == 0 && time.minutes == 30 && time.totalSeconds == -1);
+    Check("time refuses hours and total_seconds together",
+          ParamsCode([] { p::ParseTime(json::parse(R"({"hours":1,"total_seconds":5})")); }) == "bad_params");
+    Check("time refuses minute 60", ParamsCode([] { p::ParseTime(json::parse(R"({"hours":1,"minutes":60})")); }) == "bad_params");
+    Check("pause needs paused", ParamsCode([] { p::ParsePause(json::object()); }) == "bad_params");
+    Check("hud hide defaults to hidden", p::ParseHudHidden(json::object()));
+    Check("appearance check list is bounded",
+          ParamsCode([] { p::ParseAppearance(json{{"check", json::array({json::object()})}}); }) == "bad_params");
+    Check("no-parameter methods refuse parameters", ParamsCode([] { p::RequireOnly(json{{"x", 1}}, {}); }) == "bad_params");
+}
 } // namespace
 
 int RunUnitTests()
@@ -230,6 +280,7 @@ int RunUnitTests()
     NestingTests();
     SerializeTests();
     QueueTests();
+    ParamsTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }
