@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `1a575a1`–`363373a` | 2026-09-27 | In-depth UI/UX review (backlog track 7): every panel and flow against the "it just works" policy, accessibility and UI boundaries; code, style guide, acceptance screenshots and one running check | 0 High, 8 Medium, 10 Low (UI-80..97). UI-03, UI-10, UI-14, UI-15, UI-04 and UI-57 still open. Docking, menus and palette reasons, the WolvenKit consent, 3D preview setup, Character panel status and problem reports are sound. Fixes in claude/ui-polish |
 | `47f581c` | 2026-09-27 | Body and clothing render (claude/body-render, claude/clothing-render): the body plan and censorship policy, the clothing resolver and host, save packages, the loader's body shape, the Clothing control | Body and clothing render: 1 High, 7 Medium, 4 Low (PIPE-97..101, PREV-106..108, CORE-92, NATIVE-25, UI-78..79). PIPE-97: the underwear floor failed open wherever the cover could be lost after the plan. All fixed in claude/cleanup-body-clothing |
 | `d144704` | 2026-09-26 | Bridge autonomy batch 1, focused safety review (key sending, cc.confirm/back, cursor wrap, camera presets, photo.subject) | 0 High, 2 Medium, 6 Low (RB-34..41). Safe for the next session: only the bound photo-mode key can be sent, only to the game's foreground window, only with writes and the photo class on; confirm/back gated natively; presets only in test zips. All fixed in claude/bridge-batch2 |
 | `fa74f98` | 2026-09-26 | Bridge script-call fix (c31156a), faster first-time choices (8971165), native reader hardening (091054d) | 0 High, 4 Medium, 11 Low (PREV-101..105, PIPE-96, RB-32..33, NATIVE-18..24). Nothing in the script-call path likely to crash the game; prefetch Clear only deletes inside the prepared folders; NATIVE-01..17 hold (NATIVE-02/05 with the NATIVE-18/23 gaps). NATIVE-24: the native-hardening "Fixed in" section lost in the 091054d merge, restored. PREV-101..105, PIPE-96 and NATIVE-18..23 fixed in claude/cleanup-batch2; RB-32..33 in claude/bridge-batch2 |
@@ -65,6 +66,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-80 | Med | Presentation | Ordinary refusals (nothing to undo) show as red error toasts that never fade (`runtime.ts:100`, `feedback.ts:62`) | Open (claude/ui-polish) |
+| UI-81 | Med | Presentation | Ctrl+Z in the Character panel undoes creator options, clothing or makeup depending on focus; the header Undo and History never cover character changes (`character.ts:142-148`) | Open (claude/ui-polish) |
+| UI-82 | Med | Presentation | Build ends in a dead end: a path in `<code>` under a random-token folder; no "Show in folder", no install steps or consented "Add to my mod manager" (the transport exists) (`collection.ts:367,457-458`) | Open (claude/ui-polish) |
+| UI-83 | Med | Presentation | Game & tools asks for typed MO2 and game paths though `detect.mo2Instances` exists; no folder picker; developer wording in readiness messages (`collection.ts:253-267`, `bootstrap.js:220-253`, `local-settings-readiness.ts:55-97`) | Open (claude/ui-polish) |
+| UI-84 | Med | Accessibility | Disabled buttons' reasons live only in `title` with native `disabled` (not keyboard- or touch-reachable); menus already use `aria-disabled` with visible reasons (`controls.ts:189-192`, `dom.ts:37-41`) | Open (claude/ui-polish) |
+| UI-85 | Med | Presentation | Research tools, developer wording and evidence caveats in the everyday UI (lighting calibration, glitter model suite, SQLite/compiler wording, "unverified" motion and FOV notes, raw IDs, "Eye shape 02 (h011)") | Open (claude/ui-polish) |
+| UI-86 | Med | Presentation | A missing blink links to a developer guide (WolvenKit extraction and a Python bake on a development checkout) (`preview.ts:222-225`) | Open (claude/ui-polish) |
+| UI-87 | Med | Desktop | The About button is fixed over panel content (covers finish cards and export notes), skipped by F6, not in the palette (`about.css:1-6`, `bootstrap.js:122-126`) | Open (claude/ui-polish) |
 | PIPE-97 | High | Body render | The underwear floor fails open: `bodyOptionDraws` always picks the uncensored `body_color` (female nipples painted into its albedo) and nothing ties drawing it to the cover drawing. The cover can be lost after the plan while the skin stays: in the plan (`character-detail-plan.ts:373-381`), the host's write (texture budget or an unread input, `character-detail-service.ts:835`), the record reader's part cap (`render-detail.ts:534`), the loader (per-part failures, `character-detail-loader.ts:474-485`, which also dropped the body's problem line) and requests or saves without an `underpants` descriptor (`character-detail-request.ts:118-127`) | **Fixed** (claude/cleanup-body-clothing, 27 Sep; see below) |
 | PIPE-98 | Med | Body render | Body options missing from the merged creator resource still draw; a censorship twin needn't share the link or be an appearance option; covers aren't ordered after the other body options; the host accepts male body requests with no male fixtures | **Fixed** (claude/cleanup-body-clothing, 27 Sep; see below) |
 | PIPE-99 | Med | Clothing | Body type and arms state hard-coded (`clothing-resolver.ts:216`: `base_body`, `BaseArms`) instead of ArchiveXL's `GetBodyType`; each item's own suffix list (`appearanceSuffixes`) unused | **Fixed** (claude/cleanup-body-clothing, 27 Sep; see below) |
@@ -333,6 +342,18 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **RB-39:** navigation-cluster keys were sent without `KEYEVENTF_EXTENDEDKEY` (the game gets the numpad key); layout-dependent keys.
   - **RB-40:** stale config and `Params.hpp` wording about `allow_creator_leave` defaults.
   - **RB-41:** `XFB_NO_INPUT` relied on each test importing `helpers.ts`; no test that the default zip lacks the presets and keeps `allow_creator_leave` off.
+
+- **UI-88..97** (UI/UX review, 27 Sep), Open (claude/ui-polish):
+  - **UI-88:** raw idle exception text reaches the Motion panel (`head-rig.ts:84-85`, `preview.ts:234`).
+  - **UI-89:** "Unsaved changes" and "Draft autosaved" appear together; one plain save status.
+  - **UI-90:** status notes shift layout (slider/switch notes, flake text, package progress, the head readiness badge jumping sides).
+  - **UI-91:** the palette shows "View" twice around "Diagnostics"; no commands for Clothing, 3D-view switches, Default V, character presets, Clear prepared files, blink.
+  - **UI-92:** inconsistent wording (warp names, refusal titles, "Updating UV masks", "Turned on by Cyberware", body rows' head note).
+  - **UI-93:** game-rule numbers hard-coded in UI modules (glitter defaults and cap, warp reset rule, 32 layers, eye shape 9, blank-name check).
+  - **UI-94:** the Build/Check failure card points at a log (wrong on localhost) and lacks "Report this problem".
+  - **UI-95:** the layer's "won't be packaged" flag is `aria-hidden`; screen readers aren't told.
+  - **UI-96:** the compact layout shows the Character and Camera & light tabs as unlabelled icons; the 3D-view switches sit ~2,500 px down the Character panel.
+  - **UI-97:** raw update status text and a browser `confirm()` in About.
 
 ## New subsystems since last review
 
