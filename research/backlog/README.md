@@ -66,6 +66,8 @@ In order:
 
    Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md). Brow editor proposal (field-driven groom rasterised into the brow texture set, phased plan): [brow editor design](../brows/brow-editor-design.md).
 4. Hair design
+
+   Hair colours as additive creator choices (**study ready, needs discussion**): how the installed hair-colour packs work, a proposed XF export and gradient editor previewed through the exact bake, an in-game checklist, effort and questions: [hair colour authoring feasibility](../hair/hair-colour-authoring-feasibility.md).
 5. Facial expressions and idles (static/animated; varied idle animations)
 
    Feasibility, editor options, export plan and runtime questions: [expressions and idles brief](expressions-and-idles-brief.md). Phased design for static photo-mode expressions (the decided first scope): [expression editor design](../animation/expression-editor-design.md).
