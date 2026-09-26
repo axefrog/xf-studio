@@ -1,6 +1,6 @@
 // In-process checks of the bridge core pieces that are hard to reach through the pipe:
 // UTF-8-safe log sanitising, the JSON nesting pre-scan, lossless-or-replaced serialisation and
-// the game-thread queue's task states. Run with `xfb_selftest --unit`; prints PASS/FAIL lines.
+// the game-thread queue's task states, and the kill switch's ordering against queued writes. Run with `xfb_selftest --unit`; prints PASS/FAIL lines.
 
 #include <Windows.h>
 
@@ -11,10 +11,13 @@
 #include <functional>
 #include <thread>
 
+#include "core/Bridge.hpp"
+#include "core/Config.hpp"
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
 #include "core/Log.hpp"
 #include "core/Params.hpp"
+#include "core/Session.hpp"
 
 namespace
 {
@@ -224,6 +227,81 @@ void QueueTests()
               std::to_string(waited) + " ms");
     }
 }
+// Kill switch (RB-13): Bridge::Kill closes the game-thread queue synchronously, so a write that
+// is already queued never runs, and the undo (which the game thread starts only once
+// RestoreReady() is true) can never be followed by a bridge write.
+void KillTests()
+{
+    xfb::Config config;
+    config.bridgeEnabled = true;
+    config.allowWrites = true;
+    xfb::Session session;
+    std::string error;
+    wchar_t temp[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp);
+    // Never written: the bridge is not started, so no session.json or KILL file is involved.
+    if (!xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-kill-not-created"))
+    {
+        Check("kill test session", false, error);
+        return;
+    }
+    xfb::GameThreadQueue queue;
+    queue.SetPumping(true);
+    xfb::Bridge bridge(config, session, queue);
+
+    std::atomic<bool> queued{false};
+    std::atomic<bool> writeRan{false};
+    std::atomic<bool> restored{false};
+    std::atomic<bool> writeAfterRestore{false};
+    xfb::QueueResult outcome = xfb::QueueResult::Done;
+    std::thread writer([&] {
+        json result;
+        std::string werror;
+        queued = true;
+        outcome = queue.Run(
+            [&] {
+                writeRan = true;
+                if (restored.load())
+                {
+                    writeAfterRestore = true;
+                }
+                return json(1);
+            },
+            5000ms, result, werror, "unit.write_before_kill");
+    });
+    while (!queued.load())
+    {
+        std::this_thread::sleep_for(1ms);
+    }
+    std::this_thread::sleep_for(50ms); // the write is in the queue, not yet drained
+
+    Check("before the kill the undo may not run", !bridge.RestoreReady());
+    const auto started = std::chrono::steady_clock::now();
+    bridge.Kill("unit");
+    const auto killMs = MsSince(started);
+    Check("Kill closes the queue before it returns, without blocking",
+          queue.IsClosed() && bridge.RestoreReady() && killMs < 100, std::to_string(killMs) + " ms");
+    writer.join();
+    Check("the queued write's waiter is released as not run", outcome == xfb::QueueResult::NotPumping);
+
+    // Simulated game-thread ticks, in the plugin's order: drain, then the undo once ready.
+    for (int tick = 0; tick < 5; ++tick)
+    {
+        queue.Drain(4);
+        if (bridge.RestoreReady() && !restored.exchange(true))
+        {
+            // RestoreAfterKill would run here.
+        }
+    }
+    json result;
+    const auto late = queue.Run([&] {
+        writeAfterRestore = true;
+        return json(1);
+    }, 50ms, result, error, "unit.write_after_kill");
+    queue.Drain(4);
+    Check("no queued write runs after kill", !writeRan.load() && !writeAfterRestore.load() && restored.load());
+    Check("writes sent after the kill are refused", late == xfb::QueueResult::NotPumping);
+}
 // Phase-2 parameter checks: each refusal is bad_params with a plain message; accepted input is
 // turned into the attribute keys the redscript layer receives.
 std::string ParamsCode(const std::function<void()>& aParse)
@@ -280,6 +358,7 @@ int RunUnitTests()
     NestingTests();
     SerializeTests();
     QueueTests();
+    KillTests();
     ParamsTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;

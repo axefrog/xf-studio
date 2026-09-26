@@ -68,7 +68,7 @@
 
 - **One catalogue, many frontends.** Every command (name, plain text, JSON Schema input, permission class, undo note) is defined once in `tools/api/catalogue.ts`; the MCP server, the CLI's `run` and the session runner derive from it, so a command added once appears everywhere [offline]. Permission classes: `read`, `write-photo`, `write-world`, `write-character`, `control`.
 - **Writes are gated twice.** The tools can withhold classes (`--read-only`, `--allow`), and the game refuses every write unless `allow_writes = true` in the plugin's config, which only the `-writes` build sets for the test profile [offline].
-- **Every write is reversible and recorded.** It takes a save lock first, logs `write.done … undo=` and returns `undo {method, params}`; the kill switch undoes a freeze, a hidden photo-mode menu and the save lock [offline in the self-test host].
+- **Every write is reversible and recorded.** It takes a save lock first, logs `write.done … undo=` and returns `undo {method, params}`; the kill switch undoes a freeze and a hidden photo-mode menu and keeps the save lock until a save is loaded [unverified]; no queued write can run after it [offline].
 - **Photo mode is driven through its own menu.** `GetMenuItem(key)` and `ForceValue` reach `OnAttributeUpdated`, with values checked against the ranges the menu set up; keys come from four photo-mode mods' source ([design §3.2](../research/runtime/runtime-bridge-design.md#32-protocol-1)) [source]. Opening photo mode from a script needs Codeware's `QuestsSystem.ExecuteNode` with `questOpenPhotoMode_NodeType` [source; hypothesis outside quests].
 - **Character options change only in the open mirror screen,** through `ApplyChangeToOption` as its own controls do; the bridge never confirms (`ReFinalizeState`), and Back discards [source].
 - **The world clock and a freeze:** `SetGameTimeByHMS` / `SetGameTimeBySeconds`, and time dilation 0 on the world and V as the mirror screen does [source].
@@ -84,7 +84,7 @@
 | `ReFinalizeState` (Confirm), `CancelFinalizedStateUpdate` (Back) | [source] 2.31 | Never called by the bridge |
 | `TimeSystem.SetGameTimeByHMS`, `SetGameTimeBySeconds`, `SetTimeDilation`, `SetTimeDilationOnLocalPlayerZero` | [source] 2.31 | Used for the clock and the freeze |
 | `TimeSystem.SetPausedState()` | [source] 2.31, no parameters | Not used |
-| `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a load or the kill switch; blocking autosaves in practice [unverified] |
+| `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a save is loaded (the kill switch keeps it); blocking autosaves in practice [unverified] |
 | Autosave triggers: vendor, ripperdoc and perk exits (`MenuUIUtils.RequestAutoSave`), fast travel, legendary loot, drop points, quest checkpoints, the timed autosave setting | [source] 2.31 | Why sessions start with a manual save and end by loading it |
 
 ## 6. What agents can and cannot do yet

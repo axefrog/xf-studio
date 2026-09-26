@@ -119,6 +119,10 @@ void Bridge::StopListener(const std::string& aReason)
 void Bridge::Kill(const std::string& aReason)
 {
     m_dispatcher.Kill(aReason);
+    // Close the game-thread queue here, synchronously (it never blocks): a write already queued
+    // is cancelled and never runs, so nothing can run after the kill-switch undo, which the game
+    // thread starts only once RestoreReady() is true.
+    m_queue.Close();
     m_server.DropClient();
     RemoveSessionFile();
     m_watchWake.notify_all(); // the watcher stops the listener off this thread
@@ -127,6 +131,11 @@ void Bridge::Kill(const std::string& aReason)
 Dispatcher& Bridge::GetDispatcher()
 {
     return m_dispatcher;
+}
+
+bool Bridge::RestoreReady() const
+{
+    return m_dispatcher.IsKilled() && m_queue.IsClosed();
 }
 
 bool Bridge::IsListening() const

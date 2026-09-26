@@ -68,6 +68,9 @@ public:
     // the waiter of a running task at once (TimeoutAfterStart). Safe from any thread; used on
     // kill, bridge stop and plugin unload so that nothing waits on the game thread afterwards.
     void Close();
+    // True once Close() has returned (or is running): no task can start after that, except one
+    // the game thread had already taken, which finishes inside that same Drain call.
+    bool IsClosed() const;
 
 private:
     enum State : int

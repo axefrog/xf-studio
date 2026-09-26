@@ -8,7 +8,8 @@
 // game's own script bundle, so every name here exists with this signature in 2.31. Where a name
 // comes from, and why it is safe, is recorded in research/runtime/runtime-bridge-design.md §7 and
 // knowledge/runtime-access.md. Nothing here saves the game: every write first asks the game's
-// own SaveLocksManager for a save lock (reason XFRuntimeBridge), released by the kill switch.
+// own SaveLocksManager for a save lock (reason XFRuntimeBridge), kept after the kill switch and
+// released only by loading a save.
 
 module XFRuntimeBridge
 
@@ -366,11 +367,12 @@ public abstract class XFBridgeActions {
     if IsDefined(registry) && !registry.IsSaveLockHeld() {
       SaveLocksManager.RequestSaveLockAdd(GetGameInstance(), n"XFRuntimeBridge");
       registry.SetSaveLockHeld(true);
-      XFBridgeLog.Info(cid, "save lock requested (reason XFRuntimeBridge); undo: kill switch or loading a save");
+      XFBridgeLog.Info(cid, "save lock requested (reason XFRuntimeBridge); kept after the kill switch; cleared by loading a save");
     }
   }
 
-  // Called by the plugin once after the kill switch: undoes what the bridge left switched on.
+  // Called by the plugin once after the kill switch: undoes what the bridge left switched on
+  // (a world freeze, a hidden photo-mode menu). The save lock is deliberately kept.
   public static func RestoreAfterKill(cid: String) -> String {
     let game = GetGameInstance();
     let registry = XFBridgeRegistry.Get();
@@ -391,10 +393,11 @@ public abstract class XFBridgeActions {
       registry.SetPhotoUiHidden(false);
       out += ",\"photo_ui_shown\":true";
     }
+    // The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
+    // still be live, and a save now would keep it. The lock is not persistent; loading a save
+    // clears it.
     if registry.IsSaveLockHeld() {
-      SaveLocksManager.RequestSaveLockRemove(game, n"XFRuntimeBridge");
-      registry.SetSaveLockHeld(false);
-      out += ",\"save_lock_released\":true";
+      out += ",\"save_lock_kept\":true";
     }
     XFBridgeLog.Info(cid, "RestoreAfterKill " + out + "}");
     return out + "}";

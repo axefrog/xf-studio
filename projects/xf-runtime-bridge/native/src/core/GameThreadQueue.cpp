@@ -85,22 +85,20 @@ size_t GameThreadQueue::Drain(size_t aMaxTasks)
     {
         std::shared_ptr<Item> item;
         {
+            // Taken, started and published as current under one lock, so Close() either finds
+            // the task still queued (and cancels it) or sees it as the running task.
             std::scoped_lock _(m_mutex);
-            if (m_items.empty())
+            if (m_closed.load() || m_items.empty())
             {
                 break;
             }
             item = m_items.front();
             m_items.pop_front();
-        }
-
-        int expected = Queued;
-        if (!item->state.compare_exchange_strong(expected, Running))
-        {
-            continue; // the waiter gave up (or Close cancelled it) before we started: never run it
-        }
-        {
-            std::scoped_lock _(m_mutex);
+            int expected = Queued;
+            if (!item->state.compare_exchange_strong(expected, Running))
+            {
+                continue; // the waiter gave up (or Close cancelled it) before we started: never run it
+            }
             m_current = item;
         }
 
@@ -166,6 +164,11 @@ bool GameThreadQueue::IsPumping() const
 uint64_t GameThreadQueue::TicksSeen() const
 {
     return m_ticks.load();
+}
+
+bool GameThreadQueue::IsClosed() const
+{
+    return m_closed.load();
 }
 
 uint64_t GameThreadQueue::LateCompletions() const
