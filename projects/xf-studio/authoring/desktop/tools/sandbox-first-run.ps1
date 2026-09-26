@@ -1,5 +1,5 @@
 # Runs inside Windows Sandbox (see sandbox-trial.ts), unattended. Records the environment,
-# checks the setup ZIP against its checksum, installs quietly, launches the installed app with
+# checks the single setup program against its checksum, installs it, launches the installed app with
 # no preview assets and walks a first-time user's session through Windows UI Automation
 # (sandbox-ui.ps1): WebView2 consent if needed, welcome, UV editor, edit and Undo, library save,
 # fixture import and Check, About and Licences, close and relaunch, then uninstall. It records
@@ -10,7 +10,7 @@ $ErrorActionPreference = "Continue"
 $in = Join-Path $env:USERPROFILE "Desktop\xfs-input"
 $out = Join-Path $env:USERPROFILE "Desktop\xfs-results"
 $hostWebView = Join-Path $env:USERPROFILE "Desktop\xfs-webview2"
-$report = [ordered]@{ schema = "xfs/desktop-sandbox-first-run-2"; started = (Get-Date).ToString("o") }
+$report = [ordered]@{ schema = "xfs/desktop-sandbox-first-run-3"; started = (Get-Date).ToString("o") }
 function Save { $report | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $out "report.json") }
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type @"
@@ -95,6 +95,18 @@ if (Test-Path (Join-Path $in "install-webview2.txt")) {
     } else { $report.webview2.bootstrapperRefused = "$($sig.Status)" }
   } catch { $report.webview2.bootstrapperError = $_.Exception.Message }
 }
+# Mode D (--webview2-installer=<file>, networking off): Microsoft's signed Evergreen Standalone
+# Installer, downloaded beforehand, installs the runtime offline before the app starts.
+$standalone = Join-Path $in "webview2-standalone-installer.exe"
+if (Test-Path $standalone) {
+  $sig = Get-AuthenticodeSignature $standalone
+  $report.webview2.standaloneSigner = $sig.SignerCertificate.Subject
+  if ($sig.Status -eq "Valid" -and $sig.SignerCertificate.Subject -like "*O=Microsoft Corporation*") {
+    $p = Start-Process $standalone -ArgumentList "/silent", "/install" -PassThru; [void]$p.WaitForExit(900000)
+    $report.webview2.standaloneExit = $p.ExitCode
+    $report.webview2.installedByTrial = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client"
+  } else { $report.webview2.standaloneRefused = "$($sig.Status)" }
+}
 # Mode B (--host-webview2): a host WebView2 runtime copied in as a fixed-version runtime.
 # Under Electrobun 2.0.1 this did not start WebView2 (25 September); kept for diagnosis.
 # A fixed-version runtime must live on a local drive, so copy the mapped folder first.
@@ -109,39 +121,67 @@ if ($report.webview2.hostRuntimeMapped) {
 }
 $report.bunOnPath = [bool](Get-Command bun -ErrorAction SilentlyContinue)
 
-$zip = Get-ChildItem $in -Filter *.zip | Select-Object -First 1
-$expected = ((Get-Content (Join-Path $in "SHA256SUMS.txt")) -split "\s+")[0]
-$report.setupZip = $zip.Name
-$report.checksumMatches = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower() -eq $expected
-$setupDir = Join-Path $env:TEMP "xfs-setup"
-Expand-Archive $zip.FullName $setupDir -Force
-$setup = Get-ChildItem $setupDir -Filter "*Setup*.exe" | Select-Object -First 1
+$expected, $setupName = (Get-Content (Join-Path $in "SHA256SUMS.txt") -TotalCount 1) -split "\s+", 2
+$download = Get-Item -LiteralPath (Join-Path $in $setupName)
+$report.setup = $download.Name
+$report.checksumMatches = (Get-FileHash $download.FullName -Algorithm SHA256).Hash.ToLower() -eq $expected
+# Run the single downloaded setup program from Downloads, as a user would: nothing to extract.
+$downloads = Join-Path $env:USERPROFILE "Downloads"
+New-Item -ItemType Directory -Force $downloads | Out-Null
+$setup = Copy-Item $download.FullName $downloads -PassThru
 Save
 
-# Unattended install. Electrobun 2.0.1's setup has no install-time quiet flag (its --quiet
-# applies to uninstall and makes setup exit 1), so dismiss its final "Installation complete"
-# window once the launcher exists. The report records whether that happened.
+# The single setup (Inno Setup) shows one Ready page; Install is its default button. It then
+# hides itself and runs Electrobun 2.0.1's own setup, which has no install-time quiet flag (its
+# --quiet applies to uninstall), so dismiss that setup's final "Installation complete" window once
+# the launcher exists. The report records each step and both exit codes.
 $t = Get-Date
 $proc = Start-Process $setup.FullName -PassThru
 $shell = New-Object -ComObject WScript.Shell
+$report.readyPageShown = $false
+$end = (Get-Date).AddSeconds(60)
+while (-not $proc.HasExited -and (Get-Date) -lt $end) {
+  Start-Sleep -Seconds 2
+  # Inno Setup's loader starts the wizard as a separate process from its temporary folder.
+  $wizard = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "Setup - XF Studio*" } | Select-Object -First 1
+  if ($wizard) {
+    Start-Sleep -Seconds 2
+    $report.readyPageTitle = $wizard.MainWindowTitle
+    $report.wizardProcess = $wizard.ProcessName
+    ShotWindow $wizard.MainWindowHandle "installer-ready"
+    [void]$shell.AppActivate($wizard.Id); Start-Sleep -Milliseconds 500; $shell.SendKeys("{ENTER}")
+    $report.readyPageShown = $true
+    break
+  }
+}
+Save
 $report.installerDismissed = $false
+$inner = $null
 while (-not $proc.HasExited -and ((Get-Date) - $t).TotalSeconds -lt 600) {
   Start-Sleep -Seconds 5
   $installed = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue |
     ForEach-Object { Get-ChildItem $_.FullName -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue } | Select-Object -First 1
-  $proc.Refresh()
-  if ($installed -and $proc.MainWindowHandle -ne 0) {
-    Start-Sleep -Seconds 5
-    if ($proc.HasExited) { break }
-    ShotWindow $proc.MainWindowHandle "installer-final"
-    [void]$shell.AppActivate($proc.Id); Start-Sleep -Milliseconds 500; $shell.SendKeys("{ENTER}")
-    Start-Sleep -Seconds 3
-    if (-not $proc.HasExited) { [void]$proc.CloseMainWindow() }
-    $report.installerDismissed = $true
-    [void]$proc.WaitForExit(30000)
+  if (-not $inner) { $inner = Get-Process -Name "XF Studio-Setup-*" -ErrorAction SilentlyContinue | Select-Object -First 1 }
+  if ($inner) {
+    $report.electrobunSetupSeenIn = $inner.Path
+    $inner.Refresh()
+    if ($installed -and -not $inner.HasExited -and $inner.MainWindowHandle -ne 0) {
+      Start-Sleep -Seconds 5
+      if ($inner.HasExited) { continue }
+      ShotWindow $inner.MainWindowHandle "installer-final"
+      [void]$shell.AppActivate($inner.Id); Start-Sleep -Milliseconds 500; $shell.SendKeys("{ENTER}")
+      Start-Sleep -Seconds 3
+      if (-not $inner.HasExited) { [void]$inner.CloseMainWindow() }
+      $report.installerDismissed = $true
+      [void]$inner.WaitForExit(30000)
+      if ($inner.HasExited) { $report.electrobunSetup = "exit $($inner.ExitCode)" }
+      [void]$proc.WaitForExit(30000)
+    }
   }
 }
 if (-not $proc.HasExited) { $report.installer = "still running after 10 minutes" } else { $report.installer = "exit $($proc.ExitCode)" }
+# Inno Setup removes its temporary folder (and Electrobun's setup inside it) when it exits.
+$report.tempSetupLeft = @(Get-ChildItem $env:TEMP -Directory -Filter "is-*.tmp" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
 $report.installSeconds = [int]((Get-Date) - $t).TotalSeconds
 $roots = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue
 $report.installRoots = @($roots | ForEach-Object { $_.Name })
