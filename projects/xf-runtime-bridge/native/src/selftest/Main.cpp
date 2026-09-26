@@ -250,10 +250,12 @@ int wmain(int argc, wchar_t** argv)
                              return json{{"phase", sim.phase}};
                          }});
     dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
-                         [phase](const xfb::MethodContext& aContext) {
+                         [phase, &config](const xfb::MethodContext& aContext) {
                              p::RequireOnly(aContext.params, {});
                              std::scoped_lock _(sim.mutex);
                              return json{{"simulated", true},
+                                         {"allow_writes", config.allowWrites},
+                                         {"write_classes", xfb::WriteClassList(config)},
                                          {"phase", sim.phase},
                                          {"player_present", sim.phase == "gameplay" || sim.phase == "photo_mode"},
                                          {"photo_mode_active", sim.phase == "photo_mode"},

@@ -71,19 +71,23 @@
 - **One catalogue, many frontends.** Every command (name, plain text, JSON Schema input, permission class, undo note) is defined once in `tools/api/catalogue.ts`; the MCP server, the CLI's `run` and the session runner derive from it, so a command added once appears everywhere [offline]. Permission classes: `read`, `write-photo`, `write-world`, `write-character`, `control`.
 - **Writes are gated twice.** The tools can withhold classes (`--read-only` or `--allow`, never both), and the game refuses every write unless `allow_writes = true` in the plugin's config, which only the `-writes` build sets for the test profile, and then each class (photo, world, character) unless `allow_write_classes` lists it [offline].
 - **Every write is reversible and recorded.** It takes a save lock first, logs `write.done … undo=` and returns `undo {method, params}` for exactly what it changed (null when nothing changed or an earlier value is unknown); the kill switch undoes a freeze and a hidden photo-mode menu and keeps the save lock until a save is loaded [unverified]; no queued write can run after it [offline].
-- **Photo mode is driven through its own menu.** `GetMenuItem(key)` and `ForceValue` reach `OnAttributeUpdated`, with values checked against the ranges the menu set up; keys come from four photo-mode mods' source ([design §3.2](../research/runtime/runtime-bridge-design.md#32-protocol-1)) [source]. Codeware's `QuestsSystem.ExecuteNode` with `questOpenPhotoMode_NodeType` opens only a **restricted** photo mode (first person, no V tab), so the full photo mode still needs the player's key [runtime]; the routes and why are in [photo mode §2](photo-mode.md#2-opening-photo-mode).
-- **Character options change only in the open mirror screen,** through `ApplyChangeToOption` as its own controls do; the bridge never confirms (`ReFinalizeState`), and Back discards [source].
+- **Photo mode is driven through its own menu.** `GetMenuItem(key)` and `ForceValue` reach `OnAttributeUpdated`, with values checked against the ranges the menu set up; keys come from four photo-mode mods' source and matched the first session's menu dump ([design §3.2](../research/runtime/runtime-bridge-design.md#32-protocol-1)) [runtime]. Codeware's `QuestsSystem.ExecuteNode` with `questOpenPhotoMode_NodeType` opens only a **restricted** photo mode (first person, no V tab), so the full photo mode still needs the player's key [runtime]; the routes and why are in [photo mode §2](photo-mode.md#2-opening-photo-mode). The bridge's `photo.open` sends that key, the player's own binding, to the game window only: the one allowlisted input, approved for the test profile [offline].
+- **Framing needs measuring, not fixed values.** Where photo mode's drone camera spawns decides what fixed offsets show [runtime]. `photo.frame` reads V's head slot and the game's own projection (`CameraSystem.ProjectPoint`) and corrects V's placement and the field of view in a few steps; test-profile camera presets (attribute 23) can place the camera first [offline].
+- **Character options change only in the open creator,** through the option's own row (`SetSelected…(info, index, true)`, as its arrows do, so the label follows; the bare `ApplyChangeToOption` the first session used left the row's label stale [runtime]). Confirm and Back go through the menu's own `ConfirmCustomizedCharacter()` and `ConfirmBackConfirmation()`, behind their own config switch (the -writes build only) [source].
 - **The world clock and a freeze:** `SetGameTimeByHMS` / `SetGameTimeBySeconds`, and time dilation 0 on the world and V as the mirror screen does [source].
 - **Captures** are external (`PrintWindow` or the screen), cropped to named regions sized in window heights so they frame the same area on 16:9 and 21:9, saved at full resolution and returned downscaled with an exact area filter [offline].
 
 | API | Grade | Status |
 |---|---|---|
-| `gameuiPhotoModeMenuController.GetMenuItem` / `PhotoModeMenuListItem.ForceValue` / `OnAttributeUpdated` | [source] 2.31 | Used for camera, lights, expression |
-| `gameuiPhotoModeMenuController.OnExitConfirmed(Bool)` | [source] 2.31 | Used for `photo.exit` |
-| Protected `OnFadeVisibility(Float)` through an added method | [source] 2.31 | Used for `photo.hud.hide` |
-| Codeware `QuestsSystem.ExecuteNode` + `questOpenPhotoMode_NodeType` | [source]; opens a restricted photo mode [runtime] | Used for `photo.enter`; to be replaced ([bridge autonomy](../research/backlog/bridge-autonomy.md)); the player's key opens the full one |
-| `gameuiICharacterCustomizationSystem.ApplyChangeToOption`, `GetUnitedOptions` | [source] 2.31 | Used in the mirror screen only |
-| `ReFinalizeState` (Confirm), `CancelFinalizedStateUpdate` (Back) | [source] 2.31 | Never called by the bridge |
+| `gameuiPhotoModeMenuController.GetMenuItem` / `PhotoModeMenuListItem.ForceValue` / `OnAttributeUpdated` | [runtime] | Used for camera, placement, lights (on/off, type and shadow [unverified]), expression, grain, aberration, camera preset |
+| `gameuiPhotoModeMenuController.OnExitConfirmed(Bool)` | [runtime] | Used for `photo.exit` |
+| Protected `OnFadeVisibility(Float)` through an added method | [runtime] | Used for `photo.hud.hide` (hides the menu, not the cursor) |
+| `CursorGameController.ProcessCursorContext` wrapped to play `Hide` while a flag is set | [source] 2.31; AMM overrides the same function | `photo.hud.hide`'s cursor [unverified] |
+| `CameraSystem.GetActiveCameraWorldTransform`, `GetActiveCameraForward/Right/Up`, `GetActiveCameraFOV`, `GetAspectRatio`, `ProjectPoint`; `SlotComponent.GetSlotTransform(n"Head")` on the photo-mode stand-in (caught in `PhotoModePlayerEntityComponent.SetupInventory`) | [source] 2.31; `GetActiveCameraFOV` equalled the photo-mode FOV [runtime] | `photo.subject`, `photo.frame` [unverified] |
+| Codeware `QuestsSystem.ExecuteNode` + `questOpenPhotoMode_NodeType` | [source]; opens a restricted photo mode [runtime] | `photo.enter {route: "quest"}`, research only |
+| The player's photo-mode key (`TogglePhotoMode`; the `UserSettings.json` binding or `IK_N`), `SendInput` to the game window | [resource] game input config; [doc] Microsoft | `photo.open` [unverified] |
+| `gameuiICharacterCustomizationSystem.ApplyChangeToOption`, `GetUnitedOptions` | [runtime] | Used in the creator; now through the option's row (`characterCreationBodyMorphOption.SetSelected…`) [unverified] |
+| `ConfirmCustomizedCharacter` (keeps: `ReFinalizeState`), `ConfirmBackConfirmation` (discards: `CancelFinalizedStateUpdate`) on the creator menu | [source] 2.31 | `cc.confirm`, `cc.back` behind `allow_creator_leave` (the -writes build only) [unverified] |
 | `TimeSystem.SetGameTimeByHMS`, `SetGameTimeBySeconds`, `SetTimeDilation`, `SetTimeDilationOnLocalPlayerZero` | [source] 2.31 | Used for the clock and the freeze |
 | `TimeSystem.SetPausedState()` | [source] 2.31, no parameters | Not used |
 | `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a save is loaded (the kill switch keeps it); blocking autosaves in practice [unverified] |
@@ -91,7 +95,8 @@
 
 ## 6. What agents can and cannot do yet
 
-- **Built, untested in game:** the phase-2 commands above, through MCP, the CLI or a session script.
+- **Seen working in game:** reads, the photo-mode camera, placement, light values, fade and expression, `cc.apply`, the clock, the freeze and the kill switch's restore, through MCP, the CLI and a session script [runtime].
+- **Built, untested in game:** `photo.open`, `photo.subject`, `photo.frame`, light on/off, type and shadow, the cursor hidden with the menu, `cc.apply` through the row, `cc.confirm`/`cc.back`, `capture.burst`, the test profile's camera presets.
 - **Verified to exist (still untested in game):**
   - reading photo-mode state, camera transform and FOV;
   - time of day, pause and dilation, teleport;
@@ -117,7 +122,8 @@ Details and citations: [design §7](../research/runtime/runtime-bridge-design.md
 5. Does window capture return the game image in its fullscreen mode, or only in borderless windowed mode?
 6. ~~Does the Codeware quest node open photo mode outside a quest?~~ Yes, but restricted to first person [runtime]. Does the save lock hold off autosaves?
 7. ~~Do the photo-mode keys from mod source match this install?~~ Yes; light on/off is 44, chromatic aberration 13, grain 25 [runtime] ([photo mode §8.1](photo-mode.md#81-photo-mode-attributes-worth-knowing)).
+8. Which screen space does `CameraSystem.ProjectPoint` answer in, and is the photo-mode camera the active camera for it? `photo.frame` detects the space at run time; the next session records it.
 
 ## Related pages
 
-[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Mod loading](mod-loading.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)
+[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)

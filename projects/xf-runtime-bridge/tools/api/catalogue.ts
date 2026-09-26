@@ -19,6 +19,7 @@ import type { CommandApi, ImageRef } from "./command-api.ts";
 import { frame, FramingError, FRAMINGS, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
 import { KeySendError, readPhotoModeBinding, virtualKey, type KeyRoute } from "../input/photo-key.ts";
+import { plainBridgeError } from "./errors.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
@@ -146,6 +147,10 @@ const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 async function runPhotoOpen(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
   const status = await bridgeCall(context, "game.status", {});
+  // The key press changes the game like a photo write, so it follows the bridge's own write gate:
+  // allow_writes and the photo class in the plugin's config.ini.
+  const classes = Array.isArray(status.write_classes) ? (status.write_classes as string[]) : [];
+  if (status.allow_writes !== true || !classes.includes("photo")) throw Object.assign(new Error("writes"), { plain: plainBridgeError(status.allow_writes === true ? "write_class_disabled" : "writes_disabled") });
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);

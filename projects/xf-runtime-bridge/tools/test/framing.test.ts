@@ -239,8 +239,15 @@ describe("photo.open and the session runner, against the self-test host", () => 
         return { route, focused_by_bridge: false, scan_code: 0x31 };
       },
     });
-    // Refused outside gameplay (nothing sent), a no-op in photo mode, and from gameplay the key goes
+    // Refused without the write gate (a read-only host), outside gameplay (nothing sent), a no-op in
+    // photo mode, and from gameplay the key goes
     // to the target window and photo.open waits until photo mode is open.
+    const readOnly = await startSelftestHost([], 20);
+    const gated = new CommandApi({ runtimeDir: readOnly.dir, captureRoot: join(tempDir("xfb-open-ro-"), "captures"), captureTarget: { hwnd: synthetic.hwnd }, keySender: async () => { throw new Error("must not send"); } });
+    const refused = await gated.run("photo.open", {});
+    expect(!refused.ok && refused.error.code).toBe("writes_disabled");
+    gated.close();
+    await readOnly.stop();
     await api.callBridge("selftest.phase", { phase: "character_menu" }, "t-phase");
     let outcome = await api.run("photo.open", {});
     expect(!outcome.ok && outcome.error.code).toBe("not_in_gameplay");
