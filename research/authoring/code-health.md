@@ -29,6 +29,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `8857137` | 2026-09-26 | Vortex subsystem (9ee2fad) and the diagnostics cleanup (94bc1ff, 609731d) | 0 High, 3 Medium, 11 Low (VORTEX-01..08, DIAG-19..24). Vortex attribution only relabels (never changes the winner); read-only holds; fixtures hold no personal data. DIAG-01..18: 16 hold, DIAG-06 and DIAG-11 partly (DIAG-19, DIAG-24, VORTEX-05) |
+| `8857137`+`75ef068` | 2026-09-26 | Step 7 cleanup (49922f7) and the bridge fixes (e22363a, a39a461, 75ef068) | 0 High, 1 Medium, 7 Low (RB-27..31, CORE-90, PREV-99..100). Nothing can crash, freeze or save the game; RB-12..26 fixes verified; step 7 fixes hold. RB-27 and RB-28 fixed on main in df78ca0 |
 | `5e64894` | 2026-09-26 | Runtime bridge phase 2: command catalogue, MCP server, session runner, capture, write methods (security and game safety) | 0 High, 5 Medium, 10 Low (RB-12..26). Write gate enforced natively; `cc.apply` never confirms; save lock real and non-persistent; redscript wraps coexist with the profile's photo-mode mods. Before the first session: RB-12, RB-13, RB-24; before session 2: RB-15. All fixed in claude/bridge-fixes (two deliveries) |
 | `5e64894` | 2026-09-26 | Native archive and resource reader (`src/native/`, R&D, not wired in) | 5 High, 7 Medium, 5 Low (NATIVE-01..17). Every High reproduced with a scratch script: hostile archives can loop, exhaust memory or run unbounded in the host process. Not reachable by users (no production importer), but counted: open Highs 6 with DIAG-05, so feature merges stay paused. All Highs and NATIVE-06..10 gate integration. Container bounds, the Oodle call, CR2W bounds, the port's cache identity and licensing hygiene are sound. All 17 fixed in claude/native-hardening (see below) |
 | `972ee62` | 2026-09-26 | Diagnostics subsystem (`src/diagnostics/`, boundary exception 13): privacy, endpoint, correctness, architecture | 5 High, 6 Medium, 7 Low (DIAG-01..18). DIAG-02 and DIAG-03 reproduced; DIAG-04 confirmed against a local trace (sizes only). Endpoint access, size limits, entry validation, disk bounds and the ZIP writer are sound. All but DIAG-05 and DIAG-11 fixed in claude/cleanup-diagnostics, which leaves 1 High open (the feature-merge pause lifts when it merges); DIAG-05 and DIAG-11 follow there once claude/rnd-vortex's mod-identity changes are in `main` |
@@ -59,6 +61,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| VORTEX-01 | Med | Vortex | `stateFromPairs` walks keys into plain objects, so a key segment `__proto__` (a mod whose archive is named that, or a corrupt database) writes onto `Object.prototype` for the whole host process (reproduced) (`vortex-state.ts:30-39`) | Open |
+| VORTEX-02 | Med | Vortex | The LevelDB reader has no decompression bound: many index handles to one Snappy block each decompress it again (16.9 KB table → +125 MB, linear); Snappy output length unchecked; entry sizes allocated before bounds checks (`leveldb-read.ts:59-60,150-173`) | Open |
+| VORTEX-03 | Med | Vortex | A game-folder file replaced after Vortex deployed it is still credited to its Vortex mod (Nexus IDs, "re-downloadable"), pointing helpers at a different file; compare the file time with the manifest entry (`mod-identity.ts:79-119`, `source-discovery.ts:288-290`) | Open |
 | PIPE-84 | Med | Resolver | "No silent part drops" holds only inside the record: drop notes go to `provenance.notes`, which nothing shows; the `prepared` trace event omits them; the 32-note cap can cut drop notes after informational ones (`character-detail-service.ts:662,686,794,818`) | Open (after claude/choice-prefetch merges; same files) |
 | REL-04 | Med | Packaging | The installer gate proves less than it says: Inno compresses its setup header by default, so the "scanned clean" content scan reads compressed bytes; the payload check is presence plus a 3 MB budget with ~950 KB slack (`single-installer.ts:80,111`, `verify-canary.ts:131-138`, `xf-studio-setup.iss`). Fix: `InternalCompressLevel=none`, tighter budget, honest wording | Open |
 | PIPE-01 | High | Pipeline | Built-in plate always cut from the vanilla head, not the head the game actually loads (head mods/patches) | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
@@ -300,6 +305,26 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **REL-06:** the marker error names 6.7.3 but checks the 6.7.0 data format; pre-releases share one Windows file version; no `SetupMutex`.
 
 - **NATIVE-01..17** (native reader review at `5e64894`): Fixed in claude/native-hardening (see below).
+
+- **VORTEX-04..08, DIAG-19..24** (Vortex and diagnostics review at `8857137`), Open:
+  - **VORTEX-04:** a leftover Vortex manifest's staging name reclassifies an MO2 mod of the same name as a Vortex mod (`mod-identity.ts:103`).
+  - **VORTEX-05:** Vortex state (up to 512 MB per file) is read synchronously, whole, and outside the report's hashing budget (`vortex-host.ts:92-101`).
+  - **VORTEX-06:** a `vortex.deployment.json` in the game folder decides a read path; a UNC `stagingPath` makes the host open an SMB connection (`vortex-host.ts:156-162`).
+  - **VORTEX-07:** `tools/vortex-check.ts` prints the Vortex profile name, which testers are asked to paste.
+  - **VORTEX-08:** a newer hourly backup is ignored whenever the stale database lists any mods (`vortex-host.ts:113`).
+  - **DIAG-19:** the localhost issue link skips configured-folder redaction (the 501 path returns before redacting) (`host-endpoint.ts:196`, `browser-device.ts:161`).
+  - **DIAG-20:** pattern rules leak later words of 5+-word, trailing, percent-encoded or parenthesised profile names; the literal root rule misses encoded forms (`redact.ts:83-89`).
+  - **DIAG-21:** the account-name rule rewrites common words in JSON keys (and can collide keys); the MO2 profile swap is a plain substring replace (`redact.ts:90-94,143`, `host-report.ts:256`).
+  - **DIAG-22:** the host's 60 s repeat key ignores the reference, dropping notices the page promises to keep (`host-endpoint.ts:91-92`).
+  - **DIAG-23:** mod-file ZIP entry names are built from unredacted mod and archive names (`host-endpoint.ts:138`).
+  - **DIAG-24:** the hashing budget is soft: a hash started at 9.9 s runs to completion (up to 2 GB).
+- **RB-29..31, CORE-90, PREV-99..100** (step 7 cleanup and bridge fixes review at `8857137`), Open (RB-29..31 in claude/bridge-script-context):
+  - **RB-29:** `photo.camera.set {reset: true}` stops at the first non-`unavailable` error after earlier keys were reset, with no undo for them (`GameHandlers.cpp`).
+  - **RB-30:** the session lock judges liveness by PID alone (reuse keeps MCP refusing), a stale-lock delete can race a new runner, and the message suggests `bridge_kill`, which fails while the runner holds the pipe (`tools/session-lock.ts`).
+  - **RB-31:** the test card's step 13 still says 150 ms (RB-20 made it three game ticks).
+  - **CORE-90:** the import scan doesn't resolve `./x.js` specifiers or scan `new Worker(new URL(…, import.meta.url))`, so feature-core and view transitive rules don't see behind them (`tests/fixtures/import-scan.ts:34-39`).
+  - **PREV-99:** `attach(obj, {rig: true})` collects bones once; bones added later (a GLB loading after attach) never join the idle or blink (`platform/scene/feature-renderers.ts:97-102`).
+  - **PREV-100:** the makeup stack's shared geometry is never disposed; harmless while the renderer dies only with the scene host (`engines/layered-makeup/render/makeup-stack.ts:83,355-362`).
 
 ## New subsystems since last review
 
