@@ -1,6 +1,6 @@
 # Photo-mode poses
 
-**Maturity: Draft.** This page covers how Cyberpunk 2077 lists and plays V's photo-mode poses, how mods add them, what a pose clip holds, and what the game does to the body's helper joints under a pose. It was consolidated on 27 September 2026 from the installed 2.31 game (the REDmod TweakDB sources, the compiled TweakDB, photo-mode resources), the WolvenKit, ArchiveXL and TweakXL sources, and the installed pose packs and pose tools on the reference MO2 profile. Nothing here has runtime evidence of its own. Grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[offline]** our own tool runs, **[hypothesis]** not yet established. Hashes, versions and counts are in the [pose library design](../research/animation/pose-library-design.md#12-evidence-and-sources), which also holds the Studio's design built on these facts.
+**Maturity: Draft.** This page covers how Cyberpunk 2077 lists and plays V's photo-mode poses, how mods add them, what a pose clip holds, and what the game does to the body's helper joints under a pose. It was consolidated on 27 September 2026 from the installed 2.31 game (the REDmod TweakDB sources, the compiled TweakDB, photo-mode resources), the WolvenKit, ArchiveXL and TweakXL sources, and the installed pose packs and pose tools on the reference MO2 profile. Sections 6–8 (the rig for posing, the graph after the pose clip, and changing a pose at runtime) come from the pose editor study of the same day: the photo-mode body graph's node tree, the decompiled 2.31 scripts, RED4ext.SDK's animation layouts, and the Red Hot Tools, ArchiveXL and AMM sources. Nothing here has runtime evidence of its own. Grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[offline]** our own tool runs, **[hypothesis]** not yet established. Hashes, versions and counts are in the [pose library design](../research/animation/pose-library-design.md#12-evidence-and-sources) and the [pose editor design](../research/animation/pose-editor-design.md#12-evidence-and-sources), which also hold the Studio's designs built on these facts.
 
 Photo-mode faces (expressions) are a separate chain, covered in [facial expressions](facial-expressions.md#3-photo-mode-expressions). How to drive the photo-mode menu from script is in [photo mode](photo-mode.md).
 
@@ -98,6 +98,40 @@ No field names an icon, an `.anims` file or a workspot [resource]: the menu is a
 
 **Pose tools.** Photo Mode Pose Selector reads the lists the native menu builds (`OnSetupOptionSelector`), offers search, favourites, arrow-key stepping and per-character freeze, and stores favourites in SQLite keyed by the category text plus the pose text. Its README notes that a cross-category browser would need indexing beyond the menu's list [source: its `init.lua`, `README.md` 1.2.0]. Photo Mode Unlocker XL adds 31 categories and 199 full records of its own [resource].
 
+## 6. The rig for posing
+
+- **Joints** [resource]: `woman_base.rig`'s 71 joints are `Root`, `Trajectory`, `Hips`, `reference_joint`; the spine `Spine`…`Spine3`, `Neck`, `Neck1`, `Head` and the two eyes; per side the shoulder, arm, forearm and hand, a weapon socket, five metacarpals (`LeftInHandThumb`…`LeftInHandPinky`), two thumb and three joints for each other finger (`LeftHandIndex1–3`…), and the thigh, shin, foot, heel and toe. Every left joint's twin swaps `Left` for `Right` in its name.
+- **No posing limits.** The rig's only angle data is its ragdoll description: 22 bodies with swing and twist ranges relative to their capsules (the upper arm ±6°, the forearm −30…55° and −40…25°, the head ±20°). They are physics tuning, not anatomical limits [resource].
+- **IK setups**: the rig lists two-bone foot setups for each leg (`LeftUpLeg` → `LeftLeg` → `LeftFoot`, hinge Z) [resource].
+- **What a pose can key**: only these 71 joints. The 114 helper joints the body meshes are also skinned to are solved by the `deformations` graph (§4), so a pose never addresses them [resource].
+
+## 7. What the body graph does after the pose clip
+
+The photo-mode body graph runs, from the pose source to its output [resource: its node tree]:
+
+1. The pose source: a `MixerSlot` over the `WORKSPOT` graph slot, whose inputs are a looping `idle_stand` and a `WorkspotHub`. Which of the two plays a chosen pose is not traced [hypothesis].
+2. `PoseCorrection`.
+3. **Head and chest rotation**: six `RotateBone` nodes on `Head` and `Spine` (X, Y, Z; ±90°), each fed by a float input `RotateHeadX`…`RotateChestZ` / `rotateDegree`; the graph declares them as six `AnimFeature_PhotomodeBodyPartRotate` features (one float, `rotateDegree`) [resource] [source: RED4ext.SDK generated type].
+4. **Terrain foot IK**: an `AddSnapToTerrainIkRequest` whose hips request uses the `ikLeftLeg` and `ikRightLeg` chains. Clips switch it with the float tracks `allowFeetIk`, `enableLeftFootIk` and `enableRightFootIk` [resource]. The community documents that it glues feet to the floor, and removes it per pose in WolvenKit when a pose's feet should leave the ground [wiki: "Removing Foot Snap IK from Poses/Animations"].
+5. **Look-at**: two `LookAtController`s, with inputs for `Eyes`, `Head`, `Chest`, `LeftHand` and `RightHand` (`isEnabled`, `target`, `mode`, `suppress`) [resource].
+6. **Limb IK**: `AddIkRequest` for the four chains, then `Ik2` for each arm (`LeftArm` → `LeftForeArm` → `LeftHand`, hinge Z, at most 165° left and 180° right) and `Ik2Constraint` for each leg, with inputs per chain: `isEnabled`, `position`, `rotation` (a quaternion), `poleVector`, `weightPosition`, `weightRotation` and `poleVectorOverideWeight` [resource].
+7. An override blend for the eyes, then the output.
+
+So head, chest, gaze, feet and all four limbs can be bent **on top of any pose**. Whether the external IK requests reach the branch that plays poses is untested [hypothesis].
+
+## 8. Changing a pose at runtime
+
+| Lever | What it reaches | Grade |
+|---|---|---|
+| `IKTargetAddEvent` queued on the entity: `bodyPart` (the chain, e.g. `ikRightArm`), `SetStaticTarget(position)`, `SetStaticOrientationTarget(quaternion)`, or entity targets; `request` weights, transitions and priority; removed with `IKTargetRemoveEvent` | The limb IK chains (§7); the game's climbing code uses it for both hands | [source] 2.31 `ikTargetEvents.script`, `orphans.script` (`IKTargetRequest`, `AnimTargetAddEvent`), `locomotionTransitions.script` (`CreateIKConstraint`) |
+| `LookAtAddEvent` with `bodyPart` `Eyes`, `LeftHand` or `RightHand` and extra parts (`Head`, `Chest`) with weights and suppression | The look-at controllers; an AI shield aims a hand this way; AMM aims NPC eyes, head and chest this way | [source] 2.31 `aiLookats.script`; AMM `Modules/util.lua` |
+| `AnimationControllerComponent.ApplyFeature(obj, name, feature)`; public `SetInputFloat/Bool/Int/Vector`; private native `SetInputQuaternion`; the `AnimInputSetter…` events | Any graph input by group and name, e.g. `RotateHeadY` with `AnimFeature_PhotomodeBodyPartRotate` | [source] 2.31 `animationControllerComponent.script` |
+| The loaded clip's key data | RED4ext.SDK lays out `animAnimationBufferCompressed` with spans over its compressed, raw and constant joint keys and its track keys, and the 14-byte constant key (13-bit joint index, 2-bit channel, the rotation's *w* sign, three float32 values). Whether evaluation reads these spans every frame is untested | [source] SDK `animAnimationBufferCompressed.hpp`, `animKeyFrames.hpp`; per-frame use [hypothesis] |
+| Hot reload | Red Hot Tools reloads changed archives, forgets their resources from the loader and resource bank, keeps live references only for widget libraries, and calls `ArchiveXL.Reload`. ArchiveXL merges animation sets when an animated component initialises. So a set the puppet already holds is expected to stay old until a new puppet is made (re-entering photo mode) | [source] Red Hot Tools `ArchiveLoader.cpp`; ArchiveXL `Animation/Extension.cpp`; the puppet part [hypothesis] |
+| Engine hooks | The only animation function address in the public address libraries is `AnimatedComponent::InitializeAnimations` (ArchiveXL hooks it); a hook on graph evaluation would need new reverse engineering | [source] ArchiveXL `Red/Addresses/Library.hpp` |
+
+How the Studio plans to use these levers is in the [pose editor design](../research/animation/pose-editor-design.md#7-live-posing-route-survey).
+
 ## Open questions
 
 1. How does the native menu start a pose clip (mixer slot or workspot), and is `animationTime` a start or a hold time? Do static 2-frame poses loop?
@@ -106,9 +140,13 @@ No field names an icon, an `.anims` file or a workspot [resource]: the menu is a
 4. In which axes and space do `positionOffset` and `rotation` apply?
 5. Does a game without Phantom Liberty use the base `player_wa_photomode.ent` for V, and does a pack that targets only one of the two entities show in the other?
 6. What does the deformation graph compute for each helper joint, and how far is the Studio's rigid approximation from it in strong poses?
+7. Does the engine sample a loaded clip's constant keys every frame, so that writing them changes a held pose live, or does it copy or cache them per selection or per load?
+8. Do `IKTargetAddEvent` targets and `LookAtAddEvent` hand targets act on the photo-mode puppet while it holds a pose?
+9. After a hot reload, does re-selecting a pose pick up a reloaded set, or only a newly created puppet?
+10. Does individual time dilation 0 on the puppet stop its graph from evaluating?
 
-The prepared in-game checks for these are G1–G7 in the [pose library design](../research/animation/pose-library-design.md#10-in-game-checks-for-the-prepared-session).
+The prepared in-game checks for 1–6 are G1–G7 in the [pose library design](../research/animation/pose-library-design.md#10-in-game-checks-for-the-prepared-session); 7–10 are steps LP1–LP9 of the [pose editor design](../research/animation/pose-editor-design.md#74-first-experiment-plan-one-supervised-session).
 
 ## Related pages
 
-[Photo mode](photo-mode.md) · [Facial expressions](facial-expressions.md) · [Body rendering](body-rendering.md) · [Mod loading](mod-loading.md) · [Archive format](archive-format.md) · [Pose library design](../research/animation/pose-library-design.md)
+[Photo mode](photo-mode.md) · [Facial expressions](facial-expressions.md) · [Body rendering](body-rendering.md) · [Mod loading](mod-loading.md) · [Archive format](archive-format.md) · [Pose library design](../research/animation/pose-library-design.md) · [Pose editor design](../research/animation/pose-editor-design.md)
