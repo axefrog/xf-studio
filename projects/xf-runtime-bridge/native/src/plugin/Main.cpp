@@ -131,6 +131,19 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         state.restore.Tick(state.bridge && state.bridge->RestoreReady(), &RestoreAfterKill, [](const std::string& aWhat) {
             log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
         });
+        // A client dropped for idleness can't be driving photo mode any more: give the cursor back
+        // (RB-34). Only after a write, since only a write hides it.
+        if (state.bridge && state.bridge->TakeIdleDisconnect() && state.restore.WritesUsed() && !state.restore.Done())
+        {
+            try
+            {
+                ReleaseCursorAfterIdle();
+            }
+            catch (const std::exception& e)
+            {
+                log::Warn("bridge.idle_cursor_release_failed", std::string("what=") + e.what(), "idle-release");
+            }
+        }
         return false;
     });
 }
@@ -265,6 +278,10 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     {
         log::Warn("plugin.config_warning", warning);
     }
+
+    // Every engine address a game call needs, resolved now rather than lazily at the first call, where a
+    // missing one would end the game (RB-32). Without them the bridge still runs, refusing game methods.
+    ResolveScriptCallAddresses();
 
     RegisterStates(aHandle, aSdk);
 

@@ -23,6 +23,7 @@
 #include <RED4ext/Scripting/Natives/ScriptGameInstance.hpp>
 #include <RED4ext/Scripting/Natives/Vector4.hpp>
 
+#include <cstdio>
 #include <initializer_list>
 #include <thread>
 #include <vector>
@@ -749,6 +750,189 @@ json PhotoExpressionSet(const MethodContext& aContext)
     return writes::ExpressionResult(SetPhotoAttribute(params::key::kExpression, static_cast<float>(face), aContext.cid));
 }
 
+// ---- V's photo-mode face: face.rig.read (read) and photo.expression.index (write-photo) --------
+//
+// face.rig.read finds components on the photo-mode stand-in or its head item by name through the
+// redscript layer (XFFace.Component: Entity.FindComponentByName, vanilla 2.31), then reads their
+// animation setup here, through the game's own reflection: a property is read only when it exists
+// with the expected kind of type, so a changed layout is reported, never guessed. No game function is
+// called on the component; resource references are reported as their path hashes (FNV-1a64 of the
+// depot path, which the Studio labels from its resolver).
+
+constexpr uint32_t kMaxSetupEntries = 64;
+
+std::string TypeNameOf(const RED4ext::CBaseRTTIType* aType)
+{
+    if (!aType)
+    {
+        return "<none>";
+    }
+    const auto* text = aType->GetName().ToString();
+    return text ? text : "<unnamed>";
+}
+
+// Where a property's value lives, or null when the property is missing, isn't of aKind, or keeps its
+// value in a script value holder (native component data never does).
+void* PropertyValue(RED4ext::CClass* aClass, void* aInstance, const char* aName, RED4ext::ERTTIType aKind, json& aProblems)
+{
+    auto* property = aClass ? aClass->GetProperty(aName) : nullptr;
+    if (!property || !property->type)
+    {
+        aProblems.push_back(std::string(aName) + ": missing");
+        return nullptr;
+    }
+    if (property->type->GetType() != aKind || property->flags.inValueHolder)
+    {
+        aProblems.push_back(std::string(aName) + ": unexpected type " + TypeNameOf(property->type));
+        return nullptr;
+    }
+    return property->GetValuePtr<void>(aInstance);
+}
+
+// A resource reference (rRef or raRef): both keep the path hash first (RED4ext.SDK ResourceReference
+// and ResourceAsyncReference, path at offset 0). Null when unset.
+json ResourceHash(RED4ext::CClass* aClass, void* aInstance, const char* aName, RED4ext::ERTTIType aKind, json& aProblems)
+{
+    const auto* value = static_cast<const uint64_t*>(PropertyValue(aClass, aInstance, aName, aKind, aProblems));
+    if (!value)
+    {
+        return nullptr;
+    }
+    if (*value == 0)
+    {
+        return nullptr;
+    }
+    char hex[19];
+    std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(*value));
+    return json{{"hash", std::to_string(*value)}, {"hex", hex}};
+}
+
+// animAnimSetup {gameplay, cinematics: array<animAnimSetupEntry {animSet (raRef), priority}>}.
+json AnimSetup(RED4ext::CClass* aClass, void* aInstance, const char* aName, json& aProblems)
+{
+    auto* property = aClass ? aClass->GetProperty(aName) : nullptr;
+    if (!property || !property->type || property->type->GetType() != RED4ext::ERTTIType::Class ||
+        property->flags.inValueHolder)
+    {
+        aProblems.push_back(std::string(aName) + ": missing or not a structure");
+        return nullptr;
+    }
+    auto* setupClass = static_cast<RED4ext::CClass*>(property->type);
+    void* setup = property->GetValuePtr<void>(aInstance);
+    json out = json::object();
+    for (const char* list : {"gameplay", "cinematics"})
+    {
+        auto* listProperty = setupClass->GetProperty(list);
+        if (!listProperty || !listProperty->type || listProperty->type->GetType() != RED4ext::ERTTIType::Array)
+        {
+            aProblems.push_back(std::string(aName) + "." + list + ": missing or not a list");
+            continue;
+        }
+        auto* arrayType = static_cast<RED4ext::CRTTIBaseArrayType*>(listProperty->type);
+        auto* entryType = arrayType->GetInnerType();
+        if (!entryType || entryType->GetType() != RED4ext::ERTTIType::Class)
+        {
+            aProblems.push_back(std::string(aName) + "." + list + ": entries are not structures");
+            continue;
+        }
+        auto* entryClass = static_cast<RED4ext::CClass*>(entryType);
+        void* array = listProperty->GetValuePtr<void>(setup);
+        const auto length = arrayType->GetLength(array);
+        json entries = json::array();
+        for (uint32_t i = 0; i < length && i < kMaxSetupEntries; ++i)
+        {
+            void* entry = arrayType->GetElement(array, i);
+            if (!entry)
+            {
+                break;
+            }
+            json item{{"anim_set", ResourceHash(entryClass, entry, "animSet", RED4ext::ERTTIType::ResourceAsyncReference, aProblems)}};
+            if (auto* priority = static_cast<const uint8_t*>(
+                    PropertyValue(entryClass, entry, "priority", RED4ext::ERTTIType::Fundamental, aProblems)))
+            {
+                item["priority"] = *priority;
+            }
+            entries.push_back(item);
+        }
+        out[list] = entries;
+        if (length > kMaxSetupEntries)
+        {
+            out[std::string(list) + "_truncated_from"] = length;
+        }
+    }
+    return out;
+}
+
+json DescribeComponent(RED4ext::IScriptable* aComponent)
+{
+    auto* rtti = RED4ext::CRTTISystem::Get();
+    auto* cls = aComponent->GetType();
+    json out{{"class", TypeNameOf(cls)}};
+    json problems = json::array();
+    auto* animated = rtti->GetClass("entAnimatedComponent");
+    auto* extension = rtti->GetClass("entAnimationSetupExtensionComponent");
+    if (cls && animated && cls->IsA(animated))
+    {
+        out["kind"] = "animated";
+        out["facial_setup"] = ResourceHash(cls, aComponent, "facialSetup", RED4ext::ERTTIType::ResourceAsyncReference, problems);
+        out["graph"] = ResourceHash(cls, aComponent, "graph", RED4ext::ERTTIType::ResourceReference, problems);
+        out["rig"] = ResourceHash(cls, aComponent, "rig", RED4ext::ERTTIType::ResourceReference, problems);
+        out["animations"] = AnimSetup(cls, aComponent, "animations", problems);
+    }
+    else if (cls && extension && cls->IsA(extension))
+    {
+        out["kind"] = "animation_setup_extension";
+        out["animations"] = AnimSetup(cls, aComponent, "animations", problems);
+    }
+    else
+    {
+        out["kind"] = "other";
+    }
+    if (!problems.empty())
+    {
+        out["unreadable"] = problems;
+    }
+    return out;
+}
+
+json FaceRigRead(const MethodContext& aContext)
+{
+    const auto request = params::ParseFaceRig(aContext.params);
+    int32_t target = static_cast<int32_t>(request.target);
+    auto out = CallScript("XFFace", "Describe", {"Int32"}, {&target}, aContext.cid);
+    auto* fn = FindScriptFunction("XFFace", "Component", {true, "handle:IScriptable", {"String", "Int32", "CName"}}, aContext.cid);
+    json components = json::array();
+    for (const auto& name : request.components)
+    {
+        RED4ext::CString cid(aContext.cid.c_str());
+        RED4ext::CName componentName(name.c_str());
+        RED4ext::Handle<RED4ext::IScriptable> component;
+        CallFunction(fn, nullptr, {&cid, &target, &componentName}, &component, "XFRuntimeBridge.XFFace.Component", aContext.cid);
+        json entry{{"name", name}, {"found", static_cast<bool>(component)}};
+        if (component)
+        {
+            entry.update(DescribeComponent(component.GetPtr()));
+        }
+        components.push_back(entry);
+    }
+    out["components"] = components;
+    out["hashes"] = "resource path hashes (FNV-1a64 of the lower-case depot path), as decimal text and hex";
+    log::Debug("face.rig_read", "target=" + std::string(params::FaceTargetName(request.target)) +
+                                    " components=" + std::to_string(request.components.size()),
+               aContext.cid);
+    return out;
+}
+
+json PhotoExpressionIndex(const MethodContext& aContext)
+{
+    const auto request = params::ParseExpressionIndex(aContext.params);
+    int32_t target = static_cast<int32_t>(request.target);
+    int32_t index = request.index;
+    bool unlisted = request.unlisted;
+    return writes::ExpressionIndexResult(
+        CallScript("XFFace", "ApplyIndex", {"Int32", "Int32", "Bool"}, {&target, &index, &unlisted}, aContext.cid));
+}
+
 json CharacterApply(const MethodContext& aContext)
 {
     const auto request = params::ParseCharacterApply(aContext.params);
@@ -826,6 +1010,12 @@ void RestoreAfterKill()
     log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
 }
 
+void ReleaseCursorAfterIdle()
+{
+    const auto result = CallScript("XFBridgeActions", "ReleaseCursor", {}, {}, "idle-release");
+    log::Info("bridge.idle_cursor_released", SerializeJson(result), "idle-release");
+}
+
 void RegisterMethods(Dispatcher& aDispatcher)
 {
     auto& state = Get();
@@ -876,6 +1066,10 @@ void RegisterMethods(Dispatcher& aDispatcher)
                           "V's head (plus an offset) in the world and on screen, and the photo-mode camera's transform and "
                           "field of view.",
                           &PhotoSubject});
+    aDispatcher.Register({"face.rig.read", Access::Read, RunOn::GameThread,
+                          "The photo-mode stand-in's or head item's face components: facial setup, graph, rig and "
+                          "animation sets (path hashes).",
+                          &FaceRigRead});
 
     // Phase 2. Writes (refused unless allow_writes = true); each logs its reversal.
     aDispatcher.Register(WriteMethod("photo.enter", Access::WritePhoto, RunOn::BridgeThread,
@@ -889,6 +1083,9 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface and its mouse cursor.", &PhotoHudHide));
     aDispatcher.Register(WriteMethod("photo.expression.set", Access::WritePhoto, RunOn::GameThread, "Sets V's photo-mode expression by its value.",
                                      &PhotoExpressionSet));
+    aDispatcher.Register(WriteMethod("photo.expression.index", Access::WritePhoto, RunOn::GameThread,
+                                     "Applies a photo-mode face index directly (research); refuses unlisted indices unless asked.",
+                                     &PhotoExpressionIndex));
     aDispatcher.Register(WriteMethod("cc.apply", Access::WriteCharacter, RunOn::GameThread,
                                      "Sets one character-creator option on the open appearance screen (never confirms).",
                                      &CharacterApply));

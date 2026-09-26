@@ -58,6 +58,11 @@ PipeServer::~PipeServer()
     Stop();
 }
 
+void PipeServer::SetIdleCallback(std::function<void()> aOnIdle)
+{
+    m_onIdle = std::move(aOnIdle);
+}
+
 bool PipeServer::Start(const std::wstring& aPipeName, uint32_t aIdleDisconnectSeconds, Handler aHandler,
                        std::string& aError)
 {
@@ -367,6 +372,10 @@ PipeServer::EndReason PipeServer::ServeClient(uint32_t aClientPid)
                 CancelAndDrain(pipe, overlapped);
                 log::Info("bridge.client_idle", "idle_seconds=" + std::to_string(m_idleDisconnectSeconds));
                 reason = EndReason::Idle;
+                if (m_onIdle)
+                {
+                    m_onIdle(); // sets a flag only; the thread's own catch-all covers it
+                }
                 break;
             }
             ok = true;

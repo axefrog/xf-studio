@@ -154,18 +154,33 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
-  if (status.photo_mode_can_open === false) {
-    throw planError("photo_not_allowed", "The game doesn't allow photo mode right now (combat, a scene or a vehicle?). Nothing was sent.");
+  // Only an explicit yes lets the key go (RB-36): a missing or unreadable answer is a no.
+  if (status.photo_mode_can_open !== true) {
+    throw planError("photo_not_allowed", "The game doesn't allow photo mode right now (combat, a scene or a vehicle?), or didn't say it does. Nothing was sent.");
   }
-  const binding = readPhotoModeBinding();
+  let binding;
+  try {
+    binding = readPhotoModeBinding();
+  } catch (error) {
+    if (error instanceof KeySendError) throw planError(error.code, error.message);
+    throw error;
+  }
   const vk = virtualKey(binding.name);
-  if (vk === null) throw planError("key_unsupported", `The photo mode key is bound to ${binding.name}, which the bridge can't send. Ask the player to press it.`);
+  if (vk === null) throw planError("key_unsupported", `The photo mode key is bound to ${binding.name}, which the bridge can't send safely (it isn't a letter, digit, function or navigation key). Ask the player to press it.`);
   const target = context.api.keyTarget();
   if (!target) throw planError("no_window", "The game has no visible window to send the key to.");
   const route = ((input.route as string | undefined) ?? "sendinput") as KeyRoute;
+  // Checked again at the last moment, after the window came forward (RB-37): if the game left normal
+  // play or stopped allowing photo mode meanwhile, the key isn't sent.
+  const beforeSend = async () => {
+    const now = await bridgeCall(context, "game.status", {});
+    if (String(now.phase) !== "gameplay" || now.photo_mode_can_open !== true) {
+      throw planError("photo_not_allowed", `The game changed while its window came to the front (it is in ${String(now.phase)}), so the key wasn't sent. Try again from normal play.`);
+    }
+  };
   let sent;
   try {
-    sent = await context.api.keySender()(target, vk, route);
+    sent = await context.api.keySender()(target, vk, route, { beforeSend });
   } catch (error) {
     if (error instanceof KeySendError) throw planError(error.code, error.message);
     throw error;
@@ -574,6 +589,41 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({ faceId: int("The expression's value.", 0, 100000) }, ["faceId"]),
     undo: "the result's undo parameters restore the previous expression.",
     bridge: { method: "photo.expression.set" },
+  },
+  {
+    name: "photo.expression.index",
+    title: "Apply a photo-mode face index (research)",
+    description:
+      "Research tool for the expression editor: applies a photo-mode face index to V directly, the way photo mode feeds its face animation, without going through the expression list (target: puppet, V's photo-mode stand-in, the default; or head, its head item). Whether the face changed shows only in a screenshot. By default only an index the expression list offers is accepted; unlisted: true allows any (sparse-index checks). Photo mode only, in the XF test profile.",
+    permission: "write-photo",
+    input: obj(
+      {
+        index: int("The face index to apply.", 0, 100000),
+        target: oneOf("Which entity gets it: puppet (V's photo-mode stand-in, default) or head (its head item).", ["puppet", "head"]),
+        unlisted: bool("Allow an index the photo-mode expression list doesn't offer. Default false."),
+      },
+      ["index"],
+    ),
+    undo: "the result's undo selects the expression the photo-mode menu shows again (photo_expression_set); leaving photo mode also resets it.",
+    bridge: { method: "photo.expression.index" },
+  },
+  {
+    name: "face.rig.read",
+    title: "Read V's photo-mode face setup",
+    description:
+      "Reads how V's face is animated in photo mode, for the expression editor: finds the named parts (components) of V's photo-mode head item (target: head, the default) or stand-in (puppet) and reports, for each, its kind, the facial setup, animation graph and rig it uses and its animation sets with priorities, as resource path hashes the Studio can label. Photo mode only; changes nothing.",
+    permission: "read",
+    input: obj({
+      target: oneOf("Whose parts to read: head (V's photo-mode head item, default) or puppet (the stand-in).", ["head", "puppet"]),
+      components: {
+        type: "array",
+        description: "Part names to look for (default: face_rig, man_face_base_animations, PhotomodeAnimations).",
+        items: str("A part name (letters, digits and _).", { pattern: "^[A-Za-z0-9_]{1,64}$", maxLength: 64 }),
+        minItems: 1,
+        maxItems: 16,
+      },
+    }),
+    bridge: { method: "face.rig.read" },
   },
   {
     name: "photo.subject",

@@ -338,13 +338,15 @@ public func XFBridgeFakePlayer() -> wref<PlayerPuppet> {
 }
 
 // Notes every cursor controller, and plays Hide instead of any context while the bridge hides the
-// cursor (signature from cursorGameController.script:343).
+// cursor (signature from cursorGameController.script:343). Only while photo mode is open (RB-34): if
+// photo mode ever closes without OnHide, no other menu inherits a hidden cursor, and Status and an
+// idle disconnect clear the flag as well.
 @wrapMethod(CursorGameController)
 private final func ProcessCursorContext(const context: CName, data: ref<inkUserData>, opt force: Bool) -> Void {
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
     registry.NoteCursor(this);
-    if registry.IsCursorHidden() {
+    if registry.IsCursorHidden() && XFPhoto.Active() {
       wrappedMethod(n"Hide", null, force);
       return;
     }
@@ -446,6 +448,15 @@ public abstract class XFBridgeActions {
     let game = GetGameInstance();
     let phase = XFBridgeActions.Phase();
     let out = "{\"ok\":true,\"phase\":" + XFJson.Str(phase);
+    // The cursor is hidden only for photo-mode captures: any other phase clears the flag (RB-34),
+    // in case photo mode closed without its OnHide.
+    if NotEquals(phase, "photo_mode") {
+      let cursorRegistry = XFBridgeRegistry.Get();
+      if IsDefined(cursorRegistry) && cursorRegistry.IsCursorHidden() {
+        cursorRegistry.SetCursorHidden(false);
+        XFBridgeLog.Info(cid, "cursor hide cleared: the game is in '" + phase + "', not photo mode");
+      }
+    }
     if GameInstance.IsValid(game) {
       let handler = new inkMenuScenario().GetSystemRequestsHandler();
       if IsDefined(handler) {
@@ -522,6 +533,19 @@ public abstract class XFBridgeActions {
     }
     XFBridgeLog.Info(cid, "RestoreAfterKill " + out + "}");
     return out + "}";
+  }
+
+  // Called by the plugin when it drops a client for idleness (idle_disconnect_seconds): nobody is
+  // driving photo mode any more, so the mouse cursor comes back (RB-34). The menu's fade is left to
+  // the player's own photo-mode keys.
+  public static func ReleaseCursor(cid: String) -> String {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) || !registry.IsCursorHidden() {
+      return "{\"ok\":true,\"cursor_shown\":false}";
+    }
+    registry.SetCursorHidden(false);
+    XFBridgeLog.Info(cid, "cursor hide cleared after an idle disconnect");
+    return "{\"ok\":true,\"cursor_shown\":true}";
   }
 }
 
@@ -857,6 +881,129 @@ public abstract class XFPhoto {
     out += "," + XFPhoto.PoseItem(controller, registry, "near_far", 9u) + "," + XFPhoto.PoseItem(controller, registry, "up_down", 37u) + "," + XFPhoto.PoseItem(controller, registry, "look_at", 15u) + "}";
     XFBridgeLog.Debug(cid, "photo subject " + source + " slot=" + slot);
     return out + "}";
+  }
+}
+
+// --- V's photo-mode face (face.rig.read, photo.expression.index) ---------------------------------
+//
+// Photo mode gives V's stand-in a head item, Items.PlayerWaPhotomodeHead or PlayerMaPhotomodeHead, in
+// that item's placement slot (photoModePlayerEntity.script:430-439); the face graph is expected on
+// that item, the animation controller on the stand-in (research/animation/expressions-evidence.md).
+// face.rig.read finds components by name here and the plugin reads their animation setup; the
+// expression route is the game's own photo-mode face input, AnimFeature_PhotomodeFacial
+// (orphans.script:48825), queued with AnimationControllerComponent.ApplyFeature and followed by the
+// face graph's updateFacialPose event (animationControllerComponent.script:30, 61).
+
+// A component by name. Entity.FindComponentByName is protected (entity.script:32), so the bridge adds
+// a public member that calls it.
+@addMethod(Entity)
+public func XFBridgeComponent(name: CName) -> ref<IComponent> {
+  return this.FindComponentByName(name);
+}
+
+public abstract class XFFace {
+  // 0: V's photo-mode stand-in; 1: the head item photo mode gave it. Null when not seen.
+  public static func Target(target: Int32) -> ref<GameObject> {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) || !XFPhoto.Active() {
+      return null;
+    }
+    let puppet: ref<GameObject> = registry.GetPhotoPuppet();
+    if !IsDefined(puppet) {
+      let controller = registry.GetPhotoController();
+      if IsDefined(controller) {
+        puppet = controller.XFBridgeFakePlayer();
+      }
+    }
+    if !IsDefined(puppet) || target == 0 {
+      return puppet;
+    }
+    // Both photo-mode heads share one placement slot; asking for each finds whichever is there.
+    let ts = GameInstance.GetTransactionSystem(puppet.GetGame());
+    let heads: array<TweakDBID> = [t"Items.PlayerWaPhotomodeHead", t"Items.PlayerMaPhotomodeHead"];
+    let i = 0;
+    while i < ArraySize(heads) {
+      let item = ts.GetItemInSlot(puppet, EquipmentSystem.GetPlacementSlot(ItemID.FromTDBID(heads[i])));
+      if IsDefined(item) {
+        return item;
+      }
+      i += 1;
+    }
+    return null;
+  }
+
+  public static func TargetName(target: Int32) -> String {
+    if target == 0 {
+      return "puppet";
+    }
+    return "head";
+  }
+
+  // Read-only: what the target is (class, appearance, the head item's record).
+  public static func Describe(cid: String, target: Int32) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let obj = XFFace.Target(target);
+    if !IsDefined(obj) {
+      return XFJson.Fail("unavailable", "V's photo-mode " + XFFace.TargetName(target) + " hasn't been seen yet; close and reopen photo mode");
+    }
+    let out = "{\"ok\":true,\"target\":" + XFJson.Str(XFFace.TargetName(target)) + ",\"class\":" + XFJson.Name(obj.GetClassName());
+    out += ",\"appearance\":" + XFJson.Name(obj.GetCurrentAppearanceName());
+    let item = obj as ItemObject;
+    if IsDefined(item) {
+      out += ",\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(ItemID.GetTDBID(item.GetItemID())));
+    }
+    XFBridgeLog.Debug(cid, "face target " + XFFace.TargetName(target) + " " + NameToString(obj.GetClassName()));
+    return out + "}";
+  }
+
+  // One component of the target, by name, for the plugin to read (null when absent). Read-only.
+  public static func Component(cid: String, target: Int32, name: CName) -> ref<IScriptable> {
+    let obj = XFFace.Target(target);
+    if !IsDefined(obj) {
+      return null;
+    }
+    return obj.XFBridgeComponent(name);
+  }
+
+  // Applies a photo-mode face index directly: the input the photo-mode face graph reads, then the
+  // event that makes it switch (1 s cross-fade). Unless unlisted, only an index the photo-mode
+  // expression list offers. Reports the menu's expression, which the undo selects again.
+  public static func ApplyIndex(cid: String, target: Int32, index: Int32, unlisted: Bool) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let registry = XFBridgeRegistry.Get();
+    let controller = XFPhoto.Controller();
+    let item: ref<XFPhotoItem>;
+    if IsDefined(registry) {
+      item = registry.FindItem(28u);
+    }
+    let menuKnown = IsDefined(controller) && IsDefined(item) && XFPhoto.HasValue(controller, item);
+    if !unlisted {
+      if !IsDefined(item) || !Equals(item.kind, "options") {
+        return XFJson.Fail("unavailable", "the photo-mode expression list hasn't been seen yet; close and reopen photo mode, or pass unlisted");
+      }
+      if !ArrayContains(item.optionData, index) {
+        return XFJson.Fail("bad_params", "index " + IntToString(index) + " is not one of the photo-mode expression values (" + IntToString(ArraySize(item.optionData)) + " of them; see photo.state with options); pass unlisted to apply it anyway");
+      }
+    }
+    let obj = XFFace.Target(target);
+    if !IsDefined(obj) {
+      return XFJson.Fail("unavailable", "V's photo-mode " + XFFace.TargetName(target) + " hasn't been seen yet; close and reopen photo mode");
+    }
+    let menuValue = -1.0;
+    if menuKnown {
+      menuValue = XFPhoto.CurrentValue(controller, item);
+    }
+    XFBridgeActions.EnsureSaveLock(cid);
+    let feature = new AnimFeature_PhotomodeFacial();
+    feature.facialPoseIndex = index;
+    AnimationControllerComponent.ApplyFeature(obj, n"PhotomodeFacial", feature);
+    AnimationControllerComponent.PushEvent(obj, n"updateFacialPose");
+    XFBridgeLog.Info(cid, "photo face index " + IntToString(index) + " on the " + XFFace.TargetName(target) + " (PhotomodeFacial, updateFacialPose); the menu shows " + FloatToString(menuValue) + "; undo: photo.expression.set to the menu's value");
+    return "{\"ok\":true,\"target\":" + XFJson.Str(XFFace.TargetName(target)) + ",\"index\":" + IntToString(index) + ",\"unlisted\":" + XFJson.Flag(unlisted) + ",\"menu_value\":" + XFJson.Num(menuValue) + ",\"menu_value_known\":" + XFJson.Flag(menuKnown) + "}";
   }
 }
 

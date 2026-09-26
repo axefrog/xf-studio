@@ -217,6 +217,26 @@ json ExpressionResult(json aScript)
     return aScript;
 }
 
+json ExpressionIndexResult(json aScript)
+{
+    const bool known = aScript.value("menu_value_known", false) && aScript.contains("menu_value") &&
+                       aScript["menu_value"].is_number() && aScript["menu_value"].get<double>() >= 0.0;
+    if (known)
+    {
+        const auto faceId = static_cast<int32_t>(std::lround(aScript["menu_value"].get<double>()));
+        aScript["undo"] = {{"method", "photo.expression.set"}, {"params", {{"faceId", faceId}}}};
+        aScript["undo_note"] = "selects the expression the photo-mode menu shows again, through the menu; if the "
+                               "face doesn't change back, pick an expression in the menu";
+    }
+    else
+    {
+        aScript["undo"] = nullptr;
+        aScript["undo_note"] = "the photo-mode menu's expression wasn't known; pick an expression in the menu (or "
+                               "photo.expression.set) to replace the applied face";
+    }
+    return aScript;
+}
+
 json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
 {
     const auto select = aOps.set(params::key::kLightSelect, static_cast<float>(aRequest.light - 1));

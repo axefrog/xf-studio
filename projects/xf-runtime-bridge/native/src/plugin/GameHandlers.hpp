@@ -13,4 +13,8 @@ void RegisterMethods(Dispatcher& aDispatcher);
 // Called through State::restore (writes::RestoreOnce), which makes it run at most once and only
 // once the queue is closed. Throws on failure; RestoreOnce logs it.
 void RestoreAfterKill();
+
+// Game thread, after the pipe dropped a client for idleness: gives the mouse cursor back if a bridge
+// write hid it (RB-34). Throws on failure; the caller logs it.
+void ReleaseCursorAfterIdle();
 } // namespace xfb::plugin

@@ -151,6 +151,8 @@ Nothing in this section has been tried end to end; the first in-game test decide
 
 ## Open questions
 
+Questions 1 and 2 have bridge commands ready (`face.rig.read` and `photo.expression.index`, offline only) and are on the runtime bridge's next [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2).
+
 1. Does the engine use the male player facial setup for the female V, as the `face_rig` components say? The face rig lives on the photo-mode head **item** (`Items.PlayerWaPhotomodeHead` in `AttachmentSlots.TppHead`), not on the puppet, and that item's own `player_wa_tpp_head.ent` carries a placeholder `face_rig` (demo_vicky facial setup, `woman_average_sermo` graph, no sets) beside the photo-mode `.app`'s one [resource]. A read-only CET probe of the live head item is prepared in [session 3 Part D](../experiments/022-session-3/README.md#part-d-expression-console-checks-optional) ([API evidence](../research/animation/expressions-evidence.md#session-3-probes)).
 2. Is faceId passed straight to `facialPoseIndex`, and does the database look rows up by the Index column or by position (can Index values be sparse)? With the Mega Pack, menu position and faceId differ for most faces ("Static: Sleeping" is 57th in the menu list (index 56) but has faceId 60), so picking it in the menu tells the two apart; its CSV's Index equals row position everywhere, so sparseness needs a test CSV (brief R5) [resource].
 3. Does ArchiveXL `animations:` with `component: face_rig` reach the photo-mode face rig, and does a higher-priority set shadow a vanilla clip name?

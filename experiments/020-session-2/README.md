@@ -67,5 +67,5 @@ Game 2.31 on the test profile, the session 2 build above, bridge build `c31156a`
 | 5–7. Gloss, Shimmer, Metal | Rendered in the character creator's fixed light (all ten presets captured); the verdicts need a light sweep the bridge can't drive yet, so they wait for the next session. |
 | 8–9 | Not run. |
 
-The open steps (4–9, Depth C at the extreme close-up and the Lines sharpness) are in the reworked [session 2 script](../../projects/xf-runtime-bridge/tools/sessions/session-2.json), which now opens photo mode, frames, lights and sweeps by itself; the bridge [test card](../../research/runtime/runtime-bridge-test-card.md#next-session-autonomy-checks-then-session-2-continued) runs it after the autonomy checks.
+The open steps (4–9, Depth C at the extreme close-up and the Lines sharpness) are in the reworked [session 2 script](../../projects/xf-runtime-bridge/tools/sessions/session-2.json), which now opens photo mode, frames, lights and sweeps by itself; the bridge [test card](../../research/runtime/runtime-bridge-test-card.md#next-session-autonomy-checks-expression-checks-then-session-2-continued) runs it after the autonomy checks.
 

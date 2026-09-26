@@ -12,7 +12,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { spawnSync } from "node:child_process";
 import { CATALOGUE, toolName } from "../api/catalogue.ts";
 import { parsePermissionFlags } from "../mcp/server.ts";
-import { acquireSessionLock, LOCK_FILE, lockPath, processStartTime, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
+import { acquireSessionLock, LOCK_FILE, lockPath, processStartTime, putBackLock, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
 import { CommandApi } from "../api/command-api.ts";
 import { PipeConnectError } from "../bridge-lib.ts";
 import { BridgeClient } from "../bridge-lib.ts";
@@ -130,6 +130,9 @@ describe("MCP server against a bridge with writes allowed", () => {
     let result = await call(mcp, "photo_camera_set", { preset: "face" });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("This only works in photo mode");
+    result = await call(mcp, "face_rig_read");
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("This only works in photo mode");
 
     // photo.enter refuses without a route (the quest node opens a restricted photo mode) and points at
     // photo_open; photo_open refuses plainly when it can't send the key safely (here: the self-test host
@@ -182,6 +185,30 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(json(result).result.cursor_hidden).toBe(false);
     result = await call(mcp, "photo_expression_set", { faceId: 9 });
     expect(json(result).result.after).toBe(9);
+
+    // The expression design's R1/R2 commands: a face index straight to the face animation (only listed
+    // indices unless unlisted), undone by selecting the menu's own expression again; and the face rig read.
+    result = await call(mcp, "photo_expression_index", { index: 60 });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("bad_params");
+    result = await call(mcp, "photo_expression_index", { index: 3, target: "head" });
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(json(result).result).toMatchObject({ target: "head", index: 3, menu_value_known: true });
+    expect(json(result).result.undo).toEqual({ method: "photo.expression.set", params: { faceId: 9 } });
+    result = await call(mcp, "photo_expression_index", { index: 60, unlisted: true });
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(json(result).result.target).toBe("puppet");
+    result = await call(mcp, "face_rig_read");
+    expect(result.isError, text(result)).toBeFalsy();
+    const rig = json(result).result;
+    expect(rig.target).toBe("head");
+    expect(rig.components.map((c: { name: string }) => c.name)).toEqual(["face_rig", "man_face_base_animations", "PhotomodeAnimations"]);
+    expect(rig.components[0]).toMatchObject({ found: true, kind: "animated", rig: { hex: "3333333333333333" } });
+    expect(rig.components[2].animations.gameplay[0]).toMatchObject({ priority: 128 });
+    result = await call(mcp, "face_rig_read", { target: "puppet", components: ["face_rig"] });
+    expect(json(result).result.components).toEqual([{ name: "face_rig", found: false }]);
+    result = await call(mcp, "face_rig_read", { components: ["face rig"] });
+    expect(result.isError).toBe(true);
 
     // photo_frame against the self-test host's simulated camera: centres the face and sizes it by
     // projection, and undoes to the values before it.
@@ -253,6 +280,35 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(after.isError).toBe(true);
     expect(text(after)).toMatch(/isn't running|connection is gone|closed|switched off/);
   });
+});
+
+describe("RB-34: an idle disconnect gives the cursor back", () => {
+  test("a client dropped for idleness releases the hidden cursor; an active one doesn't", async () => {
+    const host = await startSelftestHost(["--allow-writes", "--idle-seconds", "1"], 30);
+    try {
+      let client = new BridgeClient(host.session, 3000);
+      await client.connect();
+      expect((await client.call("selftest.phase", { phase: "photo_mode" }, "t-idle-1")).ok).toBe(true);
+      const hidden = await client.call("photo.hud.hide", {}, "t-idle-2");
+      expect(hidden.ok && (hidden.result as { cursor_hidden: boolean }).cursor_hidden).toBe(true);
+      // Still talking (under the 1 s limit): nothing released.
+      await sleep(600);
+      let status = await client.call("game.status", {}, "t-idle-3");
+      expect((status.result as { cursor_hidden: boolean }).cursor_hidden).toBe(true);
+      // Silent past the limit: the bridge drops the client and the next tick gives the cursor back.
+      await sleep(1800);
+      client.close();
+      client = new BridgeClient(host.session, 3000);
+      await client.connect();
+      status = await client.call("game.status", {}, "t-idle-4");
+      expect((status.result as { cursor_hidden: boolean }).cursor_hidden).toBe(false);
+      client.close();
+      expect(host.log.some((line) => line.includes("evt=bridge.client_idle"))).toBe(true);
+      expect(host.log.some((line) => line.includes("evt=bridge.idle_cursor_released"))).toBe(true);
+    } finally {
+      await host.stop();
+    }
+  }, 30000);
 });
 
 describe("MCP server permissions, no bridge, and captures", () => {
@@ -405,6 +461,22 @@ describe("session runner lock", () => {
     const message = sessionRunningMessage({ pid: 1, script: "s", started_at: "" }, lockPath(dir));
     expect(message).toContain(lockPath(dir));
     expect(message).toContain("KILL file");
+  });
+
+  test("RB-33: putting a moved-aside lock back never replaces a lock a third runner wrote meanwhile", () => {
+    const dir = tempDir("xfb-lock-back-");
+    const path = lockPath(dir);
+    const aside = `${path}.stale-test`;
+    writeFileSync(aside, "second runner");
+    writeFileSync(path, "third runner");
+    expect(putBackLock(aside, path)).toBe(false);
+    expect(readFileSync(path, "utf8")).toBe("third runner");
+    expect(existsSync(aside)).toBe(false);
+    rmSync(path, { force: true });
+    writeFileSync(aside, "second runner");
+    expect(putBackLock(aside, path)).toBe(true);
+    expect(readFileSync(path, "utf8")).toBe("second runner");
+    expect(existsSync(aside)).toBe(false);
   });
 
   test("RB-30: bridge.kill falls back to the KILL file while another client holds the pipe", async () => {

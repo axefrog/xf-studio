@@ -10,7 +10,7 @@
 // only: the bridge itself never reads it.
 
 import { dlopen, FFIType, ptr } from "bun:ffi";
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type SessionLock = {
@@ -114,8 +114,38 @@ export function readSessionLock(runtimeDir: string): SessionLock | null {
   return lock && lockAlive(lock) ? lock : null;
 }
 
+/**
+ * Puts a moved-aside lock back at `path` only if nothing is there now, atomically (RB-33): a hard link
+ * fails when the name exists, where a rename would silently replace a lock a third runner wrote in
+ * between. Where hard links aren't possible, an exclusive (`wx`) copy does the same. The aside file is
+ * removed either way. Returns whether the lock was put back.
+ */
+export function putBackLock(aside: string, path: string): boolean {
+  let restored = false;
+  try {
+    linkSync(aside, path);
+    restored = true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EEXIST") {
+      const raw = readRaw(aside);
+      if (raw !== null) {
+        try {
+          writeFileSync(path, raw, { flag: "wx" });
+          restored = true;
+        } catch {
+          // someone else's lock is there now; theirs wins
+        }
+      }
+    }
+  }
+  rmSync(aside, { force: true });
+  return restored;
+}
+
 // Removes a stale lock only if it is still the file that was judged stale (aSeen): the file is
-// moved aside atomically, compared, and put back if another runner had replaced it meanwhile.
+// moved aside atomically, compared, and put back if another runner had replaced it meanwhile, never
+// over a lock a third runner has written since.
 function takeOverStale(path: string, seen: string): void {
   const aside = `${path}.stale-${process.pid}-${Math.random().toString(36).slice(2)}`;
   try {
@@ -128,15 +158,7 @@ function takeOverStale(path: string, seen: string): void {
     return;
   }
   // It was another runner's fresh lock: put it back unless a third one has written a new lock.
-  if (readRaw(path) === null) {
-    try {
-      renameSync(aside, path);
-      return;
-    } catch {
-      // fall through
-    }
-  }
-  rmSync(aside, { force: true });
+  putBackLock(aside, path);
 }
 
 /**

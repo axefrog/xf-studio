@@ -10,7 +10,9 @@
 // (control) is always exposed.
 //
 // --runtime-dir <dir> and --capture-hwnd <window handle> exist for the tests only (the plugin
-// always uses the default folder, and captures normally target the game process).
+// always uses the default folder, and captures normally target the game process). --capture-hwnd
+// never aims photo_open's key: the command API ignores it for keys unless XFB_NO_INPUT=1, in which
+// case nothing can be sent at all (RB-35).
 // Registration: see the README ("MCP server").
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
