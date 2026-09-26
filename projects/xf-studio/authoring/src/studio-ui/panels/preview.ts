@@ -16,7 +16,7 @@ import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
 const FOV_NOTE = "The camera moves closer or further as you change the lens angle, so your V's face stays the same size.";
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
-const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", piercings: "Piercings", body: "Body", clothing: "Clothes" } as const;
+const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", teeth: "Teeth", piercings: "Piercings", body: "Body", clothing: "Clothes" } as const;
 /** What each renderer limit code means for the person using the app (detail-limits.ts). */
 export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
   "head-shape": "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.",

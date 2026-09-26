@@ -9,9 +9,9 @@
  * - **Morph** options on the head shape the head and every drawn part carrying the same `(target, region)` pair
  *   (face-morphs.ts).
  * - An **appearance** option on one of the preview's detail slots (`DETAIL_UI_SLOTS`: skin type, brows, lashes, hair,
- *   eyes, piercings) that the third-person head consumes is drawn as that detail.
+ *   eyes, teeth, piercings) that the third-person head consumes is drawn as that detail.
  * - Any other head appearance consumed by the head's face groups (`FACE_GROUPS`) is drawn **when its parts are face
- *   decals** (the `mesh_decal` family: makeup, tattoos, scars, face cyberware); other parts, such as teeth, are not.
+ *   decals** (the `mesh_decal` family: makeup, tattoos, scars, face cyberware); other parts are not.
  *   Which case applies is known only after resolving a choice, so the status is `conditional`; `refineCoverage` settles
  *   it from the preview plan's drawn components.
  * - A **colour-only** controller (no `.app`, e.g. the skin tone) shows through its link followers.
@@ -57,14 +57,14 @@ export interface CoverageInput {
 
 const RANK: Record<RenderStatus, number> = { "not-rendered": 0, conditional: 1, rendered: 2 };
 const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face detail", brows: "the eyebrows", lashes: "the eyelashes",
-  hair: "the hair", eyes: "the eyes", piercings: "the piercings", body: "the body", clothing: "the clothes" };
+  hair: "the hair", eyes: "the eyes", teeth: "the teeth", piercings: "the piercings", body: "the body", clothing: "the clothes" };
 
 export const NOT_HEAD = "The preview doesn't draw this part of the body, so changing it shows nothing.";
 export const UNDER_COVER = "Covered by the game's underwear in the 3D view, so it isn't drawn.";
 export const NO_MALE_HEAD = "The preview has no masculine head yet, so this isn't drawn.";
 export const NO_MALE_BODY = "The preview has no masculine body yet, so this isn't drawn.";
 const NOT_CONSUMED = "The head the preview draws doesn't use this option, so changing it shows nothing.";
-const CONDITIONAL = "Shown when its parts are face decals (makeup, tattoos, scars, face cyberware); other parts, such as teeth, aren't drawn yet.";
+const CONDITIONAL = "Shown when its parts are face decals (makeup, tattoos, scars, face cyberware); other parts aren't drawn yet.";
 
 /** Coverage of every option, keyed by option ID. */
 export function renderCoverage(options: readonly CoverageInput[], bodyGender: "female" | "male"): Map<string, RenderCoverage> {

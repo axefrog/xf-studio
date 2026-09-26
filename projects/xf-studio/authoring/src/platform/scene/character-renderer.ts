@@ -101,12 +101,12 @@ export function createCharacterRenderer(input: {
   let browUnderlay: BrowUnderlayEvidence | undefined;
   // Resolved character details (skin, face details, brows, lashes, hair, eyes, piercings): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, piercings: true, body: true,
-    clothing: true };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, teeth: true, piercings: true,
+    body: true, clothing: true };
   // Keep context details above the entire editable makeup stack (orders 10–41); skin, hair and the eyeballs keep their own order.
   // Face decals sit below the stack (faceDecalRenderOrder).
   const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: RENDER_ORDER.skin, face: FACE_DECAL_RENDER_ORDER, brows: RENDER_ORDER.brows,
-    lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, piercings: 0, body: RENDER_ORDER.skin, clothing: RENDER_ORDER.skin };
+    lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, teeth: RENDER_ORDER.skin, piercings: 0, body: RENDER_ORDER.skin, clothing: RENDER_ORDER.skin };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
   let characterDetails: LoadedCharacterDetails | null = null;

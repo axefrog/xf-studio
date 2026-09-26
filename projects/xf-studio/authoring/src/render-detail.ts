@@ -51,12 +51,16 @@
  *   `covered` by it, the uncensored skin), so every reader fails closed: a record whose covered parts outlive a cover withdraws the body
  *   (`withdrawUncoveredBody`), and covers are kept within the part cap. A v10 reader refuses v2 to v9 character records, whose body carried
  *   no such marker.
+ * - `xfs/render-detail-11`: the character record gains the `teeth` slot (the mouth interior: the creator's teeth choice, a morph-skinned
+ *   mesh that follows the `mouth` shapes, drawn by its own template: `skin.mt` with the teeth's skin profile for the default choice, and
+ *   `multilayered.mt` for the metal and pink ones; knowledge/head-cc-rendering.md §1). A v11 reader refuses v2 to v10 character records,
+ *   which had no such slot.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-10" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-11" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
 export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5",
-  "xfs/render-detail-6", "xfs/render-detail-7", "xfs/render-detail-8", "xfs/render-detail-9"];
+  "xfs/render-detail-6", "xfs/render-detail-7", "xfs/render-detail-8", "xfs/render-detail-9", "xfs/render-detail-10"];
 
 /**
  * A record from a host of another version: older (a retired schema) or newer (a schema this reader doesn't know yet). It means the host
@@ -178,14 +182,15 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The character record (the resolved head skin, face details, brows, lashes, hair, eyes, piercings and body of the player's own game).
+// The character record (the resolved head skin, face details, brows, lashes, hair, eyes, teeth, piercings and body of the player's own game).
 
-export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings" | "body" | "clothing";
+export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "teeth" | "piercings" | "body" | "clothing";
 /**
  * Record and load order: the skin first, so decals over it can blend against the resolved skin colour; then the body (its own skin loads
- * before its decals, and the head's parts keep their order and draw order), and the clothes last, over the body they follow.
+ * before its decals, and the head's parts keep their order and draw order), and the clothes last, over the body they follow. The teeth
+ * draw with the skin adapter too, but they are never the skin under a decal (they load after the head's skin and are not kept as it).
  */
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body", "clothing"];
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "teeth", "piercings", "body", "clothing"];
 /**
  * Slots whose decal chunks draw through the post-G-buffer decal family (face-decal-material.ts) over the skin under them: the face's
  * decals over the head, and the body's (tattoos, scars, the underwear cover) over the body.
@@ -376,6 +381,7 @@ export function clampLayer(value: unknown, range: keyof typeof LAYER_RANGES, fal
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
   skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
   hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" },
+  teeth: { noun: "teeth", not: "aren't", pronoun: "they" },
   piercings: { noun: "piercings", not: "aren't", pronoun: "they" }, body: { noun: "body", not: "isn't", pronoun: "it" },
   clothing: { noun: "clothes", not: "aren't", pronoun: "they" } });
 const paramName = (value: unknown, what: string) => typeof value === "string" && /^[A-Za-z0-9_.@:+ -]{1,96}$/.test(value) ? value : fail(`${what} is invalid.`);
