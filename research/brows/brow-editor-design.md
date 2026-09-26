@@ -259,6 +259,13 @@ Runtime, batched into the session that tests the first build (these extend the b
 4. **Body types.** The same style on a male and a female V: the brow stays inside both footprints.
 5. **Powder tint** (only if `_ds` is used): a blonde brow with a strong underlay, to confirm whether the underlay stays brown.
 
+## 7a. Decisions (26 September 2026)
+
+- XF styles appear in the creator's eyebrow row as **"XF <look name>"**.
+- The **comb brush** is in the first version, beside the handles.
+- About **six starter styles** ship as editable starting points.
+- Brows are **baked textures** on the vanilla brow mesh (`_d`, `_n`, optional `_ds`); the strand model is the authoring model only, never game geometry.
+
 ## 8. Questions for the maintainer
 
 Sensible defaults are chosen above; these are the choices that are genuinely his:
