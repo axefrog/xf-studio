@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
 import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
@@ -11,7 +12,7 @@ import { CacheRun, CENSORED_BODY, CharacterDetailError, CharacterPreparationCach
 import { DEFAULT_CHARACTER } from "../src/character-detail-request";
 import { readChoiceManifest } from "../src/choice-manifest";
 import { depotHash } from "../src/depot-path";
-import { decodePng, encodePng } from "../src/png";
+import { decodePng, decodePngHalved, encodePng, encodePngAsync } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
@@ -22,7 +23,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 const png = encodePng({ width: 2, height: 1, data: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 128]) }, { alpha: true });
 
 /** An exporter over temp files: a tiny GLB-shaped file per geometry and a 2×1 PNG per texture. */
-function fakeExporter(options: { failArchive?: string; calls?: string[]; missing?: readonly string[]; partialGeometry?: boolean } = {}): GameAssetExporter {
+function fakeExporter(options: { failArchive?: string; calls?: string[]; missing?: readonly string[]; partialGeometry?: boolean; big?: readonly string[] } = {}): GameAssetExporter {
   let n = 0;
   return { open(source) {
     const dir = join(root, `export-${n++}`);
@@ -43,7 +44,8 @@ function fakeExporter(options: { failArchive?: string; calls?: string[]; missing
         options.calls?.push(`textures ${source.archivePath}`);
         return new Map(paths.filter(path => !options.missing?.includes(path)).map((path): [string, ExportedTexture] => {
           const file = join(dir, `${depotHash(path)}.png`);
-          writeFileSync(file, png);
+          // A map larger than the preview is served (a body texture mod's 8K skin), kept tiny here: 4100×2.
+          writeFileSync(file, options.big?.includes(path) ? encodePng({ width: 4100, height: 2, data: new Uint8Array(4100 * 2 * 4).fill(200) }, { alpha: false }) : png);
           return [path, { depotPath: path, hash: depotHash(path), png: file, pngSha256: "", cached: false }];
         }));
       },
@@ -574,29 +576,76 @@ describe("the body in the character record", () => {
     expect(record.components.filter(c => c.slot !== "body").map(c => c.slot)).toEqual((await prepare(REQUEST_A)).record.components.map(c => c.slot));
   });
 
+  test("PREV-107: a map larger than the preview is served from its scaled copy, made off the event loop before the record is written", async () => {
+    const { record } = await prepare(BODY_REQUEST, fakeExporter({ big: [P.bodyD] }));
+    const skin = record.components.find(c => c.slot === "body" && c.option === "body_color")!;
+    expect(skin.materials[0]!.textures.Albedo).toMatchObject({ depotPath: P.bodyD, width: 2050, height: 1 });
+    expect(record.provenance.notes.some(note => note.includes("4100×2 in the game files; the preview uses it at 2050×1"))).toBe(true);
+  });
+
   test("PREV-108: a body turned off is neither resolved nor served, and its clothes neither", async () => {
     const { record } = await prepare({ ...BODY_REQUEST, body: false });
     expect(record.components.some(c => c.slot === "body" || c.slot === "clothing")).toBe(false);
     expect(record.slots.filter(s => s.slot === "body" || s.slot === "clothing").map(s => [s.state, s.label])).toEqual([["none", "Hidden"], ["none", "Hidden"]]);
   });
 
-  test("a texture larger than the preview is served halved until it fits, once, by 2×2 means of its bytes", () => {
+  test("a texture larger than the preview is served halved until it fits, once, by 2×2 means of its bytes", async () => {
     const dir = join(root, "scaled-store"), source = join(root, "big.png");
     // 8×4: each 2×2 block one value, so the halves are exact.
     const data = new Uint8Array(8 * 4 * 4);
     for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) data.set([x * 30, y * 60, 200, 255], (y * 8 + x) * 4);
     writeFileSync(source, encodePng({ width: 8, height: 4, data }, { alpha: true }));
-    expect(storeScaledTexture(dir, source, { width: 8, height: 4 }, 8)).toBeNull();
-    const scaled = storeScaledTexture(dir, source, { width: 8, height: 4 }, 2)!;
+    expect(await storeScaledTexture(dir, source, { width: 8, height: 4 }, 8)).toBeNull();
+    const scaled = (await storeScaledTexture(dir, source, { width: 8, height: 4 }, 2))!;
     expect(scaled.size).toEqual({ width: 2, height: 1 });
     const image = decodePng(readFileSync(join(dir, "files", scaled.file)));
     // Two halvings: the means of x 0–3 and 4–7 over every row (opaque, so served without alpha).
     expect([...image.data.slice(0, 3)]).toEqual([45, 90, 200]);
     expect([...image.data.slice(4, 7)]).toEqual([165, 90, 200]);
     // Made once: the same answer from the store's key.
-    expect(storeScaledTexture(dir, source, { width: 8, height: 4 }, 2)).toEqual(scaled);
+    expect(await storeScaledTexture(dir, source, { width: 8, height: 4 }, 2)).toEqual(scaled);
     // An odd edge repeats its last texel.
     expect(halveImage({ width: 3, height: 1, data: new Uint8Array([0, 0, 0, 0, 100, 100, 100, 100, 50, 50, 50, 50]) })).toEqual({ width: 1, height: 1, data: new Uint8Array([50, 50, 50, 50]) });
+  });
+
+  test("PREV-107: the streamed halving is byte-identical to whole-image halving, for every channel layout, odd sizes and one-texel sides", async () => {
+    let seed = 7;
+    const random = () => (seed = (seed * 16807) % 2147483647) % 256;
+    const halveTo = (image: ReturnType<typeof decodePng>, max: number) => { while (image.width > max || image.height > max) image = halveImage(image); return image; };
+    for (const [width, height, max] of [[37, 23, 8], [64, 1, 16], [1, 50, 4], [300, 211, 64], [5, 5, 5]] as const) {
+      const data = Uint8Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 && i % 3 ? 255 : random());
+      for (const alpha of [true, false]) {
+        const file = encodePng({ width, height, data }, { alpha });
+        const whole = halveTo(decodePng(file), max);
+        expect(await decodePngHalved(file, max)).toEqual(whole);
+      }
+    }
+    // Grey (and grey with alpha) sources, whose rows expand to RGBA as they stream.
+    const rawPng = (width: number, height: number, colour: number, channels: number) => {
+      const chunk = (type: string, body: Uint8Array) => {
+        const out = new Uint8Array(12 + body.length), view = new DataView(out.buffer);
+        view.setUint32(0, body.length); out.set(new TextEncoder().encode(type), 4); out.set(body, 8);
+        view.setUint32(8 + body.length, Bun.hash.crc32(out.subarray(4, 8 + body.length)));
+        return out;
+      };
+      const header = new Uint8Array(13), view = new DataView(header.buffer);
+      view.setUint32(0, width); view.setUint32(4, height); header.set([8, colour, 0, 0, 0], 8);
+      // Every row Sub-filtered, so the stream's unfiltering is exercised too.
+      const rows = Uint8Array.from({ length: (width * channels + 1) * height }, (_, i) => i % (width * channels + 1) === 0 ? 1 : random());
+      const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", new Uint8Array(0))];
+      return Uint8Array.from(parts.flatMap(part => [...part]));
+    };
+    for (const [colour, channels] of [[0, 1], [4, 2], [2, 3]] as const) {
+      const file = rawPng(41, 19, colour, channels);
+      expect(await decodePngHalved(file, 8)).toEqual(halveTo(decodePng(file), 8));
+    }
+    // The asynchronous encoder writes exactly what the synchronous one does.
+    const image = { width: 33, height: 17, data: Uint8Array.from({ length: 33 * 17 * 4 }, () => random()) };
+    for (const alpha of [true, false]) expect(await encodePngAsync(image, { alpha })).toEqual(encodePng(image, { alpha }));
+    // A truncated stream is refused, not read past.
+    const short = encodePng({ width: 16, height: 16, data: new Uint8Array(16 * 16 * 4).fill(9) }, { alpha: true });
+    const damaged = short.slice(); damaged[short.length - 20] ^= 0xff;
+    await expect(decodePngHalved(damaged, 4)).rejects.toThrow();
   });
 });
 

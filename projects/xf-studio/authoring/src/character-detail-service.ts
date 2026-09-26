@@ -30,6 +30,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
 import { type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
@@ -41,7 +42,7 @@ import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
-import { decodePng, encodePng, type RgbaImage } from "./png";
+import { decodePngHalved, encodePngAsync, type RgbaImage } from "./png";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
@@ -315,30 +316,57 @@ export function halveImage(image: RgbaImage): RgbaImage {
 }
 /**
  * The served copy of an exported texture larger than `SERVED_TEXTURE_MAX` on a side: halved until it fits, keyed in the store by the
- * export's hash, the limit and `SCALED_TEXTURE_VERSION`, so it is made once. Returns null when the texture fits as it is.
+ * export's hash, the limit and `SCALED_TEXTURE_VERSION`, so it is made once. Returns null when the texture fits as it is. The decode and
+ * halving stream (png.ts `decodePngHalved`: never the whole 8K image in memory) and the compression runs on zlib's thread pool, so the
+ * host's event loop keeps serving while an 8K body map is scaled (PREV-107); the bytes are the same as the halving `halveImage` describes.
  */
-export function storeScaledTexture(storeRoot: string, file: string, size: { width: number; height: number }, max = SERVED_TEXTURE_MAX):
-  { file: string; sha256: string; size: { width: number; height: number } } | null {
+export async function storeScaledTexture(storeRoot: string, file: string, size: { width: number; height: number }, max = SERVED_TEXTURE_MAX):
+  Promise<{ file: string; sha256: string; size: { width: number; height: number } } | null> {
   if (size.width <= max && size.height <= max) return null;
   const stamp = fileStamp(file), known = hashed.get(file);
   let source = known?.stamp === stamp ? known.sha256 : null, bytes: Uint8Array | null = null;
-  if (!source) { bytes = new Uint8Array(readFileSync(file)); source = sha256(bytes); }
+  if (!source) { bytes = new Uint8Array(await readFile(file)); source = sha256(bytes); }
   const key = join(storeRoot, "scaled", `${source}-${max}-v${SCALED_TEXTURE_VERSION}.json`);
   try {
     const kept = JSON.parse(readFileSync(key, "utf8")) as { file: string; sha256: string; size: { width: number; height: number } };
     if (STORE_FILE.test(kept.file) && existsSync(join(storeRoot, "files", kept.file))) return kept;
   } catch { /* Not made yet. */ }
-  let image = decodePng(bytes ?? new Uint8Array(readFileSync(file)));
-  while (image.width > max || image.height > max) image = halveImage(image);
+  const image = await decodePngHalved(bytes ?? new Uint8Array(await readFile(file)), max);
+  bytes = null;
   let alpha = false;
   for (let i = 3; i < image.data.length && !alpha; i += 4) alpha = image.data[i] !== 255;
-  const stored = storeBytes(storeRoot, encodePng(image, { alpha }), "png");
+  const stored = storeBytes(storeRoot, await encodePngAsync(image, { alpha }), "png");
   const result = { file: stored.file, sha256: stored.sha256, size: { width: image.width, height: image.height } };
   mkdirSync(join(storeRoot, "scaled"), { recursive: true, mode: 0o700 });
   const staging = `${key}.${process.pid}.tmp`;
   writeFileSync(staging, JSON.stringify(result), { mode: 0o600 });
   renameSync(staging, key);
   return result;
+}
+
+type ScaledCopy = { file: string; sha256: string; size: { width: number; height: number } } | { why: string };
+/**
+ * The served copies of the exported textures among `located` that are larger than `SERVED_TEXTURE_MAX`, by export file: made (or found in
+ * the store) one at a time, each off the event loop (`storeScaledTexture`), and remembered per export file and stamp for the installation.
+ */
+async function scaleTextures(cache: CharacterPreparationCache, storeRoot: string, located: readonly Located[], cancelled: () => void): Promise<Map<string, ScaledCopy>> {
+  const out = new Map<string, ScaledCopy>();
+  for (const at of located) {
+    const png = cache.textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png;
+    if (!png || out.has(png)) continue;
+    const size = pngFileSize(png);
+    if (!size || (size.width <= SERVED_TEXTURE_MAX && size.height <= SERVED_TEXTURE_MAX)) continue;
+    const key = `${png}|${fileStamp(png)}`, known = cache.scaled.get(key);
+    if (known) { out.set(png, known); continue; }
+    cancelled();
+    let copy: ScaledCopy;
+    try { copy = (await storeScaledTexture(storeRoot, png, size)) ?? { why: "unreadable image" }; }
+    catch (error) { copy = { why: String((error as Error)?.message ?? error).slice(0, 120) }; }
+    // A copy made is kept for the installation; a failure is tried again next time.
+    if (!("why" in copy)) cache.scaled.set(key, copy);
+    out.set(png, copy);
+  }
+  return out;
 }
 
 /** An exported PNG's size from its header, without reading the whole file (null when it isn't a PNG). */
@@ -386,6 +414,8 @@ export class CharacterPreparationCache {
   readonly masks = new RunMap<string, { layers: string[] }>();
   /** Served components by their plan (canonical JSON), within this installation. */
   readonly components = new RunMap<string, BuiltComponent>();
+  /** Served copies of textures larger than the preview takes, by export file and stamp (PREV-107). */
+  readonly scaled = new Map<string, { file: string; sha256: string; size: { width: number; height: number } }>();
   /** The export tool that read these files (the record names it even when nothing new is exported). */
   toolLabel: string | undefined;
   private maps(): RunMap<string, unknown>[] {
@@ -403,6 +433,7 @@ export class CharacterPreparationCache {
   /** Forget everything derived from an earlier installation. */
   reset(): void {
     for (const map of this.maps()) map.clear();
+    this.scaled.clear();
     this.toolLabel = undefined;
     this.installation = null;
   }
@@ -828,6 +859,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (toolLabel) cache.toolLabel = toolLabel;
   time(`read and export ${fresh.length} of ${plan.components.length} part(s)`);
   cancelled();
+  // Textures larger than the preview is served are scaled now, off the event loop (PREV-107), so writing the record only looks them up.
+  const scaled = await scaleTextures(cache, options.storeRoot, [...textureAt.values()], cancelled);
 
   progress("writing");
   const notes: string[] = [];
@@ -853,12 +886,11 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     const exported = pngFileSize(png);
     let stored: { file: string; sha256: string; size: { width: number; height: number } | null };
     if (exported && (exported.width > SERVED_TEXTURE_MAX || exported.height > SERVED_TEXTURE_MAX)) {
-      let scaled: ReturnType<typeof storeScaledTexture> = null;
-      try { scaled = storeScaledTexture(options.storeRoot, png, exported); }
-      catch (error) { return { why: `too large to prepare (${String((error as Error)?.message ?? error).slice(0, 120)})` }; }
-      if (!scaled) return { why: "unreadable image" };
-      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the preview uses it at ${scaled.size.width}×${scaled.size.height}.`);
-      stored = scaled;
+      const copy = scaled.get(png);
+      if (!copy) return { why: "too large to prepare" };
+      if ("why" in copy) return { why: `too large to prepare (${copy.why})` };
+      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the preview uses it at ${copy.size.width}×${copy.size.height}.`);
+      stored = copy;
     } else stored = store(options.storeRoot, png, "png");
     const size = stored.size;
     if (!size) return { why: "unreadable image" };
