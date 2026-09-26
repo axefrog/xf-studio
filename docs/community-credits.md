@@ -92,6 +92,10 @@ By Hans-Kristian Arntzen. [GitHub](https://github.com/HansKristian-Work/dxil-spi
 
 By Blackboard Technologies Inc. and contributors. [Electrobun](https://github.com/blackboardsh/electrobun), [Hutch](https://github.com/blackboardsh/hutch). Electrobun's documentation shaped XF Studio's desktop packaging, update, shutdown and uninstall design, and it is the framework for our desktop packaging trial. Electrobun is MIT-licensed and its notice must accompany any distributed build, together with the notices of its bundled dependencies.
 
+### Inno Setup
+
+By Jordan Russell and Martijn Laan. [Website](https://jrsoftware.org/isinfo.php), [source](https://github.com/jrsoftware/issrc). XF Studio's downloadable Windows setup is one Inno Setup program that carries Electrobun's setup and runs it. The setup runtime it redistributes is under the Inno Setup License, whose notice ships with the app's third-party notices.
+
 ### JSON for Modern C++
 
 By Niels Lohmann and contributors. [GitHub](https://github.com/nlohmann/json). The XF Runtime Bridge plugin parses and writes its protocol messages with it. It is compiled into the plugin (MIT), so its licence notice must ship with any distributed build.
@@ -157,6 +161,10 @@ By the gfx-rs/wgpu contributors. [GitHub](https://github.com/gfx-rs/wgpu). Its d
 ### Cyberpunk 2077 Modding Wiki
 
 By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups (including the switcher guides' note that an option's index sets its place in the creator) (including the eye guide's note that eye albedo is sampled upside down while normal maps are not flipped), material families and skin-shader parameters, decals and load order. We are particularly grateful to the guide authors and editors lumad11 (the CCXL eyebrows guide), icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), saltypigloaf (facial-rig guide), Rebecca (whose multilayered clear-coat page demonstrated the view-angle coat tint), manavortex's multilayered guide and property pages (which describe microblend contrast as a crossfade between mask and microblend, the reading the preview follows), nullfractal (whose LUT guides explained that the game grades through 3D LUTs fed with ARRI LogC3 values), and to the CyberCAT documentation for pointing us to external preset files. For facial expressions and photo mode, manavortex's facial-expression, photo-mode and pose guides, Simarilius's facial-animation page (based on research by Loomy and John CO), the AMM expression table by Maximilium, Pinkydude and Vitum, the pose-pack update pages by nutboy and Zwei Valerie, LadyLea's update of the pose-making guide (whose process and templates came from xbaebsae and Angy) and Akiway's lipsync guide showed how photo mode, AMM and scenes use facial clips and how the community registers poses.
+
+### Electrobun Windows installer notes
+
+By alxrepin ([aiusagebar pull request 16](https://github.com/alxrepin/aiusagebar/pull/16)) and djalmajr ([pinar pull request 32](https://github.com/djalmajr/pinar/pull/32)). Their pull requests recorded that Electrobun's Windows setup program only runs beside its hidden `.installer` folder, and aiusagebar showed wrapping it in an Inno Setup program so users download one file, the approach XF Studio's single-file setup takes.
 
 ## Mods and creators whose work we studied
 
