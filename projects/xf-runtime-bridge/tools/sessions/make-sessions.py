@@ -58,17 +58,24 @@ def wait_phase(label, phase, timeout=PLAYER):
     return run(label, "game.wait", {"phase": [phase], "timeout_ms": timeout})
 
 
+def wait_photo(label, timeout=120000):
+    # Photo Mode Preferences (enabled in the test profile) re-applies its saved settings over
+    # several frames after photo mode opens; give it 2 s before the first camera change.
+    return [wait_phase(label, "photo_mode", timeout), wait(f"{label}-prefs", 2000)]
+
+
 def mirror_pick(prefix, index, settle=1500):
     return [apply(f"{prefix}-apply", index), wait(f"{prefix}-settle", settle), capture(f"{prefix}-mirror")]
 
 
-def enter_photo(prefix, name):
+def enter_photo(prefix, name, before_photo=None):
     return [
         note(f"{prefix}-confirm", f"At the mirror: Confirm to keep XF = {name}, then leave the appearance screen. Nothing is saved."),
         wait_phase(f"{prefix}-wait-world", "gameplay"),
+        *(before_photo or []),
         run(f"{prefix}-photo", "photo.enter", continue_on_error=True),
         note(f"{prefix}-photo-key", "If photo mode didn't open by itself, press the photo mode key."),
-        wait_phase(f"{prefix}-wait-photo", "photo_mode", 120000),
+        *wait_photo(f"{prefix}-wait-photo"),
     ]
 
 
@@ -80,7 +87,10 @@ def shots(prefix, kinds, sweep=False, hide=True):
             steps += [run(f"{prefix}-hud", "photo.hud.hide")]
         steps += [wait(f"{prefix}-{kind}-settle", 800), capture(f"{prefix}-{kind}", "eyes" if kind == "eyes" else "face" if kind == "face" else "head-and-shoulders")]
     if sweep:
-        for yaw in (150, 165, 195, 210):
+        # 15-degree steps either side of facing the camera (180). Written as -165/-150 rather
+        # than 195/210: Photo Mode Ex (enabled in the test profile) clamps V's rotation (key 7)
+        # to -180..180, so 195 and 210 would both land on 180.
+        for yaw in (150, 165, -165, -150):
             steps += [
                 camera(f"{prefix}-yaw{yaw}-camera", preset="face", subject={"yaw": yaw}),
                 wait(f"{prefix}-yaw{yaw}-settle", 600),
@@ -215,8 +225,7 @@ EFFECTS = "In photo mode, turn film grain, chromatic aberration and depth of fie
 def glitter_loop(slug, kinds, sweep=False, extra=None, before_photo=None, after_photo=None):
     index, name = GLITTER[slug]
     prefix = f"a-{slug}"
-    steps = mirror_pick(prefix, index) + enter_photo(prefix, name)
-    steps = steps[:-3] + before_photo + steps[-3:] if before_photo else steps
+    steps = mirror_pick(prefix, index) + enter_photo(prefix, name, before_photo)
     steps += [ask(f"{prefix}-effects", EFFECTS)] + shots(prefix, kinds, sweep) + (extra or [])
     steps += [run(f"{prefix}-exit", "photo.exit")] + (after_photo or [])
     steps += [note(f"{prefix}-back", "Open the mirror's appearance screen again (the page with the XF row)."), wait_phase(f"{prefix}-wait-mirror", "character_menu")]
@@ -245,7 +254,7 @@ s3 += glitter_loop(
         ask("a-c-dlaa", "Card step 5: switch the upscaler to DLAA (or its highest-quality mode) in the graphics settings, then come back to the world."),
         wait_phase("a-c-wait-world-dlaa", "gameplay"),
         run("a-c-photo-dlaa", "photo.enter", continue_on_error=True),
-        wait_phase("a-c-wait-photo-dlaa", "photo_mode", 120000),
+        *wait_photo("a-c-wait-photo-dlaa"),
         ask("a-c-effects-dlaa", EFFECTS),
     ]
     + [dict(s, label=s["label"].replace("a-c-", "a-c-dlaa-")) for s in shots("a-c", ["eyes", "face"])],
@@ -292,7 +301,7 @@ s3 += [
     note("d-start", "Part D (optional): leave the mirror with Back, stand in the world."),
     wait_phase("d-wait-world", "gameplay"),
     run("d-photo", "photo.enter", continue_on_error=True),
-    wait_phase("d-wait-photo", "photo_mode", 120000),
+    *wait_photo("d-wait-photo"),
     run("d-menu", "photo.state", {"options": True}),
     ask("d-neutral", "Set expression Neutral and look-at off in the photo-mode menu."),
     camera("d-face-camera", preset="face"),

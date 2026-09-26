@@ -197,6 +197,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "a-a-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "ask",
       "label": "a-a-effects",
       "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
@@ -289,38 +294,38 @@
     },
     {
       "do": "set camera",
-      "label": "a-a-yaw195-camera",
+      "label": "a-a-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "a-a-yaw195-settle",
+      "label": "a-a-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-a-yaw195",
+      "label": "a-a-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "a-a-yaw210-camera",
+      "label": "a-a-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "a-a-yaw210-settle",
+      "label": "a-a-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-a-yaw210",
+      "label": "a-a-yaw-150",
       "region": "face"
     },
     {
@@ -396,6 +401,11 @@
         ],
         "timeout_ms": 120000
       }
+    },
+    {
+      "do": "wait",
+      "label": "a-b-wait-photo-prefs",
+      "ms": 2000
     },
     {
       "do": "ask",
@@ -593,6 +603,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "a-c-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "ask",
       "label": "a-c-effects",
       "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
@@ -669,6 +684,11 @@
         ],
         "timeout_ms": 120000
       }
+    },
+    {
+      "do": "wait",
+      "label": "a-c-wait-photo-dlaa-prefs",
+      "ms": 2000
     },
     {
       "do": "ask",
@@ -790,6 +810,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "a-d-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "ask",
       "label": "a-d-effects",
       "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
@@ -852,38 +877,38 @@
     },
     {
       "do": "set camera",
-      "label": "a-d-yaw195-camera",
+      "label": "a-d-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "a-d-yaw195-settle",
+      "label": "a-d-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-d-yaw195",
+      "label": "a-d-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "a-d-yaw210-camera",
+      "label": "a-d-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "a-d-yaw210-settle",
+      "label": "a-d-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-d-yaw210",
+      "label": "a-d-yaw-150",
       "region": "face"
     },
     {
@@ -961,6 +986,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "a-f-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "ask",
       "label": "a-f-effects",
       "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
@@ -1023,38 +1053,38 @@
     },
     {
       "do": "set camera",
-      "label": "a-f-yaw195-camera",
+      "label": "a-f-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "a-f-yaw195-settle",
+      "label": "a-f-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-f-yaw195",
+      "label": "a-f-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "a-f-yaw210-camera",
+      "label": "a-f-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "a-f-yaw210-settle",
+      "label": "a-f-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "a-f-yaw210",
+      "label": "a-f-yaw-150",
       "region": "face"
     },
     {
@@ -1139,6 +1169,11 @@
         ],
         "timeout_ms": 120000
       }
+    },
+    {
+      "do": "wait",
+      "label": "a-e-wait-photo-prefs",
+      "ms": 2000
     },
     {
       "do": "ask",
@@ -1405,6 +1440,11 @@
         ],
         "timeout_ms": 120000
       }
+    },
+    {
+      "do": "wait",
+      "label": "d-wait-photo-prefs",
+      "ms": 2000
     },
     {
       "do": "run",

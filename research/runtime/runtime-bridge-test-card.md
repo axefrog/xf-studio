@@ -54,7 +54,7 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 
    **Nothing needs updating.** Re-run the check if the session slips and a framework has released since.
 
-4. **Photo-mode mods in this profile** that meet the bridge: *Photo Mode Preferences* re-applies its saved settings each time photo mode opens, so wait about 2 s after photo mode opens before the first camera change (the session script's waits allow for this). *Photo Mode Unlocker XL* widens slider ranges; the bridge checks values against the ranges the menu reports, so wider ranges are simply accepted. *Photo Mode Pose Selector*, *Customisable Photo Mode UI* and *Equipment-EX* add menu items; the first `photo_state` dump records them. Photo Mode Ex is not in the profile (it would persist depth of field into saves; the scripts never write depth of field anyway).
+4. **Photo-mode mods in this profile** that meet the bridge: *Photo Mode Preferences* re-applies its saved settings each time photo mode opens, so wait about 2 s after photo mode opens before the first camera change (the session scripts wait 2 s after every `game_wait` for photo mode). *Photo Mode Unlocker XL* widens slider ranges; the bridge checks values against the ranges the menu reports, so wider ranges are simply accepted. *Photo Mode Pose Selector*, *Customisable Photo Mode UI* and *Equipment-EX* add menu items; the first `photo_state` dump records them. *Photo Mode Ex* (MO2 mod `PhotoMode-EX`) **is enabled** in this profile: it clamps V's rotation (key 7) to −180…180, so the scripts' light sweep uses 150°, 165°, −165° and −150° rather than 195° and 210°, and it persists depth of field into saves, which the scripts never write.
 
 5. **Runtime folder.** `%LOCALAPPDATA%\XFStudio\runtime-bridge\` must hold no `session.json` and no `KILL`; delete leftovers.
 
@@ -62,7 +62,7 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 
 7. **Baseline capture:** `python tools/capture_session.py --label bridge-phase2-pre --profile "XF Studio diagnostic 2026-09-25"`.
 
-8. **Tell the maintainer before the session:** use a save next to a mirror (V's apartment bathroom works); make a new manual save when asked, before the first change (this profile shares the save folder, and after the first change the bridge holds a save lock until a save is loaded); the game must run in **borderless windowed** or windowed mode for captures that include overlays, and the screenshot route is recorded either way.
+8. **Tell the maintainer before the session:** use a save next to a mirror (V's apartment bathroom works); make a new manual save when asked, before the first change (this profile shares the save folder, and after the first change the bridge holds a save lock until a save is loaded; the kill switch does not release it); bind the kill hotkey once the game is at the main menu (first-session step 1); the game must run in **borderless windowed** or windowed mode for captures that include overlays, and the screenshot route is recorded either way.
 
 ## First session: bridge checks
 
@@ -70,7 +70,7 @@ Tool names are the MCP names; the CLI takes the dotted name (`bridge_ping` is `b
 
 | # | Who | Do | Expect | Undo |
 |---|---|---|---|---|
-| 1 | M | In MO2 select **XF Studio diagnostic 2026-09-25** and launch the game. Wait for the main menu. | No redscript error pop-up. An amber **"XF bridge: listening (writes ON)"** label at the top left once CET has loaded. | — |
+| 1 | M | In MO2 select **XF Studio diagnostic 2026-09-25** and launch the game. Wait for the main menu. Open the CET overlay, go to **Bindings** and bind **Kill XF Runtime Bridge (stop the local pipe)** to a free key (CET can't give a mod's hotkey a default key, so it has none until bound; CET remembers it afterwards). Close the overlay. | No redscript error pop-up. An amber **"XF bridge: listening (writes ON)"** label at the top left once CET has loaded. The hotkey shows in Bindings. | — |
 | 2 | C | `bridge_ping`, `bridge_info`, `game_status` | `pong: true`, `plugin_version` 0.2.0; `allow_writes: true` and the manifest's commit; phase `main_menu`. | — |
 | 3 | C | `bun tools/bridge-client.ts smoke` | The baseline reads answer; `game.version` shows `3.0.80.51928`; `layers.status` lists `redscript`, `tweakxl`, `cet` (note whether already at the main menu). | — |
 | 4 | M | Load the save next to the mirror and stand in the world. **Make a new manual save now** (the safety save). | — | — |
@@ -96,7 +96,7 @@ Session 2 continues from here, at the mirror. If a step fails:
 - **`rtti_missing` / `rtti_signature`:** a function differs on 2.31; the call was refused and nothing changed. Carry on; `evt=rtti.signature_mismatch` in the log says what differs.
 - **`timeout_after_start`:** the game was slow to confirm; check the game before repeating.
 - **`script_layer_missing`:** the redscript part didn't compile; check the redscript log.
-- **Anything feels wrong:** `bridge_kill` (or the CET hotkey) switches the bridge off and undoes what it left on (freeze, hidden photo-mode menu, save lock). Loading the safety save restores everything else.
+- **Anything feels wrong:** stop the bridge with any one of: the CET hotkey bound in step 1; `bridge_kill` (MCP) or `bun tools/bridge-client.ts kill`; or, if neither answers, an empty file named `KILL` created in `%LOCALAPPDATA%\XFStudio\runtime-bridge\` (the bridge checks for it twice a second). Each cancels any write still queued and undoes a freeze or a hidden photo-mode menu. The save lock stays on purpose, because other changes may still be live; loading the safety save releases it and restores everything else. Delete `KILL` afterwards, or the bridge won't start next time.
 
 ## Session 2 through the bridge
 
@@ -104,7 +104,7 @@ The script [`tools/sessions/session-2.json`](../../projects/xf-runtime-bridge/to
 
 - **p0:** bridge and game status; the maintainer confirms the safety save and notes the upscaler, resolution and ray or path tracing (card step 8); the mirror opens.
 - **p1, at the mirror's fixed camera:** every option read once (for future scripting), the XF row's values, then the placement pair Lines · new / old / new (card step 2) and a **pause for the coordinator's placement check**: stop the session if the pair doesn't line up. Then Depth A–D, Gloss A–D, Shimmer and Metal, one capture each.
-- **p2, photo mode, one confirmed preset at a time:** the bridge sets XF; the maintainer confirms and leaves the mirror; the bridge opens photo mode, frames `eyes` / `face` / `head-and-shoulders`, hides the menu and captures; for Gloss, Shimmer and Metal it turns V in 15° steps (150°–210°) as the light sweep; then it leaves photo mode and the maintainer opens the mirror again. Depth D adds the motion check (card step 4) at the mirror. A last pause collects the verdicts.
+- **p2, photo mode, one confirmed preset at a time:** the bridge sets XF; the maintainer confirms and leaves the mirror; the bridge opens photo mode, frames `eyes` / `face` / `head-and-shoulders`, hides the menu and captures; for Gloss, Shimmer and Metal it turns V in 15° steps either side of facing the camera (150°, 165°, −165°, −150°; Photo Mode Ex clamps rotation to −180…180) as the light sweep; then it leaves photo mode and the maintainer opens the mirror again. Depth D adds the motion check (card step 4) at the mirror. A last pause collects the verdicts.
 - **p3, optional (card step 9):** XF Off, then piercings and the heart eye set by hand, one capture each.
 - **p4:** Back in the appearance screen, then load the safety save.
 
@@ -123,8 +123,8 @@ Run by the coordinator (no terminal), the runner stops at each *ask* and prints 
 
 | # | Who | Do | Expect |
 |---|---|---|---|
-| 20 | C | `bridge_kill` (or M presses the CET hotkey *Kill XF Runtime Bridge*) | The label turns red "XF bridge: killed"; any freeze, hidden photo-mode menu and save lock are undone; later calls answer plainly that the bridge is off. |
-| 21 | M | Load the safety save, then quit to desktop normally. | Clean exit; `session.json` is gone from `%LOCALAPPDATA%\XFStudio\runtime-bridge\`. |
+| 20 | C | `bridge_kill` (or M presses the CET hotkey *Kill XF Runtime Bridge*; fallback: the `KILL` file, see above) | The label turns red "XF bridge: killed"; any freeze and hidden photo-mode menu are undone; the save lock is still held (saving stays blocked until step 21's load; the log's `RestoreAfterKill` line shows `save_lock_kept`); later calls answer plainly that the bridge is off. |
+| 21 | M | Load the safety save (this releases the save lock), then quit to desktop normally. | Clean exit; `session.json` is gone from `%LOCALAPPDATA%\XFStudio\runtime-bridge\`; delete a `KILL` file there if one was used. |
 | 22 | C | `python tools/capture_session.py --label bridge-phase2-post --profile "XF Studio diagnostic 2026-09-25"`; copy the session report folder and `logs/commands-*.jsonl` into the evidence. | |
 
 Expected evidence (under MO2, logs sit in `overwrite/`):

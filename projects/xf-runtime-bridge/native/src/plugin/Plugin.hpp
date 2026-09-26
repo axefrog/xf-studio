@@ -54,7 +54,7 @@ struct State
     std::atomic<uint64_t> runningTicks{0};
 
     // Set by the first successful write; the kill switch then undoes what the bridge left on
-    // (world freeze, hidden photo UI, save lock) once, from the next game-thread tick.
+    // (world freeze, hidden photo UI; not the save lock) once, from the next game-thread tick.
     std::atomic<bool> writesUsed{false};
     std::atomic<bool> restoreDone{false};
 };

@@ -59,11 +59,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
-| RB-12 | Med | Runtime bridge | The kill switch releases the save lock while changed state (clock, confirmed look) is still live, so an autosave can capture test state into the shared save folder (`XFRuntimeBridgeActions.reds:394-398`) | Open (claude/bridge-fixes; before the first session) |
-| RB-13 | Med | Runtime bridge | `Bridge::Kill` doesn't close the queue synchronously, so a write queued just before the kill can run after `RestoreAfterKill` (world frozen with the bridge dead) (`Bridge.cpp:119-125`, `Main.cpp:127-132`) | Open (claude/bridge-fixes; before the first session) |
 | RB-14 | Med | Runtime bridge | `capture.recrop`'s folder check passes other drives and UNC paths (`relative()` returns an absolute path), so it reads and writes outside the capture folder and can make an outbound SMB connection; read-class, so available under `--read-only` (`tools/capture/capture.ts:195-208`) | Open (claude/bridge-fixes) |
-| RB-15 | Med | Runtime bridge | Session 2 stops in photo mode: PhotoMode-EX (enabled in the test profile) clamps V rotation to -180..180, refusing the 195°/210° sweep steps; no settle after photo mode opens while Photo Mode Preferences re-applies settings (`tools/sessions/make-sessions.py:83`) | Open (claude/bridge-fixes; before session 2) |
-| RB-16 | Med | Runtime bridge | "Restore on kill" is graded [offline] but the self-test host has no restore; the plugin's write wrapper, undo parameters, two-step light set and `RestoreAfterKill` never run offline (`runtime-bridge-design.md:168`, `native/src/selftest/Main.cpp:180-345`) | Open (claude/bridge-fixes) |
+| RB-16 | Med | Runtime bridge | "Restore on kill" is graded [offline] but the self-test host has no restore; the plugin's write wrapper, undo parameters, two-step light set and `RestoreAfterKill` never run offline (`runtime-bridge-design.md:168`, `native/src/selftest/Main.cpp:180-345`) | Open (claude/bridge-fixes): the design row is regraded to [unverified] and the kill ordering now has a unit test; the trigger itself still needs a core test (delivery 2) |
 | NATIVE-01 | High | Native reader | A negative string length (32-bit bitwise length build, `shift > 34` check) moves the cursor backwards; an `array:String` of one normal and one −8 string loops over up to 4 billion elements (20 M: 1.9 s, 1.46 GB) (`red-values.ts:15-46`) | Open (claude/native-hardening) |
 | NATIVE-02 | High | Native reader | Name-table reads scan each name to its zero byte separately: an unterminated pool with many names at offset 0 is quadratic (391 KB body: 3.0 s, 5.8 GB) (`cr2w-file.ts:54-74`) | Open (claude/native-hardening) |
 | NATIVE-03 | High | Native reader | Package field values are read at file-chosen offsets without caching; fields pointing at the same nested struct blow up exponentially (452 bytes: 0.9 s, 1.3 GB), reachable through every `.ent`/`.app` `compiledData` (`red-package.ts:67-85`) | Open (claude/native-hardening) |
@@ -323,7 +320,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **NATIVE-16:** a missing `renderMask` is always written `"0"`, so the resolver's missing-means-drawn branch never runs; the reader knows which properties were defaulted and could say so.
   - **NATIVE-17:** no boundary test for `src/native` (pure modules versus host adapters; page code must not import it).
 
-- **RB-17..26** (bridge phase 2 review at `5e64894`), Open (claude/bridge-fixes):
+- **RB-17..23, RB-25, RB-26** (bridge phase 2 review at `5e64894`), Open (claude/bridge-fixes):
   - **RB-17:** the session runner skips `restore` on Ctrl+C (photo mode left open with its menu hidden) (`tools/session.ts:170-231`).
   - **RB-18:** wrong undo values: `world.pause` undo ignores the previous state; `photo.light.set` doesn't restore the previous selection and reports "nothing was changed" after step 1; a `before` of -1 yields undo parameters the plugin refuses; `reset: true` returns no undo.
   - **RB-19:** the post-write check rounds while `ForceValue` truncates, so a stale option list silently selecting option 0 isn't caught (`XFRuntimeBridgeActions.reds:522-540`).
@@ -331,7 +328,6 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **RB-21:** `--allow` silently overrides `--read-only`; an empty `--allow` exposes every tool; no partial-list test.
   - **RB-22:** the TS schema accepts inherited keys (`constructor`, `__proto__`) as known; the plugin still refuses them (`tools/api/schema.ts:191`).
   - **RB-23:** huge floats converted to integers (undefined behaviour) and unsigned wrap in `Params.cpp:56-60`.
-  - **RB-24:** the CET kill hotkey has no binding and the staging checklist never asks for one (before the first session).
   - **RB-25:** nothing but the one-client pipe stops MCP and the session runner driving the game together; a mid-session MCP call can fail the runner's step.
   - **RB-26:** the write-photo/world/character classes exist only in the TS tools; the plugin knows read/write/control.
 
@@ -341,6 +337,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **Runtime bridge phase 2** (`projects/xf-runtime-bridge`, claude/bridge-mcp): a command catalogue and transport-agnostic command API (`tools/api/`), a stdio MCP server on the official SDK (`tools/mcp/`, `tools/mcp-server.ts`), the CLI's `commands`/`run`, a JSON session runner with scripts (`tools/session.ts`, `tools/sessions/`), external capture through `bun:ffi` (`tools/capture/`), and write methods in the plugin (`GameHandlers.cpp`, `core/Params.cpp`) with a redscript actions layer (`redscript/XFRuntimeBridgeActions.reds`) behind `allow_writes`, plus a `-writes` package. A new subsystem outside the Studio, with new write paths into the running game and a new third-party dependency, so a deep review is due before it is used beyond the dedicated test profile. Review focus: the write gate and save lock, `RestoreAfterKill`, parameter checks shared with the self-test host, capture file handling (the `recrop` folder restriction), and MCP input handling. [README](../../projects/xf-runtime-bridge/README.md), [design](../runtime/runtime-bridge-design.md).
 
 - **Diagnostics** (`src/diagnostics/`, claude/diagnostics): host log and rolling detail window, error references, page trapping and forwarding endpoint, problem-report builder (mod identities, resource extracts, ZIP), report review UI, and one-line failure hooks in the character, resolver, LUT, preview, eye-plate, package and library hosts. A new host capability and a boundary exception (ui-architecture-boundary.md item 13), so a deep review is due. [docs/diagnostics.md](../../docs/diagnostics.md). Reviewed at `972ee62` (DIAG-01..18).
+
+## Fixed in claude/bridge-fixes
+
+The bridge phase 2 review at `5e64894` ([README](../../projects/xf-runtime-bridge/README.md), [test card](../runtime/runtime-bridge-test-card.md)). First delivery, the fixes needed before the first in-game session. Evidence: `xfb_selftest --unit` and `bun tools/selftest.ts` (100 checks), `bun test tools` (50), `bunx tsc --noEmit`, the redscript lint against a copy of the game's `final.redscripts`, the Lua lint.
+
+- **RB-12:** `RestoreAfterKill` no longer releases the save lock; it reports `save_lock_kept`. The lock is not persistent and loading a save clears it, so it stays while anything the bridge changed may still be live. The test card (steps 20 and 21, "Anything feels wrong"), design §3.2 and §4, the README and the knowledge page say so.
+- **RB-13:** `Bridge::Kill` closes the game-thread queue synchronously (non-blocking), so a queued write is cancelled and never runs; the plugin runs `RestoreAfterKill` only once `Bridge::RestoreReady()` (killed and queue closed). `Drain` now takes, starts and publishes a task under one lock and never starts one after `Close`, so `Close` either cancels it or sees it running (on the game thread, before the undo in the same tick). Unit checks: Kill closes the queue before it returns, the queued write's waiter is released unrun, no queued write runs after kill, later writes are refused.
+- **RB-15:** Photo Mode Ex is enabled in the test profile (the test card said it wasn't). The sweep uses 150°, 165°, −165° and −150°, and every `game.wait` for photo mode is followed by a 2 s wait for Photo Mode Preferences (session 2: 12 waits, session 3: 8); both scripts regenerated, otherwise step for step unchanged.
+- **RB-24:** first-session step 1 now binds *Kill XF Runtime Bridge* in CET's Bindings (CET can't pre-bind), step 8 of staging tells the maintainer, and the card documents `bridge_kill`, `bridge-client.ts kill` and the `KILL` file fallback in `%LOCALAPPDATA%\XFStudio\runtime-bridge\`.
 
 ## Fixed in claude/cleanup-diagnostics
 

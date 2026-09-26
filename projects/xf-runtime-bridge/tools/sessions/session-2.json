@@ -317,6 +317,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-lines-new-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-lines-new-eyes-camera",
       "preset": "eyes"
@@ -411,6 +416,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-lines-old-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-lines-old-eyes-camera",
       "preset": "eyes"
@@ -503,6 +513,11 @@
         ],
         "timeout_ms": 120000
       }
+    },
+    {
+      "do": "wait",
+      "label": "p2-depth-a-wait-photo-prefs",
+      "ms": 2000
     },
     {
       "do": "set camera",
@@ -614,6 +629,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-depth-b-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-depth-b-eyes-camera",
       "preset": "eyes"
@@ -723,6 +743,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-depth-c-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-depth-c-eyes-camera",
       "preset": "eyes"
@@ -830,6 +855,11 @@
         ],
         "timeout_ms": 120000
       }
+    },
+    {
+      "do": "wait",
+      "label": "p2-depth-d-wait-photo-prefs",
+      "ms": 2000
     },
     {
       "do": "set camera",
@@ -965,6 +995,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-gloss-a-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-gloss-a-face-camera",
       "preset": "face"
@@ -1022,38 +1057,38 @@
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-a-yaw195-camera",
+      "label": "p2-gloss-a-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-a-yaw195-settle",
+      "label": "p2-gloss-a-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-a-yaw195",
+      "label": "p2-gloss-a-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-a-yaw210-camera",
+      "label": "p2-gloss-a-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-a-yaw210-settle",
+      "label": "p2-gloss-a-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-a-yaw210",
+      "label": "p2-gloss-a-yaw-150",
       "region": "face"
     },
     {
@@ -1131,6 +1166,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-gloss-b-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-gloss-b-face-camera",
       "preset": "face"
@@ -1188,38 +1228,38 @@
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-b-yaw195-camera",
+      "label": "p2-gloss-b-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-b-yaw195-settle",
+      "label": "p2-gloss-b-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-b-yaw195",
+      "label": "p2-gloss-b-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-b-yaw210-camera",
+      "label": "p2-gloss-b-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-b-yaw210-settle",
+      "label": "p2-gloss-b-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-b-yaw210",
+      "label": "p2-gloss-b-yaw-150",
       "region": "face"
     },
     {
@@ -1297,6 +1337,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-gloss-c-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-gloss-c-face-camera",
       "preset": "face"
@@ -1354,38 +1399,38 @@
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-c-yaw195-camera",
+      "label": "p2-gloss-c-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-c-yaw195-settle",
+      "label": "p2-gloss-c-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-c-yaw195",
+      "label": "p2-gloss-c-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-c-yaw210-camera",
+      "label": "p2-gloss-c-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-c-yaw210-settle",
+      "label": "p2-gloss-c-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-c-yaw210",
+      "label": "p2-gloss-c-yaw-150",
       "region": "face"
     },
     {
@@ -1463,6 +1508,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-gloss-d-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-gloss-d-face-camera",
       "preset": "face"
@@ -1520,38 +1570,38 @@
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-d-yaw195-camera",
+      "label": "p2-gloss-d-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-d-yaw195-settle",
+      "label": "p2-gloss-d-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-d-yaw195",
+      "label": "p2-gloss-d-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "p2-gloss-d-yaw210-camera",
+      "label": "p2-gloss-d-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-d-yaw210-settle",
+      "label": "p2-gloss-d-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-gloss-d-yaw210",
+      "label": "p2-gloss-d-yaw-150",
       "region": "face"
     },
     {
@@ -1629,6 +1679,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-shimmer-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-shimmer-eyes-camera",
       "preset": "eyes"
@@ -1701,38 +1756,38 @@
     },
     {
       "do": "set camera",
-      "label": "p2-shimmer-yaw195-camera",
+      "label": "p2-shimmer-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "p2-shimmer-yaw195-settle",
+      "label": "p2-shimmer-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-shimmer-yaw195",
+      "label": "p2-shimmer-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "p2-shimmer-yaw210-camera",
+      "label": "p2-shimmer-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "p2-shimmer-yaw210-settle",
+      "label": "p2-shimmer-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-shimmer-yaw210",
+      "label": "p2-shimmer-yaw-150",
       "region": "face"
     },
     {
@@ -1810,6 +1865,11 @@
       }
     },
     {
+      "do": "wait",
+      "label": "p2-metal-wait-photo-prefs",
+      "ms": 2000
+    },
+    {
       "do": "set camera",
       "label": "p2-metal-face-camera",
       "preset": "face"
@@ -1867,38 +1927,38 @@
     },
     {
       "do": "set camera",
-      "label": "p2-metal-yaw195-camera",
+      "label": "p2-metal-yaw-165-camera",
       "preset": "face",
       "subject": {
-        "yaw": 195
+        "yaw": -165
       }
     },
     {
       "do": "wait",
-      "label": "p2-metal-yaw195-settle",
+      "label": "p2-metal-yaw-165-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-metal-yaw195",
+      "label": "p2-metal-yaw-165",
       "region": "face"
     },
     {
       "do": "set camera",
-      "label": "p2-metal-yaw210-camera",
+      "label": "p2-metal-yaw-150-camera",
       "preset": "face",
       "subject": {
-        "yaw": 210
+        "yaw": -150
       }
     },
     {
       "do": "wait",
-      "label": "p2-metal-yaw210-settle",
+      "label": "p2-metal-yaw-150-settle",
       "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-metal-yaw210",
+      "label": "p2-metal-yaw-150",
       "region": "face"
     },
     {

@@ -29,9 +29,13 @@ public:
     bool Start(std::string& aError);
     // Stops listening and removes session.json. Safe to call more than once.
     void Stop(const std::string& aReason);
-    // Kill switch (hotkey, KILL file or bridge.kill): refuse everything, drop the client,
-    // remove session.json; the watcher thread then stops the listener.
+    // Kill switch (hotkey, KILL file or bridge.kill): refuse everything, close the game-thread
+    // queue (queued writes never run), drop the client, remove session.json; the watcher thread
+    // then stops the listener.
     void Kill(const std::string& aReason);
+    // True once the kill switch has fired and the queue is closed: the kill-switch undo may run
+    // on the game thread, and no bridge write can run after it.
+    bool RestoreReady() const;
 
     Dispatcher& GetDispatcher();
     nlohmann::json Status() const;
