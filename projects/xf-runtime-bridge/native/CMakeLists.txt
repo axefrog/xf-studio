@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.1.0
+  VERSION 0.2.0
   LANGUAGES CXX RC
 )
 
@@ -93,6 +93,7 @@ add_library(xfb_core STATIC
   src/core/Dispatcher.cpp
   src/core/GameThreadQueue.cpp
   src/core/Log.cpp
+  src/core/Params.cpp
   src/core/PipeServer.cpp
   src/core/Session.cpp
   src/core/Win32.cpp
