@@ -25,8 +25,19 @@ export interface NativeDecodeRequest {
    * the clothing host's `JsonResource` preset, through the route's decoder).
    */
   readonly roots?: readonly string[];
+  /**
+   * For a `JsonResource` root: the payload classes (the class its `root` handle holds) this request accepts. Any other payload is
+   * `not-verified`, so a caller that asks for the creator's on-screen texts (`localizationPersistenceOnScreenEntries`) never takes a
+   * document of a kind the reader was not checked on. Absent: any payload (the clothing preset, which only the native reader reads).
+   */
+  readonly payloads?: readonly string[];
   /** This request's time budget in a worker, when it is not the decoder's (a much larger resource than the resolver reads). */
   readonly timeoutMs?: number;
+  /**
+   * `background`: a worker decodes it only when no other request waits (the creator catalogue's hundreds of text reads never hold up
+   * a V's resolution, whose reads come one chain level at a time).
+   */
+  readonly priority?: "background";
 }
 
 export type NativeDecodeOutcome =
@@ -61,6 +72,12 @@ function nameOf(archive: NativeArchive, hash: string, depotHash: (path: string) 
   return byHash.get(hash) ?? null;
 }
 
+/** The class a `JsonResource` document's `root` handle holds (`Data.RootChunk.root.Data.$type`), or null. */
+export function jsonPayloadClass(document: unknown): string | null {
+  const type = (document as { Data?: { RootChunk?: { root?: { Data?: { $type?: unknown } } } } } | null)?.Data?.RootChunk?.root?.Data?.$type;
+  return typeof type === "string" ? type : null;
+}
+
 /** Read, check and decode one resource; every failure is returned with its kind. */
 export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, request: NativeDecodeRequest, options: NativeDecodeOptions,
   depotHash: (path: string) => string): NativeDecodeOutcome {
@@ -71,6 +88,10 @@ export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, 
     const root = new Cr2wFile(bytes, session).exports[0]?.className;
     if (!root || !(options.roots.has(root) || request.roots?.includes(root))) return { ok: false, kind: "not-verified", message: `Root class ${root ?? "(none)"} is not verified.` };
     const document = readResourceJson(bytes, decompress, { buffers: "trim", header: { XfsNativeReader: options.identity } }, session);
+    if (root === "JsonResource" && request.payloads) {
+      const payload = jsonPayloadClass(document);
+      if (!payload || !request.payloads.includes(payload)) return { ok: false, kind: "not-verified", message: `JsonResource payload ${payload ?? "(none)"} is not verified.` };
+    }
     return { ok: true, document, extractedSha256: createHash("sha256").update(bytes).digest("hex"), root,
       name: request.needName ? nameOf(pool.get(request.archivePath), request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties };
   } catch (error) {
@@ -147,7 +168,7 @@ export const DEFAULT_WORKER_MAX_START_FAILURES = 3;
 type Pending = { request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOutcome) => void };
 
 /**
- * Decodes in a worker, one resource at a time, each within `timeoutMs`. A resource over its time budget, or a worker that dies,
+ * Decodes in a worker, one resource at a time, each within `timeoutMs`; a `background` request waits until no other does. A resource over its time budget, or a worker that dies,
  * answers `over-budget` or `internal` and the worker is replaced before the next resource.
  *
  * Only the current worker is heard: every message, error and exit is checked against it, and an outcome must carry the id of the
@@ -160,6 +181,8 @@ type Pending = { request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOu
 export class WorkerDecoder implements NativeDecoder {
   private current: { worker: DecodeWorker; ready: boolean; startTimer: ReturnType<typeof setTimeout> | null } | null = null;
   private readonly queue: Pending[] = [];
+  /** Requests marked `background`, decoded only while `queue` is empty. */
+  private readonly backgroundQueue: Pending[] = [];
   private busy: { pending: Pending; id: number; sent: boolean; timer: ReturnType<typeof setTimeout> | null } | null = null;
   private nextId = 1;
   private closed = false;
@@ -174,7 +197,7 @@ export class WorkerDecoder implements NativeDecoder {
 
   decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome> {
     if (this.closed) return Promise.resolve({ ok: false, kind: "internal", message: "The native decoder is closed." });
-    return new Promise(resolve => { this.queue.push({ request, resolve }); this.pump(); });
+    return new Promise(resolve => { (request.priority === "background" ? this.backgroundQueue : this.queue).push({ request, resolve }); this.pump(); });
   }
 
   private spawn(): void {
@@ -228,15 +251,15 @@ export class WorkerDecoder implements NativeDecoder {
   }
 
   private pump(): void {
-    if (this.busy || this.closed || !this.queue.length) return;
+    if (this.busy || this.closed || !(this.queue.length || this.backgroundQueue.length)) return;
     if (!this.current) {
       if (Date.now() < this.unavailableUntil) {
-        for (const pending of this.queue.splice(0)) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason });
+        for (const pending of [...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason });
         return;
       }
       this.spawn();
     }
-    this.busy = { pending: this.queue.shift()!, id: this.nextId++, sent: false, timer: null };
+    this.busy = { pending: (this.queue.shift() ?? this.backgroundQueue.shift())!, id: this.nextId++, sent: false, timer: null };
     this.send();
   }
 
@@ -282,6 +305,6 @@ export class WorkerDecoder implements NativeDecoder {
     this.closed = true;
     this.stopWorker();
     if (this.busy) { if (this.busy.timer) clearTimeout(this.busy.timer); this.busy.pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." }); this.busy = null; }
-    for (const pending of this.queue.splice(0)) pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." });
+    for (const pending of [...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." });
   }
 }

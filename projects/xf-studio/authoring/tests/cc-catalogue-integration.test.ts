@@ -28,7 +28,7 @@ oracleDescribe(missing.length === 0, `the creator catalogue oracle needs ${missi
   const installation = missing.length ? null : openInstallation({ gameRoot, wolvenKitCli: cli, cacheDir,
     launchRoute: env.XFS_RESOLVER_MO2_ROOT ? "mo2" : "direct", mo2Root: env.XFS_RESOLVER_MO2_ROOT ? resolve(env.XFS_RESOLVER_MO2_ROOT) : null,
     mo2ProfileId: env.XFS_RESOLVER_MO2_PROFILE ?? null });
-  const load = (gender: "female" | "male") => loadCreatorCatalogue({ installation: installation!, gameRoot, wolvenKitCli: cli, cacheDir, language: "en-us" }, gender);
+  const load = (gender: "female" | "male") => loadCreatorCatalogue({ installation: installation!, gameRoot, cacheDir, language: "en-us" }, gender);
 
   test("both catalogues come from the data: sections from TweakDB, labels from the game's texts, provenance on every choice", async () => {
     for (const gender of ["female", "male"] as const) {

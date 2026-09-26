@@ -30,7 +30,7 @@ import type { FetchedResource, ResourceFetchPort } from "../resource-graph";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
-import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecoder, WorkerDecoder } from "./native-decode";
+import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecodeRequest, type NativeDecoder, WorkerDecoder } from "./native-decode";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "./native-errors";
 import { loadGameOodle, type OodleLibrary, openGameOodle, type OodleVerifier, type OodleVerifierSync } from "./oodle";
 import { NATIVE_READER_VERSION } from "./resource-document";
@@ -43,8 +43,17 @@ export const NATIVE_ROOTS: ReadonlySet<string> = new Set(["gameuiCharacterCustom
   "CMesh", "MorphTargetMesh", "CBitmapTexture", "entEntityTemplate", "CMaterialTemplate", "CHairProfile", "CSkinProfile", "CGradient",
   "Multilayer_Setup", "Multilayer_LayerTemplate"]);
 
+/**
+ * `JsonResource` payload classes whose documents matched WolvenKit's leaf for leaf in the differential harness, read when a caller asks
+ * for that root and payload (`NativeDecodeRequest.payloads`): the creator catalogue's on-screen texts (`onscreens.json`).
+ */
+export const NATIVE_JSON_PAYLOADS: ReadonlySet<string> = new Set(["localizationPersistenceOnScreenEntries"]);
+/** A request's own root classes, payloads, budget and priority (a host reading a kind the resolver doesn't; `NativeDecodeRequest`). */
+export type NativeRequestExtras = Pick<NativeDecodeRequest, "roots" | "payloads" | "timeoutMs" | "priority">;
+
 /** A native answer: a `FetchedResource` plus what the JSON document cannot say. */
 export interface NativeFetchedResource extends FetchedResource {
+  readonly native: true;
   readonly notes: readonly NativeNote[];
   readonly defaulted: readonly DefaultedProperty[];
 }
@@ -178,14 +187,15 @@ export class NativeFirstFetcher implements ResourceFetchPort {
     if (outcome.kind === "internal" && this.options.strict) throw new NativeInternalError(`${resource}: ${outcome.errorName ?? "Error"}: ${outcome.message}\n${outcome.stack ?? ""}`);
   }
 
-  async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<NativeFetchedResource | FetchedResource | null> {
+  /** Natively, else from the fallback port; `extras` widens this one request (a `JsonResource` with a verified payload). */
+  async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null, extras: NativeRequestExtras = {}): Promise<NativeFetchedResource | FetchedResource | null> {
     const key = this.key(archive, ref);
-    const outcome = await this.decoder.decode({ archivePath: archive.id, hash: ref.hash, needName: !ref.path });
+    const outcome = await this.decoder.decode({ ...extras, archivePath: archive.id, hash: ref.hash, needName: !ref.path });
     if (outcome.ok) {
       this.stats.native++;
       this.fellBack.delete(key);
       this.options.ledger?.add(archive, ref.hash);
-      return { document: outcome.document, extractedSha256: outcome.extractedSha256, path: ref.path ?? outcome.name, fresh: false, notes: outcome.notes, defaulted: outcome.defaulted };
+      return { document: outcome.document, extractedSha256: outcome.extractedSha256, path: ref.path ?? outcome.name, fresh: false, native: true, notes: outcome.notes, defaulted: outcome.defaulted };
     }
     this.record(outcome, archive, ref);
     this.stats.fallback++;

@@ -5,7 +5,8 @@
  *
  * 1. the whole JSON document, leaf by leaf (Header, buffer `Type` strings and cached buffer bytes aside), and
  * 2. what the resolver's own readers make of each document (the mesh, morph target and `.app` models of the resource graph, the
- *    creator option model, material parameters, template defaults, profiles, gradients, layer setups and templates).
+ *    creator option model, material parameters, template defaults, profiles, gradients, layer setups and templates, and the creator
+ *    catalogue's on-screen text entries; tools/catalogue-texts-oracle.ts writes those resources' WolvenKit JSON).
  *
  *   bun tools/native-cr2w-diff.ts --game <game folder> [--mods <MO2 mods folder>] --cache <json folder> [--report <file>]
  *     [--learn [--holdout]] [--limit N]
@@ -23,11 +24,13 @@ import { readCcoWithPresentation } from "../src/cc-catalogue";
 import { readCco } from "../src/cco-model";
 import { gradientStops, hairProfileStops, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
 import { refFromHash } from "../src/depot-path";
+import { readOnscreenEntries } from "../src/game-text";
 import { readSetup, readTemplate } from "../src/layered-setup";
 import { templateDefaults } from "../src/material-template";
 import { tweakDbId } from "../src/tweakdb-flats";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { compareDocuments, isNameOnly } from "../src/native/document-diff";
+import { jsonPayloadClass } from "../src/native/native-decode";
 import { loadGameOodle } from "../src/native/oodle";
 import { DecodeSession } from "../src/native/limits";
 import { writeResourceJson } from "../src/native/red-json-writer";
@@ -110,6 +113,8 @@ async function projection(document: unknown, hash: string): Promise<unknown> {
     case "Multilayer_LayerTemplate": return readTemplate(root);
     case "CBitmapTexture": return textureIsGamma(root);
     case "gameuiCharacterCustomizationInfoResource": return { cco: readCco(root, "x"), presentation: iconsById(readCcoWithPresentation(root, "x")) };
+    // The creator catalogue's on-screen texts: the entries the text table merges.
+    case "JsonResource": return jsonPayloadClass(document) === "localizationPersistenceOnScreenEntries" ? readOnscreenEntries(document) : null;
     default: return null;
   }
 }

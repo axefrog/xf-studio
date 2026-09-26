@@ -142,7 +142,7 @@ export class CreatorCatalogueHost {
     const open = this.options.open ?? (await import("./installation-registry")).acquireInstallation;
     const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
     const load = await (this.options.load ?? ((inst: Installation, r: CreatorRoute, g: BodyGender) => loadCreatorCatalogue({ installation: inst,
-      gameRoot: r.gameRoot, wolvenKitCli: r.wolvenKitCli, cacheDir: this.options.resolverCache, log: this.options.log }, g)))(installation, route, gender);
+      gameRoot: r.gameRoot, cacheDir: this.options.resolverCache, log: this.options.log }, g)))(installation, route, gender);
     const index = new CatalogueIndex(load.catalogue);
     const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}`).digest("hex").slice(0, 24);
     const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity);

@@ -36,7 +36,7 @@ import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRun
 import { currentDiagnostics, hostFailure, hostTrace } from "./diagnostics/host-log";
 import type { NativeDecoder } from "./native/native-decode";
 import type { NativeFailureKind } from "./native/native-errors";
-import { type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "./native/native-fetch-port";
+import { NATIVE_JSON_PAYLOADS, type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "./native/native-fetch-port";
 import { GAME_OODLE_LIBRARY } from "./native/oodle";
 
 export interface InstallationOptions {
@@ -476,10 +476,13 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       // Each output file by depot hash, with the folder it was written to and whether that step finished cleanly.
       const found = new Map<string, { file: string; path: string | null; bytes: number; clean: boolean }>();
       const walk = (root: string, folder: string, clean: boolean) => {
-        for (const name of readdirSync(folder)) {
+        const names = readdirSync(folder), listed = new Set(names);
+        for (const name of names) {
           const full = join(folder, name);
           if (lstatSync(full).isDirectory()) { walk(root, full, clean); continue; }
-          if (name.endsWith(".json")) continue;
+          // A serialized companion is `<file>.json` beside its file. A CR2W `.json` resource (a `JsonResource`, e.g. `onscreens.json`)
+          // is a file of its own, serialized to `onscreens.json.json` (PIPE-50).
+          if (name.endsWith(".json") && listed.has(name.slice(0, -".json".length))) continue;
           const rel = relative(root, full).split(sep).join("\\");
           const numeric = /^(\d+)\.[^.\\]+$/.exec(rel);
           const hash = numeric ? BigInt(numeric[1]!).toString() : depotHash(rel);
@@ -633,6 +636,20 @@ export class ResolverFetcher implements ResourceFetchPort {
   get nativeDecoder(): NativeDecoder | null { return this.native?.decoder ?? null; }
   fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
     return this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension);
+  }
+  /**
+   * A CR2W `.json` resource (a `JsonResource`, such as the game's and mods' on-screen texts) whose payload class is one of `payloads`
+   * (default: the payloads the reader is verified on): natively first, asking for that root and payload at background priority, so a
+   * V's resolution never waits behind it; else WolvenKit's, batched with the other reads on this cache folder and cached like any
+   * resource (PIPE-50). `reader` says which answered: `native` or WolvenKit's identity (`tool`).
+   */
+  async fetchJsonResource(archive: MountedArchive, ref: DepotRef, payloads: readonly string[] = [...NATIVE_JSON_PAYLOADS]):
+    Promise<(FetchedResource & { readonly reader: string }) | null> {
+    const answer = this.native
+      ? await this.native.fetch(archive, ref, "json", { roots: ["JsonResource"], payloads, priority: "background" })
+      : await this.wolvenKit.fetch(archive, ref, "json");
+    if (!answer) return null;
+    return { ...answer, reader: "native" in answer && answer.native ? `native:${this.native!.identity}` : this.tool };
   }
   transient(archive: MountedArchive, ref: DepotRef): boolean {
     return this.native ? this.native.transient(archive, ref) : this.wolvenKit.transient(archive, ref);
