@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `17d2585` | 2026-09-27 | Native catalogue merge (creator texts read natively, WolvenKit optional until export, Oodle release, degraded rule, R12) | 0 High, 2 Medium, 6 Low (NATIVE-46..53). Oodle lifecycle, payload gate, language keys, retry rules, the degraded rule, R12 and the boundary are sound. Fix track queued |
 | `536bff3` | 2026-09-27 | UI polish merge, above all the first feature that writes into the user's MO2 profile and game folder (Add to my mod manager) | 1 High, 6 Medium, 8 Low (INSTALL-01..12, UI-98..100). Separator placement, BOM/CRLF, consent tokens, ownership refusals, path and link checks, framework safety and the architecture are sound. Fix track queued |
 | `36b5c87` | 2026-09-27 | Second pass on the production native reader (resolver-host fallbacks, decoder lifetime, ledger keys, R11–R13, worker cost) | 0 High, 2 Medium, 4 Low (NATIVE-40..45), none repeating NATIVE-26..34. The past-count loop bounds, widened roots, ledger key, `forgetDefaulted` and worker failure paths are sound. NATIVE-40..43 and 45 fixed in claude/native-catalogue; NATIVE-44 open |
 | `e09391e` | 2026-09-27 | Native reader in production (resolver integration, shared decoder, markers, notes) | 0 High, 1 Medium, 9 Low (NATIVE-26..34, PIPE-102). Cache identity, fallback kinds, the arrays-to-record-end rule against hostile files, worker bundling and the boundary are sound; no render changes beyond the intended fixes. All fixed in claude/native-catalogue |
@@ -69,6 +70,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| NATIVE-46 | Med | Native reader | The creator catalogue has no transient rule for text reads: a worker that briefly can't start (with no WolvenKit) yields a "ready" catalogue with name-derived labels and a false "texts aren't installed" gap, kept all session with no Try again; with the reader off for good it never says WolvenKit would fix the labels (`cc-catalogue-host.ts:98,145-147`, `cc-catalogue-service.ts:124`; reproduced) | Open |
+| NATIVE-47 | Med | Native reader | The "WolvenKit missing" message sends people to the 3D preview card, which a ready preview hides and which offers setup only while it needs it, so after WolvenKit is moved there is no button to press (`character-detail-service.ts:115`, `preview-core-host.ts:78`, `preview-preparation.ts`) | Open |
 | INSTALL-01 | High | Install | Add to my mod manager has no verify or isolated-server guard: the settings store ignores `XFAS_DATA_DIR`, so an agent or acceptance run under `?verify=1` can write into the user's real MO2 profile or game folder, with its install record in a throwaway folder (`server.ts:40,61-62`, `studio-startup.ts:110`) | Open |
 | INSTALL-02 | Med | Install | An interrupted install is never recovered: nothing calls `transport.recover()`, so a leftover journal (e.g. the game holding the old `.archive` during an update) blocks every later plan, and "Restart XF Studio" does nothing (`mod-install-host.ts:67-96`, `mod-install-transport.ts:396-411`; reproduced) | Open |
 | INSTALL-03 | Med | Install | Removing the mod normally (MO2 remove, or deleting the files) leaves the install record, and every later plan refuses with no way forward (`mod-install-transport.ts:291`, `mod-install-host.ts:65`; reproduced) | Open |
@@ -380,6 +383,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **INSTALL-12:** a test fixture comment states the framework order backwards (code and assertions are right).
   - **UI-99:** the install sheet picks its next step by matching host prose; the plan should carry a structured next step.
   - **UI-100:** the legacy-folder refusal is jargon with no action (the reference MO2 still has the diagnostic `XF Studio` folder), and a Vortex-deployed copy is told to rename files, which breaks Vortex's state.
+
+- **NATIVE-48..53** (native catalogue review at `17d2585`), Open:
+  - **NATIVE-48:** without WolvenKit, every V change resolves the whole chain and decodes the clothing preset, then fails as an error-level `character_tool_missing` (and prefetch as `prefetch_failed`) instead of stopping early as "needs setup".
+  - **NATIVE-49:** the fallback log cap is now session-wide, so one worker outage fills it and later `native_internal` reader bugs never reach the failure log (reverses NATIVE-45's intent).
+  - **NATIVE-50:** catalogue text reads and V preparations share one fetcher's `transientNulls`, so a transient text read marks the person's V degraded.
+  - **NATIVE-51:** the catalogue's key lacks the game language, so a language change keeps old labels until restart.
+  - **NATIVE-52:** old creator-text cache files are never pruned after reader-identity changes.
+  - **NATIVE-53:** a stale comment in `clothing-host.ts:155` says a failed preset read is not kept.
 
 ## New subsystems since last review
 
