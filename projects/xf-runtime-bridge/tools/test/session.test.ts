@@ -2,11 +2,13 @@
 // game) with captures of a synthetic window. No game involved.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { BridgeClient } from "../bridge-lib.ts";
 import { planScript, runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
+import { LOCK_FILE } from "../session-lock.ts";
 import { openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
 const script = (steps: SessionScript["steps"], extra: Partial<SessionScript> = {}): SessionScript => ({ schema: SCRIPT_SCHEMA, name: "t", steps, ...extra });
@@ -172,6 +174,46 @@ describe("runScript against the self-test host", () => {
     expect((unexpected.records[0].error as any).code).toBe("unexpected_success");
   }, 20000);
 
+  test("Ctrl+C (the abort signal) ends a game.wait, skips the rest and runs restore once", async () => {
+    const stop = new AbortController();
+    const lines: string[] = [];
+    const s = script(
+      [
+        { do: "run", label: "enter", command: "photo.enter" },
+        { do: "run", label: "hide", command: "photo.hud.hide", input: { hidden: true } },
+        { do: "run", label: "wait-menu", command: "game.wait", input: { phase: ["character_menu"], timeout_ms: 60000 } },
+        { do: "wait", label: "long", ms: 60000 },
+        { do: "run", label: "never", command: "photo.exit" },
+      ],
+      { restore: [{ do: "run", label: "restore-exit", command: "photo.exit", continue_on_error: true }] },
+    );
+    setTimeout(() => stop.abort(), 1200);
+    const started = performance.now();
+    const result = await runScript(s, { api: api(), outDir: tempDir("xfb-sess-int-"), signal: stop.signal, log: (l) => lines.push(l) });
+    expect(performance.now() - started).toBeLessThan(10000);
+    expect(result.outcome).toBe("interrupted");
+    const ran = result.records.filter((r) => !r.skipped).map((r) => r.label);
+    expect(ran).toEqual(["enter", "hide", "wait-menu", "restore-exit"]);
+    expect(result.records.find((r) => r.label === "wait-menu")!.ok).toBe(false);
+    expect(result.records.find((r) => r.label === "restore-exit")!.ok).toBe(true);
+    expect(result.records.filter((r) => r.label === "restore-exit")).toHaveLength(1);
+    const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8"));
+    expect(manifest.runs.at(-1).outcome).toBe("interrupted");
+  }, 30000);
+
+  test("an abort during an interactive ask also runs restore once", async () => {
+    const stop = new AbortController();
+    setTimeout(() => stop.abort(), 300);
+    const result = await runScript(
+      script([{ do: "ask", label: "a", text: "Never answered" }, { do: "run", label: "s", command: "game.status" }], {
+        restore: [{ do: "run", label: "r", command: "game.status" }],
+      }),
+      { api: api(), outDir: tempDir("xfb-sess-int2-"), ask: () => new Promise(() => {}), signal: stop.signal, log: () => {} },
+    );
+    expect(result.outcome).toBe("interrupted");
+    expect(result.records.filter((r) => !r.skipped).map((r) => r.label)).toEqual(["a", "r"]);
+  }, 30000);
+
   test("game.wait follows the player: it returns once the phase changes", async () => {
     await sleep(400);
     // A short idle close lets another client in between the runner's twice-a-second polls.
@@ -204,4 +246,17 @@ describe("runScript against the self-test host", () => {
     await reset.call("selftest.phase", { phase: "gameplay" }, "t-reset");
     reset.close();
   }, 40000);
+});
+
+describe("session runner command line", () => {
+  test("refuses to start while another runner holds the lock", () => {
+    const dir = tempDir("xfb-sess-lock-");
+    writeFileSync(join(dir, LOCK_FILE), JSON.stringify({ pid: process.ppid, script: "session-2", started_at: new Date().toISOString() }));
+    const scriptFile = join(dir, "s.json");
+    writeFileSync(scriptFile, JSON.stringify(script([{ do: "run", label: "s", command: "game.status" }])));
+    const run = spawnSync(process.execPath, [join(projectDir, "tools", "session.ts"), scriptFile, "--runtime-dir", dir, "--no-ask", "--out", join(dir, "out")], { encoding: "utf8", timeout: 20000 });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain("Only one session can run at a time");
+    expect(existsSync(join(dir, "out", "manifest.json"))).toBe(false);
+  }, 30000);
 });

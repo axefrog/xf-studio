@@ -12,11 +12,17 @@
 
 namespace xfb
 {
+// Write classes for [bridge] allow_write_classes (photo, world, character).
+inline constexpr uint32_t kWritePhoto = 1;
+inline constexpr uint32_t kWriteWorld = 2;
+inline constexpr uint32_t kWriteCharacter = 4;
+
 struct Config
 {
     // [bridge]
     bool bridgeEnabled = false;      // no pipe, no session file unless true
     bool allowWrites = false;        // write-class methods refused unless true
+    uint32_t writeClasses = kWritePhoto | kWriteWorld | kWriteCharacter; // allow_write_classes, after allow_writes
     uint32_t requestTimeoutMs = 2000; // wait for the game thread
     uint32_t maxRequestsPerSecond = 20;
     uint32_t idleDisconnectSeconds = 120;
@@ -37,4 +43,6 @@ struct Config
 Config ParseConfig(const std::string& aText);
 Config LoadConfig(const std::filesystem::path& aPath);
 std::string DescribeConfig(const Config& aConfig);
+// ["photo", "world", "character"] for the classes aConfig allows.
+std::vector<std::string> WriteClassList(const Config& aConfig);
 } // namespace xfb

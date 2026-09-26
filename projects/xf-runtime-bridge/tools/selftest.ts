@@ -208,6 +208,7 @@ const nested = (depth: number) => "[".repeat(depth) + "]".repeat(depth);
 
   await sleep(800);
   check("kill removes session.json", readSession(dir) === null);
+  check("a kill without any write restores nothing", count(log, "evt=bridge.kill_restored") === 0);
   check("host exits after the listener closes", await waitExit(child, 3000));
 
   const text = log.join("\n");
@@ -229,6 +230,28 @@ const nested = (depth: number) => "[".repeat(depth) + "]".repeat(depth);
   client.close();
   child.kill();
   await waitExit(child, 2000);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// --- Run 2b (RB-16, RB-26): the kill switch's restore after a write runs once; write classes -----
+{
+  const { child, dir, session, log } = await startHost(["--allow-writes", "--write-classes", "photo,world"]);
+  const client = new BridgeClient(session, 3000);
+  await client.connect();
+  let r = await client.call("cc.apply", { option: "XF", index: 1 }, "t-class-off");
+  check("a write class left out of allow_write_classes is refused", !r.ok && r.error?.code === "write_class_disabled", r.error);
+  check("the class refusal is logged", log.some((l) => l.includes("cid=t-class-off") && l.includes("reason=class_not_allowed")));
+  r = await client.call("world.pause", { paused: true }, "t-freeze");
+  check("a listed class runs, and world.pause's undo returns to the earlier state", r.ok && (r.result as any).undo?.params?.paused === false, r);
+  const info = await client.call("bridge.info", {}, "t-info-classes");
+  check("bridge.info reports the write classes", JSON.stringify((info.result as any)?.bridge?.write_classes) === JSON.stringify(["photo", "world"]), info.result);
+  check("no restore before the kill", count(log, "evt=bridge.kill_restored") === 0);
+  r = await client.call("bridge.kill", {}, "t-kill-restore");
+  client.close();
+  check("host exits after the kill", await waitExit(child, 3000));
+  check("after a write, the kill switch restores exactly once", count(log, "evt=bridge.kill_restored") === 1, log.filter((l) => l.includes("kill_restore")));
+  check("the restore unfroze the simulated world", log.some((l) => l.includes("evt=bridge.kill_restored") && l.includes('"world_unfrozen":true')));
+  if (child.exitCode === null) child.kill();
   rmSync(dir, { recursive: true, force: true });
 }
 

@@ -7,8 +7,8 @@
 // A later `recrop` of the saved full-resolution file gives a tighter view without recapturing.
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { crop, decodePng, downscaleArea, encodePng, fitSize, type Rect } from "./image.ts";
 import { describeRegion, resolveRegion, type RegionSpec } from "./regions.ts";
 import { describeWindow, grab, looksBlank, mainWindowOf, processImageName, topLevelWindows, type Pixels, type Route, type WindowInfo } from "./win32.ts";
@@ -187,20 +187,42 @@ export function captureWindow(options: CaptureOptions): CaptureRecord {
   });
 }
 
+const OUTSIDE = "Only captures saved in the XF capture folder can be cropped again.";
+
+/** True when `path` is `root` itself or lies outside it (another drive, a UNC share, `..`). */
+function outside(root: string, path: string): boolean {
+  const inside = relative(root, path);
+  return !inside || isAbsolute(inside) || inside === ".." || inside.startsWith(`..${sep}`) || inside.startsWith("../");
+}
+
+// UNC shares (\\server\share), device paths (\\?\, \\.\) and their forward-slash spellings. Refused
+// before anything touches the file system, so a path can never make Windows open an SMB connection.
+const UNC = /^[\\/]{2}/;
+
 /**
  * Crops and downscales an earlier capture's full-resolution file, without recapturing. Only
- * files inside the capture folder are accepted, so a client can't read arbitrary images.
+ * files inside the capture folder are accepted, so a client can't read arbitrary images: the
+ * path is checked as written (no other drive, no UNC or device path, no `..`), then again after
+ * resolving junctions and links, before anything is read. The recrop is written beside it.
  */
 export function recrop(options: { path: string; region?: RegionSpec; view?: ScaleOptions; name?: string; root?: string }): CaptureRecord {
   const root = resolve(options.root ?? DEFAULT_CAPTURE_ROOT);
-  const path = resolve(options.path);
-  const inside = relative(root, path);
-  if (!inside || inside.startsWith("..") || inside.includes(`..${sep}`) || resolve(root, inside) !== path) {
-    throw new CaptureError("Only captures saved in the XF capture folder can be cropped again.", "bad_file");
-  }
-  if (!path.endsWith(".full.png") || !existsSync(path)) {
+  if (typeof options.path !== "string" || UNC.test(options.path.trim())) throw new CaptureError(OUTSIDE, "bad_file");
+  const requested = resolve(root, options.path);
+  if (UNC.test(requested) || outside(root, requested)) throw new CaptureError(OUTSIDE, "bad_file");
+  if (!requested.endsWith(".full.png") || !existsSync(requested)) {
     throw new CaptureError("Pass the .full.png file of an earlier capture.", "bad_file");
   }
+  let path: string;
+  try {
+    const realRoot = realpathSync.native(root);
+    path = realpathSync.native(requested);
+    if (UNC.test(path) || UNC.test(realRoot) || outside(realRoot, path)) throw new CaptureError(OUTSIDE, "bad_file");
+  } catch (error) {
+    if (error instanceof CaptureError) throw error;
+    throw new CaptureError(OUTSIDE, "bad_file");
+  }
+  if (!path.endsWith(".full.png")) throw new CaptureError("Pass the .full.png file of an earlier capture.", "bad_file");
   const pixels = decodePng(new Uint8Array(readFileSync(path)));
   const sidecar = path.replace(/\.full\.png$/, ".json");
   const parent = existsSync(sidecar) ? (JSON.parse(readFileSync(sidecar, "utf8")) as CaptureRecord) : null;
@@ -213,6 +235,6 @@ export function recrop(options: { path: string; region?: RegionSpec; view?: Scal
     covers_monitor: parent?.source.covers_monitor ?? false,
     foreground: parent?.source.foreground ?? false,
     route: "file",
-    derived_from: { path, ...(parent ? { window: parent.source.window, crop: { x: parent.crop.x, y: parent.crop.y, width: parent.crop.width, height: parent.crop.height } } : {}) },
+    derived_from: { path: requested, ...(parent ? { window: parent.source.window, crop: { x: parent.crop.x, y: parent.crop.y, width: parent.crop.width, height: parent.crop.height } } : {}) },
   });
 }

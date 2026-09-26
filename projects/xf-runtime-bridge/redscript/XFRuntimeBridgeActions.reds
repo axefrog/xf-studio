@@ -436,6 +436,30 @@ public abstract class XFPhoto {
     return listItem.GetSliderValue();
   }
 
+  // Whether CurrentValue reports a real value: an option list whose selected index is outside the
+  // options seen has none (CurrentValue then says -1, which a slider could also legitimately hold).
+  public static func HasValue(controller: wref<gameuiPhotoModeMenuController>, item: ref<XFPhotoItem>) -> Bool {
+    let listItem = controller.GetMenuItem(item.key);
+    if !IsDefined(listItem) {
+      return false;
+    }
+    if Equals(item.kind, "options") {
+      let index = listItem.GetSelectedOptionIndex();
+      return index >= 0 && index < ArraySize(item.optionData);
+    }
+    return true;
+  }
+
+  // Whether the value the menu shows now is the one asked for: exactly, for an option list (whose
+  // ForceValue truncates and falls back to the first option for an unknown value); within one
+  // slider step (or 0.01) for a slider, which may snap to its step.
+  public static func Matches(item: ref<XFPhotoItem>, wanted: Float, actual: Float) -> Bool {
+    if Equals(item.kind, "options") {
+      return actual == wanted;
+    }
+    return AbsF(actual - wanted) <= MaxF(item.step, 0.01);
+  }
+
   public static func DescribeItem(controller: wref<gameuiPhotoModeMenuController>, item: ref<XFPhotoItem>, withOptions: Bool) -> String {
     let out = "{\"key\":" + IntToString(Cast<Int32>(item.key)) + ",\"label\":" + XFJson.Str(item.label) + ",\"page\":" + IntToString(Cast<Int32>(item.page)) + ",\"kind\":" + XFJson.Str(item.kind);
     if Equals(item.kind, "slider") || Equals(item.kind, "hue") {
@@ -523,6 +547,9 @@ public abstract class XFPhoto {
       return XFJson.Fail("unavailable", "photo-mode setting " + IntToString(key) + " is not in the menu right now");
     }
     if Equals(item.kind, "options") {
+      if Cast<Float>(RoundF(value)) != value {
+        return XFJson.Fail("bad_params", "'" + item.label + "' takes one of its option values, a whole number, not " + FloatToString(value));
+      }
       if !ArrayContains(item.optionData, RoundF(value)) {
         return XFJson.Fail("bad_params", "value " + FloatToString(value) + " is not one of the options of '" + item.label + "' (" + IntToString(ArraySize(item.optionData)) + " options; see photo.state with menu)");
       }
@@ -536,11 +563,23 @@ public abstract class XFPhoto {
       }
     }
     XFBridgeActions.EnsureSaveLock(cid);
+    let beforeKnown = XFPhoto.HasValue(controller, item);
     let before = XFPhoto.CurrentValue(controller, item);
     listItem.ForceValue(value, true);
     let after = XFPhoto.CurrentValue(controller, item);
+    if !XFPhoto.Matches(item, value, after) {
+      // The menu took a different value (a stale option list, a changed range): put the earlier
+      // value back when it is known, and refuse, so a wrong look is never reported as done.
+      let restored = "its earlier value is unknown, so it was left as it is";
+      if beforeKnown {
+        listItem.ForceValue(before, true);
+        restored = "it was set back to " + FloatToString(XFPhoto.CurrentValue(controller, item));
+      }
+      XFBridgeLog.Warn(cid, "photo attribute " + IntToString(key) + " (" + item.label + ") asked " + FloatToString(value) + ", got " + FloatToString(after) + "; " + restored);
+      return XFJson.Fail("write_mismatch", "'" + item.label + "' became " + FloatToString(after) + " instead of " + FloatToString(value) + "; " + restored);
+    }
     XFBridgeLog.Info(cid, "photo attribute " + IntToString(key) + " (" + item.label + ") " + FloatToString(before) + " -> " + FloatToString(after) + "; undo: set it back to " + FloatToString(before));
-    return "{\"ok\":true,\"key\":" + IntToString(key) + ",\"label\":" + XFJson.Str(item.label) + ",\"before\":" + XFJson.Num(before) + ",\"after\":" + XFJson.Num(after) + "}";
+    return "{\"ok\":true,\"key\":" + IntToString(key) + ",\"label\":" + XFJson.Str(item.label) + ",\"before\":" + XFJson.Num(before) + ",\"before_known\":" + XFJson.Flag(beforeKnown) + ",\"after\":" + XFJson.Num(after) + "}";
   }
 
   // Restores every captured slider and option to the value it had when photo mode set it up.
@@ -845,11 +884,12 @@ public abstract class XFWorld {
     if StrLen(refusal) > 0 {
       return refusal;
     }
+    let wasFrozen = registry.IsWorldFrozen();
     XFBridgeActions.EnsureSaveLock(cid);
     time.SetTimeDilation(n"XFBridgeFreeze", 0.0);
     time.SetTimeDilationOnLocalPlayerZero(n"XFBridgeFreeze", 0.0);
     registry.SetWorldFrozen(true);
-    XFBridgeLog.Info(cid, "world frozen (time dilation 0, reason XFBridgeFreeze); undo: world.pause paused=false, or the kill switch");
-    return "{\"ok\":true,\"frozen\":true}";
+    XFBridgeLog.Info(cid, "world frozen (time dilation 0, reason XFBridgeFreeze); undo: world.pause paused=" + XFJson.Flag(wasFrozen) + ", or the kill switch");
+    return "{\"ok\":true,\"frozen\":true,\"was_frozen\":" + XFJson.Flag(wasFrozen) + "}";
   }
 }

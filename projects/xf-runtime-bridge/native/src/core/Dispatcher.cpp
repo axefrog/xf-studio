@@ -50,10 +50,36 @@ std::string_view AccessName(Access aAccess)
         return "read";
     case Access::Write:
         return "write";
+    case Access::WritePhoto:
+        return "write-photo";
+    case Access::WriteWorld:
+        return "write-world";
+    case Access::WriteCharacter:
+        return "write-character";
     case Access::Control:
         return "control";
     }
     return "read";
+}
+
+bool IsWrite(Access aAccess)
+{
+    return aAccess == Access::Write || WriteClassBit(aAccess) != 0;
+}
+
+uint32_t WriteClassBit(Access aAccess)
+{
+    switch (aAccess)
+    {
+    case Access::WritePhoto:
+        return kWritePhoto;
+    case Access::WriteWorld:
+        return kWriteWorld;
+    case Access::WriteCharacter:
+        return kWriteCharacter;
+    default:
+        return 0;
+    }
 }
 
 size_t JsonNestingDepth(std::string_view aText, size_t aLimit)
@@ -227,14 +253,16 @@ json Dispatcher::Describe() const
     json methods = json::array();
     for (const auto& [name, spec] : m_methods)
     {
-        const bool enabled = spec.access != Access::Write || m_config.allowWrites;
+        const auto bit = WriteClassBit(spec.access);
+        const bool enabled =
+            !IsWrite(spec.access) || (m_config.allowWrites && (bit == 0 || (m_config.writeClasses & bit) != 0));
         methods.push_back({{"name", name},
                            {"access", AccessName(spec.access)},
                            {"thread", spec.runOn == RunOn::GameThread ? "game" : "bridge"},
                            {"enabled", enabled},
                            {"summary", spec.summary}});
     }
-    return json{{"methods", methods}, {"allow_writes", m_config.allowWrites}};
+    return json{{"methods", methods}, {"allow_writes", m_config.allowWrites}, {"write_classes", WriteClassList(m_config)}};
 }
 
 uint64_t Dispatcher::RequestCount() const
@@ -387,11 +415,18 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
 
     log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
 
-    if (spec.access == Access::Write && !m_config.allowWrites)
+    if (IsWrite(spec.access) && !m_config.allowWrites)
     {
         return refuse("bridge.write_refused", id, cid, "writes_disabled",
                       "write methods are off; set [bridge] allow_writes = true in config.ini", false,
                       "method=" + methodName + " reason=allow_writes_false");
+    }
+    if (const auto bit = WriteClassBit(spec.access); bit != 0 && (m_config.writeClasses & bit) == 0)
+    {
+        return refuse("bridge.write_refused", id, cid, "write_class_disabled",
+                      accessName + " methods are off; add " + accessName.substr(6) +
+                          " to [bridge] allow_write_classes in config.ini",
+                      false, "method=" + methodName + " reason=class_not_allowed");
     }
 
     MethodContext context;
