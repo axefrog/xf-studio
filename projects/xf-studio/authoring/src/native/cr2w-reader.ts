@@ -1,0 +1,187 @@
+/**
+ * Decodes a CR2W file into the red model (red-model.ts). Pure apart from the injected decompressor. Layout and sources:
+ * knowledge/archive-format.md §3-§5.
+ *
+ * An export's body is a 0x00 byte, then property records (u16 name index, u16 type-name index, u32 size counting itself, value),
+ * then a u16 0. Nested struct values repeat that layout. A few classes append data after the terminator; this reader decodes
+ * the `CMaterialInstance` parameter list (`values`) and the `CMaterialTemplate` parameter table (`parameterInfo`) and refuses any
+ * other trailing data. Every record's size is checked against what its value used, so a misread fails instead of drifting.
+ */
+import { Cr2wError, Cr2wFile } from "./cr2w-file";
+import type { Decompress } from "./kark";
+import { readPackage } from "./red-package";
+import { NativeUnsupportedError, RedBuffer, RedHandle, RedObject, type RedDocument } from "./red-model";
+import { cname, Cursor, emptyReference, importFlagsText, normalizedPath, readValue, readVarString, type ValueContext } from "./red-values";
+
+/** Which buffers are parsed, by owning `Class.property` (others stay bytes). */
+const PARSED_BUFFERS: Record<string, "package" | "cr2w-list"> = {
+  "entEntityTemplate.compiledData": "package",
+  "appearanceAppearanceDefinition.compiledData": "package",
+  "meshMeshMaterialBuffer.rawData": "cr2w-list",
+};
+
+export class Cr2wDecoder implements ValueContext {
+  private readonly objects = new Map<number, RedObject>();
+
+  constructor(readonly file: Cr2wFile, private readonly decompress: Decompress) {}
+
+  name(index: number): string { return this.file.name(index); }
+
+  /** The object of export `index` (decoded once; handles to it share it). */
+  exportObject(index: number): RedObject {
+    let object = this.objects.get(index);
+    if (object) return object;
+    const entry = this.file.exports[index];
+    if (!entry) throw new Cr2wError(`CR2W export ${index} does not exist.`);
+    object = new RedObject(entry.className);
+    this.objects.set(index, object);
+    const cursor = new Cursor(this.file.bytes, entry.dataOffset, entry.dataOffset + entry.dataSize);
+    this.readBody(cursor, object);
+    this.readAppendix(cursor, object);
+    if (cursor.pos !== cursor.end) throw new NativeUnsupportedError(`${entry.className} has ${cursor.end - cursor.pos} bytes of data after its properties that this reader does not decode.`);
+    return object;
+  }
+
+  /** A property list: 0x00, records, u16 0. */
+  private readBody(cursor: Cursor, object: RedObject): void {
+    const lead = cursor.u8();
+    if (lead !== 0) throw new Cr2wError(`${object.type}: property list starts with ${lead}, not 0.`);
+    for (;;) {
+      const nameIndex = cursor.u16();
+      if (nameIndex === 0) return;
+      const type = this.name(cursor.u16());
+      const start = cursor.pos, size = cursor.u32();
+      const name = this.name(nameIndex);
+      const end = start + size;
+      if (size < 4 || end > cursor.end) throw new Cr2wError(`${object.type}.${name}: record size ${size} is out of range.`);
+      const inner = new Cursor(cursor.bytes, cursor.pos, end);
+      object.fields[name] = readValue(this, inner, type, `${object.type}.${name}`);
+      if (inner.pos !== end) throw new Cr2wError(`${object.type}.${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
+      cursor.pos = end;
+    }
+  }
+
+  private readAppendix(cursor: Cursor, object: RedObject): void {
+    if (cursor.pos === cursor.end) return;
+    if (object.type === "CMaterialInstance") {
+      // u32 count; per entry: u32 size (counting itself and the two names), u16 parameter name, u16 type name, value.
+      const count = cursor.u32();
+      const values: unknown[] = [];
+      for (let i = 0; i < count; i++) {
+        const start = cursor.pos, size = cursor.u32();
+        const name = this.name(cursor.u16()), type = this.name(cursor.u16());
+        const inner = new Cursor(cursor.bytes, cursor.pos, start + size);
+        const value = readValue(this, inner, type, `CMaterialInstance.values`);
+        if (inner.pos !== start + size) throw new Cr2wError(`CMaterialInstance value ${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
+        cursor.pos = start + size;
+        values.push({ $type: type, [name]: value });
+      }
+      object.fields.values = values;
+      return;
+    }
+    if (object.type === "CMaterialTemplate") {
+      // Groups until the end: u8 count, then count × (u8 type, u16 offset, u16 name index).
+      const groups: unknown[] = [];
+      while (cursor.pos < cursor.end) {
+        const count = cursor.u8();
+        const group: unknown[] = [];
+        for (let i = 0; i < count; i++) {
+          const type = cursor.u8(), offset = cursor.u16(), name = this.name(cursor.u16());
+          group.push(new RedObject("CMaterialParameterInfo", { name: cname(name), offset, type }));
+        }
+        groups.push(group);
+      }
+      object.fields.parameterInfo = groups;
+    }
+  }
+
+  object(cursor: Cursor, type: string): RedObject {
+    const object = new RedObject(type);
+    this.readBody(cursor, object);
+    return object;
+  }
+
+  handle(cursor: Cursor): RedHandle {
+    const value = cursor.i32();
+    return new RedHandle(value <= 0 ? null : this.exportObject(value - 1));
+  }
+
+  reference(cursor: Cursor): unknown {
+    const value = cursor.u16();
+    if (value === 0) return emptyReference(false);
+    const entry = this.file.imports[value - 1];
+    if (!entry) throw new Cr2wError(`CR2W import ${value - 1} does not exist.`);
+    const path = normalizedPath(entry.path);
+    return { DepotPath: path ? { $type: "ResourcePath", $storage: "string", $value: path } : { $type: "ResourcePath", $storage: "uint64", $value: "0" },
+      Flags: importFlagsText(entry.flags) };
+  }
+
+  string(cursor: Cursor): string { return readVarString(cursor); }
+  nodeRef(cursor: Cursor): string { return readVarString(cursor); }
+
+  bitfield(cursor: Cursor): string[] {
+    const names: string[] = [];
+    for (let index = cursor.u16(); index !== 0; index = cursor.u16()) names.push(this.name(index));
+    return names;
+  }
+
+  buffer(cursor: Cursor, deferred: boolean, owner: string): RedBuffer | null {
+    let index: number;
+    if (deferred) {
+      const value = cursor.u16();
+      if (value === 0) return null;
+      index = value - 1;
+    } else {
+      const value = cursor.u32();
+      // 0x80000000 is an empty buffer, which the reference JSON still writes as one (with an id and no bytes).
+      if (value === 0x80000000) return new RedBuffer(0, 0, () => new Uint8Array(0));
+      if (value < 0x80000000) {
+        const bytes = cursor.take(value);
+        return this.parsed(0, bytes.length, () => bytes, owner);
+      }
+      index = (value ^ 0x80000000) - 1;
+    }
+    const entry = this.file.buffers[index];
+    if (!entry) throw new Cr2wError(`CR2W buffer ${index} does not exist.`);
+    let bytes: Uint8Array | null = null;
+    return this.parsed(entry.flags, entry.memSize, () => (bytes ??= this.file.bufferBytes(index, this.decompress)), owner);
+  }
+
+  private parsed(flags: number, memSize: number, bytes: () => Uint8Array, owner: string): RedBuffer {
+    // An empty buffer stays bytes (nothing to parse).
+    const kind = memSize ? PARSED_BUFFERS[owner] : undefined;
+    if (kind === "package") return new RedBuffer(flags, memSize, bytes, readPackage(bytes(), owner));
+    if (kind === "cr2w-list") return new RedBuffer(flags, memSize, bytes, { kind: "cr2w-list", files: readCr2wList(bytes(), this.decompress) });
+    return new RedBuffer(flags, memSize, bytes);
+  }
+
+  document(): RedDocument {
+    const root = this.exportObject(0);
+    const embedded = [];
+    // Embedded files: (u32 1-based import index, u32 chunk index, u64 path hash) records.
+    const table = this.file.view.getUint32(40 + 6 * 12, true);
+    for (let i = 0; i < this.file.embeddedCount; i++) {
+      const at = table + i * 16;
+      const importIndex = this.file.view.getUint32(at, true), chunk = this.file.view.getUint32(at + 4, true);
+      embedded.push({ path: normalizedPath(this.file.imports[importIndex - 1]?.path ?? ""), content: this.exportObject(chunk) });
+    }
+    return { version: this.file.version, buildVersion: this.file.buildVersion, root, embedded };
+  }
+}
+
+/** A CR2W file's red model. */
+export function readCr2w(bytes: Uint8Array, decompress: Decompress): RedDocument {
+  return new Cr2wDecoder(new Cr2wFile(bytes), decompress).document();
+}
+
+/** Complete CR2W files placed back to back (a mesh's local material buffer); each one's length is its own buffers end. */
+export function readCr2wList(bytes: Uint8Array, decompress: Decompress): RedDocument[] {
+  const files: RedDocument[] = [];
+  for (let at = 0; at < bytes.length;) {
+    const file = new Cr2wFile(bytes.subarray(at));
+    if (file.buffersEnd <= 0) throw new Cr2wError("Empty CR2W file in a list.");
+    files.push(new Cr2wDecoder(new Cr2wFile(bytes.subarray(at, at + file.buffersEnd)), decompress).document());
+    at += file.buffersEnd;
+  }
+  return files;
+}
