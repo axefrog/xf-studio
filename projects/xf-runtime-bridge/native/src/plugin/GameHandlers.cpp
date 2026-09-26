@@ -14,6 +14,7 @@
 //   gamePhotoModeSystem.IsPhotoModeActive/CanPhotoModeBeEnabled/IsExitLocked() -> Bool
 // The GetPlayer call pattern is RED4ext.SDK examples/native_globals_redscript/Main.cpp:19-23 (tag 1.0.0).
 
+#include <map>
 #include <set>
 #include <mutex>
 #include <RED4ext/RED4ext.hpp>
@@ -128,7 +129,61 @@ std::string BareName(const RED4ext::CName& aName)
     return name;
 }
 
-RED4ext::CClassFunction* FindByName(RED4ext::CClass* aClass, const char* aFunction)
+// First in-game run (26 Sep 2026): our redscript class was in RTTI with no functions on it at
+// all (staticFuncs and funcs both empty), so script static functions are looked for among the
+// global functions too, registered as "<Class>::<Name>;<Params>" with or without the module
+// prefix. A hit is cached per class and name, since game.wait polls game.status every 500 ms.
+std::string ShortClassName(const std::string& aClassName)
+{
+    const auto dot = aClassName.rfind('.');
+    return dot == std::string::npos ? aClassName : aClassName.substr(dot + 1);
+}
+
+bool GlobalMatches(const std::string& aFullName, const std::string& aClassName, const char* aFunction)
+{
+    const auto head = aFullName.substr(0, aFullName.find(';'));
+    const auto colons = head.rfind("::");
+    if (colons == std::string::npos || head.substr(colons + 2) != aFunction)
+    {
+        return false;
+    }
+    const auto owner = head.substr(0, colons);
+    return owner == aClassName || owner == ShortClassName(aClassName) || ShortClassName(owner) == ShortClassName(aClassName);
+}
+
+RED4ext::CBaseFunction* FindGlobalStatic(const std::string& aClassName, const char* aFunction)
+{
+    static std::mutex cacheMutex;
+    static std::map<std::string, RED4ext::CBaseFunction*> cache;
+    const auto key = aClassName + "::" + aFunction;
+    {
+        std::lock_guard lock(cacheMutex);
+        if (const auto it = cache.find(key); it != cache.end())
+        {
+            return it->second;
+        }
+    }
+    RED4ext::DynArray<RED4ext::CBaseFunction*> globals;
+    RED4ext::CRTTISystem::Get()->GetGlobalFunctions(globals);
+    RED4ext::CBaseFunction* found = nullptr;
+    for (auto* fn : globals)
+    {
+        const auto* full = fn ? fn->fullName.ToString() : nullptr;
+        if (full && GlobalMatches(full, aClassName, aFunction))
+        {
+            found = fn;
+            break;
+        }
+    }
+    if (found)
+    {
+        std::lock_guard lock(cacheMutex);
+        cache[key] = found;
+    }
+    return found;
+}
+
+RED4ext::CBaseFunction* FindByName(RED4ext::CClass* aClass, const std::string& aClassName, const char* aFunction)
 {
     if (auto* fn = aClass->GetFunction(aFunction))
     {
@@ -150,7 +205,7 @@ RED4ext::CClassFunction* FindByName(RED4ext::CClass* aClass, const char* aFuncti
             return fn;
         }
     }
-    return nullptr;
+    return FindGlobalStatic(aClassName, aFunction);
 }
 
 void LogFunctionNames(RED4ext::CClass* aClass, const std::string& aClassName, const std::string& aCid)
@@ -187,6 +242,21 @@ void LogFunctionNames(RED4ext::CClass* aClass, const std::string& aClassName, co
     {
         add(fn);
     }
+    RED4ext::DynArray<RED4ext::CBaseFunction*> globals;
+    RED4ext::CRTTISystem::Get()->GetGlobalFunctions(globals);
+    std::string related;
+    const auto shortName = ShortClassName(aClassName);
+    for (auto* fn : globals)
+    {
+        const auto* full = fn ? fn->fullName.ToString() : nullptr;
+        if (full && std::string(full).find(shortName) != std::string::npos && related.size() < 3000)
+        {
+            related += (related.empty() ? "" : ",") + std::string(full);
+        }
+    }
+    log::Warn("rtti.script_globals", "class=" + aClassName + " globals=" + std::to_string(globals.size) +
+                                         " related=" + related,
+              aCid);
     log::Warn("rtti.script_functions", "class=" + aClassName + " static=" + std::to_string(aClass->staticFuncs.size) +
                                            " member=" + std::to_string(aClass->funcs.size) + " names=" + names,
               aCid);
@@ -202,7 +272,7 @@ RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunct
         log::Warn("rtti.missing_class", std::string("class=") + aClass, aCid);
         throw MethodError("rtti_missing", std::string("class not found: ") + aClass);
     }
-    auto* fn = FindByName(cls, aFunction);
+    auto* fn = FindByName(cls, aClass, aFunction);
     if (!fn)
     {
         LogFunctionNames(cls, aClass, aCid);
@@ -296,7 +366,7 @@ json ScriptDescribe(const MethodContext& aContext)
         throw MethodError("script_layer_missing",
                           "redscript class XFRuntimeBridge.XFBridgeQuery not found (scripts not compiled?)");
     }
-    auto* fn = FindByName(cls, "DescribeJson");
+    auto* fn = FindByName(cls, "XFRuntimeBridge.XFBridgeQuery", "DescribeJson");
     if (!fn)
     {
         LogFunctionNames(cls, "XFRuntimeBridge.XFBridgeQuery", aContext.cid);
@@ -346,7 +416,7 @@ RED4ext::CBaseFunction* FindScriptFunction(const std::string& aClass, const char
     {
         throw MethodError("script_layer_missing", "redscript class " + className + " not found (scripts not compiled?)");
     }
-    auto* fn = FindByName(cls, aFunction);
+    auto* fn = FindByName(cls, className, aFunction);
     if (!fn)
     {
         LogFunctionNames(cls, className, aCid);
