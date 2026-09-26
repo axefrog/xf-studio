@@ -38,10 +38,10 @@ Thus the current pipeline demonstrably omits changing brow-region shading signal
 
 ## Next useful checks
 
-1. Add explicit brow target and brow-card trajectory checks to the future idle acceptance report; existing tests singled out eyes, jaw, lips and lids and would not expose a brow-only regression.
+1. **Done** (the offline acceptance harness now checks brow joints and all 390 brow-card trajectories; see below). Add explicit brow target and brow-card trajectory checks to the future idle acceptance report; existing tests singled out eyes, jaw, lips and lids and would not expose a brow-only regression.
 2. Compare paused matched phases with fixed camera/head movement disabled, retaining the reference save's face. Measure exposed forehead/brow skin as well as cards. This separates accessory motion, skin deformation and changing highlights without requesting a game launch.
-3. Trace the selected head skin material's wrinkle inputs and masks, and retain the processed solver tracks in an experimental bake. First establish encoding and influence before implementing browser shading or claiming that wrinkle support fixes the report.
-4. If the geometric motion remains weaker than an eventual matched game reference, trace actual character-creator clip selection/layering and facial setup. Do not amplify animation arbitrarily or add synthetic brow motion under the default-idle label.
+3. **Partly done** (the processed-wrinkle probe of 25 September, below; the skin program's wrinkle driver is decoded in the [skin reference §5.6](../materials/shader-skin.md#56-the-wrinkle-driver-vertex-program)). Trace the selected head skin material's wrinkle inputs and masks, and retain the processed solver tracks in an experimental bake. First establish encoding and influence before implementing browser shading or claiming that wrinkle support fixes the report.
+4. **Clip selection done offline** (26 September, below). If the geometric motion remains weaker than an eventual matched game reference, trace actual character-creator clip selection/layering and facial setup. Do not amplify animation arbitrarily or add synthetic brow motion under the default-idle label.
 5. Add a matched game comparison to the existing batched runtime session only when offline diagnostics are ready. No standalone launch is needed for this report now.
 
 ## Evidence and provenance

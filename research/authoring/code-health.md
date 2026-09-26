@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `36b5c87` | 2026-09-27 | Second pass on the production native reader (resolver-host fallbacks, decoder lifetime, ledger keys, R11–R13, worker cost) | 0 High, 2 Medium, 4 Low (NATIVE-40..45), none repeating NATIVE-26..34. The past-count loop bounds, widened roots, ledger key, `forgetDefaulted` and worker failure paths are sound. Fixes queued for claude/native-catalogue |
 | `e09391e` | 2026-09-27 | Native reader in production (resolver integration, shared decoder, markers, notes) | 0 High, 1 Medium, 9 Low (NATIVE-26..34, PIPE-102). Cache identity, fallback kinds, the arrays-to-record-end rule against hostile files, worker bundling and the boundary are sound; no render changes beyond the intended fixes. Fixes in claude/native-catalogue |
 | `1a575a1`–`363373a` | 2026-09-27 | In-depth UI/UX review (backlog track 7): every panel and flow against the "it just works" policy, accessibility and UI boundaries; code, style guide, acceptance screenshots and one running check | 0 High, 8 Medium, 10 Low (UI-80..97). UI-03, UI-10, UI-14, UI-15, UI-04 and UI-57 still open. Docking, menus and palette reasons, the WolvenKit consent, 3D preview setup, Character panel status and problem reports are sound. Fixes in claude/ui-polish |
 | `47f581c` | 2026-09-27 | Body and clothing render (claude/body-render, claude/clothing-render): the body plan and censorship policy, the clothing resolver and host, save packages, the loader's body shape, the Clothing control | Body and clothing render: 1 High, 7 Medium, 4 Low (PIPE-97..101, PREV-106..108, CORE-92, NATIVE-25, UI-78..79). PIPE-97: the underwear floor failed open wherever the cover could be lost after the plan. All fixed in claude/cleanup-body-clothing |
@@ -67,6 +68,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| NATIVE-40 | Med | Native reader | A transient native failure followed by a permanent WolvenKit refusal never marks the preparation degraded: the check reads `fetcher.stats.transient`, which counts WolvenKit only, so a V is served "ready" without the part, cached for the session, and the choice shows "prepared" (`character-detail-service.ts:506-509`, `resolver-host.ts:630`, `native-fetch-port.ts:200-204`; reproduced at the fetcher level) | Open |
+| NATIVE-41 | Med | Native reader | Rule R12 draws render chunks whose `renderMask` the file omits, but an omitted property equals its class default and WolvenKit's `rendChunk` default mask is 0 ("not drawn"), so a mod chunk hidden in game would draw in the preview (`resource-graph.ts:222-286`; not reproduced, no cached resource omits it) | Open |
 | NATIVE-26 | Med | Native reader | A decoder open that failed transiently (Authenticode check timeout after a patch, the DLL briefly locked) is cached under the Oodle stamp for the whole process, so WolvenKit reads everything (~90 s cold) until restart (`installation-registry.ts:151`, `resolver-host.ts:664`) | Open (claude/native-catalogue) |
 | UI-80 | Med | Presentation | Ordinary refusals (nothing to undo) show as red error toasts that never fade (`runtime.ts:100`, `feedback.ts:62`) | Open (claude/ui-polish) |
 | UI-81 | Med | Presentation | Ctrl+Z in the Character panel undoes creator options, clothing or makeup depending on focus; the header Undo and History never cover character changes (`character.ts:142-148`) | Open (claude/ui-polish) |
@@ -367,6 +370,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **NATIVE-33:** decoders for game folders no longer in use are never closed.
   - **NATIVE-34:** `resource-document.ts` lacks a version 3 comment entry.
   - **PIPE-102:** the character-detail service reaches the decoder by casting the graph's port; use `Installation.native?.decoder`.
+
+- **NATIVE-42..45** (second native reader pass, review at `36b5c87`), Open:
+  - **NATIVE-42:** the shared decode worker keeps the game's Oodle DLL loaded all session, so a game update or repair can't overwrite it while the Studio is open (`installation-registry.ts:147-164`).
+  - **NATIVE-43:** `isCached` counts ledger markers even when this session's decoder is unavailable, so a choice shows "prepared" and then runs a cold WolvenKit pass (`resolver-host.ts:641-643`).
+  - **NATIVE-44:** a native answer's host-side copy and re-serialisation sit outside the worker's budgets (a crafted resource could stall the host and spike its heap), and the decode queue is FIFO with no cancellation, so a stopped prefetch still runs ahead of a person's change (`native-decode.ts:175-177,256-262`, `resource-graph.ts:616`).
+  - **NATIVE-45:** the 16-warning cap is per fetcher and fetchers are recreated on reopen, so fallback warnings can crowd earlier failures out of the log; reader notes can crowd the over-budget and unread-mod-files notes out of the 32-note cap.
 
 ## New subsystems since last review
 

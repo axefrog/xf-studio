@@ -90,7 +90,7 @@ The warm-ivory mask row is inferred from the chain as extracted (no level sets i
 | Blush 05/06 | same freckles mesh | 2 | `mesh_decal`: `DiffuseAlpha 2` (above 1), surface alpha 0 |
 | Pimples 01 | `hx_000_pwa_c__basehead_pimples_01.mesh` | 2; mask `…551613` shows chunk 0 | `mesh_decal`: `DiffuseAlpha 0.5`, colour per definition |
 | Scars | `hx_000_pwa_c__basehead_scars_01.mesh` | 11; one chunk per scar (`scar_02` → mask `…549570` shows chunk 1) | `mesh_decal`: diffuse, secondary mask, scar normal (`NormalAlpha 0.425`, blending mode 1), `RoughnessMetalnessAlpha 0.02` |
-| Facial tattoos 04/07 | one mesh per design (`hx_000_pwa_c__basehead_tattoo_NN.mesh`) | 1 | `mesh_decal` through `customization_tattoos_<tone>.mi`: the **tone** selects colour and alpha (senna 216,204,191 at 0.7; dark 119,115,110 at 0.6) |
+| Facial tattoos 04/07 | one mesh per design (`hx_000_pwa_c__basehead_tattoo_NN.mesh`) | 1 | `mesh_decal` through `customization_tattoos_<tone>.mi`: the **tone** selects the colour (senna 216,204,191; dark 119,115,110) at alpha 0.6; face meshes 06–10 override it locally with alpha 0.7, which is where the 0.7 seen here comes from ([tattoos §4](../../knowledge/tattoos.md#4-colour-and-material)) |
 | Face cyberware 01 | `hx_000_pwa_c__basehead_cyberware_01.mesh` | 1 | `mesh_decal` with full colour, normal (`NormalAlpha 2`), roughness and metalness maps, `RoughnessMetalnessAlpha 1` |
 | Face cyberware 03 | the **freckles** mesh, appearance `cyberware_04` | 2 | `mesh_decal` (`cyberware__04.mi`); no tone variation for this design |
 | Face cyberware 12 | the tattoo-06 mesh **and** the freckles mesh, appearance `cyberware_11_dark` | 1 + 2 | `mesh_decal`; the tone picks a light or dark appearance |

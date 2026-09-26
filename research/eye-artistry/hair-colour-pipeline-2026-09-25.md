@@ -86,8 +86,8 @@ The alpha-weighted mean hair albedo under §3 of the knowledge page is sRGB ≈ 
 
 ## Remaining uncertainty
 
-- The profile bake's colour space and sample positions [hypothesis].
-- The hair-light option values. The preview now uses vanilla values from a third-party list, per the [calibration note](hair-calibration-2026-09-25.md#3-hair-light-constants). The local-light and environment hair paths are still undecoded.
+- The profile bake's colour space and sample positions: since read from the executable ([hair reference §7](../materials/shader-hair.md#7-hp-profiles-and-their-resolution)).
+- The hair-light option values. The preview uses the vanilla values, per the [calibration note](hair-calibration-2026-09-25.md#3-hair-light-constants); they and the local-light and environment paths have since been confirmed and decoded ([hair reference §6](../materials/shader-hair.md#6-the-hair-light)).
 - The runtime winner for `brown_liquorice.hp`. The preview uses the mod candidate under the mod-over-base expectation; the base profile would render the lashes golden-tan.
 - Whether the preview's ambient and exposure resemble any game scene.
 

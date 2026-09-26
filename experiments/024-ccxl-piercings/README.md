@@ -1,6 +1,6 @@
 # Experiment 024: scripted CCXL piercing probe ("XF Piercings Probe")
 
-**Status:** built and verified offline on 26 September 2026. **Not staged, not installed, not seen in game.** The coordinator stages it for the next in-game session and runs the [test card](#test-card-the-12-checks) through the runtime bridge.
+**Status:** built and verified offline on 26 September 2026. **Staged 26 September** (files in the MO2 mod `XF Piercings Probe`, not yet enabled; see [Staging](#staging)); **not seen in game.** The coordinator runs the [test card](#test-card-the-12-checks) through the runtime bridge.
 
 **Purpose.** The [CCXL piercing feasibility study](../../research/jewellery/ccxl-piercing-feasibility.md) proposes piercings as XF-branded character-creator rows added by ArchiveXL, with owned pieces fitted to the head at their attachment point. Its [§6 test plan](../../research/jewellery/ccxl-piercing-feasibility.md#6-in-game-test-plan) asks for a scripted fixture: no editor and no third-party assets, three simple procedural pieces and the plan's fitting step, packaged as a throwaway XF-branded mod. This is that fixture, adjusted to the [decisions of 26 September](../../research/jewellery/ccxl-piercing-feasibility.md#decisions-26-september-2026): own XF rows **per area** after the vanilla Piercings row, fixed materials per piece, studs, hoops and septum rings first, female V first. Its twelve checks decide the attachment solver's defaults before any authoring UI is built.
 

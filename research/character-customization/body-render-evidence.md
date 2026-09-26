@@ -51,6 +51,20 @@ The lifted-feet `.app` on the reference profile comes from the UV framework's ar
 
 **Texture sizes on the reference profile** [resource]: the body's `d02_naked`, `n02_naked`, `wa_base_rm02` and `fullbody_overlay_d01` export at 8192² (36 MB and 27 MB PNGs for the largest). Served at 4096², one V's distinct textures came to 125 M texels (the record's budget is 268 M), and the whole V's first preparation after the scaled copies existed took seconds.
 
+### Holster-state records
+
+27 September 2026, read-only, with the Studio's TweakDB reader (`src/tweakdb-flats.ts`) under the memory guard. Inputs: `r6\cache\tweakdb.bin` SHA-256 `918f0acfc3f3174b29b5c10b463dfb106b603118c85d24456204a1e2a2ac13f9` and `tweakdb_ep1.bin` SHA-256 `89c7ee678c1366d4c289edc78beaa60ce3d64bf44b300fc3902adc94f6ac14c5`, which hold the same values [resource]:
+
+| Weapon record | `cyberwareType` | `holsteredItem` (TweakDBID as a number; the record's name was not recovered) | Holstered item's `appearanceName` |
+|---|---|---|---|
+| `Items.w_melee_004__fists_a` | — | `Items.HolsteredFists` | `holstered_default` |
+| `Items.StrongArms`, `Items.StrongArmsLegendary` | `StrongArms` | `111672476241` | `holstered_strong` |
+| `Items.MantisBlades`, `Items.MantisBladesLegendary` | `MantisBlades` | `135086907534` | `holstered_mantis` |
+| `Items.NanoWires` | `NanoWires` | `122871210708` | `holstered_nanowire` |
+| `Items.ProjectileLauncher` | `ProjectileLauncher` | `163616915732` | `holstered_launcher` |
+
+Every holstered item: `entityName` `holstered_arms`, `equipArea` `EquipmentArea.RightArm`, `placementSlots` `[AttachmentSlots.RightArm]`. The weapons' own `appearanceName` is `None`; their `entityName`s are `a0_005__strongarms_ent`, `a0_003__mantisblades_ent`, `a0_002__monowire_whip_ent` and `a0_006__launcher_ent`. Scripts (decompiled, as above): `cyberpunk/systems/equipmentSystem.script` `UpdateArmSlot`, `HandleArmsCWUnequip`, `RetrofixHolsteredArms`; `cyberpunk/managers/rpgManager.script` `ForceEquipStrongArms`. ArchiveXL `5474e34d` `src/App/Extensions/PuppetState/Handler.cpp` (`ResolveArmsState`, `IsWeaponSlot`).
+
 ## Preview checks
 
 Captured with `tools/body-look.ts` (headless Chrome, ANGLE D3D11 on an RTX 4070, `?verify=1` with disposable data, the reference MO2 profile, dark theme), frames in `evidence/screenshots/body-render/` (ignored):

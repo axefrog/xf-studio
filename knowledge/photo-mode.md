@@ -31,7 +31,7 @@ Installed-mod citations give paths inside each mod's folder in the mod manager (
 | Can a script open the character creator anywhere? | **Yes:** switch the menu system to the scenario `MenuScenario_CharacterCustomizationMirror`, which is what Character Customization Anywhere does, from the pause menu (§3). | [source] |
 | Can a script confirm or cancel the creator? | **Yes, through the menu's own functions:** Confirm calls `ReFinalizeState()`, and Back then "confirm" calls `CancelFinalizedStateUpdate()`. The menu has no autosave of its own (§3.3). | [source] |
 | Can the photo-mode camera be placed exactly? | **Partly.** The camera PRESET attribute puts the camera at a TweakDB-defined offset from V. Moving the camera entity itself is a lead, not established (§4). | [resource] [runtime]; exact placement [hypothesis] |
-| Can photo-mode lights be switched and moved? | **Switched and shaded, yes:** attribute 44 is on/off. **Moved, not through the menu.** Spawned light entities, as CharLi and AMM use, can be placed exactly (§5). | [runtime] [source] |
+| Can photo-mode lights be switched and moved? | **Switched and shaded, yes:** attribute 44 is on/off (seen in the first session's menu dump; switching it from script is built but untested). **Moved, not through the menu.** Spawned light entities, as CharLi and AMM use, can be placed exactly (§5). | [runtime] menu; [source] |
 | Can the photo-mode mouse cursor be hidden? | **Yes:** make the cursor controller play its `Hide` context, as AMM does (§6). | [source] |
 | Can a scripted creator change update the row's label? | **Yes:** drive the change through the row's own controller, or push the updated option back into it (§7). | [source] |
 
@@ -57,7 +57,7 @@ The bridge's first route built the game's own quest node `questOpenPhotoMode_Nod
 
 | Route | How | Risk | Grade |
 |---|---|---|---|
-| **Send the player's key to the game** | Read the effective binding (the default `IK_N`, or the player's rebinding), bring the game window to the front, and send that key press to it. It is only needed once per session, since `photo.exit` already closes photo mode through the menu. | The game must have focus. The game's input API (raw input or window messages) decides whether posted messages suffice or `SendInput` is needed. It is input injection, so it must target only the game window and be allowlisted and logged. | [hypothesis] |
+| **Send the player's key to the game** | Read the effective binding (the default `IK_N`, or the player's rebinding), bring the game window to the front, and send that key press to it. It is only needed once per session, since `photo.exit` already closes photo mode through the menu. | The game must have focus. The game's input API (raw input or window messages) decides whether posted messages suffice or `SendInput` is needed. It is input injection, so it must target only the game window and be allowlisted and logged. Built as the bridge's `photo.open`, approved for the test profile (26 September); not yet run in game. | [hypothesis] |
 | Native entry point | Find the native function the `TogglePhotoMode` handler calls (the caller of `Activate`) in the address library or by disassembly, and call it on the main thread from the plugin | Needs reverse engineering. A wrong call crashes, and the address must be refreshed per game build | [hypothesis] |
 | Quest node | As above | Opens only the restricted photo mode | [runtime] |
 
