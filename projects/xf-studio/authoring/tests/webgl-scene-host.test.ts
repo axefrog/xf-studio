@@ -21,7 +21,9 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(probe.failure).toBeUndefined();
     expect(probe.errors).toEqual([]);
     expect(probe.ok).toBe(true);
-    expect(probe.features).toEqual(["eye-makeup", "cheek-makeup"]);
+    expect(probe.features).toEqual(["eye-makeup", "cheek-makeup", "faulty"]);
+    // Each draws in its own band: eye makeup's 32 layer slots from 10, then the cheek plate's (PREV-91).
+    expect(probe.bands).toEqual({ "eye-makeup": { first: 10, slots: 32 }, "cheek-makeup": { first: 42, slots: 2 }, faulty: { first: 44, slots: 0 } });
   });
 
   test("render on demand: an idle viewport draws nothing, a request or a burst draws one frame, the idle draws only while it plays", () => {
@@ -45,7 +47,7 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     // Each V draws its eyes and a face decal, with a geometry and a texture each.
     expect(limits.a).toMatchObject({ problems: [] });
     expect(limits.b).toMatchObject({ problems: [] });
-    for (const shown of [character.a, character.b]) expect([...(shown as { drawn: string[] }).drawn].sort()).toEqual(["eyes", "face"]);
+    for (const shown of [character.a, character.b]) expect([...(shown as { drawn: string[] }).drawn].sort()).toEqual(["eyes", "face", "skin"]);
     expect(memory.a.geometries).toBeGreaterThan(memory.empty.geometries);
     expect(memory.a.textures).toBeGreaterThan(memory.empty.textures);
     // Switching V releases the previous one: B costs what A did, A again costs what A did, and no V costs nothing.
@@ -56,6 +58,26 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     // Makeup layers release their textures when the stack is cleared.
     expect(memory.layers.textures).toBeGreaterThan(memory.empty.textures);
     expect(memory.layersCleared).toEqual(memory.empty);
+  });
+
+  test("the resolved skin goes on the core head and lights eye makeup's plate; no V brings the default skin back (PREV-98)", () => {
+    expect(probe.skin.mode).toBe("core-head");
+    expect(probe.skin.plateSkinLight).toBe(true);
+    expect(probe.skin.defaultAfter).toBe("default");
+  });
+
+  test("a renderer that throws is reported once per method and the host and other features draw on (PREV-94)", () => {
+    expect(probe.faulty.reports).toEqual(["faulty.beforeDraw: lost its target", "faulty.setNormals: no normals"]);
+    expect(probe.faulty.evidence).toEqual({ error: "no evidence" });
+    expect(probe.faulty.framesDrawn).toBeGreaterThan(10);
+  });
+
+  test("a lost and restored WebGL context: the host draws again and eye makeup's composite redraws (PREV-98)", () => {
+    expect(probe.context.events).toEqual(["lost", "restored"]);
+    expect(probe.context.framesAfter).toBe(1);
+    expect(probe.context.compositeDrawsAfter).toBeGreaterThan(probe.context.compositeDrawsBefore);
+    expect(probe.context.plateDrawn).toBe(true);
+    expect([...(probe.skin.drawn as string[])].sort()).toEqual(["eyes", "face", "skin"]);
   });
 
   test("disposing the host removes its canvas and every feature renderer", () => {

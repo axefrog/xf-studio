@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import {createSceneHost as createScene} from "../src/platform/scene/scene-host";
 import {STUDIO_RENDERERS} from "../src/compose/renderers";
-import {eyeMakeupRenderer,type EyeMakeupRenderer} from "../src/features/eye-makeup/render";
+import {EYE_MAKEUP_RENDERER,type EyeMakeupRenderer} from "../src/features/eye-makeup/render";
 import {createRasterJob} from "../src/engines/layered-makeup/recipe";
 import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
@@ -125,7 +125,7 @@ async function main(){
   maskHash=await sha(new Uint8Array(job.data));
   const canvas=document.createElement("canvas");canvas.width=canvas.height=SIZE;canvas.getContext("2d")!.putImageData(new ImageData(job.data,SIZE,SIZE),0,0);
   status.textContent="Loading the local studio head...";
-  viewer=await createScene(element("viewport"),{renderers:STUDIO_RENDERERS});makeup=eyeMakeupRenderer(viewer)!;
+  viewer=await createScene(element("viewport"),{renderers:STUDIO_RENDERERS});makeup=viewer.feature(EYE_MAKEUP_RENDERER)!;
   makeup.layers.setCanvases([canvas]);makeup.layers.updateLayer(0,fixed);
   mixture=installGlitterMixtureStudy(makeup.materials[0]!,{baseColor:BASE,flakeColor:"#f5df9f"});
   glint=installProceduralGlintStudy(makeup.materials[0]!);

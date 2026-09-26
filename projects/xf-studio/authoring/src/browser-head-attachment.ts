@@ -31,22 +31,31 @@ type Scene = Awaited<ReturnType<ViewportDevice["loadHead"]>>;
 export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions;
   characterContext?: CharacterContextActions };
 
+/**
+ * One layered-makeup surface on the loaded head and the devices that drive it (UI-76): the preview device that fills its layers, and
+ * the on-head editor's hooks when this is the surface being edited. The composition root builds one per composed layered surface it
+ * has a layer source for (the live feature's), from the composition's renderer list, so this module names no feature.
+ */
+export type LayeredSurfaceWiring = {
+  /** The feature whose renderer draws the surface (for messages). */
+  feature: string;
+  /** The surface on a loaded head (the feature renderer's). */
+  surface(scene: Scene): LayeredMakeupSurface | undefined;
+  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers">;
+  /** The on-head editor's hooks into the authoring core, for the one surface being edited. */
+  editor?: Parameters<ViewportDevice["mountSurface"]>[1];
+};
+
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
   viewport: Pick<ViewportDevice, "loadHead" | "unloadHead" | "mountSurface">;
-  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers">;
-  /**
-   * The layered-makeup surface on a loaded head that the preview device fills and the on-head editor edits: the composition root
-   * reads it from its own feature's renderer (eye makeup's), so this module names no feature.
-   */
-  layeredMakeup(scene: Scene): LayeredMakeupSurface;
+  /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
+  layered: readonly LayeredSurfaceWiring[];
   /** The UI theme preference and the OS colour scheme the stage backdrop follows. */
   preferences: Parameters<typeof bindStageTheme>[1];
   colourScheme: SystemColourScheme;
   /** Connects head services to the application (and disconnects them with `undefined`). */
   attach(services: HeadServices): void;
-  /** The surface editor's hooks into the authoring core. */
-  surface: Parameters<ViewportDevice["mountSurface"]>[1];
   /** Requests an autosave. */
   persist(): void;
   /** Tells the presentation that device status changed. */
@@ -98,15 +107,19 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     ports.attach({ savedV: savedAppearance });
     releases.push(() => ports.attach({ savedV: undefined }));
     releases.push(savedAppearance.subscribe(ports.persist), savedAppearance.subscribe(ports.changed));
-    const makeup = ports.layeredMakeup(scene);
-    ports.preview.connectScene(makeup);
-    releases.push(() => ports.preview.disconnectScene(makeup));
-    surface = ports.viewport.mountSurface(makeup.surface, ports.surface);
+    if (ports.layered.filter(wiring => wiring.editor).length > 1) throw Error("Only one layered surface can carry the on-head editor.");
+    for (const wiring of ports.layered) {
+      const makeup = wiring.surface(scene);
+      if (!makeup) throw Error(`The ${wiring.feature} renderer is not composed.`);
+      wiring.preview.connectScene(makeup);
+      releases.push(() => wiring.preview.disconnectScene(makeup));
+      if (wiring.editor) surface = ports.viewport.mountSurface(makeup.surface, wiring.editor);
+    }
     const { preview, motion } = services.finish();
     ports.attach({ preview, motion });
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
-    ports.preview.presentInitialLayers();
+    for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
     ports.attach({ characterDetails });
     releases.push(() => ports.attach({ characterDetails: undefined }));
     releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));

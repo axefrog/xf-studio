@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { createSceneHost as createScene } from "../src/platform/scene/scene-host";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
-import { eyeMakeupRenderer } from "../src/features/eye-makeup/render";
+import { EYE_MAKEUP_RENDERER } from "../src/features/eye-makeup/render";
 import { extendSkin } from "../src/skin";
 import { previewClipPlanes, previewNearPlane } from "../src/camera-depth";
 import { initialRecipe } from "../src/features/eye-makeup/region";
@@ -15,7 +15,7 @@ run.onclick = async () => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 8;
     const context = canvas.getContext("2d")!; context.fillStyle = "white"; context.fillRect(0, 0, 8, 8);
     const v = await createScene(document.getElementById("stage")!, { renderers: STUDIO_RENDERERS });
-    const makeup = eyeMakeupRenderer(v)!;
+    const makeup = v.feature(EYE_MAKEUP_RENDERER)!;
     makeup.layers.setCanvases([canvas]);
     v.renderer.setAnimationLoop(null); v.renderer.setPixelRatio(1); v.renderer.setSize(640, 640);
     v.camera.aspect = 1; v.controls.enableDamping = false;

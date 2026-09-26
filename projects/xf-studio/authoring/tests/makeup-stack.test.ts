@@ -23,8 +23,12 @@ test("new makeup layers inherit morphs and extra bone weights; removal frees onl
   bones[1].position.x = 8; bones[1].updateMatrixWorld(true);
   // The one lit plate (plate-blend.ts) deforms with them.
   expect((stack.plate.material as THREE.Material & { wireframe: boolean }).wireframe).toBe(true);
+  // Each draws the stack's own geometry over the anchor's buffers (PREV-97): morphs and both weight sets shared, none copied.
+  for (const name of ["position", "skinIndex", "skinWeight", "joints_1", "weights_1"]) expect(stack.geometry.getAttribute(name)).toBe(geometry.getAttribute(name));
+  expect(stack.geometry.morphAttributes.position![0]).toBe(geometry.morphAttributes.position![0]);
+  expect(stack.geometry.morphTargetsRelative).toBe(true);
   for (const plate of [...stack.plates, stack.plate]) {
-    expect(plate.geometry).toBe(geometry); expect(plate.skeleton).toBe(anchor.skeleton);
+    expect(plate.geometry).toBe(stack.geometry); expect(plate.skeleton).toBe(anchor.skeleton);
     expect(plate.morphTargetInfluences).toBe(anchor.morphTargetInfluences);
     expect(plate.getVertexPosition(0, new THREE.Vector3()).x).toBeCloseTo(6.5, 6);
   }

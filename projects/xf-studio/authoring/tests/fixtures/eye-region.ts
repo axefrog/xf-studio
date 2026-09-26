@@ -81,7 +81,11 @@ export const freshWorkspace = (value: recipe.Recipe = initialRecipe()) => fresh(
 export const eyeMakeupPort = (document: Parameters<typeof port.eyeMakeupPort>[0], published: Parameters<typeof port.eyeMakeupPort>[1],
   structureChanged?: Parameters<typeof port.eyeMakeupPort>[3], newId?: Parameters<typeof port.eyeMakeupPort>[4]) =>
   port.eyeMakeupPort(document, published, EYE_REGION, structureChanged, newId);
+/** A makeup stack with eye makeup's fine-Glitter scope on `anchor`, which is hidden first as the head rig hides its surfaces (PREV-97). */
 export const createMakeupStack = (anchor: Parameters<typeof stackRender.createMakeupStack>[0], anisotropy: number,
-  attach?: Parameters<typeof stackRender.createMakeupStack>[3]) => stackRender.createMakeupStack(anchor, anisotropy, EYE_FINE_GLITTER, attach);
+  placement?: Parameters<typeof stackRender.createMakeupStack>[3]) => {
+  anchor.visible = false;
+  return stackRender.createMakeupStack(anchor, anisotropy, EYE_FINE_GLITTER, placement);
+};
 export const createRasterClient = (makeWorker: Parameters<typeof client.createRasterClient>[0], publish: Parameters<typeof client.createRasterClient>[1],
   failed: Parameters<typeof client.createRasterClient>[2], size?: number) => client.createRasterClient(makeWorker, publish, failed, EYE_RASTER_REGION, size);

@@ -213,9 +213,9 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   // the same call), the roughness switch, and a save's facial shapes; the eye evidence is a reader.
   for (const eyeChange of ["setCharacterDetails", "setEyeOptics", "applySavedV", "eyeShape"]) expect(wrapped).toContain(eyeChange);
   expect(source).toContain("setCharacterDetails: character.setCharacterDetails,");
+  // Which eye shows as a V's eyes arrive and leave is behaviour (tests/character-renderer.test.ts); it happens inside this wrapped call.
   const details = character.slice(character.indexOf("  function setCharacterDetails("), character.indexOf("  function bakeLayered()"));
-  expect(details).toContain("eyes.visible = true;");
-  expect(details).toContain("eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;");
+  expect(details).toContain("applyEyes();");
   // Layered stacks (piercings, eye designs) bake inside the same wrapped call, so the frame that follows draws the baked maps.
   expect(details).toContain("const bakeLimits = bakeLayered();");
   // Showing or hiding piercings draws a frame; trying a style reaches the scene as new details (setCharacterDetails).
@@ -230,12 +230,11 @@ test("every scene method that changes what is drawn is wrapped to request a fram
 test("the authored plate's light, skin and composite change only inside calls that request a frame, and idle costs nothing", async () => {
   const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
-  // The drawn skin changes only with the V's details (setCharacterDetails, wrapped): feature renderers read its light and the skin
-  // under their surfaces again then (tests/scene-feature-renderers.test.ts drives eye makeup's renderer through the port).
-  const details = character.slice(character.indexOf("  function setCharacterDetails("), character.indexOf("  function bakeLayered()"));
-  expect(details.split("skinChanged();").length - 1).toBe(2);
-  expect(character.split("skinChanged();").length - 1).toBe(2);
+  // The drawn skin changes only with the V's details or what features supersede, each inside a call that requests a frame: feature
+  // renderers hear once and read its light and the skin under their surfaces again (behaviour: tests/character-renderer.test.ts;
+  // tests/scene-feature-renderers.test.ts drives eye makeup's renderer through the port).
   expect(source).toContain("skin: character.skin,");
+  expect(source).toContain("supersededChanged: () => { character.refreshVisibility(); invalidate(); },");
   for (const change of ["setCharacterDetails", "setNormals", "setWire"]) expect(wrapped).toContain(change);
   // The normals and wireframe toggles reach every feature renderer; each brings its GPU state up to date inside the frame, before drawing.
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
@@ -255,7 +254,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(restore).toContain("handle.contextRestored()");
   // The re-bake's limits reach the panel and the core eye follows whether a layered eye design baked again (PREV-74).
   expect(restore).toContain("publishBakeLimits([...skinLimits(), ...bakeLayered()]);");
-  expect(restore).toContain("eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;");
+  expect(restore).toContain("applyEyes();");
   expect(source).toContain(`renderer.domElement.addEventListener("webglcontextrestored", restored);`);
   // A slot shown later publishes its bakes' limits too (PREV-74).
   const visibility = character.slice(character.indexOf("function refreshDetailVisibility() {"), character.indexOf("const bakeLimitListeners"));

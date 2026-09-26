@@ -16,7 +16,7 @@ import { viewportPixelRatio, watchDevicePixelRatio } from "../../device-pixel-ra
 import { linearTargetSupported } from "../../linear-display";
 import { createStudioLightRig } from "../../studio-light-rig";
 import type { StudioLights } from "../../studio-lighting";
-import type { FeatureRendererFactory } from "../api/scene";
+import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { createCharacterRenderer } from "./character-renderer";
@@ -45,6 +45,8 @@ export type SceneHostOptions = {
   loadLut?: GradingLutLoader;
   /** Told when the WebGL context is lost and when it comes back (the diagnostics log records both; docs/diagnostics.md). */
   onContext?: (event: "lost" | "restored") => void;
+  /** Told when a feature renderer's method throws (default: the console); the host and the other features draw on (PREV-94). */
+  onRendererError?: (feature: string, method: string, error: unknown) => void;
 };
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
@@ -137,7 +139,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     deforming: () => [...features?.followers() ?? [], ...character.drawnMeshes()] });
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
-  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? new Set() });
+  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
   // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the feature
   // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62).
   const restored = () => {
@@ -220,10 +222,12 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   features = createFeatureRenderers({ renderer, head, surfaces, skin: character.skin,
     character: character.view, subscribeCharacter: character.subscribe,
     lighting: () => ({ preset: lighting.status().preset }), subscribeLighting: listener => { const off = lighting.subscribe(listener); return () => { off(); }; },
-    requestFrame: invalidate, onFrame }, options.renderers ?? []);
+    requestFrame: invalidate, onFrame, rig: { attach: bones => rigMotion.attach(bones), detach: bones => rigMotion.detach(bones) },
+    supersededChanged: () => { character.refreshVisibility(); invalidate(); },
+    ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);
   releases.push(() => features?.dispose());
-  // A renderer that replaces a resolved slot hides it from the start.
-  if (features.superseded().size) character.refreshVisibility();
+  // A renderer that replaces resolved parts hides them from the start.
+  if (features.superseded().length) character.refreshVisibility();
   resize();
   invalidate();
   const evidence = coreSceneEvidence({ coreDetail, meshes: rig.meshes, blink, blinkError: motion.blinkError,
@@ -248,12 +252,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     evidence,
     resize,
     front,
-    /** A composed feature's renderer (the composition root hands its devices what they need; the host names no feature). */
-    feature: (id: string) => features?.get(id),
+    /** A composed feature's renderer, typed by its factory (the composition root hands its devices what they need; the host names no feature). */
+    feature: <R extends FeatureRenderer>(factory: FeatureRendererFactory<R>): R | undefined => features?.get(factory),
     /** The composed features that draw, in creation order. */
     features: () => features?.features() ?? [],
     /** Developer evidence from each feature renderer, by feature. */
     featureEvidence: () => features?.evidence() ?? {},
+    /** Each feature renderer's draw-order band, by feature (developer evidence). */
+    featureBands: () => features?.bands() ?? {},
     /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
     frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
     maxTextureSize: renderer.capabilities.maxTextureSize,

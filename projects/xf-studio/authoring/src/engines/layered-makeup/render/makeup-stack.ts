@@ -11,7 +11,8 @@ import {installFresnelTint} from "./fresnel-tint";
 import {previewFacetChains} from "../route-mip-chains";
 import {createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
 import {createPlateComposite} from "./plate-composite";
-import type { SkinLight } from "../../../platform/api/scene";
+import { renderBand, RENDER_ORDER, type FeatureRenderer, type SkinLight } from "../../../platform/api/scene";
+import { MAX_LAYERS } from "../recipe";
 /** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
 const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
 
@@ -27,15 +28,44 @@ export type MakeupLayers = Pick<MakeupStack, "setCanvases" | "reconcileLayerCanv
  * and the largest texture the renderer takes. Eye makeup's renderer is one (features/eye-makeup/render).
  */
 export type LayeredMakeupSurface = { readonly layers: MakeupLayers; readonly surface: THREE.SkinnedMesh; readonly maxTextureSize: number };
+/** A feature renderer that draws a layered-makeup surface: the composition lists these for the preview wiring (compose/renderers.ts, UI-76). */
+export type LayeredSurfaceRenderer = FeatureRenderer & LayeredMakeupSurface;
+
+/** Where a stack's meshes go: onto the head rig (default: beside the anchor), and in which draw order each layer slot draws. */
+export type MakeupStackPlacement = {
+  attach?(mesh: THREE.SkinnedMesh): void;
+  /** Slot `i`'s draw order (the feature's `RenderBand.order`; default: the feature-plate range from 10, one slot per layer). */
+  renderOrder?(slot: number): number;
+};
+
+/**
+ * A geometry of the stack's own over `source`'s buffers: the same index, attributes and morph targets (no copies, so no second
+ * upload of them), with room for the attributes the stack adds (the skin underlay), which never land on the platform's surface.
+ */
+function sharedGeometry(source: THREE.BufferGeometry): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setIndex(source.index);
+  for (const [name, attribute] of Object.entries(source.attributes)) geometry.setAttribute(name, attribute);
+  for (const [name, targets] of Object.entries(source.morphAttributes)) (geometry.morphAttributes as Record<string, typeof targets>)[name] = [...targets];
+  geometry.morphTargetsRelative = source.morphTargetsRelative;
+  for (const group of source.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+  geometry.setDrawRange(source.drawRange.start, source.drawRange.count);
+  geometry.boundingBox = source.boundingBox?.clone() ?? null;
+  geometry.boundingSphere = source.boundingSphere?.clone() ?? null;
+  geometry.name = source.name;
+  return geometry;
+}
 
 /**
  * Owns layer GPU resources; complete worker bundles supply generated optical maps. `anchor` is the surface the layers are drawn on
- * (eye makeup's: the expanded eye plate); each layer and the lit plate are copies of it, sharing its skeleton and facial targets, put
- * on the head rig by `attach` (by default beside the anchor). `fineGlitter` is the feature's fine-Glitter scope (its region's), part
- * of the optical identities the worker publishes.
+ * (eye makeup's: the expanded eye plate), which the stack only reads (PREV-97): each layer and the lit plate are copies of it on a
+ * geometry of the stack's own over the anchor's buffers, sharing its skeleton and facial influences, put on the head rig by
+ * `placement.attach` (by default beside the anchor) and drawn in `placement.renderOrder`'s slots. `fineGlitter` is the feature's
+ * fine-Glitter scope (its region's), part of the optical identities the worker publishes.
  */
-export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number, fineGlitter: FineGlitterScope,
-  attach: (mesh: THREE.SkinnedMesh) => void = mesh => { anchor.parent!.add(mesh); }) {
+export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number, fineGlitter: FineGlitterScope, placement: MakeupStackPlacement = {}) {
+  const attach = placement.attach ?? ((mesh: THREE.SkinnedMesh) => { anchor.parent!.add(mesh); });
+  const renderOrder = placement.renderOrder ?? renderBand(RENDER_ORDER.featurePlates, MAX_LAYERS).order;
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
@@ -49,14 +79,17 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   let blendDirty = true;
   let merged: { slots: number[]; route: string | null } = { slots: [], route: null };
   let layerIds: string[] = [];
-  anchor.visible = false;
-  const anchorMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
-  anchor.material = anchorMaterial;
-  extendSkin(anchor, anchorMaterial);
+  // Every mesh of the stack draws this geometry: the anchor's buffers, and the skin underlay the stack adds (never on the anchor).
+  const geometry = sharedGeometry(anchor.geometry);
+  /** A hidden copy of the anchor on the stack's geometry, sharing its skeleton and facial influences. */
+  const copy = () => {
+    const mesh = anchor.clone();
+    mesh.geometry = geometry; mesh.skeleton = anchor.skeleton; mesh.morphTargetInfluences = anchor.morphTargetInfluences; mesh.visible = false;
+    return mesh;
+  };
   const plateLight = createPlateLightMaterial();
-  const plate = anchor.clone();
-  plate.name = "makeup_plate"; plate.material = plateLight.material; plate.skeleton = anchor.skeleton;
-  plate.morphTargetInfluences = anchor.morphTargetInfluences; plate.visible = false;
+  const plate = copy();
+  plate.name = "makeup_plate"; plate.material = plateLight.material;
   extendSkin(plate, plateLight.material, .00008);
   attach(plate);
   let wireframe = false;
@@ -94,15 +127,13 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     material.dispose(); textures[i].dispose(); plates[i].removeFromParent(); blendDirty = true;
   }
   function createSlot(canvas: HTMLCanvasElement, i: number) {
-    const mesh = anchor.clone(), texture = maskTexture(canvas);
+    const mesh = copy(), texture = maskTexture(canvas);
     const material = new THREE.MeshPhysicalMaterial({ map: texture, transparent: true, depthWrite: false,
       roughness: .85, side: THREE.DoubleSide, wireframe });
-    mesh.name = `makeup_layer_${i + 1}`; mesh.material = material; mesh.skeleton = anchor.skeleton;
-    mesh.morphTargetInfluences = anchor.morphTargetInfluences;
-    mesh.renderOrder = 10 + i;
+    mesh.name = `makeup_layer_${i + 1}`; mesh.material = material;
+    mesh.renderOrder = renderOrder(i);
     extendSkin(mesh, material, .00008);
     attach(mesh);
-    mesh.visible = false;
     return { mesh, material, texture };
   }
   function setCanvases(canvases: HTMLCanvasElement[], ids: string[] = []) {
@@ -136,7 +167,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     blendDirty = true;
     for (let i = 0; i < plates.length; i++) {
       plates[i].name = `makeup_layer_${i + 1}`;
-      plates[i].renderOrder = 10 + i;
+      plates[i].renderOrder = renderOrder(i);
     }
   }
   function setLayerCanvas(i: number, canvas: HTMLCanvasElement) {
@@ -241,14 +272,14 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     underlaySource = source; underlayStale = true; blendDirty = true;
   }
   /**
-   * Put the skin under the plate on the shared plate geometry. A later skin of the same vertex count is copied into the attributes
-   * already there (one buffer update each, PREV-60); only a different shape replaces them, after the geometry's GPU buffers are
-   * freed (they are uploaded again on the next draw). Without a skin the attributes stay: nothing draws with them then.
+   * Put the skin under the plate on the stack's geometry. A later skin of the same vertex count is copied into the attributes already
+   * there (one buffer update each, PREV-60); only a different shape replaces them (the surface's vertex count never changes, so the
+   * old attributes' buffers wait for the renderer's own teardown: freeing the geometry would free the anchor's shared buffers too).
+   * Without a skin the attributes stay: nothing draws with them then.
    */
   function applyUnderlay(next: PlateUnderlay | null) {
     underlay = next;
     if (!next) return;
-    const geometry = anchor.geometry;
     const incoming: [string, THREE.BufferAttribute][] = [["xfsUnderlay", next.colour], ["xfsUnderRoughness", next.roughness], ["xfsUnderMetalness", next.metalness]];
     const current = incoming.map(([name]) => geometry.getAttribute(name) as THREE.BufferAttribute | undefined);
     const fits = incoming.every(([, attribute], i) => current[i] && current[i]!.itemSize === attribute.itemSize && current[i]!.array.length === attribute.array.length);
@@ -256,7 +287,6 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
       incoming.forEach(([, attribute], i) => { current[i]!.copyArray(attribute.array); current[i]!.needsUpdate = true; });
       return;
     }
-    if (current.some(Boolean)) geometry.dispose();
     for (const [name, attribute] of incoming) geometry.setAttribute(name, attribute);
   }
   /** After a lost WebGL context comes back: the composite's targets came back empty, so the next frame redraws them (PREV-58). */
@@ -288,7 +318,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     const maskSize = Math.max(1, ...slots.map(i => (materials[i]!.map?.image as { width?: number } | undefined)?.width ?? 1));
     plateLight.handle.setComposite(composite.update(renderer, slots.map(i => materials[i]!), maskSize, anisotropy), composite.window);
     plateLight.handle.setFresnel(plan.route === "fresnel" ? plan.included[0]?.optics?.shift ?? null : null);
-    plate.renderOrder = 10 + slots[0]!;
+    plate.renderOrder = renderOrder(slots[0]!);
     plate.visible = true;
   }
   /** Light the plate with the drawn skin's own light (its profile), or with Three's standard light when no resolved skin is drawn. */
@@ -321,14 +351,16 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
         }, 0) };
     });
   }
-  /** Release every layer slot, the lit plate and the composite; the anchor keeps the material the stack gave it until the head goes. */
+  /**
+   * Release every layer slot, the lit plate and the composite. The anchor is as the stack found it; the stack's geometry shares the
+   * anchor's buffers, so its GPU state goes with the renderer rather than freeing buffers the platform's surface still owns.
+   */
   function dispose() {
     setCanvases([]);
     composite.dispose();
     plate.removeFromParent(); plateLight.material.dispose();
-    anchorMaterial.dispose();
   }
-  return { plates, materials, textures, plate, setCanvases, reconcileLayerCanvases, dispose,
+  return { plates, materials, textures, plate, geometry, setCanvases, reconcileLayerCanvases, dispose,
     setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored,
     setNormals(value: boolean) { plateLight.handle.setNormals(value); },
     setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };
