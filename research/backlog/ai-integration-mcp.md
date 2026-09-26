@@ -9,6 +9,10 @@ XF Studio offers an optional, off-by-default MCP (Model Context Protocol) server
 1. **Game tools** (through the runtime bridge, when the game runs with the bridge enabled): game status, photo mode, camera, light, creator options, screenshots with region crops and downscaling.
 2. **Studio tools** (later): the Studio's own typed actions and read-only snapshots, from the action/capability catalogue, so an assistant can inspect and edit looks, run Check and Build, and read results through the same capabilities and refusals the UI uses.
 
+## One command API, many frontends
+
+MCP is one frontend. Underneath sits a transport-agnostic command API: typed commands with schemas, permission classes and plain results or refusals, from one catalogue. The MCP server, the command line, the JSON session runner and, later, the desktop app and user scripts or macros all derive their commands from that catalogue, so a command added once is available everywhere. That makes the same interface the base for scriptable extras: batch screenshots of every preset, regression runs after an update, turntables, look comparisons across Vs.
+
 ## Design constraints
 
 - **Off by default, explicit opt-in.** A plain explanation of what an AI client can then do, per tool family.
