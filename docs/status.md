@@ -34,10 +34,10 @@ Offline verification is not in-game proof. Runtime evidence so far is in the [fi
 
 ## Waiting on the maintainer
 
-1. **Second in-game session** ([experiment 020](../experiments/020-session-2/README.md)): texture placement at the new density first, then depth variants, gloss calibration, strong Shimmer and the lifted metal ramp; staged in the test profile.
-2. **Third in-game session** ([experiment 022](../experiments/022-session-3/README.md)), after session 2: the Glitter board, the blink on several eye shapes, creator Off rows and linked hairstyles. The coordinator stages it once session 2 is in.
-3. **Calibration captures** at the mirror appearance screen with the Character creator preset's protocol ([creator lighting](../knowledge/creator-lighting.md)).
-4. **Runtime bridge session** (about 15 minutes, read-only) once a dedicated profile is set up ([test card](../research/runtime/runtime-bridge-test-card.md)).
+1. **Runtime bridge first session** (phase 2 with its MCP server is being built): start the game in the test profile and load a save; the coordinator runs the read-only checks, then the write checks, then session 2 through the bridge ([test card](../research/runtime/runtime-bridge-test-card.md)).
+2. **Second in-game session** ([experiment 020](../experiments/020-session-2/README.md)): texture placement at the new density first, then depth variants, gloss calibration, strong Shimmer and the lifted metal ramp; staged in the test profile. It now runs through the runtime bridge: the coordinator drives the presets, camera, light and captures, and the maintainer starts the game and loads a save.
+3. **Third in-game session** ([experiment 022](../experiments/022-session-3/README.md)), after session 2: the Glitter board, the blink on several eye shapes, creator Off rows and linked hairstyles. The coordinator stages it once session 2 is in.
+4. **Calibration captures** at the mirror appearance screen with the Character creator preset's protocol ([creator lighting](../knowledge/creator-lighting.md)).
 5. **In-depth review of the new UI.**
 
 ## Active direction
