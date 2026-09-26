@@ -615,8 +615,11 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
         geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks] })), signal, { lowPriority: ctx.lowPriority });
       answers.forEach((answer, index) => {
         const archive = list[index]!.archive;
-        if (answer.failed) { failed(answer.failed, [archive]); return; }
+        // What the archive's launches did answer is kept even when one of them failed: a texture both readers refuse (its WolvenKit
+        // fallback launch failing) must not take the archive's geometry and natively decoded textures with it (PIPE-108). The failure
+        // still marks the archive, so the preparation is degraded and prepared again.
         for (const kind of ["geometry", "textures", "masks"] as const) for (const [path, value] of answer[kind]) keep(kind, archive.id, path, value);
+        if (answer.failed) failed(answer.failed, [archive]);
       });
     } catch (error) { failed(error, list.map(group => group.archive)); }
     return exporter.tool?.label;

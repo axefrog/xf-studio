@@ -12,6 +12,8 @@
  *   `CBitmapTexture` width and height, so the blob's own `sizeInfo` is the size of mip 0.
  * - The mip layout's `rowPitch` and `slicePitch` are not trusted (a microblend's first mip gives a row pitch of 595 M bytes). Each
  *   mip's size is computed from its format and dimensions and must fit inside its placement, and every placement inside the slice.
+ *   When the table and data size describe a smaller chain than `sizeInfo` but the data holds `sizeInfo`'s whole chain, the mips are
+ *   computed from `sizeInfo`, back to back, as WolvenKit exports them (PIPE-111).
  *
  * Only what the preview draws is decoded: 2-D textures with one slice, in the block formats BC1, BC3, BC4, BC5 and BC7, or the raw
  * formats RGBA8 (`TRF_TrueColor`), R8 (`TRF_Grayscale`) and R8G8 (`TRF_R8G8`). Anything else (cube maps, arrays, volume LUTs, HDR,
@@ -51,8 +53,10 @@ export interface TextureLayout {
   readonly width: number;
   readonly height: number;
   readonly mips: readonly TextureMip[];
-  /** Bytes of `textureData` as the header gives them (every slice). */
+  /** Bytes of `textureData` as the header gives them (every slice), or the data's own size when the mips were derived. */
   readonly dataSize: number;
+  /** `listed`: the header's mip table; `derived`: computed from `sizeInfo`, as the table described a smaller chain than the data holds. */
+  readonly mipTable: "listed" | "derived";
   /** The texture data, decompressed on first use (within the decode session's caps). */
   readonly data: () => Uint8Array;
 }
@@ -102,26 +106,50 @@ export function textureLayout(document: RedDocument, limits: TextureLimits = DEF
   if (mipCount < 1 || mipCount > limits.maxMips || listed.length !== mipCount)
     throw new NativeMalformedError(`The texture lists ${listed.length} mips and counts ${mipCount}.`);
   if (sliceSize > dataSize) throw new NativeMalformedError(`A ${sliceSize}-byte slice is larger than its ${dataSize}-byte data.`);
-  const mips: TextureMip[] = listed.map((entry, level) => {
-    const placement = fieldsOf(fieldsOf(entry).placement);
-    const mipWidth = Math.max(1, width >> level), mipHeight = Math.max(1, height >> level);
-    const offset = count(placement.offset, `mip ${level} offset`, 0), size = count(placement.size, `mip ${level} size`);
-    const need = imageBytes(format, mipWidth, mipHeight);
-    if (size < need) throw new NativeMalformedError(`Mip ${level} (${mipWidth}×${mipHeight}) holds ${size} bytes; ${format} needs ${need}.`);
-    if (offset + size > sliceSize) throw new NativeMalformedError(`Mip ${level} lies outside its slice.`);
-    return { width: mipWidth, height: mipHeight, offset, size };
-  });
   const buffer = blob.fields.textureData;
   if (!(buffer instanceof RedBuffer)) throw new NativeMalformedError("The texture blob has no data buffer.");
-  if (buffer.memSize !== dataSize) throw new NativeMalformedError(`The texture data holds ${buffer.memSize} bytes; its header says ${dataSize}.`);
+  let mips: TextureMip[], mipTable: TextureLayout["mipTable"] = "listed";
+  try {
+    mips = listed.map((entry, level) => {
+      const placement = fieldsOf(fieldsOf(entry).placement);
+      const mipWidth = Math.max(1, width >> level), mipHeight = Math.max(1, height >> level);
+      const offset = count(placement.offset, `mip ${level} offset`, 0), size = count(placement.size, `mip ${level} size`);
+      const need = imageBytes(format, mipWidth, mipHeight);
+      if (size < need) throw new NativeMalformedError(`Mip ${level} (${mipWidth}×${mipHeight}) holds ${size} bytes; ${format} needs ${need}.`);
+      if (offset + size > sliceSize) throw new NativeMalformedError(`Mip ${level} lies outside its slice.`);
+      return { width: mipWidth, height: mipHeight, offset, size };
+    });
+    if (buffer.memSize !== dataSize) throw new NativeMalformedError(`The texture data holds ${buffer.memSize} bytes; its header says ${dataSize}.`);
+  } catch (error) {
+    // A mod texture whose mip table and data size describe a smaller chain than `sizeInfo`, while its data holds `sizeInfo`'s whole
+    // chain (a 4096² BC7 cap mask listing a 1024² chain of 1.4 MB over 22.4 MB of data): read as WolvenKit exports it, the chain
+    // computed from `sizeInfo` and the format, mips back to back from the start of the data (PIPE-111). Anything else stays refused.
+    const derived = fullChain(format, width, height);
+    if (!(error instanceof NativeMalformedError) || !derived || derived.total !== buffer.memSize || derived.mips.length > limits.maxMips) throw error;
+    mips = derived.mips; mipTable = "derived";
+  }
+  const size = mipTable === "derived" ? buffer.memSize : dataSize;
   let bytes: Uint8Array | null = null;
   const data = () => {
     if (bytes) return bytes;
     const read = buffer.bytes();
-    if (read.length !== dataSize) throw new NativeMalformedError(`The texture data decompressed to ${read.length} bytes; its header says ${dataSize}.`);
+    if (read.length !== size) throw new NativeMalformedError(`The texture data decompressed to ${read.length} bytes; its header says ${size}.`);
     return (bytes = read);
   };
-  return { format, compression, rawFormat, isGamma, width, height, mips, dataSize, data };
+  return { format, compression, rawFormat, isGamma, width, height, mips, dataSize: size, mipTable, data };
+}
+
+/** Every mip of a `width`×`height` image down to 1×1, back to back, and their total bytes (null past 16 mips). */
+function fullChain(format: TextureFormat, width: number, height: number): { mips: TextureMip[]; total: number } | null {
+  const mips: TextureMip[] = [];
+  let offset = 0;
+  for (let level = 0; level < 16; level++) {
+    const w = Math.max(1, width >> level), h = Math.max(1, height >> level), size = imageBytes(format, w, h);
+    mips.push({ width: w, height: h, offset, size });
+    offset += size;
+    if (w === 1 && h === 1) return { mips, total: offset };
+  }
+  return null;
 }
 
 /** The mip the preview is served: the largest at or under `maxSide` on both sides (the smallest mip when none is). */

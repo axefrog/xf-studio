@@ -107,6 +107,24 @@ describe("character record from the resolver", () => {
     expect(b.record.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
   });
 
+  test("PIPE-108: a failed launch keeps what the archive's other launches answered (a refused texture's fallback failing)", async () => {
+    // As the texture reader's wrapper answers when WolvenKit's fallback launch for textures both readers refused fails: the geometry
+    // and natively decoded textures are in the answer, beside the failure.
+    const base = fakeExporter();
+    const exporter: GameAssetExporter = { ...base, async exportAll(requests, signal) {
+      return Promise.all(requests.map(async request => {
+        const session = base.open(request.source, signal);
+        try {
+          return { geometry: await session.geometry(request.geometry), textures: await session.textures(request.textures), masks: await session.masks(request.masks),
+            failed: new GameAssetExportError("tool_failed", "the fallback launch for a refused texture failed") };
+        } finally { session.close(); }
+      }));
+    } };
+    const { record } = await prepare(REQUEST_A, exporter);
+    expect(record.components.length).toBeGreaterThan(0);
+    expect(record.components.some(component => component.slot === "hair")).toBe(true);
+  });
+
   test("the head skin: the resolved chain's inputs, the winning skin profile's values, and the tone per V", async () => {
     const a = (await prepare(REQUEST_A)).record, b = (await prepare(REQUEST_B)).record;
     const skinOf = (record: typeof a) => record.components.find(c => c.slot === "skin")!;
