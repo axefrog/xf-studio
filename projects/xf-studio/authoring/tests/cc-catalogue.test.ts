@@ -87,15 +87,17 @@ describe("creator catalogue from the merged resource", () => {
     expect(status("head", "xl_ring")).toEqual(["rendered", "piercings"]);
     // The Off placeholder reads like its slot: drawing nothing is what the game shows.
     expect(status("head", "piercings_00")).toEqual(["rendered", "piercings"]);
-    expect(status("head", "teeth")).toEqual(["conditional", "face"]);
+    expect(status("head", "teeth")).toEqual(["rendered", "teeth"]);
     expect(status("head", "scars")).toEqual(["conditional", "face"]);
     // The body draws since the body render: its skin (consumed by the third-person body group) and its shape.
     expect(status("body", "breast")).toEqual(["rendered", "body"]);
     expect(status("body", "body_color")).toEqual(["rendered", "body"]);
-    const teeth = coverage.get("head/teeth")!;
-    expect(refineCoverage(teeth, [{ drawn: false }]).status).toBe("not-rendered");
-    expect(refineCoverage(teeth, [{ drawn: true }]).status).toBe("rendered");
-    expect(refineCoverage(teeth, []).status).toBe("conditional");
+    // A conditional face option settles from the plan; a rendered one (the teeth, which have a slot of their own) is kept.
+    const scars = coverage.get("head/scars")!;
+    expect(refineCoverage(scars, [{ drawn: false }]).status).toBe("not-rendered");
+    expect(refineCoverage(scars, [{ drawn: true }]).status).toBe("rendered");
+    expect(refineCoverage(scars, []).status).toBe("conditional");
+    expect(refineCoverage(coverage.get("head/teeth")!, [{ drawn: false }])).toEqual(coverage.get("head/teeth")!);
   });
 
   test("a mod archive replacing the base creator resource names that mod, not vanilla (PIPE-46)", async () => {

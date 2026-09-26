@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
 import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { bodyOptionDraws, censorRole, choiceLabel, planCharacterDetails, previewInput, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
+import { bodyOptionDraws, censorRole, choiceLabel, planCharacterDetails, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
 import { templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
 import { depotHash, refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
-import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TEETH, teethRequest, TONES } from "./character-detail-fixtures";
 
 async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}) {
   const { graph } = fixture.installation();
@@ -36,7 +36,8 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(result.slots).toEqual([{ slot: "skin", state: "shown", label: "pale, skin type 1" },
       { slot: "face", state: "shown", label: "lipstick (red), cheeks (red)" }, { slot: "brows", state: "shown", label: "brown" },
       { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" },
-      { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 01, silver" },
+      { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "teeth", state: "none", label: "None" },
+      { slot: "piercings", state: "shown", label: "style 01, silver" },
       // V "A" as saved here lists no body part.
       { slot: "body", state: "none", label: "None" },
       // No clothing requested.
@@ -105,7 +106,8 @@ describe("resolver selection for brows, lashes and hair", () => {
     const { plan: result } = await plan("default");
     // The body: the third-person skin, flat feet (no footwear), the default arms and nails, and the game's underwear cover; the censored
     // twin, the parts under the cover, the first-person body, lifted feet and the arm-cyberware arms stay out.
-    expect(result.components.map(c => c.option)).toEqual(["skin_type_01", "eyebrows_color1", "eyelash_color", "hair_color1", "eyes_color",
+    // The teeth: the creator's first teeth choice, drawn once.
+    expect(result.components.map(c => c.option)).toEqual(["skin_type_01", "eyebrows_color1", "eyelash_color", "hair_color1", "eyes_color", "teeth",
       "body_color", "flat_feet", "h_default_arms_colors_tpp", "nails_color_tpp", "underpants"]);
     // The creator's first eye colour, as a new V starts with.
     expect(result.components.find(c => c.slot === "eyes")!.definition).toBe("gradient_blue");
@@ -292,6 +294,43 @@ describe("resolver selection for the eyes", () => {
     expect(component.chunks).toEqual([1, 2]);
     expect(component.materials.map(m => [m.chunk, renderTemplate(m.template)!.adapter])).toEqual([[1, "eye-shell"], [2, "eye"]]);
     expect(EYE_MASK).toBe("18446744073709551614");
+  });
+});
+
+describe("resolver selection for the teeth", () => {
+  test("the teeth choice draws on its own slot through its template, with its own skin profile; a part listed again draws once", async () => {
+    const { plan: result } = await plan(teethRequest(TEETH.natural));
+    const teeth = result.components.filter(c => c.slot === "teeth");
+    // Three listings of one component name: the identical one and the morph-additions copy draw nothing more.
+    expect(teeth.map(c => `${c.option}:${c.component}:${refLabel(c.drawnFrom.ref)}`)).toEqual([`teeth:ht_teeth:${P.teethMorph}`]);
+    expect(teeth[0]!.morphTargets).toBe(true);
+    expect(teeth[0]!.chunks).toEqual([0]);
+    const chunk = teeth[0]!.materials[0]!;
+    expect(chunk.template).toBe(P.skinMt);
+    expect(renderTemplate(chunk.template, chunk.templateName)?.adapter).toBe("skin");
+    expect(refLabel(chunk.skinProfiles.SkinProfile!.ref)).toBe(P.teethSp);
+    expect(Object.keys(chunk.textures).sort()).toEqual(expect.arrayContaining(["Albedo", "Normal", "Roughness"]));
+    expect(chunk.colours.TintColor).toEqual([61, 37, 0, 255]);
+    expect(result.slots.find(s => s.slot === "teeth")).toEqual({ slot: "teeth", state: "shown", label: "natural" });
+    // Never a face detail, and the face reports nothing about it.
+    expect(result.slots.find(s => s.slot === "face")).toEqual({ slot: "face", state: "none", label: "None" });
+  });
+
+  test("a metal or pink finish draws through the layered adapter; a chunk the preview has no adapter for is said plainly", async () => {
+    const gold = (await plan(teethRequest(TEETH.gold))).plan;
+    const teeth = gold.components.find(c => c.slot === "teeth")!;
+    expect(teeth.materials.map(m => [m.template, refLabel(m.layered!.setup.ref)])).toEqual([[P.layeredMt, P.silverSetup]]);
+    expect(gold.slots.find(s => s.slot === "teeth")).toEqual({ slot: "teeth", state: "shown", label: "gold" });
+    // The unreached `default` appearance is `metal_base.remt`: nothing is drawn and nothing breaks.
+    const metal = (await plan(teethRequest(TEETH.metal))).plan;
+    expect(metal.components.filter(c => c.slot === "teeth")).toEqual([]);
+    expect(metal.slots.find(s => s.slot === "teeth")).toEqual({ slot: "teeth", state: "unavailable", label: "metal",
+      message: "XF Studio can't draw your V's teeth (metal) yet, so they aren't shown." });
+  });
+
+  test("teeth labels: the finish, or natural without one", () => {
+    expect(teethLabel(TEETH.natural)).toBe("natural");
+    expect(teethLabel("female_ht_000__basehead__cooper")).toBe("cooper");
   });
 });
 

@@ -20,6 +20,9 @@
 // Body: the third-person body skin (a morph component with a breast shape, listed twice in its appearance), its censored twin, the
 // game's underwear cover (a decal), a nipple part and genitals the cover sits over, flat and lifted feet, a first-person body, the default
 // arms (skin plus a layered personal-link chunk), arm-cyberware arms in another holster state, and nails with a length shape.
+// Teeth: the creator's teeth option over one morph component (the mouth region) whose mesh appearances are a `skin.mt` chain with its own
+// skin profile (the natural choice), a layered gold one and a `default` appearance on `metal_base.remt`, which the preview has no adapter
+// for; the natural choice's appearance lists the component three times (twice identically and once over a morph-additions copy).
 // No private save, game file or real mod name is used.
 import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphOption, morphtarget, tex, appearanceOption,
   switcherOption, fixtureInstallation, type FixtureArchive } from "./resolver-fixtures";
@@ -92,7 +95,15 @@ export const P = {
   armsApp: "base\\fixture\\arms\\arms_full.app", armsMesh: "base\\fixture\\arms\\arms_hq.mesh", strongArmsApp: "base\\fixture\\arms\\strong_arms.app",
   strongArmsMesh: "base\\fixture\\arms\\strong_arms.mesh", nailsApp: "base\\fixture\\arms\\nails.app", nailsMorph: "base\\fixture\\arms\\nails.morphtarget",
   nailsMesh: "base\\fixture\\arms\\nails.mesh", nailsD: "base\\fixture\\arms\\tex\\nails_d.xbm",
+  teethApp: "base\\fixture\\teeth\\ht_basehead.app", teethMorph: "base\\fixture\\teeth\\ht_morphs.morphtarget",
+  teethAddMorph: "fixture_mod\\teeth\\ht_morphs_additions.morphtarget", teethMesh: "base\\fixture\\teeth\\ht_basehead.mesh",
+  teethMi: "base\\fixture\\teeth\\teeth_base.mi", teethGoldMi: "base\\fixture\\teeth\\teeth_gold.mi",
+  teethSp: "base\\fixture\\teeth\\customisation_teeth.sp", teethD: "base\\fixture\\teeth\\ht_teeth_d01.xbm",
+  teethN: "base\\fixture\\teeth\\ht_teeth_n01.xbm", teethRm: "base\\fixture\\teeth\\ht_teeth_rm01.xbm",
+  metalBaseRemt: "engine\\materials\\metal_base.remt",
 } as const;
+/** Teeth definitions, as the vanilla creator names them (`metal` is a test choice on the unreached `default` appearance). */
+export const TEETH = { natural: "female_ht_000__basehead", gold: "female_ht_000__basehead__gold", metal: "female_ht_000__basehead__metal" } as const;
 /** The body's chunk mask: chunk 2 (the calves, which the feet draw) hidden. */
 export const BODY_MASK = "18446744073709551611";
 /** Body definitions, as the vanilla creator names them (tone-linked). */
@@ -117,6 +128,7 @@ export const TONES = { pale: "h0_000_pwa__basehead__01_ca_pale", ivory: "h0_000_
 const colour = (name: string, r: number, g: number, b: number) => ({ $type: "Color", [name]: { $type: "Color", Red: r, Green: g, Blue: b, Alpha: 255 } });
 const scalar = (name: string, value: number) => ({ $type: "Float", [name]: value });
 const hp = (name: string, value: string) => ({ $type: "rRef:CHairProfile", [name]: rp(value) });
+const sp = (name: string, value: string) => ({ $type: "rRef:CSkinProfile", [name]: rp(value) });
 const xbm = (gamma: boolean) => cr2w({ $type: "CBitmapTexture", width: 4, height: 4, setup: { $type: "STextureGroupSetup", isGamma: gamma ? 1 : 0 } });
 const stop = (value: number, r: number, g: number, b: number) => ({ $type: "rendGradientEntry", value, color: { $type: "Color", Red: r, Green: g, Blue: b, Alpha: 255 } });
 const profile = (tip: number) => cr2w({ $type: "CHairProfile", sampleCount: 127,
@@ -227,7 +239,8 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       // Each style option is a controller of the colour link, as in the vanilla creator (knowledge/cc-file-chain.md "Links").
       appearanceOption("piercings_12", P.earringApp12, [PIERCING.silver, PIERCING.black], { uiSlot: "piercings_color", enabled: 0, link: "piercings color", linkController: 1 }),
       appearanceOption("piercings_01", P.earringApp1, [PIERCING.silver, PIERCING.black], { uiSlot: "piercings_color", enabled: 0, link: "piercings color", linkController: 1 }),
-    ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02"],
+      option("teeth", P.teethApp, [TEETH.natural, TEETH.gold, TEETH.metal], "teeth"),
+    ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02", "teeth"],
       face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
         "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }, {
@@ -423,6 +436,22 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
     [P.nailsMesh]: mesh({ appearances: [{ name: "beige", chunkMaterials: ["nails"] }], entries: [{ name: "nails", local: true, index: 0 }],
       local: [instance(P.skinMt, [tex("Albedo", P.nailsD), tex("Normal", P.bodyN), tex("Roughness", P.skinRm)])] }),
     [P.bodyD]: xbm(true), [P.bodyN]: xbm(false), [P.coverD]: xbm(true), [P.nailsD]: xbm(true),
+    // Teeth: the natural choice lists its component three times (twice the same part, once over a morph-additions copy of the target).
+    [P.teethApp]: app([{ name: TEETH.natural, components: [morphComponent("ht_teeth", P.teethMorph, "teeth_001"), morphComponent("ht_teeth", P.teethMorph, "teeth_001"),
+      morphComponent("ht_teeth", P.teethAddMorph, "teeth_001")] }, { name: TEETH.gold, components: [morphComponent("ht_teeth", P.teethMorph, "teeth_003__gold")] },
+    { name: TEETH.metal, components: [morphComponent("ht_teeth", P.teethMorph, "default")] }]),
+    [P.teethMorph]: morphtarget(P.teethMesh, 1, [["h021", "mouth"]]),
+    [P.teethAddMorph]: morphtarget(P.teethMesh, 1, [["h021", "mouth"], ["h099", "mouth"]]),
+    [P.teethMesh]: mesh({ appearances: [{ name: "teeth_001", chunkMaterials: ["teeth_MAT"] }, { name: "teeth_003__gold", chunkMaterials: ["gold_MAT"] },
+        { name: "default", chunkMaterials: ["default_MAT"] }],
+      entries: [{ name: "teeth_MAT", local: false, index: 0 }, { name: "gold_MAT", local: false, index: 1 }, { name: "default_MAT", local: true, index: 0 }],
+      external: [P.teethMi, P.teethGoldMi], local: [instance(P.metalBaseRemt)] }),
+    [P.teethMi]: mi(P.skinMt, [tex("Albedo", P.teethD), tex("Normal", P.teethN), tex("Roughness", P.teethRm), colour("TintColor", 61, 37, 0),
+      scalar("TintScale", 0.9), sp("SkinProfile", P.teethSp)]),
+    [P.teethGoldMi]: mi(P.layeredMt, [tex("GlobalNormal", P.teethN), setupRef(P.silverSetup), maskRef(P.earringMask)]),
+    [P.teethSp]: skinProfile({ roughness0: 0.5, roughness1: 1.2, lobeMix: 0.8, blurSize: 0.6, falloff: [255, 220, 200] }),
+    [P.metalBaseRemt]: template([]),
+    [P.teethD]: xbm(true), [P.teethN]: xbm(false), [P.teethRm]: xbm(false),
   } };
   // An ArchiveXL-style bundle: the null morph whose empty `baseTexture` its patch copies onto the fix copy.
   const bundle: FixtureArchive = { virtualPath: "red4ext/plugins/ArchiveXL/Bundle/ArchiveXL.archive", files: {
@@ -519,6 +548,8 @@ export const REQUEST_B = saved([["TPP", "skin_type_03", P.skinApp3, TONES.senna]
   ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "pack_eye_01"],
   ["face", "makeupCheeks_01", P.frecklesApp, FACE.frecklesBrown], ["TPP", "facial_tattoo_02", P.tattooApp, FACE.tattooSenna],
   ["face", "cyberware_01", P.cyberApp, FACE.cyberSenna], ["face", "pack_liner", P.packLinerApp, FACE.packLiner]]);
+/** A save-shaped request for one teeth choice alone (the other slots none). */
+export const teethRequest = (definition: string) => saved([["TPP", "teeth", P.teethApp, definition]]);
 /** A save-shaped request for one eye colour alone (the other slots none). */
 export const eyeRequest = (definition: string) => saved([["TPP", "eyes_color", P.eyeApp, definition]]);
 /** A save-shaped request for one piercing choice alone (the other slots none). */

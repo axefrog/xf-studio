@@ -68,7 +68,7 @@ export type CharacterDetailLoadOptions = {
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
 const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
-  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], piercings: ["piercings", "they aren't"], body: ["body", "it isn't"],
+  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], teeth: ["teeth", "they aren't"], piercings: ["piercings", "they aren't"], body: ["body", "it isn't"],
   clothing: ["clothes", "they aren't"] };
 /** Every served texture a chunk names: its parameters' textures and, for a layered chunk, each layer's maps and mask. */
 export const chunkTextureFiles = (material: RenderComponent["materials"][number]): RenderTexture[] =>
@@ -356,6 +356,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   };
   const skinFor = (slot: DetailSlot) => slot === "body" ? bodySkins[0] : resolvedSkin;
   const keepSkin = (component: RenderComponent, skin: NonNullable<LoadedCharacterComponent["skin"]>, meshes: THREE.SkinnedMesh[]) => {
+    // The teeth draw with the skin adapter but are never the skin under a decal (a lip decal reads the head's skin, not the mouth's).
+    if (component.slot === "teeth") return;
     const surface = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
     if (component.slot !== "body") { resolvedSkin ??= surface; return; }
     bodySkins.push(surface);
