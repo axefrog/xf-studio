@@ -27,7 +27,7 @@ One typed catalogue, [`input-bindings.ts`](../../projects/xf-studio/authoring/sr
 
 ## Head camera
 
-[`head-camera-input.ts`](../../projects/xf-studio/authoring/src/head-camera-input.ts) makes the table, not `OrbitControls`, decide what every press does to the head camera. It is attached in `scene.ts` right after the controls are created.
+[`head-camera-input.ts`](../../projects/xf-studio/authoring/src/head-camera-input.ts) makes the table, not `OrbitControls`, decide what every press does to the head camera. It is attached in the scene host ([`platform/scene/scene-host.ts`](../../projects/xf-studio/authoring/src/platform/scene/scene-host.ts)) right after the controls are created.
 
 - **Why.** In three 0.186, `OrbitControls` swaps rotate and pan while Ctrl, Meta or Shift is held (`onMouseDown`, `examples/jsm/controls/OrbitControls.js` lines 1686 to 1728). Left to its defaults, Ctrl- or Shift-right-drag orbited while the hint strip said right-drag pans.
 - **Mechanism.** On every `pointerdown`, in the capture phase before the controls see it, the adapter:

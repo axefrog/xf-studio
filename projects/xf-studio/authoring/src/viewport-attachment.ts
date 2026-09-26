@@ -8,7 +8,8 @@ export type ViewportHostKind = "head" | "uv";
 export type UVViewCommand = "both" | "single" | "other" | "fit";
 /** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
 export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
-export type ViewportSize = { width: number; height: number };
+import { visibleViewportSize, type ViewportSize } from "./viewport-size";
+export type { ViewportSize };
 /**
  * `loading` and `preparing` show progress (`progress` 0–1 when known), `unavailable` is neutral
  * (something is still needed; `message` says what), `error` is a failure (`error` says what).
@@ -155,12 +156,4 @@ export class ViewportAttachment<Slot> {
   }
 }
 
-export function visibleViewportSize(width: number, height: number): ViewportSize | undefined {
-  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
-    ? { width, height } : undefined;
-}
-
-export function retainedViewportAspect(width: number, height: number, previous: number): number {
-  const size = visibleViewportSize(width, height);
-  return size ? size.width / size.height : Number.isFinite(previous) && previous > 0 ? previous : 1;
-}
+export { retainedViewportAspect, visibleViewportSize } from "./viewport-size";

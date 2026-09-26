@@ -1,4 +1,6 @@
-import { createScene } from "./scene";
+import type * as THREE from "three";
+import { createSceneHost, type SceneHost } from "./platform/scene/scene-host";
+import type { FeatureRendererFactory } from "./platform/api/scene";
 import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
@@ -6,18 +8,20 @@ import { modifiersOf, NO_MODIFIERS } from "./input-bindings";
 import { ViewportAdapter } from "./viewport-adapter";
 import { ViewportAttachment, type ViewportAttachmentPort } from "./viewport-attachment";
 
-type Scene = Awaited<ReturnType<typeof createScene>>;
+type Scene = SceneHost;
 type UVEditor = ReturnType<typeof createUVEditor>;
 type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
 
 /** Browser resource owner. The presentation receives only `attachment`, never these handles. */
 export function createBrowserViewportDevice(options: {
-  /** The live feature's region: its editors' models and mirror, and the scene's fine-Glitter scope. */
-  region: Pick<LayeredMakeupRegion, "models" | "mirror" | "fineGlitter">;
+  /** The live feature's region: the layer models its editors' shape edits validate with and the mirror their hit tests reflect across. */
+  region: Pick<LayeredMakeupRegion, "models" | "mirror">;
   headHost: HTMLElement;
   uvHost: HTMLElement;
   queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
-  sceneFactory?: typeof createScene;
+  /** The feature renderers each loaded head creates (the composition's list, handed down by the composition root). */
+  renderers?: readonly FeatureRendererFactory[];
+  sceneFactory?: typeof createSceneHost;
   uvFactory?: typeof createUVEditor;
   surfaceFactory?: typeof createSurfaceEditor;
   /** Source of key, pointer, focus and visibility events for modifier tracking. */
@@ -78,9 +82,9 @@ export function createBrowserViewportDevice(options: {
       attachment.setReady("uv");
       return uvEditor;
     },
-    async loadHead(canvases: HTMLCanvasElement[]) {
+    async loadHead() {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createScene)(options.headHost, canvases, options.region.fineGlitter);
+      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { renderers: options.renderers });
       return viewer;
     },
     /**
@@ -90,10 +94,12 @@ export function createBrowserViewportDevice(options: {
     unloadHead(scene: Scene) {
       if (scene === viewer) releaseHead();
     },
-    mountSurface(hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
+    /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate). */
+    mountSurface(surface: THREE.SkinnedMesh, hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
       if (!viewer) throw Error("The head scene must load before mounting surface controls.");
-      surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)(viewer,
-        { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });
+      const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
+      surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
+        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },

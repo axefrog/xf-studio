@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { createBrowserPreviewDevice } from "../src/browser-preview-device";
 import type { RasterPort } from "../src/raster-client";
-import type { createScene } from "../src/scene";
+import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";
 import type { RasterRequest } from "../src/engines/layered-makeup/raster-processor";
 import { freshWorkspace, editLayers, EYE_RASTER_REGION } from "./fixtures/eye-region";
 
@@ -28,12 +28,11 @@ test("browser preview keeps completed masks before scene load and releases old c
   expect(device.coordinator.publish({ i: 0, size: 512, version: 1, ms: 2, data: mask })).toBe(true);
   expect(device.canvases[0].width).toBe(512);
   expect(events).toContain("paint:512");
-  const scene = {
-    renderer: { capabilities: { maxTextureSize: 4096 } },
+  const scene = { maxTextureSize: 4096, surface: {}, layers: {
     needsOptics: () => false, needsAlbedo: () => false,
-    setLayerCanvases: (canvases: HTMLCanvasElement[]) => events.push(`stack:${canvases[0].width}`),
+    setCanvases: (canvases: HTMLCanvasElement[]) => events.push(`stack:${canvases[0].width}`),
     setLayerCanvas: () => {}, updateLayer: (i: number) => events.push(`layer:${i}`),
-  } as unknown as Awaited<ReturnType<typeof createScene>>;
+  } } as unknown as LayeredMakeupSurface;
   device.connectScene(scene);
   device.presentInitialLayers();
   expect(events.indexOf("stack:512")).toBeLessThan(events.indexOf("layer:0"));

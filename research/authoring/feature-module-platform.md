@@ -1,6 +1,6 @@
 # XF Studio feature-module platform
 
-**Status:** accepted design, 25 September 2026; implementation per §8, with steps 1 (registry and routing), 2 (the look/part document model) and 3 (per-layer models) built on 26 September, the review of steps 1–3 fixed ([cleanup](#cleanup-after-steps-13)), step 4 (the look history, platform transactions and budgets) built on 26 September ([step 4 status](#step-4-status)), and step 5 (presentation facades, a live document per feature, view contributions, the Undo port, spec fields and per-look "not editable in this version", then the file moves into `engines/layered-makeup/`, `features/eye-makeup/view/` and `compose/`) built on 26 September ([step 5 status](#step-5-status)). It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
+**Status:** accepted design, 25 September 2026; implementation per §8, with steps 1 (registry and routing), 2 (the look/part document model) and 3 (per-layer models) built on 26 September, the review of steps 1–3 fixed ([cleanup](#cleanup-after-steps-13)), step 4 (the look history, platform transactions and budgets) built on 26 September ([step 4 status](#step-4-status)), and step 5 (presentation facades, a live document per feature, view contributions, the Undo port, spec fields and per-look "not editable in this version", then the file moves into `engines/layered-makeup/`, `features/eye-makeup/view/` and `compose/`) built on 26 September ([step 5 status](#step-5-status)), and step 7 (the scene host in `platform/scene/`, the scene port, feature renderers with eye makeup's as the first, and the platform's character renderer with the host's detail loader) built on 26 September ([step 7 status](#step-7-status)). It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
 
 **Why.** XF Studio is a platform. Eye makeup is its first feature module. Planned modules each get a dedicated effort:
 
@@ -60,9 +60,9 @@ src/features/<id>/verify/    independent verifier (host only; may not import exp
 src/compose/             composition roots: core, browser devices, views, host exporters
 ```
 
-**Built so far** (step 5): `platform/api`, `platform/core`, `engines/layered-makeup` (with `render/`), `features/eye-makeup` (core and `view/`) and `compose/` (`studio-registry.ts`, `system-families.ts`, `views.ts`, `view-panels.ts`). `platform/scene`, `platform/export` and a feature's `render/`, `export/` and `verify/` wait for steps 7 and 8; until then eye makeup's host, preview and export code stays in `src/` (see [what stays in `src/`](#file-moves)).
+**Built so far** (step 7): `platform/api` (with the scene port, `platform/api/scene.ts`), `platform/core`, `platform/scene` (the scene host, head rig, character renderer and feature-renderer registry), `engines/layered-makeup` (with `render/`), `features/eye-makeup` (core, `view/` and `render/`) and `compose/` (`studio-registry.ts`, `system-families.ts`, `views.ts`, `view-panels.ts`, `renderers.ts`). `platform/export` and a feature's `export/` and `verify/` wait for step 8; until then eye makeup's host, preview-device and export code stays in `src/` (see [step 5 status](#step-5-status) and [step 7 status](#step-7-status)).
 
-**The engine holds no region of its own.** A feature hands the layered-makeup engine a `LayeredMakeupRegion` (`engines/layered-makeup/region.ts`): the layer models its layers may hold, the starter and new-layer contours, the mirror of symmetric layers (an axis and centre), fine Glitter's UV scope (its ID and regions, part of the exact cache key), the export texture grids (plate window, Glitter window, accent and head sides) and the words user-facing text uses for the area ("the eye UV area", "the lid"). Every engine read and edit takes it: `editLayers` and the layer actions, `applyRecipeAction` and gestures, shape transforms and hit tests, the raster (`coverage`, `raster`, `createRasterJob`, `rasterWindow`, `layerCoverageSampler`), the raster worker (each request carries the region's plain-data part), the preview's optical keys, the finish catalogues and the compiler. Eye makeup's region is `features/eye-makeup/region.ts` (`EYE_MAKEUP_REGION`, with its historical sample recipe `initialRecipe`); the composition passes it to the trusted core (`STUDIO_COMPOSITION.region`), the preview and viewport devices, and the export roots (the build tool, the localhost package route, the desktop build and Check worker) pass it to the package pipeline. The region reproduces exactly what the engine used to hard-code, so appearance and exported bytes are unchanged (CORE-75).
+**The engine holds no region of its own.** A feature hands the layered-makeup engine a `LayeredMakeupRegion` (`engines/layered-makeup/region.ts`): the layer models its layers may hold, the starter and new-layer contours, the mirror of symmetric layers (an axis and centre), fine Glitter's UV scope (its ID and regions, part of the exact cache key), the export texture grids (plate window, Glitter window, accent and head sides) and the words user-facing text uses for the area ("the eye UV area", "the lid"). Every engine read and edit takes it: `editLayers` and the layer actions, `applyRecipeAction` and gestures, shape transforms and hit tests, the raster (`coverage`, `raster`, `createRasterJob`, `rasterWindow`, `layerCoverageSampler`), the raster worker (each request carries the region's plain-data part), the preview's optical keys, the finish catalogues and the compiler. Eye makeup's region is `features/eye-makeup/region.ts` (`EYE_MAKEUP_REGION`, with its historical sample recipe `initialRecipe`); the composition passes it to the trusted core (`STUDIO_COMPOSITION.region`) and the preview and viewport devices (the UV and on-head editors), eye makeup's renderer passes its fine-Glitter scope to `makeup-stack`, and the export roots (the build tool, the localhost package route, the desktop build and Check worker) pass it to the package pipeline. The region reproduces exactly what the engine used to hard-code, so appearance and exported bytes are unchanged (CORE-75).
 
 ### Registration interfaces
 
@@ -260,7 +260,7 @@ export interface FeatureRenderer {
 }
 ```
 
-**Built so far** (`scene.ts` is not split yet): render on demand in `src/render-scheduler.ts`, with the scene's `requestRender` and `onFrame` as the future port's `requestFrame` and `onFrame`; the skin placement adapter in `src/head-skin-placement.ts`, which returns limit codes (`src/detail-limits.ts`) that the presentation words; and the scene's evidence projections in `src/scene-evidence.ts`.
+**Built** (step 7; see [step 7 status](#step-7-status) for how the built port differs from the sketch above): `scene.ts` is gone. `platform/scene/scene-host.ts` owns the renderer, camera, controls, lights, display, stage, render on demand (`src/render-scheduler.ts`), resize, the device pixel ratio, context restores and disposal; `platform/scene/head-rig.ts` the core head, its surfaces, facial shapes and the rig motion; `platform/scene/character-renderer.ts` the V the character context resolved, loaded through the host's `DetailLoader`; `platform/scene/feature-renderers.ts` the registry that makes each feature's `SceneHostPort` (`platform/api/scene.ts`). Eye makeup's renderer (`features/eye-makeup/render/`) wraps `makeup-stack`; the composition lists it in `compose/renderers.ts`. The skin placement adapter (`src/head-skin-placement.ts`, limit codes in `src/detail-limits.ts`) and the evidence projections (`src/scene-evidence.ts`) are unchanged.
 
 **Detail-loading port.** The resolver runs on the host, and devices load its output:
 
@@ -421,7 +421,7 @@ Add these to `tests/architecture-import-boundary.test.ts`, with a recursive walk
 - The view rules: views receive a `FeatureViewContext` over their facade, never the shell's runtime or the port, by type (UI-73); the import scan sees every import form (UI-74).
 - The registry golden of rule 7.
 
-The engine and feature rules run over a source tree, and a test runs them on the tree with the review's injected violations appended (a pure engine module importing its renderer, the page globals of CORE-78, a feature core importing a browser device, a trusted service, the DOM and Three, and a legacy module reaching the look history), each of which must fail. Rules 3, 6 and 7's exporter checks wait for `export/` and `verify/` (step 8). See [file moves](#file-moves).
+The engine and feature rules run over a source tree, and a test runs them on the tree with the review's injected violations appended (a pure engine module importing its renderer, the page globals of CORE-78, a feature core importing a browser device, a trusted service, the DOM and Three, and a legacy module reaching the look history), each of which must fail. Rules 3, 6 and 7's exporter checks wait for `export/` and `verify/` (step 8). See [file moves](#file-moves). Since step 7, rule 2 lets a feature's `render/` (only) import Three, and a renderer imports only `platform/api`, engines, Three and its own feature's core, never `platform/scene` ([step 7 status](#step-7-status)); `platform/api` and `platform/core` never import `platform/scene`, and `platform/scene` imports the platform, Three and a listed set of the scene's device modules (a [recorded exception](ui-architecture-boundary.md#open-work)).
 
 ## 8. Migration plan
 
@@ -445,7 +445,7 @@ This is a cleanup track, so the High-findings merge pause does not block it.
 | 4 | `LookHistory` (part and look entries, chunk store, Redo), generic gesture and control transactions, `fitWorkspace` budgets. *Done 26 Sep (`claude/platform-step4`); see [step 4 status](#step-4-status).* | existing Undo/Redo/gesture/control tests; size benchmark under budget; reload keeps ≥10 steps | 4 | CORE-02, part of CORE-11, CORE-36 |
 | 5 | Presentation `features()`/`feature(id)`; eye-makeup panels move to `features/eye-makeup/view`; layout, panel meta and activity sources from contributions; `recipe.undo` → `history.undo`; `git mv` of eye-makeup files into `features/eye-makeup` and `engines/layered-makeup` (import rewrites only). *Done 26 Sep (`claude/platform-step5`; file moves in `claude/platform-step5-moves`); see [step 5 status](#step-5-status).* | studio-ui logic and boundary tests; style guide rebuilt; `?verify=1` with a saved dock layout restored | 5 | CORE-03 (routing), UI-10 |
 | 6 | One composition root used by every host | Done 25 Sep (`claude/retire-legacy`): `studio-startup.ts`, started by `studio-main` and the desktop bootstrap; `main.ts` and `port-smoke` retired; bootstrap and boundary tests | 2 | UI-05 |
-| 7 | Scene-host split, `FeatureRenderer`, `CharacterContextService`, `DetailLoader`, material adapters; eye makeup's renderer wraps `makeup-stack`; brows, lashes, hair and piercings render through resolved components. *Partly ahead (claude/render-resolver, 25 Sep): brows, lashes and hair already load from the resolver's character record through per-template material adapters (`character-detail-loader.ts`, `character-material-adapters.ts`, `character-detail-actions.ts`), inside today's `scene.ts`; the scene-host split, piercings and eye makeup's renderer remain.* | `?verify=1` Ready at 1K/2K; makeup screenshot parity; dispose leak test; idle frame-on-demand test | 7 | UI-02, UI-11, PIPE-11 (preview) |
+| 7 | Scene-host split, `FeatureRenderer`, `CharacterContextService`, `DetailLoader`, material adapters; eye makeup's renderer wraps `makeup-stack`; brows, lashes, hair and piercings render through resolved components. *Done 26 Sep (`claude/platform-step7`); see [step 7 status](#step-7-status). The resolved details came ahead of it (claude/render-resolver, claude/multilayer-piercings).* | `?verify=1` Ready at 1K/2K; makeup screenshot parity; dispose leak test; idle frame-on-demand test | 7 | UI-02, UI-11, PIPE-11 (preview) |
 | 8 | `FeatureExporter`/`FeatureVerifier`, product planner, `runProductBuild` for both hosts, `local-package-2`, transport reading version 1 and 2, package-plan actions and panel | default-product Build **byte-identical** archive members and identical plan; two-product synthetic test with a stub exporter; namespace-duplication refusal test | 6 | PIPE-12, PIPE-09, PIPE-03 |
 | 9 | Strict boundary tests (§7); update the contract, invariants, catalogue and pipeline guide (with visual diagram review) | link check; diagrams inspected | 2 | — |
 
@@ -703,8 +703,8 @@ Done on 26 September in `claude/platform-step5-moves`, as two commits so history
 | `eye-plate-recipe`, `-cut`, `-cache`, `-service` | `features/eye-makeup/export/` (plate preparation) and `render/` | preview core, `character-detail-host`, `installation-registry`, the package build and server | 7 and 8 |
 | `plate-lift`, `plate-reach`, `plate-uv-footprint-io`, `export-diagnostics`, `glitter-route`, `glitter-region`, `preset-collection`, `package-*` (the pipeline) | `features/eye-makeup/export/` | `package-build-service`, `package-server`, `collection-service`, the desktop build and Check worker | 8: the export host runs a feature exporter |
 | `mod-verifier/` | `features/eye-makeup/verify/` | `package-build-service`, `package-result-verifier` | 8 |
-| `raster-client`, `raster-worker`, `glitter-measurements`, `browser-preview-device` | `features/eye-makeup/render/` (preview jobs on the platform's scheduler) | `studio-startup`, `browser-head-attachment` | 7 |
-| `uv-editor`, `surface-editor` | `features/eye-makeup/view/` and `render/` (editors of its surfaces) | `browser-viewport-device` | 7 |
+| `raster-client`, `raster-worker`, `glitter-measurements`, `browser-preview-device` | `features/eye-makeup/render/` (preview jobs on the platform's scheduler) | `studio-startup`, `browser-head-attachment` | Step 7 follow-up (eye makeup's devices, [step 7 status](#step-7-status)) |
+| `uv-editor`, `surface-editor` | `features/eye-makeup/view/` and `render/` (editors of its surfaces; they then take the region's mirror, CORE-82) | `browser-viewport-device` | Step 7 follow-up |
 
 **Boundary rules added** (`tests/architecture-import-boundary.test.ts`, `tests/studio-ui-boundary.test.ts`):
 
@@ -717,6 +717,81 @@ Done on 26 September in `claude/platform-step5-moves`, as two commits so history
 **Identity.** The suite, typecheck, bundle build and style guide are unchanged (the rebuilt guide is byte-identical). A Build of the finish board (experiment 016, no diagnostic knobs, WolvenKit 9.0.1, the built-in plate) before the moves, after the engine move and after merging `main` (the view commit changes presentation code only): all 21 unbundled archive members, the `.archive.xl`, `plan.json`, `compiled.json`, the baked rasters and the DDS inputs are byte-identical to the build from the code before the moves (and, after the merge, to `main`'s); only WolvenKit's JSON headers (export times, paths) and the archive container differ from run to run.
 
 **What remains of step 5:** eye makeup's input bindings as view contributions (`KEY_BINDINGS` is shell code; its palette entries and layer menu are already its view's), tours, help topics and control anchors as contributions (§6a; the tours and `CONTROL_ANCHORS` still name eye makeup's panels, and `SHELL_VIEW` names them as Help's home), the shell's `Frame`/`rt.editor` reads of eye makeup's view, moving `port.authoring`'s eye-makeup methods behind the facade for their remaining callers, and a presentation action that uses `app.transaction` (for example "Reset look" once module #2 exists). The [boundary assessment](ui-architecture-boundary.md#open-work) lists each remaining shell coupling with its owner and removal criterion. The eye-makeup modules listed above as staying in `src/` move with the steps the table names.
+
+### Step 7 status
+
+Built on 26 September in `claude/platform-step7`, as reviewable commits: the scene port and eye makeup's renderer, then the move and split of `scene.ts`, then the real-GPU tests. Appearance, draw order, frame requests, stored data, the registry golden and every exported byte are unchanged.
+
+**What exists.**
+
+- **The scene port** (`platform/api/scene.ts`, types and one helper; not re-exported from the api index, so a feature's core never sees Three). `SceneHostPort` gives a renderer:
+  - `renderer`, for its offscreen passes and capabilities (the host alone draws the scene);
+  - `anchors()`: the head and the core record's surfaces by node key (`plate` is the expanded eye plate);
+  - `attach(object, { beside, morphs })`: onto the head rig; with `morphs` its meshes follow the V's facial shapes; the detach also runs on disposal;
+  - `skin`: the drawn skin's `light()`, `underlay(surface)` read on the drawn head, and a change subscription;
+  - `character()`/`subscribeCharacter` (the V drawn: record identity and drawn slots), `lighting()`/`subscribeLighting`;
+  - `requestFrame`, `onFrame` and `onContextRestored`.
+
+  `FeatureRenderer` has `beforeDraw`, `setNormals`, `setWireframe`, `pick`, `supersedes`, `evidence` and `dispose`, all optional but `dispose`. `RENDER_ORDER` names the draw-order bands (feature plates from 10), and `invalidating` wraps a renderer's mutators so each call requests a frame.
+- **The scene host** (`platform/scene/`, 1,022 lines in four modules; `scene.ts` was 758 lines and is gone).
+  - `scene-host.ts` (340 lines) owns the WebGL renderer and its context, camera, controls and camera input, the studio rig and lighting presets with their display, the stage, render on demand, resize, the device pixel ratio, context restores and disposal. It hands its devices the same flat API as before, less the makeup calls.
+  - `head-rig.ts` (255) is the head: the core head, the record's surfaces, the default skin and fallback eye, the facial shapes every deforming mesh follows, and the rig motion (the game idle with the eye gaze joints, and the blink) behind an injectable `MotionLoader`.
+  - `character-renderer.ts` (307) is the platform's character renderer (below).
+  - `feature-renderers.ts` (120) is the registry. It makes each feature's port and creates the composed renderers in order. It fans out `beforeDraw` (on drawn frames only, where the makeup composite used to be prepared), the display toggles and context restores. It owns what each renderer attached, computes `supersedes`, and releases the renderers made so far when one fails to create.
+  - The core head, motion and LUT loaders are injectable (`loadCore`, `loadMotion`, `loadLut`), which is how the GPU probe runs the real host on a synthetic head.
+- **Eye makeup's renderer** (`features/eye-makeup/render/index.ts`, `EYE_MAKEUP_RENDERER`, listed in `compose/renderers.ts`) is `makeup-stack` on the record's `plate` surface:
+  - its layers and lit plate are attached beside the plate through the port;
+  - the skin light and underlay are read through `skin`, again on each skin change;
+  - the composite is prepared in `beforeDraw` and redrawn after a context restore;
+  - normals and wireframe apply to its own materials; it has its plate pick and its `evidence()` (the page's `plateBlend` evidence).
+
+  Its `layers` (the stack's mutators, each requesting a frame, and its two readers) and `surface` form a `LayeredMakeupSurface` (an engine type). The composition root hands it to the preview device (`connectScene`) and the on-head editor (`mountSurface(surface, hooks)`), so neither device nor `browser-head-attachment` names the feature. Nothing eye-specific is left in the host: no stack, plate underlay, layer API or plate pick. `makeup-stack` gained an `attach` callback and `dispose()`.
+- **Character details** render through the platform's character renderer. The host's `DetailLoader` (`scene.details.load(record, …)`, binding the host's anisotropy and skin placement) loads each resolved component with the material adapter for its chunk's template (`character-material-adapters.ts`). `setCharacterDetails` places the V: skin placement, draw order, facial shapes, the idle rig, bakes, eye optics and limits. The character-detail device loads through `scene.details` instead of reaching into the scene's adapter context and renderer.
+  - **What is the platform's:** which V and which creator choices (the character context, `character-context.ts`), and drawing whatever it resolves, slot by slot.
+  - **What a feature would own later:** a part it authors (a brow feature's own brows, a lips feature's lips) is drawn by that feature's `FeatureRenderer`, which names the resolved slot it replaces in `supersedes`. The character renderer then hides that slot, and does not bake it, while the renderer is active. No feature supersedes a slot yet.
+- **More than one plate.** A second feature adds its own surface through `attach`, in its own render-order band beside eye makeup's plate: with `morphs`, or sharing an anchor's influences as eye makeup's layers do. The host has no per-surface code. `tests/scene-feature-renderers.test.ts` composes a synthetic cheek-plate renderer beside eye makeup's, and the GPU probe draws both.
+
+**How the built port differs from the §5 sketch, and why.**
+
+- **`attach` instead of `group(feature)`.** Eye makeup's layers must share the plate's parent and facial influences exactly, and the host must know which meshes follow facial shapes.
+- **No `details`, `jobs` or `textures` on the port yet.** No renderer loads resolved components or schedules jobs of its own. They join when a feature first needs them (the first feature that contributes a resolved part).
+- **No `sync` or `readiness` on `FeatureRenderer` yet.** Eye makeup's layers still arrive from its preview device (raster worker, coordinator, complete-bundle publication), and its readiness from the coordinator, unchanged. They move behind the renderer when the preview job policy becomes the feature's (§1); until then the device drives `layers` directly.
+- **Picking.** `pick` returns the plate UV, but the on-head editor (`surface-editor.ts`, an eye-makeup device still in `src/`) picks on the renderer's `surface` itself.
+
+**Decisions.**
+
+- **Surfaces by record node.** The host knows the core record's `plate` node only as a surface key. "Load a save" now checks that the head and every record surface carry the saved facial targets. It used to check the head and eye makeup's layer copies of the plate, which share the plate's targets, so the check is the same whenever a layer exists and stricter when none does; the plate is a head cut that keeps every head target.
+- **No initial canvases.** The host no longer takes the layer canvases at creation: the preview device sets them on `connectScene`, as it always did right after. The study tools set them through the renderer's `layers`.
+- **Dead bookkeeping dropped.** The scene pushed and spliced the V's meshes into the core mesh list after its evidence had already been taken; nothing read it.
+- **One renderer list.** `compose/renderers.ts` is the composition's renderer list. The root (`studio-startup.ts`) hands it to the viewport device; tools and tests are roots too. The verification page keeps its `plateBlend` evidence key (from eye makeup's renderer) and adds `features` (every renderer's evidence).
+
+**Boundary rules added** (`tests/architecture-import-boundary.test.ts`):
+
+- A feature's `render/`, and no other part of a feature, may import Three. It imports only `platform/api`, engines, Three and its own feature's core, never `platform/scene`. A feature's core never imports its `render/`.
+- `platform/api` and `platform/core` never import `platform/scene`, and only `platform/api/scene.ts` names Three (type-only).
+- `platform/scene` imports the platform, Three and the listed scene device modules only (the [recorded exception](ui-architecture-boundary.md#open-work)), never a feature, engine, `compose/` or the UI.
+- The trusted-service, resolver and preview-derivation rules now also refuse `platform/scene`, and the rendering-boundary test (no per-mod identifiers) covers the host, its modules and eye makeup's renderer.
+
+**Gates.**
+
+- **Makeup screenshot parity** (`tools/scene-parity.ts`; fixed camera, idle off, `?verify=1` on private ports, the reference MO2 profile). Board 1, Board 2, Board 3, Shimmer over Glossy and the bare head, under both lighting presets at 1K and 2K: 20 frames per build. After each code commit every frame is byte-identical to one of two captures of the base (`81bcac9`). The two base captures differ from each other in 4 pixels, by one step, on the first creator frame; the step-7 captures fall on one or the other.
+- **Ready at 1K and 2K** with Shimmer over Glossy: 210 and 777 ms (base 214 and 841 ms).
+- **Frame on demand and dispose leak on a real GPU** (`tests/webgl-scene-host.test.ts`: headless Chrome, the real host on a synthetic head with eye makeup's renderer and a synthetic second plate).
+  - An idle viewport draws no frame in 400 ms. One request, a burst of ten and a layer change each draw one frame. The idle draws while it plays (19 frames in 300 ms) and not when paused or off. `beforeDraw` runs once per drawn frame.
+  - `renderer.info.memory`: 7 geometries and 15 textures empty; 9/27 with V A, the same with V B and with A again; back to 7/15 with no V. Each V is a real character record loaded through the host's detail loader (eyes on `eye.mt`, a face decal on `mesh_decal.mt`). Makeup layers take it to 7/24, and clearing them returns it to 7/15. Disposal removes the canvas and every renderer.
+- **Browser** (`?verify=1`, own port, disposable data, the reference MO2 profile), the same script against this branch and the base:
+  - the default V, the reference save, save B (piercings off and on, then a forced WebGL context loss and restore), the reference save again and the default V again;
+  - the five studio setups, the creator preset, idle play and pause, Play blink and a closed blink.
+
+  After the restore every layered chunk baked again at the same size, the plate composite drew and the resolved eye stayed. The 14 still frames are identical to the base build's, or differ by one step in at most 2 pixels. `renderer.info.memory` over the switches is the same in both builds (19/67 → 25/89 → 29/98 → 25/88 → 20/67; the extra geometry and missing texture after the context restore happen in both). With the idle playing, the main-thread frame median was 5.8 ms (base 7.3 ms, single runs) at a 16.7 ms interval. There were no console errors.
+- Every existing test passes (the source checks follow the split; two fake scenes now offer the host's detail loader), and the goldens are unchanged.
+
+**What remains.**
+
+- **Step 8:** exporters and verifiers; eye makeup's package pipeline and `mod-verifier/` move into `features/eye-makeup/export/` and `verify/`.
+- **Eye makeup's devices:** its preview device (`browser-preview-device.ts`), raster client and on-head editor are still at the top of `src/`, driven through the renderer's `layers` and `surface`.
+- **Port additions on demand:** `sync`/`readiness` and the port's `details`, `jobs` and `textures` wait for a feature that needs them; picking dispatch through `FeatureRenderer.pick` waits for a second pickable feature.
+- **Step 9** moves the scene host's listed device modules under `platform/scene/`.
 
 **Parallelism.** Steps 1–4 are the format-changing core. Steps 5–6 and 7 can run in parallel after step 4. Step 8 needs only steps 1–2.
 

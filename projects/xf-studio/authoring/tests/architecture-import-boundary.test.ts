@@ -51,7 +51,7 @@ test("trusted application and presentation services keep browser devices outside
     const code = source(name);
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(three(?:\/|$)|\.\/(?:studio-main|studio-startup|browser-|scene|uv-editor|surface-editor|raster-client|collection-transport))/);
+        /^(three(?:\/|$)|\.\/(?:studio-main|studio-startup|browser-|scene|platform\/scene\/|uv-editor|surface-editor|raster-client|collection-transport))/);
     expect(code, `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
   }
 });
@@ -61,7 +61,7 @@ test("install detection keeps parsing pure and host access in its adapter", () =
     "mo2-placement", "pe-version"]) {
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|studio-(?:main|startup)$|scene|studio-ui))/);
+        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|studio-(?:main|startup)$|scene|platform\/scene\/|studio-ui))/);
   }
   // The action layer and browser device reach the host only through a typed transport.
   expect(imports(source("install-detection-actions")).filter(path => !path.startsWith("./"))).toEqual([]);
@@ -119,13 +119,13 @@ test("the character resolver keeps its rules pure and all host access in resolve
     const code = source(name);
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
-        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|studio-(?:main|startup)$|scene|studio-ui))/);
+        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|studio-(?:main|startup)$|scene|platform\/scene\/|studio-ui))/);
     expect(code, `${name} reaches the host`).not.toMatch(/\bBun\.(?:spawn|file|write)|\bprocess\.env\b/);
   }
 });
 
 test("the 3D preview derivation keeps definitions pure and WolvenKit in its one adapter", () => {
-  const io = /^(node:(?:fs|child_process|os)|\.\/(?:process-tree|game-asset-export-wolvenkit|browser-|scene|studio-ui))/;
+  const io = /^(node:(?:fs|child_process|os)|\.\/(?:process-tree|game-asset-export-wolvenkit|browser-|scene|platform\/scene\/|studio-ui))/;
   for (const name of ["preview-core-recipe", "preview-core-maps", "preview-core-materials", "preview-core-assemble", "glb", "render-detail", "preview-preparation",
     "wolvenkit-setup", "wolvenkit-release"])
     for (const dependency of imports(source(name))) expect(dependency, `${name} imports ${dependency}`).not.toMatch(io);
@@ -134,8 +134,8 @@ test("the 3D preview derivation keeps definitions pure and WolvenKit in its one 
     expect(dependency, `preview-core-service imports ${dependency}`).not.toMatch(/^(node:child_process|\.\/process-tree|\.\/game-asset-export-wolvenkit)$/);
   expect(imports(source("game-asset-export-wolvenkit"))).toContain("./wolvenkit-cli");
   // The renderer loads the core head only through the typed record loader.
-  expect(source("scene")).not.toContain('fetch("/assets/head.glb")');
-  expect(imports(source("scene"))).toContain("./core-detail-loader");
+  expect(source("platform/scene/scene-host")).not.toContain('fetch("/assets/head.glb")');
+  expect(imports(source("platform/scene/scene-host"))).toContain("../../core-detail-loader");
 });
 
 test("WolvenKit setup keeps its policy in the service and the network, archive and process work in adapters", () => {
@@ -208,10 +208,42 @@ test("platform code imports only the platform: nothing from features, engines, c
   const platform = walk("platform");
   expect(platform).toContain("platform/api/index");
   expect(platform).toContain("platform/core/registry");
-  const violations = platform.flatMap(name => resolved(name)
-    .filter(path => !path.startsWith("platform/")).map(path => `${name} -> ${path}`));
+  expect(platform).toContain("platform/scene/feature-renderers");
+  // The scene host (platform/scene) is the platform's renderer: Three, the browser and the scene's device modules (below) are its own.
+  const pure = platform.filter(name => !name.startsWith("platform/scene/"));
+  const violations = pure.flatMap(name => resolved(name)
+    // The scene port's types name Three objects (type-only; the api index does not re-export it, so a feature's core never sees Three).
+    .filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/"))
+    .filter(path => !(name === "platform/api/scene" && path === "three")).map(path => `${name} -> ${path}`));
   expect(violations).toEqual([]);
-  for (const name of platform) expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+  expect(source("platform/api/scene")).toMatch(/import type \* as THREE from "three"/);
+  expect(source("platform/api/index")).not.toContain("./scene");
+  for (const name of pure) expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+});
+
+/**
+ * The legacy `src/` modules the scene host (platform/scene) still builds on: the renderer and device modules that stay at the top of
+ * `src/` until they move under platform/scene (a recorded exception, ui-architecture-boundary.md "scene host"). Nothing else in src.
+ */
+const SCENE_DEVICE_MODULES = new Set<string>([
+  // Renderer and GPU devices: the stage, lights, display, camera input, skinning and the head's materials.
+  "browser-grading-lut-device", "lighting-preset-stage", "linear-display", "studio-light-rig", "viewport-backdrop", "head-camera-input",
+  "device-pixel-ratio", "skin", "eye-material", "layered-material", "render-scheduler",
+  // The character context's loaders, adapters and placement, and their record types and codes.
+  "core-detail-loader", "character-detail-loader", "character-material-adapters", "head-skin-placement", "render-detail", "render-templates",
+  "detail-limits", "head-load-error", "scene-evidence",
+  // The rig's motion and facial shapes.
+  "idle-animation", "game-blink", "preview-motion", "face-morphs",
+  // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the save's V.
+  "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "save-reader",
+]);
+
+test("the scene host imports the platform, Three and its listed device modules only; never a feature, engine, compose or the UI", () => {
+  const scene = walk("platform/scene");
+  const violations = scene.flatMap(name => resolved(name).filter(path => !(
+    path.startsWith("platform/") || path === "three" || path.startsWith("three/addons/") || SCENE_DEVICE_MODULES.has(path)))
+    .map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
 });
 
 /** Pure shared helpers any engine or feature core may use. */
@@ -265,20 +297,22 @@ const CORE_UNREACHABLE = /^(?:three(?:\/|$)|node:|bun:|studio-(?:main|startup)$|
  */
 function featureViolations(tree: Tree): string[] {
   const presentation = (path: string) => /^(?:studio-ui\/|context-menu$|[\w-]+-ui$)/.test(path);
-  const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$|three(?:\/|$))/.test(path);
+  const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$)/.test(path);
   return tree.names.filter(name => name.startsWith("features/")).flatMap(name => {
-    const own = name.split("/").slice(0, 2).join("/"), view = isView(name);
+    const own = name.split("/").slice(0, 2).join("/"), view = isView(name), render = isRenderer(name);
     const direct = resolvedIn(tree, name).filter(path =>
       path.startsWith("platform/") && !path.startsWith("platform/api") ||
       path.startsWith("features/") && !path.startsWith(`${own}/`) && path !== own ||
-      // The feature's core never reaches its own view; only the composition joins them.
-      !view && path.startsWith(`${own}/view`) ||
+      // The feature's core never reaches its own view or renderer; only the composition joins them.
+      !view && path.startsWith(`${own}/view`) || !render && path.startsWith(`${own}/render`) ||
+      // Only a feature's renderer uses Three.
+      /^three(?:\/|$)/.test(path) && !render ||
       path.startsWith("compose/") || !view && presentation(path) || entryOrDevice(path) || /^(?:node|bun):/.test(path) ||
       // The core's allowlist.
-      !view && !isRenderer(name) && !(path.startsWith(`${own}/`) || path === own || path.startsWith("platform/api") ||
+      !view && !render && !(path.startsWith(`${own}/`) || path === own || path.startsWith("platform/api") ||
         path.startsWith("engines/") && !isRenderer(path) || PURE_HELPERS.has(path) || FEATURE_CORE_LEGACY.has(path)))
       .map(path => `${name} -> ${path}`);
-    if (isRenderer(name)) return direct;
+    if (render) return direct;
     const reached = [...reachIn(tree, name, view)].filter(path => PLATFORM_INTERNALS.test(path) || !view && CORE_UNREACHABLE.test(path))
       .map(path => `${name} ->* ${path}`);
     const globals = view ? [] : pageGlobals(tree.text(name)).map(global => `${name} reads ${global}`);
@@ -290,6 +324,7 @@ test("feature modules import the platform only through platform/api and never an
   const features = walk("features");
   expect(features).toContain("features/eye-makeup/index");
   expect(features).toContain("features/eye-makeup/view/index");
+  expect(features).toContain("features/eye-makeup/render/index");
   expect(featureViolations(DISK)).toEqual([]);
 });
 
@@ -304,6 +339,19 @@ test("a feature's core imports only its allowlist, and the legacy list only shri
   }
   // Eye makeup's core no longer reaches the look history through editor-actions (the pure layer actions are the engine's).
   expect(reach("features/eye-makeup/index")).not.toContain("platform/core/look-history");
+});
+
+test("a feature renderer reaches the scene only through the scene port: platform/api, engines, Three and its own core", () => {
+  const renderers = walk("features").filter(name => /^features\/[\w-]+\/render\//.test(name));
+  expect(renderers).toContain("features/eye-makeup/render/index");
+  const violations = renderers.flatMap(name => {
+    const own = name.split("/").slice(0, 2).join("/");
+    return resolved(name).filter(path => !(path.startsWith("platform/api/") || path.startsWith("engines/") || path === "three" ||
+      path === own || path.startsWith(`${own}/`) && !path.startsWith(`${own}/view`))).map(path => `${name} -> ${path}`);
+  });
+  expect(violations).toEqual([]);
+  // In particular never the host's internals.
+  for (const name of renderers) expect(resolved(name).filter(path => path.startsWith("platform/scene"))).toEqual([]);
 });
 
 test("engines import no feature, UI, composition or platform internals; only their render/ uses Three (CORE-78)", () => {

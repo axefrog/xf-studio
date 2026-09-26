@@ -11,7 +11,7 @@ import {installFresnelTint} from "./fresnel-tint";
 import {previewFacetChains} from "../route-mip-chains";
 import {createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
 import {createPlateComposite} from "./plate-composite";
-import type {SkinParameters} from "../../../skin-material";
+import type { SkinLight } from "../../../platform/api/scene";
 /** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
 const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
 
@@ -19,12 +19,23 @@ export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surfa
 export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
 /** The skin under each plate vertex (head-skin-placement.ts `surfaceUnderlay`): linear colour, roughness and metalness. */
 export type PlateUnderlay = { colour: THREE.BufferAttribute; roughness: THREE.BufferAttribute; metalness: THREE.BufferAttribute };
+export type MakeupStack = ReturnType<typeof createMakeupStack>;
+/** What the preview device drives: the layer slots, their mask canvases and generated maps (browser-preview-device.ts). */
+export type MakeupLayers = Pick<MakeupStack, "setCanvases" | "reconcileLayerCanvases" | "setLayerCanvas" | "updateLayer" | "needsOptics" | "needsAlbedo">;
+/**
+ * A layered-makeup surface drawn in the scene: its layers, the surface mesh they are drawn on (for on-surface editing and picking)
+ * and the largest texture the renderer takes. Eye makeup's renderer is one (features/eye-makeup/render).
+ */
+export type LayeredMakeupSurface = { readonly layers: MakeupLayers; readonly surface: THREE.SkinnedMesh; readonly maxTextureSize: number };
 
 /**
- * Owns layer GPU resources; complete worker bundles supply generated optical maps. `fineGlitter` is the feature's
- * fine-Glitter scope (its region's), part of the optical identities the worker publishes.
+ * Owns layer GPU resources; complete worker bundles supply generated optical maps. `anchor` is the surface the layers are drawn on
+ * (eye makeup's: the expanded eye plate); each layer and the lit plate are copies of it, sharing its skeleton and facial targets, put
+ * on the head rig by `attach` (by default beside the anchor). `fineGlitter` is the feature's fine-Glitter scope (its region's), part
+ * of the optical identities the worker publishes.
  */
-export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number, fineGlitter: FineGlitterScope) {
+export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number, fineGlitter: FineGlitterScope,
+  attach: (mesh: THREE.SkinnedMesh) => void = mesh => { anchor.parent!.add(mesh); }) {
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
@@ -47,7 +58,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   plate.name = "makeup_plate"; plate.material = plateLight.material; plate.skeleton = anchor.skeleton;
   plate.morphTargetInfluences = anchor.morphTargetInfluences; plate.visible = false;
   extendSkin(plate, plateLight.material, .00008);
-  anchor.parent!.add(plate);
+  attach(plate);
   let wireframe = false;
   const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     !isDirectGlint(layer.flakes);
@@ -90,7 +101,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     mesh.morphTargetInfluences = anchor.morphTargetInfluences;
     mesh.renderOrder = 10 + i;
     extendSkin(mesh, material, .00008);
-    anchor.parent!.add(mesh);
+    attach(mesh);
     mesh.visible = false;
     return { mesh, material, texture };
   }
@@ -281,7 +292,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     plate.visible = true;
   }
   /** Light the plate with the drawn skin's own light (its profile), or with Three's standard light when no resolved skin is drawn. */
-  function setSkinLight(parameters: Pick<SkinParameters, "lobes" | "wrap"> | null) { plateLight.handle.setSkinLight(parameters); }
+  function setSkinLight(parameters: SkinLight | null) { plateLight.handle.setSkinLight(parameters); }
   function blendDiagnostics() {
     const size = composite.size;
     return { window: composite.window, underlay: !!underlay, underlayStale, dirty: blendDirty, compositeBytes: composite.bytes(), halfFloat: composite.halfFloat,
@@ -310,7 +321,14 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
         }, 0) };
     });
   }
-  return { plates, materials, textures, plate, setCanvases, reconcileLayerCanvases,
+  /** Release every layer slot, the lit plate and the composite; the anchor keeps the material the stack gave it until the head goes. */
+  function dispose() {
+    setCanvases([]);
+    composite.dispose();
+    plate.removeFromParent(); plateLight.material.dispose();
+    anchorMaterial.dispose();
+  }
+  return { plates, materials, textures, plate, setCanvases, reconcileLayerCanvases, dispose,
     setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored,
     setNormals(value: boolean) { plateLight.handle.setNormals(value); },
     setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };

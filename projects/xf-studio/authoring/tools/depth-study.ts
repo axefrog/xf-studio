@@ -1,10 +1,11 @@
 // Run on the isolated /build/depth-study.html page; never reads/writes workspace or library data.
 import * as THREE from "three";
-import { createScene } from "../src/scene";
-
+import { createSceneHost as createScene } from "../src/platform/scene/scene-host";
+import { STUDIO_RENDERERS } from "../src/compose/renderers";
+import { eyeMakeupRenderer } from "../src/features/eye-makeup/render";
 import { extendSkin } from "../src/skin";
 import { previewClipPlanes, previewNearPlane } from "../src/camera-depth";
-import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
+import { initialRecipe } from "../src/features/eye-makeup/region";
 
 const run = document.getElementById("run") as HTMLButtonElement;
 const output = document.getElementById("output")!;
@@ -13,17 +14,19 @@ run.onclick = async () => {
   try {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 8;
     const context = canvas.getContext("2d")!; context.fillStyle = "white"; context.fillRect(0, 0, 8, 8);
-    const v = await createScene(document.getElementById("stage")!, [canvas], EYE_MAKEUP_REGION.fineGlitter);
+    const v = await createScene(document.getElementById("stage")!, { renderers: STUDIO_RENDERERS });
+    const makeup = eyeMakeupRenderer(v)!;
+    makeup.layers.setCanvases([canvas]);
     v.renderer.setAnimationLoop(null); v.renderer.setPixelRatio(1); v.renderer.setSize(640, 640);
     v.camera.aspect = 1; v.controls.enableDamping = false;
-    v.updateLayer(0, initialRecipe().layers[0]);
+    makeup.layers.updateLayer(0, initialRecipe().layers[0]);
     v.setCharacterDetails(null);
     v.scene.environment = null;
     v.scene.traverse(o => { if (o instanceof THREE.Light) o.visible = false; });
-    v.scene.traverse(o => { if (o instanceof THREE.Mesh && o !== v.head && o !== v.plates[0]) o.visible = false; });
+    v.scene.traverse(o => { if (o instanceof THREE.Mesh && o !== v.head && o !== makeup.plates[0]) o.visible = false; });
     const red = new THREE.MeshStandardMaterial({ color: 0, emissive: 0xff0000, toneMapped: false });
     v.head.material = red; extendSkin(v.head, red);
-    const green = v.materials[0]; green.map = null; green.color.set(0); green.emissive.set(0x00ff00);
+    const green = makeup.materials[0]; green.map = null; green.color.set(0); green.emissive.set(0x00ff00);
     green.toneMapped = false; green.transparent = false; green.needsUpdate = true;
     v.renderer.setClearColor(0); const gl = v.renderer.getContext();
     const results: unknown[] = [];

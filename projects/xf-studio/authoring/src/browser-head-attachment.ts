@@ -21,6 +21,7 @@ import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import { bindStageTheme, type SystemColourScheme } from "./stage-theme-binding";
 import { createTrustedPreviewServices } from "./trusted-preview-services";
 import type { WorkspaceState } from "./workspace-state";
+import type { LayeredMakeupSurface } from "./engines/layered-makeup/render/makeup-stack";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
@@ -33,14 +34,19 @@ export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewA
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
   viewport: Pick<ViewportDevice, "loadHead" | "unloadHead" | "mountSurface">;
-  preview: Pick<PreviewDevice, "emptyCanvases" | "connectScene" | "disconnectScene" | "presentInitialLayers">;
+  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers">;
+  /**
+   * The layered-makeup surface on a loaded head that the preview device fills and the on-head editor edits: the composition root
+   * reads it from its own feature's renderer (eye makeup's), so this module names no feature.
+   */
+  layeredMakeup(scene: Scene): LayeredMakeupSurface;
   /** The UI theme preference and the OS colour scheme the stage backdrop follows. */
   preferences: Parameters<typeof bindStageTheme>[1];
   colourScheme: SystemColourScheme;
   /** Connects head services to the application (and disconnects them with `undefined`). */
   attach(services: HeadServices): void;
   /** The surface editor's hooks into the authoring core. */
-  surface: Parameters<ViewportDevice["mountSurface"]>[0];
+  surface: Parameters<ViewportDevice["mountSurface"]>[1];
   /** Requests an autosave. */
   persist(): void;
   /** Tells the presentation that device status changed. */
@@ -74,7 +80,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // A load that fails releases what it made itself (createScene does), so there is nothing to
     // unload until it returns. The scene (with its surface editor) is released last, after
     // everything that uses it, and only if it is still the loaded head (UI-36).
-    const scene = await ports.viewport.loadHead(ports.preview.emptyCanvases());
+    const scene = await ports.viewport.loadHead();
     releases.push(() => ports.viewport.unloadHead(scene));
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
@@ -92,9 +98,10 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     ports.attach({ savedV: savedAppearance });
     releases.push(() => ports.attach({ savedV: undefined }));
     releases.push(savedAppearance.subscribe(ports.persist), savedAppearance.subscribe(ports.changed));
-    ports.preview.connectScene(scene);
-    releases.push(() => ports.preview.disconnectScene(scene));
-    surface = ports.viewport.mountSurface(ports.surface);
+    const makeup = ports.layeredMakeup(scene);
+    ports.preview.connectScene(makeup);
+    releases.push(() => ports.preview.disconnectScene(makeup));
+    surface = ports.viewport.mountSurface(makeup.surface, ports.surface);
     const { preview, motion } = services.finish();
     ports.attach({ preview, motion });
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));

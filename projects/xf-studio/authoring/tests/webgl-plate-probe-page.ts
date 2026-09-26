@@ -268,7 +268,7 @@ try {
   probe.layered.states.push(part.handle.state);
   probe.layered.unhooked = renderLinear(partScene, 32);
   check("drawing the layered part without the restore path");
-  // The scene's restore path (scene.ts `restored`): forget the renderer's shared bakes, reset each handle, bake again.
+  // The scene host's restore path (platform/scene/character-renderer.ts `contextRestored`): forget the renderer's shared bakes, reset each handle, bake again.
   layeredContextRestored(renderer);
   part.handle.contextRestored();
   probe.layered.states.push(part.handle.state);

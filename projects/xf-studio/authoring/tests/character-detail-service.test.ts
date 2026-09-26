@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { CharacterDetailError, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
+import { CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
@@ -16,19 +16,21 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 const png = encodePng({ width: 2, height: 1, data: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 128]) }, { alpha: true });
 
 /** An exporter over temp files: a tiny GLB-shaped file per geometry and a 2×1 PNG per texture. */
-function fakeExporter(options: { failArchive?: string; calls?: string[]; missing?: readonly string[] } = {}): GameAssetExporter {
+function fakeExporter(options: { failArchive?: string; calls?: string[]; missing?: readonly string[]; partialGeometry?: boolean } = {}): GameAssetExporter {
   let n = 0;
   return { open(source) {
     const dir = join(root, `export-${n++}`);
     mkdirSync(dir, { recursive: true });
-    return { tool: { key: "fake", label: "Fake exporter" }, present: () => null, close() {},
+    // A partial geometry export lives in the session's work folder, which WolvenKit's exporter removes on close.
+    return { tool: { key: "fake", label: "Fake exporter" }, present: () => null, close() { if (options.partialGeometry) rmSync(join(dir, "geometry"), { recursive: true, force: true }); },
       async geometry(paths) {
         options.calls?.push(`geometry ${source.archivePath}`);
         if (options.failArchive && source.archivePath.includes(options.failArchive)) throw new GameAssetExportError("tool_failed", "fake failure");
         return new Map(paths.map((path): [string, ExportedGeometry] => {
-          const file = join(dir, `${depotHash(path)}.glb`);
+          mkdirSync(join(dir, "geometry"), { recursive: true });
+          const file = join(dir, "geometry", `${depotHash(path)}.glb`);
           writeFileSync(file, `glTF ${path}`);
-          return [path, { depotPath: path, hash: depotHash(path), raw: file, rawSha256: "", glb: file, glbSha256: "", materials: null, materialsSha256: null, complete: true, cached: false }];
+          return [path, { depotPath: path, hash: depotHash(path), raw: file, rawSha256: "", glb: file, glbSha256: "", materials: null, materialsSha256: null, complete: !options.partialGeometry, cached: false }];
         }));
       },
       async textures(paths) {
@@ -166,6 +168,25 @@ describe("character record from the resolver", () => {
     const withoutAlbedo = (await prepare(eyeRequest("gradient_blue"), fakeExporter({ missing: [P.eyeD] }))).record;
     expect(withoutAlbedo.components.find(c => c.slot === "eyes")!.chunks).toEqual([2]);
     expect(withoutAlbedo.provenance.notes.some(note => note.includes("Albedo (not exported) could not be read; the chunk is not drawn."))).toBe(true);
+  });
+
+  test("a partial geometry export survives its session's work folder, and a vanished export fails only its part", async () => {
+    const cache = new CharacterPreparationCache();
+    const run = (exporter: GameAssetExporter) => prepareCharacterDetails({ request: REQUEST_A, route, storeRoot: join(root, "store"),
+      resolverCache: join(root, "resolver"), exporter, open: () => fixture.installation(), cache });
+    const fixture = detailFixture();
+    // WolvenKit wrote the GLB but not every companion file: never cached by the exporter, and its folder goes on close.
+    const first = (await run(fakeExporter({ partialGeometry: true }))).record;
+    expect(first.slots.find(s => s.slot === "hair")!.state).toBe("shown");
+    // A later preparation on the same installation reuses the kept export (the hairstyle colour change that failed before).
+    const second = (await run(fakeExporter({ partialGeometry: true }))).record;
+    expect(second.slots.find(s => s.slot === "hair")!.state).toBe("shown");
+    // An export whose file is gone leaves only that part unshown, never the whole V.
+    for (const [key, value] of cache.geometry) if (key.endsWith(`|${P.hairMesh.toLowerCase()}`)) cache.geometry.set(key, { ...value, glb: join(root, "gone", "missing.glb") });
+    cache.components.clear();
+    const third = (await run(fakeExporter({ partialGeometry: true }))).record;
+    expect(third.slots.find(s => s.slot === "skin")!.state).toBe("shown");
+    expect(third.slots.find(s => s.slot === "brows")!.state).toBe("shown");
   });
 
   test("small readers: PNG size, texture colour flag and hair profiles", () => {

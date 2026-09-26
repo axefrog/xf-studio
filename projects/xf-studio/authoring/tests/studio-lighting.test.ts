@@ -202,7 +202,7 @@ test("the Three rig: strengths, key direction, environment intensity and neutral
 });
 
 test("every studio control requests a frame and nothing else draws (render on demand)", () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", "scene-host.ts"), "utf8") as string;
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   for (const change of ["setExposure", "setLightAngle", "setStudioLights"]) expect(wrapped).toContain(change);
   // The evidence reader does not.
