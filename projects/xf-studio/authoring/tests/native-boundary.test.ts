@@ -13,13 +13,14 @@ const read = (path: string) => readFileSync(path, "utf8");
 const nativeModules = readdirSync(NATIVE).filter(file => file.endsWith(".ts")).map(file => file.slice(0, -3)).sort();
 
 /** Modules that touch the host (files, FFI, processes, workers). Everything else in src/native is pure. */
-const HOST_ADAPTERS = ["archive-reader", "native-decode", "native-decode-serve", "native-decode-worker", "native-fetch-port", "oodle"];
+const HOST_ADAPTERS = ["archive-reader", "native-decode", "native-decode-serve", "native-decode-worker", "native-fetch-port", "oodle", "texture-decode"];
 /**
  * Modules outside src/native allowed to import it: the resolver host, which reads resources natively first (`ResolverFetcher`, and
  * `openNativeRoute`, which the installation registry calls without importing the reader itself), and the clothing host, which decodes
- * the one resource WolvenKit 9.0.1 doesn't serialize, the game's cooked visual-tag preset (clothing-host.ts).
+ * the one resource WolvenKit 9.0.1 doesn't serialize, the game's cooked visual-tag preset (clothing-host.ts), and the native-first texture
+ * exporter, which decodes the character details' textures in a worker of its own (native-texture-export.ts).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "resolver-host"];
+const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "native-texture-export", "resolver-host"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).

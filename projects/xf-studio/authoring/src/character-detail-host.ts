@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
-import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, STORE_FILE, TOOL_MISSING, warmCharacters,
+import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, SERVED_TEXTURE_MAX, STORE_FILE, TOOL_MISSING, warmCharacters,
   type CharacterRoute, type PrepareCharacterOptions, type WarmOptions } from "./character-detail-service";
 import { choiceKey, manifestHolds, readChoiceManifest, xlIdentity } from "./choice-manifest";
 import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
@@ -12,6 +12,7 @@ import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
+import { createNativeFirstExporter, NativeTextureDecoders, type TextureDecoder } from "./native-texture-export";
 import { acquireInstallation, installationRouteKey, installations, type InstallationRegistry } from "./installation-registry";
 import { CreatorCatalogueHost, structuralInput } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
@@ -79,6 +80,12 @@ export type CharacterDetailHostOptions = {
   resolverCache?: string;
   settings: () => CharacterDetailSettings;
   exporter?: (cli: string | null) => GameAssetExporter;
+  /**
+   * The game folder's texture decoder (native-texture-export.ts): textures are read by XF Studio's own reader first and by the exporter
+   * per texture it refuses. Default: a decode worker per game folder when the host builds its own WolvenKit exporter; with an injected
+   * `exporter` (a test seam), none unless given here. `false`: never.
+   */
+  textureDecoder?: ((gameRoot: string) => Promise<TextureDecoder | null>) | false;
   /** Test seam over the service call. */
   prepare?: (options: PrepareCharacterOptions) => ReturnType<typeof prepareCharacterDetails>;
   /** Test seam over the creator catalogue. */
@@ -191,7 +198,17 @@ export class CharacterDetailHost {
     return { dir: this.preparedRoots.manifests, key: (request: CharacterRequest) => choiceKey(key, request) };
   }
   private exporterFor(cli: string | null): GameAssetExporter {
-    return this.options.exporter?.(cli) ?? createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), cli);
+    const exports = join(this.options.cacheRoot, "exports");
+    const inner = this.options.exporter?.(cli) ?? createWolvenKitGameAssetExporter(exports, cli);
+    const decoder = this.options.textureDecoder === false ? null
+      : this.options.textureDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.textureDecoders.get(gameRoot));
+    // Textures natively first, served from their largest mip within the preview's size, WolvenKit per texture it refuses (PIPE-104).
+    return decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder }) : inner;
+  }
+  /** One texture decode worker per game folder, opened when first asked for (native-texture-export.ts). */
+  private decoders: NativeTextureDecoders | null = null;
+  private get textureDecoders(): NativeTextureDecoders {
+    return this.decoders ??= new NativeTextureDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
   }
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }

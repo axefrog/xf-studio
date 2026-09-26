@@ -12,6 +12,7 @@ import type { Decompress } from "./kark";
 import { DecodeSession, DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
 import { readResourceJson } from "./resource-document";
+import { decodeTextureFromPool, type NativeTextureOutcome, type NativeTextureRequest } from "./texture-decode";
 
 export interface NativeDecodeRequest {
   /** The archive's path (the resolver's `MountedArchive.id`). */
@@ -59,6 +60,8 @@ export interface NativeDecodeOptions {
 export interface NativeDecoder {
   readonly identity: string;
   decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome>;
+  /** One `.xbm`'s served mip as PNG (texture-decode.ts); absent on a decoder that can't. */
+  decodeTexture?(request: NativeTextureRequest): Promise<NativeTextureOutcome>;
   /**
    * Whether it would answer a request now rather than refuse it as `unavailable` (closed, or its worker failed to start and it is waiting
    * or off for the session). Absent: always. A resource answered natively before counts as ready only while this holds (NATIVE-43).
@@ -123,6 +126,10 @@ export class InProcessDecoder implements NativeDecoder {
     if (this.closed) return { ok: false, kind: "unavailable", message: CLOSED };
     return decodeFromPool(this.pool, this.decompress, request, this.options, this.depotHash);
   }
+  async decodeTexture(request: NativeTextureRequest): Promise<NativeTextureOutcome> {
+    if (this.closed) return { ok: false, kind: "unavailable", message: CLOSED };
+    return await decodeTextureFromPool(this.pool, this.decompress, request);
+  }
   close(): void { if (!this.closed) { this.closed = true; this.onClose(); } }
 }
 
@@ -143,16 +150,18 @@ export interface WorkerInit {
 
 /** One resource to decode; the worker echoes `id` with its outcome. */
 export interface WorkerDecodeMessage { readonly type: "decode"; readonly id: number; readonly request: NativeDecodeRequest }
+/** One texture to decode to its served PNG; the worker echoes `id` with its outcome (the PNG's buffer transferred). */
+export interface WorkerTextureMessage { readonly type: "texture"; readonly id: number; readonly request: NativeTextureRequest }
 
 /** What a worker sends: whether it started, and one outcome per decode message, carrying that message's id. */
 export type WorkerReply =
   | { readonly type: "ready" }
   | { readonly type: "init-failed"; readonly message: string }
-  | { readonly type: "outcome"; readonly id: number; readonly outcome: NativeDecodeOutcome };
+  | { readonly type: "outcome"; readonly id: number; readonly outcome: NativeDecodeOutcome | NativeTextureOutcome };
 
 /** The part of a `Worker` the decoder uses, so a test can drive one by hand. */
 export interface DecodeWorker {
-  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerCloseMessage): void;
+  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerCloseMessage): void;
   addEventListener(type: "message" | "error" | "close", listener: (event: any) => void): void;
   terminate(): unknown;
 }
@@ -193,7 +202,10 @@ const CLOSE_GRACE_MS = 5_000;
 /** Let a timer not keep the process alive. */
 const unref = (timer: ReturnType<typeof setTimeout>) => { (timer as { unref?: () => void }).unref?.(); return timer; };
 
-type Pending = { request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOutcome) => void };
+/** A queued request: a resource's document, or a texture's served PNG, answered by an outcome of its kind. */
+type Pending =
+  | { kind: "decode"; request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOutcome) => void }
+  | { kind: "texture"; request: NativeTextureRequest; resolve: (outcome: NativeTextureOutcome) => void };
 
 /**
  * Decodes in a worker, one resource at a time, each within `timeoutMs`; a `background` request waits until no other does. A resource over its time budget, or a worker that dies,
@@ -232,7 +244,13 @@ export class WorkerDecoder implements NativeDecoder {
     // A decoder closed while a route still holds it (the game's library changed, or the host let the game folder go) answers like one
     // that is down: the resource falls back and is read again later, never counted as a reader bug (NATIVE-28).
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
-    return new Promise(resolve => { (request.priority === "background" ? this.backgroundQueue : this.queue).push({ request, resolve }); this.pump(); });
+    return new Promise(resolve => { (request.priority === "background" ? this.backgroundQueue : this.queue).push({ kind: "decode", request, resolve }); this.pump(); });
+  }
+
+  /** A texture's served PNG, queued like any request (its own `timeoutMs`, else the decoder's). */
+  decodeTexture(request: NativeTextureRequest): Promise<NativeTextureOutcome> {
+    if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
+    return new Promise(resolve => { this.queue.push({ kind: "texture", request, resolve }); this.pump(); });
   }
 
   private spawn(): void {
@@ -336,14 +354,16 @@ export class WorkerDecoder implements NativeDecoder {
     const { worker } = current, id = busy.id;
     busy.sent = true;
     busy.timer = setTimeout(() => this.timeout(worker, id), this.budget(busy.pending.request));
-    worker.postMessage({ type: "decode", id, request: busy.pending.request });
+    const pending = busy.pending;
+    worker.postMessage(pending.kind === "texture" ? { type: "texture", id, request: pending.request } : { type: "decode", id, request: pending.request });
   }
 
-  private finish(outcome: NativeDecodeOutcome): void {
+  private finish(outcome: NativeDecodeOutcome | NativeTextureOutcome): void {
     const busy = this.busy!;
     if (busy.timer) clearTimeout(busy.timer);
     this.busy = null;
-    busy.pending.resolve(outcome);
+    // The worker answers each message with an outcome of that message's kind; a failure has the same shape for both.
+    (busy.pending.resolve as (outcome: NativeDecodeOutcome | NativeTextureOutcome) => void)(outcome);
     this.pump();
     this.idleLater();
   }
@@ -357,7 +377,7 @@ export class WorkerDecoder implements NativeDecoder {
   }
 
   /** A request's time budget: its own, else the decoder's. */
-  private budget(request: NativeDecodeRequest): number { return request.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS; }
+  private budget(request: NativeDecodeRequest | NativeTextureRequest): number { return request.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS; }
 
   private timeout(worker: DecodeWorker, id: number): void {
     if (this.current?.worker !== worker || this.busy?.id !== id) return;
