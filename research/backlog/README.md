@@ -53,6 +53,22 @@ Later-domain research queue (below the body and appearance work): [world, termin
 
 - **AI integration through MCP** (direction set 26 September): an optional, off-by-default MCP server so users can connect their own AI tools to the game (through the runtime bridge) and later to the Studio's typed actions. See [AI integration](ai-integration-mcp.md).
 
+- **Activity view: what's happening to bring each view up to date** (requested 27 September 2026). Every background job that feeds a view becomes a visible, live entry, which fits the reactive graph:
+  - V preparations and their stages;
+  - a hairstyle's export;
+  - texture decodes;
+  - prefetch;
+  - catalogue reads;
+  - WolvenKit launches.
+
+  Each entry shows a plain label and its state: pending, running with progress or the current step, done, or failed with a plain reason, an error reference and the one next step. For example: "Loading hairstyle LONG PAK - #007 … 33%", "Reading textures … decoding", "Clothing … waiting", "Couldn't load X".
+
+  It appears in two places, fed by the same job stream:
+  - an **Activity panel**, the full list, grouped per view;
+  - an optional **translucent overlay in each 3D view**, a view tool, showing only that view's jobs.
+
+  The host publishes job events (the preparation already has stage timings and `progress {index, total, label}`) as one ordered stream to the page. The page keeps a job store the views subscribe to. Nothing here replaces the instant selection and in-place "still working" indicators (the "respond instantly" rule); it is the detailed view beneath them. Build it after the hair/lag fix and view graph P2, which add the per-view tool slot.
+
 - **Pose library for the full-body view** (requested 27 September 2026; design first): show the full-body V in any photo-mode pose, vanilla or added by mods, from its own panel with search and starred favourites. Poses must come from the game's and frameworks' own data (photo-mode pose records and their `.anims` clips, mod pose packs through ArchiveXL/TweakXL), never per-pack adapters. Builds on the decoded creator idle (body clips on `woman_base.rig`, [body rendering](../../knowledge/body-rendering.md)) and the photo-mode facts in [photo mode](../../knowledge/photo-mode.md) and [facial expressions](../../knowledge/facial-expressions.md). Design ready: [pose library](../animation/pose-library-design.md) (phases P0–P3 about two and a half weeks, with a shared TweakXL reader and `.anims` decoder that clothing and expressions also need; ten questions for the maintainer with proposed defaults; in-game checks G1–G7). Facts: [poses](../../knowledge/poses.md).
 
 - **Live posing through the bridge** (runtime R&D, requested 27 September 2026; nothing built): pose V from the Studio and see it in the running game. Recommended route: a reserved XF carrier pose whose constant keys the bridge overwrites in the loaded clip (whole body, next frame, no graph change or engine hook), with the photo-mode graph's own IK, look-at and head/chest channels (`IKTargetAddEvent`, `LookAtAddEvent`, `AnimFeature_PhotomodeBodyPartRotate`) alongside and hot reload as the fallback. First step: one supervised session with a test package and three bridge commands (`photo.pose.set`, read-only `pose.live.read`, `pose.live.apply` behind its own switch), about 3–4 days of preparation: [pose editor design §7](../animation/pose-editor-design.md#7-live-posing-route-survey). Facts: [poses §7–8](../../knowledge/poses.md#7-what-the-body-graph-does-after-the-pose-clip).
