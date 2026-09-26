@@ -137,9 +137,11 @@ describe("checks", () => {
     const html = readFileSync(join(result.outDir, "index.html"), "utf8");
     expect(html).toContain('data-download="prerelease"');
     expect(html).toContain('href="https://github.com/axefrog/xf-studio/releases/tag/v0.1.0-alpha.1"');
-    expect(html).toContain("XFStudio-0.1.0-alpha.1-win-x64-setup.zip");
+    expect(html).toContain("XFStudio-0.1.0-alpha.1-win-x64-setup.exe");
+    expect(html).toContain("nothing to extract");
+    expect(html).not.toContain("ZIP");
     expect(html).toContain("Get-FileHash");
-    expect(html).toContain("gh attestation verify XFStudio-0.1.0-alpha.1-win-x64-setup.zip --repo axefrog/xf-studio");
+    expect(html).toContain("gh attestation verify XFStudio-0.1.0-alpha.1-win-x64-setup.exe --repo axefrog/xf-studio");
     expect(html).toContain("<strong>Run anyway</strong>");
     expect(html).toContain("Alpha pre-release");
     expect(html).toMatch(/<meta name="description" content="[^"]*unsigned Windows alpha/);

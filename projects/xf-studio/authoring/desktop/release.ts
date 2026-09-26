@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, wr
 import { resolve } from "node:path";
 import desktopPackage from "./package.json";
 import { noticesPath, requireLicence } from "./notices";
+import { INNO_SETUP } from "./inno-setup";
 
 // Release metadata for the desktop app. `package.json` `version` is the single
 // source of truth: the Electrobun config, packaged version.json/About, the
@@ -14,9 +15,12 @@ export const desktopRoot = import.meta.dir;
 export const changelogPath = resolve(desktopRoot, "../../CHANGELOG.md");
 /** Electrobun 2.0.1 knows only dev/canary/stable; every pre-release channel builds as `canary`. */
 export const electrobunChannel = "canary";
+/** Electrobun's own setup: a setup program plus its hidden `.installer` payload, zipped. Build input only. */
 export const canarySetupZip = resolve(desktopRoot, "artifacts", "canary-win-x64-XFStudio-Setup-canary.zip");
+/** The single self-contained setup program built from that ZIP (single-installer.ts); the released download. */
+export const canarySetupExe = resolve(desktopRoot, "artifacts", "canary-win-x64-XFStudio-Setup-canary.exe");
 export const canaryUpdateJson = resolve(desktopRoot, "artifacts", "canary-win-x64-update.json");
-/** Attached to every release beside the setup ZIP; the same file is installed with the app. */
+/** Attached to every release beside the setup program; the same file is installed with the app. */
 export const noticesAssetName = "THIRD_PARTY_NOTICES.md";
 
 export type ReleaseStage = "alpha" | "beta" | "rc" | "stable";
@@ -37,7 +41,7 @@ export function parseReleaseVersion(value: string): ReleaseVersion {
 export const appVersion = (): ReleaseVersion => parseReleaseVersion(desktopPackage.version);
 export const releaseTag = (version: ReleaseVersion) => `v${version.version}`;
 export const isPrerelease = (version: ReleaseVersion) => version.stage !== "stable";
-export const setupAssetName = (version: ReleaseVersion) => `XFStudio-${version.version}-win-x64-setup.zip`;
+export const setupAssetName = (version: ReleaseVersion) => `XFStudio-${version.version}-win-x64-setup.exe`;
 export function releaseTitle(version: ReleaseVersion): string {
   const core = `${version.major}.${version.minor}.${version.patch}`;
   const stage = { alpha: "alpha", beta: "beta", rc: "RC", stable: "" }[version.stage];
@@ -115,12 +119,14 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
     warning, "",
     "## Install", "",
     `1. Download \`${setup}\` and check its SHA-256 (below) before running anything.`,
-    "2. Extract the whole ZIP (the setup program needs its hidden `.installer` folder) and run `XF Studio-Setup-canary.exe`.",
-    "3. The installer is not code-signed yet, so Windows SmartScreen may show **Windows protected your PC**. " +
+    "2. Run it. There is nothing to extract: it is one self-contained setup program, installs for your Windows user only " +
+      "and needs no administrator rights. Choose **Install**; XF Studio opens when it's ready, and it has a Start menu entry and " +
+      "an uninstaller under **Settings → Apps**.",
+    "3. The setup program is not code-signed yet, so Windows SmartScreen may show **Windows protected your PC**. " +
       "Only if the checksum matched, choose **More info → Run anyway**. If Smart App Control is on, Windows blocks unsigned apps and offers no per-app override.",
     "4. XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows 10 and 11 PCs already have. " +
       "If it's missing, XF Studio offers to install it for you with one click, using Microsoft's own installer.", "",
-    "5. It installs for your Windows user only and includes no game or mod files. The UV editor, your library and Check work straight away. " +
+    "5. It includes no game or mod files. The UV editor, your library and Check work straight away. " +
       "The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It uses WolvenKit CLI, " +
       "which XF Studio offers to download for you (45 MB, from WolvenKit's official release, GPL-3.0) and which needs Microsoft's free .NET 10 Runtime. " +
       "Building the mod files uses the same two things.", "",
@@ -137,12 +143,12 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
   ].join("\n");
 }
 
-type StageInput = { setupZip?: string; updateJson?: string; outDir: string; commit: string; version?: ReleaseVersion;
+type StageInput = { setupExe?: string; updateJson?: string; outDir: string; commit: string; version?: ReleaseVersion;
   dependencyLock?: string; notices?: string; licence?: string };
-/** Copy the verified setup ZIP under its release name and write checksums plus asset-free build information. */
+/** Copy the verified single setup program under its release name and write checksums plus asset-free build information. */
 export function stageRelease(input: StageInput): ReleaseAsset[] {
   const version = input.version ?? appVersion();
-  const setupZip = input.setupZip ?? canarySetupZip;
+  const setupExe = input.setupExe ?? canarySetupExe;
   const update = JSON.parse(readFileSync(input.updateJson ?? canaryUpdateJson, "utf8"));
   if (update.version !== version.version || update.channel !== electrobunChannel)
     throw Error("The built update metadata does not match the app version and canary channel.");
@@ -151,7 +157,7 @@ export function stageRelease(input: StageInput): ReleaseAsset[] {
   rmSync(input.outDir, { recursive: true, force: true });
   mkdirSync(input.outDir, { recursive: true });
   const setupName = setupAssetName(version);
-  copyFileSync(setupZip, resolve(input.outDir, setupName));
+  copyFileSync(setupExe, resolve(input.outDir, setupName));
   copyFileSync(input.notices ?? noticesPath, resolve(input.outDir, noticesAssetName));
   const lockPath = input.dependencyLock ?? resolve(desktopRoot, ".hutch", "dependencies.lock");
   const toolchain = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, "utf8")).objects : null;
@@ -162,6 +168,8 @@ export function stageRelease(input: StageInput): ReleaseAsset[] {
     version: version.version, tag: releaseTag(version), prerelease: isPrerelease(version),
     electrobunChannel, electrobunBuildHash: update.hash, commit: input.commit, repository,
     signed: false, updater: "disabled", includesGameAssets: false, toolchain, webView2Bootstrapper,
+    // The download is Electrobun's setup and payload, unmodified, inside one Inno Setup program.
+    setupProgram: { wrapper: "Inno Setup", version: INNO_SETUP.version, releaseDownloadSha256: INNO_SETUP.sha256 },
   };
   writeFileSync(resolve(input.outDir, "build-info.json"), JSON.stringify(info, null, 2) + "\n");
   const assets = [setupName, "build-info.json", noticesAssetName].map(name => {
