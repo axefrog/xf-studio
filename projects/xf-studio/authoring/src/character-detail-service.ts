@@ -1010,6 +1010,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     const glb = storeChunkGeometry(options.storeRoot, exported.glb, materials.map(material => material.chunk));
     if (!glb.trimmed) note(`${component.component}: the exported geometry is served whole.`);
     if (component.skippedChunks) note(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
+    for (const line of component.readerNotes ?? []) note(`${component.component}: ${line}`);
     const hash = component.drawnFrom.ref.hash;
     // Two choices can draw the same mesh (face cyberware reuses the freckle mesh), so the option is part of the identity.
     return { id: `${component.slot}:${component.option}:${component.component}:${hash}`, slot: component.slot, option: component.option,

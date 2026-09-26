@@ -1,8 +1,14 @@
 /**
  * Host adapter for the character resolver: finds the mounted archives and `.xl` files of a launch route,
- * reads RDAR indexes, and extracts resources to JSON with WolvenKit CLI into an ignored cache
- * (default `authoring/data/resolver-cache/`). All filesystem and process access lives here; the domain
- * modules (archive-precedence, archivexl-config, cco-model, resource-graph, character-resolver) are pure.
+ * reads RDAR indexes, and reads resources as JSON: natively first (the Studio's own archive and resource reader,
+ * `native/`, through one decoder per route), and with WolvenKit CLI, extracting into an ignored cache
+ * (default `authoring/data/resolver-cache/`), for what the native reader can't answer. All filesystem and process
+ * access lives here; the domain modules (archive-precedence, archivexl-config, cco-model, resource-graph,
+ * character-resolver) are pure.
+ *
+ * Native answers are never written to WolvenKit's JSON cache. The cache folder's `native/` keeps only empty markers of
+ * which resources the native reader answered, keyed by depot hash, archive fingerprint and the native reader's identity
+ * (`NativeAnswerFiles`), so a later session knows a prepared choice needs no WolvenKit.
  *
  * Read-only towards the game and MO2: archives are opened for reading and WolvenKit writes only into the
  * cache directory. Cache entries are keyed by (depot hash, archive path+size+mtime fingerprint, WolvenKit
@@ -13,6 +19,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
@@ -26,7 +33,11 @@ import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./r
 import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
-import { hostFailure } from "./diagnostics/host-log";
+import { currentDiagnostics, hostFailure, hostTrace } from "./diagnostics/host-log";
+import type { NativeDecoder } from "./native/native-decode";
+import type { NativeFailureKind } from "./native/native-errors";
+import { type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "./native/native-fetch-port";
+import { GAME_OODLE_LIBRARY } from "./native/oodle";
 
 export interface InstallationOptions {
   readonly gameRoot: string;
@@ -39,16 +50,30 @@ export interface InstallationOptions {
   readonly log?: (message: string) => void;
   /** How folders are stamped (default: by the volume's file system, volume-info.ts). A test seam. */
   readonly folderStamps?: (root: string) => FolderStampMode;
+  /**
+   * The route's native decoder (`openNativeRoute`; the installation registry opens one per game folder), or why there is none. Absent
+   * or null: WolvenKit reads everything.
+   */
+  readonly native?: NativeRoute | null;
 }
+
+/** A route's native decoder, or why the route reads with WolvenKit alone. `strict` rethrows reader bugs (benches and tests). */
+export type NativeRoute = { readonly decoder: NativeDecoder; readonly strict?: boolean } | { readonly decoder: null; readonly reason: string };
+/** How an installation reads resources, for its summary and diagnostics. */
+export type NativeReaderState = { readonly state: "on"; readonly identity: string } | { readonly state: "off"; readonly reason: string };
 
 export interface Installation {
   readonly plan: MountPlan;
   readonly depot: DepotIndex;
   readonly xl: ArchiveXlConfig;
   readonly graph: ResourceGraph;
-  readonly fetcher: WolvenKitFetcher;
+  readonly fetcher: ResolverFetcher;
+  /** The route's native decoder or why there is none (null: not asked for; WolvenKit reads everything). */
+  readonly native?: NativeRoute | null;
   readonly summary: {
     readonly route: "direct" | "mo2";
+    /** Whether the Studio reads resources itself (then WolvenKit only for what it can't), and why not when it doesn't. */
+    readonly nativeReader?: NativeReaderState;
     readonly scanComplete: boolean;
     readonly scanIssues: readonly string[];
     /** Blocking scan issues that may hide an archive, `.xl` or modlist file (see SourceIssue.mayHideSources). */
@@ -557,13 +582,105 @@ export class WolvenKitFetcher implements ResourceFetchPort {
 }
 
 /**
- * A resource graph and fetcher over an opened route's archives, caching extracted resources in `cacheDir`. Every view
- * on one cache folder shares that folder's extraction lane, so views never extract the same resource twice.
+ * Which resources the native reader answered, on disk: an empty file per resource, archive fingerprint and native reader identity in
+ * the cache folder's `native/`, written in the background. It is what `ResolverFetcher.isCached` reads for a native answer, so a later
+ * session knows a prepared choice needs no WolvenKit; a changed archive or another reader has another key.
  */
-export function installationView(core: { depot: DepotIndex; xl: ArchiveXlConfig },
-  options: Pick<InstallationOptions, "wolvenKitCli" | "cacheDir" | "log">): { graph: ResourceGraph; fetcher: WolvenKitFetcher } {
-  const fetcher = new WolvenKitFetcher(options.wolvenKitCli, options.cacheDir, (archiveId, hash) => core.depot.archiveContains(archiveId, hash),
+export class NativeAnswerFiles implements NativeAnswerLedger {
+  private readonly known = new Set<string>();
+  private readonly tag: string;
+  private folderMade = false;
+  constructor(private readonly cacheDir: string, identity: string) { this.tag = createHash("sha256").update(identity).digest("hex").slice(0, 12); }
+  private file(archive: MountedArchive, hash: string): string | null {
+    try { return join(this.cacheDir, "native", `${hash}-${fingerprint(archive.id)}-${this.tag}.ok`); } catch { return null; }
+  }
+  has(archive: MountedArchive, hash: string): boolean {
+    const file = this.file(archive, hash);
+    return !!file && (this.known.has(file) || existsSync(file));
+  }
+  add(archive: MountedArchive, hash: string): void {
+    const file = this.file(archive, hash);
+    if (!file || this.known.has(file)) return;
+    this.known.add(file);
+    try { if (!this.folderMade) { mkdirSync(join(this.cacheDir, "native"), { recursive: true }); this.folderMade = true; } }
+    catch { return; } // Advisory: the choice is checked by preparing it next time.
+    writeFile(file, "").catch(() => {});
+  }
+}
+
+/** Fallbacks one fetcher reports to the diagnostics log (the rest are counted in its stats and the rolling window). */
+const LOGGED_FALLBACKS = 16;
+/** Kinds the native reader falls back on by design (a resource it doesn't read); not logged, only counted. */
+const EXPECTED_FALLBACKS: ReadonlySet<NativeFailureKind> = new Set(["not-indexed", "not-verified"]);
+
+/**
+ * A cache folder's fetch port: native first when the route has a decoder (`NativeFirstFetcher`, falling back per resource), else
+ * WolvenKit alone. `tool` and `stats` are WolvenKit's (its cache identity and launches); `nativeStats` counts native answers and
+ * fallbacks by kind.
+ */
+export class ResolverFetcher implements ResourceFetchPort {
+  readonly native: NativeFirstFetcher | null;
+  private logged = 0;
+  constructor(readonly wolvenKit: WolvenKitFetcher, route: NativeRoute | null | undefined, cacheDir: string) {
+    this.native = route?.decoder ? new NativeFirstFetcher(route.decoder, wolvenKit, { strict: route.strict,
+      ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message) => this.fellBack(kind, resource, message) }) : null;
+  }
+  /** WolvenKit's identity (`WolvenKitFetcher.tool`): the key of its JSON cache and of the choice manifests. */
+  get tool(): string { return this.wolvenKit.tool; }
+  get stats(): WolvenKitFetcher["stats"] { return this.wolvenKit.stats; }
+  get nativeStats(): NativeFirstFetcher["stats"] | null { return this.native?.stats ?? null; }
+  fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
+    return this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension);
+  }
+  transient(archive: MountedArchive, ref: DepotRef): boolean {
+    return this.native ? this.native.transient(archive, ref) : this.wolvenKit.transient(archive, ref);
+  }
+  /** Whether this resource is answered now without WolvenKit: in WolvenKit's cache (or a lasting marker), or answered natively before. */
+  isCached(archive: MountedArchive, hash: string): boolean {
+    return this.wolvenKit.isCached(archive, hash) || !!this.native?.answeredNatively(archive, hash);
+  }
+  private fellBack(kind: NativeFailureKind, resource: string, message: string): void {
+    hostTrace().event("resolver", "native_fallback", { kind, resource, message: message.slice(0, 300) });
+    if (EXPECTED_FALLBACKS.has(kind) || this.logged >= LOGGED_FALLBACKS) return;
+    this.logged++;
+    const plain = `XF Studio couldn't read ${resource} itself (${kind}), so WolvenKit read it instead.`;
+    if (kind === "internal") hostFailure("resolver", "native_internal", plain, new Error(message), "warn");
+    else currentDiagnostics()?.log.warn("resolver", "native_fallback", plain, { codes: [kind], stack: message.slice(0, 300) });
+  }
+}
+
+/** The native reader's state of a route, for its summary. */
+export const nativeReaderState = (route: NativeRoute | null | undefined): NativeReaderState =>
+  route?.decoder ? { state: "on", identity: route.decoder.identity }
+    : { state: "off", reason: route ? route.reason : "XF Studio's own reader wasn't asked for; WolvenKit reads everything." };
+
+/**
+ * Open a route's native decoder (a worker with a time budget per resource), without blocking the event loop; never rejects. `script`
+ * is the built worker when the host is bundled (the desktop app), otherwise native-decode-worker.ts next to its module. The
+ * `XFS_NATIVE_READER=0` environment variable turns it off (WolvenKit reads everything), for comparisons.
+ */
+export async function openNativeRoute(gameRoot: string, options: { script?: URL | string } = {}): Promise<NativeRoute> {
+  if (process.env.XFS_NATIVE_READER === "0") return { decoder: null, reason: "It is turned off (XFS_NATIVE_READER=0)." };
+  try {
+    const opened = await openNativeDecoderAsync(gameRoot, { script: options.script });
+    return opened.decoder ? { decoder: opened.decoder } : { decoder: null, reason: opened.reason };
+  } catch (error) { return { decoder: null, reason: String((error as Error)?.message ?? error) }; }
+}
+/** The stamp of the game's Oodle library (a changed library, e.g. after a game update, needs a new decoder). */
+export function nativeRouteStamp(gameRoot: string): string {
+  try { return pathStamp(lstatSync(join(gameRoot, ...GAME_OODLE_LIBRARY))); } catch { return pathStamp(null); }
+}
+
+/**
+ * A resource graph and fetcher over an opened route's archives, caching extracted resources in `cacheDir`. Every view
+ * on one cache folder shares that folder's extraction lane, so views never extract the same resource twice. With the route's
+ * native decoder, resources are read natively first.
+ */
+export function installationView(core: { depot: DepotIndex; xl: ArchiveXlConfig; native?: NativeRoute | null },
+  options: Pick<InstallationOptions, "wolvenKitCli" | "cacheDir" | "log">): { graph: ResourceGraph; fetcher: ResolverFetcher } {
+  const wolvenKit = new WolvenKitFetcher(options.wolvenKitCli, options.cacheDir, (archiveId, hash) => core.depot.archiveContains(archiveId, hash),
     options.log ?? (() => {}));
+  const fetcher = new ResolverFetcher(wolvenKit, core.native, options.cacheDir);
   return { graph: new ResourceGraph(core.depot, core.xl, fetcher), fetcher };
 }
 
@@ -632,8 +749,9 @@ export function openInstallation(options: InstallationOptions): Installation {
   }
   indexMemo = nextIndexes; xlMemo = nextXl;
   const xl = readArchiveXlConfig(documents);
-  const { graph, fetcher } = installationView({ depot, xl }, options);
-  return { plan, depot, xl, graph, fetcher, watch, summary: { route: options.launchRoute, scanComplete: discovery.complete,
+  const native = options.native ?? null;
+  const { graph, fetcher } = installationView({ depot, xl, native }, options);
+  return { plan, depot, xl, graph, fetcher, native, watch, summary: { route: options.launchRoute, nativeReader: nativeReaderState(native), scanComplete: discovery.complete,
     scanIssues: discovery.issues.filter(issue => issue.blocking).map(issue => `${issue.code}: ${issue.detail}`),
     scanGaps: discovery.issues.filter(issue => issue.blocking && issue.mayHideSources !== false).map(issue => `${issue.code}: ${issue.detail}`),
     readErrors: [...indexErrors, ...xlReadErrors, ...discovery.issues.filter(issue => UNREADABLE_ISSUES.has(issue.code)).map(issue => `${issue.code}: ${issue.detail}`)],
