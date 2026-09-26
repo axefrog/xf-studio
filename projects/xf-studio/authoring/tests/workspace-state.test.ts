@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
 import { readSavedV } from "../src/save-reader";
-import { initialRecipe, newLayerTemplate, parseRecipe } from "../src/recipe";
+import { initialRecipe, newLayerTemplate, parseRecipe } from "../src/engines/layered-makeup/recipe";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 

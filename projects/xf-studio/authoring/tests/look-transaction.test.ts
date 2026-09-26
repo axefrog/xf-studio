@@ -9,7 +9,7 @@ import { STUDIO_COMPOSITION, STUDIO_OWNERS } from "../src/compose/studio-registr
 import { CollectionSession } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";
 import { COLLECTION_2, featureActionTable, featureId } from "../src/platform/api";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";

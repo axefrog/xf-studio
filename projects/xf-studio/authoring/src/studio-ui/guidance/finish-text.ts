@@ -1,4 +1,4 @@
-import type { FinishDescriptor } from "../../finish-catalogue";
+import type { FinishDescriptor } from "../../engines/layered-makeup/finish-catalogue";
 
 /**
  * Help and tour words about which finishes can go into a mod, built from the finish catalogue the port

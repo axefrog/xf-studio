@@ -1,5 +1,5 @@
 import type { Layer, Recipe } from "./recipe";
-import type { ReadonlyDeep } from "./read-only";
+import type { ReadonlyDeep } from "../../read-only";
 
 /** Editor-only selections keyed by stable layer/field identities. */
 export type FieldSelection = Record<string, string>;

@@ -1,4 +1,4 @@
-import { initialRecipe, curve, raster, coverage, type Point, type Layer } from '../../src/recipe';
+import { initialRecipe, curve, raster, coverage, type Point, type Layer } from '../../src/engines/layered-makeup/recipe';
 // Freeze the historical study geometry when production defaults evolve.
 const studyLayer = (): Layer => { const l=initialRecipe().layers[0]; l.pathMode='catmull-rom'; l.points=l.points.map(({handles: _handles,...p})=>p); return l; };
 import { boundaryKernel, pointKernel, harmonicGrid, geometry, subdivide, type Field } from './fields';

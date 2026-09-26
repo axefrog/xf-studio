@@ -2,16 +2,16 @@ import { expect, test } from "bun:test";
 import { CollectionActions } from "../src/collection-actions";
 import { collectionDraft, editPresets, emptyMemory, type CollectionWorkspace } from "../src/collection-workspace";
 import { applyLayerAction, layerCapability, RecipeHistory } from "../src/editor-actions";
-import { applyRecipeAction, RecipeActions, recipeActionCapability, type RecipeActionState } from "../src/recipe-actions";
+import { applyRecipeAction, RecipeActions, recipeActionCapability, type RecipeActionState } from "../src/engines/layered-makeup/recipe-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { PreviewActions, type PreviewPort } from "../src/preview-actions";
 import { ViewportAdapter, type ViewportPort } from "../src/viewport-adapter";
 import { freshWorkspace } from "../src/workspace-state";
-import { glitterModel, type GlitterChoices } from "../src/glitter-model";
-import { initialRecipe } from "../src/recipe";
+import { glitterModel, type GlitterChoices } from "../src/engines/layered-makeup/glitter-model";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
-import type { GestureEdit } from "../src/recipe-actions";
+import type { GestureEdit } from "../src/engines/layered-makeup/recipe-actions";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("collection commands keep UI views isolated and notify only after valid transitions", () => {

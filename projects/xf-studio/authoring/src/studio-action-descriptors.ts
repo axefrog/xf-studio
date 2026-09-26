@@ -1,5 +1,5 @@
 import type { CollectionRequest } from "./collection-service";
-import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./finish-catalogue";
+import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./engines/layered-makeup/finish-catalogue";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";

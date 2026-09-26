@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { editPigment } from "../src/pigment-edit";
-import { initialRecipe, parseRecipe, DEFAULT_STRENGTH_BLEND } from "../src/recipe";
+import { editPigment } from "../src/engines/layered-makeup/pigment-edit";
+import { initialRecipe, parseRecipe, DEFAULT_STRENGTH_BLEND } from "../src/engines/layered-makeup/recipe";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
-import { editLayers } from "../src/layer-stack";
+import { editLayers } from "../src/engines/layered-makeup/layer-stack";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 

@@ -9,7 +9,7 @@ import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorI
 import { keyTokens, parseHelp, plainText } from "../src/studio-ui/guidance/content";
 import { conditionHolds, eventHappened, GUIDANCE_DESCRIPTORS, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
 import { exportableFinishClause, finishExportHelp } from "../src/studio-ui/guidance/finish-text";
-import { finishCatalogue } from "../src/finish-catalogue";
+import { finishCatalogue } from "../src/engines/layered-makeup/finish-catalogue";
 import { HELP_LINKS, HELP_TOPICS, helpReference, helpTopicsFor, searchTopics, searchTours } from "../src/studio-ui/guidance/help-topics";
 import { tourKey } from "../src/studio-ui/guidance/overlay";
 import { NARROW_WIDTH, placeCallout } from "../src/studio-ui/guidance/placement";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/uv-view";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";

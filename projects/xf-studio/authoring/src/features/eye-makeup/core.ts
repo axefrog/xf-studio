@@ -9,10 +9,10 @@
  * same state and action always give the same result (replay; migration step 4).
  */
 import type { Capability } from "../../platform/api";
-import { parseFieldSelection } from "../../field-selection";
-import type { GlitterChoices, LayerChoices } from "../../glitter-model";
+import { parseFieldSelection } from "../../engines/layered-makeup/field-selection";
+import type { GlitterChoices, LayerChoices } from "../../engines/layered-makeup/glitter-model";
 import { applyLayerAction, layerCapability, type LayerAction } from "../../editor-actions";
-import { applyRecipeAction, recipeActionCapability } from "../../recipe-actions";
+import { applyRecipeAction, recipeActionCapability } from "../../engines/layered-makeup/recipe-actions";
 import type { EyeMakeupAction, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
 
 export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";

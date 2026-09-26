@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   MAX_FIELDS, coverage, curve, initialRecipe, parseRecipe, parseRecipeFile, raster, warp, warpFields,
   type Field, type Layer, type Point, type WarpField,
-} from "../src/recipe";
+} from "../src/engines/layered-makeup/recipe";
 
 type LegacyLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field: Field };
 const oldLayer = (): LegacyLayer => ({

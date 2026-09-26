@@ -1,10 +1,10 @@
-import { clamp, curve, type Layer, type Recipe } from "./recipe";
+import { clamp, curve, type Layer, type Recipe } from "./engines/layered-makeup/recipe";
 import { cancelsGesture } from "./gesture-cancel";
 import { modifierKey, modifiersOf, pointerBinding, pointerInputOf, type EditorInputState,
   type GestureKind, type PointerTarget } from "./input-bindings";
-import { insertPathPoint, nearestPathSection } from "./path-edit";
-import { moveTangent, tangentEndpoint } from "./bezier-path";
-import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer, wheelScaleFactor } from "./shape-transform";
+import { insertPathPoint, nearestPathSection } from "./engines/layered-makeup/path-edit";
+import { moveTangent, tangentEndpoint } from "./engines/layered-makeup/bezier-path";
+import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer, wheelScaleFactor } from "./engines/layered-makeup/shape-transform";
 import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, NO_UV_INSETS, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvToPixel, uvViewRegion, zoomUVView,
   type UV, type UVInsets, type UVView } from "./uv-view";

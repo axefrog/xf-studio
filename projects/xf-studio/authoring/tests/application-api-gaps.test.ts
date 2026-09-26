@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { cancelsGesture } from "../src/gesture-cancel";
-import { IRREGULAR_RANGE_MESSAGE } from "../src/recipe-actions";
+import { IRREGULAR_RANGE_MESSAGE } from "../src/engines/layered-makeup/recipe-actions";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";

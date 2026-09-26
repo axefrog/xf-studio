@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { defaultIrregularFlakes, FLAKE_LIMITS } from "../src/flake-field";
+import { defaultIrregularFlakes, FLAKE_LIMITS } from "../src/engines/layered-makeup/flake-field";
 import { GlitterMeasurements } from "../src/glitter-measurements";
-import type { GlitterStats } from "../src/raster-processor";
-import { initialRecipe, type Layer } from "../src/recipe";
+import type { GlitterStats } from "../src/engines/layered-makeup/raster-processor";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
 
 const stats = (maskCentres: number): GlitterStats => ({ generated: 90000, regionRetained: 40000, maskCentres,
   paintedPixels: 5000, coveredPixels: 1200, quarterCoveragePixels: 300, halfCoveragePixels: 100 });

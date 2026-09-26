@@ -1,4 +1,4 @@
-import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
+import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./engines/layered-makeup/recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
 import { liveFeatureStates, liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, withLiveFeatures, withLiveMemory,
   writeCollectionWorkspace,
@@ -8,11 +8,11 @@ import type { DocumentHistory } from "./authoring-document";
 import { emptyLookHistory } from "./platform/core/look-history";
 import type { NewerPolicy } from "./platform/core/document";
 import type { LiveFeatureState } from "./platform/core/live-features";
-import { parseFieldSelection, type FieldSelection } from "./field-selection";
+import { parseFieldSelection, type FieldSelection } from "./engines/layered-makeup/field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
 import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
-import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
+import {parseGlitterChoices, type GlitterChoices} from "./engines/layered-makeup/glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { isChoiceName } from "./render-detail";
 import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";

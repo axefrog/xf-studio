@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { defaultUVView } from "../src/uv-view";
 
 const close = (actual: any[], expected: any[]) => {

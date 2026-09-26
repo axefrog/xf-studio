@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { extendSkin } from "./skin";
 import type { SavedV } from "./save-reader";
-import { createMakeupStack } from "./makeup-stack";
+import { createMakeupStack } from "./engines/layered-makeup/render/makeup-stack";
 import { IdleAnimation } from "./idle-animation";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "./game-blink";
 import { composePreviewMotion } from "./preview-motion";

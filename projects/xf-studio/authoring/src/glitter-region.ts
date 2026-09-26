@@ -11,7 +11,7 @@
 // - Warp fields move the sampled point by at most the summed |du| and |dv|.
 // Build then clips the rectangle to the plate window before sizing the catalogue (PIPE-69); planning, which knows no
 // plate yet, clips to the unit square, so its flake count bounds the window's from above.
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 
 /** Area-weighted median world length per unit UV on the plate (experiment 018, built-in plate): U and V, in mm. */
 export const MM_PER_UV = { u: 569, v: 405 } as const;

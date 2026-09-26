@@ -11,10 +11,10 @@
  * - A bare recipe file of any schema lifts into a part-2 recipe, migrating exactly as before.
  */
 import type { EditorCodec, MemoryCodec, PartCodec, PartEnvelope } from "../../platform/api";
-import { parseFieldSelection, type FieldSelection } from "../../field-selection";
-import { parseGlitterChoices, type GlitterChoices } from "../../glitter-model";
-import { LAYER_MODELS, type LayerModelRegistry } from "../../layer-models";
-import { emptyRecipe, joinRecipe, recipeChunks, starterRecipe, type Recipe } from "../../recipe";
+import { parseFieldSelection, type FieldSelection } from "../../engines/layered-makeup/field-selection";
+import { parseGlitterChoices, type GlitterChoices } from "../../engines/layered-makeup/glitter-model";
+import { LAYER_MODELS, type LayerModelRegistry } from "../../engines/layered-makeup/layer-models";
+import { emptyRecipe, joinRecipe, recipeChunks, starterRecipe, type Recipe } from "../../engines/layered-makeup/recipe";
 import { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readPortableRecipe, recipeFile,
   RECIPE_SCHEMAS } from "../../recipe-schema";
 

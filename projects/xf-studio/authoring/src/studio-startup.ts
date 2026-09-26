@@ -21,7 +21,7 @@ import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
 import { mountStudio } from "./studio-ui/app";

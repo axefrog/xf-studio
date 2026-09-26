@@ -1,7 +1,7 @@
 import { RECIPE_HISTORY, recipeHistory, type HistoryEntryId, type HistoryEntryInfo } from "./editor-actions";
-import { parseFieldSelection, type FieldSelection } from "./field-selection";
-import { parseRecipe, type Recipe } from "./recipe";
-import type { RecipeActionEffect, RecipeActionState } from "./recipe-actions";
+import { parseFieldSelection, type FieldSelection } from "./engines/layered-makeup/field-selection";
+import { parseRecipe, type Recipe } from "./engines/layered-makeup/recipe";
+import type { RecipeActionEffect, RecipeActionState } from "./engines/layered-makeup/recipe-actions";
 import type { ReadonlyDeep } from "./read-only";
 import type { HistoryLabel } from "./history-labels";
 import { LOOK_HISTORY_1, type HistoryParts, type LookHistoryData } from "./platform/api";

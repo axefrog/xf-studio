@@ -3,7 +3,7 @@
 // verifier decodes. Test-only use of the builder's window arithmetic (src/plate-uv-window.ts); the
 // verifier re-derives all of it independently.
 import { referenceCrop } from "../src/package-bake";
-import { plateUvBounds, plateUvWindow, uvTransformConstants, type UvWindow } from "../src/plate-uv-window";
+import { plateUvBounds, plateUvWindow, uvTransformConstants, type UvWindow } from "../src/engines/layered-makeup/plate-uv-window";
 
 export const WINDOW_W = 2048, WINDOW_H = 512;
 

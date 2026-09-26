@@ -1,5 +1,5 @@
 import {expect,test} from "bun:test";
-import {preparePigmentStrength} from "../../src/pigment-strength";
+import {preparePigmentStrength} from "../../src/engines/layered-makeup/pigment-strength";
 import {fixtures,strip,widthField,prepareCoverage,subdivide} from "./fields";
 
 test("positive smooth widths remove medial-axis winner seams and remain bounded",()=>{

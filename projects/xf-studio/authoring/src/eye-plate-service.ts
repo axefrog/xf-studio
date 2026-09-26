@@ -17,7 +17,7 @@ import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 import { routeIdentity, routeStamps } from "./route-fingerprint";
 import type { PackagePlate } from "./package-action";
-import { plateUvFootprint, plateUvWindow } from "./plate-uv-window";
+import { plateUvFootprint, plateUvWindow } from "./engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateUvManifestRecord, readManifestPlateReach, type PlateUvManifestRecord } from "./plate-uv-footprint-io";
 import type { PlateReachInput } from "./plate-reach";
 

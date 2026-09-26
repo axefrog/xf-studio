@@ -1,6 +1,6 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { ReadonlyDeep } from "./read-only";
-import type { Layer, Point, Recipe, WarpField } from "./recipe";
+import type { Layer, Point, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 
 /**
  * Detached geometry for presentation hit testing and drawing. A recipe replacement

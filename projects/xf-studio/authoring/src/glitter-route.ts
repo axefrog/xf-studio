@@ -31,12 +31,12 @@
 // catalogue is sized over them within a flake budget. Region membership at each level is the texel rectangle those
 // bounds touch, [floor(a·n), ceil(b·n)) in window texels. The independent verifier restates all three.
 import type { GlitterDiagnostic, GlitterFlakes } from "./export-diagnostics";
-import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, planPresetExport } from "./finish-export";
-import { flatMipChain, mipDimensions, reducePlanes } from "./flat-mip-chain";
-import type { UvWindow } from "./plate-uv-window";
-import { compileFlatPreset } from "./preset-compiler";
+import { ACCENT_TEXTURE_SIZE, GLITTER_WINDOW_TEXTURE, planPresetExport } from "./engines/layered-makeup/finish-export";
+import { flatMipChain, mipDimensions, reducePlanes } from "./engines/layered-makeup/flat-mip-chain";
+import type { UvWindow } from "./engines/layered-makeup/plate-uv-window";
+import { compileFlatPreset } from "./engines/layered-makeup/preset-compiler";
 import { checkFlakeBudget, clipRect, flakeCount, HEX_AREA, layerOutlineBounds, MM_PER_UV, rectMm, type RectUv } from "./glitter-region";
-import { parseRecipe, raster, rasterWindow, type Recipe } from "./recipe";
+import { parseRecipe, raster, rasterWindow, type Recipe } from "./engines/layered-makeup/recipe";
 
 export { MM_PER_UV } from "./glitter-region";
 /** Nesting constants of experiment 018's design. */

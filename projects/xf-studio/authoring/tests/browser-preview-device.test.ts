@@ -4,8 +4,8 @@ import { createBrowserPreviewDevice } from "../src/browser-preview-device";
 import type { RasterPort } from "../src/raster-client";
 import type { createScene } from "../src/scene";
 import { freshWorkspace } from "../src/workspace-state";
-import { editLayers } from "../src/layer-stack";
-import type { RasterRequest } from "../src/raster-processor";
+import { editLayers } from "../src/engines/layered-makeup/layer-stack";
+import type { RasterRequest } from "../src/engines/layered-makeup/raster-processor";
 
 test("browser preview keeps completed masks before scene load and releases old canvases before a quality rebuild", () => {
   const authoring = new AuthoringDocument(freshWorkspace());

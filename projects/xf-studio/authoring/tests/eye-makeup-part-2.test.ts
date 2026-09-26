@@ -11,19 +11,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { COLLECTION_2_LIBRARY_MESSAGE, CollectionLibrary } from "../src/collection-store";
 import { STUDIO_PARTS, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../src/direct-glint-settings";
+import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
 import { EYE_MAKEUP, EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, eyeMakeupPartCodec } from "../src/features/eye-makeup";
-import { defaultFlakes } from "../src/finish";
-import { defaultStudioIrregularFlakes } from "../src/flake-field";
-import { selectGlitterModel } from "../src/glitter-model";
+import { defaultFlakes } from "../src/engines/layered-makeup/finish";
+import { defaultStudioIrregularFlakes } from "../src/engines/layered-makeup/flake-field";
+import { selectGlitterModel } from "../src/engines/layered-makeup/glitter-model";
 import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank,
-  type RecipeFileSchema } from "../src/layer-models";
+  type RecipeFileSchema } from "../src/engines/layered-makeup/layer-models";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { eyeMakeupCollection } from "../src/preset-collection";
 import { initialRecipe, newLayerTemplate, parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE,
-  type Layer, type Recipe, type RecipeFile } from "../src/recipe";
-import { applyRecipeAction, type RecipeAction } from "../src/recipe-actions";
+  type Layer, type Recipe, type RecipeFile } from "../src/engines/layered-makeup/recipe";
+import { applyRecipeAction, type RecipeAction } from "../src/engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_FEATURE, portableRecipe, readPortableRecipe, recipeFile } from "../src/recipe-schema";
 import { loadWorkspace } from "../src/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";

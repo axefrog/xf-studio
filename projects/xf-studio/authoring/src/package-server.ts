@@ -11,7 +11,7 @@ import { verifyPackageBuildResult } from "./package-result-verifier";
 import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateHeadOverride, eyePlateRouteKey, type EyePlateManifest,
   type EyePlateTools } from "./eye-plate-service";
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
-import { plateUvFootprint } from "./plate-uv-window";
+import { plateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import type { PlateReachInput } from "./plate-reach";
 import { createInstalledHeadSource } from "./eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";

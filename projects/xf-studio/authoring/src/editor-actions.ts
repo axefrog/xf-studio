@@ -1,5 +1,5 @@
-import { editLayers, type LayerCommand } from "./layer-stack";
-import { joinRecipe, MAX_LAYERS, parseRecipe, recipeChunks, type Recipe } from "./recipe";
+import { editLayers, type LayerCommand } from "./engines/layered-makeup/layer-stack";
+import { joinRecipe, MAX_LAYERS, parseRecipe, recipeChunks, type Recipe } from "./engines/layered-makeup/recipe";
 import type { CodedCapability } from "./collection-actions";
 import { nameIssue, positionIssue, refuse } from "./validation-issues";
 import { HISTORY_LIMIT, refusal, type HistoryEntryId as PlatformHistoryEntryId, type HistoryParts } from "./platform/api";

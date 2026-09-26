@@ -1,5 +1,5 @@
-import { preparePigmentStrength } from "../../src/pigment-strength";
-import type { Point } from "../../src/recipe";
+import { preparePigmentStrength } from "../../src/engines/layered-makeup/pigment-strength";
+import type { Point } from "../../src/engines/layered-makeup/recipe";
 
 export type SoftPoint = Point & { width: number };
 export type WidthMode = "linear" | "log";

@@ -5,7 +5,7 @@ import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { MotionActions } from "../src/motion-actions";
 import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
-import { RECIPE_ACTION_KINDS } from "../src/recipe-actions";
+import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { StudioApplication } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";

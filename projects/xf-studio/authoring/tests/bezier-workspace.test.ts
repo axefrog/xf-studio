@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { initialRecipe, parseRecipe, raster } from "../src/recipe";
-import { convertToBezier, moveTangent, setPointMode, splitBezierSegment, tangentEndpoint } from "../src/bezier-path";
+import { initialRecipe, parseRecipe, raster } from "../src/engines/layered-makeup/recipe";
+import { convertToBezier, moveTangent, setPointMode, splitBezierSegment, tangentEndpoint } from "../src/engines/layered-makeup/bezier-path";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
-import { editLayers } from "../src/layer-stack";
+import { editLayers } from "../src/engines/layered-makeup/layer-stack";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { createMakeupStack } from "../src/makeup-stack";
-import { initialRecipe } from "../src/recipe";
+import { createMakeupStack } from "../src/engines/layered-makeup/render/makeup-stack";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 
 test("completed optics are size keyed, pending changes retain the complete look, and replacement disposes owned maps", () => {
   const geometry=new THREE.BufferGeometry();

@@ -1,7 +1,7 @@
 import { parseCollection, type PresetCollection } from "./preset-collection";
 import type { PackageExperimental, PackageOmission } from "./package-filter";
 import type { EyePlateHeadRecord } from "./eye-plate-head-source";
-import type { ExportRoute } from "./finish-export";
+import type { ExportRoute } from "./engines/layered-makeup/finish-export";
 import type { PresetDiagnostics } from "./export-diagnostics";
 import type { PlateUvRecord } from "./plate-reach";
 

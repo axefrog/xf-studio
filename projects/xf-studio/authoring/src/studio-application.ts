@@ -14,8 +14,8 @@ import type { CharacterContextActions } from "./character-context-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
-import type { Layer, Point, Recipe, WarpField } from "./recipe";
-import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./recipe-actions";
+import type { Layer, Point, Recipe, WarpField } from "./engines/layered-makeup/recipe";
+import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { EyeMakeupPort, EyeMakeupSpec } from "./authoring-eye-makeup";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
@@ -29,8 +29,8 @@ import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from ".
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
-import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
-import { layerExport, planPresetExport, type LayerExport } from "./finish-export";
+import { finishCatalogue, glitterModelCatalogue } from "./engines/layered-makeup/finish-catalogue";
+import { layerExport, planPresetExport, type LayerExport } from "./engines/layered-makeup/finish-export";
 
 /**
  * Each owner this application binds a handler for, with its action union, keyed by owner ID. The

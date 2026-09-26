@@ -1,4 +1,4 @@
-import { createRasterProcessor, type RasterRequest } from "./raster-processor";
+import { createRasterProcessor, type RasterRequest } from "./engines/layered-makeup/raster-processor";
 import { createRasterTaskYield } from "./raster-task-yield";
 const processor = createRasterProcessor(result => self.postMessage(result,
   { transfer: result.cancelled || "error" in result ? [] : [result.data.buffer, ...(result.optics ? [result.optics.normal.buffer,result.optics.surface.buffer] : []),

@@ -1,9 +1,9 @@
-import { FLAKE_LIMITS } from "./flake-field";
-import { isIrregular } from "./finish";
-import { maskAlphaKey, previewOpticalKey } from "./makeup-dependencies";
+import { FLAKE_LIMITS } from "./engines/layered-makeup/flake-field";
+import { isIrregular } from "./engines/layered-makeup/finish";
+import { maskAlphaKey, previewOpticalKey } from "./engines/layered-makeup/makeup-dependencies";
 import type { GlitterPreviewMeasurement } from "./presentation-status";
-import type { GlitterStats } from "./raster-processor";
-import type { Layer } from "./recipe";
+import type { GlitterStats } from "./engines/layered-makeup/raster-processor";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import type { ReadonlyDeep } from "./read-only";
 
 /** Trusted reads the service needs; the composition root supplies the live document and preview tier. */

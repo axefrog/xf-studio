@@ -1,7 +1,7 @@
 import type { AuthoringDocument, LookRestore } from "./authoring-document";
 import type { HistoryEntryId } from "./editor-actions";
 import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 
 /** The history family's actions (registered by the composition as the `history` system family). */
 export type HistoryAction = { kind: "history.undo" | "history.redo" } | { kind: "history.jumpTo"; entryId: string };

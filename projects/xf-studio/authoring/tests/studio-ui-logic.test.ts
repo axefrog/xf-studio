@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { contextCandidates, type StudioContextHit } from "../src/studio-context-targets";
-import { convertToBezier } from "../src/bezier-path";
-import { initialRecipe } from "../src/recipe";
+import { convertToBezier } from "../src/engines/layered-makeup/bezier-path";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { matchCommands } from "../src/studio-ui/commands";
 import { libraryState } from "../src/studio-ui/panels/collection";
 import { Frame, sourceLabel, type Port } from "../src/studio-ui/runtime";

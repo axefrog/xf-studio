@@ -1,7 +1,7 @@
 import { BUILD_NEEDS_SETUP } from "./alpha-availability";
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
 import type { PackageBuild, PackageCheck } from "./package-action";
-import { RECIPE_FILE_MESSAGE, type Layer, type Recipe } from "./recipe";
+import { RECIPE_FILE_MESSAGE, type Layer, type Recipe } from "./engines/layered-makeup/recipe";
 import { portableRecipe, readPortableRecipe } from "./recipe-schema";
 import type { ReadonlyDeep } from "./read-only";
 import type { SavedAppearanceState } from "./saved-appearance-actions";

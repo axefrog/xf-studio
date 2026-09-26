@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { parseRecipe, type Recipe } from "./recipe";
+import { parseRecipe, type Recipe } from "./engines/layered-makeup/recipe";
 import { recipeFile } from "./recipe-schema";
 
 export type LookSummary = { id: string; name: string; revision: number; updatedAt: string };

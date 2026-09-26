@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { boundaryKernel, pointKernel, subdivide } from './fields';
-import type { Point } from '../../src/recipe';
+import type { Point } from '../../src/engines/layered-makeup/recipe';
 const square:Point[]=[{u:.3,v:.3,weight:0},{u:.7,v:.3,weight:0},{u:.7,v:.7,weight:1},{u:.3,v:.7,weight:1}];
 
 test('arclength integral agrees with independent midpoint quadrature',()=>{

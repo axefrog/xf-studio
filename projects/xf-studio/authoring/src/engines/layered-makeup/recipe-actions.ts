@@ -11,8 +11,8 @@ import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS, validStudioIrregularSettings, 
 import { hasGameOptics } from "./finish-export";
 import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
-import { refuse, type ValidationIssue } from "./validation-issues";
-import { refusal, type ReasonCode } from "./platform/api";
+import { refuse, type ValidationIssue } from "../../validation-issues";
+import { refusal, type ReasonCode } from "../../platform/api";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =

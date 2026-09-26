@@ -1,5 +1,5 @@
 import type { LayerAction } from "./editor-actions";
-import type { GestureEdit, RecipeAction } from "./recipe-actions";
+import type { GestureEdit, RecipeAction } from "./engines/layered-makeup/recipe-actions";
 
 import type { HistoryLabel } from "./platform/api";
 

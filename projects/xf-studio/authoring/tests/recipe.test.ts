@@ -5,7 +5,7 @@ import {
   coverage,
   raster,
   curve,
-} from "../src/recipe";
+} from "../src/engines/layered-makeup/recipe";
 describe("portable authoring contract", () => {
   test("round trips without aliasing the loaded document", () => {
     const a = initialRecipe(),

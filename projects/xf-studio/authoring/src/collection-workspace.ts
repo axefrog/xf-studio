@@ -9,12 +9,12 @@
  * look; every other part and feature memory of a look is carried unchanged.
  */
 import type { DocumentHistory } from "./authoring-document";
-import type { FieldSelection } from "./field-selection";
+import type { FieldSelection } from "./engines/layered-makeup/field-selection";
 import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection, type LookMemory,
   type PartMemory } from "./platform/api";
 import type { NewerPolicy, PartRegistry } from "./platform/core/document";
 import type { LiveFeatureState } from "./platform/core/live-features";
-import { emptyRecipe, type Recipe } from "./recipe";
+import { emptyRecipe, type Recipe } from "./engines/layered-makeup/recipe";
 
 /**
  * What the collection and workspace code needs from the composition: the registered features'
@@ -23,7 +23,7 @@ import { emptyRecipe, type Recipe } from "./recipe";
  */
 export type DocumentModel = { readonly parts: PartRegistry; readonly live: string };
 
-export { emptyRecipe } from "./recipe";
+export { emptyRecipe } from "./engines/layered-makeup/recipe";
 /** Why a collection holding a look from a newer XF Studio is not saved to the library (the look is kept in the draft and in exports). */
 export const NEWER_LOOKS_LIBRARY_MESSAGE = "This collection has a look made with a newer version of XF Studio, so this version doesn't " +
   "save it to your library. Use Export collection to keep a copy, or update XF Studio to save it.";

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { compositeTargetSize, MODE1_FULL_TILT, FACET_ZERO, type BlendWindow } from "./plate-blend";
-import { halfFloatRenderable } from "./linear-display";
+import { halfFloatRenderable } from "../../../linear-display";
 
 /**
  * The makeup plate's composite pass (renderer adapter): the export's merged decal and its faceted mip chain, drawn on the GPU

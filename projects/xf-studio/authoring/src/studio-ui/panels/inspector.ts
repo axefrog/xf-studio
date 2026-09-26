@@ -1,11 +1,11 @@
-import type { DirectGlintFlakes } from "../../direct-glint-settings";
+import type { DirectGlintFlakes } from "../../engines/layered-makeup/direct-glint-settings";
 import { editingReference } from "../../input-bindings";
 // Conditional flake-size limits are not expressible in the static action descriptor yet (audit A-7).
-import type { IrregularFlakes } from "../../flake-field";
-import type { LegacyFlakes } from "../../finish";
-import type { GlitterModel } from "../../glitter-model";
-import type { Layer } from "../../recipe";
-import type { RecipeAction } from "../../recipe-actions";
+import type { IrregularFlakes } from "../../engines/layered-makeup/flake-field";
+import type { LegacyFlakes } from "../../engines/layered-makeup/finish";
+import type { GlitterModel } from "../../engines/layered-makeup/glitter-model";
+import type { Layer } from "../../engines/layered-makeup/recipe";
+import type { RecipeAction } from "../../engines/layered-makeup/recipe-actions";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../controls";
 import { h, pct, setAttr, setText } from "../dom";

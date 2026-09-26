@@ -4,7 +4,7 @@
 import { resolve } from "node:path";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { bakeFlakes, defaultFlakes } from "../src/finish";
+import { bakeFlakes, defaultFlakes } from "../src/engines/layered-makeup/finish";
 const output = resolve(
   import.meta.dir,
   "../../../../experiments/002-flake-material/generated",

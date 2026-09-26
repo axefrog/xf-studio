@@ -5,9 +5,9 @@
  * keep reading what this build writes whenever the content allows. No edit ever changes a
  * schema: it is derived when a recipe is written.
  */
-import { LAYER_MODELS, type LayerModelRegistry } from "./layer-models";
+import { LAYER_MODELS, type LayerModelRegistry } from "./engines/layered-makeup/layer-models";
 import { NewerDataError } from "./platform/api";
-import { parseRecipe, parseRecipeFile, parseRecipePart, type Recipe, type RecipeFile } from "./recipe";
+import { parseRecipe, parseRecipeFile, parseRecipePart, type Recipe, type RecipeFile } from "./engines/layered-makeup/recipe";
 
 /** Eye makeup's feature ID: its part's key in a look (feature-module platform §2). */
 export const EYE_MAKEUP_FEATURE = "eye-makeup" as const;

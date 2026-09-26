@@ -7,7 +7,7 @@
 // byte-identical to the ones the Python oracle produces.
 import { createHash } from "node:crypto";
 import type { CollectionPlan } from "./package-bake";
-import type { UvTransformConstants } from "./plate-uv-window";
+import type { UvTransformConstants } from "./engines/layered-makeup/plate-uv-window";
 
 // WolvenKit JSON is untyped here; only the fields the rewrite touches are named.
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any

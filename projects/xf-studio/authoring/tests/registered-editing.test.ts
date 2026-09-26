@@ -12,7 +12,7 @@ import { STUDIO_COMPOSITION, STUDIO_OWNERS, STUDIO_REGISTRY } from "../src/compo
 import { EYE_MAKEUP, assignEyeMakeupIds } from "../src/features/eye-makeup";
 import { undoPolicyOf, type ActionSpec, type FeatureActionSpec } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
-import { parseRecipe, type Recipe } from "../src/recipe";
+import { parseRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { EyeMakeupAction, EyeMakeupState } from "../src/eye-makeup-model";
 import { createTrustedAuthoringCore, type StudioComposition } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";

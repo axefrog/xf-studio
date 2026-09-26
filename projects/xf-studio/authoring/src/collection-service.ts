@@ -4,7 +4,7 @@ import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";

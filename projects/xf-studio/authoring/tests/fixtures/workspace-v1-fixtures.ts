@@ -4,10 +4,10 @@
  * so they do not depend on the reader under test. `tests/golden/workspace-v1-observable.json`
  * holds what the pre-migration code restored from them.
  */
-import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../../src/direct-glint-settings";
-import { defaultFlakes } from "../../src/finish";
-import { defaultStudioIrregularFlakes } from "../../src/flake-field";
-import { initialRecipe, newLayerTemplate, type Layer, type RecipeFile } from "../../src/recipe";
+import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../../src/engines/layered-makeup/direct-glint-settings";
+import { defaultFlakes } from "../../src/engines/layered-makeup/finish";
+import { defaultStudioIrregularFlakes } from "../../src/engines/layered-makeup/flake-field";
+import { initialRecipe, newLayerTemplate, type Layer, type RecipeFile } from "../../src/engines/layered-makeup/recipe";
 
 /** The startup recipe as earlier builds stored it (recipe-7, schema first). */
 export const storedInitialRecipe = (): RecipeFile => ({ schema: "xfs/recipe-7", ...initialRecipe() });

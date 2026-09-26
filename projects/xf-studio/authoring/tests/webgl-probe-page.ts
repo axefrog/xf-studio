@@ -20,10 +20,10 @@ import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTextu
 import { createFaceDecalMaterial, decalColourUnits, faceDecalParameters, forwardDecal, gbufferColour, type Rgb } from "../src/face-decal-material";
 import type { DecalKind } from "../src/render-templates";
 import { createLinearDisplay, linearTargetSupported } from "../src/linear-display";
-import { flatSurface } from "../src/finish-export";
-import { createMakeupStack, type PlateUnderlay } from "../src/makeup-stack";
-import { accumulateComposite, EMPTY_COMPOSITE, plateSurface, type PlateComposite, type PlateTexel } from "../src/plate-blend";
-import { initialRecipe, type Layer } from "../src/recipe";
+import { flatSurface } from "../src/engines/layered-makeup/finish-export";
+import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
+import { accumulateComposite, EMPTY_COMPOSITE, plateSurface, type PlateComposite, type PlateTexel } from "../src/engines/layered-makeup/render/plate-blend";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
 import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters } from "../src/skin-material";
 import { stageBackdropPixels } from "../src/stage-backdrop";
 import { createStudioEnvironment } from "../src/studio-environment";

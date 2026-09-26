@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { decodeSrgbByte } from "../src/decal-underlay";
 import { gbufferColour, type Rgb } from "../src/face-decal-material";
-import { flatSurface, planPresetExport } from "../src/finish-export";
-import { createMakeupStack, type PlateUnderlay } from "../src/makeup-stack";
+import { flatSurface, planPresetExport } from "../src/engines/layered-makeup/finish-export";
+import { createMakeupStack, type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { accumulateComposite, compositeTargetSize, createPlateLightMaterial, EMPTY_COMPOSITE, MODE1_FULL_TILT, patchPlateLightShader, plateBlendWindow,
-  plateDrawnAlpha, plateSurface, residualForward, unfadeFacet, type PlateComposite, type PlateSkin, type PlateSurface, type PlateTexel } from "../src/plate-blend";
-import { mergeFlatSample, type MergedSample } from "../src/preset-compiler";
-import { initialRecipe, type Layer } from "../src/recipe";
-import { previewFacetChains } from "../src/route-mip-chains";
+  plateDrawnAlpha, plateSurface, residualForward, unfadeFacet, type PlateComposite, type PlateSkin, type PlateSurface, type PlateTexel } from "../src/engines/layered-makeup/render/plate-blend";
+import { mergeFlatSample, type MergedSample } from "../src/engines/layered-makeup/preset-compiler";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
+import { previewFacetChains } from "../src/engines/layered-makeup/route-mip-chains";
 import { skinParameters } from "../src/skin-material";
 
 const hex = (value: string): Rgb => [1, 3, 5].map(i => decodeSrgbByte(parseInt(value.slice(i, i + 2), 16))) as Rgb;

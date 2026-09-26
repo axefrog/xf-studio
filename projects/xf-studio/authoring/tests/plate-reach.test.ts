@@ -8,8 +8,8 @@ import { preflightPackageCollection } from "../src/package-preflight";
 import { PLATE_REACH_MIN_BYTE, presetReachesPlate } from "../src/plate-reach";
 import { plateReachInput } from "../src/plate-uv-footprint-io";
 import { parsePlateUvFootprint, plateSamplePoints, plateUvBounds, plateUvFootprint, plateUvWindow, PLATE_UV_FOOTPRINT_SCHEMA,
-  type PlateUvFootprint } from "../src/plate-uv-window";
-import { initialRecipe, type Layer } from "../src/recipe";
+  type PlateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
+import { initialRecipe, type Layer } from "../src/engines/layered-makeup/recipe";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { VerificationError } from "../src/mod-verifier/resource-checks";
 import { errorStats } from "../src/mod-verifier/texture-checks";

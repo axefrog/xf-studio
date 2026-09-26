@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialRecipe, type Recipe } from "../src/recipe";
+import { initialRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, panUVView, parseUVView, pixelToUV, uvAspect, uvRegion, uvToPixel, zoomUVView } from "../src/uv-view";

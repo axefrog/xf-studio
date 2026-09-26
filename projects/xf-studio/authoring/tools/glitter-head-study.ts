@@ -2,7 +2,7 @@
  * controller; never edits production recipes or the material's skinning hooks. */
 import * as THREE from "three";
 import {createScene} from "../src/scene";
-import {createRasterJob,initialRecipe} from "../src/recipe";
+import {createRasterJob,initialRecipe} from "../src/engines/layered-makeup/recipe";
 import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
 

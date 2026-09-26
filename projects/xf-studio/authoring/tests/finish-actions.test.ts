@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/finish-export";
-import { glitterModel, glitterModels, parseGlitterChoices } from "../src/glitter-model";
+import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/engines/layered-makeup/finish-export";
+import { glitterModel, glitterModels, parseGlitterChoices } from "../src/engines/layered-makeup/glitter-model";
 import { historyLabel } from "../src/history-labels";
-import { initialRecipe, parseRecipe, type Recipe } from "../src/recipe";
+import { initialRecipe, parseRecipe, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 
 /** The schema the recipe is written in: the in-memory recipe has none (part-2), so no action can change one. */

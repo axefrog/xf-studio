@@ -213,7 +213,7 @@ describe("rendering boundary", () => {
     "character-material-adapters", "browser-character-detail-device", "brow-material", "hair-shading", "hair-colour-model",
     "browser-head-attachment", "browser-scene-preview-ports", "material-template", "skin-material", "head-surface", "eye-material",
     "scene-evidence", "detail-limits", "resource-graph", "character-resolver", "face-decal-material", "decal-underlay", "head-skin-placement",
-    "plate-blend", "layered-setup", "layered-material", "game-asset-export", "trusted-preview-services", "preview-actions",
+    "engines/layered-makeup/render/plate-blend", "layered-setup", "layered-material", "game-asset-export", "trusted-preview-services", "preview-actions",
     "studio-ui/panels/preview"];
   const PER_MOD = new RegExp(String.raw`arkhe|icxrus|softnatural|mel_ccxl|meluminary|island_dancer|alliekat|preemhair|eagul|\bprc\b|kala|brown_ombre|ash_brown|10_brown|38_ash|05_brown|\/assets\/(?:brows|lashes|hair)\b|brows\.glb|lashes\.glb|local-hair-assets|lash-profile-preview|brow-preview-1|\b\d{17,20}\b|universalskintone|complexion|ks_uv|ks_donor|uv_framework|uv4\.xl|facialcustomizationfix|xbaebsae|warmsmooth|wa_head_overlay|wa_head_glow|4k\\\\common|_ca_pale|_ca_senna|_bl_espresso|_bl_dark|skin_type_0\d|basehead_d0\d|nutboy|brocreate|photoreal|unique_eyes|unique eyes|pit_eyes|forbidden_eyes|forbidden eyes|beautiful_iris|beautiful iris|beautiful_exotic|heterochrom|ccxl_eye|eye_\d\d_|\/assets\/eyes\b|local-eye-assets|eye-appearance|eye-optics|he_000_base|eye_mask\.xbm|eye_shadow_mask|gradient_(?:light_)?blue|gradient_brown|rebecca|cybereye|eye_blue|eye_red|eye_brown|` +
     // Face details: no option, definition, mesh, material or archive of a particular makeup, scar, tattoo, cyberware or

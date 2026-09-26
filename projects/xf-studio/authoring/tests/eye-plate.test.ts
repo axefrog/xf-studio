@@ -10,7 +10,7 @@ import { cutMorphBlob, derivePlateDocuments, selectPlate } from "../src/eye-plat
 import { plateTopology, verifyEyePlate } from "../src/eye-plate-verify";
 import { contentFingerprint, EyePlateCache, eyePlateReadiness } from "../src/eye-plate-cache";
 import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, type EyePlateTools } from "../src/eye-plate-service";
-import { plateUvFootprint } from "../src/plate-uv-window";
+import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { depotPathRegex } from "../src/eye-plate-wolvenkit";
 import { FIXTURE_DIFFS, fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";

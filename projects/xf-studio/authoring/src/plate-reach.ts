@@ -5,9 +5,9 @@
 // verifier refuses its window map, so Check and Build omit it as a reported omission (PIPE-33). The test
 // samples the plate where the verifier does, at every vertex and six points inside every triangle, and
 // asks whether any exportable layer's own coverage reaches at least PLATE_REACH_MIN_BYTE / 255 at one of them.
-import { planPresetExport } from "./finish-export";
-import { plateSamplePoints, type PlateUvFootprint } from "./plate-uv-window";
-import { layerCoverageSampler, type Recipe } from "./recipe";
+import { planPresetExport } from "./engines/layered-makeup/finish-export";
+import { plateSamplePoints, type PlateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
+import { layerCoverageSampler, type Recipe } from "./engines/layered-makeup/recipe";
 
 /**
  * Smallest coverage byte, at one plate sample, that counts as reaching the plate. The verifier counts a sample

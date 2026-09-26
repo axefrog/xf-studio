@@ -1,7 +1,7 @@
 // Run on the isolated /build/depth-study.html page; never reads/writes workspace or library data.
 import * as THREE from "three";
 import { createScene } from "../src/scene";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 import { extendSkin } from "../src/skin";
 import { previewClipPlanes, previewNearPlane } from "../src/camera-depth";
 

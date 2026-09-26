@@ -1,4 +1,4 @@
-import type { Layer } from "./recipe";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import type { StudioFileKind, StudioFilePort, StudioPickedFile } from "./studio-file-operations";
 
 /** Browser mechanics for the file workflow. The shell supplies its own picker elements. */

@@ -1,7 +1,7 @@
-import { isDirectGlint } from "./direct-glint-settings";
-import { canonicalFinish } from "./finish";
+import { isDirectGlint } from "./engines/layered-makeup/direct-glint-settings";
+import { canonicalFinish } from "./engines/layered-makeup/finish";
 import type { PreviewQualityAssessment, PreviewTextureSize } from "./preview-quality";
-import type { Layer, Recipe } from "./recipe";
+import type { Layer, Recipe } from "./engines/layered-makeup/recipe";
 
 export type LayerPreviewPlan =
   | { kind: "missing" }

@@ -1,6 +1,6 @@
 import { parseExportDiagnostics } from "./export-diagnostics";
-import { canonicalFinish, finishLabel, type Finish } from "./finish";
-import { layerExport, planPresetExport, type ExportAdapterId } from "./finish-export";
+import { canonicalFinish, finishLabel, type Finish } from "./engines/layered-makeup/finish";
+import { layerExport, planPresetExport, type ExportAdapterId } from "./engines/layered-makeup/finish-export";
 import { NO_EYE_MAKEUP_REASON, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
 import type { PackagePresetIdentity } from "./package-action";
 import { plateUvRecord, presetReachesPlate, type PlateReachInput } from "./plate-reach";

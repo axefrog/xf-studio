@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { forwardDecal, gbufferColour, type Rgb } from "./face-decal-material";
-import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "./finish-export";
+import { forwardDecal, gbufferColour, type Rgb } from "../../../face-decal-material";
+import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "../finish-export";
 import { FRESNEL_TINT_TERM } from "./fresnel-tint";
-import { patchSkinLight, skinLightMapsChunk, skinLightUniforms, type SkinParameters } from "./skin-material";
+import { patchSkinLight, skinLightMapsChunk, skinLightUniforms, type SkinParameters } from "../../../skin-material";
 
 /**
  * The Studio's authored makeup plate, drawn the way the game draws the exported plate (renderer adapter).

@@ -1,6 +1,6 @@
 import type { AuthoringDocument } from "./authoring-document";
-import type { RecipeAction } from "./recipe-actions";
-import type { Layer } from "./recipe";
+import type { RecipeAction } from "./engines/layered-makeup/recipe-actions";
+import type { Layer } from "./engines/layered-makeup/recipe";
 import { historyLabel, type HistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
 import { CONTROL_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";

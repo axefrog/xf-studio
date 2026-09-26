@@ -8,7 +8,7 @@ import { attachHeadCameraInput, CAMERA_EFFECTS, headCameraEffect, orbitMouseActi
 import { ADAPTER_INPUTS, ALL_TARGETS, MAKEUP_TARGETS, MODIFIER_KEYS, POINTER_BINDINGS, PRESS_INPUTS, pointerBinding,
   pointerBindingById, pointerInputOf, targetTip, viewportHints, type HeldModifiers, type ModifierKey, type PointerInput,
   type PointerTarget, type ViewportScope } from "../src/input-bindings";
-import { initialRecipe, type Layer, type Recipe } from "../src/recipe";
+import { initialRecipe, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
 import { createUVEditor } from "../src/uv-editor";
 import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";

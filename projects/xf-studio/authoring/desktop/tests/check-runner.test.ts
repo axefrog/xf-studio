@@ -7,7 +7,7 @@ import { desktopPackageRequest } from "../package";
 import { derivePlateDocuments } from "../../src/eye-plate-cut";
 import { OFF_PLATE_REASON } from "../../src/package-filter";
 import { plateReachInput } from "../../src/plate-uv-footprint-io";
-import { plateUvFootprint } from "../../src/plate-uv-window";
+import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
 import { preparePackageCollection } from "../../src/package-filter";

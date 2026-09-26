@@ -33,7 +33,7 @@ test("the browser-globals check catches every global it names (CORE-37)", () => 
 test("trusted application and presentation services keep browser devices outside their import boundary", () => {
   const trusted = ["studio-application", "studio-presentation", "trusted-authoring-core",
     "trusted-studio-bootstrap", "trusted-preview-services", "collection-application",
-    "studio-file-operations", "authoring-preview-coordinator", "glitter-measurements", "makeup-dependencies"];
+    "studio-file-operations", "authoring-preview-coordinator", "glitter-measurements", "engines/layered-makeup/makeup-dependencies"];
   for (const name of trusted) {
     const code = source(name);
     for (const dependency of imports(code))
@@ -67,7 +67,7 @@ test("core modules never import presentation modules or browser entry points", (
     .filter(file => file.endsWith(".ts") && !file.endsWith(".d.ts"))
     .map(file => file.slice(0, -3));
   const core = modules.filter(name => !presentation(`./${name}`) && !entries.has(name));
-  expect(core).toContain("recipe-actions");
+  expect(core).toContain("recipe-schema");
   expect(core).toContain("studio-application");
   const violations = core.flatMap(name => imports(source(name))
     .filter(path => presentation(path) || entries.has(path.replace(/^\.\//, "")))
@@ -77,9 +77,9 @@ test("core modules never import presentation modules or browser entry points", (
 
 test("the package builder keeps resource definitions pure and external processes in its adapters", () => {
   // Pure definitions: no file, process or compiler access.
-  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./plate-uv-window"]);
+  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./engines/layered-makeup/plate-uv-window"]);
   // The plate-local UV window is pure arithmetic over WolvenKit JSON.
-  expect(imports(source("plate-uv-window"))).toEqual([]);
+  expect(imports(source("engines/layered-makeup/plate-uv-window"))).toEqual([]);
   // Orchestration reaches WolvenKit only through the PackageResourceTools port.
   for (const name of ["package-resource-builder", "package-build-service", "package-bake"])
     for (const dependency of imports(source(name)))

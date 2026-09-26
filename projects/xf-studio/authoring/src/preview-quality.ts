@@ -1,5 +1,5 @@
-import type { Recipe } from "./recipe";
-import {isDirectGlint} from "./direct-glint-settings";
+import type { Recipe } from "./engines/layered-makeup/recipe";
+import {isDirectGlint} from "./engines/layered-makeup/direct-glint-settings";
 
 export const PREVIEW_TEXTURE_SIZES = [512, 1024, 2048, 4096] as const;
 export type PreviewTextureSize = (typeof PREVIEW_TEXTURE_SIZES)[number];

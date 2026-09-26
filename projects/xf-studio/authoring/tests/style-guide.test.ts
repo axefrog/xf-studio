@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { iconNames } from "../src/studio-ui/icons";
 import { PANEL_IDS } from "../src/studio-ui/layout-defaults";
 import { PANEL_META } from "../src/studio-ui/panel-meta";
-import { finishCatalogue } from "../src/finish-catalogue";
+import { finishCatalogue } from "../src/engines/layered-makeup/finish-catalogue";
 import { contrastTable } from "../src/studio-ui/style-guide/contrast";
 
 const root = resolve(import.meta.dir, "..");

@@ -3,7 +3,7 @@ import { canvasResolution } from "../src/canvas-resolution";
 import { createUVEditor } from "../src/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, pixelToUV, uvToPixel } from "../src/uv-view";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe } from "../src/engines/layered-makeup/recipe";
 
 test("fractional CSS dimensions and DPR cover exactly the drawing rectangle", () => {
   for (const width of [288.3,720,1400.25]) for (const dpr of [1,1.25,2,3]) {

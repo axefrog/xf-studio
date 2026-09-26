@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "./finish-export";
+import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "../finish-export";
 
 /**
  * The tint the game adds to the decal colour before the G-buffer's square root (uniforms `xfsShiftColor`, `xfsShiftIntensity`,

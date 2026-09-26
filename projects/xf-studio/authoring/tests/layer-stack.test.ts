@@ -1,8 +1,8 @@
 import { test, expect } from "bun:test";
-import { coverage, initialRecipe, MAX_LAYERS, parseRecipe, parseRecipeFile } from "../src/recipe";
-import { editLayers } from "../src/layer-stack";
+import { coverage, initialRecipe, MAX_LAYERS, parseRecipe, parseRecipeFile } from "../src/engines/layered-makeup/recipe";
+import { editLayers } from "../src/engines/layered-makeup/layer-stack";
 import { RecipeHistory } from "../src/editor-actions";
-import { compileFlatPreset } from "../src/preset-compiler";
+import { compileFlatPreset } from "../src/engines/layered-makeup/preset-compiler";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";

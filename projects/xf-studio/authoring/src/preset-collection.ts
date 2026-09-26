@@ -1,10 +1,10 @@
 import { ACCENT_ENTRY_PREFIX, fresnelMaterial, HEAD_UV_ENTRY_SUFFIX, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, ROUTE_UV_WINDOW,
-  type ExportRoute, type FresnelMaterial, type TextureChannel } from "./finish-export";
+  type ExportRoute, type FresnelMaterial, type TextureChannel } from "./engines/layered-makeup/finish-export";
 import { accentConstants, parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type PresetDiagnostics } from "./export-diagnostics";
 import { checkRegionPlan } from "./glitter-region";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
-import type { Recipe, RecipeFile } from "./recipe";
+import type { Recipe, RecipeFile } from "./engines/layered-makeup/recipe";
 import { EYE_MAKEUP_FEATURE, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readRecipeFile, recipeFile } from "./recipe-schema";
 import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 

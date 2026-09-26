@@ -1,5 +1,5 @@
 import type { StudioAction, StudioTarget } from "./studio-application";
-import type { Recipe } from "./recipe";
+import type { Recipe } from "./engines/layered-makeup/recipe";
 
 /**
  * A renderer/DOM adapter identifies the hit; this module never performs picking.

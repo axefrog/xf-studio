@@ -2,7 +2,7 @@
 
 ## Status (25 Sep 2026)
 
-All of the 23 September path/falloff/surface requests are implemented and browser-verified offline. The default new recipe is `xfs/recipe-7` (see `projects/xf-studio/authoring/src/recipe.ts`); every earlier schema still migrates on read without changing saved looks.
+All of the 23 September path/falloff/surface requests are implemented and browser-verified offline. The default new recipe is `xfs/recipe-7` (see `projects/xf-studio/authoring/src/engines/layered-makeup/recipe.ts`); every earlier schema still migrates on read without changing saved looks.
 
 | Request | State | Evidence |
 |---|---|---|

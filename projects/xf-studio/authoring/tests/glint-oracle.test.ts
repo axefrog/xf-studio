@@ -1,6 +1,6 @@
 import {describe,expect,test} from "bun:test";
 import {downsample2x2,errorMetrics,facetResponse,idealAveragedResponse,integrateCrop,integrateFacetSamples,runGlintOracle,topFlakeAt,type Vec3} from "../tools/glint-oracle";
-import type {Flake} from "../src/flake-field";
+import type {Flake} from "../src/engines/layered-makeup/flake-field";
 
 function rectangle(id:number,x0:number,y0:number,x1:number,y1:number,normal:Vec3):Flake{
   return {id,u:(x0+x1)/2,v:(y0+y1)/2,radius:Math.max(x1-x0,y1-y0)/2,aspect:1,angle:0,normal,

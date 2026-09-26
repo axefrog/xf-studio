@@ -2,8 +2,8 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { bakeFlakes, defaultFlakes } from "../../projects/xf-studio/authoring/src/finish";
-import { initialRecipe, parseRecipe, raster } from "../../projects/xf-studio/authoring/src/recipe";
+import { bakeFlakes, defaultFlakes } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/finish";
+import { initialRecipe, parseRecipe, raster } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/recipe";
 
 const [source, layerId, out, sizeArg] = process.argv.slice(2);
 if (!out) throw Error("Usage: bun recipe-inputs.ts <recipe.json|--sample> <layer-id> <output-dir> [size]");
