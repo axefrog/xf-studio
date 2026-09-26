@@ -27,6 +27,12 @@
  *
  * Single flight: requests that arrive while a route is being checked or opened wait for that one check or open.
  *
+ * Native reader. Each game folder gets one native decoder (resolver-host.ts `openNativeRoute`: a worker that reads resources with the
+ * game's own Oodle library), opened asynchronously before the route's first open and shared by every route and view on that folder, so
+ * resources are read natively first and WolvenKit runs only for what the native reader can't answer. If it can't be opened, the route
+ * reads with WolvenKit alone and the reason goes to the diagnostics log in plain words. A changed Oodle library (a game update) opens a
+ * new decoder; `clear` closes them all.
+ *
  * Views. Resources are extracted into a cache folder chosen by each consumer; each folder gets its own resource graph
  * and fetcher over the shared archives (`installationView`). A view's graph remembers what it read (its shapes of meshes,
  * morph targets and `.app`s, and other documents whole), so a later V reuses the resources earlier ones shared. It is
@@ -37,7 +43,8 @@
 import { lstat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
-import { installationView, openInstallation, type Installation, type InstallationOptions } from "./resolver-host";
+import { currentDiagnostics } from "./diagnostics/host-log";
+import { installationView, type NativeRoute, nativeRouteStamp, openInstallation, openNativeRoute, type Installation, type InstallationOptions } from "./resolver-host";
 import { ResourceGraph } from "./resource-graph";
 import { routeIdentity, type LaunchRouteSettings } from "./route-fingerprint";
 import { pathStamp, readListingStamp, type WatchedPath } from "./source-discovery";
@@ -82,6 +89,13 @@ type Entry = {
 export type InstallationRegistryOptions = {
   /** Opens a route (default `openInstallation`); a test seam. */
   open?: (options: InstallationOptions) => Installation;
+  /**
+   * Opens a game folder's native decoder (default `openNativeRoute` with `nativeWorker`); a test seam. `false`: never, so WolvenKit reads
+   * everything (tests with synthetic installations).
+   */
+  openNative?: ((gameRoot: string) => Promise<NativeRoute>) | false;
+  /** Stamps a game folder's Oodle library (default `nativeRouteStamp`); a test seam. */
+  nativeStamp?: (gameRoot: string) => string;
   /** Routes kept open at once (default 2); the least recently used beyond it is dropped. */
   maxRoutes?: number;
   /** Reads a path's time stamp (default `lstat`); a test seam. Listing stamps are read by listing the folder. */
@@ -115,9 +129,39 @@ export class InstallationRegistry {
   private readonly generations = new Map<string, number>();
   /** Watch lists of routes dropped to make room, by key, until the route is opened again (PIPE-52). */
   private readonly retired = new Map<string, readonly WatchedPath[]>();
+  /** One native decoder per game folder, with the stamp of the Oodle library it was opened for. */
+  private readonly natives = new Map<string, { stamp: string; route: Promise<NativeRoute> }>();
+  /** The built native decode worker, when the host is bundled (the desktop app); by default the worker's source next to its module. */
+  private nativeWorker: URL | string | undefined;
   private clock = 0;
-  readonly stats = { opens: 0, checks: 0, reused: 0, changed: 0, expired: 0, evicted: 0, graphsReplaced: 0 };
+  readonly stats = { opens: 0, checks: 0, reused: 0, changed: 0, expired: 0, evicted: 0, graphsReplaced: 0, nativeOpens: 0 };
   constructor(private readonly options: InstallationRegistryOptions = {}) {}
+
+  /** Where the native decode worker is (a composition root that bundles the host sets it before the first route opens). */
+  useNativeWorker(script: URL | string | undefined): void { this.nativeWorker = script; }
+
+  /**
+   * The game folder's native decoder, opened once (asynchronously) and shared; opened again when its Oodle library changed. The outcome
+   * goes to the diagnostics log: which reader is used, or in plain words why WolvenKit reads everything.
+   */
+  private native(gameRoot: string): Promise<NativeRoute> {
+    if (this.options.openNative === false) return Promise.resolve({ decoder: null, reason: "XF Studio's own reader is not used here." });
+    const key = folderKey(gameRoot), stamp = (this.options.nativeStamp ?? nativeRouteStamp)(gameRoot);
+    const known = this.natives.get(key);
+    if (known?.stamp === stamp) return known.route;
+    if (known) void known.route.then(route => route.decoder?.close());
+    this.stats.nativeOpens++;
+    const open = this.options.openNative ?? (root => openNativeRoute(root, { script: this.nativeWorker }));
+    const route = open(gameRoot).catch(error => ({ decoder: null, reason: String((error as Error)?.message ?? error) }) as NativeRoute).then(route => {
+      const log = currentDiagnostics()?.log;
+      if (route.decoder) log?.info("resolver", "native_reader_on", "XF Studio reads your game files itself; WolvenKit runs only for files it can't read.",
+        { codes: [route.decoder.identity] });
+      else log?.warn("resolver", "native_reader_off", `XF Studio can't read your game files itself here, so WolvenKit reads them (slower the first time). ${route.reason}`);
+      return route;
+    });
+    this.natives.set(key, { stamp, route });
+    return route;
+  }
 
   private now() { return this.options.now?.() ?? Date.now(); }
 
@@ -176,8 +220,12 @@ export class InstallationRegistry {
     await this.checkRetired(key);
   }
 
-  /** Forget every opened route (tests, or a host shutting down). */
-  clear(): void { this.entries.clear(); this.retired.clear(); }
+  /** Forget every opened route and close the native decoders (tests, or a host shutting down). */
+  clear(): void {
+    this.entries.clear(); this.retired.clear();
+    for (const { route } of this.natives.values()) void route.then(opened => opened.decoder?.close());
+    this.natives.clear();
+  }
 
   private bump(key: string): void { this.generations.set(key, (this.generations.get(key) ?? 0) + 1); }
 
@@ -245,8 +293,9 @@ export class InstallationRegistry {
     const opening = (async () => {
       // Let the request that asked answer its caller's other work first; opening is synchronous file work.
       await new Promise(resolve => setTimeout(resolve, 0));
+      const native = await this.native(options.gameRoot);
       this.stats.opens++;
-      const core = (this.options.open ?? openInstallation)(options);
+      const core = (this.options.open ?? openInstallation)({ ...options, native });
       const problems = problemsOf(core);
       // Reopened because it was old: the answer changed only if its read errors did.
       if (entry.expired !== undefined && entry.expired !== problems) this.bump(key);

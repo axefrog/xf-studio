@@ -20,6 +20,13 @@ export interface NativeDecodeRequest {
   readonly hash: string;
   /** Also look the resource's depot path up in the archive's own name list (the reference carried only a hash). */
   readonly needName: boolean;
+  /**
+   * Root classes this request may decode besides the decoder's own (a host reading one resource of a kind the resolver doesn't, e.g.
+   * the clothing host's `JsonResource` preset, through the route's decoder).
+   */
+  readonly roots?: readonly string[];
+  /** This request's time budget in a worker, when it is not the decoder's (a much larger resource than the resolver reads). */
+  readonly timeoutMs?: number;
 }
 
 export type NativeDecodeOutcome =
@@ -62,7 +69,7 @@ export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, 
     if (!bytes) return { ok: false, kind: "not-indexed", message: "The archive does not list the resource." };
     const session = new DecodeSession(options.limits ?? DEFAULT_LIMITS);
     const root = new Cr2wFile(bytes, session).exports[0]?.className;
-    if (!root || !options.roots.has(root)) return { ok: false, kind: "not-verified", message: `Root class ${root ?? "(none)"} is not verified.` };
+    if (!root || !(options.roots.has(root) || request.roots?.includes(root))) return { ok: false, kind: "not-verified", message: `Root class ${root ?? "(none)"} is not verified.` };
     const document = readResourceJson(bytes, decompress, { buffers: "trim", header: { XfsNativeReader: options.identity } }, session);
     return { ok: true, document, extractedSha256: createHash("sha256").update(bytes).digest("hex"), root,
       name: request.needName ? nameOf(pool.get(request.archivePath), request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties };
@@ -242,7 +249,7 @@ export class WorkerDecoder implements NativeDecoder {
     if (!busy || busy.sent || !current?.ready) return;
     const { worker } = current, id = busy.id;
     busy.sent = true;
-    busy.timer = setTimeout(() => this.timeout(worker, id), this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS);
+    busy.timer = setTimeout(() => this.timeout(worker, id), this.budget(busy.pending.request));
     worker.postMessage({ type: "decode", id, request: busy.pending.request });
   }
 
@@ -262,10 +269,13 @@ export class WorkerDecoder implements NativeDecoder {
     void current.worker.terminate();
   }
 
+  /** A request's time budget: its own, else the decoder's. */
+  private budget(request: NativeDecodeRequest): number { return request.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS; }
+
   private timeout(worker: DecodeWorker, id: number): void {
     if (this.current?.worker !== worker || this.busy?.id !== id) return;
     this.stopWorker();
-    this.finish({ ok: false, kind: "over-budget", message: `Decoding took longer than ${this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS} ms and was abandoned.` });
+    this.finish({ ok: false, kind: "over-budget", message: `Decoding took longer than ${this.budget(this.busy!.pending.request)} ms and was abandoned.` });
   }
 
   close(): void {

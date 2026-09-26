@@ -1,6 +1,7 @@
 /**
- * Integration seam (prototype, not wired in): a resource fetch port that reads natively first and falls back to another port
- * (WolvenKit, resolver-host.ts `WolvenKitFetcher`) per resource. See research/backlog/native-archive-reader.md for the plan.
+ * The resolver's native-first fetch port: reads a resource natively and falls back to another port (WolvenKit, resolver-host.ts
+ * `WolvenKitFetcher`) per resource. The resolver host opens one decoder per installation route and wraps each cache folder's WolvenKit
+ * fetcher in this port (resolver-host.ts `ResolverFetcher`); research/backlog/native-archive-reader.md has the plan and measurements.
  *
  * - A resource is served natively when its archive indexes it, its root class is one the native reader has been verified on
  *   (`NATIVE_ROOTS`, from the differential harness tools/native-cr2w-diff.ts) and decoding succeeds within its budgets. Anything
@@ -13,11 +14,14 @@
  * - The answer carries the same `extractedSha256` the fallback would (the native bytes are identical to WolvenKit's extraction),
  *   so provenance and render records do not depend on which reader answered. It also carries `notes` (a property stored with a
  *   type the RTTI disagrees with, e.g. a mod's `castShadows` stored as `Bool`) and `defaulted` (watched properties the file left
- *   out, e.g. `rendChunk.renderMask`, which the document can only show as 0), for the resolver to surface.
- * - Native answers are not cached on disk: a read and decode takes well under 10 ms for all but the largest morph targets. If a
- *   cache is added, its key is (depot hash, archive fingerprint, `NativeReader.identity`), never the WolvenKit identity, so a
- *   WolvenKit update does not invalidate native answers and a reader change does not reuse old ones.
+ *   out, e.g. `rendChunk.renderMask`, which the document can only show as 0), which the resource graph reads.
+ * - Native answers are not cached: a read and decode takes well under 10 ms for all but the largest morph targets. What is kept is
+ *   only *that* a resource was answered natively (`NativeAnswerLedger`, so a later session knows a prepared choice needs no
+ *   WolvenKit), keyed by (depot hash, archive fingerprint, `NativeReader.identity`), never by the WolvenKit identity, so a WolvenKit
+ *   update does not invalidate native answers and a reader change does not reuse old ones.
  * - Native answers are not `fresh`: the resource graph's prefetch exists to batch WolvenKit launches, which native reads don't need.
+ * - A fallback whose native failure may not repeat (`unavailable`, `io`) counts as transient when the fallback also
+ *   fails, so the resource graph reads it again later instead of settling on the fallback's lasting failure.
  */
 import { createHash } from "node:crypto";
 import type { MountedArchive } from "../archive-precedence";
@@ -126,20 +130,42 @@ export interface NativeFetchStats {
 const SAMPLE_LIMIT = 32, INTERNAL_LIMIT = 8;
 const QUIET: ReadonlySet<NativeFailureKind> = new Set(["not-indexed", "not-verified"]);
 
+/**
+ * What remembers which resources were answered natively (resolver-host.ts keeps it on disk per cache folder). Its keys must include
+ * the archive's identity and the reader's, never WolvenKit's.
+ */
+export interface NativeAnswerLedger {
+  has(archive: MountedArchive, hash: string): boolean;
+  add(archive: MountedArchive, hash: string): void;
+}
+
+/**
+ * Native failure kinds that may not repeat on a later read: the decoder was down or the file system failed. A reader bug (`internal`)
+ * is not one: it would repeat, and a graph dropped for it would be read again on every preparation.
+ */
+export const TRANSIENT_NATIVE_FAILURES: ReadonlySet<NativeFailureKind> = new Set(["unavailable", "io"]);
+
+export interface NativeFirstOptions {
+  /** Rethrow reader bugs (`internal` failures) instead of falling back, for tests and benches. */
+  readonly strict?: boolean;
+  /** Sees every fallback as it happens (diagnostics). */
+  readonly onFallback?: (kind: NativeFailureKind, resource: string, message: string) => void;
+  /** Records native answers, so `answeredNatively` holds across sessions. */
+  readonly ledger?: NativeAnswerLedger;
+}
+
 /** A reader bug surfaced by a strict port (`strict: true`). */
 export class NativeInternalError extends Error { override name = "NativeInternalError"; }
 
 export class NativeFirstFetcher implements ResourceFetchPort {
   readonly stats: NativeFetchStats = { native: 0, fallback: 0, byKind: Object.fromEntries(NATIVE_FAILURE_KINDS.map(kind => [kind, 0])) as Record<NativeFailureKind, number>, samples: [], internal: [] };
-  /** Resources the last answer for came from the fallback (so its `transient` rule applies). */
-  private readonly fellBack = new Set<string>();
+  /** Resources the last answer for came from the fallback, with the native failure's kind (so the `transient` rule applies). */
+  private readonly fellBack = new Map<string, NativeFailureKind>();
 
-  /**
-   * `strict`: rethrow reader bugs (`internal` failures) instead of falling back, for tests and benches. `onFallback` sees every
-   * fallback as it happens (diagnostics).
-   */
-  constructor(private readonly decoder: NativeDecoder, private readonly fallback: ResourceFetchPort,
-    private readonly options: { strict?: boolean; onFallback?: (kind: NativeFailureKind, resource: string, message: string) => void } = {}) {}
+  constructor(readonly decoder: NativeDecoder, private readonly fallback: ResourceFetchPort, private readonly options: NativeFirstOptions = {}) {}
+
+  /** The native reader's identity (cache keys of anything derived from native answers). */
+  get identity(): string { return this.decoder.identity; }
 
   private key(archive: MountedArchive, ref: DepotRef) { return `${archive.id}|${ref.hash}`; }
 
@@ -158,17 +184,27 @@ export class NativeFirstFetcher implements ResourceFetchPort {
     if (outcome.ok) {
       this.stats.native++;
       this.fellBack.delete(key);
+      this.options.ledger?.add(archive, ref.hash);
       return { document: outcome.document, extractedSha256: outcome.extractedSha256, path: ref.path ?? outcome.name, fresh: false, notes: outcome.notes, defaulted: outcome.defaulted };
     }
     this.record(outcome, archive, ref);
     this.stats.fallback++;
-    this.fellBack.add(key);
+    this.fellBack.set(key, outcome.kind);
     return this.fallback.fetch(archive, ref, extension);
   }
 
+  /**
+   * Whether the last null answer may not repeat: the fallback's own rule, or a native failure that may not repeat (the resource may
+   * read natively next time). A native answer is never null.
+   */
   transient(archive: MountedArchive, ref: DepotRef): boolean {
-    return this.fellBack.has(this.key(archive, ref)) ? this.fallback.transient?.(archive, ref) ?? true : false;
+    const kind = this.fellBack.get(this.key(archive, ref));
+    if (kind === undefined) return false;
+    return TRANSIENT_NATIVE_FAILURES.has(kind) || (this.fallback.transient?.(archive, ref) ?? true);
   }
+
+  /** Whether this resource was answered natively from this archive's current bytes by this reader (this session or, with a ledger, before). */
+  answeredNatively(archive: MountedArchive, hash: string): boolean { return this.options.ledger?.has(archive, hash) ?? false; }
 
   close(): void { this.decoder.close(); }
 }

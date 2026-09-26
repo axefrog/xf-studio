@@ -119,7 +119,7 @@ for (const item of bigOnes) {
     row.usage.ms = Math.max(row.usage.ms, performance.now() - start);
     for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "names", "largestBuffer"] as const) row.usage[key] = Math.max(row.usage[key], result.usage[key]);
     checkDefaults(result.usage, bytes, root);
-    for (const note of result.notes) outcome = `decoded, note ${note.property}: ${note.stored} (RTTI ${note.rtti})`;
+    for (const note of result.notes) outcome = `decoded, note ${note.property}: ${note.stored} ${note.kind === "type-mismatch" ? `(RTTI ${note.rtti})` : "elements past its count"}`;
   } catch (error) { outcome = `${(error as Error).name}: ${(error as Error).message.replace(/[0-9]+/g, "N").slice(0, 100)}`; }
   row.outcomes.set(outcome, (row.outcomes.get(outcome) ?? 0) + 1);
 }
@@ -153,7 +153,10 @@ if (cache) {
         usage.ms = Math.max(usage.ms, performance.now() - start);
         for (const key of ["decodedBytes", "nodes", "jsonNodes", "depth", "longestName", "names", "largestBuffer"] as const) usage[key] = Math.max(usage[key], result.usage[key]);
         checkDefaults(result.usage, bytes, "cached");
-        for (const note of result.notes) notes.set(`${note.property}: ${note.stored} (RTTI ${note.rtti})`, (notes.get(`${note.property}: ${note.stored} (RTTI ${note.rtti})`) ?? 0) + 1);
+        for (const note of result.notes) {
+          const key = note.kind === "type-mismatch" ? `${note.property}: ${note.stored} (RTTI ${note.rtti})` : `${note.property}: ${note.stored} elements past a count of ${note.declared}`;
+          notes.set(key, (notes.get(key) ?? 0) + 1);
+        }
         for (const row of result.defaulted) defaulted.set(row.property, (defaulted.get(row.property) ?? 0) + row.count);
       } catch (error) { notes.set(`refused: ${(error as Error).name}`, (notes.get(`refused: ${(error as Error).name}`) ?? 0) + 1); }
       break;

@@ -4,7 +4,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clothingPorts, itemRecords, PRESET_PATHS, presetOf, presetTable, tweakIdOf } from "../src/clothing-host";
+import { clothingPorts, itemRecords, PRESET_PATHS, presetOf, presetTable, routePresetDecoder, tweakIdOf } from "../src/clothing-host";
+import type { NativeDecodeRequest, NativeDecoder } from "../src/native/native-decode";
 import { depotHash, fnv1a64 } from "../src/depot-path";
 import type { ResourceGraph } from "../src/resource-graph";
 import { TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/tweakdb-flats";
@@ -164,6 +165,22 @@ describe("the cooked visual-tag preset (PIPE-101, NATIVE-25, PIPE-100)", () => {
     const nowhere = { depot: { plan: { ep1Installed: false } }, exists: () => false, locate: () => ({ lookup: { winner: null } }) } as unknown as ResourceGraph;
     expect(await presetOf(nowhere, root, cache, () => {}, decode)).toBeNull();
     expect(calls).toBe(1);
+  });
+
+  test("through the route's native decoder: one request for the preset's root class with the preset's budget; the decoder stays open", async () => {
+    const archive = join(root, "route.archive");
+    writeFileSync(archive, "route bytes");
+    const asked: NativeDecodeRequest[] = [];
+    let closed = false;
+    const decoder: NativeDecoder = { identity: "route", close: () => { closed = true; },
+      decode: async request => { asked.push(request); return { ok: true, document, extractedSha256: "", root: "JsonResource", name: null, notes: [], defaulted: [] }; } };
+    const ports = await clothingPorts(graphOver(archive), join(root, "no-game"), join(root, "cache-d"), () => {}, { routeDecoder: decoder });
+    expect(ports.presetTags("123", "t2_coat_&Female&TPP")).toEqual(["Common", "Large", "hide_T1part"]);
+    expect(asked).toEqual([{ archivePath: archive, hash: depotHash(PRESET_PATHS.base), needName: false, roots: ["JsonResource"], timeoutMs: 120_000 }]);
+    expect(closed).toBe(false);
+    // A refusal is the decode's failure (logged by presetOf, tried again next time), not a silent empty table.
+    const refusing: NativeDecoder = { identity: "route", close() {}, decode: async () => ({ ok: false, kind: "malformed", message: "bad bytes" }) };
+    expect(routePresetDecoder(refusing, root)(archive, "1")).rejects.toThrow("malformed: bad bytes");
   });
 
   test("without a TweakDB the records port answers null, so every item says the records couldn't be read", async () => {

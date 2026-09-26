@@ -52,7 +52,7 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot,
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
-import type { Installation, InstallationOptions } from "./resolver-host";
+import type { Installation, InstallationOptions, ResolverFetcher } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
@@ -1049,6 +1049,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     const glb = storeChunkGeometry(options.storeRoot, exported.glb, materials.map(material => material.chunk));
     if (!glb.trimmed) note(`${component.component}: the exported geometry is served whole.`);
     if (component.skippedChunks) note(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
+    for (const line of component.readerNotes ?? []) note(`${component.component}: ${line}`);
     const hash = component.drawnFrom.ref.hash;
     // Two choices can draw the same mesh (face cyberware reuses the freckle mesh), so the option is part of the identity.
     return { id: `${component.slot}:${component.option}:${component.component}:${hash}`, slot: component.slot, option: component.option,
@@ -1169,7 +1170,9 @@ async function dress(graph: ResourceGraph, request: CharacterRequest, options: {
   Promise<ResolvedClothing | ClothingFailure | null> {
   if (!request.clothing) return null;
   try {
-    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker });
+    // The preset is decoded by the route's native decode worker when the resolver reads through one (one worker per route).
+    const routeDecoder = (graph.port as Partial<Pick<ResolverFetcher, "nativeDecoder">>).nativeDecoder ?? null;
+    const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker, routeDecoder });
     return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
   } catch (error) {
     log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);

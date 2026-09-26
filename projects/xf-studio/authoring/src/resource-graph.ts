@@ -40,7 +40,20 @@ export interface FetchedResource {
   readonly fresh?: boolean;
   /** Length of the document's JSON text, when the adapter knows it (the graph measures it otherwise). */
   readonly bytes?: number;
+  /** What the reader noticed that the document can't say (a native answer's; resolver-host.ts). */
+  readonly notes?: readonly ReaderNote[];
+  /** Watched properties the file left out, which the document shows as a default value: where (JSON paths from the document root). */
+  readonly defaulted?: readonly DefaultedPaths[];
 }
+/**
+ * What a reader noticed: a property stored with a type other than the one the game's current RTTI gives it (read by its stored type), or
+ * an array record holding more elements than its count says (all of them read, as WolvenKit shows them).
+ */
+export type ReaderNote =
+  | { readonly kind: "type-mismatch"; readonly property: string; readonly stored: string; readonly rtti: string; readonly count: number }
+  | { readonly kind: "array-past-count"; readonly property: string; readonly declared: number; readonly stored: number; readonly count: number };
+/** A watched property (`Class.property`) the file left out: the JSON paths where the document shows its default instead (at most a few hundred). */
+export interface DefaultedPaths { readonly property: string; readonly paths: readonly string[]; readonly count: number }
 
 /** Where a resource came from and why that source won. Contains no physical paths. */
 export interface Provenance {
@@ -62,6 +75,8 @@ export interface LoadedResource {
   readonly ref: DepotRef;
   readonly root: JsonObject;
   readonly provenance: Provenance;
+  /** Rule notes about how the file was read (`readerRuleNotes`): its app, mesh or morph model carries them. */
+  readonly readerNotes?: readonly RuleNote[];
 }
 
 export interface ComponentModel {
@@ -216,6 +231,62 @@ const chunkSceneFlags = (blob: unknown, scope: HandleScope): boolean[] | null =>
   if (!header) return null;
   return asArray(header.renderChunkInfos).map(info => chunkInScene(isObject(info) ? info.renderMask : undefined));
 };
+
+/**
+ * Watched properties whose default the graph must not read as a stored value: `rendChunk.renderMask` written as "0" for a chunk that
+ * stores no mask would read as "not drawn", while a missing mask is the engine's default flags (`chunkInScene`, PIPE-67).
+ */
+const ABSENT_WHEN_DEFAULTED = new Set(["rendChunk.renderMask"]);
+const PATH_STEP = /\.([^.[\]]+)|\[(\d+)\]/y;
+/** Parse a reader's JSON path (`.Data.RootChunk.list[1].name`) into keys and indexes, or null when it isn't one. */
+export function jsonPathSteps(path: string): (string | number)[] | null {
+  const steps: (string | number)[] = [];
+  PATH_STEP.lastIndex = 0;
+  while (PATH_STEP.lastIndex < path.length) {
+    const at = PATH_STEP.lastIndex, match = PATH_STEP.exec(path);
+    if (!match || PATH_STEP.lastIndex === at) return null;
+    steps.push(match[1] !== undefined ? match[1] : Number(match[2]));
+  }
+  return steps.length ? steps : null;
+}
+/**
+ * Remove from a reader's document the watched properties the file left out, where the reader wrote a default for them
+ * (`ABSENT_WHEN_DEFAULTED`), so consumers see them as absent, as the engine does. Changes the document in place (a reader's answer is
+ * its own copy). Returns how many it could not remove (past the reader's list of paths, or a path that doesn't lead to the property).
+ */
+export function forgetDefaulted(document: unknown, defaulted: readonly DefaultedPaths[]): number {
+  let unresolved = 0;
+  for (const row of defaulted) {
+    if (!ABSENT_WHEN_DEFAULTED.has(row.property)) continue;
+    unresolved += Math.max(0, row.count - row.paths.length);
+    for (const path of row.paths) {
+      const steps = jsonPathSteps(path);
+      const last = steps?.[steps.length - 1];
+      let owner: unknown = document;
+      for (const step of steps?.slice(0, -1) ?? []) owner = owner && typeof owner === "object" ? (owner as Record<string | number, unknown>)[step] : undefined;
+      if (typeof last === "string" && isObject(owner) && Object.hasOwn(owner, last)) delete owner[last];
+      else unresolved++;
+    }
+  }
+  return unresolved;
+}
+/** The rule notes a reader's answer brings: stored types the RTTI disagrees with, and watched properties the file left out. */
+export function readerRuleNotes(fetched: Pick<FetchedResource, "notes" | "defaulted">, unresolved = 0): RuleNote[] {
+  const notes: RuleNote[] = [];
+  for (const item of fetched.notes ?? []) {
+    const times = item.count > 1 ? ` (${item.count} times)` : "";
+    if (item.kind === "type-mismatch")
+      notes.push(note("R11-stored-type", "hypothesis", `${item.property} is stored as ${item.stored} where the game's current type is ${item.rtti}` +
+        `${times}; it was read as stored. How the game treats such a value is unread.`));
+    else if (item.kind === "array-past-count")
+      notes.push(note("R13-array-past-count", "hypothesis", `${item.property} says it holds ${item.declared} element(s) but its record holds ${item.stored}${times}; ` +
+        "all were read, as WolvenKit shows them. Whether the game reads past the count is unread."));
+  }
+  for (const row of fetched.defaulted ?? []) if (ABSENT_WHEN_DEFAULTED.has(row.property))
+    notes.push(note("R12-property-absent", "hypothesis", `The file leaves out ${row.property} ${row.count} time(s); read as absent ` +
+      `(a render chunk without a mask is drawn: the engine's default flags)${unresolved ? `, except ${unresolved} the reader could not place` : ""}.`));
+  return notes;
+}
 
 /**
  * Prefetch: when a resource is read, the resources of these kinds that it names are requested at once, in the same
@@ -509,6 +580,10 @@ export class ResourceGraph {
         }
         if (fetched.path && !entry.path) this.paths.set(entry.hash, fetched.path);
         if (fetched.path && !named.path && entry.hash === named.hash) this.paths.set(named.hash, fetched.path);
+        const unresolved = fetched.defaulted?.length ? forgetDefaulted(fetched.document, fetched.defaulted) : 0;
+        const readerNotes = readerRuleNotes(fetched, unresolved);
+        if (readerNotes.length) this.trace.event("resolver", "reader_notes", { path: this.named(named).path ?? null, hash: named.hash,
+          archive: lookup.winner.name, notes: readerNotes.map(item => item.basis) });
         const { root } = cr2wRoot(fetched.document);
         const found: string[] = [];
         this.learnPaths(root, 0, found);
@@ -517,7 +592,8 @@ export class ResourceGraph {
           const wanted = [...new Set(found.filter(path => !/[*{]/.test(path) && kinds.includes(extensionOf(path) ?? "")))];
           if (wanted.length) this.children.set(named.hash, wanted);
         }
-        return { ref: this.named(named), root: this.keep(named.hash, root, fetched), provenance: this.provenanceOf(named, fetched.extractedSha256) };
+        return { ref: this.named(named), root: this.keep(named.hash, root, fetched), provenance: this.provenanceOf(named, fetched.extractedSha256),
+          ...(readerNotes.length ? { readerNotes } : {}) };
       })();
       this.loads.set(named.hash, pending);
     }
@@ -604,11 +680,12 @@ export class ResourceGraph {
     const loaded = await this.load(ref, "app");
     if (!loaded) return null;
     const appearances = this.appDefinitions(loaded);
-    const patchNotes: RuleNote[] = [];
+    const patchNotes: RuleNote[] = [...loaded.readerNotes ?? []];
     for (const patch of this.patchesFor(ref.hash)) {
       if (!patchModifies(patch, "appearances")) continue;
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "app");
       if (!source) continue;
+      patchNotes.push(...source.readerNotes ?? []);
       const added = new Set<string>();
       for (const definition of this.appDefinitions(source)) {
         const multi = !definition.name;
@@ -649,7 +726,7 @@ export class ResourceGraph {
     const loaded = await this.load(ref, "mesh");
     if (!loaded) return null;
     const base = this.meshShape(loaded);
-    const notes: RuleNote[] = [];
+    const notes: RuleNote[] = [...loaded.readerNotes ?? []];
     const fix = this.xl.fixes.get(ref.hash);
     if (fix?.names.size) {
       for (const appearance of base.appearances) appearance.chunkMaterials = appearance.chunkMaterials.map(name => fix.names.get(name) ?? name);
@@ -662,6 +739,7 @@ export class ResourceGraph {
     for (const patch of this.patchesFor(ref.hash)) {
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "mesh");
       if (!source) continue;
+      notes.push(...source.readerNotes ?? []);
       const patchMesh = this.meshShape(source);
       if (patchModifies(patch, "appearances") && patchMesh.appearances.length) {
         let expansionTag: string | null = null;
@@ -709,7 +787,7 @@ export class ResourceGraph {
     const loaded = await this.load(ref, "morphtarget");
     if (!loaded) return null;
     const base = this.morphShape(loaded);
-    const notes: RuleNote[] = [];
+    const notes: RuleNote[] = [...loaded.readerNotes ?? []];
     let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, renderChunkScene, baseTexture, baseTextureParam } = base;
     const targets = [...base.targets];
     let blobFrom: DepotRef | null = null;
@@ -717,6 +795,7 @@ export class ResourceGraph {
     if (!this.additions.patchSources.has(ref.hash)) for (const patch of this.patchesFor(ref.hash)) {
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "morphtarget");
       if (!source) continue;
+      notes.push(...source.readerNotes ?? []);
       const patchMorph = this.morphShape(source);
       if (patchMorph.baseMesh && patchModifies(patch, "baseMesh")) baseMesh = patchMorph.baseMesh;
       if (patchModifies(patch, "baseMeshAppearance", !patchMorph.baseMeshAppearance)) baseMeshAppearance = patchMorph.baseMeshAppearance;
