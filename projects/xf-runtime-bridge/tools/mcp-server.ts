@@ -6,7 +6,8 @@
 //
 //   bun tools/mcp-server.ts [--allow read,write-photo,...] [--read-only] [--no-inline-images]
 //
-// --runtime-dir <dir> exists for the tests only (the plugin always uses the default folder).
+// --runtime-dir <dir> and --capture-hwnd <window handle> exist for the tests only (the plugin
+// always uses the default folder, and captures normally target the game process).
 // Registration: see the README ("MCP server").
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -32,7 +33,12 @@ if (allowText) {
   }
 }
 
-const api = new CommandApi({ runtimeDir: option("--runtime-dir"), captureRoot: option("--capture-root") });
+const hwnd = option("--capture-hwnd");
+const api = new CommandApi({
+  runtimeDir: option("--runtime-dir"),
+  captureRoot: option("--capture-root"),
+  ...(hwnd ? { captureTarget: { hwnd: BigInt(hwnd) } } : {}),
+});
 const server = createMcpServer(api, { allow, inlineImages: !args.includes("--no-inline-images") });
 const transport = new StdioServerTransport();
 transport.onclose = () => {

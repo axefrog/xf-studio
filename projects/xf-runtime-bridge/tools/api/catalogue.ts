@@ -252,7 +252,10 @@ export const CATALOGUE: readonly CommandDef[] = [
         type: "array",
         description: "Options to look for in V's finalized look.",
         maxItems: 16,
-        items: obj({ group: str("Customization group name.", { maxLength: 128 }), option: str("Option name.", { maxLength: 128 }), fpp: bool("First-person variant.") }, ["group", "option"]),
+        items: {
+          ...obj({ group: str("Customization group name.", { maxLength: 128 }), option: str("Option name.", { maxLength: 128 }), fpp: bool("First-person variant.") }, ["group", "option"]),
+          description: "One option to look for.",
+        },
       },
     }),
     bridge: { method: "player.appearance" },
@@ -304,12 +307,15 @@ export const CATALOGUE: readonly CommandDef[] = [
       autofocus: bool("Autofocus on or off."),
       look_at: int("V's look-at option value (see photo_state options).", 0, 1000),
       look_at_part: int("What V looks with: 0 upper body, 1 head, 2 eyes.", 0, 1000),
-      subject: obj({
+      subject: {
+        description: "V's placement in front of the camera (photo mode's pose tab).",
+        ...obj({
         yaw: num("V's rotation in degrees.", -360, 360),
         left_right: num("V's sideways offset.", -1000, 1000),
         near_far: num("V's distance offset.", -1000, 1000),
         up_down: num("V's height offset.", -1000, 1000),
-      }),
+        }),
+      },
       reset: bool("Put every camera and placement setting back to how photo mode opened."),
     }),
     undo: "the result's undo parameters restore each previous value; reset (or the open-defaults preset) restores how photo mode opened.",
