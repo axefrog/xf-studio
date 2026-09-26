@@ -25,7 +25,8 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   if (eyeChoices && !eyeChoices.some(choice => choice.index === initial.eyeShape)) initial.eyeShape = 0;
 
   // These scene settings preceded surface-control construction in the original startup.
-  ports.preview.setEyeOptics(initial.eyeOptics);
+  // The eye's own roughness is on unless the viewer turned it off (the retired `eyeOptics` opt-in is not read).
+  ports.preview.setEyeOptics(initial.eyeOwnRoughness ?? true);
   ports.preview.setEyeShape(initial.eyeShape);
   ports.preview.setWire(initial.wire);
   ports.preview.setNormals(initial.normals);

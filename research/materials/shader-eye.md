@@ -180,7 +180,8 @@ What the numbers mean [observed arithmetic; magnitudes computed from the vanilla
 - **The surface is virtual.** Position on the eye comes from the vertex **normal** times `EyeRadius` (15.2 mm), not from the mesh position (a plain 13.7 mm sphere with no cornea bulge). The iris plane lies 13.4 mm from the centre, 1.8 mm under the virtual apex; the parallax height reaches zero at about UV radius 0.18.
 - **The iris is a remap, not a texture on the sphere.** At a straight view the limbus (mesh UV radius 0.165) lands at iris UV 0.151: the iris texture is drawn about 9 % larger than the mesh UV would draw it. That comes from the `IrisSize/(2·EyeRadius)` scale, not from bending: the refraction shifts that point by 6 µm.
 - **The "refraction" is almost pure parallax.** `RefractionIndex` 0.97 is `n₁/n₂`, an inner index of about 1.03 (a real cornea is about 1.38). At a 30° view the ray bends by about 1° (29.0° inside), so the iris under the pupil shifts by 1.0 mm, 0.024 iris UV, a sixth of the iris radius; with no refraction at all it would shift 1.04 mm. A renderer can treat the effect as parallax to within 4 % [observed arithmetic].
-- **The ±5° turn** rotates each eye's axis about the lateral vector before the frame is built, shifting the iris sideways by about 0.03 UV if its sign is wrong. The direction depends on the sign of the engine's lateral vector [hypothesis; [eye rendering test ask 10](../../knowledge/head-cc-rendering.md#in-game-test-asks)].
+- **The ±5° turn** rotates each eye's axis about the lateral vector before the frame is built, shifting the iris sideways by about 0.03 UV if its sign is wrong. The direction depends on the sign of the engine's lateral vector [hypothesis; [eye rendering test ask 10](../../knowledge/head-cc-rendering.md#in-game-test-asks)]. On the exported female eye mesh each pupil's normal points 3.59° outward of the two pupils' mean direction [observed, resource], which is the circle designs' ±3.6: with an outward turn their axis lands on the pupil.
+- **`S = T2 × A` runs against the mesh's V.** With A pointing out of the eye, {T2, S} seen from outside is a mirrored frame, while the mesh's (fold(u), 1 − v) is not: on the exported mesh the straight-view iris coordinate correlates +0.999 with fold(u) and −0.999 with 1 − v, so taken literally the iris is drawn mirrored in V against the sclera, and across the iris-weight blend the coordinate sweeps through the pupil (dark arcs at the top and bottom of the iris) [observed arithmetic on the exported frame]. The CCXL eye guide's in-game image shows an iris drawn the same way up as the rest of the eye [wiki: `ccxl-eye-textures.md`, `inverted_y_03.png`], so the engine's inputs must differ from the exported frame by a reflection here (the per-eye vectors, the tangent stream) [hypothesis for the cause]. The preview orients S along the mesh's bitangent (§10).
 
 ### 5.4 Iris normal N2
 
@@ -308,15 +309,15 @@ The shell is the only stock forward pass that adds a second specular lobe over a
 
 **Term by term** [observed for the game column and the preview code; the visual attribution is a hypothesis]:
 
-| Term | Game | Preview then | Preview now (`eye-material.ts`) |
+| Term | Game | Preview then | Preview now (`eye-material.ts`, ranks 4–5) |
 |---|---|---|---|
-| Iris diffuse normal | **N2**, relief 50–60° | sphere normal | sphere normal |
-| Specular normal | **N1**: bulge up to +25° at the limbus, bubble on the sclera | sphere | sphere |
-| Roughness | sclera **0.050**, iris 0.155 (α 0.0025 and 0.024) | 0.18 everywhere (α 0.032) | 0.18 by default; the source map is a switch |
-| Specular energy at normal incidence | eye visibility 0.125, no N·L | Smith 0.25 × N·L | same as then |
-| Iris depth | parallax 1.8 mm under the cornea | painted on the sphere | painted |
+| Iris diffuse normal | **N2**, relief 50–60° | sphere normal | **N2** at the refracted coordinate |
+| Specular normal | **N1**: bulge up to +25° at the limbus, bubble on the sclera | sphere | **N1** |
+| Roughness | sclera **0.050**, iris 0.155 (α 0.0025 and 0.024) | 0.18 everywhere (α 0.032) | the source map by default; flat 0.18 is the switch's off |
+| Specular energy at normal incidence | eye visibility 0.125, no N·L | Smith 0.25 × N·L | eye visibility, no N·L (half the energy at equal roughness, measured on the GPU) |
+| Iris depth | parallax 1.8 mm under the cornea | painted on the sphere | the refracted iris coordinate |
 | Corner occlusion, tear line | the shell | none | the shell (built) |
-| Ambient | probes on N1 at the pixel's roughness, × (1 + `cb6[9].w`) | IBL on the sphere at 0.18 | same as then |
+| Ambient | probes on N1 at the pixel's roughness, × (1 + `cb6[9].w`) | IBL on the sphere at 0.18 | IBL on N1 at the pixel's roughness, × 1.1 |
 | Subsurface | none | none | none |
 
 **Reading** [hypothesis, ranked]:
@@ -327,7 +328,7 @@ The shell is the only stock forward pass that adds a second specular lobe over a
 
 The earlier rendering order (upside-down albedo, no shell) is fixed; the shell removes the "stuck-on" look but not the three terms above. **Not an SSS problem:** the eye is outside the SSS passes, so a subsurface wrap or blur on the eye would move the preview away from the game.
 
-**Fix path.** Ranks 4 and 5 of the [eye plan](../../knowledge/eye-rendering.md#65-ranked-plan-visual-gain-per-effort), in one change: the two-normal Eye light with the map's own roughness on by default, then the refracted coordinate. Verification: the audit's controlled A/B (fixed camera, pose and lights; before and after), and head CC test ask 12 in game.
+**Fix path.** Ranks 4 and 5 of the [eye plan](../../knowledge/eye-rendering.md#65-ranked-plan-visual-gain-per-effort), in one change: the two-normal Eye light with the map's own roughness on by default, then the refracted coordinate. Built on 27 September ([eye rendering §6.6](../../knowledge/eye-rendering.md#66-implementation-status), with its before/after captures and GPU measurements); head CC test asks 10–12 in game remain the verification.
 
 ## 10. What the browser adapter reproduces
 
@@ -337,25 +338,23 @@ The earlier rendering order (upside-down albedo, no shell) is fixed; the shell r
 |---|---|---|
 | Side by raw U, fold, V-flip for colour/normal/mask, raw UV for roughness, fold with raw derivatives | `EYE_SURFACE`, `eyeSampleCoordinates` | Faithful |
 | Gradient: mask R (raw by default) → ramp, blend by mask A in linear light | `XFS_EYE_GRADIENT`, `bakeGradientRamp`, `irisBaseColour` | Faithful to the read side; bake and mask encoding [hypothesis] |
-| Roughness R × `RoughnessScale`, metalness `Specularity` | `roughnessmap_fragment` patch | Faithful when the switch is on; **off by default** (flat 0.18) |
-| Analytic iris weight, refracted `uvC`, per-eye axis and ±5° | Not drawn (`uvC` = mesh coordinate) | Gap (rank 5); needs the eye joints' frames as uniforms |
-| N2 and N1 (relief and cornea bulge + bubble) | Not drawn (the sphere normal) | Gap (rank 4) |
-| Eye-class light (Lambert on N2, GGX on N1, eye visibility, exp2 Fresnel, no N·L, sun cut on N2) | Three's standard light | Gap (rank 4); the main cause of §9 |
-| Ambient on N1, no AO when the flag is off, × 1.1 | Three's IBL on the sphere | Approximation |
+| Roughness R × `RoughnessScale`, metalness `Specularity` | `roughnessmap_fragment` patch | Faithful; **on by default** (off: the earlier flat 0.18) |
+| Analytic iris weight, refracted `uvC`, per-eye axis and ±5° | `EYE_SURFACE`, `xfsEyeIrisPlane`; per-eye vectors from the eyeball geometry (`eyeAxes`), skinned per vertex | Faithful arithmetic; the vectors' source and the outward turn [hypothesis]; S oriented along the mesh's bitangent (`IRIS_PLANE_ORIENTATION`, §5.3) |
+| N2 and N1 (relief and cornea bulge + bubble) | `EYE_SURFACE`, `xfsEyeCornea`; a gamma-flagged `Normal` follows `IRIS_MASK_ENCODING` | Faithful |
+| Eye-class light (Lambert on N2, GGX on N1, eye visibility, exp2 Fresnel, no N·L, sun cut on N2) | `RE_Direct_XfsEye`, `xfsEyeBRDF`; the cut on Three's sun and directional lights | Faithful (the Studio stage's directional lights stand for the sun) |
+| Ambient on N1, no AO when the flag is off, × 1.1 | Three's IBL and probes on N1 at the pixel's roughness, × `1 + EYE_AMBIENT_BOOST` | Approximation (Three's IBL for the probes; the 0.1 [hypothesis]) |
 | Shell: shadow, neutral darkening, wet GGX, no Fresnel, no environment, `One/SrcAlpha` | `createEyeShellMaterial` | Faithful (fog omitted: none in the studio) |
 | Multilayer eyes | `layered-material.ts` | Separate adapter; no refraction, like the game |
 | Not in SSS, no wetness | No wrap on eyes | Faithful |
 
 **Browser follow-ups this study suggests** (separate reviewable changes with before/after evidence, per the backlog):
 
-1. Ranks 4–5 together, with the source roughness on by default once the Eye light lands, and the §9 A/B as the acceptance capture.
-2. When rank 4 samples `Normal`, apply the same encoding switch as the iris mask to gamma-flagged normal maps (Rebecca's, and any other whose `isGamma` is set), so test ask 9 settles both at once.
-3. An eye-only ambient factor of 1 + 0.1, labelled with its hypothesis.
+1. Done (27 September): ranks 4–5 together, the source roughness on by default, the gamma-flagged `Normal` on the mask's switch, and the eye-only ambient factor of 1 + 0.1 labelled with its hypothesis ([eye rendering §6.6](../../knowledge/eye-rendering.md#66-implementation-status)).
 
 ## 11. Open questions
 
 1. `IrisMask` R and gamma-flagged normals: raw or sRGB-decoded (§4)? More generally, does `isGamma` on a `TCM_QualityColor` texture always produce sRGB sampling?
-2. What exactly are the per-eye modifier vectors (the eye joints' forward and lateral axes, a look-at frame, something else), and which way does the ±5° turn?
+2. What exactly are the per-eye modifier vectors (the eye joints' forward and lateral axes, a look-at frame, something else), and which way does the ±5° turn? Which engine input makes the iris plane follow the mesh's orientation where the exported frame mirrors it (§5.3)?
 3. How is the gradient atlas built (row width, stop interpolation space, format, `s10` filtering)? Is its row index shared with any other gradient consumer?
 4. Is `cb6[9].w` the `DiffuseBoost` option and `cb6[9].z` `UseAOOnEyes` (§6.3)? What is `cb13[4]`?
 5. Does the morph `baseTexture` really replace `Normal` at run time ([eye rendering §1.3](../../knowledge/eye-rendering.md#13-the-morph-resource-can-replace-the-eyes-normal-map))?
@@ -366,5 +365,7 @@ The earlier rendering order (upside-down albedo, no shell) is fixed; the shell r
 The eye asks are head CC test asks 9–12 ([head CC rendering](../../knowledge/head-cc-rendering.md#in-game-test-asks)). This study adds one frame to ask 9:
 
 - **Rebecca normal.** Creator eyes page, option 54 (Rebecca blue) beside gradient blue, one frame with the key light from the side. If the Rebecca eye's sclera shades lopsidedly (one side much darker than the gradient eye's) or loses its catch light on one side, gamma-flagged textures are decoded; if both shade alike, they are read raw. It must agree with the iris-colour result of ask 9.
+
+Ask 10 now also takes the iris's orientation and depth (§5.3): see [head CC rendering](../../knowledge/head-cc-rendering.md#in-game-test-asks).
 
 Related: [eye rendering](../../knowledge/eye-rendering.md) · [materials and shaders](../../knowledge/materials-and-shaders.md) · [eye rendering evidence](../character-customization/eye-rendering-evidence.md) · [experiment 014](../../experiments/014-native-eye-gradient/compiled-shader-and-gaze.md) · [optics audit](../eye-artistry/eye-lip-optics-audit.md) · [skin reference](shader-skin.md) · [hair reference](shader-hair.md) · [fact index](shader-fact-index.md).

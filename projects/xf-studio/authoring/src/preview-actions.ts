@@ -10,7 +10,7 @@ import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" |
-  "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
+  "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
 export type PreviewAction =
   | { kind: "camera.front" }
   | { kind: "camera.body" }
@@ -82,7 +82,8 @@ export class PreviewActions {
   private listeners = new Set<() => void>();
   constructor(initial: PreviewState, private port: PreviewPort) {
     this.state = { surface: initial.surface, wire: initial.wire, brows: initial.brows,
-      lashes: initial.lashes, hair: initial.hair, normals: initial.normals, eyeOptics: initial.eyeOptics,
+      lashes: initial.lashes, hair: initial.hair, normals: initial.normals,
+      ...(initial.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: initial.eyeOwnRoughness }),
       eyeShape: initial.eyeShape, piercings: initial.piercings, ...(initial.body === undefined ? {} : { body: initial.body }),
       exposure: initial.exposure, lightAngle: initial.lightAngle,
       lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting }, studioLights: { ...initial.studioLights } };
@@ -213,7 +214,7 @@ export class PreviewActions {
       case "preview.setSurfaceControls": this.port.setSurfaceControls(action.enabled); this.state.surface = action.enabled; break;
       case "preview.setWire": this.port.setWire(action.enabled); this.state.wire = action.enabled; break;
       case "preview.setNormals": this.port.setNormals(action.enabled); this.state.normals = action.enabled; break;
-      case "preview.setEyeOptics": this.port.setEyeOptics(action.enabled); this.state.eyeOptics = action.enabled; break;
+      case "preview.setEyeOptics": this.port.setEyeOptics(action.enabled); this.state.eyeOwnRoughness = action.enabled; break;
       case "preview.setHair": this.port.setHair(action.enabled); this.state.hair = action.enabled; break;
       case "preview.setDetail": this.port.setDetail(action.detail, action.enabled); this.state[action.detail] = action.enabled; break;
     }

@@ -27,7 +27,17 @@ export type PreviewState = {
   textureSize: PreviewTextureSize;
   camera?: CameraState;
   eyeShape: number;
-  surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
+  surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean;
+  /**
+   * Retired: the earlier opt-in for the eye's own roughness (off unless chosen). Read and written back unchanged, so a workspace keeps
+   * its stored bytes; nothing uses it now (`eyeOwnRoughness`).
+   */
+  eyeOptics: boolean;
+  /**
+   * Whether the eyes use their own roughness (`preview.setEyeOptics`). Absent means on, so every workspace, including one that stored
+   * the retired opt-in off, starts with the game's roughness; written only once the viewer changes it.
+   */
+  eyeOwnRoughness?: boolean;
   /**
    * Whether the V's body shows (body, arms, hands, feet and their decals). Absent means shown: it is written only once the viewer
    * changes it, so a workspace that never did keeps its stored bytes.
@@ -161,6 +171,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
     for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
+    if (typeof p.eyeOwnRoughness === "boolean") state.preview.eyeOwnRoughness = p.eyeOwnRoughness;
     if (typeof p.body === "boolean") state.preview.body = p.body;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {

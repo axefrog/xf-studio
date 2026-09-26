@@ -289,18 +289,23 @@ const eyeball: MaterialAdapter = {
   create(chunk, textures) {
     const albedo = need(textures("Albedo", "colour", "repeat"), "Albedo", chunk);
     const roughness = textures("Roughness", "data", "repeat");
+    // Gamma-flagged data (the iris mask, a normal map stored as a gamma colour texture) is read raw unless the switch says decoded
+    // (eye-rendering.md §2.3, eye reference §4); a "colour" request honours the resource's own flag, so ordinary normals stay data.
+    const gammaData = IRIS_MASK_ENCODING === "raw" ? "data" : "colour";
+    const normal = textures("Normal", gammaData, "repeat");
+    const bubble = textures("NormalBubble", "data", "repeat");
     const owned: THREE.Texture[] = [], notes: string[] = [];
     let irisMask: THREE.Texture | undefined, ramp: THREE.Texture | undefined;
     if (renderTemplate(chunk.template, chunk.templateName)?.gradients?.includes("IrisColorGradient")) {
-      // The mask is a gamma resource; the preview reads its R raw unless the switch says decoded (eye-rendering.md §2.3).
-      irisMask = need(textures("IrisMask", IRIS_MASK_ENCODING === "raw" ? "data" : "colour", "repeat"), "IrisMask", chunk);
+      irisMask = need(textures("IrisMask", gammaData, "repeat"), "IrisMask", chunk);
       const stops = chunk.gradients.IrisColorGradient?.stops;
       if (!stops) throw Error(`chunk ${chunk.chunk} has no IrisColorGradient`);
       ramp = gradientTexture(stops);
       owned.push(ramp);
     }
     if (!roughness) notes.push("no readable eye roughness; the flat preview roughness is used");
-    const made = createEyeMaterial({ albedo, roughness, irisMask, gradient: ramp }, eyeParameters(chunk));
+    if (!normal) notes.push("no readable iris normal; the iris is lit on the eyeball's own normal");
+    const made = createEyeMaterial({ albedo, roughness, irisMask, gradient: ramp, normal, bubble }, eyeParameters(chunk));
     return { material: made.material, owned: [...owned, ...made.owned], notes, eye: made.handle };
   },
 };
