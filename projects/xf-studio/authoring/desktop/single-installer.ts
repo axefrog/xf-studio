@@ -30,11 +30,25 @@ const workRoot = resolve(desktopRoot, "artifacts", "single-installer");
 export const innoSetupHome = (env = process.env) =>
   resolve(env.XFS_INNO_SETUP_HOME || resolve(desktopRoot, "installer-tools", `innosetup-${INNO_SETUP.version}`));
 
-/** Numeric Windows file version for a SemVer app version: 0.1.0-alpha.1 → 0.1.0.0. */
+/**
+ * Where each pre-release channel's builds start in a Windows file version's fourth part: every pre-release gets its own file version,
+ * in release order, and the release itself the highest (REL-06). Each part is at most 65535.
+ */
+const PRERELEASE_BASE: Readonly<Record<string, number>> = Object.freeze({ alpha: 1000, beta: 2000, rc: 3000 });
+const RELEASE_BUILD = 65535;
+/**
+ * Numeric Windows file version for a SemVer app version: 0.1.0-alpha.1 → 0.1.0.1001, 0.1.0-beta.2 → 0.1.0.2002, 0.1.0-rc.1 →
+ * 0.1.0.3001, 0.1.0 → 0.1.0.65535. A pre-release this can't number distinctly (another label, or a number over 999) is refused.
+ */
 export const quadVersion = (version: string) => {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
-  if (!match) throw Error(`Cannot derive a Windows file version from "${version}".`);
-  return `${match[1]}.${match[2]}.${match[3]}.0`;
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(version);
+  if (!match || [match[1], match[2], match[3]].some(part => Number(part) > 65535)) throw Error(`Cannot derive a Windows file version from "${version}".`);
+  const prerelease = match[4];
+  if (prerelease === undefined) return `${match[1]}.${match[2]}.${match[3]}.${RELEASE_BUILD}`;
+  const channel = /^(alpha|beta|rc)\.(\d{1,3})$/.exec(prerelease);
+  if (!channel || Number(channel[2]) < 1)
+    throw Error(`Cannot derive a distinct Windows file version from "${version}": use alpha.N, beta.N or rc.N with N from 1 to 999.`);
+  return `${match[1]}.${match[2]}.${match[3]}.${PRERELEASE_BASE[channel[1]!]! + Number(channel[2])}`;
 };
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -70,14 +84,23 @@ export async function ensureInnoSetup(home = innoSetupHome()): Promise<string> {
   return iscc;
 }
 
-/** Inno Setup 6.7.x writes this setup-data marker; it names the data format, not the patch release. */
+/** Inno Setup 6.7.x writes this setup-data marker; it names the data format (6.7.0), not the patch release. */
 export const INNO_DATA_MARKER = "Inno Setup Setup Data (6.7.0)";
+/** The data format the marker names, for messages (REL-06). */
+export const INNO_DATA_FORMAT = "6.7.0";
 /**
- * Bytes the single setup may carry besides the verified payload: Inno Setup's loader, its
- * compressed setup runtime and the compiled script (about 2.05 MB with 6.7.3). Anything larger
- * means something else was packed in.
+ * Bytes the single setup may carry besides the verified payload: Inno Setup's loader, its setup runtime, the wizard's images and
+ * the compiled script, stored uncompressed (`WRAPPER_MEASURED`: a local build with 6.7.3 and this script, 26 September 2026; about
+ * 2.05 MB while Setup's data was compressed). The budget leaves about 58 KB for the script's text and version to grow, not room for
+ * another file (REL-04).
  */
-export const WRAPPER_BUDGET = 3_000_000;
+export const WRAPPER_MEASURED = 5_241_942;
+export const WRAPPER_BUDGET = 5_300_000;
+/**
+ * Strings of the compiled script that must read as plain text in the wrapper, proving Setup's own data is stored uncompressed
+ * (InternalCompressLevel=none), so the content scan reads text rather than compressed bytes (REL-04).
+ */
+export const WRAPPER_PLAIN_TEXT = ["dev.axefrog.xf-studio.setup", "Ready to install XF Studio"] as const;
 export type PayloadMember = Readonly<{ name: string; bytes: Uint8Array }>;
 
 /**
@@ -86,7 +109,8 @@ export type PayloadMember = Readonly<{ name: string; bytes: Uint8Array }>;
  */
 export function singleInstallerWrapper(exe: Buffer, members: readonly PayloadMember[]): Buffer {
   if (exe.subarray(0, 2).toString("latin1") !== "MZ") throw Error("The single setup is not a Windows executable.");
-  if (!exe.includes(INNO_DATA_MARKER)) throw Error(`The single setup was not built with Inno Setup ${INNO_SETUP.version}.`);
+  if (!exe.includes(INNO_DATA_MARKER))
+    throw Error(`The single setup was not built with Inno Setup ${INNO_SETUP.version} (its ${INNO_DATA_FORMAT} setup-data marker is missing).`);
   const regions = members.map(member => {
     const at = exe.indexOf(member.bytes);
     if (at < 0) throw Error(`The single setup does not carry the verified ${member.name} byte for byte.`);
@@ -104,6 +128,11 @@ export function singleInstallerWrapper(exe: Buffer, members: readonly PayloadMem
   const wrapper = Buffer.concat(gaps);
   if (wrapper.length > WRAPPER_BUDGET)
     throw Error(`The single setup carries ${wrapper.length} bytes besides the verified payload; at most ${WRAPPER_BUDGET} are expected.`);
+  // The content scan reads the wrapper as text: its setup data must be stored uncompressed, or the scan proves nothing (REL-04).
+  const texts = wrapperTexts(wrapper);
+  const unreadable = WRAPPER_PLAIN_TEXT.filter(text => !texts.some(view => view.includes(text)));
+  if (unreadable.length)
+    throw Error(`The single setup's own data isn't stored as plain text (${unreadable.map(text => `"${text}"`).join(", ")} not found), so its content scan would read compressed bytes; build it with InternalCompressLevel=none.`);
   return wrapper;
 }
 

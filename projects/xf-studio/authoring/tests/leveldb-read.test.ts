@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readLevelDb, readLogRecords, readTable, snappyDecompress, type LevelDbFile } from "../src/leveldb-read";
+import { DecodeBudget, LEVELDB_BLOCK_BYTES, readLevelDb, readLogRecords, readTable, snappyDecompress, type LevelDbFile } from "../src/leveldb-read";
 
 // A minimal LevelDB writer for fixtures, following google/leveldb doc/log_format.md and doc/table_format.md.
 const enc = new TextEncoder();
@@ -132,4 +132,72 @@ test("while Vortex runs, its MANIFEST and newest log are locked and only earlier
   expect(read.entries.has("app###instanceId")).toBe(false);
   expect([...read.entries.keys()].some(key => key.startsWith("persistent###mods###"))).toBe(false);
   expect(read.entries.get("settings###profiles###activeProfileId")).toBe(JSON.stringify("xfstest"));
+});
+
+// VORTEX-02: another program's files may be damaged or hostile; decoding them is bounded.
+/** A literal-only Snappy block of `data` (valid, if uncompressed). */
+const snappyLiteral = (data: number[]) => {
+  const out = [...varint(data.length)];
+  for (let at = 0; at < data.length; at += 65536) {
+    const part = data.slice(at, at + 65536), n = part.length - 1;
+    out.push(n < 60 ? n << 2 : n < 256 ? 60 << 2 : 61 << 2, ...(n < 60 ? [] : n < 256 ? [n] : [n & 255, n >> 8]), ...part);
+  }
+  return out;
+};
+/** A table whose one Snappy data block is listed `handles` times by its index. */
+function repeatedBlockTable(handles: number, rows = 200): Uint8Array {
+  const ikey = (key: string, seq: bigint) => [...enc.encode(key), ...u64((seq << 8n) | 1n)];
+  const plain = [...Array.from({ length: rows }, (_, i) => ikey(`k###${String(i).padStart(5, "0")}`, BigInt(i + 1)))
+    .flatMap(k => [0, ...varint(k.length), ...varint(1), ...k, 49]), ...u32(0), ...u32(1)];
+  const data = snappyLiteral(plain);
+  const out = [...data, 1, 0, 0, 0, 0];
+  const handle = [...varint(0), ...varint(data.length)];
+  const index = [...Array.from({ length: handles }, (_, i) => ikey(`k###${String(i).padStart(9, "0")}`, 1n))
+    .flatMap(k => [0, ...varint(k.length), ...varint(handle.length), ...k, ...handle]), ...u32(0), ...u32(1)];
+  const indexOffset = out.length;
+  out.push(...index, 0, 0, 0, 0, 0);
+  const footer = [...varint(0), ...varint(0), ...varint(indexOffset), ...varint(index.length)];
+  out.push(...footer, ...new Array(40 - footer.length).fill(0), ...u64(0xdb4775248b80fb57n));
+  return new Uint8Array(out);
+}
+
+test("a Snappy header claiming more than its bytes can hold, or than the limit, is refused before anything is allocated", () => {
+  // A megabyte claimed by a five-byte block.
+  expect(() => snappyDecompress(new Uint8Array([...varint(1 << 20), 0x00, 97]))).toThrow("more than 5 compressed bytes can hold");
+  expect(() => snappyDecompress(new Uint8Array(snappyLiteral([1, 2, 3, 4])), 3)).toThrow("more than the 3-byte limit");
+  const budget = new DecodeBudget(3);
+  expect(() => snappyDecompress(new Uint8Array(snappyLiteral([1, 2, 3, 4])), 64, budget)).toThrow("decoding budget");
+  // A literal running past the claimed length is corrupt, not an overflow of the output.
+  expect(() => snappyDecompress(new Uint8Array([2, 0x08, 97, 98, 99]))).toThrow("bad snappy literal");
+});
+
+test("a block listed many times by a table's index is decoded once", () => {
+  const once = new DecodeBudget(Number.MAX_SAFE_INTEGER), many = new DecodeBudget(Number.MAX_SAFE_INTEGER);
+  const one = readTable(repeatedBlockTable(1), undefined, once), repeated = readTable(repeatedBlockTable(2000), undefined, many);
+  expect(repeated.length).toBe(one.length);
+  // Only the index grows with the handles; the data block is decompressed once, not 2,000 times.
+  expect(many.spent - once.spent).toBeLessThan(2000 * 30);
+  expect(many.spent).toBeLessThan(3 * once.spent + 2000 * 30);
+});
+
+test("a database whose decoding passes its budget reports the table as a gap and still reads the rest", () => {
+  // Every key shares the whole previous key and adds one byte: the expanded keys grow quadratically with the entries.
+  const rows = 3000, entries: number[] = [];
+  for (let i = 0; i < rows; i++) entries.push(...varint(i === 0 ? 0 : i + 8), ...varint(i === 0 ? 9 : 1), ...varint(0), ...(i === 0 ? [...enc.encode("k"), ...u64(1n << 8n | 1n)] : [65]));
+  const block = [...entries, ...u32(0), ...u32(1)];
+  const growing = [...block, 0, 0, 0, 0, 0];
+  const handle = [...varint(0), ...varint(block.length)];
+  const index = [0, ...varint(9), ...varint(handle.length), ...enc.encode("k"), ...u64(1n << 8n | 1n), ...handle, ...u32(0), ...u32(1)];
+  const indexOffset = growing.length;
+  growing.push(...index, 0, 0, 0, 0, 0);
+  const footer = [...varint(0), ...varint(0), ...varint(indexOffset), ...varint(index.length)];
+  growing.push(...footer, ...new Array(40 - footer.length).fill(0), ...u64(0xdb4775248b80fb57n));
+  const read = readLevelDb([
+    { name: "CURRENT", bytes: enc.encode("MANIFEST-000004\n") },
+    { name: "MANIFEST-000004", bytes: manifest(7, [3, 5]) },
+    { name: "000003.ldb", bytes: new Uint8Array(growing) },
+    { name: "000005.ldb", bytes: table([["ok###key", "1", 2n]]) },
+  ], { maxBlockBytes: LEVELDB_BLOCK_BYTES, maxDecodedBytes: 1_000_000 });
+  expect(read.gaps.filter(gap => gap.startsWith("000003.ldb:") && gap.includes("decoding budget")), read.gaps.join("; ")).toHaveLength(1);
+  expect(read.entries.get("ok###key")).toBe("1");
 });

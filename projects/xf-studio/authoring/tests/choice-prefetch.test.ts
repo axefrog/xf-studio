@@ -342,9 +342,9 @@ describe("lasting outcomes and the mesh export repair", () => {
   };
   const repairing = (outcome: "glb" | "none", calls: { path: string; lowPriority?: boolean }[] = []): GeometryRepair => async ({ depotPath, workDir, lowPriority }) => {
     calls.push({ path: depotPath, lowPriority });
-    if (outcome === "none") return null;
+    if (outcome === "none") return { outcome: "not-applicable", detail: "no known repair fits this mesh" };
     writeFileSync(join(workDir, "copy.glb"), "glTF");
-    return { glb: join(workDir, "copy.glb"), materials: null, detail: "the copy's repair" };
+    return { outcome: "repaired", glb: join(workDir, "copy.glb"), materials: null, detail: "the copy's repair" };
   };
   const tool = { key: "fake", label: "Fake" };
 

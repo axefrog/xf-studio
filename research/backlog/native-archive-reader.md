@@ -36,6 +36,10 @@ The render blob (`rendRenderMeshBlob`) holds a header with per-chunk vertex layo
 - **Oracle:** compare vertex positions, normals, UVs, skin weights and morph deltas with WolvenKit's GLB (within quantisation) on the head, body, brows, lashes, hair and one piercing. This also shows whether WolvenKit applies any transform the preview has come to rely on.
 - **Effort** is dominated by vertex-factory coverage and morph targets: 1.5 weeks for the character meshes the preview shows, up to 3 with garment and hair variants.
 
+### Native modules for the hot loops
+
+Direction (26 September 2026): performance-critical decoding may move into a small native module behind `bun:ffi` (C via `bun:ffi` `cc`, C++ or Rust, chosen per case), as the Oodle call and the bridge's window capture already do. The candidates are phase 3's BCn texture decompression and mip handling and phase 4's mesh buffer unpacking (vertex streams, morph targets, skin weights), where tight loops over megabytes dominate. The rule for choosing: first write and measure the TypeScript version against the budgets below; move a loop to native code only when the measurement shows it matters, keep a TypeScript reference implementation as the test oracle (byte-identical outputs), bound every native entry point by the same limits (`limits.ts`), and never run untrusted data through native code without the size and bounds checks happening before the call. Licence: our own code (MIT); no GPL sources consulted beyond format facts.
+
 ## Integration plan
 
 1. **Wait for `claude/choice-prefetch`** (it changes `WolvenKitFetcher` and the resource graph's prefetch). Integrate after it lands, against its fetch-port shape; [`native-fetch-port.ts`](../../projects/xf-studio/authoring/src/native/native-fetch-port.ts) stays self-contained until then.

@@ -11,10 +11,17 @@
 ; Every path is relative to this script, so no build-machine path is compiled in. Files are
 ; stored uncompressed (the payload is already a Zstandard archive), which also lets
 ; verify-canary.ts find each verified payload file byte for byte inside the single installer.
+; Setup's own data (the compiled script, messages and wizard settings) is stored uncompressed too
+; (InternalCompressLevel=none), so verify-canary.ts's content scan reads it as text, not as
+; compressed bytes.
+;
+; Exit codes, beside Inno Setup's own 0-8 (2: the user cancelled before installing):
+;   100  Electrobun's setup could not be started
+;   101  Electrobun's setup ran and reported a failure (its own window explained it)
 ;
 ; Defines passed by single-installer.ts (ISCC /D...):
 ;   AppVersion      package.json version, e.g. 0.1.0-alpha.1
-;   AppVersionQuad  numeric file version, e.g. 0.1.0.0
+;   AppVersionQuad  numeric file version, distinct per pre-release, e.g. 0.1.0.1001
 ;   Payload         folder holding Electrobun's setup program and .installer (relative)
 ;   SetupProgram    Electrobun's setup file name, e.g. "XF Studio-Setup-canary.exe"
 ;   OutputDir       output folder (relative)
@@ -53,6 +60,9 @@ MinVersion=10.0
 WizardStyle=modern
 SetupIconFile=..\icon\icon.ico
 Compression=none
+InternalCompressLevel=none
+; One setup at a time: a second copy started while one runs says so and stops.
+SetupMutex=dev.axefrog.xf-studio.setup
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputName}
 
@@ -82,12 +92,12 @@ begin
   if not Exec(ExpandConstant('{tmp}\{#SetupProgram}'), '', ExpandConstant('{localappdata}'),
     SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
   begin
-    InstallExitCode := 2;
+    InstallExitCode := 100;
     SuppressibleMsgBox('XF Studio setup could not start its installer (' + SysErrorMessage(ResultCode) + '). ' +
       'Download the setup again and retry.', mbError, MB_OK, IDOK);
   end
   else if ResultCode <> 0 then
-    InstallExitCode := 3;
+    InstallExitCode := 101;
 end;
 
 function GetCustomSetupExitCode: Integer;

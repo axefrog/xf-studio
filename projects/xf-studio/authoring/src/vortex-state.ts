@@ -17,26 +17,42 @@ import type { VortexModIdentity } from "./vortex-deployment";
 export const VORTEX_KEY_SEPARATOR = "###";
 type Tree = { [key: string]: unknown };
 const isTree = (value: unknown): value is Tree => !!value && typeof value === "object" && !Array.isArray(value);
+/**
+ * Path segments that would reach an object's prototype instead of a property of its own (VORTEX-01). A mod whose archive is named
+ * `__proto__`, or a corrupt database, must never write onto `Object.prototype` for the whole host process, so such a key is skipped.
+ */
+const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "prototype", "constructor"]);
+/** A tree node of the state's own: no prototype, so no inherited property can be read or written through it. */
+const node = (): Tree => Object.create(null) as Tree;
+/** `value`'s own entries, skipping the unsafe keys (a JSON backup's objects come from `JSON.parse`, which keeps `__proto__` as data). */
+const ownEntries = (value: Tree) => Object.entries(value).filter(([key]) => !UNSAFE_KEYS.has(key));
 
-/** Build the nested state from database pairs. A value that isn't JSON is kept as its text. */
+/** Build the nested state from database pairs. A value that isn't JSON is kept as its text. Unsafe key segments are skipped. */
 export function stateFromPairs(pairs: ReadonlyMap<string, string> | Iterable<readonly [string, string]>): { state: Tree; problems: string[] } {
-  const state: Tree = {}, problems: string[] = [];
+  const state = node(), problems: string[] = [];
   for (const [key, raw] of pairs) {
     const path = key.split(VORTEX_KEY_SEPARATOR);
+    if (path.some(part => UNSAFE_KEYS.has(part))) { problems.push(`${key.slice(0, 200)} names an object's prototype; skipped`); continue; }
     let value: unknown;
     try { value = JSON.parse(raw); } catch { value = raw; problems.push(`${key} is not JSON`); }
-    let node = state;
+    let cursor = state;
     for (const part of path.slice(0, -1)) {
-      if (!isTree(node[part])) node[part] = {};
-      node = node[part] as Tree;
+      if (!isTree(cursor[part])) cursor[part] = node();
+      cursor = cursor[part] as Tree;
     }
     const leaf = path.at(-1)!;
-    node[leaf] = isTree(node[leaf]) && isTree(value) ? { ...(node[leaf] as Tree), ...value } : value;
+    if (isTree(cursor[leaf]) && isTree(value)) {
+      const merged = node();
+      for (const [name, item] of [...ownEntries(cursor[leaf] as Tree), ...ownEntries(value)]) merged[name] = item;
+      cursor[leaf] = merged;
+    } else cursor[leaf] = value;
   }
   return { state, problems };
 }
 
-const at = (tree: unknown, ...path: string[]): unknown => path.reduce<unknown>((node, part) => isTree(node) ? node[part] : undefined, tree);
+/** The value at `path`, reading own properties only (never an inherited one such as `constructor`). */
+const at = (tree: unknown, ...path: string[]): unknown => path.reduce<unknown>((item, part) =>
+  isTree(item) && !UNSAFE_KEYS.has(part) && Object.hasOwn(item, part) ? item[part] : undefined, tree);
 const str = (value: unknown): string | null => typeof value === "string" && value !== "" ? value : null;
 const int = (value: unknown): number | null => {
   const number = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
@@ -67,7 +83,7 @@ export function readVortexGameState(state: unknown, gameId: string): VortexGameS
   const problems: string[] = [];
   const profiles: VortexProfile[] = [];
   const profilesTree = at(state, "persistent", "profiles");
-  if (isTree(profilesTree)) for (const [id, value] of Object.entries(profilesTree))
+  if (isTree(profilesTree)) for (const [id, value] of ownEntries(profilesTree))
     if (str(at(value, "gameId")) === gameId) profiles.push({ id, name: str(at(value, "name")), lastActivated: typeof at(value, "lastActivated") === "number" ? at(value, "lastActivated") as number : null });
   profiles.sort((a, b) => a.id.localeCompare(b.id));
   const activeId = str(at(state, "settings", "profiles", "activeProfileId"));
@@ -78,7 +94,7 @@ export function readVortexGameState(state: unknown, gameId: string): VortexGameS
   const modState = profile ? at(state, "persistent", "profiles", profile.id, "modState") : undefined;
   const mods = new Map<string, VortexModIdentity>();
   const modsTree = at(state, "persistent", "mods", gameId);
-  if (isTree(modsTree)) for (const [id, value] of Object.entries(modsTree)) {
+  if (isTree(modsTree)) for (const [id, value] of ownEntries(modsTree)) {
     const attributes = at(value, "attributes");
     const modId = int(at(attributes, "modId")), fileId = int(at(attributes, "fileId"));
     const source = str(at(attributes, "source"));

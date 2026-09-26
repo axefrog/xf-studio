@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
+import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
+import type { DetailLimit, SlotLimits } from "../src/detail-limits";
+import type { DetailSlot } from "../src/render-detail";
+import { CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
@@ -336,10 +339,41 @@ describe("a slot is its parts", () => {
     const geometry = exporter.open.bind(exporter);
     exporter.open = (source, signal) => { const session = geometry(source, signal); return { ...session,
       geometry: async paths => { const out = await session.geometry(paths); out.delete(P.shadowMesh); return out; } }; };
-    const { record } = await prepare(REQUEST_A, exporter, detailFixture({ shadowsInScene: true }));
+    const events: { event: string; data?: Readonly<Record<string, unknown>> }[] = [];
+    const trace = { deep: false, event: (area: string, event: string, data?: Readonly<Record<string, unknown>>) => { if (area === "character") events.push({ event, data }); } };
+    const { record } = await prepareCharacterDetails({ request: REQUEST_A, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
+      exporter, open: () => detailFixture({ shadowsInScene: true }).installation(), trace });
     expect(record.components.filter(c => c.slot === "hair").map(c => c.component)).toEqual(["hair"]);
+    // The page words the slot's code (PIPE-84): a part left out is never silent.
     expect(record.slots.find(slot => slot.slot === "hair")).toEqual({ slot: "hair", state: "shown", label: "brown",
-      message: "Some of your V's hair couldn't be read from your game files, so not all of it is shown." });
+      message: "Some of your V's hair couldn't be read from your game files, so not all of it is shown.", limits: ["part-unread"] });
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(record))).slots.find(slot => slot.slot === "hair")!.limits).toEqual(["part-unread"]);
+    // The drop notes (the shadow mesh is drawn by a hair part and a skin part) lead the record's notes and are in the diagnostics
+    // window's `prepared` event.
+    const drops = record.provenance.notes.filter(note => note.includes(" isn't shown: "));
+    expect(drops.some(note => /^Part \S+ of your V's hair isn't shown: /.test(note))).toBe(true);
+    expect(record.provenance.notes.slice(0, drops.length)).toEqual(drops);
+    expect(events.find(item => item.event === "prepared")!.data!.dropped).toEqual(drops);
+    // The page's device keeps the host's code on the slot, beside the limits the scene finds later.
+    let bake: ((limits: { slot: DetailSlot; limit: DetailLimit }[]) => void) | null = null;
+    const scene = { setCharacterDetails: () => ({ limits: [] }), details: { load: async () => ({ limits: [], problems: [], notes: [], dispose() {} }) },
+      onBakeLimits: (listener: typeof bake) => { bake = listener; return () => {}; } } as never;
+    const device = createBrowserCharacterDetailDevice(scene, async () => Response.json(record));
+    const shown = await device.show(`${record.identity}.json`, new AbortController().signal);
+    expect(shown.slots.find(slot => slot.slot === "hair")!.limits).toEqual(["part-unread"]);
+    const updates: SlotLimits[] = [];
+    device.onLimits!(update => updates.push(update));
+    bake!([{ slot: "hair", limit: "layered-material" }]);
+    expect(updates.at(-1)!.find(entry => entry.slot === "hair")!.limits).toEqual(["part-unread", "layered-material"]);
+  });
+
+  test("drop notes are kept ahead of informational ones under the record's note cap (PIPE-84)", () => {
+    const info = Array.from({ length: 40 }, (_, i) => `part_${i}: the exported geometry is served whole.`);
+    const drop = "Part hair_extra of your V's hair isn't shown: WolvenKit couldn't read x.archive.";
+    const notes = recordNotes([drop], [...info, drop]);
+    expect(notes).toHaveLength(RECORD_NOTE_CAP);
+    expect(notes[0]).toBe(drop);
+    expect(notes.filter(note => note === drop)).toHaveLength(1);
   });
 });
 

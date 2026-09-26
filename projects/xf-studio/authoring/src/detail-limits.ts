@@ -18,8 +18,12 @@
  * - `rigid-part`: a part whose exported mesh has no skin (a framework's linked ring) is drawn where the export placed it and does not
  *   follow the head's idle movement. The component binds to the entity's `root`, not to a head bone, so the data names no bone to
  *   follow [resource]; how the engine moves such a part is unread [hypothesis] (knowledge/head-cc-rendering.md).
+ * - `part-unread`: the host couldn't prepare some of a shown slot's parts (their shape or an input they need couldn't be read or
+ *   exported), so those parts are left out and the others drawn. The host sets it on the record's slot; the record's notes and the
+ *   diagnostics window's `character/prepared` event say which parts and why (PIPE-84).
  */
-export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "layered-mask", "layered-base", "decal-template", "rigid-part"] as const;
+export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "layered-mask", "layered-base", "decal-template", "rigid-part",
+  "part-unread"] as const;
 export type DetailLimit = typeof DETAIL_LIMITS[number];
 
 /**

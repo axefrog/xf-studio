@@ -282,6 +282,35 @@ test("bones under an attachment with `rig` join the rig motion, and leave it on 
   expect(state.rig).toEqual(["attach:Jaw,l_ear", "attach:", "detach:Jaw,l_ear"]);
 });
 
+test("bones added under a rig attachment after it joined, such as a GLB that loads later, join the rig motion too (PREV-99)", () => {
+  const { ctx, state } = context();
+  let root!: THREE.Group;
+  const late: FeatureRendererFactory = { feature: featureId("earrings"), create(host) {
+    root = new THREE.Group();
+    host.attach(root, { rig: true });
+    return { dispose() {} };
+  } };
+  const features = createFeatureRenderers(ctx, [late]);
+  expect(state.rig).toEqual(["attach:"]);
+  // Nothing changed: a frame adds nothing.
+  features.beforeDraw();
+  expect(state.rig).toEqual(["attach:"]);
+  // The GLB arrives: its bones join before the next frame is drawn, once, in their neutral pose.
+  const jaw = new THREE.Bone(), ear = new THREE.Bone();
+  jaw.name = "Jaw"; ear.name = "l_ear"; ear.position.set(0, 0.1, 0); jaw.add(ear); root.add(jaw);
+  features.beforeDraw(); features.beforeDraw();
+  expect(state.rig).toEqual(["attach:", "attach:Jaw,l_ear"]);
+  expect(ear.matrixWorld.elements[13]).toBeCloseTo(0.1, 6);
+  // A part replaced: the old bone leaves, the new one joins.
+  jaw.remove(ear);
+  const tip = new THREE.Bone(); tip.name = "l_ear_tip"; jaw.add(tip);
+  features.beforeDraw();
+  expect(state.rig).toEqual(["attach:", "attach:Jaw,l_ear", "detach:l_ear", "attach:l_ear_tip"]);
+  // Disposal detaches the bones there now.
+  features.dispose();
+  expect(state.rig.at(-1)).toBe("detach:Jaw,l_ear_tip");
+});
+
 test("the host releases what a renderer left behind, and a failed creation releases its own leftovers and the renderers before it (PREV-92)", () => {
   const { ctx, parts, frameListeners, skinListeners, characterListeners, lightingListeners, state } = context();
   const before = parts.root.children.length;

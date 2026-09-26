@@ -766,9 +766,16 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     return { setup: setup.source, mask: maskRef ? { depotPath: refLabel(maskRef.ref), archive: maskAtArchive?.archive.name ?? null,
       sha256: hexSha(maskRef.extractedSha256), layers: maskFiles.length } : null, ratio: setup.values.ratio, useNormal: setup.values.useNormal, layers };
   };
-  /** One plain line naming a part that is left out and why (it feeds the record's notes and diagnostics). */
-  const dropped = (component: PlannedComponent, why: string) =>
-    note(`Part ${component.component} of your V's ${SLOT_WORDS[component.slot].noun} isn't shown: ${why}`);
+  /**
+   * One plain line naming a part that is left out and why. It feeds the record's notes (ahead of every informational note, so the cap
+   * never cuts it), the slot's `part-unread` limit, and the diagnostics window's `prepared` event (PIPE-84).
+   */
+  const drops: string[] = [];
+  const dropped = (component: PlannedComponent, why: string) => {
+    const line = `Part ${component.component} of your V's ${SLOT_WORDS[component.slot].noun} isn't shown: ${why}`;
+    drops.push(line);
+    note(line);
+  };
   /**
    * Write one planned component, or say why it can't be served (the slot's outcome is decided by the caller). Every path that leaves the
    * component out adds a `dropped` note.
@@ -889,8 +896,10 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   for (const [slot, why] of partial) {
     const current = slots.get(slot)!, { noun, pronoun } = SLOT_WORDS[slot];
     const all = pronoun === "it" ? "not all of it is" : "not all of them are";
+    // Shown in part: the page words the `part-unread` code, so a part left out is never silent (PIPE-84).
     if (components.some(item => item.slot === slot))
-      slots.set(slot, { ...current, message: `Some of your V's ${noun} couldn't be read from your game files, so ${all} shown.` });
+      slots.set(slot, { ...current, message: `Some of your V's ${noun} couldn't be read from your game files, so ${all} shown.`,
+        limits: [...new Set([...(current.limits ?? []), "part-unread" as const])] });
     else unavailable(slot, why);
   }
   // A slot whose components all failed is unavailable; one with some drawn stays shown.
@@ -900,7 +909,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
     character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
-      notes: [...new Set(notes)].slice(0, 32).map(line => line.slice(0, 500)), ...(toolLabel ? { tool: toolLabel } : {}) },
+      notes: recordNotes(drops, notes), ...(toolLabel ? { tool: toolLabel } : {}) },
     components, slots: [...slots.values()],
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
@@ -927,10 +936,18 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
   trace.event("character", "prepared", { record: recordName, degraded, note: choicesNote ?? null, timings, slots: record.slots,
+    dropped: [...new Set(drops)].slice(0, 50),
     components: record.components.map(item => ({ slot: item.slot, option: item.option, definition: item.definition, component: item.component,
       geometry: item.geometry.depotPath, sources: item.geometry.sources.map(source => ({ path: source.depotPath, archive: source.archive ?? null, provider: source.provider ?? null })), chunks: item.chunks })),
     loadErrors: [...graph.loadErrors].slice(0, 50), ambiguities: [...graph.observedAmbiguities.values()].slice(0, 50) });
   return { record, recordFile: recordName, degraded, ...(choicesNote ? { note: choicesNote } : {}) };
+}
+
+/** The most notes a record's provenance carries. */
+export const RECORD_NOTE_CAP = 32;
+/** A record's notes: each once, drop notes first, so the cap cuts informational notes and never a part left out (PIPE-84). */
+export function recordNotes(drops: readonly string[], notes: readonly string[]): string[] {
+  return [...new Set([...drops, ...notes])].slice(0, RECORD_NOTE_CAP).map(line => line.slice(0, 500));
 }
 
 export type WarmOptions = Omit<PrepareCharacterOptions, "request" | "progress"> & {

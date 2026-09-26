@@ -31,7 +31,7 @@ export type FeatureRendererContext = {
   report?(feature: FeatureId, method: string, error: unknown): void;
 };
 
-type Attached = { object: THREE.Object3D; morphs: boolean; followers: Set<THREE.Mesh>; bones: THREE.Bone[] };
+type Attached = { object: THREE.Object3D; morphs: boolean; rig: boolean; followers: Set<THREE.Mesh>; bones: THREE.Bone[] };
 type Entry = {
   feature: FeatureId; factory: FeatureRendererFactory; renderer?: FeatureRenderer; band: RenderBand;
   attached: Set<Attached>; restored: Set<() => void>; releases: Set<() => void>;
@@ -75,6 +75,24 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
     }
     for (const mesh of [...item.followers]) if (!present.has(mesh)) item.followers.delete(mesh);
   }
+  /**
+   * Bring an attachment's rig bones up to date with what is under it now (PREV-99): bones added after `attach` (a GLB that finished
+   * loading later) join the idle and blink, taking their neutral pose as they join; bones removed since leave them.
+   */
+  function syncBones(item: Attached) {
+    if (!item.rig) return;
+    const present: THREE.Bone[] = [];
+    item.object.traverse(child => { if (child instanceof THREE.Bone) present.push(child); });
+    const known = new Set(item.bones), kept = new Set(present);
+    const added = present.filter(bone => !known.has(bone)), removed = item.bones.filter(bone => !kept.has(bone));
+    if (!added.length && !removed.length) return;
+    if (removed.length) context.rig.detach(removed);
+    if (added.length) {
+      item.object.updateWorldMatrix(true, true);
+      context.rig.attach(added);
+    }
+    item.bones = present;
+  }
   /** Keep a subscription so disposal ends it; the returned unsubscribe ends it early. */
   function tracked(entry: Entry, off: () => void) {
     const release = () => { if (entry.releases.delete(release)) off(); };
@@ -92,7 +110,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
         const parent = (options.beside ?? head).parent;
         if (!parent) throw Error("That anchor is not on the head rig.");
         parent.add(object);
-        const item: Attached = { object, morphs: !!options.morphs, followers: new Set(), bones: [] };
+        const item: Attached = { object, morphs: !!options.morphs, rig: !!options.rig, followers: new Set(), bones: [] };
         syncFollowers(item);
         if (options.rig) {
           object.traverse(child => { if (child instanceof THREE.Bone) item.bones.push(child); });
@@ -187,10 +205,13 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       return entries.find(entry => entry.factory === factory)?.renderer as R | undefined;
     },
     features: () => entries.map(entry => entry.feature),
-    /** Before a drawn frame, after the rig moved and the frame listeners ran: new morph followers take the V's shape first. */
+    /**
+     * Before a drawn frame, after the rig moved and the frame listeners ran: new morph followers take the V's shape first, and bones
+     * added under a rig attachment since the last frame join the rig motion, which poses them at once (PREV-99).
+     */
     beforeDraw() {
       for (const entry of entries) {
-        for (const item of entry.attached) syncFollowers(item);
+        for (const item of entry.attached) { syncFollowers(item); syncBones(item); }
         guarded(entry, "beforeDraw", renderer => renderer.beforeDraw?.());
       }
     },

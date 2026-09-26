@@ -1,17 +1,21 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { defaultLocalSettings } from "../src/local-settings";
 import { discoverSources } from "../src/source-discovery";
 import { compareWithDeployment } from "../src/vortex-deployment";
-import { inspectVortexSetup, readVortexManifests, readVortexStateFolder } from "../src/vortex-host";
+import { inspectVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/vortex-host";
 import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/vortex-state";
 
 const fixtures = join(import.meta.dir, "fixtures", "vortex");
 const withFolder = (run: (base: string) => void) => {
   const base = mkdtempSync(join(tmpdir(), "xfs-vortex-test-"));
   try { run(base); } finally { rmSync(base, { recursive: true, force: true }); }
+};
+const withFolderAsync = async (run: (base: string) => Promise<void>) => {
+  const base = mkdtempSync(join(tmpdir(), "xfs-vortex-test-"));
+  try { await run(base); } finally { rmSync(base, { recursive: true, force: true }); }
 };
 const put = (path: string, content = "fixture", timeMs?: number) => {
   mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, content);
@@ -62,6 +66,32 @@ test("reads the active profile, enabled mods and Nexus identities from Vortex's 
   expect(other.profileActive).toBe(false);
 });
 
+test("a key naming an object's prototype never reaches Object.prototype, and inherited names read as absent (VORTEX-01)", () => {
+  const hostile: [string, string][] = [...pairs,
+    ["__proto__###polluted", "true"],
+    ["persistent###mods###cyberpunk2077###__proto__###attributes###name", JSON.stringify("polluted")],
+    ["persistent###mods###cyberpunk2077###constructor###prototype###polluted", "true"],
+    ["persistent###profiles###p1###modState###__proto__###enabled", "true"],
+    // A JSON leaf that carries `__proto__` as data, merged into a tree.
+    ["persistent###mods###cyberpunk2077###XF Test Mod A###attributes", '{"__proto__":{"polluted":true},"version":"2.0"}'],
+  ];
+  try {
+    const { state, problems } = stateFromPairs(hostile);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect((Object.prototype as Record<string, unknown>).polluted).toBeUndefined();
+    expect(problems.filter(problem => problem.includes("prototype"))).toHaveLength(4);
+    const game = readVortexGameState(state, "cyberpunk2077");
+    expect([...game.mods.keys()].sort()).toEqual(["XF Test Mod A", "XF Test Mod B-9001-1-0-1727000000"]);
+    expect(game.mods.get("XF Test Mod A")?.version).toBe("2.0");
+    // A mod folder named after an inherited property is simply not there.
+    expect(readVortexGameState(stateFromPairs([["persistent###profiles###p1###gameId", JSON.stringify("cyberpunk2077")],
+      ["settings###profiles###activeProfileId", JSON.stringify("toString")]]).state, "cyberpunk2077").profile).toBeNull();
+    // A JSON backup's objects come from JSON.parse, which keeps "__proto__" as an own key: it is skipped too.
+    const backup = JSON.parse('{"persistent":{"mods":{"cyberpunk2077":{"__proto__":{"attributes":{"name":"x"}},"ok":{"attributes":{"name":"ok"}}}}}}');
+    expect([...readVortexGameState(backup, "cyberpunk2077").mods.keys()]).toEqual(["ok"]);
+  } finally { delete (Object.prototype as Record<string, unknown>).polluted; }
+});
+
 test("resolves the staging folder setting as Vortex does", () => {
   const win = (...parts: string[]) => parts.join("\\");
   const abs = (path: string) => /^[a-z]:\\/i.test(path);
@@ -107,7 +137,7 @@ test("a game folder without Vortex watches for a first deployment and reports no
   expect(broken.issues.map(i => [i.code, i.blocking])).toEqual([["vortex_manifest_unreadable", false]]);
 }));
 
-test("inspecting a Vortex setup matches the deploying installation by instance id and reads its state backup", () => withFolder(base => {
+test("inspecting a Vortex setup matches the deploying installation by instance id and reads its state backup", () => withFolderAsync(async base => {
   const game = join(base, "Games", "Cyberpunk 2077"), appData = join(base, "AppData"), programData = join(base, "ProgramData");
   mkdirSync(game, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), "utf8"));
@@ -120,7 +150,7 @@ test("inspecting a Vortex setup matches the deploying installation by instance i
   put(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), backup("fixture-instance-0001"));
   put(join(programData, "vortex", "temp", "state_backups_full", "hourly.json"), backup("another-instance"));
   const env = (name: string) => ({ APPDATA: appData, ProgramData: programData, USERNAME: "user" } as Record<string, string>)[name];
-  const setup = inspectVortexSetup(game, env);
+  const setup = await inspectVortexSetup(game, env);
   expect(setup.deployed).toBe(true);
   expect(setup.manifests).toEqual([{ fileName: "vortex.deployment.json", modType: "", deploymentMethod: "hardlink_activator",
     deploymentTimeMs: 1727000100000, files: 5, instance: "fixture-instance-0001" }]);
@@ -132,7 +162,7 @@ test("inspecting a Vortex setup matches the deploying installation by instance i
   expect(setup.stagingMarker).toEqual({ instance: "fixture-instance-0001", game: "cyberpunk2077" });
   expect(setup.state?.game.mods.get("XF Test Mod B-9001-1-0-1727000000")?.nexus?.modId).toBe(9001);
   // No Vortex at all: nothing deployed, no state, no guesses.
-  const none = inspectVortexSetup(join(base, "elsewhere"), () => undefined);
+  const none = await inspectVortexSetup(join(base, "elsewhere"), () => undefined);
   expect([none.deployed, none.state, none.stagingPath, none.instanceMatches]).toEqual([false, null, null, null]);
 }));
 
@@ -141,12 +171,12 @@ const sandbox = join(fixtures, "sandbox-023");
 const observedFiles = (JSON.parse(readFileSync(join(sandbox, "game-folder.json"), "utf8")).files as { path: string; modifiedMs: number }[])
   .map(file => ({ virtualPath: file.path, modifiedMs: file.modifiedMs }));
 
-test("a real Vortex deployment and closed state database attribute every deployed file and nothing else", () => withFolder(base => {
+test("a real Vortex deployment and closed state database attribute every deployed file and nothing else", () => withFolderAsync(async base => {
   const game = join(base, "game"), appData = join(base, "AppData");
   mkdirSync(game, { recursive: true });
   copyFileSync(join(sandbox, "vortex.deployment.json"), join(game, "vortex.deployment.json"));
   cpSync(join(sandbox, "state.v2-closed"), join(appData, "Vortex", "state.v2"), { recursive: true });
-  const setup = inspectVortexSetup(game, name => ({ APPDATA: appData } as Record<string, string>)[name]);
+  const setup = await inspectVortexSetup(game, name => ({ APPDATA: appData } as Record<string, string>)[name]);
   expect(setup.manifests.map(row => [row.deploymentMethod, row.files])).toEqual([["hardlink_activator", 6]]);
   expect([setup.state?.source, setup.state?.databaseMode, setup.state?.current, setup.state?.gaps]).toEqual(["database", "manifest", true, []]);
   expect(setup.instanceMatches).toBe(true);
@@ -177,12 +207,12 @@ test("a real Vortex deployment and closed state database attribute every deploye
   expect([report.missing, report.changed, report.stale]).toEqual([[], [], []]);
 }));
 
-test("state read while Vortex runs is marked incomplete, so its missing mods are not reported as uninstalled", () => withFolder(base => {
+test("state read while Vortex runs is marked incomplete, so its missing mods are not reported as uninstalled", () => withFolderAsync(async base => {
   const folder = join(base, "Vortex"), db = join(folder, "state.v2");
   cpSync(join(sandbox, "state.v2-live"), db, { recursive: true });
   // Stand-ins for the MANIFEST and log Vortex held open: present in the listing, not readable as files.
   mkdirSync(join(db, "MANIFEST-000034")); mkdirSync(join(db, "000036.log"));
-  const state = readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077")!;
+  const state = (await readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077"))!;
   expect([state.source, state.databaseMode, state.current]).toEqual(["database", "all-files", false]);
   expect(state.gaps[0]).toContain("Vortex appears to be running");
   expect(state.game.mods.size).toBe(0);
@@ -191,6 +221,94 @@ test("state read while Vortex runs is marked incomplete, so its missing mods are
   // Treated as current, the same state would call every deployed mod uninstalled.
   expect(compareWithDeployment(deployment, observedFiles, ["archive/pc/"], state.game.mods, true).stale.map(row => row.reason))
     .toEqual(["not-installed", "not-installed", "not-installed"]);
+}));
+
+test("a game-folder file changed after Vortex deployed it keeps the game folder as its provider (VORTEX-03)", () => withFolder(base => {
+  const game = join(base, "game");
+  mkdirSync(game, { recursive: true });
+  copyFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), join(game, "vortex.deployment.json"));
+  put(join(game, "archive", "pc", "mod", "XF Test Shared.archive"), "B", 1727000000000);
+  // Replaced by hand a day after the deployment.
+  put(join(game, "archive", "pc", "mod", "xf_test_a.archive"), "not A any more", 1727086400000);
+  const byPath = new Map(discoverSources({ ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" }).candidates.map(c => [c.virtualPath, c]));
+  expect(byPath.get("archive/pc/mod/XF Test Shared.archive")?.providerName).toBe("XF Test Mod B-9001-1-0-1727000000");
+  const replaced = byPath.get("archive/pc/mod/xf_test_a.archive")!;
+  expect([replaced.providerName, replaced.deployedBy?.state, replaced.deployedBy?.modId]).toEqual(["Installed game", "changed", "XF Test Mod A"]);
+  expect(replaced.priorityEvidence).toContain("changed after it was deployed");
+}));
+
+test("Vortex's state is read asynchronously, within a byte limit and a deadline, and kept for unchanged files (VORTEX-05)", () => withFolderAsync(async base => {
+  const folder = join(base, "Vortex");
+  cpSync(join(sandbox, "state.v2-closed"), join(folder, "state.v2"), { recursive: true });
+  const pending = readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077");
+  expect(pending).toBeInstanceOf(Promise);
+  const full = (await pending)!;
+  expect([full.source, full.current, full.game.mods.size]).toEqual(["database", true, 3]);
+  // The same files again: the read is kept, not repeated.
+  expect(await readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077")).toBe(full);
+  // A complete read kept is used even when time is short: it costs nothing.
+  expect(await readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077", { deadline: 0, now: () => 1 })).toBe(full);
+  // Out of time before the first file of another folder: nothing is read, the state says why, and the partial read isn't kept.
+  const other = join(base, "Other");
+  cpSync(join(sandbox, "state.v2-closed"), join(other, "state.v2"), { recursive: true });
+  const late = (await readVortexStateFolder({ path: other, kind: "user" }, "cyberpunk2077", { deadline: 0, now: () => 1 }))!;
+  expect([late.current, late.game.mods.size]).toEqual([false, 0]);
+  expect(late.gaps[0]).toContain("in the time a problem report allows");
+  expect((await readVortexStateFolder({ path: other, kind: "user" }, "cyberpunk2077"))!.current).toBe(true);
+  // Over the byte limit: the large files are left out, and the state says why.
+  const small = (await readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077", { maxStateBytes: 64 }))!;
+  expect(small.current).toBe(false);
+  expect(small.gaps).toContain("Vortex's state is larger than XF Studio reads, so some of it was left out.");
+}));
+
+test("a newer backup is read when the database is incomplete, even though the database lists mods (VORTEX-08)", () => withFolderAsync(async base => {
+  const folder = join(base, "Vortex"), db = join(folder, "state.v2");
+  cpSync(join(sandbox, "state.v2-closed"), db, { recursive: true });
+  // A log Vortex holds open while it runs: the database reads with a gap, and still lists the three mods it had.
+  mkdirSync(join(db, "000099.log"));
+  // The copy may keep the fixture's own file times; give every database file one known time so "newer" and "older" are exact.
+  const stamp = Date.now() / 1000;
+  for (const name of readdirSync(db)) utimesSync(join(db, name), stamp, stamp);
+  const backupPath = join(folder, "temp", "state_backups_full", "hourly.json");
+  const backup = stateFromPairs(pairs).state;
+  const newest = Math.max(...readdirSync(db).map(name => statSync(join(db, name)).mtimeMs));
+  put(backupPath, JSON.stringify(backup), newest + 60_000);
+  const newer = (await readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077"))!;
+  expect([newer.source, newer.current]).toEqual(["backup", false]);
+  expect(newer.game.mods.has("XF Test Mod B-9001-1-0-1727000000")).toBe(true);
+  // A backup older than the database files read is not preferred over them.
+  utimesSync(backupPath, (newest - 3_600_000) / 1000, (newest - 3_600_000) / 1000);
+  const older = (await readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077"))!;
+  expect([older.source, older.game.mods.size]).toEqual(["database", 3]);
+  expect(older.gaps[0]).toContain("Vortex appears to be running");
+}));
+
+test("a staging folder that isn't on a local drive is never opened (VORTEX-06)", () => withFolderAsync(async base => {
+  expect([String.raw`C:\Vortex\mods`, "d:/mods", "/opt/xfs-mods"].map(isLocalFolder)).toEqual([true, true, true]);
+  expect([String.raw`\\server\share\mods`, "//server/share/mods", String.raw`\\?\UNC\server\x`, String.raw`\\.\pipe\x`, "mods", ""]
+    .map(isLocalFolder)).toEqual([false, false, false, false, false, false]);
+  const game = join(base, "game"), share = String.raw`\\xfs-test.invalid\share\mods`;
+  mkdirSync(game, { recursive: true });
+  const manifest = JSON.parse(readFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), "utf8"));
+  writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ ...manifest, stagingPath: share }));
+  const setup = await inspectVortexSetup(game, () => undefined);
+  expect([setup.stagingPath, setup.stagingMarker]).toEqual([share, null]);
+  expect(setup.problems).toContain("The staging folder isn't on a local drive, so XF Studio didn't look inside it.");
+}));
+
+test("the Vortex check tool leaves the profile's name out of what testers paste (VORTEX-07)", () => withFolder(base => {
+  const game = join(base, "game"), appData = join(base, "AppData");
+  mkdirSync(game, { recursive: true });
+  copyFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), join(game, "vortex.deployment.json"));
+  const named = stateFromPairs([...pairs, ["persistent###profiles###p1###name", JSON.stringify("Jane Doe private profile")],
+    ["settings###gameMode###discovered###cyberpunk2077###path", JSON.stringify(game)]]).state;
+  put(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), JSON.stringify(named));
+  const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "tools", "vortex-check.ts"), "--game-root", game],
+    { env: { ...process.env, APPDATA: appData, ProgramData: join(base, "none") } });
+  const output = run.stdout.toString();
+  expect(run.exitCode, run.stderr.toString()).toBe(0);
+  expect(JSON.parse(output).state.profileFound).toBe(true);
+  expect(output).not.toContain("Jane Doe");
 }));
 
 test("Vortex parsing modules stay pure", () => {
