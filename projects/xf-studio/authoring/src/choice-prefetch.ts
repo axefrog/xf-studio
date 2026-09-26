@@ -66,6 +66,12 @@ type Job = { key: string; base: CharacterRequest; option: string; items: Map<num
   stopped: PrefetchStop; running: boolean; serial: number; batches: number };
 
 export const requestKey = (request: CharacterRequest) => canonicalJson(request);
+/** A request without the choices of one option (`part/name`). */
+export function withoutOption(request: CharacterRequest, option: string): CharacterRequest {
+  const choices = (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option);
+  const { choices: _all, ...rest } = request;
+  return (choices.length ? { ...rest, choices } : rest) as CharacterRequest;
+}
 
 export class ChoicePrefetcher {
   private job: Job | null = null;
@@ -83,10 +89,11 @@ export class ChoicePrefetcher {
 
   /** Start or update the job for a row and answer its states for `positions`. Never waits for preparation. */
   update(input: PrefetchInput): PrefetchAnswer {
-    const key = `${requestKey(input.base)}\n${input.option}`;
+    // The V without the row's own choice: choosing in the row doesn't start its job again (each choice's request replaces it).
+    const base = withoutOption(input.base, input.option), key = `${requestKey(base)}\n${input.option}`;
     if (this.job?.key !== key) {
       this.cancel();
-      this.job = { key, base: input.base, option: input.option, items: new Map(), controller: new AbortController(), startedAt: this.now(),
+      this.job = { key, base, option: input.option, items: new Map(), controller: new AbortController(), startedAt: this.now(),
         stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0 };
     }
     const job = this.job!;

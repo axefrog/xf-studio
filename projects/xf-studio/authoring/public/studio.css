@@ -479,11 +479,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-more { margin: 0 0 var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); align-self: flex-start; }
 .cc-row-swatch { width: 12px; height: 12px; }
 /* Choices prepared ahead: a corner mark on one not prepared yet, a turning one while it is prepared, a warning one when it couldn't be.
-   Absolutely placed, so a mark never moves the layout; the ring's own fill keeps it legible over any swatch colour in both themes. */
+   Absolutely placed on the item's corner (over its border, clear of its label), so a mark never moves the layout; the ring's own fill
+   keeps it legible over any swatch colour in both themes. */
 .cc-choice { position: relative; }
 .cc-choice[data-fetch]::after, .cc-fetch-mark { width: 7px; height: 7px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-muted);
   background: var(--bg-raised); }
-.cc-choice[data-fetch]::after { content: ""; position: absolute; top: 2px; right: 2px; pointer-events: none; }
+.cc-choice[data-fetch]::after { content: ""; position: absolute; top: -3px; right: -3px; pointer-events: none; }
 .cc-fetch-mark { display: inline-block; vertical-align: -1px; }
 .cc-choice[data-fetch="fetching"]::after, .cc-fetch-mark[data-fetch="fetching"] { border-color: var(--signal); border-top-color: transparent; animation: cc-fetch-turn .9s linear infinite; }
 .cc-choice[data-fetch="failed"]::after { border-color: var(--warning); background: var(--warning); }

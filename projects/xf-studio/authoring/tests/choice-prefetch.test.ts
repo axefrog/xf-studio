@@ -421,3 +421,12 @@ describe("the fetcher's lanes and the graph's reads", () => {
     expect([...again.reads]).toEqual([depotHash("base\\a.mesh")]);
   });
 });
+
+test("choosing in the row keeps its job: the V is keyed without the row's own choice", async () => {
+  const { service, warmed } = prefetcher();
+  const withRowChoice: CharacterRequest = { ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "hair", choice: "c3" }] };
+  ask(service, [0, 1]);
+  await settle();
+  expect(service.update({ base: withRowChoice, option: "head/hair", positions: [0, 1], focus: null }).states).toBe("rr");
+  expect(warmed).toEqual([[0, 1]]);
+});

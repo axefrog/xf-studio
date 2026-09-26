@@ -260,7 +260,9 @@ export class CharacterContextActions {
    */
   prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null {
     if (!this.ports.creator.prefetch || !this.ready() || this.state.bodyGender !== "female" || !positions.length) return null;
-    const key = `${JSON.stringify(this.detailRequest())}\n${option}`;
+    // Keyed by the V without the row's own choice, so choosing in the row keeps the states it has.
+    const request = this.detailRequest();
+    const key = JSON.stringify([{ ...request, choices: (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option) }, option]);
     if (this.fetch?.key !== key) {
       this.fetch?.asking?.abort();
       this.fetch = { key, option, positions: [], focus: null, sent: "", states: new Map(), stopped: null, busy: true, asking: null, again: false,
