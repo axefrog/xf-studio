@@ -27,6 +27,7 @@ import { readSetup, readTemplate } from "../src/layered-setup";
 import { templateDefaults } from "../src/material-template";
 import { tweakDbId } from "../src/tweakdb-flats";
 import { NativeArchivePool } from "../src/native/archive-reader";
+import { compareDocuments, isNameOnly } from "../src/native/document-diff";
 import { loadGameOodle } from "../src/native/oodle";
 import { writeResourceJson } from "../src/native/red-json-writer";
 import { NativeUnsupportedError } from "../src/native/red-model";
@@ -76,31 +77,7 @@ function observe(mine: unknown, reference: unknown, depth = 0): void {
   }
 }
 
-// ---- comparison ------------------------------------------------------------------------------------------------------------
-type Mismatch = { path: string; kind: string; mine: string; reference: string };
-function compare(mine: unknown, reference: unknown, path: string, out: Mismatch[], owner = ""): void {
-  const text = (value: unknown) => JSON.stringify(value)?.slice(0, 160) ?? "undefined";
-  if (Array.isArray(mine) && Array.isArray(reference)) {
-    if (mine.length !== reference.length) out.push({ path, kind: `${owner}: array length`, mine: String(mine.length), reference: String(reference.length) });
-    for (let i = 0; i < Math.min(mine.length, reference.length); i++) compare(mine[i], reference[i], `${path}[${i}]`, out, owner);
-    return;
-  }
-  if (isObject(mine) && isObject(reference)) {
-    const type = typeof reference.$type === "string" ? reference.$type : owner;
-    if (reference.$type === "TweakDBID" && mine.$type === "TweakDBID" && mine.$storage === "uint64" && reference.$storage === "string") {
-      const same = String(tweakDbId(String(reference.$value))) === String(BigInt(String(mine.$value)) & ((1n << 40n) - 1n));
-      out.push({ path, kind: same ? "TweakDB name unavailable (hash-only TweakDBID, same id)" : "TweakDBID: different id", mine: text(mine.$value), reference: text(reference.$value) }); return;
-    }
-    if (reference.$type === "ResourcePath" && mine.$type === "ResourcePath" && mine.$storage === "uint64" && reference.$storage === "string") {
-      out.push({ path, kind: "path text unavailable (hash-only reference)", mine: text(mine.$value), reference: text(reference.$value) }); return;
-    }
-    for (const key of Object.keys(reference)) if (!(key in mine)) out.push({ path: `${path}.${key}`, kind: `${type}.${key}: missing`, mine: "", reference: text(reference[key]) });
-    for (const key of Object.keys(mine)) if (!(key in reference)) out.push({ path: `${path}.${key}`, kind: `${type}.${key}: extra`, mine: text(mine[key]), reference: "" });
-    for (const key of Object.keys(mine)) if (key in reference && key !== "Type") compare(mine[key], reference[key], `${path}.${key}`, out, `${type}.${key}`);
-    return;
-  }
-  if (mine !== reference) out.push({ path, kind: `${owner}: value`, mine: text(mine), reference: text(reference) });
-}
+// ---- comparison: src/native/document-diff.ts ----------------------------------------------------------------------------
 
 /** One archive holding one resource, for running the resource graph's readers on a document. */
 async function graphModel(type: string, hash: string, document: unknown): Promise<unknown> {
@@ -193,13 +170,12 @@ for (const name of files) {
   if (learn) { observe(writeResourceJson(model, { buffers: "trim", omitDefaults: true }).Data, entry.document.Data); continue; }
   const mine = writeResourceJson(model, { buffers: "trim" });
   row.ms += performance.now() - start;
-  const mismatches: Mismatch[] = [];
-  compare(mine.Data, entry.document.Data, "", mismatches);
+  const mismatches = compareDocuments(mine.Data, entry.document.Data);
   if (!mismatches.length) row.docsEqual++;
-  else if (mismatches.every(m => m.kind.startsWith("path text unavailable") || m.kind.startsWith("TweakDB name unavailable"))) row.docsEqualButPaths++;
+  else if (mismatches.every(isNameOnly)) row.docsEqualButPaths++;
   for (const mismatch of mismatches) {
     row.mismatchKinds.set(mismatch.kind, (row.mismatchKinds.get(mismatch.kind) ?? 0) + 1);
-    if (row.examples.length < 6 && !/^(path text|TweakDB name) unavailable/.test(mismatch.kind)) row.examples.push(`${meta.path ?? meta.hash}${mismatch.path}: ${mismatch.mine} vs ${mismatch.reference}`);
+    if (row.examples.length < 6 && !isNameOnly(mismatch)) row.examples.push(`${meta.path ?? meta.hash}${mismatch.path}: ${mismatch.mine} vs ${mismatch.reference}`);
   }
   try {
     const [a, b] = await Promise.all([projection(mine, meta.hash), projection(entry.document, meta.hash)]);

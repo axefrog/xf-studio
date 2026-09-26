@@ -43,6 +43,8 @@ export function float32Text(value: number): string {
 export function float32Value(value: number): number | string | null {
   if (Number.isNaN(value)) return null;
   if (!Number.isFinite(value)) return value > 0 ? "+inf" : "-inf";
+  // Whole numbers below 10^9 print exactly (the common zeros and ones among them).
+  if (Number.isInteger(value) && Math.abs(value) < 1e9) return Object.is(value, -0) ? -0 : value;
   // `toPrecision(9)` rounds correctly except on an exact tie, which only a value with exactly ten significant digits ending in 5 has.
   const ten = value.toPrecision(10);
   if (/5(?:e|$)/.test(ten) && Number(ten) === value) return Number(float32Text(value));
