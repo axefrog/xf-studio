@@ -1,0 +1,51 @@
+# XF Runtime Bridge: photo-mode camera presets for repeatable framing. TEST PROFILE ONLY.
+#
+# Only the -diagnostic and -writes packages carry this file (tools/package.ts); the distribution
+# package never does, because it replaces three of the player's nine photo-mode camera presets.
+# Approved for the XF test profile on 26 September 2026.
+#
+# Photo mode's camera PRESET row (attribute 23: 0 Customization, 1-9) puts the camera at the offset
+# a photo_mode.std_preset_<n> record describes: dist, pitchDeg, yawDeg, rollDeg, distUpDown,
+# distLeftRight and fov (flat names and types as Portrait Enhancer for Photo Mode's overrides use
+# them; knowledge/photo-mode.md §4). photo.frame {xf_preset: true} selects 7, 8 or 9 for its framing
+# and then fine-tunes with V's placement and the field of view, so these only need to be close.
+#
+# Starting values: the camera 1.8 m from V at eye level, as Portrait Enhancer's portrait preset 1
+# (distance -1.8, up/down 0.07) but level (pitch 0); the field of view fits each framing's span at
+# that distance (fov = 2 atan(span / 2 / 1.8)). Whether presets follow V's spawn and how collision
+# moves them is the next session's check (knowledge/photo-mode.md open question 4). The profile's
+# Portrait Enhancer also overrides these records; TweakXL should read this folder after it (by path
+# order), which the session confirms by selecting preset 7.
+#
+# Floats are written with a decimal point so TweakXL reads them as Float
+# (TweakXL v1.11.4 src/App/Tweaks/Declarative/Yaml/YamlReader.Values.cpp:499-523).
+
+# 7: face (span 0.36 m)
+photo_mode.std_preset_7:
+  dist: -1.8
+  pitchDeg: 0.0
+  yawDeg: 0.0
+  rollDeg: 0.0
+  distUpDown: 0.07
+  distLeftRight: 0.0
+  fov: 11.4
+
+# 8: eyes (span 0.2 m)
+photo_mode.std_preset_8:
+  dist: -1.8
+  pitchDeg: 0.0
+  yawDeg: 0.0
+  rollDeg: 0.0
+  distUpDown: 0.1
+  distLeftRight: 0.0
+  fov: 6.4
+
+# 9: head and shoulders (span 0.8 m)
+photo_mode.std_preset_9:
+  dist: -1.8
+  pitchDeg: 0.0
+  yawDeg: 0.0
+  rollDeg: 0.0
+  distUpDown: 0.0
+  distLeftRight: 0.0
+  fov: 25.1

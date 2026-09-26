@@ -407,6 +407,28 @@ void UndoTests()
               !undo.contains("look_at") && !undo.contains("look_at_part") && unknown.size() == 2, undo.dump());
     }
     {
+        std::vector<std::string> unknown;
+        const auto undo = w::UndoParams(json::array({Attr("on", 0, 1), Attr("type", 2, 1), Attr("shadow", 1, 0), Attr("brightness", 50, 80),
+                                                     Attr("camera_preset", 0, 7)}),
+                                        &unknown);
+        Check("light undo turns the switch back into a flag and the type into its name",
+              undo["on"] == false && undo["type"] == "ambient" && undo["shadow"] == true && undo["brightness"] == 50.0 && unknown.empty(),
+              undo.dump());
+        Check("camera_preset undo is the earlier preset number", undo["camera_preset"] == 0, undo.dump());
+        std::vector<std::string> unknownType;
+        const auto none = w::UndoParams(json::array({Attr("type", -1, 1)}), &unknownType);
+        Check("a light type the menu didn't show is left out of the undo and named",
+              !none.contains("type") && unknownType.size() == 1 && unknownType[0] == "type", none.dump());
+    }
+    {
+        const auto both = w::HudResult(json{{"hidden", true}, {"was_hidden", false}, {"cursor_hidden", true}, {"was_cursor_hidden", false}});
+        Check("hud undo shows the menu and the cursor again",
+              both["undo"]["params"] == json{{"hidden", false}, {"cursor", true}} && !both.contains("undo_note"), both.dump());
+        const auto mixed = w::HudResult(json{{"hidden", true}, {"was_hidden", true}, {"cursor_hidden", true}, {"was_cursor_hidden", false}});
+        Check("hud undo with menu and cursor in different states restores the menu only and says so",
+              mixed["undo"]["params"] == json{{"hidden", true}, {"cursor", false}} && mixed.contains("undo_note"), mixed.dump());
+    }
+    {
         json out;
         w::AttachUndo(out, "photo.camera.set", json::object(), {"look_at"});
         Check("no known value: undo is null with a note", out["undo"].is_null() && out["undo_note"].get<std::string>().find("look_at") != std::string::npos,
@@ -690,6 +712,40 @@ void ParamsTests()
     Check("light params select light 2 and map brightness 47, hue 51",
           light.light == 2 && light.attributes.size() == 2 && light.attributes[0].key == 47 && light.attributes[1].key == 51);
     Check("light refuses light 4", ParamsCode([] { p::ParseLight(json::parse(R"({"light":4,"hue":1})")); }) == "bad_params");
+    const auto lightOn = p::ParseLight(json::parse(R"({"light":1,"brightness":80,"type":"ambient","on":true})"));
+    Check("light on (key 44 = 1) and type (key 45: ambient = 2) come first, then the values",
+          lightOn.attributes.size() == 3 && lightOn.attributes[0].key == 44 && lightOn.attributes[0].value == 1.0f &&
+              lightOn.attributes[1].key == 45 && lightOn.attributes[1].value == 2.0f && lightOn.attributes[2].key == 47);
+    Check("light off is key 44 = 0 and spot is key 45 = 1",
+          p::ParseLight(json::parse(R"({"on":false,"type":"spot"})")).attributes[0].value == 0.0f &&
+              p::ParseLight(json::parse(R"({"on":false,"type":"spot"})")).attributes[1].value == 1.0f);
+    Check("light refuses an unknown type", ParamsCode([] { p::ParseLight(json::parse(R"({"type":"area"})")); }) == "bad_params");
+    Check("photo.enter without a route is refused with photo_key_needed",
+          ParamsCode([] { p::ParsePhotoEnter(json::object()); }) == "photo_key_needed" &&
+              ParamsCode([] { p::ParsePhotoEnter(json::parse(R"({"route":"auto"})")); }) == "photo_key_needed");
+    Check("photo.enter keeps the quest route for research and refuses unknown routes",
+          p::ParsePhotoEnter(json::parse(R"({"route":"quest"})")) == p::PhotoEnterRoute::Quest &&
+              ParamsCode([] { p::ParsePhotoEnter(json::parse(R"({"route":"input"})")); }) == "bad_params");
+    const auto preset = p::ParseCamera(json::parse(R"({"fov":20,"camera_preset":7})"));
+    Check("camera_preset is key 23 and comes before the other camera values",
+          preset.attributes.size() == 2 && preset.attributes[0].key == 23 && preset.attributes[0].value == 7.0f &&
+              p::CameraKeys().front() == 23 && p::CameraParamName(23) == "camera_preset");
+    Check("grain is key 25 and chromatic aberration key 13",
+          p::ParseCamera(json::parse(R"({"grain":0,"chromatic_aberration":0})")).attributes[0].key == 25 &&
+              p::ParseCamera(json::parse(R"({"grain":0,"chromatic_aberration":0})")).attributes[1].key == 13 &&
+              ParamsCode([] { p::ParseCamera(json::parse(R"({"grain":2})")); }) == "bad_params");
+    Check("camera_preset is 0 to 9", ParamsCode([] { p::ParseCamera(json::parse(R"({"camera_preset":10})")); }) == "bad_params");
+    Check("light shadow is key 46 after on and type",
+          p::ParseLight(json::parse(R"({"shadow":false,"on":true})")).attributes[1].key == 46);
+    Check("cc.confirm and cc.back are refused while allow_creator_leave is off",
+          ParamsCode([] { p::CreatorLeaveAllowed(false); }) == "creator_leave_disabled" && p::CreatorLeaveAllowed(true));
+    Check("allow_creator_leave defaults to false and parses",
+          !xfb::ParseConfig("").allowCreatorLeave && xfb::ParseConfig("[bridge]\nallow_creator_leave = true\n").allowCreatorLeave);
+    const auto hud = p::ParseHud(json::parse(R"({"hidden":true,"cursor":false})"));
+    Check("hud takes hidden and cursor (cursor defaults to true)", hud.hidden && !hud.cursor && p::ParseHud(json::object()).cursor);
+    Check("subject offsets are metres within 2 of the head",
+          p::ParseSubject(json::parse(R"({"up":0.07,"forward":0.09})")).forward == 0.09f &&
+              ParamsCode([] { p::ParseSubject(json::parse(R"({"up":3})")); }) == "bad_params");
     Check("expression needs a whole faceId", ParamsCode([] { p::ParseExpression(json::parse(R"({"faceId":2.5})")); }) == "bad_params");
     Check("cc.apply needs option and index", ParamsCode([] { p::ParseCharacterApply(json::parse(R"({"option":"XF"})")); }) == "bad_params");
     Check("cc.apply refuses control characters in the option name",

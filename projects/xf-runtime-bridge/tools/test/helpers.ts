@@ -7,6 +7,9 @@ import { join, resolve } from "node:path";
 import { readSession, type BridgeSession } from "../bridge-lib.ts";
 
 export const projectDir = resolve(import.meta.dir, "..", "..");
+// No test may ever press a key on this machine's desktop (photo.open's sender refuses with this set);
+// child processes inherit it.
+process.env.XFB_NO_INPUT = "1";
 export const selftestExe = join(projectDir, "build", "Release", "xfb_selftest.exe");
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

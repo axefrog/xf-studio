@@ -1,16 +1,16 @@
-# Runtime bridge: first session and session 2
+# Runtime bridge test card
 
-**Status: first run on 26 September 2026 stopped at script calls (a crash, since fixed offline); the [script-call check](#script-call-check-first) comes first next time.** The first in-game run of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 (phase 2: command catalogue, MCP server, session runner, write methods behind `allow_writes`), followed directly by [session 2](../../experiments/020-session-2/README.md) run through the bridge. Design and citations: [runtime bridge design](runtime-bridge-design.md).
+**Status: the next session is [autonomy checks, then session 2 continued](#next-session-autonomy-checks-then-session-2-continued).** The first in-game runs of [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md) 0.2.0 on 26 September 2026 passed the [script-call check](#script-call-check-first) and the [first-session checks](#first-session-bridge-checks), and ran session 2 semi-manually ([results](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial)). Since then the bridge can open photo mode with the player's own key, frame V without hand-tuned values, switch lights on, hide the cursor, keep the creator's row labels in step and press the creator's Confirm and Back; all of it is built and tested offline only. Design and citations: [runtime bridge design](runtime-bridge-design.md); photo mode and the creator from script: [knowledge/photo-mode.md](../../knowledge/photo-mode.md).
 
-**Who does what.** The maintainer starts MO2 and the game, loads a save and does the few things only a player can (open a mirror, confirm a look, press the photo-mode key if needed). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only this one entry into the test profile.
+**Who does what.** The maintainer starts MO2 and the game, loads a save, keeps the game window in front, and opens the character creator when asked (a mirror, or F12 with Character Customization Anywhere). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only the `XF Runtime Bridge` entry in the test profile.
 
 | Part | Time | Needs |
 |---|---|---|
-| [Before the session](#before-the-session-coordinator) | offline | The coordinator stages one mod entry |
-| [Script-call check](#script-call-check-first) | 10 min | A save next to a mirror; proves the crash fix |
-| [First session](#first-session-bridge-checks) | 15–20 min | A save next to a mirror |
-| [Session 2 through the bridge](#session-2-through-the-bridge) | about 25 min | Directly after the first session, same game |
-| [Kill switch and wrap-up](#kill-switch-and-wrap-up) | 2 min | End of the evening |
+| [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
+| [Next session: autonomy checks](#next-session-autonomy-checks-then-session-2-continued) | 15–20 min | V in the world in an open, quiet spot; the game window in front |
+| [Session 2 continued](#session-2-through-the-bridge) | about 40 min | Directly after the checks, same game |
+| [Kill switch and wrap-up](#kill-switch-and-wrap-up) | 3 min | End of the evening |
+| [Script-call check](#script-call-check-first), [first session](#first-session-bridge-checks) | done | Results kept below |
 
 ## Before the session (coordinator)
 
@@ -24,7 +24,9 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   **Build record** (26 September 2026, `main` at `c31156aaf29b`, clean tree: the script-call fix, RB-29..31, and every earlier review fix; `xfb_selftest --unit` OK, self-test 157 of 157, `bun test tools` 65 of 65, redscript and Lua lint passed on that build). The zip to stage is the `-writes` one:
+   **Next build:** from the `main` commit that merges `claude/bridge-autonomy`; record its zip and DLL hashes here before staging. What it adds to the staged zips: the -writes zip sets `allow_creator_leave = true`, and the -diagnostic and -writes zips carry `r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml` (XF camera presets 7-9; the default zip doesn't). Check the -writes manifest for `"allow_creator_leave": true` and `"photo_mode_presets"`.
+
+   **Build record of the first sessions** (26 September 2026, `main` at `c31156aaf29b`, clean tree: the script-call fix, RB-29..31, and every earlier review fix; `xfb_selftest --unit` OK, self-test 157 of 157, `bun test tools` 65 of 65, redscript and Lua lint passed on that build). The zip to stage is the `-writes` one:
 
    | Zip | SHA-256 |
    |---|---|
@@ -67,6 +69,27 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 7. **Baseline capture:** `python tools/capture_session.py --label bridge-phase2-pre --profile "XF Studio diagnostic 2026-09-25"`.
 
 8. **Tell the maintainer before the session:** use a save next to a mirror (V's apartment bathroom works); make a new manual save when asked, before the first change (this profile shares the save folder, and after the first change the bridge holds a save lock until a save is loaded; the kill switch does not release it); bind the kill hotkey once the game is at the main menu (first-session step 1); the game must run in **borderless windowed** or windowed mode for captures that include overlays, and the screenshot route is recorded either way.
+
+## Next session: autonomy checks, then session 2 continued
+
+Each check proves one new bridge feature in the game before session 2's script relies on it. Tool names are the MCP names. Restage first (above), and tell the maintainer: borderless windowed, the game window in front (`photo_open` presses the photo-mode key in it, and refuses if another window is in front), V standing in an open, quiet spot with a few metres in front of her (the XF camera presets put the camera 1.8 m from V), and a new manual safety save before the first change. The kill hotkey stays bound from last time.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| A1 | M, C | M loads the save, stands V in the open spot and makes the safety save. C: `bridge_info`, `game_status` | The new build's commit; `allow_writes: true`, phase `gameplay` | Stop: wrong build |
+| A2 | C | `photo_open` | Photo mode opens by itself within about a second; the result names the key (`IK_N` unless rebound), `route: "sendinput"` and whether the bridge brought the window to the front | `not_foreground`: M clicks the game, C repeats. `photo_open_timeout`: M presses the photo-mode key; record it (the posted route is `photo_open {route: "postmessage"}`, worth one try) |
+| A3 | C | Wait 2 s. `photo_subject {}` | `slot: "Head"`, `approximate: false`, `subject: "photo_puppet"`; `screen.center` near (0, 0), (0.5, 0.5) or the window centre in pixels. Record the raw `screen` block | `approximate: true` or no stand-in: `photo_frame` still works but coarser; record |
+| A4 | C | `photo_light_set {light: 1, on: true, type: "spot", brightness: 60, hue: 35, saturation: 15}` | Light 1 switches on (warm); note where it appears relative to V and the camera. The undo switches it off | `write_mismatch` on `on` or `type`: record the menu values (`photo_state {options: true}`) |
+| A5 | C | `photo_camera_set {camera_preset: 7}`, then `capture_screenshot {region: "face"}` | The camera jumps to about 1.8 m in front of V at eye level, field of view about 11 (the XF face preset). If it matches Portrait Enhancer's preset 7 instead, our file loaded first | Record which preset values took effect |
+| A6 | C | `photo_frame {target: "face", look_at: "off", xf_preset: true}`, `photo_hud_hide {}`, wait 0.5 s, `capture_screenshot {region: "face"}`; then `photo_frame {target: "eyes", xf_preset: true}` + `capture_screenshot {region: "eyes"}`; then `head-and-shoulders` + its region | Each `method: "project"`, `converged: true`, a handful of steps. The face fills the face crop from chin to hairline, the eyes crop holds both eyes and brows, centred | Off-centre vertically: the anatomical offsets need tuning; note by how much (the result's `offset` and the capture). `method: "capture"`: record the note |
+| A7 | M, C | M moves the mouse so the pointer sits over V's face and leaves it. C: `photo_hud_hide {}`, wait 0.5 s, `capture_screenshot {region: "face"}`, then `photo_hud_hide {hidden: false}` | No cursor and no menu in the capture (`cursor_controllers` ≥ 1); the menu and cursor come back and the mouse still works in the menu | Cursor visible: record `cursor_controllers`; the next try is the menu-layer event (knowledge/photo-mode.md §6) |
+| A8 | C | `photo_frame {target: "face", yaw_offset: -30}` then `-15`, `15`, `30`, a face capture after each | V turns (head with the body, look-at off), stays centred and sized; the light meets the face from changing sides | — |
+| A9 | C | `capture_burst {region: "eyes", frames: 10, interval_ms: 100}` | A contact sheet; `diff_previous` means near 0 (the scene is still), timings near 100 ms | Large differences in a still scene: record (flicker) |
+| A10 | C | `photo_exit`. M opens the creator with F12 (Character Customization Anywhere) and goes to the XF row. C: `game_wait {phase: ["character_menu"]}`, `player_appearance {option: "XF"}` | Record `menu.updating_finalized_state` and `menu.edit_mode` ([photo-mode open question 2](../../knowledge/photo-mode.md#open-questions)): `true` means F12 opens the edit-V's-look mode and Confirm keeps a look | `game_wait` times out: F12 opened the new-game mode (the bridge treats only the edit mode as `character_menu`); M closes it and uses a mirror instead; record |
+| A11 | C | `cc_apply {option: "XF", index: 5}`, wait 1.5 s, `capture_screenshot {region: "cc-eyes"}` | The preview changes and **the XF row shows Gloss A's name** (`route: "row"`); the `cc-eyes` crop frames both eyes and brows | Row still shows the old name: record `route` |
+| A12 | C | `cc_confirm` | The creator closes and V keeps Gloss A in the world (`kept: true`); `game_status` shows `bridge_save_lock: true` | `creator_leave_disabled`: wrong build. `not_in_character_menu`: M presses Confirm |
+
+Then run session 2 continued (below). The kill-switch check with the cursor hidden is at the [wrap-up](#kill-switch-and-wrap-up).
 
 ## Script-call check (first)
 
@@ -137,7 +160,7 @@ Tool names are the MCP names; the CLI takes the dotted name (`bridge_ping` is `b
 | Session 2 | Run semi-manually: the player opened the creator with F12 and photo mode with the key; the bridge applied presets, framed, captured and restored. Results in [experiment 020](../../experiments/020-session-2/README.md#results-26-september-2026-run-through-the-runtime-bridge-partial). |
 | 20–22 | The kill switch was proven in the script-call check; the game quit cleanly and removed `session.json`; post-session capture `bridge-phase2-post`. |
 
-Session 2 continues from here, at the mirror. If a step fails:
+If a step fails, in any part of this card:
 - **Redscript error pop-up:** screenshot it, quit, disable `XF Runtime Bridge` in this profile; the coordinator reads `r6/logs/redscript_rCURRENT.log`.
 - **Crash:** disable the entry; send the newest `red4ext/logs/*.log` (under MO2: `overwrite/red4ext/logs/`). The last `script.call` or `step` line names the call; `python tools/minidump_summary.py` gives the crash's fingerprint ([game crashes](../../knowledge/game-crashes.md)).
 - **`rtti_missing` / `rtti_signature`:** a function differs on 2.31; the call was refused and nothing changed. Carry on; `evt=rtti.signature_mismatch` in the log says what differs.
@@ -147,15 +170,15 @@ Session 2 continues from here, at the mirror. If a step fails:
 
 ## Session 2 through the bridge
 
-The script [`tools/sessions/session-2.json`](../../projects/xf-runtime-bridge/tools/sessions/session-2.json) follows the [session 2 test card](../../experiments/020-session-2/README.md) step for step (generated by `tools/sessions/make-sessions.py`):
+The script [`tools/sessions/session-2.json`](../../projects/xf-runtime-bridge/tools/sessions/session-2.json) runs the parts of the [session 2 card](../../experiments/020-session-2/README.md) still open after 26 September (generated by `tools/sessions/make-sessions.py`). About 300 steps, 19 of them asks; each creator visit is one ask, marked `replaced_by: cc.open` for when the bridge can open the creator itself.
 
-- **p0:** bridge and game status; the maintainer confirms the safety save and notes the upscaler, resolution and ray or path tracing (card step 8); the mirror opens.
-- **p1, at the mirror's fixed camera:** every option read once (for future scripting), the XF row's values, then the placement pair Lines · new / old / new (card step 2) and a **pause for the coordinator's placement check**: stop the session if the pair doesn't line up. Then Depth A–D, Gloss A–D, Shimmer and Metal, one capture each.
-- **p2, photo mode, one confirmed preset at a time:** the bridge sets XF; the maintainer confirms and leaves the mirror; the bridge opens photo mode, frames `eyes` / `face` / `head-and-shoulders`, hides the menu and captures; for Gloss, Shimmer and Metal it turns V in 15° steps either side of facing the camera (150°, 165°, −165°, −150°; Photo Mode Ex clamps rotation to −180…180) as the light sweep; then it leaves photo mode and the maintainer opens the mirror again. Depth D adds the motion check (card step 4) at the mirror. A last pause collects the verdicts.
-- **p3, optional (card step 9):** XF Off, then piercings and the heart eye set by hand, one capture each.
-- **p4:** Back in the appearance screen, then load the safety save.
+- **p0:** bridge and game status; the maintainer confirms the safety save, notes the game version, upscaler, resolution and ray or path tracing (card step 8) and stands V in the open spot.
+- **p1, Gloss A–D, Shimmer and Metal (card steps 5–7):** for each preset the maintainer opens the creator; the bridge sets XF, photographs the creator's eyes zoom (`cc-eyes`), presses Confirm, opens photo mode with the photo-mode key, turns grain and aberration off, switches light 1 on, frames the face (XF preset, then `photo_frame`), hides the menu and cursor, captures, and sweeps the light by turning V −30°, −15°, 15° and 30° with look-at off, then leaves photo mode. Shimmer adds the eyes framing and a 10-frame burst. After Gloss A the session **pauses for the coordinator's check** that framing, cursor and sweep look right.
+- **p2:** Depth C at the extreme close-up (span 0.08 m) with a 5-frame burst; Depth D in motion in the creator (a 20-frame burst of the eyes zoom, then the maintainer's verdict, card step 4); Lines · new and old at the eyes framing and the extreme close-up (the sharpness the first run couldn't establish); a last pause for the verdicts.
+- **p3, optional (card step 9):** XF Off, then piercings and the heart eye by hand in the creator, one creator capture each.
+- **p4:** Back through the bridge (`cc_back`), then the maintainer loads the safety save (the kept looks and the save lock go with it).
 
-Run it in either of two ways, never together with MCP tool calls (the bridge takes one client at a time):
+If `cc_confirm` is refused, a note asks the maintainer to press Confirm; if `photo_open` fails, a note asks for the photo-mode key; `game_wait` then continues. Run it one of two ways, never together with MCP tool calls (the bridge takes one client at a time):
 
 ```powershell
 cd projects/xf-runtime-bridge
@@ -164,13 +187,13 @@ bun tools/session.ts tools/sessions/session-2.json                    # interact
 bun tools/session.ts tools/sessions/session-2.json --out <folder> --from <label>   # harness: stops at each ask
 ```
 
-Run by the coordinator (no terminal), the runner stops at each *ask* and prints the `--from` label that continues after it; the coordinator relays the ask, then continues into the same `--out` folder. *Notes* (for example "Confirm and leave the mirror") print while the next `game_wait` waits up to 10 minutes for the player. Every run appends to the folder's `manifest.json` with each step's input, result, undo note, timings and screenshots (`.full.png` at full resolution, `.png` at viewing size, `.json` sidecar). The camera presets used here must be the values calibrated in step 12.
+Run by the coordinator (no terminal), the runner stops at each *ask* and prints the `--from` label that continues after it; the coordinator relays the ask, then continues into the same `--out` folder. *Notes* print while the next `game_wait` waits up to 10 minutes for the player. Every run appends to the folder's `manifest.json` with each step's input, result, undo note, timings and screenshots (`.full.png` at full resolution, `.png` at viewing size, `.json` sidecar; bursts add a contact sheet and a `.burst.json`).
 
 ## Kill switch and wrap-up
 
 | # | Who | Do | Expect |
 |---|---|---|---|
-| 20 | C | `bridge_kill` (or M presses the CET hotkey *Kill XF Runtime Bridge*; fallback: the `KILL` file, see above) | The label turns red "XF bridge: killed"; any freeze and hidden photo-mode menu are undone; the save lock is still held (saving stays blocked until step 21's load; the log's `RestoreAfterKill` line shows `save_lock_kept`); later calls answer plainly that the bridge is off. |
+| 20 | M, C | M opens photo mode (or C: `photo_open`) and leaves the pointer over V. C: `photo_hud_hide {}`, then `bridge_kill` (or M presses the CET hotkey *Kill XF Runtime Bridge*; fallback: the `KILL` file, see above) | The label turns red "XF bridge: killed"; the hidden photo-mode menu **and the cursor** come back (`RestoreAfterKill … "photo_ui_shown":true … "cursor_shown":true`); the save lock is still held (saving stays blocked until step 21's load; `save_lock_kept`); later calls answer plainly that the bridge is off. M leaves photo mode with its own key. |
 | 21 | M | Load the safety save (this releases the save lock), then quit to desktop normally. | Clean exit; `session.json` is gone from `%LOCALAPPDATA%\XFStudio\runtime-bridge\`; delete a `KILL` file there if one was used. |
 | 22 | C | `python tools/capture_session.py --label bridge-phase2-post --profile "XF Studio diagnostic 2026-09-25"`; copy the session report folder and `logs/commands-*.jsonl` into the evidence. | |
 

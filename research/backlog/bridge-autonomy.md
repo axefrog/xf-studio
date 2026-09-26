@@ -1,6 +1,6 @@
 # Runtime bridge autonomy
 
-**Status: ranked, nothing built (26 September 2026).** In the first bridge session the player still had to open photo mode, open the character creator, press Confirm there, switch photo-mode light 1 on, move the mouse cursor out of shot, and stand V where the drone camera had room ([test card results](../runtime/runtime-bridge-test-card.md#first-session-bridge-checks)). This page ranks the bridge features that remove those steps, from the photo-mode and creator study in [knowledge/photo-mode.md](../../knowledge/photo-mode.md), which holds the evidence and citations. It is a queue for the [runtime bridge](../../projects/xf-runtime-bridge/README.md) track under [runtime access](../../knowledge/runtime-access.md).
+**Status: ranks 1, 2, 3, 5, 6 and 9 built and tested offline (claude/bridge-autonomy, 26 September 2026); none seen in game yet. The rest are queued.** In the first bridge session the player still had to open photo mode, open the character creator, press Confirm there, switch photo-mode light 1 on, move the mouse cursor out of shot, and stand V where the drone camera had room ([test card results](../runtime/runtime-bridge-test-card.md#first-session-bridge-checks)). This page ranks the bridge features that remove those steps, from the photo-mode and creator study in [knowledge/photo-mode.md](../../knowledge/photo-mode.md), which holds the evidence and citations. It is a queue for the [runtime bridge](../../projects/xf-runtime-bridge/README.md) track under [runtime access](../../knowledge/runtime-access.md).
 
 Effort is rough agent effort once the bridge's redscript actions layer is in place: **S** is under half a day, **M** one to two days, **L** longer or research-heavy. Every write keeps the bridge's rules: behind `allow_writes` and its class, reversible with an `undo`, cleared by the kill switch, logged ([design §4](../runtime/runtime-bridge-design.md#4-safety-model)).
 
@@ -22,7 +22,18 @@ Effort is rough agent effort once the bridge's redscript actions layer is in pla
 | 12 | **A reference NPC beside V** | Photo Mode Ex's photo-mode characters (attribute 55, placement 60–62/66); outside photo mode Codeware `DynamicEntitySystem` with a friendly attitude and god mode | Photo Mode Ex, Photomode NPCs Extended, AMM [source] [resource] | M | Medium: depends on the player's installed mods; three NPC slots |
 | 13 | **Native photo-mode entry** | Identify the native function behind `TogglePhotoMode` (the caller of `PhotoModeSystem::Activate`) and call it from the plugin on the main thread | Photo Mode Ex's address-library entries [source]; entry point unknown | L | High: a wrong call crashes; addresses change per game build |
 
-**Suggested order:** ranks 1–3, 6 and 7 are small and remove most of the player's photo-mode steps; build them together with the cursor hide. Ranks 4 and 5 remove the creator steps once open question 2 is answered. Rank 9 needs the maintainer's decision on input injection. Ranks 10–13 are later work.
+**Built (offline, awaiting the next session's [autonomy checks](../runtime/runtime-bridge-test-card.md#next-session-autonomy-checks-then-session-2-continued)):**
+
+| Rank | As built |
+|---|---|
+| 1 | `photo.light.set` takes `on`, `type` (spot, ambient) and `shadow` (keys 44–46), applied first after the light is selected; the undo restores them |
+| 2 | `photo.hud.hide` hides the cursor with the menu by default (`cursor: false` leaves it): a flag read by our wrap of `CursorGameController.ProcessCursorContext`, cleared when photo mode opens or closes and by the kill switch. No separate `photo.cursor.hide` command: the cursor only matters for captures, which already hide the menu |
+| 3 | `photo.camera.set {camera_preset}` (attribute 23) and `photo.frame {xf_preset: true}`; the TweakXL file `tweaks/test-profile/xf_photo_mode_presets.yaml` sets presets 7 (face), 8 (eyes) and 9 (head and shoulders), carried by the -diagnostic and -writes packages only. `photo.frame` fine-tunes from the game's own projection (`photo.subject`), with a coarse capture-based fallback |
+| 5 | `cc.confirm` and `cc.back` (the menu's own `ConfirmCustomizedCharacter()` / `ConfirmBackConfirmation()`), refused unless `[bridge] allow_creator_leave = true`, which only the -writes build sets; refused in the new-game mode. `player.appearance` reports `menu.updating_finalized_state` and `edit_mode` (question 1 below) |
+| 6 | `cc.apply` goes through the row (`SetSelected…(info, index, true)`), falling back to the bare call when no row shows the option; the result names the route |
+| 9 | `photo.open` in the tools (`tools/input/photo-key.ts`): the player's binding from `UserSettings.json` or `IK_N`, sent only to the game's own window after the write gate, the phase and `photo_mode_can_open` pass; `sendinput` refuses unless the game window is in front. `photo.enter` now refuses without `route: "quest"` |
+
+Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. **Next:** rank 4 (`cc.open`, after question 1), rank 7 (scene attributes), rank 8 (studio spot), then ranks 10–13.
 
 ## Questions for the next session
 
@@ -35,9 +46,11 @@ Batch these into the next bridge session's test card:
 
 ## Decisions for the maintainer
 
-- May the bridge press **Confirm** in the creator on a test save (rank 5)? Recommended: yes, only in the test profile and only in sessions that end by loading their save.
-- May the bridge send the **photo-mode key** to the game window (rank 9)? Recommended: yes, one allowlisted key, only to the game window, only after `CanPhotoModeBeEnabled` and only in the test profile.
-- May the test profile ship a TweakXL file that sets **our own camera presets** (rank 3)? It replaces the player's presets in that profile only.
+All three approved on 26 September 2026, each confined to the test profile's -writes build:
+
+- **Confirm and Back in the creator** (rank 5): yes, only in sessions that end by loading the safety save, with the save lock held while changes are live. Built as `cc.confirm`/`cc.back` behind `allow_creator_leave`.
+- **The photo-mode key** (rank 9): yes, one allowlisted key (the bound `TogglePhotoMode` key), only to the Cyberpunk window, only after `CanPhotoModeBeEnabled`, never any other input. Built as `photo.open`.
+- **Our own camera presets** (rank 3): yes, in the -diagnostic and -writes packages; the distribution package must not carry them. Built as `xf_photo_mode_presets.yaml`.
 
 ## Constraints
 

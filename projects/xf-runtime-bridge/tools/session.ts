@@ -13,11 +13,15 @@
 //     "restore": [ ...steps run at the end even after a failure ]
 //   }
 // Step kinds ("do"): "set camera" (photo.camera.set), "set light" (photo.light.set),
-// "apply cc" (cc.apply), "capture" (capture.screenshot), "wait" ({"ms": n}), "note" ({"text"}),
+// "apply cc" (cc.apply), "frame" (photo.frame), "capture" (capture.screenshot), "burst"
+// (capture.burst), "wait" ({"ms": n}), "note" ({"text"}),
 // "ask" ({"text"}: something the player must do or judge), and "run" ({"command": "<any catalogue
 // command>", "input": {...}}), so every command in the catalogue is scriptable. Every other key
 // of a step is the command's input. A failed step stops the run (then "restore" runs) unless it
 // says "continue_on_error": true, or "expect_error": "<code>" names the refusal it expects.
+//
+// An "ask" may name, in "replaced_by", the command expected to take it over once the bridge can do
+// that step itself (for example "photo.open"); dry runs and the manifest show it.
 //
 // "ask" steps split a session into parts. Run interactively (a terminal), the runner shows the
 // text and waits for Enter. Run by a harness (no terminal), it stops cleanly at the ask, without
@@ -42,11 +46,13 @@ export const STEP_COMMANDS: Record<string, string> = {
   "set camera": "photo.camera.set",
   "set light": "photo.light.set",
   "apply cc": "cc.apply",
+  frame: "photo.frame",
   capture: "capture.screenshot",
+  burst: "capture.burst",
 };
-const STEP_META = new Set(["do", "label", "continue_on_error", "command", "input", "expect_error", "text"]);
+const STEP_META = new Set(["do", "label", "continue_on_error", "command", "input", "expect_error", "text", "replaced_by"]);
 
-export type Step = { do: string; label?: string; continue_on_error?: boolean; command?: string; input?: Record<string, unknown>; expect_error?: string; [key: string]: unknown };
+export type Step = { do: string; label?: string; continue_on_error?: boolean; command?: string; input?: Record<string, unknown>; expect_error?: string; replaced_by?: string; [key: string]: unknown };
 export type SessionScript = {
   schema: string;
   name: string;
@@ -84,6 +90,9 @@ export function planScript(script: SessionScript): { plan: PlannedStep[]; proble
       if (kind === "note" || kind === "ask") {
         if (!step.text) problems.push(`${where}: ${kind} needs "text"`);
         if (kind === "ask" && phase === "restore") problems.push(`${where}: restore steps can't ask the player anything`);
+        if (step.replaced_by !== undefined && (kind !== "ask" || typeof step.replaced_by !== "string" || !/^[a-z]+(\.[a-z]+)+$/.test(step.replaced_by))) {
+          problems.push(`${where}: replaced_by belongs on an ask and names a command such as photo.open`);
+        }
         plan.push({ index, phase, label, kind, text: String(step.text ?? ""), step });
         continue;
       }
@@ -98,7 +107,9 @@ export function planScript(script: SessionScript): { plan: PlannedStep[]; proble
         continue;
       }
       const input = { ...(script.defaults?.[kind] ?? {}), ...(kind === "run" ? (step.input ?? {}) : own) };
-      if (kind === "capture" && input.name === undefined) input.name = label.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
+      if ((kind === "capture" || kind === "burst" || (kind === "run" && (commandName === "capture.screenshot" || commandName === "capture.burst"))) && input.name === undefined) {
+        input.name = label.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
+      }
       for (const problem of validate(command.input, input)) problems.push(`${where}: ${problem}`);
       plan.push({ index, phase, label, kind, command: command.name, input, step });
     }
@@ -124,7 +135,8 @@ type StepRecord = {
   result?: unknown;
   error?: unknown;
   undo?: string;
-  files?: { full: string; view: string };
+  files?: Record<string, string>;
+  replaced_by?: string;
 };
 
 export type SessionRunOptions = {
@@ -222,6 +234,7 @@ export async function runScript(
       log(`     note: ${planned.text}`);
     } else if (planned.kind === "ask") {
       record.result = planned.text;
+      if (planned.step.replaced_by) record.replaced_by = planned.step.replaced_by;
       log(`     ASK: ${planned.text}`);
       if (options.ask) {
         await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
@@ -238,9 +251,11 @@ export async function runScript(
       if (outcome.ok) {
         record.result = outcome.result;
         if (outcome.undo) record.undo = outcome.undo;
-        const capture = outcome.result as { full?: { path: string }; view?: { path: string } };
+        const capture = outcome.result as { full?: { path: string }; view?: { path: string }; contact_sheet?: { path: string }; manifest?: string };
         if (capture?.full?.path && capture.view?.path) {
           record.files = { full: relative(options.outDir, capture.full.path), view: relative(options.outDir, capture.view.path) };
+        } else if (capture?.contact_sheet?.path && capture.manifest) {
+          record.files = { sheet: relative(options.outDir, capture.contact_sheet.path), manifest: relative(options.outDir, capture.manifest) };
         }
         if (planned.step.expect_error) {
           record.ok = false;
@@ -384,7 +399,8 @@ if (import.meta.main) {
   }
   if (args.includes("--dry-run")) {
     for (const p of plan) {
-      const what = p.command ? ` -> ${p.command} ${JSON.stringify(p.input)}` : p.ms !== undefined ? ` ${p.ms} ms` : ` ${p.text}`;
+      const later = p.step.replaced_by ? ` [later: ${p.step.replaced_by}]` : "";
+      const what = p.command ? ` -> ${p.command} ${JSON.stringify(p.input)}` : p.ms !== undefined ? ` ${p.ms} ms` : ` ${p.text}${later}`;
       console.log(`  ${String(p.index).padStart(3)} ${p.phase === "restore" ? "[restore] " : ""}${p.label}: ${p.kind}${what}`);
     }
     console.log("\nDry run: the script is valid. Nothing was sent to the game.");

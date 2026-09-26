@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { crop, decodePng, downscaleArea, encodePng, fitSize, type Rect } from "./image.ts";
+import { contactSheet, crop, decodePng, diffStats, downscaleArea, encodePng, fitSize, type Rect } from "./image.ts";
 import { describeRegion, resolveRegion, type RegionSpec } from "./regions.ts";
 import { describeWindow, grab, looksBlank, mainWindowOf, processImageName, topLevelWindows, type Pixels, type Route, type WindowInfo } from "./win32.ts";
 
@@ -129,32 +129,51 @@ function stamp(date = new Date()): string {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}-${pad(date.getMilliseconds(), 3)}`;
 }
 
+function checkName(name: string) {
+  if (!NAME_PATTERN.test(name)) throw new CaptureError("A capture name may use only letters, digits, '.', '_' and '-' (up to 80).", "bad_region");
+}
+
+function regionRect(region: RegionSpec | undefined, width: number, height: number): Rect {
+  try {
+    return resolveRegion(region, width, height);
+  } catch (error) {
+    throw new CaptureError((error as Error).message, "bad_region");
+  }
+}
+
 function finish(
   pixels: Pixels,
   options: { region?: RegionSpec; view?: ScaleOptions; name?: string; outDir?: string },
   source: Omit<CaptureRecord["source"], "window"> & { window: { width: number; height: number } },
 ): CaptureRecord {
   const name = options.name ?? "capture";
-  if (!NAME_PATTERN.test(name)) throw new CaptureError("A capture name may use only letters, digits, '.', '_' and '-' (up to 80).", "bad_region");
-  let rect: Rect;
-  try {
-    rect = resolveRegion(options.region, pixels.width, pixels.height);
-  } catch (error) {
-    throw new CaptureError((error as Error).message, "bad_region");
-  }
-  const cropped = crop(pixels, rect);
+  checkName(name);
+  const rect = regionRect(options.region, pixels.width, pixels.height);
+  return finishCropped(crop(pixels, rect), rect, options, source);
+}
+
+/** Writes an already-cropped frame (full resolution, view, sidecar) and returns its record. */
+function finishCropped(
+  cropped: Pixels,
+  rect: Rect,
+  options: { region?: RegionSpec; view?: ScaleOptions; name?: string; outDir?: string; stamp?: string },
+  source: Omit<CaptureRecord["source"], "window"> & { window: { width: number; height: number } },
+  capturedAt = new Date(),
+): CaptureRecord {
+  const name = options.name ?? "capture";
+  checkName(name);
   const view = options.view ?? { maxWidth: DEFAULT_VIEW_MAX, maxHeight: DEFAULT_VIEW_MAX };
   const size = fitSize(cropped.width, cropped.height, view);
   const scaled = downscaleArea(cropped, size.width, size.height);
 
   const outDir = options.outDir ?? DEFAULT_CAPTURE_ROOT;
   mkdirSync(outDir, { recursive: true });
-  const base = join(outDir, `${stamp()}-${name}`);
+  const base = join(outDir, `${options.stamp ?? stamp(capturedAt)}-${name}`);
   const full = writeImage(`${base}.full.png`, cropped);
   const viewFile = size.factor === 1 ? { ...full } : writeImage(`${base}.png`, scaled);
   const record: CaptureRecord = {
     name,
-    captured_at: new Date().toISOString(),
+    captured_at: capturedAt.toISOString(),
     source,
     crop: { ...rect, region: describeRegion(options.region), ...(options.region ? { requested: options.region } : {}) },
     scale: {
@@ -176,7 +195,11 @@ export function captureWindow(options: CaptureOptions): CaptureRecord {
   const window = findWindow(options.target);
   const imageName = processImageName(window.pid);
   const { pixels, route } = grabWindow(window, options.route ?? "auto", imageName?.toLowerCase() === GAME_EXE.toLowerCase());
-  return finish(pixels, options, {
+  return finish(pixels, options, sourceOf(window, imageName, route));
+}
+
+function sourceOf(window: WindowInfo, imageName: string | null, route: Route): CaptureRecord["source"] {
+  return {
     pid: window.pid,
     process: imageName,
     title: window.title,
@@ -184,7 +207,119 @@ export function captureWindow(options: CaptureOptions): CaptureRecord {
     covers_monitor: window.coversMonitor,
     foreground: window.foreground,
     route,
-  });
+  };
+}
+
+/**
+ * Grabs the target window once, without writing anything, and returns it downscaled to at most
+ * maxWidth pixels wide (area filter). For image checks such as photo.frame's capture route.
+ */
+export function grabForAnalysis(target: CaptureTarget, maxWidth = 480, route: CaptureOptions["route"] = "auto"): Pixels {
+  const window = findWindow(target);
+  const imageName = processImageName(window.pid);
+  const { pixels } = grabWindow(window, route, imageName?.toLowerCase() === GAME_EXE.toLowerCase());
+  const size = fitSize(pixels.width, pixels.height, { maxWidth });
+  return downscaleArea(pixels, size.width, size.height);
+}
+
+export type BurstFrame = { index: number; at_ms: number; record: CaptureRecord; diff_previous: { mean: number; changed_fraction: number } | null; diff_first: { mean: number; changed_fraction: number } | null };
+export type BurstRecord = {
+  schema: "xfb/capture-burst-1";
+  name: string;
+  started_at: string;
+  frames_requested: number;
+  interval_ms: number;
+  /** Actual time of each grab after the first, in milliseconds (the interval is a target). */
+  timing: { first_to_last_ms: number; mean_interval_ms: number; max_interval_ms: number };
+  crop: Rect & { region: string };
+  diff_note: string;
+  frames: BurstFrame[];
+  contact_sheet: ImageFile;
+  manifest: string;
+};
+
+/** Frames kept in memory until the burst ends (cropped, full resolution). */
+export const BURST_MEMORY_LIMIT = 256 * 1024 * 1024;
+
+/**
+ * Captures `frames` pictures of the same area, `intervalMs` apart, for flicker and motion checks.
+ * Every frame is grabbed and cropped first and only written afterwards, so the interval isn't
+ * stretched by PNG encoding; the crops are kept in memory (at most BURST_MEMORY_LIMIT bytes, or the
+ * burst is refused with a plain message). Writes each frame like a screenshot, a contact sheet of
+ * every frame, and one manifest (<stamp>-<name>.burst.json) with timings and frame-to-frame
+ * differences (measured on the viewing-size copies: mean absolute difference 0-255 and the share of
+ * pixels that changed by more than 8).
+ */
+export async function captureBurst(options: CaptureOptions & { frames: number; intervalMs: number; signal?: AbortSignal }): Promise<BurstRecord> {
+  const name = options.name ?? "burst";
+  checkName(name);
+  if (!(options.frames >= 2 && options.frames <= 120)) throw new CaptureError("A burst takes 2 to 120 frames.", "bad_region");
+  const window = findWindow(options.target);
+  const imageName = processImageName(window.pid);
+  const isGame = imageName?.toLowerCase() === GAME_EXE.toLowerCase();
+  const rect = regionRect(options.region, window.width, window.height);
+  const bytesPerFrame = rect.width * rect.height * 3;
+  if (bytesPerFrame * options.frames > BURST_MEMORY_LIMIT) {
+    const fits = Math.max(1, Math.floor(BURST_MEMORY_LIMIT / bytesPerFrame));
+    throw new CaptureError(
+      `That burst would hold ${Math.round((bytesPerFrame * options.frames) / 1048576)} MB of pictures in memory. Use a smaller region or at most ${fits} frames.`,
+      "bad_region",
+    );
+  }
+  const started = new Date();
+  const startMs = performance.now();
+  const grabs: { pixels: Pixels; at: number; date: Date; route: Route }[] = [];
+  for (let i = 0; i < options.frames; i++) {
+    if (i > 0) {
+      const due = startMs + i * options.intervalMs;
+      const wait = due - performance.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      if (options.signal?.aborted) break;
+    }
+    const at = performance.now() - startMs;
+    const { pixels, route } = grabWindow(window, options.route ?? "auto", isGame);
+    if (pixels.width !== window.width || pixels.height !== window.height) {
+      throw new CaptureError("The game window changed size during the burst. Keep it still and try again.", "failed");
+    }
+    grabs.push({ pixels: crop(pixels, rect), at, date: new Date(), route });
+  }
+  const stampText = stamp(started);
+  const outDir = options.outDir ?? DEFAULT_CAPTURE_ROOT;
+  const frames: BurstFrame[] = [];
+  const views: Pixels[] = [];
+  for (const [index, grab] of grabs.entries()) {
+    const frameName = `${name}-${String(index + 1).padStart(3, "0")}`;
+    const record = finishCropped(grab.pixels, rect, { region: options.region, view: options.view, name: frameName, outDir, stamp: stampText }, sourceOf(window, imageName, grab.route), grab.date);
+    const view = decodePng(new Uint8Array(readFileSync(record.view.path)));
+    const previous = views.at(-1);
+    frames.push({ index: index + 1, at_ms: Math.round(grab.at), record, diff_previous: previous ? diffStats(previous, view) : null, diff_first: views[0] ? diffStats(views[0], view) : null });
+    views.push(view);
+    grab.pixels = { width: 0, height: 0, rgb: new Uint8Array(0) }; // release the full-resolution crop
+  }
+  const sheet = contactSheet(views, 1600);
+  mkdirSync(outDir, { recursive: true });
+  const sheetFile = writeImage(join(outDir, `${stampText}-${name}.sheet.png`), sheet);
+  const intervals = frames.slice(1).map((f, i) => f.at_ms - frames[i].at_ms);
+  const manifest = join(outDir, `${stampText}-${name}.burst.json`);
+  const record: BurstRecord = {
+    schema: "xfb/capture-burst-1",
+    name,
+    started_at: started.toISOString(),
+    frames_requested: options.frames,
+    interval_ms: options.intervalMs,
+    timing: {
+      first_to_last_ms: frames.length > 1 ? frames.at(-1)!.at_ms - frames[0].at_ms : 0,
+      mean_interval_ms: intervals.length ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length) : 0,
+      max_interval_ms: intervals.length ? Math.max(...intervals) : 0,
+    },
+    crop: { ...rect, region: describeRegion(options.region) },
+    diff_note: "Differences are measured on the viewing-size copies: mean absolute difference (0-255) and the share of pixels that changed by more than 8 in any channel. A still scene gives near-zero values; flicker shows as spikes against the previous frame.",
+    frames,
+    contact_sheet: sheetFile,
+    manifest,
+  };
+  writeFileSync(manifest, JSON.stringify(record, null, 2) + "\n");
+  return record;
 }
 
 const OUTSIDE = "Only captures saved in the XF capture folder can be cropped again.";
