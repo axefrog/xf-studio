@@ -36,18 +36,19 @@ The diffuse content fills roughly u 0.05–0.86, v 0.20–0.67 of the brow UV ar
 
 ## 3. Material and colour
 
-Parameters set by `eyebrows_grad__default.mi` [resource]; the arithmetic is [source] (pixel program `8834363738920290566`, [brow material study](../research/eye-artistry/brow-lash-fidelity.md)):
+Parameters set by `eyebrows_grad__default.mi` [resource]; the arithmetic is [source] (pixel program `7624081209775720613` and its Discarded twin `8834363738920290566`, which differ only by the engine's dissolve; [decal reference §5.1](../research/materials/shader-decal.md#51-mesh_decal_double_diffuse-brows-36-lip-styles), [brow material study](../research/eye-artistry/brow-lash-fidelity.md)):
 
 | Parameter | Vanilla value | Effect |
 |---|---|---|
 | `DiffuseColor` / `SecondaryDiffuseColor` | (103, 81, 71) / (62, 49, 42) | Tint of the primary and secondary terms |
 | `DiffuseAlpha` | 1 | Colour target alpha multiplier |
 | `SecondaryDiffuseAlphaIntensity` | 0.6 | Coverage = `(p + (1 − p)·s·0.6)²` at default contrast, p = primary alpha, s = secondary alpha, squared after filtering |
-| `UseGradientMap` / `GradientMapIntensity` | 1 / 2 | Colour = gradient sample × 2 × primary RGB, plus the secondary term |
+| `UseGradientMap` / `GradientMapIntensity` | 1 / 2 | Colour = `saturate(gradient sample × 2)` × primary RGB, plus the secondary term: gradient channels above 0.5 clip, so bright colours lose part of their tint |
 | `GradientMap` | `hh_cap_grad__<colour>.xbm` (32 × 4 BC7), sampled at the **constant** coordinate (`GradientMapUV`, 0.5), template default `GradientMapUV` 1 | One colour per brow: the ramp's end texel, not an ombre along the brow |
 | `NormalTexture` / `NormalAlpha` / `UseNormalAlphaTex` / `NormalsBlendingMode` | style normal / 0.4 / 1 / 1 | Hair relief composed onto the skin normal (reoriented blending, flat texels fade out) |
-| `RoughnessTexture` / `RoughnessMetalnessAlpha` | `engine\textures\editor\roughmetal.xbm` (4 × 4, R = 128, linear) / 1 | The brow writes **roughness ≈ 0.50** over its coverage; metalness from the template default [hypothesis: 0] |
-| `AlphaMaskContrast`, UV transform | unset (0; scale 1, offset 0) | – |
+| `RoughnessTexture` / `RoughnessMetalnessAlpha` | `engine\textures\editor\roughmetal.xbm` (4 × 4, R = 128, linear) / 1 | The brow writes **roughness ≈ 0.50** over its coverage; metalness from the template default `black.xbm`, so 0 [resource] |
+| `AlphaMaskContrast`, UV transform | unset (0; scale 1, offset 0) | The program applies the UV transform to every texture, as `mesh_decal` does [source] |
+| `DepthThreshold` | template default **0** | The depth-distance test is off for brows (0.5 m in `mesh_decal`) [resource] [source] |
 
 The brow is a `post_gbuffer` decal: it blends colour in square-root space into the skin's G-buffer and is lit as Subsurface skin, once ([materials §2.4](materials-and-shaders.md#24-what-a-post_gbuffer-decal-does-to-the-pixel-under-it)).
 
@@ -91,7 +92,7 @@ There is no brow authoring of any kind: no part, painter, texture injection or e
 | Both brows share one UV area | Symmetric by construction. Per-side asymmetry needs a brow mesh with separate UVs per side (a UV-only change keeps positions and skin bytes), or a cut in head UV0 (below). |
 | The footprint is a fixed strip of head triangles | Shapes outside the strip (a much higher arch, a brow reaching the temple) need new geometry: a new cut of head triangles, lifted like the vanilla brow. |
 | 89 % of brow vertices lie inside the expanded eye plate's faces | The eye plate's head-UV texture already covers the brow region. Brow *makeup* over any brow (tint, gel, brow-bone highlight) is drawable today with the eye-makeup engine; a brow *replacement* is not, because a decal cannot remove the vanilla brow below it. |
-| In head UV0 the brow region is u 0.316–0.684, v 0.173–0.248 (glTF) at 418–448 mm per UV unit | A brow cut kept in head UV0 with the eye plate's `UVScale`/`UVOffset` window trick would give about 0.08 × 0.07 mm per texel at 2048 × 512 for both brows in one window, separate per side and with no UV authoring (head UV0 is not mirrored). The double-diffuse template declares the UV transform parameters [resource]; that its program applies them as `mesh_decal`'s does is [hypothesis]. |
+| In head UV0 the brow region is u 0.316–0.684, v 0.173–0.248 (glTF) at 418–448 mm per UV unit | A brow cut kept in head UV0 with the eye plate's `UVScale`/`UVOffset` window trick would give about 0.08 × 0.07 mm per texel at 2048 × 512 for both brows in one window, separate per side and with no UV authoring (head UV0 is not mirrored). The double-diffuse program applies the UV transform to all its textures exactly as `mesh_decal`'s does [source]; the gradient is sampled at a constant coordinate and is unaffected. |
 | One colour per brow from the gradient's end texel | "Follow the creator's colour" (35 hair colours plus installed packs) is free through `@brows`; a multi-tone or ombre brow must bake colour into the diffuse RGB with `UseGradientMap` 0, and then loses the colour row. |
 | Colour and hair colour are independent choices sharing gradient files | A "match my hair" default is a Studio convenience (preselect the same colour name), not an engine link. |
 | Colour = gradient × `GradientMapIntensity` × primary RGB | Greyscale variation in the `_d` RGB (per-hair tone, a lighter front) survives every creator colour; only hue changes need `UseGradientMap` 0. Arkhe's style-18 `_d` RGB is greyscale [resource]. |
@@ -103,8 +104,8 @@ There is no brow authoring of any kind: no part, painter, texture injection or e
 
 1. Why are brows lifted 0.35 mm while every other face decal is 0.40 mm, and does the difference matter for draw order against eye makeup (both are `EMP_Normal`)?
 2. What does `GradientMapUV` mean exactly (the vanilla default 1 against `phoenix_fire`'s 0.75): a position along the 32-texel ramp, and with which filtering at the end texel?
-3. Does the double-diffuse program apply `UVScale`/`UVOffset` to all three textures (needed for a head-UV brow cut with a texture window)?
-4. What is the template default for the brow's metalness and `NormalAlphaTex`?
+3. ~~Does the double-diffuse program apply `UVScale`/`UVOffset` to all three textures?~~ **Answered [source]:** yes, like `mesh_decal` ([decal reference §5.1](../research/materials/shader-decal.md#51-mesh_decal_double_diffuse-brows-36-lip-styles)).
+4. ~~What is the template default for the brow's metalness and `NormalAlphaTex`?~~ **Answered [resource]:** `black.xbm` (metalness 0) and `white.xbm`.
 5. Do the unused brow apps 14–16 and texture sets 09–11 draw anything if selected through a mod?
 6. Does a brow mesh with separate per-side UVs (positions and skin bytes unchanged) render and deform identically in game?
 

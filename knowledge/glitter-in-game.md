@@ -111,8 +111,8 @@ This covers the case where glints of analytic lights prove too rare, or are supp
 | Part | Specification | Grade |
 |---|---|---|
 | `EmissiveMask` | R holds the accent flakes: the lowest-key 8 % of the same catalogue, drawn at least 2 texels wide in a **head-UV 2048 atlas** (≈ 0.28 × 0.20 mm texels; the template has no UV transform), with nested mips | [resource] parameters; [source] sampling |
-| Other parameters | `EmissiveMaskChannel` (1, 0, 0, 0), `EmissiveColor` = flake colour, `EmissiveEV` small (start around 0–1 and tune in session), `AlphaThreshold` 0; leave `SecondaryMask` at its default white | [source] |
-| Behaviour | Constant glow, independent of light and view. It is sparse, so it reads as always-lit points. The visible result of the `subsurface_emissive` stage over skin, and whether it blooms, are unknown. | [source]; look [hypothesis] |
+| Other parameters | `EmissiveMaskChannel` (1, 0, 0, 0), `EmissiveColor` = flake colour, `AlphaThreshold` 0; leave `SecondaryMask` at its default white. **`EmissiveEV` must be above 0**: this program writes `EmissiveEV × EmissiveColor` as a plain product, not `2^EV`, so 0 is black | [source] ([decal reference §5.4](../research/materials/shader-decal.md#54-emissive-decals)) |
+| Behaviour | Constant glow, independent of light and view. It is sparse, so it reads as always-lit points. Its opacity is `MaterialModifiersConsts[2].x` × mask, a per-draw engine modifier: if the engine leaves it at 0 on a CCXL head component, the accent draws nothing at any `EmissiveEV`. The visible result of the `subsurface_emissive` stage over skin, and whether it blooms, are unknown. | [source]; modifier value and look [hypothesis] |
 
 Label it in the Studio as a stylised sparkle, never as reflective glitter. The primary maps stay in the preset, so real glints still appear where lights allow.
 
@@ -142,7 +142,7 @@ The recipe fields should be physical, and each maps one-to-one onto the catalogu
 5. What roughness shift do photo-mode lights apply per light (the per-light roughness byte)?
 6. Do metal flakes' environment reflections survive the RT reflection denoisers at all?
 7. At what brightness do glints start to bloom?
-8. What does `mesh_decal_emissive_subsurface` look like over skin, and does it bloom?
+8. What does `mesh_decal_emissive_subsurface` look like over skin, and does it bloom? Does the engine set its opacity modifier (`MaterialModifiersConsts[2].x`) on a CCXL head component at all?
 9. Does a lower Texture Quality setting drop the top mip of mod textures? The nested chain is designed so every level stands alone.
 10. What precision do GBuffer1 (normal) and GBuffer2 have? This affects small tilts only.
 

@@ -342,6 +342,10 @@ Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger
 
 Zina H. Cigolle, Sam Donow, Daniel Evangelakos, Michael Mara, Morgan McGuire and Quirin Meyer, [A Survey of Efficient Representations for Independent Unit Vectors](https://jcgt.org/published/0003/02/01/) (Journal of Computer Graphics Techniques, 2014). Its octahedral encoding let us recognise how the game's eye shader packs the iris normal into spare G-buffer bits.
 
+### Policarpo, Oliveira and Comba (2005)
+
+Fábio Policarpo, Manuel M. Oliveira and João L. D. Comba, "Real-Time Relief Mapping on Arbitrary Polygonal Surfaces" (ACM Symposium on Interactive 3D Graphics and Games, 2005). Its linear search followed by a binary refinement along the view ray let us recognise how the game's parallax decal template offsets its texture lookups.
+
 ### Toksvig (2005) and Olano and Baker (2010)
 
 Michael Toksvig, "Mipmapping Normal Maps" (Journal of Graphics Tools), and Marc Olano and Dan Baker, [LEAN Mapping](https://www.csee.umbc.edu/~olano/papers/lean/). Their idea of turning normal variance lost to mipmapping into wider roughness shapes the Shimmer export's lower mip levels.
