@@ -1,6 +1,6 @@
 /**
  * Pure selection step between the generic resolver and the character render record: which resolved
- * drawing components are the V's head skin, brows, lashes, hair and eyes, which of their chunks the preview can
+ * drawing components are the V's head skin, face details, brows, lashes, hair, eyes, piercings and body, which of their chunks the preview can
  * draw, and each chunk's effective material inputs (instance chain first, then the template's defaults, then the
  * morph target's `baseTexture` rule).
  *
@@ -41,6 +41,9 @@
  *   style, a framework that replaces the style's `.app` (inline components, one per filled slot; zero-chunk placeholders draw
  *   nothing) and a CCXL option on the slot all resolve through the same rules (knowledge/cc-file-chain.md §6). Their chunks are layered
  *   (`multilayered.mt`): each carries its `.mlsetup` and `.mlmask` references for the host to read into the chunk's layer stack.
+ * - **Body** (the `body` slot) is the third-person body the body's consumers read (`BODY_GROUPS`, the feet state's group), less what the
+ *   creator's own censorship rules leave under the game's underwear cover (`bodyOptionDraws`); each body component carries the shapes the
+ *   resolver applied to it (breast size, nail length), and never follows the face (knowledge/body-rendering.md).
  * - **Choices** a viewer makes are the character context's (character-context.ts): the host derives the whole V from them with the
  *   shared R5 rules before planning, so the record lists no choices to try and no override (CORE-58, PIPE-82). An option a slot's
  *   switcher activates belongs to that slot even when its own `uiSlot` is another (`detailSlotOf`).
