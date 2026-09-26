@@ -90,12 +90,13 @@ test("disposing the stack frees its own geometry, never the anchor's shared buff
   // The skin under the plate is the stack's own attribute on its geometry.
   const underlay = new THREE.Float32BufferAttribute(new Float32Array(9).fill(0.4), 3);
   stack.geometry.setAttribute("xfsUnderlay", underlay);
-  let seen: { index: unknown; attributes: string[]; morphs: string[] } | null = null, anchorDisposed = false;
+  const seen: { index: unknown; attributes: string[]; morphs: string[] }[] = [];
+  let anchorDisposed = false;
   // What the renderer's dispose frees is what the geometry holds when it fires (three's WebGLGeometries).
-  stack.geometry.addEventListener("dispose", () => { seen = { index: stack.geometry.index, attributes: Object.keys(stack.geometry.attributes), morphs: Object.keys(stack.geometry.morphAttributes) }; });
+  stack.geometry.addEventListener("dispose", () => { seen.push({ index: stack.geometry.index, attributes: Object.keys(stack.geometry.attributes), morphs: Object.keys(stack.geometry.morphAttributes) }); });
   geometry.addEventListener("dispose", () => { anchorDisposed = true; });
   stack.dispose();
-  expect(seen).toEqual({ index: null, attributes: ["xfsUnderlay"], morphs: [] });
+  expect(seen).toEqual([{ index: null, attributes: ["xfsUnderlay"], morphs: [] }]);
   expect(anchorDisposed).toBe(false);
   // The anchor keeps every buffer it had.
   expect(geometry.index!.count).toBe(3);

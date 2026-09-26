@@ -363,7 +363,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     setCanvases([]);
     composite.dispose();
     plate.removeFromParent(); plateLight.material.dispose();
-    const own = new Set(STACK_ATTRIBUTES);
+    const own = new Set<string>(STACK_ATTRIBUTES);
     geometry.setIndex(null);
     for (const name of Object.keys(geometry.attributes)) if (!own.has(name)) geometry.deleteAttribute(name);
     geometry.morphAttributes = {};
