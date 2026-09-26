@@ -197,8 +197,11 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   const keys = [...body.matchAll(/^    (?:\/\/.*\n    )?([A-Za-z]+)(?::|,)/gm)].map(match => match[1]!);
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   expect(keys.length).toBeGreaterThan(40);
-  const mutators = keys.filter(key => /^(set|apply|animate|restore|update|reconcile)/.test(key) || ["eyeShape", "front", "resize", "onFrame"].includes(key));
+  const mutators = keys.filter(key => /^(set|apply|animate|restore|update|reconcile)/.test(key) || ["eyeShape", "front", "resize"].includes(key));
   expect(mutators.filter(key => !wrapped.includes(key))).toEqual([]);
+  // Adding or removing a frame listener draws a frame by itself (the scene port's `onFrame` is the same function).
+  expect(source).toMatch(/frameListeners\.add\(callback\);\s+invalidate\(\);/);
+  expect(source).toContain("return () => { frameListeners.delete(callback); invalidate(); };");
   // Reading state, evidence or timing never draws a frame (a measurement must not keep the viewport busy).
   for (const reader of ["cameraState", "frameTiming", "characterDetailsEvidence", "eyeAppearance", "eyeShapeOptions", "piercingSelection", "pick"])
     expect(wrapped).not.toContain(reader);
@@ -222,23 +225,22 @@ test("every scene method that changes what is drawn is wrapped to request a fram
 test("the authored plate's light, skin and composite change only inside calls that request a frame, and idle costs nothing", async () => {
   const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
-  // The skin light and the skin under the plate arrive and leave with the V's details (setCharacterDetails, wrapped).
-  const refresh = source.slice(source.indexOf("  function refreshPlateUnderlay() {"), source.indexOf("  refreshPlateUnderlay();\n"));
-  expect(refresh).toContain("makeup.setSkinLight(item?.skin?.handle.parameters ?? null);");
-  const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  const ray = new THREE.Raycaster()"));
-  expect(details.split("refreshPlateUnderlay();").length - 1).toBe(2);
-  expect(source.split("refreshPlateUnderlay();").length - 1).toBe(3);
-  for (const change of ["setCharacterDetails", "setNormals", "updateLayer", "setLayerCanvas", "setLayerCanvases", "reconcileLayerCanvases", "setWire"])
-    expect(wrapped).toContain(change);
-  // The normals toggle reaches the plate's facets; the composite is brought up to date inside the frame, before drawing.
+  // The drawn skin changes only with the V's details (setCharacterDetails, wrapped): feature renderers read its light and the skin
+  // under their surfaces again then (tests/scene-feature-renderers.test.ts drives eye makeup's renderer through the port).
+  const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  function bakeLayered()"));
+  expect(details.split("skinChanged();").length - 1).toBe(2);
+  expect(source.split("skinChanged();").length - 1).toBe(2);
+  for (const change of ["setCharacterDetails", "setNormals", "setWire"]) expect(wrapped).toContain(change);
+  // The normals and wireframe toggles reach every feature renderer; each brings its GPU state up to date inside the frame, before drawing.
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
-  expect(normals).toContain("makeup.setNormals(v);");
+  expect(normals).toContain("features?.setNormals(v);");
+  expect(source).toContain("setWire: (v: boolean) => features?.setWireframe(v),");
   const frame = source.slice(source.indexOf("    frame(dt) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
-  expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeGreaterThan(-1);
-  expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
-  // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and redraws the composite (PREV-58).
+  expect(frame.indexOf("features?.beforeDraw();")).toBeGreaterThan(-1);
+  expect(frame.indexOf("features?.beforeDraw();")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
+  // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and lets each feature redraw its targets (PREV-58).
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
-  expect(source).toContain("studio.restore(); makeup.contextRestored();");
+  expect(source).toContain("studio.restore(); features?.contextRestored();");
   // …and bakes the shown V's layered parts again from their stacks (PREV-62).
   const restore = source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)"));
   expect(restore).toContain("layeredContextRestored(renderer);");

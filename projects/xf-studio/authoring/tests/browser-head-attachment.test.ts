@@ -58,10 +58,13 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
   const preferenceListeners = new Set<Listener>(), schemeListeners = new Set<Listener>();
   const attached: HeadServices = {};
   let connected: unknown;
+  const surfaces = new Map<unknown, ReturnType<HeadAttachmentPorts["layeredMakeup"]>>();
   const ports: HeadAttachmentPorts = {
     workspace: freshWorkspace(), viewport,
+    // The composition root reads the layered-makeup surface from eye makeup's renderer; here, one per scene.
+    layeredMakeup: scene => surfaces.get(scene) ?? surfaces.set(scene, { layers: {}, surface: {}, maxTextureSize: 4096 } as unknown as
+      ReturnType<HeadAttachmentPorts["layeredMakeup"]>).get(scene)!,
     preview: {
-      emptyCanvases: () => [],
       connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<HeadAttachmentPorts["preview"]["connectScene"]>; },
       disconnectScene: scene => { if (connected === scene) connected = undefined; },
       presentInitialLayers: () => { presents++; if (plan.failPresent?.includes(presents)) throw Error("A layer could not be shown."); },
@@ -76,7 +79,7 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
       wait: async () => {} },
   };
   return { log, host, scenes, viewport, ports, attached, preferenceListeners, schemeListeners,
-    get connected() { return connected; }, get persisted() { return persisted; }, get loads() { return loads; } };
+    get connected() { return connected; }, surfaces, get persisted() { return persisted; }, get loads() { return loads; } };
 }
 
 test("a head step failing after the scene loaded releases every head connection, and Try again attaches once", async () => {
@@ -98,7 +101,7 @@ test("a head step failing after the scene loaded releases every head connection,
   expect(h.loads).toBe(2);
   expect(h.host.canvases).toBe(1);
   expect(h.viewport.scene()).toBe(head.scene);
-  expect(h.connected).toBe(head.scene);
+  expect(h.connected).toBe(h.surfaces.get(head.scene));
   expect(h.attached).toEqual({ savedV: head.savedAppearance, preview: head.preview, motion: head.motion, characterDetails: head.characterDetails,
     characterContext: head.characterContext });
   expect(h.preferenceListeners.size).toBe(1);
@@ -127,7 +130,7 @@ test("a scene that fails to load attaches nothing, and the next load starts clea
   expect(h.preferenceListeners.size).toBe(1);
   expect(h.viewport.scene()).toBe(head.scene);
   // Loading again over a loaded head releases the old one first.
-  await h.viewport.loadHead([]);
+  await h.viewport.loadHead();
   expect(h.host.canvases).toBe(1);
   expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
 });
@@ -136,7 +139,7 @@ test("releasing a head that a later load replaced leaves the current head loaded
   const h = harness({});
   const first = await attachBrowserHead(h.ports);
   // A later load replaces the first head (and releases its scene)…
-  const current = await h.viewport.loadHead([]);
+  const current = await h.viewport.loadHead();
   expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
   expect(h.host.canvases).toBe(1);
   // …so the first head's release must not unload the head that is now current.

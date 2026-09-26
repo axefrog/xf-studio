@@ -2,6 +2,8 @@
  * controller; never edits production recipes or the material's skinning hooks. */
 import * as THREE from "three";
 import {createScene} from "../src/scene";
+import {STUDIO_RENDERERS} from "../src/compose/renderers";
+import {eyeMakeupRenderer,type EyeMakeupRenderer} from "../src/features/eye-makeup/render";
 import {createRasterJob,initialRecipe} from "../src/engines/layered-makeup/recipe";
 import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
@@ -17,7 +19,7 @@ const status=element<HTMLParagraphElement>("status"),controls=element<HTMLFieldS
   roughnessInput=element<HTMLInputElement>("flake-roughness"),environmentInput=element<HTMLInputElement>("environment"),glintStrengthInput=element<HTMLInputElement>("glint-strength"),glintPowerInput=element<HTMLInputElement>("glint-power"),glintSeedInput=element<HTMLInputElement>("glint-seed"),glintDensityInput=element<HTMLInputElement>("glint-density"),glintFineInput=element<HTMLInputElement>("glint-fine"),
   metalInput=element<HTMLInputElement>("zero-metalness"),lightInput=element<HTMLInputElement>("light"),
   blinkInput=element<HTMLInputElement>("blink"),idleInput=element<HTMLInputElement>("idle"),pauseInput=element<HTMLInputElement>("pause");
-let viewer:Awaited<ReturnType<typeof createScene>>|undefined,active:Variant|undefined,requested:Variant="default",
+let viewer:Awaited<ReturnType<typeof createScene>>|undefined,makeup:EyeMakeupRenderer|undefined,active:Variant|undefined,requested:Variant="default",
   loading=false,error="",generation=0,maskHash="",frames=0;
 let sources:Record<string,{url:string;sha256:string;width:number;height:number}>={},manifest:unknown=null,fineManifest:unknown=null,coveredManifest:unknown=null;
 let owned:THREE.Texture[]=[],normalTexture:THREE.Texture|undefined,surfaceTexture:THREE.Texture|undefined;
@@ -37,11 +39,11 @@ Object.defineProperty(window,"glitterStudyDiagnostics",{value:()=>({
     idlePaused:viewer?.idle?.paused??false,idleTime:viewer?.idle?.time??0},
   diagnosticOverrides:{zeroNormal:normalInput.checked,zeroMetalness:metalInput.checked,twoBRDFMixture:mixtureInput.checked&&active!=="legacy"&&active!=="uv-cell-glints"&&active!=="uv-cell-polygons",uvCellGlints:active==="uv-cell-glints"||active==="uv-cell-polygons",uvCellShape:active==="uv-cell-polygons"?"polygon":"circle"},
   frameCallbacks:frames,renderCount:viewer?.renderer.info.render.frame,
-  material:viewer?{normalScale:viewer.materials[0]!.normalScale.toArray(),metalness:viewer.materials[0]!.metalness,
-    roughness:viewer.materials[0]!.roughness,color:viewer.materials[0]!.color.getHexString(),
-    mapSpace:viewer.materials[0]!.map?.colorSpace,normalSpace:viewer.materials[0]!.normalMap?.colorSpace,
-    skinProgram:viewer.materials[0]!.customProgramCacheKey(),
-    maps:[viewer.materials[0]!.map,viewer.materials[0]!.normalMap,viewer.materials[0]!.roughnessMap].map(t=>{
+  material:makeup?{normalScale:makeup.materials[0]!.normalScale.toArray(),metalness:makeup.materials[0]!.metalness,
+    roughness:makeup.materials[0]!.roughness,color:makeup.materials[0]!.color.getHexString(),
+    mapSpace:makeup.materials[0]!.map?.colorSpace,normalSpace:makeup.materials[0]!.normalMap?.colorSpace,
+    skinProgram:makeup.materials[0]!.customProgramCacheKey(),
+    maps:[makeup.materials[0]!.map,makeup.materials[0]!.normalMap,makeup.materials[0]!.roughnessMap].map(t=>{
       const image=t?.image as {width:number;height:number}|undefined;return image?{width:image.width,height:image.height}:null;
     })}:null,
   renderer:viewer?{exposure:viewer.renderer.toneMappingExposure,pixelRatio:viewer.renderer.getPixelRatio(),memory:{...viewer.renderer.info.memory}}:null,
@@ -67,8 +69,8 @@ function texture(data:Uint8Array<ArrayBuffer>,colour=false){
   t.anisotropy=viewer!.renderer.capabilities.getMaxAnisotropy();t.needsUpdate=true;return t;
 }
 function applyOverrides(){
-  if(!viewer||!active)return;
-  const material=viewer.materials[0]!;
+  if(!viewer||!makeup||!active)return;
+  const material=makeup.materials[0]!;
   const procedural=active==="uv-cell-glints"||active==="uv-cell-polygons";
   material.normalMap=normalTexture!;material.normalScale.setScalar(normalInput.checked?0:1);
   material.roughnessMap=material.metalnessMap=procedural?null:surfaceTexture!;
@@ -100,10 +102,10 @@ async function selectVariant(variant:Variant,alpha:Uint8ClampedArray<ArrayBuffer
     // baker. Only copy authoritative alpha here; Canvas source-over is not used.
     const rgba=variant==="legacy"||procedural?new Uint8Array(alpha):colour.data;
     for(let i=3;i<rgba.length;i+=4)rgba[i]=alpha[i]!;
-    const next=[texture(rgba,true),texture(normal.data),texture(surface.data)],material=viewer!.materials[0]!;
+    const next=[texture(rgba,true),texture(normal.data),texture(surface.data)],material=makeup!.materials[0]!;
     material.map=next[0]!;normalTexture=next[1];surfaceTexture=next[2];
     material.color.set(variant==="legacy"||procedural?BASE:"#ffffff");material.opacity=1;
-    material.clearcoat=0;material.iridescence=0;material.needsUpdate=true;viewer!.plates[0]!.visible=true;
+    material.clearcoat=0;material.iridescence=0;material.needsUpdate=true;makeup!.plates[0]!.visible=true;
     const previous=owned;owned=next;active=variant;applyOverrides();for(const t of previous)t.dispose();
     sources=Object.fromEntries([["normal",normal],["surface",surface],["color",colour]].map(([name,value])=>{
       const a=value as Asset;return [name,{url:a.url,sha256:a.sha256,width:a.width,height:a.height}];
@@ -122,9 +124,10 @@ async function main(){
   maskHash=await sha(new Uint8Array(job.data));
   const canvas=document.createElement("canvas");canvas.width=canvas.height=SIZE;canvas.getContext("2d")!.putImageData(new ImageData(job.data,SIZE,SIZE),0,0);
   status.textContent="Loading the local studio head...";
-  viewer=await createScene(element("viewport"),[canvas]);viewer.updateLayer(0,fixed);
-  mixture=installGlitterMixtureStudy(viewer.materials[0]!,{baseColor:BASE,flakeColor:"#f5df9f"});
-  glint=installProceduralGlintStudy(viewer.materials[0]!);
+  viewer=await createScene(element("viewport"),{renderers:STUDIO_RENDERERS});makeup=eyeMakeupRenderer(viewer)!;
+  makeup.layers.setCanvases([canvas]);makeup.layers.updateLayer(0,fixed);
+  mixture=installGlitterMixtureStudy(makeup.materials[0]!,{baseColor:BASE,flakeColor:"#f5df9f"});
+  glint=installProceduralGlintStudy(makeup.materials[0]!);
   viewer.onFrame(()=>frames++);viewer.setIdle(false);viewer.setBlink(0);viewer.setLightAngle(Number(lightInput.value));
   controls.disabled=false;
   variantInput.addEventListener("change",()=>{const v=variantInput.value as Variant;if(variants.includes(v))void selectVariant(v,job.data);});

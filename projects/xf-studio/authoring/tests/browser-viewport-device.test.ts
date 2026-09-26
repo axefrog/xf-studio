@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type * as THREE from "three";
 import { createBrowserViewportDevice } from "../src/browser-viewport-device";
 import type { createScene } from "../src/scene";
 import type { createSurfaceEditor } from "../src/surface-editor";
@@ -43,13 +44,13 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   expect(attachment.snapshot().head).toMatchObject({ phase: "error", error: "The 3D preview couldn't be loaded. Try again." });
   expect(attachment.snapshot().head.message).toBeUndefined();
   device.headPending("loading", "Loading the 3D head…");
-  expect(() => device.mountSurface({} as Parameters<typeof createSurfaceEditor>[1])).toThrow();
+  expect(() => device.mountSurface({} as THREE.SkinnedMesh, {} as Parameters<typeof createSurfaceEditor>[1])).toThrow();
   expect(device.mountUV({} as HTMLCanvasElement, undefined,
     {} as Parameters<typeof createUVEditor>[2], uvView)).toBe(uvEditor);
   expect(uvControls).toBeUndefined();
   expect(attachment.snapshot().uv).toMatchObject({ phase: "ready", captured: true, view: uvView });
-  await device.loadHead([]);
-  expect(device.mountSurface({} as Parameters<typeof createSurfaceEditor>[1])).toBe(surfaceEditor);
+  await device.loadHead();
+  expect(device.mountSurface({} as THREE.SkinnedMesh, {} as Parameters<typeof createSurfaceEditor>[1])).toBe(surfaceEditor);
   device.headReady();
   expect(attachment.snapshot().head).toMatchObject({ phase: "ready", view: camera });
   const slot = { append(node: unknown) { events.push(node === head ? "head:move" : "uv:move"); } };

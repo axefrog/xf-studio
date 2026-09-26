@@ -135,16 +135,5 @@ export function bindRenderTriggers(invalidate: () => void, sources: RenderTrigge
   };
 }
 
-/** Wrap each named method so a call also requests a frame (after it ran, whatever it returned). */
-export function invalidating<T extends object, K extends keyof T>(target: T, keys: readonly K[], invalidate: () => void): Pick<T, K> {
-  const out = {} as Pick<T, K>;
-  for (const key of keys) {
-    const method = target[key];
-    if (typeof method !== "function") throw Error(`${String(key)} is not a method.`);
-    out[key] = ((...args: unknown[]) => {
-      try { return (method as (...a: unknown[]) => unknown).apply(target, args); }
-      finally { invalidate(); }
-    }) as T[K];
-  }
-  return out;
-}
+/** Wrap each named method so a call also requests a frame; shared with feature renderers through the scene port. */
+export { invalidating } from "./platform/api/scene";

@@ -3,7 +3,6 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { extendSkin } from "./skin";
 import type { SavedV } from "./save-reader";
-import { createMakeupStack } from "./engines/layered-makeup/render/makeup-stack";
 import { IdleAnimation } from "./idle-animation";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "./game-blink";
 import { composePreviewMotion } from "./preview-motion";
@@ -15,7 +14,7 @@ import type { ProfileEncoding } from "./hair-colour-model";
 import type { AdapterContext } from "./character-material-adapters";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { DetailSlot } from "./render-detail";
-import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type DecalSurfaceUnderlay, type HeadSkinPlacement } from "./head-skin-placement";
+import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type HeadSkinPlacement } from "./head-skin-placement";
 import { priorityRank } from "./render-templates";
 import type { DetailLimit } from "./detail-limits";
 import { layeredContextRestored } from "./layered-material";
@@ -35,6 +34,8 @@ import { viewportPixelRatio, watchDevicePixelRatio } from "./device-pixel-ratio"
 import { linearTargetSupported } from "./linear-display";
 import { createStudioLightRig } from "./studio-light-rig";
 import type { StudioLights } from "./studio-lighting";
+import type { CharacterSlot, CharacterView, FeatureRendererFactory, SkinUnderlayPort } from "./platform/api/scene";
+import { createFeatureRenderers, type FeatureRenderers } from "./platform/scene/feature-renderers";
 
 /**
  * Draw order of the face's decals, below the editable makeup plates (10 to 41), the eye's wetness shell (99), brows (100) and
@@ -52,13 +53,14 @@ export const faceDecalRenderOrder = (priority: string | null | undefined, index:
  * what was made so far (WebGL context, canvas, stage and observers), so a retry starts clean; the
  * returned scene's `dispose()` releases the same resources when the head is unloaded (PREV-20).
  */
-export async function createScene(
-  host: HTMLElement,
-  canvases: HTMLCanvasElement[],
-  stage: StageTheme = "dark",
-) {
+export type SceneOptions = {
+  stage?: StageTheme;
+  /** The feature renderers to create once the head is ready (the composition's list, compose/renderers.ts). */
+  renderers?: readonly FeatureRendererFactory[];
+};
+export async function createScene(host: HTMLElement, options: SceneOptions = {}) {
   const releases: (() => void)[] = [];
-  try { return await assembleScene(host, canvases, stage, releases); }
+  try { return await assembleScene(host, options.stage ?? "dark", options.renderers ?? [], releases); }
   catch (error) { releaseAll(releases); throw error; }
 }
 
@@ -71,8 +73,8 @@ function releaseAll(releases: (() => void)[]) {
 
 async function assembleScene(
   host: HTMLElement,
-  canvases: HTMLCanvasElement[],
   stage: StageTheme,
+  factories: readonly FeatureRendererFactory[],
   releases: (() => void)[],
 ) {
   // Opaque canvas: the stage is drawn in the scene (viewport-backdrop.ts), and the drawing buffer
@@ -141,6 +143,9 @@ async function assembleScene(
   const core: LoadedCoreDetail = await loadCoreDetail(renderer);
   const { gltf, meshes, head, plate } = core;
   let eyes = core.eyes;
+  // The record's surfaces beside the head, by node key: today one, the expanded eye plate (`geometry.nodes.plate`), which eye makeup's
+  // renderer draws on. The host rigs them with the head (facial shapes, pose) and knows nothing of what a feature draws there.
+  const surfaces = new Map<string, THREE.SkinnedMesh>([["plate", plate]]);
   scene.add(gltf.scene);
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
   const { "head.albedo": albedo, "eyes.albedo": eyeColor, "head.normal": normal, "head.roughness": roughness } = core.textures;
@@ -225,12 +230,13 @@ async function assembleScene(
         return result.attribute;
       } } : {}) };
   }
-  const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
-  // A restored WebGL context comes back with empty render targets: prefilter the environment again and redraw the composite.
-  // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the composite
-  // redraws, and the shown V's layered parts are baked again from their stacks (PREV-62): their kept maps died with the context.
+  // The feature renderers (compose/renderers.ts), created once the head and its motion are ready.
+  let features: FeatureRenderers | undefined;
+  // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the feature
+  // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62):
+  // their kept maps died with the context.
   const restored = () => {
-    studio.restore(); makeup.contextRestored();
+    studio.restore(); features?.contextRestored();
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
     // The re-bake's outcome reaches the panel, and the core eye shows only while no layered eye design is baked (PREV-74).
@@ -239,26 +245,19 @@ async function assembleScene(
   };
   renderer.domElement.addEventListener("webglcontextrestored", restored);
   releases.push(() => renderer.domElement.removeEventListener("webglcontextrestored", restored));
-  const { plates, materials, updateLayer } = makeup;
-  makeup.setCanvases(canvases);
-  // The skin under the authored plate, which the plate blends over and lights once with the skin's own light (plate-blend.ts): read on
-  // the drawn head, like the face decals' underlay, once per skin change and only when a layer first needs it. A plate not over the
-  // drawn head keeps a linear blend per layer; without a resolved skin the plate is lit with the standard light, as the face decals.
-  let plateUnderlay: { evidence?: DecalSurfaceUnderlay["evidence"]; error?: string } = {};
-  function refreshPlateUnderlay() {
-    const item = resolvedSkin?.item, skinSurface: ResolvedSkinSurface | null = item?.skin
-      ? { base: item.skin.base, roughness: item.skin.roughness, chunks: item.meshes } : null;
-    makeup.setSkinLight(item?.skin?.handle.parameters ?? null);
-    plateUnderlay = {};
-    makeup.setUnderlaySource(() => {
-      try {
-        const result = skinPlacement.surfaceUnderlay(plate, skinSurface);
-        plateUnderlay = { evidence: result.evidence };
-        return result;
-      } catch (error) { plateUnderlay = { error: (error as Error).message }; return null; }
-    });
-  }
-  refreshPlateUnderlay();
+  // The skin drawn under a feature's surfaces (the scene port's `skin`): the resolved skin's light, and the skin under a surface read on
+  // the drawn head, like the face decals' underlay. Features read both again whenever the drawn skin changes.
+  const skinListeners = new Set<() => void>();
+  const skinPort: SkinUnderlayPort = {
+    light: () => resolvedSkin?.item.skin?.handle.parameters ?? null,
+    underlay(surface) {
+      const item = resolvedSkin?.item, skinSurface: ResolvedSkinSurface | null = item?.skin
+        ? { base: item.skin.base, roughness: item.skin.roughness, chunks: item.meshes } : null;
+      return skinPlacement.surfaceUnderlay(surface, skinSurface);
+    },
+    subscribe(listener) { skinListeners.add(listener); return () => { skinListeners.delete(listener); }; },
+  };
+  function skinChanged() { for (const listener of [...skinListeners]) listener(); }
   let idle: IdleAnimation | undefined, idleError = "";
   try {
     const [motion, facial, binding] = await Promise.all([
@@ -351,12 +350,13 @@ async function assembleScene(
   // the head's by (target, region); see face-morphs.ts.
   const coreDeforming: THREE.Mesh[] = [
     head,
-    plate,
+    ...surfaces.values(),
     ...(eyes.morphTargetDictionary ? [eyes] : []),
   ];
   // Resolved details join and leave with each character record (a skin drawn on the core head adds no mesh).
   const drawnDetails = () => characterDetails?.components.filter(item => !(resolvedSkin?.placement.mode === "core-head" && resolvedSkin.item === item)) ?? [];
-  const deforming = () => [...coreDeforming, ...drawnDetails().flatMap(item => item.meshes)];
+  // Meshes a feature attached with `morphs` follow too (a mesh sharing a surface's influences, like eye makeup's layers, needs not).
+  const deforming = () => [...coreDeforming, ...features?.followers() ?? [], ...drawnDetails().flatMap(item => item.meshes)];
   // The head is the authority for which eye shapes exist: its `eyes` targets in resource order.
   const eyeShapeChoices: FaceMorphChoice[] = faceMorphChoices(morphTargetNames(head), "eyes");
   const eyesFollowShape = followsFaceMorphChoices(morphTargetNames(eyes), eyeShapeChoices);
@@ -415,7 +415,7 @@ async function assembleScene(
       throw Error("No supported facial morph group found.");
     // A V whose every face region is the base shape stores no morphs; that is the base head.
     const names = group.morphs.map((m) => `${m.target}_${m.region}`);
-    for (const mesh of [head, ...plates])
+    for (const mesh of [head, ...surfaces.values()])
       for (const name of names)
         if (mesh.morphTargetDictionary?.[name] === undefined)
           throw Error(
@@ -439,8 +439,10 @@ async function assembleScene(
       ...(savedEyeShape === undefined ? {} : { eyeShape: savedEyeShape }),
     };
   }
+  /** Whether a slot shows: the viewer's preference, unless an active feature renderer replaces that slot (`supersedes`). */
+  const slotShown = (slot: DetailSlot) => detailVisible[slot] && !features?.superseded().has(slot);
   function refreshDetailVisibility() {
-    for (const item of drawnDetails()) item.root.visible = detailVisible[item.component.slot];
+    for (const item of drawnDetails()) item.root.visible = slotShown(item.component.slot);
     // A layered part of a slot that was hidden is baked when the slot is first shown (PREV-63); its outcome reaches the panel (PREV-74).
     if (characterDetails) publishBakeLimits([...skinLimits(), ...bakeLayered()]);
   }
@@ -483,8 +485,8 @@ async function assembleScene(
     }
     // The previous V is released after the new one has baked, so a tried style can share a bake it keeps (PREV-78).
     const releasePrevious = () => previous?.dispose(kept);
-    refreshPlateUnderlay();
-    if (!next) { releasePrevious(); publishedBakeLimits = "[]"; return { limits: [] }; }
+    skinChanged();
+    if (!next) { releasePrevious(); publishedBakeLimits = "[]"; characterChanged(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
@@ -499,7 +501,7 @@ async function assembleScene(
       } else head.visible = false;
       resolvedSkin = { item: skinItem, placement };
       skinItem.skin!.handle.setNormals(normalsEnabled);
-      refreshPlateUnderlay();
+      skinChanged();
     }
     for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);
     characterDetails = next;
@@ -531,6 +533,7 @@ async function assembleScene(
     // The blink binds first: it must capture the details' neutral pose before a playing idle poses them.
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
+    characterChanged();
     return { limits: [...skinLimits(), ...bakeLimits] };
   }
   /**
@@ -541,7 +544,7 @@ async function assembleScene(
   function bakeLayered(): { slot: DetailSlot; limit: DetailLimit }[] {
     const limits: { slot: DetailSlot; limit: DetailLimit }[] = [];
     for (const item of characterDetails?.components ?? []) for (const { mesh, handle } of item.layered ?? []) {
-      if (handle.state === "pending" && detailVisible[item.component.slot]) handle.bake(renderer);
+      if (handle.state === "pending" && slotShown(item.component.slot)) handle.bake(renderer);
       if (handle.state !== "failed") continue;
       mesh.visible = false;
       const limit: DetailLimit = item.component.slot === "eyes" ? "eye-design" : "layered-material";
@@ -549,19 +552,13 @@ async function assembleScene(
     }
     return limits;
   }
-  const ray = new THREE.Raycaster(),
-    mouse = new THREE.Vector2();
+  /** The V drawn now, for feature renderers (the scene port's `character`), and its change notices. */
+  const characterListeners = new Set<() => void>();
+  const characterView = (): CharacterView => ({ identity: characterDetails?.record.identity ?? null,
+    drawn: [...new Set(drawnDetails().map(item => item.component.slot))] });
+  function characterChanged() { for (const listener of [...characterListeners]) listener(); }
+  const ray = new THREE.Raycaster();
   let fovGestureAnchor: THREE.Vector3 | undefined;
-  function pick(e: PointerEvent) {
-    const r = renderer.domElement.getBoundingClientRect();
-    mouse.set(
-      ((e.clientX - r.left) / r.width) * 2 - 1,
-      (-(e.clientY - r.top) / r.height) * 2 + 1,
-    );
-    ray.setFromCamera(mouse, camera);
-    plate.computeBoundingSphere();
-    return ray.intersectObject(plate, false)[0]?.uv;
-  }
   let appliedWidth = 0, appliedHeight = 0;
   const resize = () => {
     const size = visibleViewportSize(host.clientWidth, host.clientHeight);
@@ -575,7 +572,7 @@ async function assembleScene(
     if (frontPending) front();
     return true;
   };
-  const frameListeners = new Set<() => void>();
+  const frameListeners = new Set<(dt: number) => void>();
   // Reused every frame: the head centre the clip planes are measured from.
   const centre = new THREE.Vector3();
   // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or
@@ -596,10 +593,10 @@ async function assembleScene(
       }
       if (frameListeners.size) {
         scene.updateMatrixWorld(true);
-        for (const update of frameListeners) update();
+        for (const update of frameListeners) update(dt);
       }
-      // The plate's composite, only after a layer or the skin changed (plate-blend.ts).
-      makeup.prepareBlend(renderer);
+      // Each feature renderer brings its own GPU state up to date (eye makeup: the plate's composite, only after a change).
+      features?.beforeDraw();
       lighting.render(camera);
     },
   });
@@ -614,6 +611,17 @@ async function assembleScene(
   releases.push(() => observer.disconnect());
   // A monitor move or page zoom changes the device pixel ratio without resizing the host (UI-46).
   releases.push(watchDevicePixelRatio(window, pixelRatio => { renderer.setPixelRatio(pixelRatio); resize(); invalidate(); }));
+  const onFrame = (callback: (dt: number) => void) => {
+    frameListeners.add(callback);
+    invalidate();
+    return () => { frameListeners.delete(callback); invalidate(); };
+  };
+  // The feature renderers, through their scene ports only (platform/api/scene.ts).
+  features = createFeatureRenderers({ renderer, head, surfaces, skin: skinPort,
+    character: characterView, subscribeCharacter: listener => { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },
+    lighting: () => ({ preset: lighting.status().preset }), subscribeLighting: listener => { const off = lighting.subscribe(listener); return () => { off(); }; },
+    requestFrame: invalidate, onFrame }, factories);
+  releases.push(() => features?.dispose());
   resize();
   invalidate();
   const evidence = coreSceneEvidence({ coreDetail, meshes, blink, blinkError,
@@ -624,11 +632,8 @@ async function assembleScene(
     camera,
     /** Releases the renderer, its canvas, the stage and observers; the scene is unusable afterwards. */
     dispose: () => { setCharacterDetails(null); releaseAll(releases); },
-    /** Run `callback` before each drawn frame (the viewport draws only when something changed; see `requestRender`). */
-    onFrame: (callback: () => void) => {
-      frameListeners.add(callback);
-      return () => { frameListeners.delete(callback); invalidate(); };
-    },
+    /** Run `callback` before each drawn frame (the viewport draws only when something changed; see `requestRender`). Adding or removing one draws a frame. */
+    onFrame,
     /** Something the scene can't see changed what it draws (for example the selected layer's handles): draw a frame. */
     requestRender: invalidate,
     renderer,
@@ -638,23 +643,16 @@ async function assembleScene(
     lighting,
     head,
     eyes,
-    plate,
-    plates,
-    materials,
     albedo,
     evidence,
     resize,
     front,
-    pick,
-    updateLayer,
-    setLayerCanvases: makeup.setCanvases,
-    reconcileLayerCanvases: makeup.reconcileLayerCanvases,
-    setLayerCanvas: makeup.setLayerCanvas,
-    needsOptics: makeup.needsOptics,
-    needsAlbedo: makeup.needsAlbedo,
-    makeupDiagnostics: makeup.diagnostics,
-    /** How the authored plate is drawn: the export plan's layers in one lit plate, its light, the skin underlay's source and the composite. */
-    plateBlendEvidence: () => ({ ...makeup.blendDiagnostics(), source: plateUnderlay }),
+    /** A composed feature's renderer (the composition root hands its devices what they need; the host names no feature). */
+    feature: (id: string) => features?.get(id),
+    /** The composed features that draw, in creation order. */
+    features: () => features?.features() ?? [],
+    /** Developer evidence from each feature renderer, by feature. */
+    featureEvidence: () => features?.evidence() ?? {},
     /** Developer evidence: each baked layered part's packed maps read back at their centre texel (colour + roughness, normal + metalness). */
     layeredSamples: () => (characterDetails?.components ?? []).flatMap(item => (item.layered ?? []).map(({ mesh, handle }) => {
       const target = handle.target;
@@ -733,12 +731,13 @@ async function assembleScene(
     },
     setBlink: (v: number) => blink?.setClosure(v),
     animateBlink: (v: boolean) => blink?.setPlaying(v),
-    setWire: makeup.setWire,
+    /** Wireframe display of the feature renderers' own surfaces (eye makeup's layers and plate). */
+    setWire: (v: boolean) => features?.setWireframe(v),
     setNormals: (v: boolean) => {
       normalsEnabled = v;
       skin.normalScale.set(v ? 0.35 : 0, v ? -0.35 : 0);
       resolvedSkin?.item.skin?.handle.setNormals(v);
-      makeup.setNormals(v);
+      features?.setNormals(v);
       for (const item of characterDetails?.components ?? []) for (const decal of item.decals ?? []) decal.handle.setNormals(v);
     },
     setExposure: (v: number) => (renderer.toneMappingExposure = v),
@@ -751,8 +750,7 @@ async function assembleScene(
     studioLighting: () => studio.state(),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
-  return { ...api, ...invalidating(api, ["onFrame", "resize", "front", "updateLayer", "setLayerCanvases", "reconcileLayerCanvases",
-    "setLayerCanvas", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings",
+  return { ...api, ...invalidating(api, ["resize", "front", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings",
     "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail", "setBlink", "animateBlink", "setWire",
     "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

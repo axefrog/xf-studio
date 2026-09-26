@@ -172,31 +172,69 @@ test("platform code imports only the platform: nothing from features, engines, c
   const platform = walk("platform");
   expect(platform).toContain("platform/api/index");
   expect(platform).toContain("platform/core/registry");
-  const violations = platform.flatMap(name => resolved(name)
-    .filter(path => !path.startsWith("platform/")).map(path => `${name} -> ${path}`));
+  expect(platform).toContain("platform/scene/feature-renderers");
+  // The scene host (platform/scene) is the platform's renderer: Three, the browser and the scene's device modules (below) are its own.
+  const pure = platform.filter(name => !name.startsWith("platform/scene/"));
+  const violations = pure.flatMap(name => resolved(name)
+    // The scene port's types name Three objects (type-only; the api index does not re-export it, so a feature's core never sees Three).
+    .filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/"))
+    .filter(path => !(name === "platform/api/scene" && path === "three")).map(path => `${name} -> ${path}`));
   expect(violations).toEqual([]);
-  for (const name of platform) expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+  expect(source("platform/api/scene")).toMatch(/import type \* as THREE from "three"/);
+  expect(source("platform/api/index")).not.toContain("./scene");
+  for (const name of pure) expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+});
+
+/**
+ * The legacy `src/` modules the scene host (platform/scene) still builds on: the renderer and device modules that stay at the top of
+ * `src/` until they move under platform/scene (a recorded exception, ui-architecture-boundary.md "scene host"). Nothing else in src.
+ */
+const SCENE_DEVICE_MODULES = new Set<string>([]);
+
+test("the scene host imports the platform, Three and its listed device modules only; never a feature, engine, compose or the UI", () => {
+  const scene = walk("platform/scene");
+  const violations = scene.flatMap(name => resolved(name).filter(path => !(
+    path.startsWith("platform/") || path === "three" || path.startsWith("three/addons/") || SCENE_DEVICE_MODULES.has(path)))
+    .map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
 });
 
 test("feature modules import the platform only through platform/api and never another feature, the UI or compose", () => {
   const features = walk("features");
   expect(features).toContain("features/eye-makeup/index");
   expect(features).toContain("features/eye-makeup/view/index");
+  expect(features).toContain("features/eye-makeup/render/index");
   /** A feature's view (`features/<id>/view/`) is presentation: it may use the shell's presentation toolkit and runtime. */
   const isView = (name: string) => /^features\/[\w-]+\/view\//.test(name);
+  /** A feature's renderer (`features/<id>/render/`) may use Three. */
+  const isRender = (name: string) => /^features\/[\w-]+\/render\//.test(name);
   const presentation = (path: string) => /^(?:studio-ui\/|context-menu$|[\w-]+-ui$)/.test(path);
-  const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$|three(?:\/|$))/.test(path);
+  const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$)/.test(path);
   const violations = features.flatMap(name => {
     const own = name.split("/").slice(0, 2).join("/");
     return resolved(name).filter(path =>
       path.startsWith("platform/") && !path.startsWith("platform/api") ||
       path.startsWith("features/") && !path.startsWith(`${own}/`) && path !== own ||
-      // The feature's core never reaches its own view; only the composition joins them.
-      !isView(name) && path.startsWith(`${own}/view`) ||
-      path.startsWith("compose/") || !isView(name) && presentation(path) || entryOrDevice(path) || /^node:/.test(path))
+      // The feature's core never reaches its own view or renderer; only the composition joins them.
+      !isView(name) && path.startsWith(`${own}/view`) || !isRender(name) && path.startsWith(`${own}/render`) ||
+      path.startsWith("compose/") || !isView(name) && presentation(path) || entryOrDevice(path) ||
+      (path === "three" || path.startsWith("three/")) && !isRender(name) || /^node:/.test(path))
       .map(path => `${name} -> ${path}`);
   });
   expect(violations).toEqual([]);
+});
+
+test("a feature renderer reaches the scene only through the scene port: platform/api, engines, Three and its own core", () => {
+  const renderers = walk("features").filter(name => /^features\/[\w-]+\/render\//.test(name));
+  expect(renderers).toContain("features/eye-makeup/render/index");
+  const violations = renderers.flatMap(name => {
+    const own = name.split("/").slice(0, 2).join("/");
+    return resolved(name).filter(path => !(path.startsWith("platform/api/") || path.startsWith("engines/") || path === "three" ||
+      path === own || path.startsWith(`${own}/`) && !path.startsWith(`${own}/view`))).map(path => `${name} -> ${path}`);
+  });
+  expect(violations).toEqual([]);
+  // In particular never the host's internals.
+  for (const name of renderers) expect(resolved(name).filter(path => path.startsWith("platform/scene"))).toEqual([]);
 });
 
 /** The scene's shared material modules an engine renderer may build on (they move to `platform/scene` with step 7). */

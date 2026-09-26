@@ -47,9 +47,13 @@ type Hooks = {
 };
 const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
+/** What the on-head editor uses of the loaded head: the scene host's view and input, and the layered-makeup surface it edits. */
+export type SurfaceViewer = Pick<Awaited<ReturnType<typeof createScene>>, "renderer" | "scene" | "camera" | "head" | "eyes" | "controls"
+  | "cameraInput" | "onFrame" | "requestRender"> & { plate: THREE.SkinnedMesh };
+
 /** Face controls operate on the same recipe as the UV editor. No baked geometry edits. */
 export function createSurfaceEditor(
-  viewer: Awaited<ReturnType<typeof createScene>>,
+  viewer: SurfaceViewer,
   hooks: Hooks,
 ) {
   const { renderer, scene, camera, plate, head, controls } = viewer,
