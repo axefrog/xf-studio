@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
 import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { choiceLabel, planCharacterDetails, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
+import { bodyOptionDraws, choiceLabel, planCharacterDetails, previewInput, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
 import { templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
 import { refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
-import { detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}) {
   const { graph } = fixture.installation();
@@ -36,7 +36,9 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(result.slots).toEqual([{ slot: "skin", state: "shown", label: "pale, skin type 1" },
       { slot: "face", state: "shown", label: "lipstick (red), cheeks (red)" }, { slot: "brows", state: "shown", label: "brown" },
       { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" },
-      { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 01, silver" }]);
+      { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 01, silver" },
+      // V "A" as saved here lists no body part.
+      { slot: "body", state: "none", label: "None" }]);
     expect(result.components.map(c => `${c.slot}:${c.option}:${c.component}`)).toEqual(
       ["skin:skin_type_01:head", "face:makeupLips_05:hx_lips", "face:makeupCheeks_05:hx_freckles", "brows:eyebrows_color1:brow",
         "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes", "piercings:piercings_01:earring_01"]);
@@ -99,7 +101,10 @@ describe("resolver selection for brows, lashes and hair", () => {
 
   test("the default V comes from the effective creator resource's UI state", async () => {
     const { plan: result } = await plan("default");
-    expect(result.components.map(c => c.option)).toEqual(["skin_type_01", "eyebrows_color1", "eyelash_color", "hair_color1", "eyes_color"]);
+    // The body: the third-person skin, flat feet (no footwear), the default arms and nails, and the game's underwear cover; the censored
+    // twin, the parts under the cover, the first-person body, lifted feet and the arm-cyberware arms stay out.
+    expect(result.components.map(c => c.option)).toEqual(["skin_type_01", "eyebrows_color1", "eyelash_color", "hair_color1", "eyes_color",
+      "body_color", "flat_feet", "h_default_arms_colors_tpp", "nails_color_tpp", "underpants"]);
     // The creator's first eye colour, as a new V starts with.
     expect(result.components.find(c => c.slot === "eyes")!.definition).toBe("gradient_blue");
     expect(result.components[0]!.definition).toBe(TONES.pale);
@@ -285,5 +290,69 @@ describe("resolver selection for the eyes", () => {
     expect(component.chunks).toEqual([1, 2]);
     expect(component.materials.map(m => [m.chunk, renderTemplate(m.template)!.adapter])).toEqual([[1, "eye-shell"], [2, "eye"]]);
     expect(EYE_MASK).toBe("18446744073709551614");
+  });
+});
+
+describe("resolver selection for the body", () => {
+  test("the third-person body: its consumer groups, the censorship policy, one part per repeated component, the skin first", async () => {
+    const { plan: result } = await plan(BODY_REQUEST);
+    const body = result.components.filter(c => c.slot === "body");
+    expect(body.map(c => `${c.option}:${c.component}`)).toEqual(["body_color:t0_body", "flat_feet:l0_feet_flat", "h_default_arms_colors_tpp:a0_arms",
+      "nails_color_tpp:a0_nails_l", "underpants:i0_cover"]);
+    expect(result.slots.find(slot => slot.slot === "body")).toEqual({ slot: "body", state: "shown", label: "body, feet, arms, nails (beige), underwear" });
+    // The head is planned exactly as without the body.
+    expect(result.components.filter(c => c.slot !== "body").map(c => c.component)).toEqual((await plan(REQUEST_A)).plan.components.map(c => c.component));
+    const skin = body[0]!;
+    // The body's chunk mask hides the calves, which the feet draw; every chunk is the tone's skin.
+    expect(skin.chunks).toEqual([0, 1]);
+    expect(skin.materials.map(m => m.template)).toEqual([P.skinMt, P.skinMt]);
+    expect(skin.definition).toBe(BODY.pale);
+    // The body's own shapes: the breast size on the body, the left nail length on the nails; head parts carry none.
+    expect(skin.morphs).toEqual(["breast_big_breast"]);
+    expect(body.find(c => c.component === "a0_nails_l")!.morphs).toEqual(["nails_long_l_nails_l"]);
+    expect(body.find(c => c.component === "l0_feet_flat")!.morphs).toEqual([]);
+    expect(result.components.find(c => c.slot === "skin")!.morphs).toBeUndefined();
+    // The arms: two skin chunks and the layered personal-link chunk, with its stack references.
+    const arms = body.find(c => c.component === "a0_arms")!;
+    expect(arms.materials.map(m => m.template)).toEqual([P.skinMt, P.skinMt, P.layeredMt]);
+    expect(arms.materials[2]!.layered?.setup.ref.path).toBe(P.silverSetup);
+    // The underwear cover is a decal, drawn with the decal family's inputs.
+    expect(body.at(-1)!.materials.map(m => m.templateName)).toEqual([null]);
+    expect(body.at(-1)!.materials[0]!.textures.DiffuseTexture!.ref.path).toBe(P.coverD);
+    expect(BODY_MASK).toBe("18446744073709551611");
+  });
+
+  test("the censorship policy comes from the creator's own rules: the uncensored skin, the cover drawn, what it covers left out", async () => {
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    const draws = (name: string) => bodyOptionDraws(cco.parts.body.options, name);
+    expect(["body_color", "body_color_censored", "underpants", "nipples_01", "genitals_04", "flat_feet", "breast"].map(draws))
+      .toEqual([true, false, true, false, false, true, true]);
+    expect(cco.parts.body.options.find(option => option.name === "underpants")!.censor).toEqual({ flag: "Censor_Nudity", action: "activate" });
+    expect(cco.parts.body.options.find(option => option.name === "flat_feet")!.censor).toBeUndefined();
+  });
+
+  test("only what the preview draws is resolved: every head descriptor, and the body parts its third-person consumers read", () => {
+    const input = inputFromCharacterRequest(BODY_REQUEST as Extract<typeof BODY_REQUEST, { source: "save" }>);
+    const kept = previewInput(input);
+    expect(kept.appearances.filter(a => a.part === "head")).toEqual(input.appearances.filter(a => a.part === "head"));
+    expect([...new Set(kept.appearances.filter(a => a.part !== "head").map(a => a.group))].sort())
+      .toEqual(["TPP_Body", "flat_feet", "genitals", "holstered_default_tpp"]);
+    expect(kept.morphs).toEqual(input.morphs);
+    // The lifted-feet state (footwear) reads the other feet group.
+    expect(previewInput(input, { feet: "lifted" }).appearances.some(a => a.group === "lifted_feet")).toBe(true);
+    // A V without body parts is unchanged.
+    const head = inputFromCharacterRequest(REQUEST_A as Extract<typeof REQUEST_A, { source: "save" }>);
+    expect(previewInput(head)).toBe(head);
+  });
+
+  test("the nail length links: the right hand follows the left's row (rule R5 for morphs)", async () => {
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    const morphs = (state: Record<string, string>) => descriptorsFromUiState(cco, state).morphs.filter(m => m.part === "arms").map(m => `${m.region}:${m.target}`);
+    expect([...new Set(morphs({ nails_l: "nails_long_l" }))]).toEqual(["nails_l:nails_long_l", "nails_r:nails_long_r"]);
+    expect(morphs({})).toEqual([]);
+    // A follower set on its own keeps its own choice.
+    expect([...new Set(morphs({ nails_l: "nails_long_l", nails_r: "" }))]).toEqual(["nails_l:nails_long_l"]);
   });
 });

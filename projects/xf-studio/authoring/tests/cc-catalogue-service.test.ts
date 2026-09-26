@@ -54,14 +54,15 @@ describe("the creator catalogue service", () => {
     expect(unset.state("female")).toMatchObject({ phase: "failed", message: expect.stringContaining("game folder and WolvenKit") });
   });
 
-  test("the view names each row's current and own choice with labels; the head input keeps only the head", async () => {
+  test("the view names each row's current and own choice with labels; the input carries every part, the choices applied", async () => {
     const { host } = await service();
     const request: CharacterRequest = { ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "eyes_color", choice: "he__03_violet" }] };
     const view = await host.view(request);
     expect(view.values["head/eyes_color"]).toEqual({ choice: "he__03_violet", own: "he__01_brown", position: 2, set: true, active: true, label: "Violet", color: "#7828a0", ownLabel: "Brown" });
     expect(view.missing.entries).toEqual([]);
     const input = await host.inputFor({ ...request, choices: [...request.choices!, { part: "head", option: "skin_color", choice: "tone_c" }] });
-    expect(input.appearances.every(item => item.part === "head")).toBe(true);
+    // Every part: the preparation keeps what the preview draws (character-detail-plan.ts `previewInput`).
+    expect(new Set(input.appearances.map(item => item.part))).toEqual(new Set(["head", "body"]));
     expect(input.appearances.map(item => `${item.option}=${item.definition}`)).toEqual(expect.arrayContaining(["eyes_color=he__03_violet", "skin_type_01=h0__tone_c"]));
   });
 

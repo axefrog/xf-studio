@@ -43,6 +43,7 @@
   "package.split",
   "package.merge",
   "camera.front",
+  "camera.body",
   "camera.setFov",
   "camera.endFovGesture",
   "camera.restore",
@@ -59,6 +60,7 @@
   "preview.resetStudioLighting",
   "preview.setEyeShape",
   "preview.setPiercings",
+  "preview.setBody",
   "preview.setSurfaceControls",
   "preview.setWire",
   "preview.setNormals",
@@ -1437,6 +1439,14 @@
    "undo": "none",
    "payload": {}
   },
+  "camera.body": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
   "camera.setFov": {
    "scope": [
     "viewport"
@@ -1827,6 +1837,20 @@
    }
   },
   "preview.setPiercings": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setBody": {
    "scope": [
     "viewport"
    ],
@@ -2656,6 +2680,15 @@
    "async": false
   },
   {
+   "id": "camera.body",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "camera.setFov",
    "family": "action",
    "scope": [
@@ -2792,6 +2825,15 @@
   },
   {
    "id": "preview.setPiercings",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setBody",
    "family": "action",
    "scope": [
     "viewport"

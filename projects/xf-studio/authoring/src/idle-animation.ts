@@ -82,8 +82,11 @@ export class IdleAnimation {
         let node: THREE.Object3D | null = bone.parent;
         while (node instanceof THREE.Bone && !this.drivers.has(node.name) && !Object.hasOwn(this.ancestry, node.name)) node = node.parent;
         bone.updateWorldMatrix(true, false);
-        // A bone kept still on purpose (a rigid part with no bone to follow: character-detail-loader.ts `bindRigid`) stays unbound.
-        name = node instanceof THREE.Bone ? node.name : bone.userData.xfsStill ? null
+        // Only a joint of a skeleton the clip drives (a sibling joint is driven by name: the body's exports list every joint flat under the
+        // armature) takes the nearest segment; a bone kept still on purpose (a rigid part with no bone to follow: character-detail-loader.ts
+        // `bindRigid`) stays unbound.
+        const drivenSkeleton = !!bone.parent?.children.some(other => other instanceof THREE.Bone && this.drivers.has(other.name));
+        name = node instanceof THREE.Bone ? node.name : bone.userData.xfsStill || !(drivenSkeleton || bone.userData.xfsFollow) ? null
           : this.nearestDriver(new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld));
       }
       while (name && !this.drivers.has(name) && !seen.has(name)) {

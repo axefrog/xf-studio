@@ -6,13 +6,14 @@ import { CharacterDetailHost, characterRequestKey, installationFingerprint, type
 import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
 import type { DetailLimit, SlotLimits } from "../src/detail-limits";
 import type { DetailSlot } from "../src/render-detail";
-import { CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
+import { CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes, skinProfileValues,
+  storeScaledTexture, templateIdentity, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
-import { encodePng } from "../src/png";
+import { decodePng, encodePng } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail } from "../src/render-detail";
-import { detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -92,7 +93,8 @@ describe("character record from the resolver", () => {
   test("an export failure empties only the affected slot, with one plain line", async () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
-    expect(record.slots.map(s => s.state)).toEqual(Array(7).fill("unavailable"));
+    // Every head slot is unavailable; V "A" as saved here lists no body part.
+    expect(record.slots.map(s => s.state)).toEqual([...Array(7).fill("unavailable"), "none"]);
     expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
     expect(record.slots[1]!.message).toBe("WolvenKit couldn't read your V's face details from your game files, so they aren't shown.");
     expect(record.slots[4]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
@@ -526,4 +528,41 @@ test("two face choices drawing one shared mesh are two components with their own
   expect(new Set(shared.map(c => c.id)).size).toBe(2);
   expect(shared[0]!.geometry.file).toBe(shared[1]!.geometry.file);
   expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
+});
+
+describe("the body in the character record", () => {
+  test("the V's body parts with their own shapes; the head's parts are served as without the body", async () => {
+    const { record } = await prepare(BODY_REQUEST);
+    const body = record.components.filter(c => c.slot === "body");
+    expect(body.map(c => c.component)).toEqual(["t0_body", "l0_feet_flat", "a0_arms", "a0_nails_l", "i0_cover"]);
+    expect(body.map(c => c.morphs)).toEqual([["breast_big_breast"], [], [], ["nails_long_l_nails_l"], []]);
+    expect(record.slots.at(-1)).toEqual({ slot: "body", state: "shown", label: "body, feet, arms, nails (beige), underwear" });
+    // Head parts carry no body shapes, and are the same entries as for the V without her body.
+    const head = (await prepare(REQUEST_A)).record.components;
+    expect(record.components.filter(c => c.slot !== "body")).toEqual(head);
+    expect(record.components.some(c => c.slot !== "body" && c.morphs)).toBe(false);
+    // The cover is a decal: its own mask, and the decal family's other inputs from the template's defaults.
+    const cover = body.at(-1)!.materials[0]!;
+    expect(cover.textures.DiffuseTexture!.depotPath).toBe(P.coverD);
+    expect(Object.keys(cover.textures).sort()).toEqual(["DiffuseTexture", "MetalnessTexture", "NormalAlphaTex", "NormalTexture", "RoughnessTexture", "SecondaryMask"]);
+  });
+
+  test("a texture larger than the preview is served halved until it fits, once, by 2×2 means of its bytes", () => {
+    const dir = join(root, "scaled-store"), source = join(root, "big.png");
+    // 8×4: each 2×2 block one value, so the halves are exact.
+    const data = new Uint8Array(8 * 4 * 4);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) data.set([x * 30, y * 60, 200, 255], (y * 8 + x) * 4);
+    writeFileSync(source, encodePng({ width: 8, height: 4, data }, { alpha: true }));
+    expect(storeScaledTexture(dir, source, { width: 8, height: 4 }, 8)).toBeNull();
+    const scaled = storeScaledTexture(dir, source, { width: 8, height: 4 }, 2)!;
+    expect(scaled.size).toEqual({ width: 2, height: 1 });
+    const image = decodePng(readFileSync(join(dir, "files", scaled.file)));
+    // Two halvings: the means of x 0–3 and 4–7 over every row (opaque, so served without alpha).
+    expect([...image.data.slice(0, 3)]).toEqual([45, 90, 200]);
+    expect([...image.data.slice(4, 7)]).toEqual([165, 90, 200]);
+    // Made once: the same answer from the store's key.
+    expect(storeScaledTexture(dir, source, { width: 8, height: 4 }, 2)).toEqual(scaled);
+    // An odd edge repeats its last texel.
+    expect(halveImage({ width: 3, height: 1, data: new Uint8Array([0, 0, 0, 0, 100, 100, 100, 100, 50, 50, 50, 50]) })).toEqual({ width: 1, height: 1, data: new Uint8Array([50, 50, 50, 50]) });
+  });
 });

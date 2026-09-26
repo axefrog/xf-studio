@@ -180,6 +180,7 @@ export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D, options: { fol
     geometry.computeBoundingBox();
     const centre = geometry.boundingBox!.getCenter(new THREE.Vector3()).applyMatrix4(skinned.matrixWorld);
     bone.position.copy(root.worldToLocal(centre));
+    bone.userData.xfsFollow = true;
   } else bone.userData.xfsStill = true;
   root.add(bone);
   root.updateMatrixWorld(true);
