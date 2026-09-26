@@ -74,8 +74,13 @@ export interface VortexStateRead {
   /** Files that could not be read (Vortex holds some open while it runs) and format problems: recent changes may be missing. */
   readonly gaps: readonly string[];
   readonly backupTimeMs: number | null;
+  /** The whole current state was read (the database, with no gaps). Only then does a mod's absence mean it isn't installed. */
+  readonly current: boolean;
   readonly game: VortexGameState;
 }
+
+/** Observed in experiment 023: while Vortex runs, its MANIFEST and newest log can't be opened by another program. */
+const RUNNING_NOTE = "Vortex appears to be running: it keeps its newest changes in files no other program can open until it closes, so mods installed or enabled since it started may be missing.";
 
 /** Read one Vortex data folder's state for a game: the database files when they read cleanly, else the newest JSON backup. */
 export function readVortexStateFolder(folder: { path: string; kind: "user" | "shared" }, gameId: string): VortexStateRead | null {
@@ -92,8 +97,9 @@ export function readVortexStateFolder(folder: { path: string; kind: "user" | "sh
     });
     const read = readLevelDb(files);
     const { state, problems } = stateFromPairs(read.entries);
-    database = { read: { ...read, gaps: [...read.gaps, ...problems.slice(0, 5)] }, game: readVortexGameState(state, gameId) };
-    if (!read.gaps.length) return { folder: folder.path, kind: folder.kind, source: "database", databaseMode: read.mode, gaps: database.read.gaps, backupTimeMs: null, game: database.game };
+    const notes = files.some(file => !file.bytes) ? [RUNNING_NOTE] : [];
+    database = { read: { ...read, gaps: [...notes, ...read.gaps, ...problems.slice(0, 5)] }, game: readVortexGameState(state, gameId) };
+    if (!database.read.gaps.length) return { folder: folder.path, kind: folder.kind, source: "database", databaseMode: read.mode, gaps: [], backupTimeMs: null, current: true, game: database.game };
   }
   // Vortex keeps the database's newest writes in files it holds open while running; a backup may then be more complete.
   const backups = join(folder.path, "temp", "state_backups_full");
@@ -108,10 +114,10 @@ export function readVortexStateFolder(folder: { path: string; kind: "user" | "sh
     try {
       const game = readVortexGameState(JSON.parse(readFileSync(newest.path, "utf8")), gameId);
       return { folder: folder.path, kind: folder.kind, source: "backup", databaseMode: null,
-        gaps: database ? [...database.read.gaps, "The database could not be read completely; this is Vortex's last state backup."] : [], backupTimeMs: newest.time, game };
+        gaps: database ? [...database.read.gaps, "The database could not be read completely; this is Vortex's last state backup."] : [], backupTimeMs: newest.time, current: false, game };
     } catch { /* fall through */ }
   }
-  return database ? { folder: folder.path, kind: folder.kind, source: "database", databaseMode: database.read.mode, gaps: database.read.gaps, backupTimeMs: null, game: database.game } : null;
+  return database ? { folder: folder.path, kind: folder.kind, source: "database", databaseMode: database.read.mode, gaps: database.read.gaps, backupTimeMs: null, current: false, game: database.game } : null;
 }
 
 export interface VortexSetup {

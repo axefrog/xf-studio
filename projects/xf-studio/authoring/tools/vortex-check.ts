@@ -16,14 +16,14 @@ if (!gameRoot) throw Error("Usage: bun tools/vortex-check.ts --game-root <absolu
 const setup = inspectVortexSetup(gameRoot, name => process.env[name]);
 const scan = discoverSources({ ...defaultLocalSettings(), gameRoot, launchRoute: "direct" });
 const gameFiles = scan.candidates.filter(c => c.provider === "game").map(c => ({ virtualPath: c.virtualPath, modifiedMs: c.modifiedMs }));
-const report = setup.deployment ? compareWithDeployment(setup.deployment, gameFiles, ["archive/pc/"], setup.state?.game.mods ?? null) : null;
+const report = setup.deployment ? compareWithDeployment(setup.deployment, gameFiles, ["archive/pc/"], setup.state?.game.mods ?? null, setup.state?.current ?? false) : null;
 const mods = new Map<string, number>();
 for (const row of report?.attributed ?? []) mods.set(row.attribution.modId, (mods.get(row.attribution.modId) ?? 0) + 1);
 const game = setup.state?.game;
 console.log(JSON.stringify({
   deployed: setup.deployed,
   manifests: setup.manifests.map(({ instance: _instance, ...row }) => ({ ...row, deploymentTime: row.deploymentTimeMs ? new Date(row.deploymentTimeMs).toISOString() : null })),
-  state: setup.state ? { location: setup.state.kind, source: setup.state.source, databaseMode: setup.state.databaseMode, gaps: setup.state.gaps,
+  state: setup.state ? { location: setup.state.kind, source: setup.state.source, databaseMode: setup.state.databaseMode, current: setup.state.current, gaps: setup.state.gaps,
     backupTime: setup.state.backupTimeMs ? new Date(setup.state.backupTimeMs).toISOString() : null,
     profile: game?.profile?.name ?? game?.profile?.id ?? null, profileActive: game?.profileActive, installedMods: game?.mods.size,
     deploymentMethod: game?.deploymentMethod } : null,

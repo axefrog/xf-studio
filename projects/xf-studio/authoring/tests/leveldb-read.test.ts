@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
-import { readLevelDb, readLogRecords, readTable, snappyDecompress } from "../src/leveldb-read";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { readLevelDb, readLogRecords, readTable, snappyDecompress, type LevelDbFile } from "../src/leveldb-read";
 
 // A minimal LevelDB writer for fixtures, following google/leveldb doc/log_format.md and doc/table_format.md.
 const enc = new TextEncoder();
@@ -100,4 +102,34 @@ test("without a readable MANIFEST every file is read and the gap is reported", (
   expect([...read.entries]).toEqual([["k", "\"table\""]]);
   expect(read.gaps.join(" ")).toContain("MANIFEST-000004 could not be read");
   expect(read.gaps.join(" ")).toContain("000007.log could not be read");
+});
+
+// Real databases from experiment 023 (Vortex 2.7.1 in Windows Sandbox): see tests/fixtures/vortex/sandbox-023.
+const sandbox = join(import.meta.dir, "fixtures", "vortex", "sandbox-023");
+const dbFiles = (dir: string, unreadable: string[] = []): LevelDbFile[] => [
+  ...readdirSync(join(sandbox, dir)).map(name => ({ name, bytes: new Uint8Array(readFileSync(join(sandbox, dir, name))) })),
+  ...unreadable.map(name => ({ name, bytes: null })),
+];
+
+test("Vortex's closed state.v2 reads through its MANIFEST, including a Snappy-compressed table", () => {
+  const read = readLevelDb(dbFiles("state.v2-closed"));
+  expect(read.mode).toBe("manifest");
+  expect(read.gaps).toEqual([]);
+  expect([read.tablesRead, read.logsRead]).toEqual([1, 1]);
+  expect(read.entries.get("app###instanceId")).toBe(JSON.stringify("bd4ee12d-7bf6-4784-a79f-fb54a81f527f"));
+  expect(read.entries.get("persistent###profiles###xfstest###modState###XF Test Mod D###enabled")).toBe("true");
+  expect(read.entries.get("persistent###mods###cyberpunk2077###XF Test Mod A###attributes###fileName")).toBe(JSON.stringify("XF Test Mod A.zip"));
+  expect(read.entries.get("settings###nexus###associateNXM")).toBe("false");
+});
+
+test("while Vortex runs, its MANIFEST and newest log are locked and only earlier sessions' tables can be read", () => {
+  // The two files another process could not open during the run (sharing violation), as a directory listing reports them.
+  const read = readLevelDb(dbFiles("state.v2-live", ["MANIFEST-000034", "000036.log"]));
+  expect(read.mode).toBe("all-files");
+  expect(read.gaps).toEqual(["MANIFEST-000034 could not be read; every table and log present was read instead.", "000036.log could not be read."]);
+  expect(read.tablesRead).toBe(11);
+  // Only the state seeded before Vortex started: none of the session's installs, not even its new instance id.
+  expect(read.entries.has("app###instanceId")).toBe(false);
+  expect([...read.entries.keys()].some(key => key.startsWith("persistent###mods###"))).toBe(false);
+  expect(read.entries.get("settings###profiles###activeProfileId")).toBe(JSON.stringify("xfstest"));
 });

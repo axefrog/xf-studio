@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { defaultLocalSettings } from "../src/local-settings";
 import { discoverSources } from "../src/source-discovery";
-import { inspectVortexSetup, readVortexManifests } from "../src/vortex-host";
+import { compareWithDeployment } from "../src/vortex-deployment";
+import { inspectVortexSetup, readVortexManifests, readVortexStateFolder } from "../src/vortex-host";
 import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/vortex-state";
 
 const fixtures = join(import.meta.dir, "fixtures", "vortex");
@@ -133,6 +134,63 @@ test("inspecting a Vortex setup matches the deploying installation by instance i
   // No Vortex at all: nothing deployed, no state, no guesses.
   const none = inspectVortexSetup(join(base, "elsewhere"), () => undefined);
   expect([none.deployed, none.state, none.stagingPath, none.instanceMatches]).toEqual([false, null, null, null]);
+}));
+
+// Experiment 023: what Vortex 2.7.1 actually wrote in Windows Sandbox (tests/fixtures/vortex/sandbox-023).
+const sandbox = join(fixtures, "sandbox-023");
+const observedFiles = (JSON.parse(readFileSync(join(sandbox, "game-folder.json"), "utf8")).files as { path: string; modifiedMs: number }[])
+  .map(file => ({ virtualPath: file.path, modifiedMs: file.modifiedMs }));
+
+test("a real Vortex deployment and closed state database attribute every deployed file and nothing else", () => withFolder(base => {
+  const game = join(base, "game"), appData = join(base, "AppData");
+  mkdirSync(game, { recursive: true });
+  copyFileSync(join(sandbox, "vortex.deployment.json"), join(game, "vortex.deployment.json"));
+  cpSync(join(sandbox, "state.v2-closed"), join(appData, "Vortex", "state.v2"), { recursive: true });
+  const setup = inspectVortexSetup(game, name => ({ APPDATA: appData } as Record<string, string>)[name]);
+  expect(setup.manifests.map(row => [row.deploymentMethod, row.files])).toEqual([["hardlink_activator", 6]]);
+  expect([setup.state?.source, setup.state?.databaseMode, setup.state?.current, setup.state?.gaps]).toEqual(["database", "manifest", true, []]);
+  expect(setup.instanceMatches).toBe(true);
+  // The sandbox's staging folder carried no marker (state was seeded, bypassing Vortex's manage-game flow).
+  expect(setup.stagingMarker).toBeNull();
+  const game023 = setup.state!.game;
+  expect(game023.profile?.id).toBe("xfstest");
+  expect(game023.profileActive).toBe(true);
+  // Installed from local archives: named as Vortex's Mods page shows them (the archive's file name), no version and no
+  // Nexus ids, even for a Nexus-style file name.
+  expect([...game023.mods.values()].map(mod => [mod.id, mod.name, mod.version, mod.nexus, mod.enabled])).toEqual([
+    ["XF Test Mod A", "XF Test Mod A.zip", null, null, true],
+    ["XF Test Mod B-9001-1-0-1727000000", "XF Test Mod B-9001-1-0-1727000000.zip", null, null, true],
+    ["XF Test Mod D", "XF Test Mod D.zip", null, null, true],
+  ]);
+  const report = compareWithDeployment(setup.deployment!, observedFiles, ["archive/pc/"], game023.mods, setup.state!.current);
+  expect(report.attributed.map(row => [row.virtualPath, row.attribution.modId, row.attribution.state])).toEqual([
+    ["archive/pc/mod/Preexisting.archive", "XF Test Mod B-9001-1-0-1727000000", "deployed"],
+    ["archive/pc/mod/XF Test Shared.archive", "XF Test Mod B-9001-1-0-1727000000", "deployed"],
+    ["archive/pc/mod/xf_test_a.archive", "XF Test Mod A", "deployed"],
+    ["archive/pc/mod/xf_test_a.archive.xl", "XF Test Mod A", "deployed"],
+    ["archive/pc/mod/xf_test_b.archive", "XF Test Mod B-9001-1-0-1727000000", "deployed"],
+    ["archive/pc/mod/xf_test_d.archive", "XF Test Mod D", "deployed"],
+  ]);
+  // Hand-placed files, the file another tool dropped in, and the original Vortex moved aside are all left unmanaged.
+  expect(report.unmanaged).toEqual(["archive/pc/content/basegame_1_engine.archive", "archive/pc/mod/Hand Installed.archive",
+    "archive/pc/mod/Preexisting.archive.vortex_backup", "archive/pc/mod/XF Eye Artistry.archive", "bin/x64/Cyberpunk2077.exe", "vortex.deployment.json"]);
+  expect([report.missing, report.changed, report.stale]).toEqual([[], [], []]);
+}));
+
+test("state read while Vortex runs is marked incomplete, so its missing mods are not reported as uninstalled", () => withFolder(base => {
+  const folder = join(base, "Vortex"), db = join(folder, "state.v2");
+  cpSync(join(sandbox, "state.v2-live"), db, { recursive: true });
+  // Stand-ins for the MANIFEST and log Vortex held open: present in the listing, not readable as files.
+  mkdirSync(join(db, "MANIFEST-000034")); mkdirSync(join(db, "000036.log"));
+  const state = readVortexStateFolder({ path: folder, kind: "user" }, "cyberpunk2077")!;
+  expect([state.source, state.databaseMode, state.current]).toEqual(["database", "all-files", false]);
+  expect(state.gaps[0]).toContain("Vortex appears to be running");
+  expect(state.game.mods.size).toBe(0);
+  const deployment = readVortexManifests(sandbox).deployment!;
+  expect(compareWithDeployment(deployment, observedFiles, ["archive/pc/"], state.game.mods, state.current).stale).toEqual([]);
+  // Treated as current, the same state would call every deployed mod uninstalled.
+  expect(compareWithDeployment(deployment, observedFiles, ["archive/pc/"], state.game.mods, true).stale.map(row => row.reason))
+    .toEqual(["not-installed", "not-installed", "not-installed"]);
 }));
 
 test("Vortex parsing modules stay pure", () => {

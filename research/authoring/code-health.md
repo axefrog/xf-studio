@@ -286,6 +286,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
+- **Vortex attribution** (`src/vortex-deployment.ts`, `src/vortex-state.ts`, `src/leveldb-read.ts` pure; `src/vortex-host.ts` adapter; hook in `src/source-discovery.ts`; `tools/vortex-check.ts`; claude/rnd-vortex): reads Vortex's deployment manifest in the game folder and, read-only, its LevelDB state database without taking its lock. A new host capability (a binary format reader over another program's live files). [knowledge/vortex.md](../../knowledge/vortex.md).
 - **Diagnostics** (`src/diagnostics/`, claude/diagnostics): host log and rolling detail window, error references, page trapping and forwarding endpoint, problem-report builder (mod identities, resource extracts, ZIP), report review UI, and one-line failure hooks in the character, resolver, LUT, preview, eye-plate, package and library hosts. A new host capability and a boundary exception (ui-architecture-boundary.md item 13), so a deep review is due. [docs/diagnostics.md](../../docs/diagnostics.md).
 
 ## Fixed in claude/platform-step7

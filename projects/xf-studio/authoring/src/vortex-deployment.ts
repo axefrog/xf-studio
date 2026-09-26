@@ -190,10 +190,12 @@ export interface VortexDeploymentReport {
 /**
  * Compare a scan of the game folder with the deployment. `scannedPrefixes` bounds the comparison to the folders the scan
  * walked (e.g. `archive/pc/`), so a manifest entry elsewhere is not reported missing. `identities` (from Vortex state)
- * adds names, Nexus ids and the stale-deployment check; without it, attribution uses staging folder names only.
+ * adds names and Nexus ids; without it, attribution uses staging folder names only. The stale-deployment check needs
+ * `stateCurrent`: state read while Vortex runs, or from a backup, lacks recent installs, which would look "not installed".
  */
 export function compareWithDeployment(deployment: VortexDeployment, files: readonly GameFolderFile[],
-  scannedPrefixes: readonly string[], identities: ReadonlyMap<string, VortexModIdentity> | null = null): VortexDeploymentReport {
+  scannedPrefixes: readonly string[], identities: ReadonlyMap<string, VortexModIdentity> | null = null,
+  stateCurrent = identities !== null): VortexDeploymentReport {
   const inScope = (path: string) => scannedPrefixes.some(prefix => path.toLowerCase().startsWith(prefix.toLowerCase()));
   const present = new Set<string>();
   const attributed: VortexDeploymentReport["attributed"][number][] = [];
@@ -208,7 +210,7 @@ export function compareWithDeployment(deployment: VortexDeployment, files: reado
     .map(({ file }) => ({ virtualPath: file.virtualPath, modId: file.source }));
   const changed = [...new Set(attributed.filter(row => row.attribution.state === "changed").map(row => row.attribution.modId))].sort();
   const stale: VortexDeploymentReport["stale"][number][] = [];
-  if (identities) for (const modId of new Set([...deployment.byPath.values()].map(({ file }) => file.source))) {
+  if (identities && stateCurrent) for (const modId of new Set([...deployment.byPath.values()].map(({ file }) => file.source))) {
     const identity = identities.get(modId);
     if (!identity) stale.push({ modId, reason: "not-installed" });
     else if (identity.enabled === false) stale.push({ modId, reason: "disabled" });

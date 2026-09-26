@@ -30,6 +30,8 @@ function Shot([string]$name) {
   $bmp = New-Object System.Drawing.Bitmap $w, $h; $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size); $bmp.Save((Join-Path $out "$name.png")); $g.Dispose(); $bmp.Dispose()
 }
+# Plain strings: Windows PowerShell 5.1's Get-Content attaches provider properties that ConvertTo-Json would serialise.
+function Text([string]$path) { if (Test-Path $path) { [IO.File]::ReadAllText($path) } else { $null } }
 function Nxm { try { (Get-ItemProperty "HKCU:\Software\Classes\nxm\shell\open\command" -ErrorAction Stop)."(default)" } catch { $null } }
 
 $report.os = (Get-CimInstance Win32_OperatingSystem).Caption + " " + [Environment]::OSVersion.Version
@@ -80,8 +82,8 @@ $setResults = @()
 foreach ($s in $sets) {
   $arg = '--set "' + ($s -replace '"', '\"') + '"'
   $o = Join-Path $env:TEMP "set.txt"
-  $sp = Start-Process $exe -ArgumentList $arg -PassThru -RedirectStandardOutput $o -RedirectStandardError "$o.err"; [void]$sp.WaitForExit(60000)
-  $setResults += [ordered]@{ set = $s; exit = $sp.ExitCode; out = (Get-Content $o -Raw -ErrorAction SilentlyContinue); err = (Get-Content "$o.err" -Raw -ErrorAction SilentlyContinue) }
+  $sp = Start-Process $exe -ArgumentList $arg -PassThru -RedirectStandardOutput $o -RedirectStandardError "$o.err"; [void]$sp.Handle; [void]$sp.WaitForExit(60000)
+  $setResults += [ordered]@{ set = $s; exit = $sp.ExitCode; out = (Text $o); err = (Text "$o.err") }
 }
 Step "seed" $setResults
 
@@ -118,7 +120,7 @@ function Tree {
   Get-ChildItem $game -Recurse -Force -File | ForEach-Object {
     $links = @(fsutil hardlink list $_.FullName 2>$null)
     [ordered]@{ path = $_.FullName.Substring($game.Length + 1); size = $_.Length; mtime = $_.LastWriteTimeUtc.ToString("o");
-      linkType = $_.LinkType; hardLinks = $links.Count; content = $(if ($_.Length -lt 200) { (Get-Content $_.FullName -Raw) } else { $null }) }
+      linkType = $_.LinkType; hardLinks = $links.Count; content = $(if ($_.Length -lt 200) { (Text $_.FullName) } else { $null }) }
   }
 }
 function Manifests([string]$tag) {
@@ -141,7 +143,7 @@ Manifests "after-d"
 $appData = Join-Path $env:APPDATA "Vortex"
 $staging = Join-Path $appData "cyberpunk2077\mods"
 Step "staging" @{ path = $staging; entries = @(Get-ChildItem $staging -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($staging.Length + 1) }) ;
-  marker = (Get-Content (Join-Path $staging "__vortex_staging_folder") -Raw -ErrorAction SilentlyContinue) }
+  marker = (Text (Join-Path $staging "__vortex_staging_folder")) }
 Copy-Item (Join-Path $staging "vortex.deployment*.msgpack") $out -ErrorAction SilentlyContinue
 $db = Join-Path $appData "state.v2"
 $live = @(Get-ChildItem $db -Force -ErrorAction SilentlyContinue | ForEach-Object {
@@ -161,8 +163,8 @@ Start-Sleep -Seconds 5
 $gets = @()
 foreach ($path in @("persistent.mods.cyberpunk2077", "persistent.profiles", "settings.profiles", "settings.mods", "settings.nexus.associateNXM", "settings.gameMode.discovered.cyberpunk2077", "app.instanceId")) {
   $o = Join-Path $env:TEMP "get.txt"
-  $gp = Start-Process $exe -ArgumentList "--get $path" -PassThru -RedirectStandardOutput $o -RedirectStandardError "$o.err"; [void]$gp.WaitForExit(60000)
-  $gets += [ordered]@{ get = $path; out = (Get-Content $o -Raw -ErrorAction SilentlyContinue); err = (Get-Content "$o.err" -Raw -ErrorAction SilentlyContinue) }
+  $gp = Start-Process $exe -ArgumentList "--get $path" -PassThru -RedirectStandardOutput $o -RedirectStandardError "$o.err"; [void]$gp.Handle; [void]$gp.WaitForExit(60000)
+  $gets += [ordered]@{ get = $path; out = (Text $o); err = (Text "$o.err") }
 }
 Step "stateAfterClose" $gets
 Copy-Item $db (Join-Path $out "state.v2-closed") -Recurse -Force
