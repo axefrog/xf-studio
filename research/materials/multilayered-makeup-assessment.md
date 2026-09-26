@@ -1,5 +1,7 @@
 # Can the multilayered shader compile eye-makeup presets?
 
+**Current status:** answered from the compiled programs in the [multilayered reference §8](shader-multilayered.md#8-what-this-means-for-makeup-on-a-face-plate): no. Multilayered is an opaque Standard surface that would replace the skin, and the export stays on the decal family.
+
 Research prompted by the supplied [materials overview](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/materials) and [multilayered guide](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/materials/multilayered), read 2026-09-23. The latter explains masks (`mlmask`), layer settings (`mlsetup`) and reusable surfaces (`mltemplate`), describes up to 20 surfaces and lists a clearcoat variant. Its last documented edit is October 2024; treat the stated limit and technical property descriptions as leads for current-source checks.
 
 CDPR's technical art director explains the original system in [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) (December 2020). Shared tileable surface maps and small coverage masks reduce duplication; microblends add fine transition detail. The engine uses compute shaders to prepare visible layers in a runtime texture. Their external preview deliberately matches shader inputs and tone mapping. This is primary historical support for resource reuse and a calibrated studio preview, not proof that a particular current shader can overlay makeup on skin.

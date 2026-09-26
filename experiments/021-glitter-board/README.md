@@ -29,7 +29,7 @@ Evidence grades as in the knowledge base: **[source]** compiled programs or tool
 - The flakes come from an independent TypeScript generator with its own seeded random stream, so the individual flakes differ from `make_maps.py`'s; the statistics and nesting rules are the same.
 - The window is the production one Build derives from the plate (stored U 0.2659–0.7339, V 0.6739–0.8236), not 018's hand-picked window; texels are 0.065 × 0.059 mm at level 0.
 - Each stripe has its own seed (2077, 2078, 2079 left; 4242–4244 right), so neighbouring stripes do not repeat one flake layout at another size.
-- The accent's `EmissiveEV` is 0 (knowledge §4 suggests starting between 0 and 1).
+- The accent's `EmissiveEV` is 0 (knowledge §4 suggested starting between 0 and 1). The [decal reference §5.4](../../research/materials/shader-decal.md#54-emissive-decals) has since shown that this template multiplies `EmissiveColor` by `EmissiveEV` directly, so at 0 the accent is black: **rebuild with a positive value before staging** *E*. Its opacity is also an engine modifier times the mask, so "no accent at any value" is a possible outcome.
 
 Represented flakes per level on the left lid of *A* (the compiler's record, [`result.json`](result.json)) [offline]:
 

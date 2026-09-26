@@ -1,5 +1,7 @@
 # Mesh decal shader: inspected material-input contract
 
+**Current status:** consolidated, with every other program of the family, in the [decal reference](shader-decal.md); the observations below remain valid.
+
 Observed 23 September 2026 in the installed game shader cache. This covers the selected `mesh_decal` MeshSkinned, `renderstage_post_gbuffer` compilation only. Other templates, vertex factories, render passes and runtime state may differ.
 
 Pixel GUID `16098255505177109230`; vertex GUID `11128168794837425370`; material GUID `3719702598002043981`. The [cache index](evidence/shader-cache-index.json) records source/extract hashes. Local DXIL disassembly: `research/consumers/glitter/raw/shaders/mesh-decal-skinned-fragment.ll`. The unmodified `.mt` defines source-alpha/inverse-source-alpha blending on its three main render targets and disables depth writes.
