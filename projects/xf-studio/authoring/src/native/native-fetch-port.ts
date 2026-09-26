@@ -30,9 +30,9 @@ import type { FetchedResource, ResourceFetchPort } from "../resource-graph";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
-import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecoder, WorkerDecoder } from "./native-decode";
+import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecodeRequest, type NativeDecoder, WorkerDecoder } from "./native-decode";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "./native-errors";
-import { loadGameOodle, type OodleLibrary, openGameOodle, type OodleVerifier, type OodleVerifierSync } from "./oodle";
+import { loadGameOodle, type OodleLibrary, OodleUnavailableError, openGameOodle, type OodleVerifier, type OodleVerifierSync } from "./oodle";
 import { NATIVE_READER_VERSION } from "./resource-document";
 import rttiClassHashes from "./rtti-class-hashes.json";
 import rttiSubset from "./rtti-subset.json";
@@ -43,8 +43,17 @@ export const NATIVE_ROOTS: ReadonlySet<string> = new Set(["gameuiCharacterCustom
   "CMesh", "MorphTargetMesh", "CBitmapTexture", "entEntityTemplate", "CMaterialTemplate", "CHairProfile", "CSkinProfile", "CGradient",
   "Multilayer_Setup", "Multilayer_LayerTemplate"]);
 
+/**
+ * `JsonResource` payload classes whose documents matched WolvenKit's leaf for leaf in the differential harness, read when a caller asks
+ * for that root and payload (`NativeDecodeRequest.payloads`): the creator catalogue's on-screen texts (`onscreens.json`).
+ */
+export const NATIVE_JSON_PAYLOADS: ReadonlySet<string> = new Set(["localizationPersistenceOnScreenEntries"]);
+/** A request's own root classes, payloads, budget and priority (a host reading a kind the resolver doesn't; `NativeDecodeRequest`). */
+export type NativeRequestExtras = Pick<NativeDecodeRequest, "roots" | "payloads" | "timeoutMs" | "priority">;
+
 /** A native answer: a `FetchedResource` plus what the JSON document cannot say. */
 export interface NativeFetchedResource extends FetchedResource {
+  readonly native: true;
   readonly notes: readonly NativeNote[];
   readonly defaulted: readonly DefaultedProperty[];
 }
@@ -59,10 +68,18 @@ export interface NativeReader {
   close(): void;
 }
 
-const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassHashes)).digest("hex").slice(0, 12);
+/**
+ * Hash of everything besides the version that decides which resources the reader answers and what their documents hold: the RTTI slice,
+ * the learned defaults and class list, the verified roots and payloads, and the default budgets (a resource over a cap falls back, so
+ * a changed cap changes which answers were native; NATIVE-30).
+ */
+const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassHashes))
+  .update(JSON.stringify([...NATIVE_ROOTS].sort())).update(JSON.stringify([...NATIVE_JSON_PAYLOADS].sort())).update(JSON.stringify(DEFAULT_LIMITS)).digest("hex").slice(0, 12);
 export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATIVE_READER_VERSION}:${dataHash}:${decompressor}`;
 
-type Opened<T> = { reader: T } | { reader: null; reason: string };
+/** Opened, or why not; `permanent` when trying again can't help until the library file or the platform changes (NATIVE-26). */
+type Opened<T> = { reader: T } | { reader: null; reason: string; permanent: boolean };
+const refusal = (error: unknown) => ({ reader: null, reason: (error as Error).message, permanent: error instanceof OodleUnavailableError && error.permanent });
 type ReaderOptions = { limits?: NativeLimits };
 type DecoderOptions = { timeoutMs?: number; limits?: NativeLimits; roots?: ReadonlySet<string>;
   /** The worker script: a packaged host's bundle of native-decode-worker.ts (the source file next to the reader otherwise). */
@@ -79,13 +96,13 @@ function readerOver(oodle: OodleLibrary, limits: NativeLimits = DEFAULT_LIMITS):
  */
 export async function openNativeReaderAsync(gameRoot: string, options: ReaderOptions & { verify?: OodleVerifier } = {}): Promise<Opened<NativeReader>> {
   try { return { reader: readerOver(await openGameOodle(gameRoot, { verify: options.verify }), options.limits) }; }
-  catch (error) { return { reader: null, reason: (error as Error).message }; }
+  catch (error) { return refusal(error); }
 }
 
 /** `openNativeReaderAsync`, blocking while an unknown library's signature is checked: for command-line tools only. */
 export function openNativeReader(gameRoot: string, options: ReaderOptions & { verify?: OodleVerifierSync } = {}): Opened<NativeReader> {
   try { return { reader: readerOver(loadGameOodle(gameRoot, { verify: options.verify }), options.limits) }; }
-  catch (error) { return { reader: null, reason: (error as Error).message }; }
+  catch (error) { return refusal(error); }
 }
 
 /** Decode on the calling thread with a reader's pool and decompressor. */
@@ -93,8 +110,10 @@ export function inProcessDecoder(reader: NativeReader, roots: ReadonlySet<string
   return new InProcessDecoder(reader.pool, reader.decompress, { roots, limits, identity: reader.identity }, depotHash, () => reader.close());
 }
 
-function workerDecoderFor(gameRoot: string, opened: Opened<NativeReader>, options: DecoderOptions): { decoder: NativeDecoder } | { decoder: null; reason: string } {
-  if (!opened.reader) return { decoder: null, reason: opened.reason };
+/** A decoder, or why there is none (`permanent`: see `Opened`). */
+export type OpenedDecoder = { decoder: NativeDecoder } | { decoder: null; reason: string; permanent: boolean };
+function workerDecoderFor(gameRoot: string, opened: Opened<NativeReader>, options: DecoderOptions): OpenedDecoder {
+  if (!opened.reader) return { decoder: null, reason: opened.reason, permanent: opened.permanent };
   const { identity, oodleSha256 } = opened.reader;
   opened.reader.close();
   return { decoder: new WorkerDecoder({ decompressor: { gameRoot, trustedSha256: oodleSha256 }, roots: options.roots ?? NATIVE_ROOTS, limits: options.limits, identity,
@@ -105,14 +124,12 @@ function workerDecoderFor(gameRoot: string, opened: Opened<NativeReader>, option
  * Decode in a worker with a time budget per resource. The library is checked here first (asynchronously), so a worker loads only
  * a library whose bytes match the checked hash.
  */
-export async function openNativeDecoderAsync(gameRoot: string, options: DecoderOptions & { verify?: OodleVerifier } = {}):
-  Promise<{ decoder: NativeDecoder } | { decoder: null; reason: string }> {
+export async function openNativeDecoderAsync(gameRoot: string, options: DecoderOptions & { verify?: OodleVerifier } = {}): Promise<OpenedDecoder> {
   return workerDecoderFor(gameRoot, await openNativeReaderAsync(gameRoot, { limits: options.limits, verify: options.verify }), options);
 }
 
 /** `openNativeDecoderAsync`, blocking while an unknown library's signature is checked: for command-line tools only. */
-export function openNativeDecoder(gameRoot: string, options: DecoderOptions & { verify?: OodleVerifierSync } = {}):
-  { decoder: NativeDecoder } | { decoder: null; reason: string } {
+export function openNativeDecoder(gameRoot: string, options: DecoderOptions & { verify?: OodleVerifierSync } = {}): OpenedDecoder {
   return workerDecoderFor(gameRoot, openNativeReader(gameRoot, { limits: options.limits, verify: options.verify }), options);
 }
 
@@ -148,8 +165,8 @@ export const TRANSIENT_NATIVE_FAILURES: ReadonlySet<NativeFailureKind> = new Set
 export interface NativeFirstOptions {
   /** Rethrow reader bugs (`internal` failures) instead of falling back, for tests and benches. */
   readonly strict?: boolean;
-  /** Sees every fallback as it happens (diagnostics). */
-  readonly onFallback?: (kind: NativeFailureKind, resource: string, message: string) => void;
+  /** Sees every fallback as it happens (diagnostics), with the reader's own stack for an `internal` failure (the worker's). */
+  readonly onFallback?: (kind: NativeFailureKind, resource: string, message: string, stack?: string) => void;
   /** Records native answers, so `answeredNatively` holds across sessions. */
   readonly ledger?: NativeAnswerLedger;
 }
@@ -159,8 +176,11 @@ export class NativeInternalError extends Error { override name = "NativeInternal
 
 export class NativeFirstFetcher implements ResourceFetchPort {
   readonly stats: NativeFetchStats = { native: 0, fallback: 0, byKind: Object.fromEntries(NATIVE_FAILURE_KINDS.map(kind => [kind, 0])) as Record<NativeFailureKind, number>, samples: [], internal: [] };
-  /** Resources the last answer for came from the fallback, with the native failure's kind (so the `transient` rule applies). */
-  private readonly fellBack = new Map<string, NativeFailureKind>();
+  /**
+   * Resources the last answer for came from the fallback, with the native failure's kind and whether it will hold for the session (so
+   * the `transient` rule applies).
+   */
+  private readonly fellBack = new Map<string, { kind: NativeFailureKind; lasting: boolean }>();
 
   constructor(readonly decoder: NativeDecoder, private readonly fallback: ResourceFetchPort, private readonly options: NativeFirstOptions = {}) {}
 
@@ -174,22 +194,23 @@ export class NativeFirstFetcher implements ResourceFetchPort {
     this.stats.byKind[outcome.kind]++;
     if (!QUIET.has(outcome.kind) && this.stats.samples.length < SAMPLE_LIMIT) this.stats.samples.push({ kind: outcome.kind, resource, message: outcome.message.slice(0, 300) });
     if (outcome.kind === "internal" && this.stats.internal.length < INTERNAL_LIMIT) this.stats.internal.push({ resource, message: outcome.message, stack: outcome.stack });
-    this.options.onFallback?.(outcome.kind, resource, outcome.message);
+    this.options.onFallback?.(outcome.kind, resource, outcome.message, outcome.stack);
     if (outcome.kind === "internal" && this.options.strict) throw new NativeInternalError(`${resource}: ${outcome.errorName ?? "Error"}: ${outcome.message}\n${outcome.stack ?? ""}`);
   }
 
-  async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<NativeFetchedResource | FetchedResource | null> {
+  /** Natively, else from the fallback port; `extras` widens this one request (a `JsonResource` with a verified payload). */
+  async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null, extras: NativeRequestExtras = {}): Promise<NativeFetchedResource | FetchedResource | null> {
     const key = this.key(archive, ref);
-    const outcome = await this.decoder.decode({ archivePath: archive.id, hash: ref.hash, needName: !ref.path });
+    const outcome = await this.decoder.decode({ ...extras, archivePath: archive.id, hash: ref.hash, needName: !ref.path });
     if (outcome.ok) {
       this.stats.native++;
       this.fellBack.delete(key);
       this.options.ledger?.add(archive, ref.hash);
-      return { document: outcome.document, extractedSha256: outcome.extractedSha256, path: ref.path ?? outcome.name, fresh: false, notes: outcome.notes, defaulted: outcome.defaulted };
+      return { document: outcome.document, extractedSha256: outcome.extractedSha256, path: ref.path ?? outcome.name, fresh: false, native: true, notes: outcome.notes, defaulted: outcome.defaulted };
     }
     this.record(outcome, archive, ref);
     this.stats.fallback++;
-    this.fellBack.set(key, outcome.kind);
+    this.fellBack.set(key, { kind: outcome.kind, lasting: outcome.lasting === true });
     return this.fallback.fetch(archive, ref, extension);
   }
 
@@ -198,13 +219,19 @@ export class NativeFirstFetcher implements ResourceFetchPort {
    * read natively next time). A native answer is never null.
    */
   transient(archive: MountedArchive, ref: DepotRef): boolean {
-    const kind = this.fellBack.get(this.key(archive, ref));
-    if (kind === undefined) return false;
-    return TRANSIENT_NATIVE_FAILURES.has(kind) || (this.fallback.transient?.(archive, ref) ?? true);
+    const failure = this.fellBack.get(this.key(archive, ref));
+    if (failure === undefined) return false;
+    // A decoder off for the session won't answer later either: only the fallback's own rule counts (NATIVE-29).
+    return (TRANSIENT_NATIVE_FAILURES.has(failure.kind) && !failure.lasting) || (this.fallback.transient?.(archive, ref) ?? true);
   }
 
-  /** Whether this resource was answered natively from this archive's current bytes by this reader (this session or, with a ledger, before). */
-  answeredNatively(archive: MountedArchive, hash: string): boolean { return this.options.ledger?.has(archive, hash) ?? false; }
+  /**
+   * Whether this resource was answered natively from this archive's current bytes by this reader (this session or, with a ledger, before),
+   * and the decoder would answer it now: while it is closed or its worker won't start, a prepared choice would need WolvenKit (NATIVE-43).
+   */
+  answeredNatively(archive: MountedArchive, hash: string): boolean {
+    return (this.decoder.canAnswer?.() ?? true) && (this.options.ledger?.has(archive, hash) ?? false);
+  }
 
   close(): void { this.decoder.close(); }
 }

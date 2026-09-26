@@ -224,7 +224,7 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 ### Hair-colour packs
 
-[MCH Focused Hair Colors Pt 1](https://www.nexusmods.com/cyberpunk2077/mods/30027), [Washed Out](https://www.nexusmods.com/cyberpunk2077/mods/29943), [Illegally Blonde](https://www.nexusmods.com/cyberpunk2077/mods/23002) and [Like totally — Pink](https://www.nexusmods.com/cyberpunk2077/mods/22664). Together they showed how hair colour profiles are scoped and layered by data. Their individual authors are still being confirmed.
+[MCH Focused Hair Colors Pt 1](https://www.nexusmods.com/cyberpunk2077/mods/30027), [Washed Out](https://www.nexusmods.com/cyberpunk2077/mods/29943), [Illegally Blonde](https://www.nexusmods.com/cyberpunk2077/mods/23002) and [Like totally — Pink](https://www.nexusmods.com/cyberpunk2077/mods/22664). Together they showed how hair colour profiles are scoped and layered by data: each adds its colours to every hairstyle's colour row, and to the brow, lash and beard rows, through slot overlays and one set of material templates, with no per-hairstyle materials. Comparing their profiles, cap gradients and swatches shaped the proposed XF hair-colour export and editor. Their individual authors are still being confirmed.
 
 ### High Resolution Garment Preview
 
@@ -276,7 +276,7 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ### nutboy
 
-[Unique Eyes to CCXL](https://www.nexusmods.com/cyberpunk2077/mods/23263), which itself credits psiberx, icxrus, halvkyrie and another creator (redacted-c01). It resolves the saved character's eye choice and gave us a concrete case for reading character-creator option catalogues. Studied only; the page requires permission for asset reuse or modification.
+[Unique Eyes to CCXL](https://www.nexusmods.com/cyberpunk2077/mods/23263), which itself credits psiberx, icxrus, halvkyrie and another creator (redacted-c01). It resolves the saved character's eye choice and gave us a concrete case for reading character-creator option catalogues. Their CCXL hair-profiles guide on the modding wiki walks through the shared template that every hair-colour pack we studied follows, including why each colour needs a tag for hair under hats. Studied only; the page requires permission for asset reuse or modification.
 
 ### Photo-mode pose and tool mods
 

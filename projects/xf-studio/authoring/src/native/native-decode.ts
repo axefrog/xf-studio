@@ -25,14 +25,27 @@ export interface NativeDecodeRequest {
    * the clothing host's `JsonResource` preset, through the route's decoder).
    */
   readonly roots?: readonly string[];
+  /**
+   * For a `JsonResource` root: the payload classes (the class its `root` handle holds) this request accepts. Any other payload is
+   * `not-verified`, so a caller that asks for the creator's on-screen texts (`localizationPersistenceOnScreenEntries`) never takes a
+   * document of a kind the reader was not checked on. Absent: any payload (the clothing preset, which only the native reader reads).
+   */
+  readonly payloads?: readonly string[];
   /** This request's time budget in a worker, when it is not the decoder's (a much larger resource than the resolver reads). */
   readonly timeoutMs?: number;
+  /**
+   * `background`: a worker decodes it only when no other request waits (the creator catalogue's hundreds of text reads never hold up
+   * a V's resolution, whose reads come one chain level at a time).
+   */
+  readonly priority?: "background";
 }
 
 export type NativeDecodeOutcome =
   | { readonly ok: true; readonly document: unknown; readonly extractedSha256: string; readonly root: string; readonly name: string | null;
     readonly notes: readonly NativeNote[]; readonly defaulted: readonly DefaultedProperty[] }
-  | { readonly ok: false; readonly kind: NativeFailureKind; readonly message: string; readonly errorName?: string; readonly stack?: string };
+  | { readonly ok: false; readonly kind: NativeFailureKind; readonly message: string; readonly errorName?: string; readonly stack?: string;
+    /** An `unavailable` answer that will not change this session (the worker failed to start too often; NATIVE-29). */
+    readonly lasting?: boolean };
 
 export interface NativeDecodeOptions {
   /** Root classes the reader has been verified on; any other root is `not-verified`. */
@@ -46,6 +59,11 @@ export interface NativeDecodeOptions {
 export interface NativeDecoder {
   readonly identity: string;
   decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome>;
+  /**
+   * Whether it would answer a request now rather than refuse it as `unavailable` (closed, or its worker failed to start and it is waiting
+   * or off for the session). Absent: always. A resource answered natively before counts as ready only while this holds (NATIVE-43).
+   */
+  canAnswer?(): boolean;
   close(): void;
 }
 
@@ -61,6 +79,12 @@ function nameOf(archive: NativeArchive, hash: string, depotHash: (path: string) 
   return byHash.get(hash) ?? null;
 }
 
+/** The class a `JsonResource` document's `root` handle holds (`Data.RootChunk.root.Data.$type`), or null. */
+export function jsonPayloadClass(document: unknown): string | null {
+  const type = (document as { Data?: { RootChunk?: { root?: { Data?: { $type?: unknown } } } } } | null)?.Data?.RootChunk?.root?.Data?.$type;
+  return typeof type === "string" ? type : null;
+}
+
 /** Read, check and decode one resource; every failure is returned with its kind. */
 export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, request: NativeDecodeRequest, options: NativeDecodeOptions,
   depotHash: (path: string) => string): NativeDecodeOutcome {
@@ -71,6 +95,10 @@ export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, 
     const root = new Cr2wFile(bytes, session).exports[0]?.className;
     if (!root || !(options.roots.has(root) || request.roots?.includes(root))) return { ok: false, kind: "not-verified", message: `Root class ${root ?? "(none)"} is not verified.` };
     const document = readResourceJson(bytes, decompress, { buffers: "trim", header: { XfsNativeReader: options.identity } }, session);
+    if (root === "JsonResource" && request.payloads) {
+      const payload = jsonPayloadClass(document);
+      if (!payload || !request.payloads.includes(payload)) return { ok: false, kind: "not-verified", message: `JsonResource payload ${payload ?? "(none)"} is not verified.` };
+    }
     return { ok: true, document, extractedSha256: createHash("sha256").update(bytes).digest("hex"), root,
       name: request.needName ? nameOf(pool.get(request.archivePath), request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties };
   } catch (error) {
@@ -81,17 +109,28 @@ export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, 
   }
 }
 
+/** What a closed decoder answers: `unavailable`, so the resource falls back and is read again later (NATIVE-28). */
+const CLOSED = "The native decoder was closed.";
+
 /** Decodes on the calling thread (tests, the differential tools, and hosts without workers). */
 export class InProcessDecoder implements NativeDecoder {
+  private closed = false;
   constructor(private readonly pool: NativeArchivePool, private readonly decompress: Decompress, private readonly options: NativeDecodeOptions,
     private readonly depotHash: (path: string) => string, private readonly onClose: () => void = () => {}) {}
   get identity() { return this.options.identity; }
-  async decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome> { return decodeFromPool(this.pool, this.decompress, request, this.options, this.depotHash); }
-  close(): void { this.onClose(); }
+  canAnswer(): boolean { return !this.closed; }
+  async decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome> {
+    if (this.closed) return { ok: false, kind: "unavailable", message: CLOSED };
+    return decodeFromPool(this.pool, this.decompress, request, this.options, this.depotHash);
+  }
+  close(): void { if (!this.closed) { this.closed = true; this.onClose(); } }
 }
 
 /** How a worker gets its decompressor: the game's Oodle library, or (the tests' own worker only) a stand-in codec by name. */
 export type WorkerDecompressor = { readonly gameRoot: string; readonly trustedSha256?: string } | { readonly test: string };
+
+/** What a worker is told when it has been idle: release the library and exit (NATIVE-42). */
+export interface WorkerCloseMessage { readonly type: "close" }
 
 /** What a worker is told at start. */
 export interface WorkerInit {
@@ -113,7 +152,7 @@ export type WorkerReply =
 
 /** The part of a `Worker` the decoder uses, so a test can drive one by hand. */
 export interface DecodeWorker {
-  postMessage(message: WorkerInit | WorkerDecodeMessage): void;
+  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerCloseMessage): void;
   addEventListener(type: "message" | "error" | "close", listener: (event: any) => void): void;
   terminate(): unknown;
 }
@@ -131,6 +170,11 @@ export interface WorkerDecoderOptions {
   readonly restartDelayMs?: number;
   /** Consecutive start failures after which the decoder stays `unavailable` for the rest of the session. */
   readonly maxStartFailures?: number;
+  /**
+   * How long a worker may sit idle before it is told to release the game's Oodle library and exit, so a game update or repair can replace
+   * the file while the Studio stays open (NATIVE-42); the next request starts a new worker (well under a second).
+   */
+  readonly idleMs?: number;
   /** The worker script (defaults to native-decode-worker.ts next to this module). */
   readonly script?: URL | string;
   /** Starts a worker (tests inject one; the default is `new Worker(script)`). */
@@ -143,11 +187,16 @@ export const DEFAULT_DECODE_TIMEOUT_MS = 10_000;
 export const DEFAULT_WORKER_START_TIMEOUT_MS = 15_000;
 export const DEFAULT_WORKER_RESTART_DELAY_MS = 60_000;
 export const DEFAULT_WORKER_MAX_START_FAILURES = 3;
+export const DEFAULT_WORKER_IDLE_MS = 60_000;
+/** How long an idle worker told to close may take to exit before it is terminated. */
+const CLOSE_GRACE_MS = 5_000;
+/** Let a timer not keep the process alive. */
+const unref = (timer: ReturnType<typeof setTimeout>) => { (timer as { unref?: () => void }).unref?.(); return timer; };
 
 type Pending = { request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOutcome) => void };
 
 /**
- * Decodes in a worker, one resource at a time, each within `timeoutMs`. A resource over its time budget, or a worker that dies,
+ * Decodes in a worker, one resource at a time, each within `timeoutMs`; a `background` request waits until no other does. A resource over its time budget, or a worker that dies,
  * answers `over-budget` or `internal` and the worker is replaced before the next resource.
  *
  * Only the current worker is heard: every message, error and exit is checked against it, and an outcome must carry the id of the
@@ -156,25 +205,34 @@ type Pending = { request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOu
  * A worker that fails to start (reports `init-failed`, exits or errors before it is ready, or is not ready within `startTimeoutMs`)
  * is not restarted for every request: resources are answered `unavailable`, so they fall back to WolvenKit, for `restartDelayMs`,
  * then one new start is tried. After `maxStartFailures` consecutive failures the decoder stays unavailable for the session.
+ *
+ * A worker idle for `idleMs` is told to release the game's library and exit (terminated if it hasn't within a few seconds), so the
+ * library file isn't held all session (NATIVE-42); the next request starts another.
  */
 export class WorkerDecoder implements NativeDecoder {
   private current: { worker: DecodeWorker; ready: boolean; startTimer: ReturnType<typeof setTimeout> | null } | null = null;
   private readonly queue: Pending[] = [];
+  /** Requests marked `background`, decoded only while `queue` is empty. */
+  private readonly backgroundQueue: Pending[] = [];
   private busy: { pending: Pending; id: number; sent: boolean; timer: ReturnType<typeof setTimeout> | null } | null = null;
   private nextId = 1;
   private closed = false;
   private startFailures = 0;
   private unavailableUntil = 0;
   private unavailableReason = "";
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** Workers started (1 + replacements after timeouts, crashes or start retries). */
   started = 0;
 
   constructor(private readonly options: WorkerDecoderOptions) {}
   get identity() { return this.options.identity; }
+  canAnswer(): boolean { return !this.closed && Date.now() >= this.unavailableUntil; }
 
   decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome> {
-    if (this.closed) return Promise.resolve({ ok: false, kind: "internal", message: "The native decoder is closed." });
-    return new Promise(resolve => { this.queue.push({ request, resolve }); this.pump(); });
+    // A decoder closed while a route still holds it (the game's library changed, or the host let the game folder go) answers like one
+    // that is down: the resource falls back and is read again later, never counted as a reader bug (NATIVE-28).
+    if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
+    return new Promise(resolve => { (request.priority === "background" ? this.backgroundQueue : this.queue).push({ request, resolve }); this.pump(); });
   }
 
   private spawn(): void {
@@ -224,20 +282,48 @@ export class WorkerDecoder implements NativeDecoder {
     const permanent = this.startFailures >= (this.options.maxStartFailures ?? DEFAULT_WORKER_MAX_START_FAILURES);
     this.unavailableUntil = permanent ? Infinity : Date.now() + (this.options.restartDelayMs ?? DEFAULT_WORKER_RESTART_DELAY_MS);
     this.unavailableReason = permanent ? `${message} It failed to start ${this.startFailures} times in a row, so it is off for this session.` : message;
-    if (this.busy) this.finish({ ok: false, kind: "unavailable", message: this.unavailableReason });
+    if (this.busy) this.finish({ ok: false, kind: "unavailable", message: this.unavailableReason, ...(permanent ? { lasting: true } : {}) });
   }
 
   private pump(): void {
-    if (this.busy || this.closed || !this.queue.length) return;
+    if (this.busy || this.closed || !(this.queue.length || this.backgroundQueue.length)) return;
     if (!this.current) {
       if (Date.now() < this.unavailableUntil) {
-        for (const pending of this.queue.splice(0)) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason });
+        const lasting = this.unavailableUntil === Infinity;
+        for (const pending of [...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason, ...(lasting ? { lasting } : {}) });
         return;
       }
       this.spawn();
     }
-    this.busy = { pending: this.queue.shift()!, id: this.nextId++, sent: false, timer: null };
+    this.clearIdle();
+    this.busy = { pending: (this.queue.shift() ?? this.backgroundQueue.shift())!, id: this.nextId++, sent: false, timer: null };
     this.send();
+  }
+
+  private clearIdle(): void { if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; } }
+  /** Nothing queued or in progress: after `idleMs`, the worker releases the library and goes (NATIVE-42). */
+  private idleLater(): void {
+    if (this.busy || this.closed || !this.current || this.queue.length || this.backgroundQueue.length) return;
+    this.clearIdle();
+    this.idleTimer = unref(setTimeout(() => {
+      this.idleTimer = null;
+      const current = this.current;
+      if (this.busy || this.closed || !current?.ready) return;
+      this.release();
+    }, this.options.idleMs ?? DEFAULT_WORKER_IDLE_MS));
+  }
+  /**
+   * Let the current worker go, releasing the game's library: it is told to close (it frees the library and exits) and ended after a grace
+   * period if it hasn't. It is no longer the current worker, so nothing it says is heard again. A worker ended any other way (over its
+   * time budget, a crash) keeps the library loaded until the Studio exits.
+   */
+  private release(): void {
+    const current = this.current;
+    this.current = null;
+    if (!current) return;
+    if (current.startTimer) clearTimeout(current.startTimer);
+    try { current.worker.postMessage({ type: "close" }); } catch { /* ended below */ }
+    unref(setTimeout(() => { void current.worker.terminate(); }, CLOSE_GRACE_MS));
   }
 
   /**
@@ -259,6 +345,7 @@ export class WorkerDecoder implements NativeDecoder {
     this.busy = null;
     busy.pending.resolve(outcome);
     this.pump();
+    this.idleLater();
   }
 
   private stopWorker(): void {
@@ -280,8 +367,9 @@ export class WorkerDecoder implements NativeDecoder {
 
   close(): void {
     this.closed = true;
-    this.stopWorker();
-    if (this.busy) { if (this.busy.timer) clearTimeout(this.busy.timer); this.busy.pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." }); this.busy = null; }
-    for (const pending of this.queue.splice(0)) pending.resolve({ ok: false, kind: "internal", message: "The native decoder was closed." });
+    this.clearIdle();
+    this.release();
+    if (this.busy) { if (this.busy.timer) clearTimeout(this.busy.timer); this.busy.pending.resolve({ ok: false, kind: "unavailable", message: CLOSED }); this.busy = null; }
+    for (const pending of [...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: CLOSED });
   }
 }

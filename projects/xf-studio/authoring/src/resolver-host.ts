@@ -19,7 +19,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
@@ -36,7 +36,7 @@ import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRun
 import { currentDiagnostics, hostFailure, hostTrace } from "./diagnostics/host-log";
 import type { NativeDecoder } from "./native/native-decode";
 import type { NativeFailureKind } from "./native/native-errors";
-import { type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "./native/native-fetch-port";
+import { NATIVE_JSON_PAYLOADS, type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "./native/native-fetch-port";
 import { GAME_OODLE_LIBRARY } from "./native/oodle";
 
 export interface InstallationOptions {
@@ -45,7 +45,11 @@ export interface InstallationOptions {
   readonly mo2Root?: string | null;
   readonly mo2ProfileId?: string | null;
   readonly manualModRoot?: string | null;
-  readonly wolvenKitCli: string;
+  /**
+   * WolvenKit CLI, or null when it isn't set up: the route then reads with the native reader alone, and a resource only WolvenKit could
+   * read is answered null and counted (`WolvenKitFetcher.stats.withoutWolvenKit`), so the host can ask for WolvenKit in plain words.
+   */
+  readonly wolvenKitCli: string | null;
   readonly cacheDir: string;
   readonly log?: (message: string) => void;
   /** How folders are stamped (default: by the volume's file system, volume-info.ts). A test seam. */
@@ -58,7 +62,9 @@ export interface InstallationOptions {
 }
 
 /** A route's native decoder, or why the route reads with WolvenKit alone. `strict` rethrows reader bugs (benches and tests). */
-export type NativeRoute = { readonly decoder: NativeDecoder; readonly strict?: boolean } | { readonly decoder: null; readonly reason: string };
+export type NativeRoute = { readonly decoder: NativeDecoder; readonly strict?: boolean }
+  /** `permanent`: trying again can't help until the game's library or the platform changes (NATIVE-26). */
+  | { readonly decoder: null; readonly reason: string; readonly permanent?: boolean };
 /** How an installation reads resources, for its summary and diagnostics. */
 export type NativeReaderState = { readonly state: "on"; readonly identity: string } | { readonly state: "off"; readonly reason: string };
 
@@ -328,14 +334,19 @@ export class WolvenKitFetcher implements ResourceFetchPort {
    * `transient` counts resources answered null for a reason that may not repeat (no lasting `.failed` marker: the tool
    * did not run cleanly, or its output was missing). A graph that saw one should not be kept for later preparations.
    */
-  readonly stats = { cacheHits: 0, shared: 0, extracted: 0, cliCalls: 0, transient: 0, failures: [] as string[] };
+  readonly stats = { cacheHits: 0, shared: 0, extracted: 0, cliCalls: 0, transient: 0, failures: [] as string[],
+    /** Resources only WolvenKit could have read while it isn't set up (answered null, lastingly for this route), and a few of them. */
+    withoutWolvenKit: 0, needed: [] as string[] };
 
-  constructor(private readonly cli: string, private readonly cacheDir: string, private readonly contains: (archiveId: string, hash: string) => boolean,
+  constructor(private readonly cli: string | null, private readonly cacheDir: string, private readonly contains: (archiveId: string, hash: string) => boolean,
     private readonly log: (message: string) => void = () => {}) {
     this.lane = laneFor(cacheDir);
-    this.tool = wolvenKitIdentityKey(wolvenKitIdentity(cli));
+    this.tool = wolvenKitIdentityKey(cli ? wolvenKitIdentity(cli) : null);
     this.toolTag = createHash("sha256").update(this.tool).digest("hex").slice(0, 12);
   }
+
+  /** Whether WolvenKit is set up for this fetcher (without it, only cached answers are given). */
+  get available(): boolean { return !!this.cli; }
 
   /** Cache file of one resource: keyed by depot hash, archive fingerprint and WolvenKit identity (a WolvenKit update extracts again). */
   private cachePath(archive: MountedArchive, hash: string) { return join(this.cacheDir, "json", `${hash}-${fingerprint(archive.id)}-${this.toolTag}.json`); }
@@ -375,6 +386,13 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     if (cached !== undefined) { this.stats.cacheHits++; this.lane.transient.delete(path); return Promise.resolve(cached); }
     const inflight = this.lane.inflight.get(path);
     if (inflight) { this.stats.shared++; return inflight; }
+    if (!this.cli) {
+      // Without WolvenKit this route can't read it: a lasting answer for this route (setting WolvenKit up opens another route).
+      this.stats.withoutWolvenKit++;
+      if (this.stats.needed.length < 16) this.stats.needed.push(`${archive.name}: ${ref.path ?? ref.hash}`);
+      this.lane.transient.delete(path);
+      return Promise.resolve(null);
+    }
     const promise = new Promise<FetchedResource | null>(resolve => {
       const queue = this.pending.get(archive.id) ?? { archive, items: new Map<string, Pending>() };
       queue.items.set(ref.hash, { archive, ref, extension, resolve });
@@ -392,7 +410,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
 
   private run(args: string[], options: Pick<WolvenKitRunOptions, "accept" | "failure" | "lowPriority"> = {}): Promise<WolvenKitRun> {
     this.stats.cliCalls++;
-    return runWolvenKit(this.cli, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
+    return runWolvenKit(this.cli!, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
   }
   /**
    * A background batch's priority, decided as each launch starts rather than when the batch was queued: once foreground work runs on
@@ -476,10 +494,13 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       // Each output file by depot hash, with the folder it was written to and whether that step finished cleanly.
       const found = new Map<string, { file: string; path: string | null; bytes: number; clean: boolean }>();
       const walk = (root: string, folder: string, clean: boolean) => {
-        for (const name of readdirSync(folder)) {
+        const names = readdirSync(folder), listed = new Set(names);
+        for (const name of names) {
           const full = join(folder, name);
           if (lstatSync(full).isDirectory()) { walk(root, full, clean); continue; }
-          if (name.endsWith(".json")) continue;
+          // A serialized companion is `<file>.json` beside its file. A CR2W `.json` resource (a `JsonResource`, e.g. `onscreens.json`)
+          // is a file of its own, serialized to `onscreens.json.json` (PIPE-50).
+          if (name.endsWith(".json") && listed.has(name.slice(0, -".json".length))) continue;
           const rel = relative(root, full).split(sep).join("\\");
           const numeric = /^(\d+)\.[^.\\]+$/.exec(rel);
           const hash = numeric ? BigInt(numeric[1]!).toString() : depotHash(rel);
@@ -501,7 +522,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       const named = [...new Set(batch.flatMap(queue => [...queue.items].filter(([hash, item]) => plainPath(item.ref.path) && depotHash(item.ref.path!) === hash)
         .map(([, item]) => item.ref.path!.replaceAll("/", "\\"))))];
       const serialized = join(dir, "serialized");
-      for (const pattern of uncookPatterns(this.cli, archives, serialized, named)) {
+      for (const pattern of uncookPatterns(this.cli!, archives, serialized, named)) {
         mkdirSync(serialized, { recursive: true });
         const run = await this.run(["uncook", ...archives, "-o", serialized, "-r", pattern, "-u", "-s", "-v", "Minimal"],
           { accept: () => true, failure: /(?!)/, lowPriority: this.low(background) });
@@ -588,28 +609,61 @@ export class WolvenKitFetcher implements ResourceFetchPort {
  */
 export class NativeAnswerFiles implements NativeAnswerLedger {
   private readonly known = new Set<string>();
+  /** Markers being written now (they count as present). */
+  private readonly writing = new Set<string>();
   private readonly tag: string;
-  private folderMade = false;
-  constructor(private readonly cacheDir: string, identity: string) { this.tag = createHash("sha256").update(identity).digest("hex").slice(0, 12); }
+  constructor(private readonly cacheDir: string, identity: string) {
+    this.tag = createHash("sha256").update(identity).digest("hex").slice(0, 12);
+    pruneStaleMarkers(cacheDir, this.tag);
+  }
   private file(archive: MountedArchive, hash: string): string | null {
     try { return join(this.cacheDir, "native", `${hash}-${fingerprint(archive.id)}-${this.tag}.ok`); } catch { return null; }
   }
   has(archive: MountedArchive, hash: string): boolean {
     const file = this.file(archive, hash);
-    return !!file && (this.known.has(file) || existsSync(file));
+    // On disk (Clear removes the markers with what was prepared from them; NATIVE-27), or being written now.
+    return !!file && (this.writing.has(file) || existsSync(file));
   }
   add(archive: MountedArchive, hash: string): void {
     const file = this.file(archive, hash);
-    if (!file || this.known.has(file)) return;
+    // Written again when it is gone (Clear removed it this session; NATIVE-27).
+    if (!file || this.writing.has(file) || (this.known.has(file) && existsSync(file))) return;
     this.known.add(file);
-    try { if (!this.folderMade) { mkdirSync(join(this.cacheDir, "native"), { recursive: true }); this.folderMade = true; } }
+    try { mkdirSync(join(this.cacheDir, "native"), { recursive: true }); }
     catch { return; } // Advisory: the choice is checked by preparing it next time.
-    writeFile(file, "").catch(() => {});
+    this.writing.add(file);
+    writeFile(file, "").catch(() => {}).finally(() => this.writing.delete(file));
   }
 }
 
-/** Fallbacks one fetcher reports to the diagnostics log (the rest are counted in its stats and the rolling window). */
-const LOGGED_FALLBACKS = 16;
+/** Cache folders whose markers were pruned this session, per reader tag. */
+const pruned = new Set<string>();
+/**
+ * Remove, in the background, the markers another reader identity wrote in a cache folder (NATIVE-27): they can never answer again (the
+ * reader changed, or the game's library did). Once per folder and reader per session; advisory.
+ */
+function pruneStaleMarkers(cacheDir: string, tag: string): void {
+  const key = `${resolve(cacheDir).toLowerCase()}|${tag}`;
+  if (pruned.has(key)) return;
+  pruned.add(key);
+  const folder = join(cacheDir, "native");
+  void (async () => {
+    let names: string[];
+    try { names = await readdir(folder); } catch { return; }
+    for (const name of names) {
+      const match = /^\d+-[0-9a-f]{24}-([0-9a-f]{12})\.ok$/.exec(name);
+      if (match && match[1] !== tag) await rm(join(folder, name), { force: true }).catch(() => {});
+    }
+  })();
+}
+
+/**
+ * Fallbacks reported to the diagnostics log this session, each resource and kind once, across every fetcher (a route's fetchers are made again
+ * when it reopens), so they can't crowd earlier failures out of the log (NATIVE-45); the rest are counted in the fetchers' stats and the
+ * rolling window.
+ */
+const LOGGED_FALLBACKS = 24;
+const loggedFallbacks = new Set<string>();
 /** Kinds the native reader falls back on by design (a resource it doesn't read); not logged, only counted. */
 const EXPECTED_FALLBACKS: ReadonlySet<NativeFailureKind> = new Set(["not-indexed", "not-verified"]);
 
@@ -620,10 +674,14 @@ const EXPECTED_FALLBACKS: ReadonlySet<NativeFailureKind> = new Set(["not-indexed
  */
 export class ResolverFetcher implements ResourceFetchPort {
   readonly native: NativeFirstFetcher | null;
-  private logged = 0;
+  /**
+   * Null answers whose failure may not repeat (`transient`), whichever reader failed: a native failure that may pass followed by a lasting
+   * WolvenKit refusal counts too, which WolvenKit's own `stats.transient` can't see. A preparation that saw one is degraded (NATIVE-40).
+   */
+  transientNulls = 0;
   constructor(readonly wolvenKit: WolvenKitFetcher, route: NativeRoute | null | undefined, cacheDir: string) {
     this.native = route?.decoder ? new NativeFirstFetcher(route.decoder, wolvenKit, { strict: route.strict,
-      ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message) => this.fellBack(kind, resource, message) }) : null;
+      ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message, stack) => this.fellBack(kind, resource, message, stack) }) : null;
   }
   /** WolvenKit's identity (`WolvenKitFetcher.tool`): the key of its JSON cache and of the choice manifests. */
   get tool(): string { return this.wolvenKit.tool; }
@@ -631,8 +689,27 @@ export class ResolverFetcher implements ResourceFetchPort {
   get nativeStats(): NativeFirstFetcher["stats"] | null { return this.native?.stats ?? null; }
   /** The route's native decoder, shared with the host's other native reads (the clothing preset), or null. */
   get nativeDecoder(): NativeDecoder | null { return this.native?.decoder ?? null; }
-  fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
-    return this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension);
+  async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
+    return this.counted(archive, ref, await (this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension)));
+  }
+  /** Count a null answer that may not repeat (`transientNulls`). */
+  private counted<T extends FetchedResource>(archive: MountedArchive, ref: DepotRef, answer: T | null): T | null {
+    if (!answer && this.transient(archive, ref)) this.transientNulls++;
+    return answer;
+  }
+  /**
+   * A CR2W `.json` resource (a `JsonResource`, such as the game's and mods' on-screen texts) whose payload class is one of `payloads`
+   * (default: the payloads the reader is verified on): natively first, asking for that root and payload at background priority, so a
+   * V's resolution never waits behind it; else WolvenKit's, batched with the other reads on this cache folder and cached like any
+   * resource (PIPE-50). `reader` says which answered: `native` or WolvenKit's identity (`tool`).
+   */
+  async fetchJsonResource(archive: MountedArchive, ref: DepotRef, payloads: readonly string[] = [...NATIVE_JSON_PAYLOADS]):
+    Promise<(FetchedResource & { readonly reader: string }) | null> {
+    const answer = this.counted(archive, ref, this.native
+      ? await this.native.fetch(archive, ref, "json", { roots: ["JsonResource"], payloads, priority: "background" })
+      : await this.wolvenKit.fetch(archive, ref, "json"));
+    if (!answer) return null;
+    return { ...answer, reader: "native" in answer && answer.native ? `native:${this.native!.identity}` : this.tool };
   }
   transient(archive: MountedArchive, ref: DepotRef): boolean {
     return this.native ? this.native.transient(archive, ref) : this.wolvenKit.transient(archive, ref);
@@ -641,13 +718,20 @@ export class ResolverFetcher implements ResourceFetchPort {
   isCached(archive: MountedArchive, hash: string): boolean {
     return this.wolvenKit.isCached(archive, hash) || !!this.native?.answeredNatively(archive, hash);
   }
-  private fellBack(kind: NativeFailureKind, resource: string, message: string): void {
+  private fellBack(kind: NativeFailureKind, resource: string, message: string, stack?: string): void {
     hostTrace().event("resolver", "native_fallback", { kind, resource, message: message.slice(0, 300) });
-    if (EXPECTED_FALLBACKS.has(kind) || this.logged >= LOGGED_FALLBACKS) return;
-    this.logged++;
-    const plain = `XF Studio couldn't read ${resource} itself (${kind}), so WolvenKit read it instead.`;
-    if (kind === "internal") hostFailure("resolver", "native_internal", plain, new Error(message), "warn");
-    else currentDiagnostics()?.log.warn("resolver", "native_fallback", plain, { codes: [kind], stack: message.slice(0, 300) });
+    const key = `${kind}|${resource}`;
+    if (EXPECTED_FALLBACKS.has(kind) || loggedFallbacks.has(key) || loggedFallbacks.size >= LOGGED_FALLBACKS) return;
+    loggedFallbacks.add(key);
+    // Logged as the fallback starts: WolvenKit hasn't read it yet, and may not be set up at all (NATIVE-32).
+    const plain = this.wolvenKit.available ? `XF Studio couldn't read ${resource} itself (${kind}), so WolvenKit will read it instead.`
+      : `XF Studio couldn't read ${resource} itself (${kind}), and WolvenKit isn't set up to read it instead.`;
+    if (kind === "internal") {
+      // The reader's own stack (the worker's), not this host's.
+      const error = new Error(message);
+      if (stack) error.stack = stack;
+      hostFailure("resolver", "native_internal", plain, error, "warn");
+    } else currentDiagnostics()?.log.warn("resolver", "native_fallback", plain, { codes: [kind], stack: message.slice(0, 300) });
   }
 }
 
@@ -662,10 +746,10 @@ export const nativeReaderState = (route: NativeRoute | null | undefined): Native
  * `XFS_NATIVE_READER=0` environment variable turns it off (WolvenKit reads everything), for comparisons.
  */
 export async function openNativeRoute(gameRoot: string, options: { script?: URL | string } = {}): Promise<NativeRoute> {
-  if (process.env.XFS_NATIVE_READER === "0") return { decoder: null, reason: "It is turned off (XFS_NATIVE_READER=0)." };
+  if (process.env.XFS_NATIVE_READER === "0") return { decoder: null, reason: "It is turned off (XFS_NATIVE_READER=0).", permanent: true };
   try {
     const opened = await openNativeDecoderAsync(gameRoot, { script: options.script });
-    return opened.decoder ? { decoder: opened.decoder } : { decoder: null, reason: opened.reason };
+    return opened.decoder ? { decoder: opened.decoder } : { decoder: null, reason: opened.reason, permanent: opened.permanent };
   } catch (error) { return { decoder: null, reason: String((error as Error)?.message ?? error) }; }
 }
 /** The stamp of the game's Oodle library (a changed library, e.g. after a game update, needs a new decoder). */

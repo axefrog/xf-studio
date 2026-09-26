@@ -20,7 +20,8 @@ import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
 /**
  * Version of the native reader's output rules. Part of the reader identity in cache keys: bump it whenever decoding or JSON
  * writing changes what a resource's document holds. 2: hardened decoding (budgets, strict packages, typed refusals); documents of
- * well-formed resources are unchanged.
+ * well-formed resources are unchanged. 3: an array record is read to its end past a short count (a hair replacer pack's
+ * `renderLODs`, as WolvenKit shows it; noted), and the defaults were learned again on 2,448 resources.
  */
 export const NATIVE_READER_VERSION = 3;
 

@@ -34,7 +34,7 @@ import type { Installation, InstallationOptions } from "./resolver-host";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
 export type CreatorHostOptions = {
-  /** The launch route and WolvenKit, or null while they aren't set up. */
+  /** The launch route (WolvenKit optional), or null while the game folder isn't set up. */
   route: () => CreatorRoute | null;
   /** The installation fingerprint (character-detail-host.ts `installationFingerprint`). */
   fingerprint: () => string;
@@ -58,7 +58,7 @@ type Entry = { fingerprint: string; promise: Promise<Loaded>; loaded: Loaded | n
   /** Failed builds in a row for this fingerprint, and when a question may build again. */
   failures: number; retryAt: number };
 
-const NEEDS_SETUP = "Your game's character-creator options appear once your game folder and WolvenKit are set up.";
+const NEEDS_SETUP = "Your game's character-creator options appear once your game folder is set up.";
 const PREPARING = "Reading your game's character-creator options…";
 const FAILED = "XF Studio couldn't read your game's character-creator options, so they can't be changed here yet.";
 const RETRY_MS = 10_000, RETRY_MAX_MS = 10 * 60_000;
@@ -142,7 +142,7 @@ export class CreatorCatalogueHost {
     const open = this.options.open ?? (await import("./installation-registry")).acquireInstallation;
     const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
     const load = await (this.options.load ?? ((inst: Installation, r: CreatorRoute, g: BodyGender) => loadCreatorCatalogue({ installation: inst,
-      gameRoot: r.gameRoot, wolvenKitCli: r.wolvenKitCli, cacheDir: this.options.resolverCache, log: this.options.log }, g)))(installation, route, gender);
+      gameRoot: r.gameRoot, cacheDir: this.options.resolverCache, log: this.options.log }, g)))(installation, route, gender);
     const index = new CatalogueIndex(load.catalogue);
     const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}`).digest("hex").slice(0, 24);
     const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity);
@@ -249,7 +249,7 @@ export class CreatorCatalogueHost {
   }
 }
 
-/** The route isn't set up (no game folder or WolvenKit). */
+/** The route isn't set up (no game folder; WolvenKit is optional for the catalogue). */
 export class CreatorSetupError extends Error { constructor() { super(NEEDS_SETUP); } }
 /** The catalogue couldn't be built (kept until its backoff ends or Try again). */
 export class CreatorFailedError extends Error { constructor() { super(FAILED); } }

@@ -35,7 +35,9 @@ export const ROOTS = ["CMesh", "MorphTargetMesh", "appearanceAppearanceResource"
   "CMaterialParameterVector", "CMaterialParameterHairParameters", "CMaterialParameterSkinParameters", "CMaterialParameterGradient",
   "CMaterialParameterTextureArray", "CMaterialParameterCube", "CMaterialParameterMultilayerSetup", "CMaterialParameterMultilayerMask",
   "CMaterialParameterStructBuffer", "CMaterialParameterDynamicTexture", "CMaterialParameterTerrainSetup", "CMaterialParameterFoliageParameters",
-  "CMaterialParameterCpuNameU64", "rendRenderMeshBlob", "rendRenderMorphTargetMeshBlob", "rendRenderTextureBlobPC"];
+  "CMaterialParameterCpuNameU64", "rendRenderMeshBlob", "rendRenderMorphTargetMeshBlob", "rendRenderTextureBlobPC",
+  // The creator catalogue's on-screen texts (`JsonResource` holding `localizationPersistenceOnScreenEntries`).
+  "JsonResource", "localizationPersistenceOnScreenEntries"];
 
 type DumpProp = { name: string; type: string };
 type DumpClass = { name: string; parent?: string; props?: DumpProp[] };

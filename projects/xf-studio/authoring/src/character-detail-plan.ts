@@ -547,9 +547,15 @@ export function planClothing(clothing: ResolvedClothing | ClothingFailure | null
  * Select the head skin, face details, brows, lashes, hair, eyes, teeth, piercings and body of a resolved character. Each slot reports one outcome:
  * shown, none (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
+/**
+ * Which readers the installation has besides XF Studio's own: whether WolvenKit is set up to read what the native reader can't. Only the
+ * wording of an unreadable part depends on it (without WolvenKit, setting it up may read the part).
+ */
+export type PlanReaders = { readonly wolvenKit: boolean };
+
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map(),
   identities: TemplateIdentities = new Map(), body: BodyState = DEFAULT_BODY_STATE, clothing: ResolvedClothing | ClothingFailure | null = null,
-  scope: BodyScope = "drawn"): CharacterPlan {
+  scope: BodyScope = "drawn", readers: PlanReaders = { wolvenKit: true }): CharacterPlan {
   const slotOf = detailSlotOf(cco);
   const components: PlannedComponent[] = [];
   const slots: DetailSlotState[] = [];
@@ -588,11 +594,13 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     const label = clampedList(names), inMessage = clampedList(names, 160);
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");
-      // Installed but unreadable is not "not installed": name the archive WolvenKit couldn't read.
+      // Installed but unreadable is not "not installed": name the archive neither XF Studio's reader nor WolvenKit could read, and
+      // without WolvenKit say that setting it up may read it.
       const unreadable = entries.find(entry => entry.appearance.status === "unreadable");
       const { noun, not, pronoun } = SLOT_WORDS[slot];
       slots.push({ slot, state: "unavailable", label, message: unreadable
-        ? `WolvenKit couldn't read your V's ${noun} (${inMessage})${unreadable.app?.archive ? ` from ${unreadable.app.archive}` : ""}, so ${pronoun} ${not} shown.`
+        ? `XF Studio couldn't read your V's ${noun} (${inMessage})${unreadable.app?.archive ? ` from ${unreadable.app.archive}` : ""}, so ${pronoun} ${not} shown.` +
+          (readers.wolvenKit ? "" : " Setting up WolvenKit from the 3D preview card may let XF Studio read it.")
         : missing ? `Your V's ${noun} (${inMessage}) ${not} in your installed game files, so ${pronoun} ${not} shown.`
         : `XF Studio can't draw your V's ${noun} (${inMessage}) yet, so ${pronoun} ${not} shown.` });
       continue;

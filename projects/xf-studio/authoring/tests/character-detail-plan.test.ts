@@ -130,7 +130,12 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(resolved.appearances.find(entry => entry.option === "eyebrows_color1")!.appearance.status).toBe("unreadable");
     const brows = result.slots.find(s => s.slot === "brows")!;
     expect(brows.state).toBe("unavailable");
-    expect(brows.message).toBe("WolvenKit couldn't read your V's eyebrows (brown) from old_brows.archive, so they aren't shown.");
+    expect(brows.message).toBe("XF Studio couldn't read your V's eyebrows (brown) from old_brows.archive, so they aren't shown.");
+    // Without WolvenKit set up, the line says that setting it up may read the part.
+    const cco = await loadMergedCco(fixture.installation().graph, "female");
+    const without = planCharacterDetails(resolved, cco.merged.cco, undefined, undefined, undefined, null, "drawn", { wolvenKit: false });
+    expect(without.slots.find(s => s.slot === "brows")!.message)
+      .toBe("XF Studio couldn't read your V's eyebrows (brown) from old_brows.archive, so they aren't shown. Setting up WolvenKit from the 3D preview card may let XF Studio read it.");
   });
 
   test("plain skin labels: tone name and skin type, without index numbers or group codes", () => {

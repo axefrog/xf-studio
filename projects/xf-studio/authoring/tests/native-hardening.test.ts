@@ -473,3 +473,58 @@ test("NATIVE-23: an archive index over its cap is refused before it is read, and
   const repeated = NativeArchive.open(unsorted, fakeDecompress), first = repeated.index.entryAt(0).hash;
   expect(repeated.index.find(BigInt(first))).toBe(1);
 });
+
+test("NATIVE-42: an idle worker is told to release the game's library and exit; the next request starts another", async () => {
+  const { decoder, workers } = fakeDecoder({ idleMs: 30 });
+  try {
+    const first = decoder.decode(decodeRequest("1"));
+    workers[0]!.emit("message", { type: "ready" });
+    workers[0]!.emit("message", { type: "outcome", id: workers[0]!.lastDecode.id, outcome: answer("one") });
+    expect(await first).toMatchObject({ ok: true });
+    // Busy again before the idle time is up: the worker stays.
+    await Bun.sleep(10);
+    const second = decoder.decode(decodeRequest("2"));
+    workers[0]!.emit("message", { type: "outcome", id: workers[0]!.lastDecode.id, outcome: answer("two") });
+    await second;
+    expect(workers[0]!.sent.map(message => message.type)).toEqual(["init", "decode", "decode"]);
+    await Bun.sleep(60);
+    expect(workers[0]!.sent.at(-1) as unknown).toEqual({ type: "close" });
+    // Its exit is not a failure: the next request starts a new worker, which is ready as before.
+    workers[0]!.emit("close");
+    expect(decoder.canAnswer()).toBe(true);
+    const third = decoder.decode(decodeRequest("3"));
+    expect(workers.length).toBe(2);
+    workers[1]!.emit("message", { type: "ready" });
+    workers[1]!.emit("message", { type: "outcome", id: workers[1]!.lastDecode.id, outcome: answer("three") });
+    expect(await third).toMatchObject({ ok: true, document: { tag: "three" } });
+  } finally { decoder.close(); }
+});
+
+test("NATIVE-42: the worker loop releases what its opener loaded when told to close, then ends", async () => {
+  const { serveDecodes } = await import("../src/native/native-decode-serve");
+  const listeners: ((event: { data: unknown }) => void)[] = [], replies: unknown[] = [];
+  let released = 0, ended = 0;
+  serveDecodes({ addEventListener: (_type, listener) => { listeners.push(listener); }, postMessage: message => { replies.push(message); }, close: () => { ended++; } },
+    () => ({ decompress: fakeDecompress, close: () => { released++; } }));
+  const send = (data: unknown) => { for (const listener of listeners) listener({ data }); };
+  send({ type: "init", decompressor: { test: "fake" }, roots: [], limits: DEFAULT_LIMITS, identity: "t" });
+  await Bun.sleep(1);
+  expect(replies).toEqual([{ type: "ready" }]);
+  send({ type: "close" });
+  expect([released, ended]).toEqual([1, 1]);
+});
+
+test("NATIVE-43: a decoder that can't answer now doesn't count earlier native answers as ready", async () => {
+  const { NativeFirstFetcher } = await import("../src/native/native-fetch-port");
+  const { decoder } = fakeDecoder({ startTimeoutMs: 20, restartDelayMs: 10_000 });
+  const archive = { id: "a.archive", name: "a.archive" } as import("../src/archive-precedence").MountedArchive;
+  const port = new NativeFirstFetcher(decoder, { fetch: async () => null }, { ledger: { has: () => true, add: () => {} } });
+  try {
+    expect(port.answeredNatively(archive, "1")).toBe(true);
+    // The worker never becomes ready: the decoder waits before starting another, and answers `unavailable` meanwhile.
+    expect(await decoder.decode(decodeRequest("1"))).toMatchObject({ ok: false, kind: "unavailable" });
+    expect(decoder.canAnswer()).toBe(false);
+    expect(port.answeredNatively(archive, "1")).toBe(false);
+  } finally { decoder.close(); }
+  expect(port.answeredNatively(archive, "1")).toBe(false);
+});
