@@ -247,7 +247,7 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
     ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}) };
 }
 /** The resolver's notes about how a file was read (resource-graph.ts `readerRuleNotes`). */
-const READER_RULES = new Set(["R11-stored-type", "R12-property-absent"]);
+const READER_RULES = new Set(["R11-stored-type", "R12-property-absent", "R13-array-past-count"]);
 
 /** The record's form of a planned morph texture rule. */
 export const recordMorphTexture = (rule: PlannedComponent["morphTexture"]): RenderMorphTexture | undefined =>

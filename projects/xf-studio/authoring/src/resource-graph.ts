@@ -45,8 +45,13 @@ export interface FetchedResource {
   /** Watched properties the file left out, which the document shows as a default value: where (JSON paths from the document root). */
   readonly defaulted?: readonly DefaultedPaths[];
 }
-/** A property stored with a type other than the one the game's current RTTI gives it; the value was read by its stored type. */
-export interface ReaderNote { readonly kind: "type-mismatch"; readonly property: string; readonly stored: string; readonly rtti: string; readonly count: number }
+/**
+ * What a reader noticed: a property stored with a type other than the one the game's current RTTI gives it (read by its stored type), or
+ * an array record holding more elements than its count says (all of them read, as WolvenKit shows them).
+ */
+export type ReaderNote =
+  | { readonly kind: "type-mismatch"; readonly property: string; readonly stored: string; readonly rtti: string; readonly count: number }
+  | { readonly kind: "array-past-count"; readonly property: string; readonly declared: number; readonly stored: number; readonly count: number };
 /** A watched property (`Class.property`) the file left out: the JSON paths where the document shows its default instead (at most a few hundred). */
 export interface DefaultedPaths { readonly property: string; readonly paths: readonly string[]; readonly count: number }
 
@@ -268,9 +273,15 @@ export function forgetDefaulted(document: unknown, defaulted: readonly Defaulted
 /** The rule notes a reader's answer brings: stored types the RTTI disagrees with, and watched properties the file left out. */
 export function readerRuleNotes(fetched: Pick<FetchedResource, "notes" | "defaulted">, unresolved = 0): RuleNote[] {
   const notes: RuleNote[] = [];
-  for (const item of fetched.notes ?? []) if (item.kind === "type-mismatch")
-    notes.push(note("R11-stored-type", "hypothesis", `${item.property} is stored as ${item.stored} where the game's current type is ${item.rtti}` +
-      `${item.count > 1 ? ` (${item.count} times)` : ""}; it was read as stored. How the game treats such a value is unread.`));
+  for (const item of fetched.notes ?? []) {
+    const times = item.count > 1 ? ` (${item.count} times)` : "";
+    if (item.kind === "type-mismatch")
+      notes.push(note("R11-stored-type", "hypothesis", `${item.property} is stored as ${item.stored} where the game's current type is ${item.rtti}` +
+        `${times}; it was read as stored. How the game treats such a value is unread.`));
+    else if (item.kind === "array-past-count")
+      notes.push(note("R13-array-past-count", "hypothesis", `${item.property} says it holds ${item.declared} element(s) but its record holds ${item.stored}${times}; ` +
+        "all were read, as WolvenKit shows them. Whether the game reads past the count is unread."));
+  }
   for (const row of fetched.defaulted ?? []) if (ABSENT_WHEN_DEFAULTED.has(row.property))
     notes.push(note("R12-property-absent", "hypothesis", `The file leaves out ${row.property} ${row.count} time(s); read as absent ` +
       `(a render chunk without a mask is drawn: the engine's default flags)${unresolved ? `, except ${unresolved} the reader could not place` : ""}.`));

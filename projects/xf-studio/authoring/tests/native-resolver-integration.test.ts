@@ -36,13 +36,17 @@ function readerOver(tag = "test"): NativeReader {
 }
 const route = (tag = "test"): NativeRoute => { const decoder = inProcessDecoder(readerOver(tag)); closers.push(() => decoder.close()); return { decoder }; };
 
-/** A mesh with three chunks: one drawn, one that leaves its render mask out, one shadow-only; `objectType` stored as Bool (RTTI: an enum). */
+/**
+ * A mesh with three chunks: one drawn, one that leaves its render mask out, one shadow-only; `objectType` stored as Bool (RTTI: an enum);
+ * and `renderLODs` whose count says 1 while its record holds 4 floats (as a hair replacer pack's meshes store it).
+ */
 function meshBytes(): Uint8Array {
   const file = new Cr2wBuilder();
   const chunk = (...flags: string[]) => v.struct([prop("lodMask", "Uint8", v.u8(1)), ...(flags.length ? [prop("renderMask", "EMeshChunkFlags", v.bitfield(...flags))] : [])]);
   file.export("CMesh", [prop("objectType", "Bool", v.bool(true)), prop("renderResourceBlob", "handle:IRenderResourceBlob", v.handle(1))]);
   file.export("rendRenderMeshBlob", [prop("header", "rendRenderMeshBlobHeader", v.struct([prop("renderChunkInfos", "array:rendChunk",
-    v.array([chunk("MCF_RenderInScene"), chunk(), chunk("MCF_RenderInShadows")]))]))]);
+    v.array([chunk("MCF_RenderInScene"), chunk(), chunk("MCF_RenderInShadows")])),
+    prop("renderLODs", "array:Float", w => { w.u32(1); for (const lod of [0, 3, 6, 9]) w.f32(lod); })]))]);
   return file.build();
 }
 function resource(className: string, props = [prop("sampleCount", "Uint16", v.u16(16))]) { const file = new Cr2wBuilder(); file.export(className, props); return file.build(); }
@@ -153,9 +157,13 @@ test("the reader's notes and left-out properties reach the resolver's models: a 
   const mesh = await installation.graph.mesh(refFromPath("base\\fixture\\m.mesh"));
   // Chunk 1 leaves its mask out: the engine's default flags draw it (WolvenKit's JSON shows "0", which would read as not drawn).
   expect(mesh!.renderChunkScene).toEqual([true, true, false]);
-  expect(mesh!.notes.map(note => note.rule)).toEqual(["R11-stored-type", "R12-property-absent"]);
+  expect(mesh!.notes.map(note => note.rule)).toEqual(["R11-stored-type", "R13-array-past-count", "R12-property-absent"]);
   expect(mesh!.notes[0]!.basis).toContain("CMesh.objectType is stored as Bool where the game's current type is ERenderObjectType");
-  expect(mesh!.notes[1]!.basis).toContain("rendChunk.renderMask 1 time(s)");
+  expect(mesh!.notes[1]!.basis).toBe("rendRenderMeshBlobHeader.renderLODs says it holds 1 element(s) but its record holds 4; all were read, as WolvenKit shows them. Whether the game reads past the count is unread.");
+  expect(mesh!.notes[2]!.basis).toContain("rendChunk.renderMask 1 time(s)");
+  // Every element in the record is read, as WolvenKit shows them.
+  const document = (await installation.fetcher.fetch(installation.plan.archives[0]!, refFromPath("base\\fixture\\m.mesh"), "mesh"))!.document as any;
+  expect(document.Data.RootChunk.renderResourceBlob.Data.header.renderLODs).toEqual([0, 3, 6, 9]);
   // The rolling window records them beside the read (in diagnostic mode it records every read).
   const events: { event: string; data?: Readonly<Record<string, unknown>> }[] = [];
   installation.graph.trace = { deep: false, event: (_area, event, data) => { events.push({ event, data }); } };
@@ -166,6 +174,19 @@ test("the reader's notes and left-out properties reach the resolver's models: a 
   await fresh.mesh(refFromPath("base\\fixture\\m.mesh"));
   expect(events.map(item => item.event)).toEqual(["reader_notes"]);
   expect(diagnostics.log.tail()).toEqual([]);
+});
+
+test("an array record's elements past its count are read only while each uses bytes; anything else is refused", async () => {
+  const { readResource } = await import("../src/native/resource-document");
+  const withRecord = (write: (w: import("./fixtures/native-cr2w").Bytes) => void) => {
+    const file = new Cr2wBuilder(); file.export("CMesh", [prop("lodLevelInfo", "array:Float", write)]); return file.build();
+  };
+  expect((readResource(withRecord(w => { w.u32(0); w.f32(1); w.f32(2); }), fakeDecompress).document.Data.RootChunk as any).lodLevelInfo).toEqual([1, 2]);
+  // Two bytes left over: not a whole element, refused as before.
+  expect(() => readResource(withRecord(w => { w.u32(1); w.f32(1); w.u16(7); }), fakeDecompress)).toThrow(/read 12 of 14 bytes|past the end|bytes/);
+  // An element that uses no bytes (an empty struct) can't make the reader loop: refused.
+  const empty = new Cr2wBuilder(); empty.export("CMesh", [prop("parameters", "array:Box", w => { w.u32(0); w.u8(0); })]);
+  expect(() => readResource(empty.build(), fakeDecompress)).toThrow();
 });
 
 test("forgetDefaulted removes only watched properties at the reader's paths, and counts what it could not place", () => {
@@ -179,6 +200,15 @@ test("forgetDefaulted removes only watched properties at the reader's paths, and
   expect(document as unknown).toEqual({ Data: { RootChunk: { list: [{ renderMask: "0" }, {}], other: { renderMask: "0" } } } });
   // One path past the reader's list (count 4, 3 paths), one that leads nowhere, and the repeated path (already removed).
   expect(unresolved).toBe(3);
+});
+
+test("a request may widen the decoder's root classes for itself (the clothing preset through the route's decoder)", async () => {
+  const setup = gameFolder(), decoder = route().decoder!;
+  const rig = { archivePath: setup.archive, hash: refFromPath("base\\fixture\\r.rig").hash, needName: false };
+  expect(await decoder.decode(rig)).toMatchObject({ ok: false, kind: "not-verified" });
+  expect(await decoder.decode({ ...rig, roots: ["animRig"] })).toMatchObject({ ok: true, root: "animRig" });
+  // Only for that request.
+  expect(await decoder.decode(rig)).toMatchObject({ ok: false, kind: "not-verified" });
 });
 
 test("every native failure kind falls back to WolvenKit per resource; only kinds that may not repeat keep a failed read retryable", async () => {

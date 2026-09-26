@@ -162,7 +162,7 @@ export class NativeFirstFetcher implements ResourceFetchPort {
   /** Resources the last answer for came from the fallback, with the native failure's kind (so the `transient` rule applies). */
   private readonly fellBack = new Map<string, NativeFailureKind>();
 
-  constructor(private readonly decoder: NativeDecoder, private readonly fallback: ResourceFetchPort, private readonly options: NativeFirstOptions = {}) {}
+  constructor(readonly decoder: NativeDecoder, private readonly fallback: ResourceFetchPort, private readonly options: NativeFirstOptions = {}) {}
 
   /** The native reader's identity (cache keys of anything derived from native answers). */
   get identity(): string { return this.decoder.identity; }

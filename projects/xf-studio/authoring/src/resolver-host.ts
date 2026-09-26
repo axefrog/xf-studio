@@ -629,6 +629,8 @@ export class ResolverFetcher implements ResourceFetchPort {
   get tool(): string { return this.wolvenKit.tool; }
   get stats(): WolvenKitFetcher["stats"] { return this.wolvenKit.stats; }
   get nativeStats(): NativeFirstFetcher["stats"] | null { return this.native?.stats ?? null; }
+  /** The route's native decoder, shared with the host's other native reads (the clothing preset), or null. */
+  get nativeDecoder(): NativeDecoder | null { return this.native?.decoder ?? null; }
   fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
     return this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension);
   }

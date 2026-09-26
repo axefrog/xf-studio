@@ -81,7 +81,9 @@ export const DEFAULT_LIMITS: NativeLimits = Object.freeze({
 /** Something the reader noticed about a resource that the JSON document cannot say (its value is still readable). */
 export type NativeNote =
   /** A property stored with a type other than the one the RTTI slice gives it; the value was decoded by the stored type. */
-  | { readonly kind: "type-mismatch"; readonly property: string; readonly stored: string; readonly rtti: string; readonly count: number };
+  | { readonly kind: "type-mismatch"; readonly property: string; readonly stored: string; readonly rtti: string; readonly count: number }
+  /** An array record holding more elements than its count says; every element in the record was read (`declared` is the count). */
+  | { readonly kind: "array-past-count"; readonly property: string; readonly declared: number; readonly stored: number; readonly count: number };
 
 /** A watched property the file left out, so the document shows its default: where it was written. */
 export interface DefaultedProperty { readonly property: string; readonly paths: readonly string[]; readonly count: number }
@@ -104,7 +106,7 @@ export class DecodeSession {
   private longestName = 0;
   private nameCount = 0;
   private largestBuffer = 0;
-  private readonly notesByKey = new Map<string, { kind: "type-mismatch"; property: string; stored: string; rtti: string; count: number }>();
+  private readonly notesByKey = new Map<string, NativeNote & { count: number }>();
   private readonly defaultedByProperty = new Map<string, { property: string; paths: string[]; count: number }>();
   readonly watched: ReadonlySet<string>;
 
@@ -162,6 +164,14 @@ export class DecodeSession {
     const known = this.notesByKey.get(key);
     if (known) { known.count++; return; }
     if (this.notesByKey.size < MAX_NOTES) this.notesByKey.set(key, { kind: "type-mismatch", property, stored, rtti, count: 1 });
+  }
+
+  /** Record an array record that held more elements than its count said (`declared`), all `stored` of which were read. */
+  arrayPastCount(property: string, declared: number, stored: number): void {
+    const key = `${property}\u0001past-count`;
+    const known = this.notesByKey.get(key) as { count: number } | undefined;
+    if (known) { known.count++; return; }
+    if (this.notesByKey.size < MAX_NOTES) this.notesByKey.set(key, { kind: "array-past-count", property, declared, stored, count: 1 });
   }
 
   /** Record that a watched property was written as its default at `path` (built only when needed). */
