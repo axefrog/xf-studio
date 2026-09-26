@@ -208,3 +208,18 @@ test("every studio control requests a frame and nothing else draws (render on de
   // The evidence reader does not.
   expect(wrapped).not.toContain("studioLighting");
 });
+
+test("the eye's own roughness: absent from an untouched workspace (bytes kept, the retired opt-in kept as read), stored once turned off", () => {
+  const fresh = freshWorkspace();
+  const stored = serializeWorkspace(fresh, STUDIO_DOCUMENTS);
+  expect("eyeOwnRoughness" in stored.preview).toBe(false);
+  const legacy = JSON.parse(JSON.stringify({ ...stored, preview: { ...stored.preview, eyeOptics: false } }));
+  const loaded = parseWorkspace(legacy, STUDIO_DOCUMENTS);
+  expect(loaded.preview.eyeOwnRoughness).toBeUndefined();
+  expect(JSON.stringify(serializeWorkspace(loaded, STUDIO_DOCUMENTS))).toBe(JSON.stringify(legacy));
+  const off = freshWorkspace();
+  off.preview.eyeOwnRoughness = false;
+  expect(parseWorkspace(storedWorkspace(off), STUDIO_DOCUMENTS).preview.eyeOwnRoughness).toBe(false);
+  expect(parseWorkspace({ ...storedWorkspace(off), preview: { ...storedWorkspace(off).preview, eyeOwnRoughness: "no" } }, STUDIO_DOCUMENTS)
+    .preview.eyeOwnRoughness).toBeUndefined();
+});

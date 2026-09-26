@@ -29,10 +29,15 @@ export type PreviewState = {
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean;
   /**
-   * The eye's own roughness (`preview.setEyeOptics`), on by default. Stored as `eyeOwnRoughness: false` only once the viewer turns it
-   * off; the earlier opt-in field `eyeOptics` (off unless chosen) is not read, so every workspace starts with the game's roughness.
+   * Retired: the earlier opt-in for the eye's own roughness (off unless chosen). Read and written back unchanged, so a workspace keeps
+   * its stored bytes; nothing uses it now (`eyeOwnRoughness`).
    */
   eyeOptics: boolean;
+  /**
+   * Whether the eyes use their own roughness (`preview.setEyeOptics`). Absent means on, so every workspace, including one that stored
+   * the retired opt-in off, starts with the game's roughness; written only once the viewer changes it.
+   */
+  eyeOwnRoughness?: boolean;
   /**
    * Whether the V's body shows (body, arms, hands, feet and their decals). Absent means shown: it is written only once the viewer
    * changes it, so a workspace that never did keeps its stored bytes.
@@ -114,8 +119,8 @@ export type WorkspaceState = {
 export type StoredWorkspace = Omit<WorkspaceState, "schema" | "recipe" | "active" | "selected" | "history" | "historyTrimmed" |
   "fieldSelection" | "glitterChoices" | "collections" | "otherFeatures" | "preview"> & {
   schema: typeof WORKSPACE_2;
-  /** The preview state; `studioLights` only when it differs from the original rig, `eyeOwnRoughness` only when off. */
-  preview: Omit<PreviewState, "studioLights" | "eyeOptics"> & { studioLights?: StudioLights; eyeOwnRoughness?: false };
+  /** The preview state; `studioLights` only when it differs from the original rig. */
+  preview: Omit<PreviewState, "studioLights"> & { studioLights?: StudioLights };
   look?: { parts: Record<string, PartEnvelope>; memory: Record<string, unknown> };
   features: Record<string, unknown>;
   collections?: ReturnType<typeof writeCollectionWorkspace>;
@@ -126,7 +131,7 @@ export function freshWorkspace(recipe: Recipe): WorkspaceState {
     uvView: defaultUVView(), fieldSelection: {}, glitterChoices: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
-      normals: true, eyeOptics: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false,
+      normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false,
       lightingPreset: DEFAULT_LIGHTING_PRESET, creatorLighting: { ...DEFAULT_CREATOR_LIGHTING },
       studioLights: { ...DEFAULT_STUDIO_LIGHTS }, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
@@ -164,10 +169,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   const p = v.preview;
   if (p && typeof p === "object") {
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
-    for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
+    for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
-    // The eye's own roughness is on unless this workspace turned it off (the retired opt-in `eyeOptics` is ignored).
-    if ((p as { eyeOwnRoughness?: unknown }).eyeOwnRoughness === false) state.preview.eyeOptics = false;
+    if (typeof p.eyeOwnRoughness === "boolean") state.preview.eyeOwnRoughness = p.eyeOwnRoughness;
     if (typeof p.body === "boolean") state.preview.body = p.body;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
@@ -296,9 +300,8 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
     parts: registry.minimalLook({ id: "", name: "", revision: 1, parts: loose.parts }, false).parts,
     memory: registry.writeMemory(loose.memory, options) };
   // The studio rig is stored only when adjusted: workspaces that never touch it keep their bytes (studio-lighting.ts).
-  const { studioLights, eyeOptics, ...preview } = view.preview;
-  const storedPreview = { ...preview, ...(sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? {} : { studioLights }),
-    ...(eyeOptics ? {} : { eyeOwnRoughness: false as const }) };
+  const { studioLights, ...preview } = view.preview;
+  const storedPreview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? preview : view.preview;
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view, preview: storedPreview,
     ...(collections ? { collections: writeCollectionWorkspace(collections, model, options) } : {}) };
 }

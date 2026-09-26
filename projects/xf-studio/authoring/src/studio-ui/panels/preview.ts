@@ -189,7 +189,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
-      optics.update(!!preview?.eyeOptics, loading);
+      optics.update(preview?.eyeOwnRoughness ?? true, loading);
       const eye = assets.eyeOptics;
       setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the preview's even gloss." : eye.active
         ? "The eye's own roughness from your game files: a glassy eye with a crisp catch light, lit the way the game lights eyes."

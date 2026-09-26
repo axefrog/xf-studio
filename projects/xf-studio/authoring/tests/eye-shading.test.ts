@@ -43,7 +43,7 @@ function oracleUvC(uv: [number, number], N: Vec3, T: Vec3, P: Vec3, camera: Vec3
 }
 
 /** §5.5 transcribed (tangent space, before the TBN): `s`, `q`, `e` (z + 0.5 after normalising), the margin, the lerp to the bubble. */
-function oracleCornea(fu: number, v: number, bubble: [number, number], iris: number): number[] {
+function oracleCornea(fu: number, v: number, bubble: [number, number], iris: number): Vec3 {
   const s = V.EggFullRadius * V.EggSubFactor, q = [fu - 0.5, 0.5 - v, s], lq = Math.hypot(...q), r = Math.hypot(fu - 0.5, 0.5 - v);
   let e: number[];
   if (lq < V.EggFullRadius) { const k = n3(q.map(c => c * (V.EggFullRadius / lq) - c)); e = [k[0], k[1], k[2] + 0.5]; }
