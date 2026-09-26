@@ -306,7 +306,7 @@ export class CharacterPreparationCache {
   readonly layerTemplates = new Map<string, { values: TemplateValues; source: RenderSourceRef } | null>();
   readonly gamma = new Map<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
-  readonly geometry = new Map<string, { glb: string | null; complete: boolean }>();
+  readonly geometry = new Map<string, { glb: string | null; complete: boolean; repair?: string | null }>();
   readonly textures = new Map<string, { png: string }>();
   readonly masks = new Map<string, { layers: string[] }>();
   /** Served components by their plan (canonical JSON), within this installation. */
@@ -648,14 +648,32 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     return { setup: setup.source, mask: maskRef ? { depotPath: refLabel(maskRef.ref), archive: maskAtArchive?.archive.name ?? null,
       sha256: hexSha(maskRef.extractedSha256), layers: maskFiles.length } : null, ratio: setup.values.ratio, useNormal: setup.values.useNormal, layers };
   };
-  /** Write one planned component; null when it can't be served (the slot's outcome is decided by the caller). */
+  /** One plain line naming a part that is left out and why (it feeds the record's notes and diagnostics). */
+  const dropped = (component: PlannedComponent, why: string) =>
+    note(`Part ${component.component} of your V's ${SLOT_WORDS[component.slot].noun} isn't shown: ${why}`);
+  /**
+   * Write one planned component, or say why it can't be served (the slot's outcome is decided by the caller). Every path that leaves the
+   * component out adds a `dropped` note.
+   */
   const build = (component: PlannedComponent): RenderComponent | "tool" | "export" => {
     const located = geometryAt.get(component) ?? locate(graph, component.drawnFrom.ref) ?? undefined;
     const geometryKey = located ? `${located.archive.id}|${located.depotPath.toLowerCase()}` : "";
     const exported = located ? cache.geometry.get(geometryKey) : undefined;
+    const shape = refLabel(component.drawnFrom.ref);
     // An export whose file has gone (cleared by hand, or a work folder removed) fails only this part, and is exported again next time.
-    if (exported?.glb && !existsSync(exported.glb)) { cache.geometry.delete(geometryKey); return "export"; }
-    if (!located || !exported?.glb) return located && toolFailures.has(located.archive.id) ? "tool" : "export";
+    if (exported?.glb && !existsSync(exported.glb)) {
+      cache.geometry.delete(geometryKey);
+      dropped(component, `its exported shape (${shape}) was removed before it could be used; it is exported again next time.`);
+      return "export";
+    }
+    if (!located) { dropped(component, `its shape (${shape}) isn't in any archive your game loads.`); return "export"; }
+    if (!exported?.glb) {
+      const tool = toolFailures.has(located.archive.id);
+      dropped(component, tool ? `WolvenKit couldn't read ${located.archive.name}.`
+        : `WolvenKit couldn't export its shape (${located.depotPath}) from ${located.archive.name}.`);
+      return tool ? "tool" : "export";
+    }
+    if (exported.repair) note(`${component.component}: WolvenKit couldn't export its shape as it is, so it was exported from a repaired copy: ${exported.repair}.`);
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};
@@ -704,8 +722,14 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     }
     // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws. A face detail made only of
     // decal templates the preview can't draw yet is kept, hidden, so the renderer reports it (limit `decal-template`).
-    if (!materials.length || (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)))
+    if (!materials.length) {
+      dropped(component, `none of its ${component.materials.length} chunk(s) could be drawn, because an input they need couldn't be read.`);
       return "export";
+    }
+    if (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
+      dropped(component, "its chunks use only materials the preview can't draw yet.");
+      return "export";
+    }
     const glb = storeChunkGeometry(options.storeRoot, exported.glb, materials.map(material => material.chunk));
     if (!glb.trimmed) note(`${component.component}: the exported geometry is served whole.`);
     if (component.skippedChunks) note(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
@@ -730,7 +754,12 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     componentNotes = []; componentTextures = new Map();
     let built: ReturnType<typeof build>;
     // One part that can't be built leaves only its slot unshown; it never costs the V's other details.
-    try { built = build(component); } catch (error) { log(`${component.component} could not be served: ${(error as Error).message}`); built = "export"; }
+    try { built = build(component); }
+    catch (error) {
+      log(`${component.component} could not be served: ${(error as Error)?.stack ?? error}`);
+      dropped(component, `it couldn't be prepared (${String((error as Error)?.message ?? error).slice(0, 160)}).`);
+      built = "export";
+    }
     notes.push(...componentNotes);
     if (typeof built === "string") { failSlot(component.slot, built); continue; }
     components.push(built);
