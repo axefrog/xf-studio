@@ -62,6 +62,8 @@ Captured with `tools/body-look.ts` (headless Chrome, ANGLE D3D11 on an RTX 4070,
 
 `renderer.info.memory` with the body shown and hidden was the same (the toggle releases nothing); the real-GPU probe (`tests/webgl-body.test.ts`) measures the draw, the toggle, the depth range and the release on a synthetic body.
 
-**Makeup screenshot parity** (`tools/scene-parity.ts`, the step-7 gate): two captures of `main` at `4053038` and one of this branch with the body shown (its default): all 20 frames identical to a base capture once the viewport toolbar's corner (x 380–583, y 0–47 of each 584×788 frame) is left out, where the new whole-body button shifts the toolbar's icons; with the corner included every frame differs in exactly those 831 toolbar pixels.
+**Makeup screenshot parity** (`tools/scene-parity.ts`, the step-7 gate), with the body shown (its default), leaving out the viewport toolbar's corner (x 380–583, y 0–47 of each 584×788 frame), where the new whole-body button shifts the toolbar's icons (with the corner included every frame differs in exactly those 831 pixels):
+- against two captures of `main` at `4053038`: all 20 frames of the branch identical to a base capture;
+- after merging `main` at `9ca6c78`, against two new captures of it: 19 frames identical; the first creator frame (`bare-creator-1024`) differs from the nearest base in 4 pixels by one step, the known run-to-run noise of that frame (the two new base captures themselves differ in 3 pixels by one step on `board2-creator-2048`).
 
 **Tooling note**: the memory guard started through the `python` alias from the Windows app store package runs its children inside the package's AppData virtualization, so the localhost host found no saved settings (`%LOCALAPPDATA%\XF Studio`) and asked for setup; started through the interpreter's own path it found them.
