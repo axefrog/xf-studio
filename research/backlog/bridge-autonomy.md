@@ -44,6 +44,20 @@ Batch these into the next bridge session's test card:
 3. Switch light 1 on through attribute 44 once rank 1 is built; note where it appears relative to the camera.
 4. With the cursor hide built, capture with the cursor over V's face.
 
+## Suggestions from the sessions plan
+
+The [next-sessions plan](../runtime/next-sessions-plan.md#bridge-suggestions-for-the-autonomy-backlog) lists the player steps its ten sittings still need, as B1–B10 (unranked here until the autonomy checks have run):
+- `cc.open` (rank 4) removes about 30 creator-opening asks.
+- `world.time.set` in the appearance screen.
+- `cc_apply` in the session scripts for the vanilla rows still asked by hand; a script generator change only.
+- A read, then a write, of graphics settings (upscaler, RT/PT, SSS quality).
+- A spawned light that moves in elevation (rank 10).
+- A read-only GameOptions dump.
+- A worn-item read, then equip and unequip.
+- A full-body camera preset.
+- `cc.page`, if `cc_apply` doesn't move the creator camera.
+- Photo-mode NPC hiding (rank 7).
+
 ## Decisions for the maintainer
 
 All three approved on 26 September 2026, each confined to the test profile's -writes build:
