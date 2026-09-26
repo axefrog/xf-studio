@@ -29,6 +29,7 @@ import { tweakDbId } from "../src/tweakdb-flats";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { compareDocuments, isNameOnly } from "../src/native/document-diff";
 import { loadGameOodle } from "../src/native/oodle";
+import { DecodeSession } from "../src/native/limits";
 import { writeResourceJson } from "../src/native/red-json-writer";
 import { NativeUnsupportedError } from "../src/native/red-model";
 import { readResourceModel } from "../src/native/resource-document";
@@ -162,13 +163,14 @@ for (const name of files) {
   row.count++; row.bytesOk++;
   const start = performance.now();
   let model;
-  try { model = readResourceModel(bytes, oodle.decompress); }
+  const session = new DecodeSession();
+  try { model = readResourceModel(bytes, oodle.decompress, session); }
   catch (error) {
     if (error instanceof NativeUnsupportedError) row.unsupported++; else { row.errors++; failures.push(`${meta.path ?? meta.hash}: ${(error as Error).message}`); }
     continue;
   }
-  if (learn) { observe(writeResourceJson(model, { buffers: "trim", omitDefaults: true }).Data, entry.document.Data); continue; }
-  const mine = writeResourceJson(model, { buffers: "trim" });
+  if (learn) { observe(writeResourceJson(model, { buffers: "trim", omitDefaults: true }, session).Data, entry.document.Data); continue; }
+  const mine = writeResourceJson(model, { buffers: "trim" }, session);
   row.ms += performance.now() - start;
   const mismatches = compareDocuments(mine.Data, entry.document.Data);
   if (!mismatches.length) row.docsEqual++;
