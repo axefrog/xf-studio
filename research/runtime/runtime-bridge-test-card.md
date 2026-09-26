@@ -23,7 +23,15 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
    | `xf-runtime-bridge-0.2.0-diagnostic.zip` | on, read-only | Any other diagnostic profile |
    | `xf-runtime-bridge-0.2.0.zip` | off | Distribution default |
 
-   Check the zip's SHA-256 against the build record in the handoff or merge notes, and that its `red4ext/plugins/XFRuntimeBridge/manifest.json` says `"variant": "writes"`, `"allow_writes": true` and the expected `commit`. The self-test (`bun tools/selftest.ts`) and `bun test tools` must pass on that commit.
+   **Build record** (26 September 2026, commit `7899779e13e5`, clean tree; self-test 95 of 95 and `bun test tools` 50 of 50 passed on that build):
+
+   | Zip | SHA-256 |
+   |---|---|
+   | `-writes` | `afb8eb83e3c906dc5da6947d0ada9e04e3c41afc1b138cc5f6c82e7fbb4db470` |
+   | `-diagnostic` | `3b4da17c9e61b437c6bf3c4ea1b421965813887529044c072b03abaacb349a5b` |
+   | default | `03d874c56e2f8c9f5d6a01b75b7b21fe5ec78febdbb1b00a940254869e0a3bb8` |
+
+   A rebuild after merging gives new hashes (the DLL embeds the commit); record them here if the staged zip is rebuilt. Check the zip's SHA-256 against the build record, and that its `red4ext/plugins/XFRuntimeBridge/manifest.json` says `"variant": "writes"`, `"allow_writes": true` and the expected `commit`. The self-test (`bun tools/selftest.ts`) and `bun test tools` must pass on that commit.
 
 2. **Stage one mod entry** in MO2 profile **`XF Studio diagnostic 2026-09-25`** only:
    - Create the mod **`XF Runtime Bridge`** from `xf-runtime-bridge-0.2.0-writes.zip` (MO2 *Install a new mod from an archive*, name it exactly that). The zip's root is the game folder: `bin/`, `r6/`, `red4ext/`.
@@ -67,7 +75,7 @@ Tool names are the MCP names; the CLI takes the dotted name (`bridge_ping` is `b
 | 5 | C | `game_status`, `player_appearance`, `photo_state` | Phase `gameplay`, `player_present: true`, `saving_locked: false`, `bridge_save_lock: false`; body, voice and life path; photo mode `active: false`, `can_open: true`. | — |
 | 6 | C | `capture_screenshot` (full), then with `region: "center-16x9"` | A preview no wider than 1280 px that shows the game, not black; the full-resolution file path; the sidecar records the route (`printwindow` or `screen`) and window size 3840×1600. | — |
 | 7 | C | `world_time_set` `{hours: 21, minutes: 0}` | Night lighting within a second or two. Result has `before_total_seconds` and `undo`. `game_status` now shows `saving_locked: true`, `bridge_save_lock: true` (the save lock taken before the first change). | `world_time_set` with the result's `total_seconds` |
-| 8 | C | `world_pause` `{paused: true}`, look, then `{paused: false}` | Everything around V stops, then moves again. | `world_pause {paused: false}` (the kill switch also unfreezes) |
+| 8 | C | `world_pause` `{paused: true}`, look, then `{paused: false}` | The world stops (V too: the freeze copies the mirror screen's, which also holds the player), then moves again. | `world_pause {paused: false}` (the kill switch also unfreezes) |
 | 9 | C | `photo_enter` | Photo mode opens by itself (Codeware quest node, a [hypothesis] outside quests). If it answers but nothing opens, or refuses: M presses the photo-mode key; C runs `game_wait {phase: ["photo_mode"]}`. Record which. | `photo_exit` |
 | 10 | C | Wait 2 s. `photo_state {options: true}` | Every menu item with its key, label, range or options and current value. Record: whether keys 1 (field of view), 26 (depth of field), 28 (expression), 37 (up/down) and 43–53 (lights) match the [research keys](runtime-bridge-design.md#73-photo-mode); the light on/off key; film grain and chromatic aberration keys. | — |
 | 11 | C | `photo_camera_set {fov: 30}`, then `{reset: true}` | The view widens or narrows, then returns. `applied` lists each change with its before value. | The result's `undo`, or `reset` |
