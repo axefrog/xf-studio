@@ -258,10 +258,19 @@ The view header shows a small link badge per shared slot, lettered per node ("Ca
 
 ### 3.6 Undo scope
 
-- **Camera, light and display changes** record no Undo. They remain workspace view state, as the Camera & light panel already states (`preview.ts:153`), and they never enter look history, recipes or exports.
-- **Graph edits** record no look history either: a view is not part of a look. Close view is recoverable through Reopen closed view. Close view and Unlink offer a toast **Undo**, backed by a session-only graph step list (20 steps) that is never persisted.
-- **Tool toggles** are view state, not Undo.
-- **Gestures** stay exactly as today: one application-wide open gesture, from whichever view started it, recorded in the look history.
+Revised 27 September 2026 after the maintainer asked why the graph shouldn't be undoable. The answer: it should, but in **its own history**, never mixed into look history.
+
+- **Look history stays pure.** Ctrl+Z while editing makeup never undoes a camera orbit or a light change, and looks, recipes and exports never carry view state.
+- **A second history, "View and lighting"**, per workspace. It records deliberate edits:
+  - light rig changes (presets, a light's colour, strength or position, rig swaps);
+  - display settings;
+  - graph edits (add, close, link, unlink or duplicate a view; module visibility);
+  - discrete camera jumps (Front view, Whole body, Frame V, a saved camera, applying a pose's framing).
+
+  Each continuous drag coalesces into one step, as look edits already do.
+- **Camera navigation is not recorded** (orbit, zoom, pan), the way Blender and most 3D tools treat view navigation. A camera Back/Forward instead returns to where the camera was before the last jump or long navigation, per camera node, so a shared camera shares its trail.
+- **Which history Undo acts on** follows the existing focus rule (the Character panel's Undo already works by focus): Ctrl+Z in a viewport, the Camera & light panel or the view graph acts on View and lighting; everywhere else on the look. The History panel shows both histories as separate categories. The header Undo acts on the focused scope and says which ("Undo light change").
+- **Persistence:** View and lighting history is session-only; the graph state itself is saved with the workspace.
 
 ### 3.7 Rendering and performance
 
@@ -505,7 +514,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 | Q1 | Are modules exclusive or combinable? | Combinable, from a Modules menu; named workspaces later, as saved sets |
 | Q2 | Does a hidden module's content still draw on V? | Yes, the look is unchanged; each view can hide a module's content |
 | Q3 | What does a new view share? | Scene, lights and display; camera copied; tools fresh. Compare lighting as its own command. |
-| Q4 | Do camera, light or graph edits enter Undo? | No; they are workspace view state. Close view is reopenable, and Close and Unlink offer a toast Undo. |
+| Q4 | Do camera, light or graph edits enter Undo? | Yes, in their own **View and lighting** history, separate from look history; camera navigation itself isn't recorded, discrete camera jumps are, with a camera Back/Forward (§3.6; revised 27 September). |
 | Q5 | How many views may show at once, and at what cost? | 4 visible; focused view at full rate, others at half while animating; hidden views paused |
 | Q6 | Are the placeholders shown by default? | Listed under Modules as Preview and hidden until switched on; the `?verify=1` tests switch them on |
 | Q7 | Should a view be able to show a look other than the selected one (compare presets A and B)? | Later (P6): it needs raster jobs for a non-live look |
