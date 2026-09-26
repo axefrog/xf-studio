@@ -48,7 +48,7 @@ test("a monitor move or page zoom reports the new capped ratio and re-arms for t
 });
 
 test("the scene applies the capped ratio at start and watches for changes, releasing the watch with the scene", () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", "scene-host.ts"), "utf8") as string;
   expect(source).toContain("renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio))");
   expect(source).toContain("releases.push(watchDevicePixelRatio(window, pixelRatio => { renderer.setPixelRatio(pixelRatio); resize(); invalidate(); }))");
 });

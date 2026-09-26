@@ -187,7 +187,8 @@ describe("render record versions", () => {
 // Complexion mods and texture frameworks work through archive precedence and ArchiveXL patches, so none of
 // their names, archives or donor paths may appear either, nor any particular skin type or tone.
 describe("rendering boundary", () => {
-  const RENDERING_PATH = ["scene", "render-detail", "render-templates", "character-detail-plan", "character-detail-request",
+  const RENDERING_PATH = ["platform/scene/scene-host", "platform/scene/head-rig", "platform/scene/character-renderer",
+    "platform/scene/feature-renderers", "platform/api/scene", "features/eye-makeup/render/index", "render-detail", "render-templates", "character-detail-plan", "character-detail-request",
     "character-detail-service", "character-detail-host", "character-detail-server", "character-detail-loader", "character-detail-actions",
     "character-material-adapters", "browser-character-detail-device", "brow-material", "hair-shading", "hair-colour-model",
     "browser-head-attachment", "browser-scene-preview-ports", "material-template", "skin-material", "head-surface", "eye-material",
