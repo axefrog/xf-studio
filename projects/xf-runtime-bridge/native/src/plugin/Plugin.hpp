@@ -52,6 +52,11 @@ struct State
     std::string gameFileVersion;    // exe version resource (e.g. 3.0.80.51928)
     std::atomic<int> gameState{-1}; // RED4ext::EGameStateType, -1 before BaseInitialization
     std::atomic<uint64_t> runningTicks{0};
+
+    // Set by the first successful write; the kill switch then undoes what the bridge left on
+    // (world freeze, hidden photo UI, save lock) once, from the next game-thread tick.
+    std::atomic<bool> writesUsed{false};
+    std::atomic<bool> restoreDone{false};
 };
 
 State& Get();

@@ -115,6 +115,46 @@ std::string SerializeJson(const json& aValue)
     return aValue.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
+json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
+                 const std::string& aLabel)
+{
+    json envelope;
+    std::string error;
+    const auto result = aQueue.Run(
+        [aTask]() -> json {
+            try
+            {
+                return json{{"ok", true}, {"result", aTask()}};
+            }
+            catch (const MethodError& e)
+            {
+                return json{{"ok", false}, {"code", e.code}, {"message", e.what()}};
+            }
+        },
+        aTimeout, envelope, error, aLabel);
+    switch (result)
+    {
+    case QueueResult::Done:
+        if (envelope.value("ok", false))
+        {
+            return envelope["result"];
+        }
+        throw MethodError(envelope.value("code", std::string("failed")), envelope.value("message", std::string()));
+    case QueueResult::Timeout:
+        throw MethodError("timeout", "the game thread did not start the step in time; it was cancelled (" + aLabel + ")");
+    case QueueResult::TimeoutAfterStart:
+        throw MethodError("timeout_after_start",
+                          "a game-thread step started but did not finish in time (" + aLabel + "); it may still complete");
+    case QueueResult::QueueFull:
+        throw MethodError("busy", "too many requests are waiting for the game thread");
+    case QueueResult::NotPumping:
+        throw MethodError("game_not_running", "the game is not in its Running state");
+    case QueueResult::Failed:
+        break;
+    }
+    throw MethodError("failed", error.empty() ? "game-thread step failed" : error);
+}
+
 bool IsValidCid(const std::string& aCid)
 {
     if (aCid.empty() || aCid.size() > 64)

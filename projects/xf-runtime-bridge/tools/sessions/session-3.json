@@ -1,0 +1,1557 @@
+{
+  "schema": "xfb/session-script-1",
+  "name": "session-3",
+  "title": "Session 3: Glitter board, blink and creator checks",
+  "card": "experiments/022-session-3/README.md",
+  "requires": [
+    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (the experiment 021 Glitter board) and XF Runtime Bridge (-writes build)",
+    "a loaded save with V in the world, next to a mirror",
+    "a fresh manual safety save (step p0-ready)",
+    "session 2 done through the bridge (camera presets calibrated)"
+  ],
+  "steps": [
+    {
+      "do": "run",
+      "label": "p0-bridge",
+      "command": "bridge.info"
+    },
+    {
+      "do": "run",
+      "label": "p0-status",
+      "command": "game.status"
+    },
+    {
+      "do": "ask",
+      "label": "p0-ready",
+      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Check that the XF selector lists Off plus six Glitter presets. Stand next to a mirror, but don't open it yet."
+    },
+    {
+      "do": "note",
+      "label": "p0-mirror",
+      "text": "Open a mirror's appearance screen and go to the page with the XF row. Zoom its camera onto the face as far as it goes, then leave the camera alone until the mirror part ends."
+    },
+    {
+      "do": "run",
+      "label": "p0-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-xf-values",
+      "command": "player.appearance",
+      "input": {
+        "option": "XF"
+      }
+    },
+    {
+      "do": "capture",
+      "label": "a-xf-off"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-mirror-a-apply",
+      "option": "XF",
+      "index": 1
+    },
+    {
+      "do": "wait",
+      "label": "a-mirror-a-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-mirror-a-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-mirror-b-apply",
+      "option": "XF",
+      "index": 2
+    },
+    {
+      "do": "wait",
+      "label": "a-mirror-b-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-mirror-b-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-mirror-c-apply",
+      "option": "XF",
+      "index": 3
+    },
+    {
+      "do": "wait",
+      "label": "a-mirror-c-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-mirror-c-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-mirror-d-apply",
+      "option": "XF",
+      "index": 4
+    },
+    {
+      "do": "wait",
+      "label": "a-mirror-d-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-mirror-d-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-mirror-e-apply",
+      "option": "XF",
+      "index": 5
+    },
+    {
+      "do": "wait",
+      "label": "a-mirror-e-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-mirror-e-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-mirror-f-apply",
+      "option": "XF",
+      "index": 6
+    },
+    {
+      "do": "wait",
+      "label": "a-mirror-f-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-mirror-f-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-a-apply",
+      "option": "XF",
+      "index": 1
+    },
+    {
+      "do": "wait",
+      "label": "a-a-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-a-mirror"
+    },
+    {
+      "do": "note",
+      "label": "a-a-confirm",
+      "text": "At the mirror: Confirm to keep XF = Glitter A · base, then leave the appearance screen. Nothing is saved."
+    },
+    {
+      "do": "run",
+      "label": "a-a-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-a-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-a-photo-key",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "a-a-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-a-effects",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-eyes-camera",
+      "preset": "eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-a-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-a-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-a-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-face-camera",
+      "preset": "face"
+    },
+    {
+      "do": "wait",
+      "label": "a-a-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-a-face",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-head-and-shoulders-camera",
+      "preset": "head-and-shoulders"
+    },
+    {
+      "do": "wait",
+      "label": "a-a-head-and-shoulders-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-a-head-and-shoulders",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-yaw150-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 150
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-a-yaw150-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-a-yaw150",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-yaw165-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 165
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-a-yaw165-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-a-yaw165",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-yaw195-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 195
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-a-yaw195-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-a-yaw195",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-a-yaw210-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 210
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-a-yaw210-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-a-yaw210",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "a-a-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "note",
+      "label": "a-a-back",
+      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+    },
+    {
+      "do": "run",
+      "label": "a-a-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "a-b-apply",
+      "option": "XF",
+      "index": 2
+    },
+    {
+      "do": "wait",
+      "label": "a-b-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-b-mirror"
+    },
+    {
+      "do": "note",
+      "label": "a-b-confirm",
+      "text": "At the mirror: Confirm to keep XF = Glitter B · mips, then leave the appearance screen. Nothing is saved."
+    },
+    {
+      "do": "run",
+      "label": "a-b-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-b-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-b-photo-key",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "a-b-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-b-effects",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-eyes-camera",
+      "preset": "eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-b-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-b-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-b-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-fov6-camera",
+      "preset": "face",
+      "fov": 6
+    },
+    {
+      "do": "wait",
+      "label": "a-b-fov6-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-b-fov6",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-fov9-camera",
+      "preset": "face",
+      "fov": 9
+    },
+    {
+      "do": "wait",
+      "label": "a-b-fov9-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-b-fov9",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-fov12-camera",
+      "preset": "face",
+      "fov": 12
+    },
+    {
+      "do": "wait",
+      "label": "a-b-fov12-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-b-fov12",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-fov15-camera",
+      "preset": "face",
+      "fov": 15
+    },
+    {
+      "do": "wait",
+      "label": "a-b-fov15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-b-fov15",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-fov20-camera",
+      "preset": "face",
+      "fov": 20
+    },
+    {
+      "do": "wait",
+      "label": "a-b-fov20-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-b-fov20",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "set camera",
+      "label": "a-b-fov30-camera",
+      "preset": "face",
+      "fov": 30
+    },
+    {
+      "do": "wait",
+      "label": "a-b-fov30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-b-fov30",
+      "region": "head-and-shoulders"
+    },
+    {
+      "do": "run",
+      "label": "a-b-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "note",
+      "label": "a-b-back",
+      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+    },
+    {
+      "do": "run",
+      "label": "a-b-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "a-c-apply",
+      "option": "XF",
+      "index": 3
+    },
+    {
+      "do": "wait",
+      "label": "a-c-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-c-mirror"
+    },
+    {
+      "do": "note",
+      "label": "a-c-confirm",
+      "text": "At the mirror: Confirm to keep XF = Glitter C · size, then leave the appearance screen. Nothing is saved."
+    },
+    {
+      "do": "run",
+      "label": "a-c-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-c-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-c-photo-key",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "a-c-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-c-effects",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-c-eyes-camera",
+      "preset": "eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-c-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-c-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-c-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "set camera",
+      "label": "a-c-face-camera",
+      "preset": "face"
+    },
+    {
+      "do": "wait",
+      "label": "a-c-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-c-face",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "a-c-exit-for-dlaa",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "a-c-dlaa",
+      "text": "Card step 5: switch the upscaler to DLAA (or its highest-quality mode) in the graphics settings, then come back to the world."
+    },
+    {
+      "do": "run",
+      "label": "a-c-wait-world-dlaa",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-c-photo-dlaa",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "a-c-wait-photo-dlaa",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-c-effects-dlaa",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-c-dlaa-eyes-camera",
+      "preset": "eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-c-dlaa-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-c-dlaa-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-c-dlaa-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "set camera",
+      "label": "a-c-dlaa-face-camera",
+      "preset": "face"
+    },
+    {
+      "do": "wait",
+      "label": "a-c-dlaa-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-c-dlaa-face",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "a-c-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "a-c-dlaa-undo",
+      "text": "Set the upscaler back to how it was."
+    },
+    {
+      "do": "note",
+      "label": "a-c-back",
+      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+    },
+    {
+      "do": "run",
+      "label": "a-c-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "a-d-apply",
+      "option": "XF",
+      "index": 4
+    },
+    {
+      "do": "wait",
+      "label": "a-d-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-d-mirror"
+    },
+    {
+      "do": "note",
+      "label": "a-d-confirm",
+      "text": "At the mirror: Confirm to keep XF = Glitter D · surface, then leave the appearance screen. Nothing is saved."
+    },
+    {
+      "do": "run",
+      "label": "a-d-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-d-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-d-photo-key",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "a-d-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-d-effects",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-d-eyes-camera",
+      "preset": "eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-d-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-d-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-d-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "set camera",
+      "label": "a-d-yaw150-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 150
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-d-yaw150-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-d-yaw150",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-d-yaw165-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 165
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-d-yaw165-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-d-yaw165",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-d-yaw195-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 195
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-d-yaw195-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-d-yaw195",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-d-yaw210-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 210
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-d-yaw210-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-d-yaw210",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "a-d-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "note",
+      "label": "a-d-back",
+      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+    },
+    {
+      "do": "run",
+      "label": "a-d-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "a-f-apply",
+      "option": "XF",
+      "index": 6
+    },
+    {
+      "do": "wait",
+      "label": "a-f-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-f-mirror"
+    },
+    {
+      "do": "note",
+      "label": "a-f-confirm",
+      "text": "At the mirror: Confirm to keep XF = Glitter F · tilt, then leave the appearance screen. Nothing is saved."
+    },
+    {
+      "do": "run",
+      "label": "a-f-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-f-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-f-photo-key",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "a-f-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-f-effects",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-f-eyes-camera",
+      "preset": "eyes"
+    },
+    {
+      "do": "run",
+      "label": "a-f-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-f-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-f-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "set camera",
+      "label": "a-f-yaw150-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 150
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-f-yaw150-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-f-yaw150",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-f-yaw165-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 165
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-f-yaw165-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-f-yaw165",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-f-yaw195-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 195
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-f-yaw195-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-f-yaw195",
+      "region": "face"
+    },
+    {
+      "do": "set camera",
+      "label": "a-f-yaw210-camera",
+      "preset": "face",
+      "subject": {
+        "yaw": 210
+      }
+    },
+    {
+      "do": "wait",
+      "label": "a-f-yaw210-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "a-f-yaw210",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "a-f-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "note",
+      "label": "a-f-back",
+      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+    },
+    {
+      "do": "run",
+      "label": "a-f-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "a-e-apply",
+      "option": "XF",
+      "index": 5
+    },
+    {
+      "do": "wait",
+      "label": "a-e-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-e-mirror"
+    },
+    {
+      "do": "note",
+      "label": "a-e-confirm",
+      "text": "At the mirror: Confirm to keep XF = Glitter E · accent, then leave the appearance screen. Nothing is saved."
+    },
+    {
+      "do": "run",
+      "label": "a-e-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-e-night",
+      "command": "world.time.set",
+      "input": {
+        "hours": 23,
+        "minutes": 30
+      }
+    },
+    {
+      "do": "run",
+      "label": "a-e-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-e-photo-key",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "a-e-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "ask",
+      "label": "a-e-effects",
+      "text": "In photo mode, turn film grain, chromatic aberration and depth of field off if they're on (the bridge doesn't know their menu keys yet)."
+    },
+    {
+      "do": "set camera",
+      "label": "a-e-face-camera",
+      "preset": "face"
+    },
+    {
+      "do": "run",
+      "label": "a-e-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "a-e-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "a-e-face",
+      "region": "face"
+    },
+    {
+      "do": "ask",
+      "label": "a-e-dark",
+      "text": "Card step 7: is the accent still visible at night? Does it bloom? Would it be acceptable as a labelled stylised option?"
+    },
+    {
+      "do": "run",
+      "label": "a-e-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "run",
+      "label": "a-e-noon",
+      "command": "world.time.set",
+      "input": {
+        "hours": 12,
+        "minutes": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "a-e-back",
+      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+    },
+    {
+      "do": "run",
+      "label": "a-e-wait-mirror",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "apply cc",
+      "label": "a-clear-e-apply",
+      "option": "XF",
+      "index": 5
+    },
+    {
+      "do": "wait",
+      "label": "a-clear-e-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-clear-e-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-clear-a-apply",
+      "option": "XF",
+      "index": 1
+    },
+    {
+      "do": "wait",
+      "label": "a-clear-a-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-clear-a-mirror"
+    },
+    {
+      "do": "apply cc",
+      "label": "a-clear-off-apply",
+      "option": "XF",
+      "index": 0
+    },
+    {
+      "do": "wait",
+      "label": "a-clear-off-settle",
+      "ms": 1500
+    },
+    {
+      "do": "capture",
+      "label": "a-clear-off-mirror"
+    },
+    {
+      "do": "ask",
+      "label": "a-motion",
+      "text": "Card step 8: with Glitter A (set it again if needed), watch a blink and turn V slowly. Did the E → A → Off switch leave any glowing points behind?"
+    },
+    {
+      "do": "ask",
+      "label": "a-winterkissed",
+      "text": "Optional card step 9: only if Winterkissed is already enabled, equip Golden Girl for a reference close-up (don't change the mod list for this). Otherwise skip."
+    },
+    {
+      "do": "capture",
+      "label": "a-winterkissed-shot"
+    },
+    {
+      "do": "ask",
+      "label": "b-shape-01",
+      "text": "Part B: set eye shape 01, close V's eyes (a closed-eyes photo-mode expression, or a blink in the creator), frontal close-up."
+    },
+    {
+      "do": "capture",
+      "label": "b-shape-01-shot"
+    },
+    {
+      "do": "ask",
+      "label": "b-shape-10",
+      "text": "Eye shape 10, eyes closed, same framing."
+    },
+    {
+      "do": "capture",
+      "label": "b-shape-10-shot"
+    },
+    {
+      "do": "ask",
+      "label": "b-shape-12",
+      "text": "Eye shape 12, eyes closed, same framing."
+    },
+    {
+      "do": "capture",
+      "label": "b-shape-12-shot"
+    },
+    {
+      "do": "ask",
+      "label": "b-shape-h011",
+      "text": "The eye shape that uses morph h011, eyes closed."
+    },
+    {
+      "do": "capture",
+      "label": "b-shape-h011-shot"
+    },
+    {
+      "do": "ask",
+      "label": "b-makeup-closed",
+      "text": "Eye shape 12 with an XF look covering the upper lid, eyes closed: does bare skin show between the crease and the lashes?"
+    },
+    {
+      "do": "capture",
+      "label": "b-makeup-closed-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-legacy-off",
+      "text": "Part C step 4 (needs the legacy build on the reference character; otherwise skip): set every legacy XF layer row, lipstick and blush to Off. Does anything remain drawn?"
+    },
+    {
+      "do": "capture",
+      "label": "c-legacy-off-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-hair-5",
+      "text": "Step 5: pick hairstyle 5 without face cyberware."
+    },
+    {
+      "do": "capture",
+      "label": "c-hair-5-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-hair-cyberware",
+      "text": "Now pick a face cyberware that swaps the hairstyle row to its cyberware variant. Is it the same hair?"
+    },
+    {
+      "do": "capture",
+      "label": "c-hair-cyberware-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-piercing-9-black",
+      "text": "Step 7 (if not done in session 2): piercing style 9 in black."
+    },
+    {
+      "do": "capture",
+      "label": "c-piercing-9-black-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-piercing-1-silver",
+      "text": "Piercing style 1 in silver."
+    },
+    {
+      "do": "capture",
+      "label": "c-piercing-1-silver-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-piercing-1-gold",
+      "text": "Piercing style 1 in gold."
+    },
+    {
+      "do": "capture",
+      "label": "c-piercing-1-gold-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-eye-24",
+      "text": "Eye colour 24."
+    },
+    {
+      "do": "capture",
+      "label": "c-eye-24-shot"
+    },
+    {
+      "do": "ask",
+      "label": "c-creator-rows",
+      "text": "Step 6 needs a new game's body page; note the rows in order and any unlabelled row the next time a new game is started. Skip it here."
+    },
+    {
+      "do": "note",
+      "label": "d-start",
+      "text": "Part D (optional): leave the mirror with Back, stand in the world."
+    },
+    {
+      "do": "run",
+      "label": "d-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "d-photo",
+      "command": "photo.enter",
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "d-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "run",
+      "label": "d-menu",
+      "command": "photo.state",
+      "input": {
+        "options": true
+      }
+    },
+    {
+      "do": "ask",
+      "label": "d-neutral",
+      "text": "Set expression Neutral and look-at off in the photo-mode menu."
+    },
+    {
+      "do": "set camera",
+      "label": "d-face-camera",
+      "preset": "face"
+    },
+    {
+      "do": "run",
+      "label": "d-hud",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "d-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "d-neutral-face",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "d-face-9",
+      "command": "photo.expression.set",
+      "input": {
+        "faceId": 9
+      }
+    },
+    {
+      "do": "wait",
+      "label": "d-face-9-settle",
+      "ms": 2000
+    },
+    {
+      "do": "capture",
+      "label": "d-face-9-shot",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "d-face-60",
+      "command": "photo.expression.set",
+      "input": {
+        "faceId": 60
+      }
+    },
+    {
+      "do": "wait",
+      "label": "d-face-60-settle",
+      "ms": 2000
+    },
+    {
+      "do": "capture",
+      "label": "d-face-60-shot",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "d-face-217",
+      "command": "photo.expression.set",
+      "input": {
+        "faceId": 217
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "wait",
+      "label": "d-face-217-settle",
+      "ms": 2000
+    },
+    {
+      "do": "capture",
+      "label": "d-face-217-shot",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "d-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false
+      }
+    },
+    {
+      "do": "ask",
+      "label": "d-menu-sleeping",
+      "text": "Pick Static: Sleeping from the photo-mode expression menu yourself."
+    },
+    {
+      "do": "run",
+      "label": "d-hud-again",
+      "command": "photo.hud.hide"
+    },
+    {
+      "do": "wait",
+      "label": "d-sleeping-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "d-menu-sleeping-shot",
+      "region": "face"
+    },
+    {
+      "do": "run",
+      "label": "d-menu-after",
+      "command": "photo.state",
+      "input": {
+        "options": true
+      }
+    },
+    {
+      "do": "note",
+      "label": "d-cet",
+      "text": "R1 (which facial setup photo mode uses) and XF.graph() still need the CET console lines on the session 3 card; they are optional."
+    },
+    {
+      "do": "run",
+      "label": "d-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "wrap",
+      "text": "Done. Load the safety save to restore your usual look, the time of day and the save lock."
+    }
+  ],
+  "restore": [
+    {
+      "do": "run",
+      "label": "restore-photo-exit",
+      "command": "photo.exit",
+      "continue_on_error": true
+    }
+  ]
+}

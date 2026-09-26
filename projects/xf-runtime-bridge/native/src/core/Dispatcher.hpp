@@ -133,6 +133,13 @@ private:
     std::chrono::steady_clock::time_point m_lastRefill;
 };
 
+// Runs aTask on the game thread through aQueue and waits for it, like a RunOn::GameThread method.
+// For bridge-thread methods that need several game-thread steps with a pause between them (for
+// example selecting a photo-mode light, then setting it a few frames later). Throws MethodError
+// with the same codes a game-thread method would answer (timeout, busy, game_not_running, ...).
+nlohmann::json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout,
+                           const std::function<nlohmann::json()>& aTask, const std::string& aLabel);
+
 // Accepts client-provided correlation ids only if they are short and plain.
 bool IsValidCid(const std::string& aCid);
 } // namespace xfb
