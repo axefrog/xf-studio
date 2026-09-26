@@ -107,7 +107,7 @@ The rule's default is **extra choices in the vanilla `makeupCheeks` switcher** (
 4. **Cheeks:** XF looks join the vanilla `makeupCheeks` row (they replace vanilla freckles and blush while chosen).
 5. **Cheek plate footprint:** cheeks, nose, temples and jaw line; the under-eye band stays with the eye plate.
 6. **Names:** split mods are "XF Brow Artistry" and "XF Cheek Artistry"; several features merged into one mod are "XF Looks".
-7. **Editor reference:** an earlier first-party project's eyebrow editor is the starting point for the Studio's brow editor, adapted to this context (see the brow editor research once written).
+7. **Editor reference:** an earlier first-party project's eyebrow editor is the starting point for the Studio's brow editor, adapted to this context. The proposal is the [brow editor design](../brows/brow-editor-design.md): a field-driven groom (outline, density centres, flow controls) rasterised into the brow's `_d`/`_ds`/`_n` set with greyscale tone so the creator's colour row still applies, a new `strand-field` engine and an `eyebrows` feature module, in six phases.
 
 Still open: the §6/§9 lip selector wording (question 7 below).
 
@@ -136,4 +136,4 @@ None needs a session now; add them to the prepared session in which the first br
 
 ## Related
 
-[Eyebrows](../../knowledge/brows.md) · [Face makeup](../../knowledge/face-makeup.md) · [Evidence](../character-customization/brows-cheeks-evidence.md) · [Feature-module platform](../authoring/feature-module-platform.md) · [Eye-makeup authoring](eye-artistry-authoring.md) · [Jewellery construction set](../jewellery/construction-set-design.md) (the preceding feature's proposal)
+[Eyebrows](../../knowledge/brows.md) · [Face makeup](../../knowledge/face-makeup.md) · [Evidence](../character-customization/brows-cheeks-evidence.md) · [Feature-module platform](../authoring/feature-module-platform.md) · [Eye-makeup authoring](eye-artistry-authoring.md) · [Brow editor design](../brows/brow-editor-design.md) · [Jewellery construction set](../jewellery/construction-set-design.md) (the preceding feature's proposal)
