@@ -7,6 +7,7 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
 import type { LightingStatus } from "../../preview-actions";
+import type { MotionState } from "../../motion-actions";
 import type { DetailLimit, DetailNotice } from "../../detail-limits";
 import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
 
@@ -208,7 +209,12 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const play = button({ label: "Play blink", icon: "play", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.playBlink", playing: !motion?.blinkPlaying });
   } });
-  const blinkNote = note("");
+  // The note links the preparation guide while the blink isn't ready (UI-62).
+  const blinkNoteText = h("span", {});
+  const blinkGuide = h("button", { class: "link-button", type: "button", text: "How to prepare the blink", hidden: true, onclick: () => {
+    void rt.port.links.open("blink-guide").then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Blink", outcome.message); });
+  } });
+  const blinkNote = h("p", { class: "note muted" }, blinkNoteText, " ", blinkGuide);
   const element = h("div", { class: "panel-content" },
     section("Game idle", idle.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
     section("Blink", blink.element, h("div", { class: "row" }, play), blinkNote));
@@ -230,11 +236,20 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
-      setText(blinkNote, !motion ? "" : !motion.blinkAvailable
-        ? `${motion.blinkError ?? "The game's blink hasn't been prepared on this computer yet."} It is made once from your own game files, like the idle; the idle guide shows how.`
-        : "The game's own normal blink, solved from your game files: lids, lashes, brows and makeup move together. Closure scrubs its closing half; Play blink plays it at the game's speed, repeated every 2.45 s (the idle's average spacing). Off while the idle plays, which blinks on its own.");
+      setText(blinkNoteText, blinkNoteLine(motion));
+      blinkGuide.hidden = !motion || motion.blinkAvailable;
     },
   };
+}
+
+/** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
+export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError" | "blinkRepeatSeconds"> | undefined): string {
+  if (!motion) return "";
+  if (!motion.blinkAvailable) return `${motion.blinkError ?? ""} It is made once from your own game files, like the idle.`.trim();
+  const seconds = Number(motion.blinkRepeatSeconds.toFixed(2));
+  return "The game's own normal blink, solved from your game files: lids, lashes, brows and makeup move together. Closure scrubs its closing half; "
+    + `Play blink plays it at the game's speed, repeated every ${seconds} s (a Studio choice: the idle's average blink spacing). `
+    + "Off while the idle plays, which blinks on its own.";
 }
 
 export function qualityPanel(rt: StudioRuntime): PanelController {

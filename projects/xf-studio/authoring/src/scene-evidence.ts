@@ -24,10 +24,10 @@ export function coreSceneEvidence(input: {
     coreDetail: input.coreDetail,
     meshes: input.meshes.map(m => ({ name: m.name, vertices: vertices(m), morphs: m.morphTargetInfluences?.length ?? 0,
       skinSets: m instanceof THREE.SkinnedMesh ? skinSets(m.geometry).length : 0 })),
-    /** The game's blink: which clip Play blink uses and how many preview bones it drives. */
+    /** The game's blink: which clip Play blink uses, the rig it was solved on (absent in older bakes) and how many preview bones it drives. */
     blink: { available: !!input.blink, error: input.blinkError, clip: input.blink?.description.clip.animation,
       clipDuration: input.blink?.clipDuration, closureSteps: input.blink?.description.closure.steps,
-      repeatSeconds: input.blink?.repeatSeconds, mappedBones: input.blink?.bindings.length ?? 0 },
+      repeatSeconds: input.blink?.repeatSeconds, rig: input.blink?.description.rig, mappedBones: input.blink?.bindings.length ?? 0 },
     eyeShape: input.eyeShape,
     profileEncoding: input.profileEncoding,
     idle: { available: !!idle, error: input.idleError, clip: idle?.clip.name, duration: idle?.clip.duration,

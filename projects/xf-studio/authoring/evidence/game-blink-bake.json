@@ -764,11 +764,17 @@
     "l_J_eye_lid_lashes_up_rowA_2_JNT",
     "r_J_eye_lid_lashes_up_rowA_2_JNT"
   ],
-  "outputBytes": 725044,
-  "outputSha256": "f95ba7e7611390436e79e5dec4090c01953d26c21a760eeb83ea0620f9ca2170",
+  "outputBytes": 725180,
+  "outputSha256": "10bbd5d88bfc889d4ac41b9f6c47d923ad8f05e81cfec8089f3b1bc1004558d2",
   "trackPolicy": "AdditiveFromRefPose: decoded track values added to rig referenceTracks; the closure is the clip from 0 to closedTime",
+  "rig": {
+    "skeleton": "h0_000_pwa_c__basehead_skeleton.rig",
+    "bodyGender": "female"
+  },
   "setup": {
-    "used": "h0_000_pwa_c__basehead_rigsetup.facialsetup (the female head's own setup, beside its skeleton)",
+    "used": "h0_000_pwa_c__basehead_rigsetup.facialsetup",
+    "sha256": "aae907a8e308dd3261627778aa546e7e79182ef88ad0f93c946c9ac2034db458",
+    "role": "the female head's own setup, beside its skeleton",
     "alsoReferenced": "The female face-rig entity names base\\characters\\head\\pma\\h0_001_ma_c__player\\h0_001_ma_c__player_rigsetup.facialsetup; which one the engine solves V's face with is untested"
   },
   "limitations": [

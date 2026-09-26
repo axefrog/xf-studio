@@ -50,7 +50,7 @@ python projects/xf-studio/authoring/tools/bake_game_blink.py --addon D:/Dev/Cybe
 cd projects/xf-studio/authoring; bun tools/verify_blink.ts
 ```
 
-`--setup`, `--output` and `--evidence` bake a comparison (the male setup below) without touching the Studio's asset.
+`--setup` bakes a comparison (the male setup below) and requires `--output` and `--evidence`, so the Studio's asset and the tracked report are never overwritten by one. The report names the setup actually used, with its SHA-256, and the rig and body type (`rig`, also in the asset's `asset.extras.rig`); an identical re-bake leaves the report untouched.
 
 ## What the setup says about a blink
 
@@ -78,7 +78,7 @@ The preview had ignored these binds, so the lids turned about the base eye centr
 | `h091` | 22.0 % / 16.8 % | 14.5 % / 12.0 % | 6.7 % / 5.0 % | **7.5 % / 4.8 %** |
 | `h211` | 16.3 % / 18.1 % | 10.3 % / 12.3 % | 0 / 0 | **0 / 0** |
 
-(The "stays" and "rows" columns are from the pure blink pose before the slider switched to the normal clip; the clip changes these figures by under a percentage point.) The adopted rule is best on the sum but not everywhere; the remaining exposure on `h011`/`h091` is a slit about 1 mm high along the lid line (7 to 16 mm²), the same "narrow lower strip" experiment 015 found in the idle. Nothing here establishes the engine's rule: how it blends the binds of five active region targets, what it does with unlisted joints, and whether the game's own blink closes these shapes completely are the next in-game comparison.
+(The "stays" and "rows" columns are from the pure blink pose before the slider switched to the normal clip; the clip changes these figures by under a percentage point.) The adopted rule is best on the sum but not everywhere: on `h011` it is worse than turning about the base centre (10.2 / 5.5 % against 3.6 / 0 %), a regression the in-game comparison must settle. `h111` (save B) was not measured here, only seen in the browser. The remaining exposure on `h011`/`h091` is a slit about 1 mm high along the lid line (7 to 16 mm²), the same "narrow lower strip" experiment 015 found in the idle. Nothing here establishes the engine's rule: how it blends the binds of five active region targets, what it does with unlisted joints, and whether the game's own blink closes these shapes completely are the next in-game comparison.
 
 ## Offline check
 
@@ -105,5 +105,6 @@ The retired study also hid the eye, but only by driving the upper lid 3.4 mm thr
 - The blink and the idle are not blended: the idle already blinks (its own tracks), and solving both together would need the solver at runtime (the correctives are not additive). The blink controls are off while the idle plays, as before.
 - The per-shape joint binds are applied to the blink only; the idle still turns the lids about the base centres.
 - Modded eye shapes without binds in the bake use the base seat.
+- The preview refuses a blink whose rig doesn't sit on the preview head's skeleton (any bound joint more than 0.1 mm from its rig rest; the derived female head matches to 0.0003 mm), so another body type's or a modded head can't turn the lids about the wrong centres. Details (brows, lashes, hair, piercings) follow the checked rig in world space, so their own binds may differ: three cached hair meshes bind eye and mouth joints 5 to 8 mm away.
 
 Community learning and tools: [Cyberpunk Blender Add-on / IO Suite](../../docs/community-credits.md#cyberpunk-blender-add-on-io-suite) (solver, run unmodified as an external tool), [WolvenKit](../../docs/community-credits.md#wolvenkit) (extraction, serialization, animation export).

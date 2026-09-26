@@ -215,7 +215,8 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   // The frame loop is the scheduler's, not an always-on animation loop.
   expect(source).not.toContain("setAnimationLoop");
   expect(source).toContain("bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting })");
-  expect(source).toContain("playing.onChange = invalidate");
+  // The idle and the blink request frames through their composition (tests/game-blink-composition.test.ts).
+  expect(source).toContain("releases.push(rigMotion.connect(invalidate));");
 });
 
 test("the authored plate's light, skin and composite change only inside calls that request a frame, and idle costs nothing", async () => {
