@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { previewClipPlanes } from "../../camera-depth";
-import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "../../camera-framing";
+import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../camera-depth";
+import { BODY_FRAME, bodyCameraDistance, frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "../../camera-framing";
 import { coreSceneEvidence } from "../../scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../viewport-size";
@@ -122,6 +122,18 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     return requested > distance;
   }
   front();
+  /** The whole-body view: the same frontal orbit, aimed at the body's middle and far enough to fit a standing V (camera-framing.ts). */
+  function frameBody() {
+    frontPending = false;
+    const requested = bodyCameraDistance(camera.fov, retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
+    const distance = Math.min(MAX_CAMERA_DISTANCE - .005, requested);
+    camera.position.set(0, BODY_FRAME.targetHeight, -distance);
+    controls.target.set(0, BODY_FRAME.targetHeight, 0.005);
+    camera.position.add(idleFrameOffset);
+    controls.target.add(idleFrameOffset);
+    controls.update();
+    return requested > distance;
+  }
   // The studio stage's room environment, key, fill and rim (studio-light-rig.ts).
   const studio = createStudioLightRig(renderer, scene);
   releases.push(() => studio.dispose());
@@ -174,8 +186,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     return true;
   };
   const frameListeners = new Set<(dt: number) => void>();
-  // Reused every frame: the head centre the clip planes are measured from.
-  const centre = new THREE.Vector3();
+  // Reused every frame: the head centre (and, while the body shows, the body's) the clip planes are measured from.
+  const centre = new THREE.Vector3(), bodyCentre = new THREE.Vector3();
   // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or
   // Play blink runs. The host's own mutators, the feature renderers' changes, the lighting device, the idle,
   // the controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
@@ -188,7 +200,12 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
       // At long orbits, move the near plane in front of a conservative head
       // envelope so the thin makeup plate retains depth precision.
       centre.set(0, 1.67, 0).add(idleFrameOffset);
-      const clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
+      let clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
+      // With the body shown, the depth range covers it too (the head views are unchanged while it is hidden).
+      if (character.bodyShown()) {
+        bodyCentre.set(0, BODY_ENVELOPE.centreHeight, 0).add(idleFrameOffset);
+        clip = bodyClipPlanes(clip, controls.getDistance(), camera.position.distanceTo(bodyCentre));
+      }
       if (clip.near !== camera.near || clip.far !== camera.far) {
         camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
       }
@@ -252,6 +269,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     evidence,
     resize,
     front,
+    /** Frame the whole body (the whole-body view); true when the lens is too narrow to fit it within the orbit's reach. */
+    frameBody,
     /** A composed feature's renderer, typed by its factory (the composition root hands its devices what they need; the host names no feature). */
     feature: <R extends FeatureRenderer>(factory: FeatureRendererFactory<R>): R | undefined => features?.get(factory),
     /** The composed features that draw, in creation order. */
@@ -279,6 +298,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     characterDetailsEvidence: () => ({ ...character.evidence(), memory: { ...renderer.info.memory } }),
     /** Piercings are a visibility preference: the V's own (or a tried style) arrive with the character record and follow it. */
     setPiercings: (enabled: boolean) => character.setSlotVisible("piercings", enabled),
+    /** The V's body (body, arms, hands, feet and their decals) is a visibility preference too; it arrives with the character record. */
+    setBody: (enabled: boolean) => character.setSlotVisible("body", enabled),
     /** Developer evidence: each baked layered part's packed maps read back at their centre texel. */
     layeredSamples: character.layeredSamples,
     /** The idle rig; its own changes (seek, pause) request a frame through `onChange`. */
@@ -345,7 +366,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     studioLighting: () => studio.state(),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
-  return { ...api, ...invalidating(api, ["resize", "front", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
-    "setCharacterDetails", "setPiercings", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
+  return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
+    "setCharacterDetails", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

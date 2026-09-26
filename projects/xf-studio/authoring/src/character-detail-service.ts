@@ -40,7 +40,7 @@ import { keepGlbMeshes } from "./glb";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
-import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
+import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
   type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
@@ -53,7 +53,7 @@ import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolut
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair and piercings" },
+  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair, piercings and body" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -102,8 +102,8 @@ export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
     message: string, readonly detail = "") { super(message); }
 }
-const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair and piercings aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes, hair and piercings aren't shown yet. The head still works.";
+const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown. The head still works.";
+const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown yet. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -825,7 +825,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       // A chunk missing an input its adapter can't draw without is left out rather than drawn wrongly. An optional input
       // (the adapter falls back to the template's neutral value) or one recorded for a later adapter only earns a note.
       const inputs = renderTemplate(material.template, material.templateName);
-      const required = new Set(inputs ? templateRequired(inputs, component.slot === "face") : unread.map(entry => entry.param));
+      const required = new Set(inputs ? templateRequired(inputs, decalFamilySlot(component.slot)) : unread.map(entry => entry.param));
       const words = (entries: typeof unread) => entries.map(entry => entry.why ? `${entry.param} (${entry.why})` : entry.param).join(", ");
       const blocking = unread.filter(entry => required.has(entry.param)), optional = unread.filter(entry => !required.has(entry.param));
       if (blocking.length) {
@@ -844,7 +844,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       dropped(component, `none of its ${component.materials.length} chunk(s) could be drawn, because an input they need couldn't be read.`);
       return "export";
     }
-    if (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
+    if (!decalFamilySlot(component.slot) && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
       dropped(component, "its chunks use only materials the preview can't draw yet.");
       return "export";
     }
@@ -859,7 +859,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
         sources: [{ depotPath: located.depotPath, archive: located.archive.name, provider: located.archive.provider,
           ...(hexSha(component.drawnFrom.extractedSha256) ? { sha256: hexSha(component.drawnFrom.extractedSha256)! } : {}) }] },
       renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
-      ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}) };
+      ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}),
+      ...(component.morphs ? { morphs: component.morphs } : {}) };
   };
   let reusedComponents = 0;
   for (const component of plan.components) {

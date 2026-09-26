@@ -163,6 +163,7 @@ function viewSection(rt: StudioRuntime, kind: ViewportHostKind): MenuSection {
   const preview = port.authoring.previewState().preview;
   return { label: "Head view", items: [
     { kind: "action", label: "Front view", icon: "front", shortcut: shortcutLabel("head.front"), capability: port.authoring.capability({ kind: "camera.front" }), run: () => { rt.dispatch({ kind: "camera.front" }); } },
+    { kind: "action", label: "Whole body view", icon: "body", capability: port.authoring.capability({ kind: "camera.body" }), run: () => { rt.dispatch({ kind: "camera.body" }); } },
     { kind: "action", label: "Surface controls", icon: "handles", checked: !!preview?.surface,
       capability: port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }),
       run: () => { rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }); } },

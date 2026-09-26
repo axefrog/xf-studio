@@ -5,7 +5,7 @@ import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
 import { loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
-import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
+import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
 import { priorityRank } from "../../render-templates";
 import type { DetailLimit } from "../../detail-limits";
 import { layeredContextRestored } from "../../layered-material";
@@ -15,7 +15,7 @@ import type { HeadRig } from "./head-rig";
 
 /**
  * The platform's character renderer (feature-module platform §5): it draws the V the character context resolved (skin, face
- * details, eyes, brows, lashes, hair, piercings) from the host's character record, each chunk through the material adapter for its
+ * details, eyes, brows, lashes, hair, piercings and body) from the host's character record, each chunk through the material adapter for its
  * game template (character-material-adapters.ts), loaded by the host's detail loader. Which V and which creator choices is the
  * character context's (CharacterContextService, character-context.ts); how it is drawn is this module's. Nothing here names a
  * mod, a choice or a feature.
@@ -96,11 +96,11 @@ export function createCharacterRenderer(input: {
   let browUnderlay: BrowUnderlayEvidence | undefined;
   // Resolved character details (skin, face details, brows, lashes, hair, eyes, piercings): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, piercings: true };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, piercings: true, body: true };
   // Keep context details above the entire editable makeup stack (orders 10–41); skin, hair and the eyeballs keep their own order.
   // Face decals sit below the stack (faceDecalRenderOrder).
   const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: RENDER_ORDER.skin, face: FACE_DECAL_RENDER_ORDER, brows: RENDER_ORDER.brows,
-    lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, piercings: 0 };
+    lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, piercings: 0, body: RENDER_ORDER.skin };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
   let characterDetails: LoadedCharacterDetails | null = null;
@@ -117,6 +117,11 @@ export function createCharacterRenderer(input: {
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
     return { overMakeup: slot === "lashes", profileEncoding,
       ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => skinPlacement.surfaceUnderlay(mesh, skin ?? null) } : {}),
+      // The body's decals (tattoos, scars, the underwear cover) blend against the body's own skin, read on its chunks (knowledge/body-rendering.md).
+      ...(slot === "body" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
+        if (!skin) throw Error("the body's skin didn't load");
+        return skinSurfaceUnderlay(mesh, skin);
+      } } : {}),
       ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
         const result = skinPlacement.underlay(mesh, skin ?? null);
         browUnderlay = result.evidence;
@@ -250,9 +255,12 @@ export function createCharacterRenderer(input: {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
         // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
         if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
-        // Facial shapes: the same (target, region) names as the head's.
+        // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the
+        // resolver applied to that component, each at full weight.
+        const applied = item.component.slot === "body" ? new Set(item.component.morphs ?? []) : null;
         for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
-          mesh.morphTargetInfluences![index] = head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
+          mesh.morphTargetInfluences![index] = applied ? (applied.has(key) ? 1 : 0)
+            : head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
       }
       scene.add(item.root);
     }
@@ -303,8 +311,10 @@ export function createCharacterRenderer(input: {
     view,
     subscribe(listener: () => void) { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },
     /** The resolved parts the feature renderers supersede changed: show and hide again (PREV-89). */
-    /** Meshes of the drawn V that follow the facial shapes with the head. */
-    drawnMeshes: () => drawnDetails().flatMap(item => item.meshes),
+    /** Meshes of the drawn V that follow the facial shapes with the head (the body has its own shapes: `RenderComponent.morphs`). */
+    drawnMeshes: () => drawnDetails().filter(item => item.component.slot !== "body").flatMap(item => item.meshes),
+    /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
+    bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
     setSlotVisible,
     refreshVisibility: refreshDetailVisibility,

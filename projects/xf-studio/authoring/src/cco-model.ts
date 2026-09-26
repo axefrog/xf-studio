@@ -30,6 +30,12 @@ interface OptionBase {
   editTags: string[];
   /** Label of the resource that defined the option (the base CCO or a custom resource). */
   definedBy: string;
+  /**
+   * The option's censorship rule (`censorFlag`, `censorFlagAction`), absent when it has none: while the game censors that flag
+   * (`Censor_Nudity` when nudity isn't allowed), an `activate` option turns on and a `deactivate` option turns off [resource: the vanilla
+   * body options; the switch itself is native, `IsNudityAllowed`].
+   */
+  censor?: { flag: string; action: "activate" | "deactivate" };
 }
 export interface AppearanceChoice { name: string; index: number; localizedName: string; tags: string[]; providedBy: string }
 export interface MorphChoice { morphName: string; index: number; localizedName: string; providedBy: string }
@@ -49,6 +55,13 @@ const bool = (value: unknown) => value === 1 || value === true || value === "1";
 const num = (value: unknown, fallback = 0) => typeof value === "number" ? value : Number(value ?? fallback) || fallback;
 const tags = (value: unknown) => isObject(value) ? asArray(value.tags).map(cname).filter(Boolean) : [];
 
+/** A `censorFlag`/`censorFlagAction` pair as the option's censorship rule; none for the flag `0` (no flag). */
+function censorRule(flag: unknown, action: unknown): OptionBase["censor"] | undefined {
+  const name = typeof flag === "string" ? flag : cname(flag);
+  if (!name || name === "0" || !/^[A-Za-z0-9_]{1,64}$/.test(name)) return undefined;
+  return { flag: name, action: action === "Deactivate" ? "deactivate" : "activate" };
+}
+
 function readOption(data: JsonObject, label: string): CcoOption | null {
   const base: OptionBase = {
     name: cname(data.name), uiSlot: cname(data.uiSlot), link: cname(data.link), linkController: bool(data.linkController),
@@ -56,6 +69,8 @@ function readOption(data: JsonObject, label: string): CcoOption | null {
     localizedName: typeof data.localizedName === "string" ? data.localizedName : "",
     editTags: asArray(data.editTags).filter((tag): tag is string => typeof tag === "string"), definedBy: label,
   };
+  const censor = censorRule(data.censorFlag, data.censorFlagAction);
+  if (censor) base.censor = censor;
   switch (data.$type) {
     case "gameuiAppearanceInfo": return { ...base, type: "appearance", resource: depotRef(data.resource),
       definitions: asArray(data.definitions).filter(isObject).map(definition => ({ name: cname(definition.name),
@@ -334,6 +349,15 @@ function partDescriptors(cco: CcoResource, part: CcoPart, state: UiOptionState, 
       const index = option.definitions.findIndex(definition => definition.name === wanted);
       linkIndex.set(option.link, index >= 0 ? index : option.defaultIndex);
     }
+    // Morph links (`nails_size`: the right hand's nail length follows the left's row): the controller's chosen position, which its
+    // followers take like appearance followers do [resource: vanilla link keys; propagation hypothesis, as R5-links].
+    const morphLinkIndex = new Map<string, number>();
+    for (const option of options) {
+      if (option.type !== "morph" || !option.linkController || !option.link || !active.has(option.name)) continue;
+      const wanted = state[option.name];
+      const index = option.morphNames.findIndex(item => item.morphName === wanted || item.localizedName === wanted);
+      morphLinkIndex.set(option.link, index >= 0 ? index : option.defaultIndex);
+    }
     const chosen = new Map<string, { definition: string } | { morph: string }>();
     for (const option of options) {
       if (!active.has(option.name)) continue;
@@ -351,8 +375,10 @@ function partDescriptors(cco: CcoResource, part: CcoPart, state: UiOptionState, 
         if (definition?.name && option.resource) chosen.set(option.name, { definition: definition.name });
       } else if (option.type === "morph") {
         const wanted = state[option.name];
+        const followed = !option.linkController && option.link && morphLinkIndex.has(option.link)
+          ? option.morphNames[morphLinkIndex.get(option.link)!] : undefined;
         const choice = option.morphNames.find(item => item.morphName === wanted || item.localizedName === wanted)
-          ?? option.morphNames[option.defaultIndex];
+          ?? followed ?? option.morphNames[option.defaultIndex];
         if (choice?.morphName) chosen.set(option.name, { morph: choice.morphName });
       }
     }

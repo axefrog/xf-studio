@@ -178,6 +178,32 @@ export function createHeadSkinPlacement(core: THREE.Mesh, options: { coreAlbedo(
 }
 
 /**
+ * The skin colour, roughness and metalness under each vertex of a decal over a resolved skin that is not the head (the body's tattoos,
+ * scars and underwear cover over the body skin), read on that skin's own chunks by the nearest vertex, as the face decals read the head.
+ * Throws when the skin's colour can't be read or the decal is not over it.
+ */
+export function skinSurfaceUnderlay(decal: THREE.Mesh, skin: ResolvedSkinSurface): DecalSurfaceUnderlay {
+  const texels = skin.base();
+  if (!texels) throw Error("the skin colour under this decal is unavailable");
+  const uvArrays = skin.chunks.map(mesh => mesh.geometry.getAttribute("uv")?.array);
+  if (!uvArrays.length || uvArrays.some(uv => !uv)) throw Error("the skin under this decal has no UVs");
+  const uvs = concatenate(uvArrays as ArrayLike<number>[]);
+  const nearest = nearestVertices(worldPositions(decal), concatenate(skin.chunks.map(worldPositions)));
+  if (nearest.unmatched) throw Error(`${nearest.unmatched} decal vertices are not over the skin`);
+  const colour = sampleAtVertices(nearest, uvs, texels, 3, decodeSrgbByte);
+  const roughTexels = skin.roughness?.() ?? null;
+  const count = nearest.index.length, roughness = new Float32Array(count).fill(FLAT_SKIN_ROUGHNESS), metalness = new Float32Array(count);
+  if (roughTexels) {
+    const surface = sampleAtVertices(nearest, uvs, roughTexels, 2, byte => byte / 255);
+    for (let i = 0; i < count; i++) { roughness[i] = surface[i * 2]!; metalness[i] = surface[i * 2 + 1]!; }
+  }
+  return { colour: new THREE.BufferAttribute(colour, 3), roughness: new THREE.BufferAttribute(roughness, 1),
+    metalness: new THREE.BufferAttribute(metalness, 1),
+    evidence: { maxMatchedDistance: nearest.maxMatchedDistance, unmatched: nearest.unmatched, source: "resolved-skin", surface: "resolved-head",
+      roughness: roughTexels ? "resolved-skin" : "flat" } };
+}
+
+/**
  * The core head's roughness as effective roughness bytes (channel 0: R with the template's detail bias gated by B at a mid
  * microdetail term), read through a canvas once, or null when it can't be read (face decals then assume a flat value).
  * Channel 1 is the core head's metalness, which is zero (its default material has none).

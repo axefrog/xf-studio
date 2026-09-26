@@ -64,7 +64,7 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-7");
+    expect(record.schema).toBe("xfs/render-detail-8");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);

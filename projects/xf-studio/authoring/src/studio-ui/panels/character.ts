@@ -106,6 +106,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const lashes = new Toggle({ label: "Eyelashes", onChange: enabled => dispatch({ kind: "preview.setDetail", detail: "lashes", enabled }) });
   const hair = new Toggle({ label: "Hair", onChange: enabled => dispatch({ kind: "preview.setHair", enabled }) });
   const piercings = new Toggle({ label: "Piercings", onChange: enabled => dispatch({ kind: "preview.setPiercings", enabled }) });
+  const body = new Toggle({ label: "Body", onChange: enabled => dispatch({ kind: "preview.setBody", enabled }) });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const detailNote = note("");
   // The game files prepared for the 3D view on this computer, and clearing them.
@@ -119,7 +120,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       h("span", { class: "cc-history" }, undo, redo)), status, messages),
     h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
     h("section", { class: "section" }, h("h3", { class: "section-title", text: "Creator options" }), search, legend, sections, noMatch),
-    section("3D view only", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, detailNote,
+    section("3D view only", eyeShape.element, eyeNote, brows.element, lashes.element, hair.element, piercings.element, body.element, detailNote,
       h("div", { class: "row wrap gap-s" }, exportV),
       h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared),
       note("These change what the 3D view shows, never your V or your makeup. A save is read locally and never changed or uploaded.")));
@@ -380,6 +381,10 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       hair.update(!!preview?.hair, { disabled: !preview || (!preview.hair && !hairAllowed.available), reason: hairAllowed.reason ?? loading, note: "Hair physics is not simulated." });
       const piercingAllowed = port.authoring.capability({ kind: "preview.setPiercings", enabled: true });
       piercings.update(!!preview?.piercings, { disabled: !preview || (!preview.piercings && !piercingAllowed.available), reason: piercingAllowed.reason ?? loading });
+      // Absent means shown (workspace-state.ts); a head-only preview can't show a body.
+      const bodyShown = preview?.body ?? true, bodyAllowed = port.authoring.capability({ kind: "preview.setBody", enabled: !bodyShown });
+      body.update(!!preview && bodyShown && bodyAllowed.available, { disabled: !preview || !bodyAllowed.available, reason: bodyAllowed.reason ?? loading,
+        note: "Shown in the game's own underwear, as your V wears no clothing here." });
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
       const prepared = context?.prepared;
       setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"

@@ -38,12 +38,17 @@
  * - `xfs/render-detail-7`: the record no longer lists the `choices` a viewer may try or the `override` the host applied: every creator
  *   choice is the character context's (character-context.ts), which the host derives into the V before planning (CORE-58, PIPE-82). A
  *   v7 reader refuses v2 to v6 character records, so a page and a host of different versions say so (the version-skew notice).
+ * - `xfs/render-detail-8`: the character record gains the `body` slot (the V's third-person body, arms, hands and nails, feet and body
+ *   decals such as tattoos, scars and the game's own underwear cover, selected by the body's consumer groups and the creator's censorship
+ *   rules; knowledge/body-rendering.md), and a component may carry the `morphs` the resolver applied to it (`<target>_<region>`, e.g.
+ *   the breast size and nail length, which the body does not share with the head's facial shapes). A v8 reader refuses v2 to v7
+ *   character records.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-7" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-8" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
 export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5",
-  "xfs/render-detail-6"];
+  "xfs/render-detail-6", "xfs/render-detail-7"];
 
 /**
  * A record from a host of another version: older (a retired schema) or newer (a schema this reader doesn't know yet). It means the host
@@ -165,11 +170,19 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Version 5: the character record (the resolved head skin, face details, brows, lashes, hair, eyes and piercings of the player's own game).
+// The character record (the resolved head skin, face details, brows, lashes, hair, eyes, piercings and body of the player's own game).
 
-export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings";
-/** Record and load order: the skin first, so decals over it can blend against the resolved skin colour. */
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"];
+export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings" | "body";
+/**
+ * Record and load order: the skin first, so decals over it can blend against the resolved skin colour; the body last (its own skin loads
+ * before its decals, and the head's parts keep their order and draw order).
+ */
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body"];
+/**
+ * Slots whose decal chunks draw through the post-G-buffer decal family (face-decal-material.ts) over the skin under them: the face's
+ * decals over the head, and the body's (tattoos, scars, the underwear cover) over the body.
+ */
+export const decalFamilySlot = (slot: DetailSlot) => slot === "face" || slot === "body";
 /** A texture as the game stores it: raw decoded channels, plus the resource's own colour flag. */
 export type RenderTexture = RenderResource & { depotPath: string; width: number; height: number; isGamma: boolean };
 export type RenderProfileStop = { value: number; color: [number, number, number] };
@@ -277,6 +290,11 @@ export type RenderComponent = {
   materials: RenderChunkMaterial[];
   /** Morph components only: the effective morph target's `baseTexture` rule. */
   morphTexture?: RenderMorphTexture;
+  /**
+   * Body components: the morph targets the resolver applied to this component (`<target>_<region>`, as the exported geometry names its
+   * shape keys), each at full weight. Head parts follow the head's facial shapes instead.
+   */
+  morphs?: string[];
 };
 export type DetailSlotState = { slot: DetailSlot; state: "shown" | "none" | "unavailable";
   /** Short plain label (the resolved choice), for the character panel. */
@@ -318,7 +336,7 @@ export function clampLayer(value: unknown, range: keyof typeof LAYER_RANGES, fal
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
   skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
   hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" },
-  piercings: { noun: "piercings", not: "aren't", pronoun: "they" } });
+  piercings: { noun: "piercings", not: "aren't", pronoun: "they" }, body: { noun: "body", not: "isn't", pronoun: "it" } });
 const paramName = (value: unknown, what: string) => typeof value === "string" && /^[A-Za-z0-9_.@:+ -]{1,96}$/.test(value) ? value : fail(`${what} is invalid.`);
 const int = (value: unknown, what: string, min: number, max: number) =>
   Number.isInteger(value) && (value as number) >= min && (value as number) <= max ? value as number : fail(`${what} is out of range.`);
@@ -457,6 +475,8 @@ function component(value: unknown, index: number): RenderComponent {
   const geometry = item.geometry;
   const rule = item.morphTexture;
   if (rule !== undefined && (!rule || typeof rule !== "object")) fail(`${what} morph texture rule is invalid.`);
+  const morphs = item.morphs;
+  if (morphs !== undefined && (!Array.isArray(morphs) || morphs.length > 16)) fail(`${what} morphs are invalid.`);
   return { id: text(item.id, `${what} id`), slot: item.slot, option: text(item.option, `${what} option`),
     definition: text(item.definition, `${what} definition`), component: text(item.component, `${what} component`),
     geometry: { ...resource(geometry, `${what} geometry`), depotPath: text(geometry?.depotPath, `${what} geometry path`),
@@ -464,7 +484,8 @@ function component(value: unknown, index: number): RenderComponent {
       morphTargets: typeof geometry?.morphTargets === "boolean" ? geometry.morphTargets : fail(`${what} geometry kind is missing.`) },
     renderChunks, chunks, materials,
     ...(rule ? { morphTexture: { morph: text(rule.morph, `${what} morph`), texture: rule.texture === null ? null : text(rule.texture, `${what} morph texture`),
-      parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}) };
+      parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}),
+    ...(morphs ? { morphs: morphs.map((name, k) => paramName(name, `${what} morph ${k}`)) } : {}) };
 }
 
 /**
@@ -522,7 +543,7 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     components, slots };
 }
 
-/** Version dispatch: a v1 record is a core head; a v2 to v5 record is a core head, and a v5 record may be a character. */
+/** Version dispatch: a v1 record is a core head; a later record is a core head or, under the current schema, a character. */
 export function parseRenderDetail(value: unknown): CoreDetail | CharacterDetail {
   const doc = value as { schema?: unknown; detail?: unknown };
   if (doc?.detail === "character") return parseCharacterDetail(value);

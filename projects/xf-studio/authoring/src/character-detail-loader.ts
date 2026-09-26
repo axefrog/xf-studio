@@ -4,6 +4,7 @@ import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture } from "./render-detail";
+import { renderTemplate } from "./render-templates";
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
 import type { EyeballHandle, EyeShellHandle } from "./eye-material";
@@ -66,7 +67,7 @@ export type CharacterDetailLoadOptions = {
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
 const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
-  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], piercings: ["piercings", "they aren't"] };
+  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], piercings: ["piercings", "they aren't"], body: ["body", "it isn't"] };
 /** Every served texture a chunk names: its parameters' textures and, for a layered chunk, each layer's maps and mask. */
 export const chunkTextureFiles = (material: RenderComponent["materials"][number]): RenderTexture[] =>
   [...Object.values(material.textures), ...(material.layered?.layers.flatMap(layer => Object.values(layer.textures)) ?? [])];
@@ -161,6 +162,11 @@ export const textureLedgerKey = (source: Pick<RenderTexture, "file" | "isGamma">
 const contentKey = (component: RenderComponent) => JSON.stringify(component);
 /** Slots whose adapters read the resolved skin under them (the face decals' and brows' underlay): reused only with an unchanged skin. */
 const READS_SKIN: ReadonlySet<DetailSlot> = new Set(["face", "brows"]);
+/** Whether a component draws with the skin adapter (the head's skin, or the body's: its skin, arms, feet, nails). */
+const drawsSkin = (component: RenderComponent) => component.materials.some(material => renderTemplate(material.template, material.templateName)?.adapter === "skin");
+/** Whether a body component reads the body's skin under it (a body decal: tattoo, scar, the underwear cover). */
+const readsBodySkin = (component: RenderComponent) => component.slot === "body" &&
+  component.materials.some(material => !!renderTemplate(material.template, material.templateName)?.decal);
 
 /**
  * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
@@ -244,10 +250,21 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   for (const item of previous?.components ?? []) lendable.set(contentKey(item.component), item);
   const skinKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "skin").map(contentKey).join("\n");
   const sameSkin = !!previous && skinKey(previous.record.components) === skinKey(record.components);
+  // The body's decals read the body's own skin (its skin-drawing parts), so they are reused only while that is unchanged.
+  const bodySkinKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "body" && drawsSkin(item)).map(contentKey).join("|");
+  const sameBodySkin = !!previous && bodySkinKey(previous.record.components) === bodySkinKey(record.components);
   // The skin loads first, so decals over it (brows) can blend against the resolved skin colour, read on the
   // head the scene will draw (the skin's own chunks or the core head; head-skin-placement.ts).
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
   let resolvedSkin: AdapterContext["skin"];
+  /** The body's loaded skin (its first skin-drawing part), which body decals blend against and are lit by (knowledge/body-rendering.md). */
+  let bodySkin: AdapterContext["skin"];
+  const skinFor = (slot: DetailSlot) => slot === "body" ? bodySkin : resolvedSkin;
+  const keepSkin = (component: RenderComponent, skin: NonNullable<LoadedCharacterComponent["skin"]>, meshes: THREE.SkinnedMesh[]) => {
+    const surface = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
+    if (component.slot === "body") bodySkin ??= surface;
+    else resolvedSkin ??= surface;
+  };
   /** Decoded texels of the distinct textures this record draws, against the record's budget (PIPE-43). */
   const texels = new Map<string, number>();
   const texelsOf = (component: RenderComponent) => {
@@ -270,16 +287,17 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         continue;
       }
       const lent = lendable.get(contentKey(component));
-      if (lent && (!READS_SKIN.has(component.slot) || sameSkin) && !components.includes(lent)) {
+      if (lent && (!READS_SKIN.has(component.slot) || sameSkin) && (!readsBodySkin(component) || sameBodySkin) && !components.includes(lent)) {
         spendTexels(component);
         components.push(lent); borrowed.add(lent);
         for (const limit of lent.limits ?? []) addLimit(component.slot, limit);
         verticesUsed += lent.meshes.reduce((sum, mesh) => sum + mesh.geometry.getAttribute("position").count, 0);
-        if (lent.skin && !resolvedSkin) resolvedSkin = { base: lent.skin.base, chunks: lent.meshes, roughness: lent.skin.roughness, parameters: lent.skin.handle.parameters };
+        if (lent.skin) keepSkin(component, lent.skin, lent.meshes);
         continue;
       }
       spendTexels(component);
-      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(resolvedSkin ? { skin: resolvedSkin } : {}) };
+      const skinUnder = skinFor(component.slot);
+      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(skinUnder ? { skin: skinUnder } : {}) };
       const part: PartResources = { materials: [], owned: [], textureKeys: [] };
       // Two components may share a name (two face choices drawing one mesh); a failure releases this one's root only.
       let componentRoot: THREE.Object3D | undefined;
@@ -367,7 +385,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         ledger.parts.set(item, part);
         components.push(item);
         for (const limit of partLimits) addLimit(component.slot, limit);
-        if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
+        if (skin) keepSkin(component, skin, meshes);
       } catch (error) {
         ledger.release(part);
         if (signal?.aborted) throw error;

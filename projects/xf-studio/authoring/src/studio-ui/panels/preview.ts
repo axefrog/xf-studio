@@ -13,7 +13,7 @@ import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
-const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", piercings: "Piercings" } as const;
+const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", piercings: "Piercings", body: "Body" } as const;
 /** What each renderer limit code means for the person using the app (detail-limits.ts). */
 export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
   "head-shape": "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.",
@@ -94,6 +94,11 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
     if (limited) setText(fovNote, "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV.");
   } });
+  const bodyView = button({ label: "Whole body", icon: "body", small: true, title: "Frame your V's whole body", onClick: () => {
+    const result = port.authoring.dispatch({ kind: "camera.body" });
+    const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
+    if (limited) setText(fovNote, "This pane is too narrow to fit the whole body within the camera range. Widen the pane or increase FOV.");
+  } });
   // Studio stage: named setups, then each control on its own (studio-lighting.ts). Exposure is in stops, on a log scale.
   // The setups arrive with the preview's read model (StudioApplication.previewState().studioSetups).
   let setupButtons: { id: StudioSetupId; button: HTMLButtonElement }[] = [];
@@ -129,7 +134,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
-    section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, creatorFace, creatorHair)),
+    section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section("Light", preset.element, presetNote, studioControls),
     diagnostics,
     section("Display", surface.element, wire.element, normals.element, optics.element, opticsNote),
@@ -180,6 +185,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
+      applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
       optics.update(!!preview?.eyeOptics, loading);
       const eye = assets.eyeOptics;

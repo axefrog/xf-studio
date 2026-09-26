@@ -3,7 +3,7 @@ import { createDoubleDiffuseDecalMaterial, doubleDiffuseParameters } from "./bro
 import { hairMaterialFromScalars, type ProfileEncoding } from "./hair-colour-model";
 import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL,
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
-import type { DetailSlot, RenderChunkMaterial, RenderTexture } from "./render-detail";
+import { decalFamilySlot, type DetailSlot, type RenderChunkMaterial, type RenderTexture } from "./render-detail";
 import { bakeOrder, bakeSurface, createLayeredMaterial, layeredBakeExtent, layeredGlobals, stackProblems, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
 import { createSkinMaterial, skinBaseTexels, skinParameters, skinRoughness, type SkinImage, type SkinMaterialHandle, type SkinParameters,
@@ -355,10 +355,10 @@ export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter
 
 /**
  * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that
- * template. On the face every member of the decal family goes through the one decal material.
+ * template. On the face and the body every member of the decal family goes through the one decal material.
  */
 export function materialAdapter(template: string | null, templateName?: string | null, slot?: DetailSlot): MaterialAdapter | undefined {
   const inputs = renderTemplate(template, templateName);
   if (!inputs) return undefined;
-  return slot === "face" && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
+  return slot && decalFamilySlot(slot) && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
 }

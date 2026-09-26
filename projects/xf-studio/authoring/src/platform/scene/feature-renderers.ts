@@ -40,7 +40,7 @@ type Entry = {
 
 export type FeatureRenderers = ReturnType<typeof createFeatureRenderers>;
 
-const SLOTS: readonly CharacterSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"];
+const SLOTS: readonly CharacterSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings", "body"];
 
 /** A renderer's supersede list, checked and frozen (plain data the host keeps). */
 function supersedeList(parts: readonly SupersededPart[]): readonly SupersededPart[] {

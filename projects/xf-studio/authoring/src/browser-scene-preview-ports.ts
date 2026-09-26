@@ -23,6 +23,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       setNormals: scene.setNormals, setEyeOptics: scene.setEyeOptics,
       setHair: scene.setHair, setDetail: scene.setDetail, setEyeShape: scene.eyeShape,
       setPiercings: scene.setPiercings,
+      setBody: scene.setBody, frameBody: scene.frameBody,
       eyeShapeOptions: scene.eyeShapeOptions,
       setLightingPreset: preset => scene.lighting.setPreset(preset),
       // The studio stage's adjustable rig (studio-light-rig.ts), part of this port like every other scene device (PREV-69).
@@ -31,7 +32,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       creatorCamera: page => scene.lighting.camera(page),
       lightingStatus: () => scene.lighting.status(),
       onLightingStatus: listener => scene.lighting.subscribe(listener),
-      // Brows, lashes, hair and piercings are visibility preferences: their resolved details arrive later and
+      // Brows, lashes, hair, piercings and the body are visibility preferences: their resolved details arrive later and
       // follow the setting, so the toggles never depend on what is loaded right now.
     },
     motion: {
