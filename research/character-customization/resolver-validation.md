@@ -77,6 +77,6 @@ Not modelled: whether a switcher that is a link controller (`facial_tattoo`) act
 - **Geometry is not exported.** The resolver names the winning `.morphtarget`/`.mesh` bytes; GLB export remains in the older intake tools.
 - **The skin head material now differs from the hand trace** because of the KS patch. Which chain the game uses depends on ArchiveXL applying that patch at runtime, which no log has confirmed.
 - **Unproven rules decide real payloads:** 57 resources for this character come from a mod over a base copy and 55 of those payloads differ. All 70 base-internal collisions are byte-identical and harmless here.
-- **Not modelled:** `.ent` patches of the player entity (R6b), visual-tag hiding, REDmod, Vortex, `!exclude` patch tags, and link propagation beyond the simple index rule.
+- **Not modelled:** `.ent` patches of the player entity (R6b), visual-tag hiding, REDmod, Vortex beyond file attribution ([Vortex](../../knowledge/vortex.md)), `!exclude` patch tags, and link propagation beyond the simple index rule.
 
 Provenance: third-party resources were read privately from the reference installation for this validation; the mods involved are credited in the [community credits](../../docs/community-credits.md). No extracted resource, texture or report is committed.
