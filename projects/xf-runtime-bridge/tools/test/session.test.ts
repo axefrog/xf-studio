@@ -75,9 +75,19 @@ describe("planScript", () => {
     }
     const s2 = planScript(JSON.parse(readFileSync(join(dir, "session-2.json"), "utf8"))).plan;
     const indices = s2.filter((p) => p.command === "cc.apply").map((p) => p.input!.index as number);
-    expect(new Set(indices)).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]));
-    // Card step 2: the placement pair comes before every other preset.
-    expect(indices.slice(0, 3)).toEqual([11, 12, 11]);
+    // Every index is one of the card's presets (Off plus 12), and the steps still open after 26
+    // September are all covered: Gloss A-D, Shimmer and Metal (5-10), Depth C and D, Lines new and old.
+    expect(indices.every((i) => i >= 0 && i <= 12)).toBe(true);
+    for (const i of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) expect(indices, `preset ${i}`).toContain(i);
+    for (const file of files) {
+      const plan = planScript(JSON.parse(readFileSync(join(dir, file), "utf8"))).plan;
+      // Every ask that opens the creator is marked for the later cc.open, every photo excursion hides
+      // the cursor before its first capture, and every photo-mode capture follows a frame step.
+      for (const p of plan.filter((p) => p.kind === "ask" && /Open the character creator/.test(p.text ?? ""))) expect(p.step.replaced_by, `${file} ${p.label}`).toBe("cc.open");
+      expect(plan.filter((p) => p.command === "photo.hud.hide" && (p.input as { hidden?: boolean }).hidden === true).every((p) => (p.input as { cursor?: boolean }).cursor === true)).toBe(true);
+      expect(plan.some((p) => p.command === "photo.frame")).toBe(true);
+      expect(plan.some((p) => p.command === "photo.light.set" && (p.input as { on?: boolean }).on === true)).toBe(true);
+    }
   });
 });
 

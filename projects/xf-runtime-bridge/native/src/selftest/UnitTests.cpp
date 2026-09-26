@@ -730,6 +730,10 @@ void ParamsTests()
     Check("camera_preset is key 23 and comes before the other camera values",
           preset.attributes.size() == 2 && preset.attributes[0].key == 23 && preset.attributes[0].value == 7.0f &&
               p::CameraKeys().front() == 23 && p::CameraParamName(23) == "camera_preset");
+    Check("grain is key 25 and chromatic aberration key 13",
+          p::ParseCamera(json::parse(R"({"grain":0,"chromatic_aberration":0})")).attributes[0].key == 25 &&
+              p::ParseCamera(json::parse(R"({"grain":0,"chromatic_aberration":0})")).attributes[1].key == 13 &&
+              ParamsCode([] { p::ParseCamera(json::parse(R"({"grain":2})")); }) == "bad_params");
     Check("camera_preset is 0 to 9", ParamsCode([] { p::ParseCamera(json::parse(R"({"camera_preset":10})")); }) == "bad_params");
     Check("light shadow is key 46 after on and type",
           p::ParseLight(json::parse(R"({"shadow":false,"on":true})")).attributes[1].key == 46);

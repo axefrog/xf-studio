@@ -495,7 +495,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     title: "Frame the photo-mode shot",
     description: `Sets the photo-mode camera: a named preset (${Object.entries(CAMERA_PRESETS)
       .map(([name, preset]) => `${name}: ${preset.description}${preset.calibrated ? "" : " (not yet calibrated)"}`)
-      .join("; ")}) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.`,
+      .join("; ")}) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.`,
     permission: "write-photo",
     input: obj({
       preset: oneOf("A named framing; explicit values override it.", Object.keys(CAMERA_PRESETS)),
@@ -507,7 +507,9 @@ export const CATALOGUE: readonly CommandDef[] = [
       dof: bool("Depth of field on or off."),
       autofocus: bool("Autofocus on or off."),
       look_at: int("V's look-at option value (see photo_state options).", 0, 1000),
-      look_at_part: int("What V looks with: 0 upper body, 1 head, 2 eyes.", 0, 1000),
+      look_at_part: int("What V looks with: 1 head, 2 eyes (see photo_state options).", 0, 1000),
+      grain: num("Film grain, 0 to 1 (0 = off).", 0, 1),
+      chromatic_aberration: num("Chromatic aberration, -2 to 2 (0 = off).", -2, 2),
       subject: {
         description: "V's placement in front of the camera (photo mode's pose tab).",
         ...obj({

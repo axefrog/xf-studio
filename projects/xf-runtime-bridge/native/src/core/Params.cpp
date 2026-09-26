@@ -184,7 +184,7 @@ CameraRequest ParseCamera(const json& aParams)
 {
     RequireOnly(aParams,
                 {"camera_preset", "fov", "roll", "focal_distance", "aperture", "dof", "autofocus", "look_at", "look_at_part",
-                 "subject", "reset"});
+                 "grain", "chromatic_aberration", "subject", "reset"});
     CameraRequest request;
     request.reset = Boolean(aParams, "reset").value_or(false);
     if (const auto preset = Integer(aParams, "camera_preset", 0, 9))
@@ -199,6 +199,8 @@ CameraRequest ParseCamera(const json& aParams)
     AddFlag(request.attributes, aParams, "autofocus", key::kAutofocus);
     AddOption(request.attributes, aParams, "look_at", key::kLookAt);
     AddOption(request.attributes, aParams, "look_at_part", key::kLookAtPart);
+    Add(request.attributes, aParams, "grain", key::kGrain, 0, 1);
+    Add(request.attributes, aParams, "chromatic_aberration", key::kChromaticAberration, -2, 2);
     if (const auto it = aParams.find("subject"); it != aParams.end() && !it->is_null())
     {
         if (!it->is_object())
@@ -226,7 +228,7 @@ CameraRequest ParseCamera(const json& aParams)
     if (!request.reset && request.attributes.empty())
     {
         Bad("give at least one camera setting (camera_preset, fov, roll, focal_distance, aperture, dof, autofocus, "
-            "look_at, look_at_part or subject), or reset = true");
+            "look_at, look_at_part, grain, chromatic_aberration or subject), or reset = true");
     }
     return request;
 }
@@ -253,6 +255,10 @@ std::string CameraParamName(int32_t aKey)
         return "look_at";
     case key::kLookAtPart:
         return "look_at_part";
+    case key::kGrain:
+        return "grain";
+    case key::kChromaticAberration:
+        return "chromatic_aberration";
     case key::kSubjectYaw:
         return "subject.yaw";
     case key::kSubjectLeftRight:
@@ -270,8 +276,8 @@ std::vector<int32_t> CameraKeys()
 {
     // The preset first: resetting it moves the camera, and the other keys then reset on top.
     return {key::kCameraPreset, key::kFov, key::kRoll, key::kFocalDistance, key::kAperture, key::kDepthOfField,
-            key::kAutofocus,   key::kLookAt,   key::kLookAtPart,    key::kSubjectYaw,   key::kSubjectLeftRight,
-            key::kSubjectNearFar, key::kSubjectUpDown};
+            key::kAutofocus,   key::kLookAt,   key::kLookAtPart,    key::kGrain,        key::kChromaticAberration,
+            key::kSubjectYaw,  key::kSubjectLeftRight, key::kSubjectNearFar, key::kSubjectUpDown};
 }
 
 LightRequest ParseLight(const json& aParams)

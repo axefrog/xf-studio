@@ -1,13 +1,13 @@
 {
   "schema": "xfb/session-script-1",
   "name": "session-2",
-  "title": "Session 2: depth, gloss, shimmer and texture placement",
+  "title": "Session 2 (continued): gloss, shimmer and metal under a light sweep; depth in motion; lines sharpness",
   "card": "experiments/020-session-2/README.md",
   "requires": [
-    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (session 2 build) and XF Runtime Bridge (-writes build)",
-    "a loaded save with V in the world, next to a mirror",
+    "MO2 profile 'XF Studio diagnostic 2026-09-25' with XF Eye Artistry (session 2 build) and XF Runtime Bridge (-writes build of this commit, with its XF camera presets)",
+    "a loaded save with V in the world, in an open spot",
     "a fresh manual safety save (step p0-ready)",
-    "camera presets calibrated in the bridge's first session (tools/api/presets.ts)"
+    "the game window in front (photo.open presses the photo-mode key in it)"
   ],
   "steps": [
     {
@@ -23,16 +23,17 @@
     {
       "do": "ask",
       "label": "p0-ready",
-      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Stand next to a mirror, but don't open it yet."
+      "text": "Before anything changes: (1) make a new manual save now. This profile shares your save folder, and once the bridge changes something, saving stays locked until you load a save. (2) Tell the coordinator the game version, the upscaler and mode, the resolution, and whether ray tracing or path tracing is on. (3) Stand V in an open, quiet spot with room in front of her (photo mode's camera needs a few metres); keep the game window in front."
     },
     {
-      "do": "note",
-      "label": "p0-mirror",
-      "text": "Open a mirror's appearance screen and go to the page with the XF row. Zoom its camera onto the face as far as it goes, then leave the camera alone until the mirror part ends."
+      "do": "ask",
+      "label": "p1-gloss-a-open-creator",
+      "text": "Open the character creator (a mirror's appearance screen, or F12 with Character Customization Anywhere) and go to the page with the XF row. Leave its camera on the eyes zoom.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "p0-wait-mirror",
+      "label": "p1-gloss-a-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -43,12 +44,7 @@
     },
     {
       "do": "run",
-      "label": "p1-options",
-      "command": "player.appearance"
-    },
-    {
-      "do": "run",
-      "label": "p1-xf-values",
+      "label": "p1-menu-mode",
       "command": "player.appearance",
       "input": {
         "option": "XF"
@@ -56,117 +52,13 @@
     },
     {
       "do": "capture",
-      "label": "p1-xf-off"
+      "label": "p1-xf-off",
+      "region": "cc-eyes"
     },
     {
-      "do": "apply cc",
-      "label": "p1-lines-new-apply",
-      "option": "XF",
-      "index": 11
-    },
-    {
-      "do": "wait",
-      "label": "p1-lines-new-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-lines-new-mirror"
-    },
-    {
-      "do": "apply cc",
-      "label": "p1-lines-old-apply",
-      "option": "XF",
-      "index": 12
-    },
-    {
-      "do": "wait",
-      "label": "p1-lines-old-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-lines-old-mirror"
-    },
-    {
-      "do": "apply cc",
-      "label": "p1-lines-new-again-apply",
-      "option": "XF",
-      "index": 11
-    },
-    {
-      "do": "wait",
-      "label": "p1-lines-new-again-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-lines-new-again-mirror"
-    },
-    {
-      "do": "ask",
-      "label": "p1-placement",
-      "text": "Placement check (card step 2). Coordinator: compare p1-lines-new, p1-lines-old and p1-lines-new-again; the patterns must sit in exactly the same place, the new one sharper. If they don't line up, stop the session here. Maintainer: stay in the appearance screen."
-    },
-    {
-      "do": "apply cc",
-      "label": "p1-depth-a-apply",
-      "option": "XF",
-      "index": 1
-    },
-    {
-      "do": "wait",
-      "label": "p1-depth-a-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-depth-a-mirror"
-    },
-    {
-      "do": "apply cc",
-      "label": "p1-depth-b-apply",
-      "option": "XF",
-      "index": 2
-    },
-    {
-      "do": "wait",
-      "label": "p1-depth-b-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-depth-b-mirror"
-    },
-    {
-      "do": "apply cc",
-      "label": "p1-depth-c-apply",
-      "option": "XF",
-      "index": 3
-    },
-    {
-      "do": "wait",
-      "label": "p1-depth-c-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-depth-c-mirror"
-    },
-    {
-      "do": "apply cc",
-      "label": "p1-depth-d-apply",
-      "option": "XF",
-      "index": 4
-    },
-    {
-      "do": "wait",
-      "label": "p1-depth-d-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p1-depth-d-mirror"
+      "do": "note",
+      "label": "p1-menu-mode-note",
+      "text": "Coordinator: the p1-menu-mode result's menu.updating_finalized_state must be true (the edit-V's-look mode) for cc.confirm to keep a look; with false, Confirm is refused and the player confirms by hand."
     },
     {
       "do": "apply cc",
@@ -181,7 +73,213 @@
     },
     {
       "do": "capture",
-      "label": "p1-gloss-a-mirror"
+      "label": "p1-gloss-a-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-a-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-photo",
+      "command": "photo.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-a-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-prefs",
+      "ms": 2000
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-a-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-a-face",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-a-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-yaw-30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-a-yaw-30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-a-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-yaw-15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-a-yaw-15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-a-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-yaw15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-a-yaw15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-a-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-a-yaw30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-a-yaw30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-a-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-a-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "p1-check",
+      "text": "Coordinator check before going on: in p1-gloss-a-face the face is centred and fills the face crop, no mouse cursor is visible, and the sweep captures show the light moving across the face. If not, stop and note what's wrong. Maintainer: nothing to do."
+    },
+    {
+      "do": "ask",
+      "label": "p1-gloss-b-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
     },
     {
       "do": "apply cc",
@@ -196,7 +294,208 @@
     },
     {
       "do": "capture",
-      "label": "p1-gloss-b-mirror"
+      "label": "p1-gloss-b-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-b-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-photo",
+      "command": "photo.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-b-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-prefs",
+      "ms": 2000
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-b-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-b-face",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-b-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-yaw-30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-b-yaw-30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-b-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-yaw-15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-b-yaw-15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-b-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-yaw15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-b-yaw15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-b-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-b-yaw30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-b-yaw30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-b-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-b-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "p1-gloss-c-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
     },
     {
       "do": "apply cc",
@@ -211,7 +510,208 @@
     },
     {
       "do": "capture",
-      "label": "p1-gloss-c-mirror"
+      "label": "p1-gloss-c-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-c-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-photo",
+      "command": "photo.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-c-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-prefs",
+      "ms": 2000
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-c-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-c-face",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-c-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-yaw-30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-c-yaw-30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-c-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-yaw-15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-c-yaw-15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-c-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-yaw15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-c-yaw15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-c-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-c-yaw30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-c-yaw30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-c-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-c-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "p1-gloss-d-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
     },
     {
       "do": "apply cc",
@@ -226,7 +726,208 @@
     },
     {
       "do": "capture",
-      "label": "p1-gloss-d-mirror"
+      "label": "p1-gloss-d-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-d-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-photo",
+      "command": "photo.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-gloss-d-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-prefs",
+      "ms": 2000
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-d-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-d-face",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-d-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-yaw-30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-d-yaw-30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-d-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-yaw-15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-d-yaw-15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-d-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-yaw15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-d-yaw15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-d-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
+    },
+    {
+      "do": "wait",
+      "label": "p1-gloss-d-yaw30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-gloss-d-yaw30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-gloss-d-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-gloss-d-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "p1-shimmer-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
     },
     {
       "do": "apply cc",
@@ -241,7 +942,241 @@
     },
     {
       "do": "capture",
-      "label": "p1-shimmer-mirror"
+      "label": "p1-shimmer-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-shimmer-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-wait-world",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "gameplay"
+        ],
+        "timeout_ms": 600000
+      }
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-photo",
+      "command": "photo.open",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-shimmer-photo-fallback",
+      "text": "If photo mode didn't open by itself, press the photo mode key."
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-wait-photo",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "photo_mode"
+        ],
+        "timeout_ms": 120000
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-prefs",
+      "ms": 2000
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-eyes-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "p1-shimmer-eyes",
+      "region": "eyes"
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-face-frame",
+      "target": "face",
+      "xf_preset": true
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-face-settle",
+      "ms": 800
+    },
+    {
+      "do": "capture",
+      "label": "p1-shimmer-face",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-yaw-30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-shimmer-yaw-30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-yaw-15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-shimmer-yaw-15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-yaw15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-shimmer-yaw15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-yaw30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-shimmer-yaw30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
+      "do": "frame",
+      "label": "p1-shimmer-burst-frame",
+      "target": "eyes"
+    },
+    {
+      "do": "wait",
+      "label": "p1-shimmer-burst-settle",
+      "ms": 600
+    },
+    {
+      "do": "burst",
+      "label": "p1-shimmer-burst",
+      "region": "eyes",
+      "frames": 10,
+      "interval_ms": 100
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-shimmer-exit",
+      "command": "photo.exit"
+    },
+    {
+      "do": "ask",
+      "label": "p1-metal-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
+    },
+    {
+      "do": "run",
+      "label": "p1-metal-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
     },
     {
       "do": "apply cc",
@@ -256,36 +1191,23 @@
     },
     {
       "do": "capture",
-      "label": "p1-metal-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-start",
-      "text": "Photo-mode part: for each preset the bridge sets XF, you Confirm and leave the mirror, the bridge takes the photos, then you open the mirror again. About a minute each."
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-lines-new-apply",
-      "option": "XF",
-      "index": 11
-    },
-    {
-      "do": "wait",
-      "label": "p2-lines-new-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-lines-new-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-lines-new-confirm",
-      "text": "At the mirror: Confirm to keep XF = Lines · new, then leave the appearance screen. Nothing is saved."
+      "label": "p1-metal-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "run",
-      "label": "p2-lines-new-wait-world",
+      "label": "p1-metal-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p1-metal-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p1-metal-wait-world",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -296,18 +1218,18 @@
     },
     {
       "do": "run",
-      "label": "p2-lines-new-photo",
-      "command": "photo.enter",
+      "label": "p1-metal-photo",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "p2-lines-new-photo-key",
+      "label": "p1-metal-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
       "do": "run",
-      "label": "p2-lines-new-wait-photo",
+      "label": "p1-metal-wait-photo",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -318,369 +1240,152 @@
     },
     {
       "do": "wait",
-      "label": "p2-lines-new-wait-photo-prefs",
+      "label": "p1-metal-prefs",
       "ms": 2000
     },
     {
-      "do": "set camera",
-      "label": "p2-lines-new-eyes-camera",
-      "preset": "eyes"
-    },
-    {
       "do": "run",
-      "label": "p2-lines-new-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-lines-new-eyes-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-lines-new-eyes",
-      "region": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-new-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-lines-new-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-new-wait-mirror",
-      "command": "game.wait",
+      "label": "p1-metal-effects",
+      "command": "photo.camera.set",
       "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-lines-old-apply",
-      "option": "XF",
-      "index": 12
-    },
-    {
-      "do": "wait",
-      "label": "p2-lines-old-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-lines-old-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-lines-old-confirm",
-      "text": "At the mirror: Confirm to keep XF = Lines · old, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-old-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-old-photo",
-      "command": "photo.enter",
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
       "continue_on_error": true
     },
     {
-      "do": "note",
-      "label": "p2-lines-old-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
+      "do": "run",
+      "label": "p1-metal-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p1-metal-face-frame",
+      "target": "face",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
-      "label": "p2-lines-old-wait-photo",
-      "command": "game.wait",
+      "label": "p1-metal-hud",
+      "command": "photo.hud.hide",
       "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
+        "hidden": true,
+        "cursor": true
       }
     },
     {
       "do": "wait",
-      "label": "p2-lines-old-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-lines-old-eyes-camera",
-      "preset": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-old-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-lines-old-eyes-settle",
+      "label": "p1-metal-face-settle",
       "ms": 800
     },
     {
       "do": "capture",
-      "label": "p2-lines-old-eyes",
-      "region": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-old-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-lines-old-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-lines-old-wait-mirror",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-depth-a-apply",
-      "option": "XF",
-      "index": 1
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-a-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-a-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-a-confirm",
-      "text": "At the mirror: Confirm to keep XF = Depth A · 0 mm control, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-a-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-a-photo",
-      "command": "photo.enter",
-      "continue_on_error": true
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-a-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-a-wait-photo",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-a-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-a-eyes-camera",
-      "preset": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-a-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-a-eyes-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-a-eyes",
-      "region": "eyes"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-a-face-camera",
-      "preset": "face"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-a-face-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-a-face",
+      "label": "p1-metal-face",
       "region": "face"
     },
     {
-      "do": "run",
-      "label": "p2-depth-a-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-a-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-a-wait-mirror",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-depth-b-apply",
-      "option": "XF",
-      "index": 2
+      "do": "frame",
+      "label": "p1-metal-yaw-30-frame",
+      "target": "face",
+      "yaw_offset": -30
     },
     {
       "do": "wait",
-      "label": "p2-depth-b-settle",
-      "ms": 1500
+      "label": "p1-metal-yaw-30-settle",
+      "ms": 600
     },
     {
       "do": "capture",
-      "label": "p2-depth-b-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-b-confirm",
-      "text": "At the mirror: Confirm to keep XF = Depth B · +0.1 mm, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-b-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-b-photo",
-      "command": "photo.enter",
-      "continue_on_error": true
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-b-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-b-wait-photo",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-b-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-b-eyes-camera",
-      "preset": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-b-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-b-eyes-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-b-eyes",
-      "region": "eyes"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-b-face-camera",
-      "preset": "face"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-b-face-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-b-face",
+      "label": "p1-metal-yaw-30",
       "region": "face"
     },
     {
+      "do": "frame",
+      "label": "p1-metal-yaw-15-frame",
+      "target": "face",
+      "yaw_offset": -15
+    },
+    {
+      "do": "wait",
+      "label": "p1-metal-yaw-15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-metal-yaw-15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-metal-yaw15-frame",
+      "target": "face",
+      "yaw_offset": 15
+    },
+    {
+      "do": "wait",
+      "label": "p1-metal-yaw15-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-metal-yaw15",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-metal-yaw30-frame",
+      "target": "face",
+      "yaw_offset": 30
+    },
+    {
+      "do": "wait",
+      "label": "p1-metal-yaw30-settle",
+      "ms": 600
+    },
+    {
+      "do": "capture",
+      "label": "p1-metal-yaw30",
+      "region": "face"
+    },
+    {
+      "do": "frame",
+      "label": "p1-metal-yaw0-frame",
+      "target": "face",
+      "yaw_offset": 0
+    },
+    {
       "do": "run",
-      "label": "p2-depth-b-exit",
+      "label": "p1-metal-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p1-metal-exit",
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "p2-depth-b-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "p2-depth-c-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "p2-depth-b-wait-mirror",
+      "label": "p2-depth-c-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -702,12 +1407,19 @@
     },
     {
       "do": "capture",
-      "label": "p2-depth-c-mirror"
+      "label": "p2-depth-c-creator",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "run",
+      "label": "p2-depth-c-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "p2-depth-c-confirm",
-      "text": "At the mirror: Confirm to keep XF = Depth C · +0.2 mm, then leave the appearance screen. Nothing is saved."
+      "label": "p2-depth-c-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
     },
     {
       "do": "run",
@@ -723,12 +1435,12 @@
     {
       "do": "run",
       "label": "p2-depth-c-photo",
-      "command": "photo.enter",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "p2-depth-c-photo-key",
+      "label": "p2-depth-c-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
@@ -744,18 +1456,47 @@
     },
     {
       "do": "wait",
-      "label": "p2-depth-c-wait-photo-prefs",
+      "label": "p2-depth-c-prefs",
       "ms": 2000
     },
     {
-      "do": "set camera",
-      "label": "p2-depth-c-eyes-camera",
-      "preset": "eyes"
+      "do": "run",
+      "label": "p2-depth-c-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p2-depth-c-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p2-depth-c-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
       "label": "p2-depth-c-hud",
-      "command": "photo.hud.hide"
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
@@ -768,19 +1509,32 @@
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "p2-depth-c-face-camera",
-      "preset": "face"
+      "do": "frame",
+      "label": "p2-depth-c-close-frame",
+      "target": "eyes",
+      "span_m": 0.08
     },
     {
       "do": "wait",
-      "label": "p2-depth-c-face-settle",
+      "label": "p2-depth-c-close-settle",
       "ms": 800
     },
     {
-      "do": "capture",
-      "label": "p2-depth-c-face",
-      "region": "face"
+      "do": "burst",
+      "label": "p2-depth-c-close",
+      "region": "eyes",
+      "frames": 5,
+      "interval_ms": 200
+    },
+    {
+      "do": "run",
+      "label": "p2-depth-c-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
     },
     {
       "do": "run",
@@ -788,13 +1542,14 @@
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "p2-depth-c-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "p2-depth-d-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "p2-depth-c-wait-mirror",
+      "label": "p2-depth-d-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -816,154 +1571,51 @@
     },
     {
       "do": "capture",
-      "label": "p2-depth-d-mirror"
+      "label": "p2-depth-d-creator",
+      "region": "cc-eyes"
     },
     {
-      "do": "note",
-      "label": "p2-depth-d-confirm",
-      "text": "At the mirror: Confirm to keep XF = Depth D · +0.4 mm, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-d-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-d-photo",
-      "command": "photo.enter",
-      "continue_on_error": true
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-d-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-d-wait-photo",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-d-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-d-eyes-camera",
-      "preset": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-d-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-d-eyes-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-d-eyes",
-      "region": "eyes"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-d-face-camera",
-      "preset": "face"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-d-face-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-d-face",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-depth-d-head-and-shoulders-camera",
-      "preset": "head-and-shoulders"
-    },
-    {
-      "do": "wait",
-      "label": "p2-depth-d-head-and-shoulders-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-d-head-and-shoulders",
-      "region": "head-and-shoulders"
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-d-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-depth-d-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-depth-d-wait-mirror",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
+      "do": "burst",
+      "label": "p2-depth-d-motion",
+      "region": "cc-eyes",
+      "frames": 20,
+      "interval_ms": 150
     },
     {
       "do": "ask",
-      "label": "p2-depth-d-motion",
-      "text": "Depth D in motion (card step 4). In the appearance screen, zoom out to normal framing, watch a few blinks and rotate V slowly. Is there a visible edge or a lifted look? Also on D: does skin show through at the inner eye corners by the lash line? Tell the coordinator."
-    },
-    {
-      "do": "capture",
-      "label": "p2-depth-d-motion-shot"
+      "label": "p2-depth-d-motion-check",
+      "text": "Depth D in motion (card step 4): in the creator, zoom out to normal framing, watch a few blinks and rotate V slowly. Is there a visible edge or a lifted look? Does skin show through at the inner eye corners by the lash line? Tell the coordinator, then zoom back to the eyes."
     },
     {
       "do": "apply cc",
-      "label": "p2-gloss-a-apply",
+      "label": "p2-lines-new-apply",
       "option": "XF",
-      "index": 5
+      "index": 11
     },
     {
       "do": "wait",
-      "label": "p2-gloss-a-settle",
+      "label": "p2-lines-new-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "p2-gloss-a-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-a-confirm",
-      "text": "At the mirror: Confirm to keep XF = Gloss A · as before, then leave the appearance screen. Nothing is saved."
+      "label": "p2-lines-new-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "run",
-      "label": "p2-gloss-a-wait-world",
+      "label": "p2-lines-new-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p2-lines-new-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-new-wait-world",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -974,18 +1626,18 @@
     },
     {
       "do": "run",
-      "label": "p2-gloss-a-photo",
-      "command": "photo.enter",
+      "label": "p2-lines-new-photo",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "p2-gloss-a-photo-key",
+      "label": "p2-lines-new-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
       "do": "run",
-      "label": "p2-gloss-a-wait-photo",
+      "label": "p2-lines-new-wait-photo",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -996,813 +1648,98 @@
     },
     {
       "do": "wait",
-      "label": "p2-gloss-a-wait-photo-prefs",
+      "label": "p2-lines-new-prefs",
       "ms": 2000
     },
     {
-      "do": "set camera",
-      "label": "p2-gloss-a-face-camera",
-      "preset": "face"
-    },
-    {
       "do": "run",
-      "label": "p2-gloss-a-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-a-face-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-a-face",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-a-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-a-yaw150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-a-yaw150",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-a-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-a-yaw165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-a-yaw165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-a-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-a-yaw-165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-a-yaw-165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-a-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-a-yaw-150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-a-yaw-150",
-      "region": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-a-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-a-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-a-wait-mirror",
-      "command": "game.wait",
+      "label": "p2-lines-new-effects",
+      "command": "photo.camera.set",
       "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-gloss-b-apply",
-      "option": "XF",
-      "index": 6
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-b-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-b-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-b-confirm",
-      "text": "At the mirror: Confirm to keep XF = Gloss B · skin rough, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-b-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-b-photo",
-      "command": "photo.enter",
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
       "continue_on_error": true
     },
     {
-      "do": "note",
-      "label": "p2-gloss-b-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
+      "do": "run",
+      "label": "p2-lines-new-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p2-lines-new-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
     },
     {
       "do": "run",
-      "label": "p2-gloss-b-wait-photo",
-      "command": "game.wait",
+      "label": "p2-lines-new-hud",
+      "command": "photo.hud.hide",
       "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
+        "hidden": true,
+        "cursor": true
       }
     },
     {
       "do": "wait",
-      "label": "p2-gloss-b-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-b-face-camera",
-      "preset": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-b-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-b-face-settle",
+      "label": "p2-lines-new-eyes-settle",
       "ms": 800
     },
     {
       "do": "capture",
-      "label": "p2-gloss-b-face",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-b-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-b-yaw150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-b-yaw150",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-b-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-b-yaw165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-b-yaw165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-b-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-b-yaw-165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-b-yaw-165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-b-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-b-yaw-150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-b-yaw-150",
-      "region": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-b-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-b-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-b-wait-mirror",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-gloss-c-apply",
-      "option": "XF",
-      "index": 7
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-c-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-c-confirm",
-      "text": "At the mirror: Confirm to keep XF = Gloss C · all rough, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-c-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-c-photo",
-      "command": "photo.enter",
-      "continue_on_error": true
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-c-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-c-wait-photo",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-c-face-camera",
-      "preset": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-c-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-face-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-c-face",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-c-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-yaw150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-c-yaw150",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-c-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-yaw165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-c-yaw165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-c-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-yaw-165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-c-yaw-165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-c-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-c-yaw-150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-c-yaw-150",
-      "region": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-c-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-c-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-c-wait-mirror",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-gloss-d-apply",
-      "option": "XF",
-      "index": 8
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-d-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-d-confirm",
-      "text": "At the mirror: Confirm to keep XF = Gloss D · rough +0.12, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-d-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-d-photo",
-      "command": "photo.enter",
-      "continue_on_error": true
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-d-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-d-wait-photo",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-d-face-camera",
-      "preset": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-d-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-face-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-d-face",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-d-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-yaw150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-d-yaw150",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-d-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-yaw165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-d-yaw165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-d-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-yaw-165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-d-yaw-165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-gloss-d-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-gloss-d-yaw-150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-gloss-d-yaw-150",
-      "region": "face"
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-d-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-gloss-d-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-gloss-d-wait-mirror",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "apply cc",
-      "label": "p2-shimmer-apply",
-      "option": "XF",
-      "index": 9
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-settle",
-      "ms": 1500
-    },
-    {
-      "do": "capture",
-      "label": "p2-shimmer-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-shimmer-confirm",
-      "text": "At the mirror: Confirm to keep XF = Shimmer · strong, then leave the appearance screen. Nothing is saved."
-    },
-    {
-      "do": "run",
-      "label": "p2-shimmer-wait-world",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "gameplay"
-        ],
-        "timeout_ms": 600000
-      }
-    },
-    {
-      "do": "run",
-      "label": "p2-shimmer-photo",
-      "command": "photo.enter",
-      "continue_on_error": true
-    },
-    {
-      "do": "note",
-      "label": "p2-shimmer-photo-key",
-      "text": "If photo mode didn't open by itself, press the photo mode key."
-    },
-    {
-      "do": "run",
-      "label": "p2-shimmer-wait-photo",
-      "command": "game.wait",
-      "input": {
-        "phase": [
-          "photo_mode"
-        ],
-        "timeout_ms": 120000
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-wait-photo-prefs",
-      "ms": 2000
-    },
-    {
-      "do": "set camera",
-      "label": "p2-shimmer-eyes-camera",
-      "preset": "eyes"
-    },
-    {
-      "do": "run",
-      "label": "p2-shimmer-hud",
-      "command": "photo.hud.hide"
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-eyes-settle",
-      "ms": 800
-    },
-    {
-      "do": "capture",
-      "label": "p2-shimmer-eyes",
+      "label": "p2-lines-new-eyes",
       "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "p2-shimmer-face-camera",
-      "preset": "face"
+      "do": "frame",
+      "label": "p2-lines-new-close-frame",
+      "target": "eyes",
+      "span_m": 0.08
     },
     {
       "do": "wait",
-      "label": "p2-shimmer-face-settle",
+      "label": "p2-lines-new-close-settle",
       "ms": 800
     },
     {
       "do": "capture",
-      "label": "p2-shimmer-face",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-shimmer-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-yaw150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-shimmer-yaw150",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-shimmer-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-yaw165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-shimmer-yaw165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-shimmer-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-yaw-165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-shimmer-yaw-165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-shimmer-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-shimmer-yaw-150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-shimmer-yaw-150",
-      "region": "face"
+      "label": "p2-lines-new-close",
+      "region": "eyes"
     },
     {
       "do": "run",
-      "label": "p2-shimmer-exit",
+      "label": "p2-lines-new-hud-show",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-new-exit",
       "command": "photo.exit"
     },
     {
-      "do": "note",
-      "label": "p2-shimmer-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
+      "do": "ask",
+      "label": "p2-lines-old-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
     },
     {
       "do": "run",
-      "label": "p2-shimmer-wait-mirror",
+      "label": "p2-lines-old-wait-creator",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -1813,27 +1750,34 @@
     },
     {
       "do": "apply cc",
-      "label": "p2-metal-apply",
+      "label": "p2-lines-old-apply",
       "option": "XF",
-      "index": 10
+      "index": 12
     },
     {
       "do": "wait",
-      "label": "p2-metal-settle",
+      "label": "p2-lines-old-settle",
       "ms": 1500
     },
     {
       "do": "capture",
-      "label": "p2-metal-mirror"
-    },
-    {
-      "do": "note",
-      "label": "p2-metal-confirm",
-      "text": "At the mirror: Confirm to keep XF = Metal ramp · lifted, then leave the appearance screen. Nothing is saved."
+      "label": "p2-lines-old-creator",
+      "region": "cc-eyes"
     },
     {
       "do": "run",
-      "label": "p2-metal-wait-world",
+      "label": "p2-lines-old-confirm",
+      "command": "cc.confirm",
+      "continue_on_error": true
+    },
+    {
+      "do": "note",
+      "label": "p2-lines-old-confirm-fallback",
+      "text": "If the creator is still open, press Confirm yourself (the look is kept until the safety save is loaded)."
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-old-wait-world",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -1844,18 +1788,18 @@
     },
     {
       "do": "run",
-      "label": "p2-metal-photo",
-      "command": "photo.enter",
+      "label": "p2-lines-old-photo",
+      "command": "photo.open",
       "continue_on_error": true
     },
     {
       "do": "note",
-      "label": "p2-metal-photo-key",
+      "label": "p2-lines-old-photo-fallback",
       "text": "If photo mode didn't open by itself, press the photo mode key."
     },
     {
       "do": "run",
-      "label": "p2-metal-wait-photo",
+      "label": "p2-lines-old-wait-photo",
       "command": "game.wait",
       "input": {
         "phase": [
@@ -1866,126 +1810,110 @@
     },
     {
       "do": "wait",
-      "label": "p2-metal-wait-photo-prefs",
+      "label": "p2-lines-old-prefs",
       "ms": 2000
     },
     {
-      "do": "set camera",
-      "label": "p2-metal-face-camera",
-      "preset": "face"
+      "do": "run",
+      "label": "p2-lines-old-effects",
+      "command": "photo.camera.set",
+      "input": {
+        "grain": 0,
+        "chromatic_aberration": 0
+      },
+      "continue_on_error": true
     },
     {
       "do": "run",
-      "label": "p2-metal-hud",
-      "command": "photo.hud.hide"
+      "label": "p2-lines-old-light",
+      "command": "photo.light.set",
+      "input": {
+        "light": 1,
+        "on": true,
+        "type": "spot",
+        "brightness": 60,
+        "hue": 35,
+        "saturation": 15
+      }
+    },
+    {
+      "do": "frame",
+      "label": "p2-lines-old-eyes-frame",
+      "target": "eyes",
+      "xf_preset": true,
+      "look_at": "off"
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-old-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": true,
+        "cursor": true
+      }
     },
     {
       "do": "wait",
-      "label": "p2-metal-face-settle",
+      "label": "p2-lines-old-eyes-settle",
       "ms": 800
     },
     {
       "do": "capture",
-      "label": "p2-metal-face",
-      "region": "face"
+      "label": "p2-lines-old-eyes",
+      "region": "eyes"
     },
     {
-      "do": "set camera",
-      "label": "p2-metal-yaw150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-metal-yaw150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-metal-yaw150",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-metal-yaw165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": 165
-      }
+      "do": "frame",
+      "label": "p2-lines-old-close-frame",
+      "target": "eyes",
+      "span_m": 0.08
     },
     {
       "do": "wait",
-      "label": "p2-metal-yaw165-settle",
-      "ms": 600
+      "label": "p2-lines-old-close-settle",
+      "ms": 800
     },
     {
       "do": "capture",
-      "label": "p2-metal-yaw165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-metal-yaw-165-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -165
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-metal-yaw-165-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-metal-yaw-165",
-      "region": "face"
-    },
-    {
-      "do": "set camera",
-      "label": "p2-metal-yaw-150-camera",
-      "preset": "face",
-      "subject": {
-        "yaw": -150
-      }
-    },
-    {
-      "do": "wait",
-      "label": "p2-metal-yaw-150-settle",
-      "ms": 600
-    },
-    {
-      "do": "capture",
-      "label": "p2-metal-yaw-150",
-      "region": "face"
+      "label": "p2-lines-old-close",
+      "region": "eyes"
     },
     {
       "do": "run",
-      "label": "p2-metal-exit",
-      "command": "photo.exit"
-    },
-    {
-      "do": "note",
-      "label": "p2-metal-back",
-      "text": "Open the mirror's appearance screen again (the page with the XF row)."
-    },
-    {
-      "do": "run",
-      "label": "p2-metal-wait-mirror",
-      "command": "game.wait",
+      "label": "p2-lines-old-hud-show",
+      "command": "photo.hud.hide",
       "input": {
-        "phase": [
-          "character_menu"
-        ],
-        "timeout_ms": 600000
-      }
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "p2-lines-old-exit",
+      "command": "photo.exit"
     },
     {
       "do": "ask",
       "label": "p2-verdicts",
-      "text": "Quick verdicts for the coordinator: which Depth is the smallest lift that stays solid; which Gloss reads most like four distinct finishes; does Shimmer flash as V turns and still differ from Satin at face distance; are the Metal ramp's angular highlights gone, and is there a seam along the lid?"
+      "text": "Quick verdicts for the coordinator: which Gloss reads most like four distinct finishes; does Shimmer flash as V turns and still differ from Satin at face distance; are the Metal ramp's angular highlights gone, and is there a seam along the lid; is Lines · new sharper than Lines · old close up?"
+    },
+    {
+      "do": "ask",
+      "label": "p3-open-creator",
+      "text": "Open the character creator again (mirror or F12) and go to the XF row.",
+      "replaced_by": "cc.open"
+    },
+    {
+      "do": "run",
+      "label": "p3-wait-creator",
+      "command": "game.wait",
+      "input": {
+        "phase": [
+          "character_menu"
+        ],
+        "timeout_ms": 600000
+      }
     },
     {
       "do": "apply cc",
@@ -2001,11 +1929,16 @@
     {
       "do": "ask",
       "label": "p3-piercing-9-black",
-      "text": "Optional (card step 9): set piercing style 9 in black, same light, face close-up."
+      "text": "Optional (card step 9): set piercing style 9 in black; the bridge photographs the creator's eyes zoom."
     },
     {
       "do": "capture",
-      "label": "p3-piercing-9-black-shot"
+      "label": "p3-piercing-9-black-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "p3-piercing-9-black-shot-full"
     },
     {
       "do": "ask",
@@ -2014,7 +1947,12 @@
     },
     {
       "do": "capture",
-      "label": "p3-piercing-1-silver-shot"
+      "label": "p3-piercing-1-silver-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "p3-piercing-1-silver-shot-full"
     },
     {
       "do": "ask",
@@ -2023,7 +1961,12 @@
     },
     {
       "do": "capture",
-      "label": "p3-piercing-1-gold-shot"
+      "label": "p3-piercing-1-gold-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "p3-piercing-1-gold-shot-full"
     },
     {
       "do": "ask",
@@ -2032,15 +1975,36 @@
     },
     {
       "do": "capture",
-      "label": "p3-eye-24-shot"
+      "label": "p3-eye-24-shot",
+      "region": "cc-eyes"
+    },
+    {
+      "do": "capture",
+      "label": "p3-eye-24-shot-full"
+    },
+    {
+      "do": "run",
+      "label": "p4-back",
+      "command": "cc.back",
+      "continue_on_error": true
     },
     {
       "do": "ask",
       "label": "p4-wrap",
-      "text": "Done. Press Back in the appearance screen to discard the changes made there, then load the safety save to restore your usual look (loading also releases the bridge's save lock)."
+      "text": "Done. If the creator is still open, press Back. Then load the safety save: it restores your usual look and releases the bridge's save lock."
     }
   ],
   "restore": [
+    {
+      "do": "run",
+      "label": "restore-hud",
+      "command": "photo.hud.hide",
+      "input": {
+        "hidden": false,
+        "cursor": true
+      },
+      "continue_on_error": true
+    },
     {
       "do": "run",
       "label": "restore-photo-exit",
