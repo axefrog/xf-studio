@@ -6,44 +6,16 @@
 //   bun tools/derive-plate-selection.ts --reference PATH_TO_pwa_morphs.glb --target PATH_TO_pma_morphs.glb
 //
 // The output is asset-free (triangle indices and counts only). A selection derived here is not an audited Build recipe:
-// the skin-byte, lift and clearance gates of the eye plate still apply before Build may use it (plan phase 5).
+// the eye plate's gates (eye-plate-verify.ts, against the head's native bytes) decide that.
+//
+// It also finds the target head's native seams inside the selection: vertices stored twice at one position whose normal,
+// skin and every morph target delta are equal, so the copies never part. The head's own triangles leave a zero-width slit
+// between them, which the raw topology counts as extra boundary loops or a pinched vertex; the `seams` block is the
+// topology with those welded (male V plan §4.1, phase 5). The plate verifier re-derives both from the native bytes.
 import { readFileSync } from "node:fs";
 import { parseGlb, readAccessor, type Glb, type GltfJson } from "../src/glb";
 import { EYE_PLATE_RECIPE, idListSha256, selectedFaceIds } from "../src/eye-plate-recipe";
-
-/**
- * The recipe's topology summary, tolerant of pinched boundaries (a vertex on more than two boundary edges), which the audited
- * plate gate (`plateTopology` in eye-plate-verify.ts) refuses; they are counted instead, because a derived selection is a
- * candidate for that gate, not a result of it.
- */
-function selectionTopology(triangles: number[][], vertexCount: number) {
-  const edges = new Map<string, number>();
-  const neighbours = Array.from({ length: vertexCount }, () => new Set<number>());
-  for (const face of triangles) for (let corner = 0; corner < 3; corner++) {
-    const a = face[corner]!, b = face[(corner + 1) % 3]!;
-    const key = a < b ? `${a},${b}` : `${b},${a}`;
-    edges.set(key, (edges.get(key) ?? 0) + 1);
-    neighbours[a]!.add(b); neighbours[b]!.add(a);
-  }
-  const walk = (graph: Set<number>[], seeds: Iterable<number>) => {
-    const seen = new Set<number>(), sizes: number[] = [];
-    for (const seed of seeds) {
-      if (seen.has(seed)) continue;
-      const stack = [seed]; seen.add(seed); let size = 0;
-      while (stack.length) { size++; for (const next of graph[stack.pop()!]!) if (!seen.has(next)) { seen.add(next); stack.push(next); } }
-      sizes.push(size);
-    }
-    return sizes;
-  };
-  const boundary = [...edges].filter(([, uses]) => uses === 1).map(([key]) => key.split(",").map(Number) as [number, number]);
-  const boundaryGraph = Array.from({ length: vertexCount }, () => new Set<number>());
-  for (const [a, b] of boundary) { boundaryGraph[a]!.add(b); boundaryGraph[b]!.add(a); }
-  return {
-    topology: { componentVertexCounts: walk(neighbours, neighbours.keys()).sort((a, b) => a - b), boundaryEdges: boundary.length,
-      boundaryLoops: walk(boundaryGraph, boundary.flat()).length, nonManifoldEdges: [...edges.values()].filter(uses => uses > 2).length },
-    pinchedBoundaryVertices: boundaryGraph.filter(set => set.size > 2).length,
-  };
-}
+import { plateTopology, weldedSeams } from "../src/eye-plate-verify";
 
 const args = new Map<string, string>();
 for (let index = 2; index < process.argv.length; index += 2) args.set(process.argv[index]!, process.argv[index + 1]!);
@@ -56,8 +28,15 @@ function headOf(glb: Glb) {
   const mesh = glb.json.meshes[nodes[0].mesh];
   if (mesh.primitives.length !== 1) throw Error("Expected exactly one head primitive.");
   const primitive = mesh.primitives[0];
-  return { indices: Uint32Array.from(readAccessor(glb, primitive.indices).array),
-    uv: readAccessor(glb, primitive.attributes.TEXCOORD_0).array as Float32Array, targets: (primitive.targets ?? []).length as number };
+  const read = (accessor: number) => readAccessor(glb, accessor);
+  const row = (accessor: ReturnType<typeof read>, vertex: number) => Array.from(accessor.array.slice(vertex * accessor.width, (vertex + 1) * accessor.width)).join(",");
+  const position = read(primitive.attributes.POSITION);
+  const deforming = [primitive.attributes.NORMAL, primitive.attributes.JOINTS_0, primitive.attributes.WEIGHTS_0, primitive.attributes.JOINTS_1,
+    primitive.attributes.WEIGHTS_1, ...(primitive.targets ?? []).flatMap((target: GltfJson) => [target.POSITION, target.NORMAL])]
+    .filter((accessor: number | undefined) => accessor !== undefined).map(read);
+  return { indices: Uint32Array.from(read(primitive.indices).array),
+    uv: read(primitive.attributes.TEXCOORD_0).array as Float32Array, targets: (primitive.targets ?? []).length as number,
+    position: (vertex: number) => row(position, vertex), deforms: (vertex: number) => deforming.map(accessor => row(accessor, vertex)).join("|") };
 }
 // Exact UVs are shared between the two heads; the quantisation only absorbs float formatting.
 const uvKey = (uv: Float32Array, vertex: number) => `${Math.round(uv[vertex * 2]! * 1e5)},${Math.round(uv[vertex * 2 + 1]! * 1e5)}`;
@@ -79,7 +58,19 @@ for (const face of faces) {
   const last = ranges[ranges.length - 1];
   if (last && last[1] === face - 1) last[1] = face; else ranges.push([face, face]);
 }
-const shape = selectionTopology(triangles, vertexIds.length);
+const topology = plateTopology(triangles, vertexIds.length, { pinches: "count" });
+let pinchedBoundaryVertices = 0;
+{
+  const edges = new Map<string, number>();
+  for (const face of triangles) for (let corner = 0; corner < 3; corner++) {
+    const [a, b] = [face[corner]!, face[(corner + 1) % 3]!].sort((x, y) => x - y);
+    edges.set(`${a},${b}`, (edges.get(`${a},${b}`) ?? 0) + 1);
+  }
+  const degree = new Map<number, number>();
+  for (const [key, uses] of edges) if (uses === 1) for (const vertex of key.split(",").map(Number)) degree.set(vertex, (degree.get(vertex) ?? 0) + 1);
+  pinchedBoundaryVertices = [...degree.values()].filter(count => count > 2).length;
+}
+const seams = weldedSeams(triangles, vertexIds.map(targetHead.deforms), vertexIds.map(targetHead.position));
 let area = 0;
 for (const face of faces) {
   const [a, b, c] = [0, 1, 2].map(corner => targetHead.indices[face * 3 + corner]!);
@@ -88,10 +79,10 @@ for (const face of faces) {
 }
 console.log(JSON.stringify({
   measured: { referencePlateUvs: plateUvs.size, uvArea: +area.toFixed(6), targetMorphTargets: targetHead.targets,
-    pinchedBoundaryVertices: shape.pinchedBoundaryVertices },
+    pinchedBoundaryVertices },
   selection: {
     renderChunk: 0, faceCount: faces.length, vertexCount: vertexIds.length, morphTargetCount: targetHead.targets,
     faceIdsSha256: idListSha256(faces), vertexIdsSha256: idListSha256(vertexIds),
-    topology: shape.topology, faceRangesInclusive: ranges,
+    topology, faceRangesInclusive: ranges, ...(seams.weldedVertices ? { seams } : {}),
   },
 }, null, 1));

@@ -441,8 +441,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     if (isBuild) block.append(installRow(product.productId).element);
     card.append(block);
   }
-  // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
-  if (!isBuild) for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
+  // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does. A Build's
+  // notes say what the mod is not made for (a masculine V, when his eye plate couldn't be prepared).
+  for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
   // Each omission once: whole looks, parts and features (the host decided them), then each feature's own, labelled with
   // its feature when several features export (PIPE-88; the same order as `resultOmissions` in the export contract).
   const features = r.products.flatMap(product => product.features), several = new Set(features.map(feature => feature.feature)).size > 1;

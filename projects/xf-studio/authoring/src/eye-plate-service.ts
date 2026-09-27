@@ -9,7 +9,7 @@ import {
   type HeadRole, type HeadSourcePlan,
 } from "./eye-plate-head-source";
 import {
-  canonicalJson, EYE_PLATE_DERIVER_VERSION, EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, eyePlateRecipeSha256,
+  canonicalJson, EYE_PLATE_DERIVER_VERSION, EYE_PLATE_RECIPE, eyePlateBody, eyePlateCacheKey, eyePlateCacheName, eyePlateRecipeSha256,
   supportedEyePlateSource, type EyePlateRecipe, type EyePlateSourceRevision,
 } from "./eye-plate-recipe";
 import { verifyEyePlate, type EyePlateVerification } from "./eye-plate-verify";
@@ -97,6 +97,19 @@ export function packagePlateRecord(manifest: EyePlateManifest): PackagePlate {
     ...(manifest.head ? { head: manifest.head } : {}) };
 }
 
+/**
+ * The masculine plate's prerequisite value when it can't be used (the host could not prepare it, or has none): the
+ * mod is then for a feminine V only, and `message`, which starts with `FEMININE_ONLY`, says why in plain words with the
+ * one next step. Check, Build and the manifest carry it as a note.
+ */
+export type UnavailablePlate = { readonly unavailable: { readonly code: string; readonly message: string } };
+export const FEMININE_ONLY = "This mod is for a feminine V only";
+/** A prerequisite value read as an unavailable plate, or null. */
+export function unavailablePlate(value: unknown): UnavailablePlate["unavailable"] | null {
+  const item = (value as Partial<UnavailablePlate> | null)?.unavailable;
+  return item && typeof item.code === "string" && typeof item.message === "string" && item.message.startsWith(FEMININE_ONLY) ? item : null;
+}
+
 export const EYE_PLATE_RESOURCE_DIRECTORY = "resources";
 export const EYE_PLATE_MANIFEST_FILE = "plate-manifest.json";
 /** Developer environment override for the same choice. */
@@ -116,12 +129,14 @@ const readDocument = (cache: EyePlateCache, path: string) => cache.readJson(path
 const placeholderMeshPath = (recipe: EyePlateRecipe) => `xfs\\eye_plate\\${recipe.output.stem}.mesh`;
 const depotFile = (root: string, depotPath: string) => join(root, ...depotPath.split("\\"));
 
+/** "female player head" or "male player head": whose head a recipe cuts, for plain messages. */
+const headNoun = (recipe: EyePlateRecipe) => `${eyePlateBody(recipe)} player head`;
 function unsupportedMessage(recipe: EyePlateRecipe): string {
   const labels = recipe.source.supported.map(item => item.label).join(", ");
-  return `Your installed Cyberpunk 2077 has a different female player head from the one XF Studio's built-in eye plate was checked against (${labels}). ` +
+  return `Your installed Cyberpunk 2077 has a different ${headNoun(recipe)} from the one XF Studio's built-in eye plate was checked against (${labels}). ` +
     "This usually means a newer game patch. Update XF Studio to a version that supports your game, then build again. Nothing was changed.";
 }
-const MISSING_MESSAGE = "Build could not find the female player head in your Cyberpunk 2077 content archives. " +
+const missingMessage = (recipe: EyePlateRecipe) => `Build could not find the ${headNoun(recipe)} in your Cyberpunk 2077 content archives. ` +
   "Check that the Cyberpunk 2077 folder in Local setup is correct, or verify the game files in your launcher, then build again.";
 function moddedMessage(providers: string[]): string {
   const names = providers.length ? providers.join(", ") : "an installed mod";
@@ -226,7 +241,7 @@ export function cachedPlateReach(cacheRoot: string | null, gameRoot: string | nu
   { plate: PlateReachInput; manifestFile: string } | null {
   if (!cacheRoot || !gameRoot || !routeKey) return null;
   try {
-    const cache = new EyePlateCache(cacheRoot), status = cache.readStatus();
+    const cache = new EyePlateCache(cacheRoot, recipe), status = cache.readStatus();
     if (!status || status.state !== "ready" || !status.cacheName || status.recipeId !== recipe.id ||
         status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot) || status.routeKey !== routeKey ||
         status.contentFingerprint !== contentFingerprint(gameRoot, recipe.source.archiveDirectory)) return null;
@@ -236,6 +251,20 @@ export function cachedPlateReach(cacheRoot: string | null, gameRoot: string | nu
         !manifest.uv || !currentWindowRule(manifest.uv)) return null;
     const plate = readManifestPlateReach(manifestFile, manifest);
     return plate ? { plate, manifestFile } : null;
+  } catch { return null; }
+}
+
+/**
+ * The last recorded outcome of preparing `recipe`'s plate for this game folder, unchanged content archives and route
+ * (`routeKey`), or null. Advisory, for Check: why the masculine plate couldn't be prepared the last time.
+ */
+export function cachedPlateStatus(cacheRoot: string | null, gameRoot: string | null, routeKey: string | null, recipe: EyePlateRecipe) {
+  if (!cacheRoot || !gameRoot || !routeKey) return null;
+  try {
+    const status = new EyePlateCache(cacheRoot, recipe).readStatus();
+    if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot) ||
+        status.routeKey !== routeKey || status.contentFingerprint !== contentFingerprint(gameRoot, recipe.source.archiveDirectory)) return null;
+    return status;
   } catch { return null; }
 }
 
@@ -255,7 +284,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
   const { tools, signal, gameRoot } = options;
   const progress = options.progress ?? (() => {});
   let cache: EyePlateCache, work: string;
-  try { cache = new EyePlateCache(options.cacheRoot); work = cache.createWork(); }
+  try { cache = new EyePlateCache(options.cacheRoot, recipe); work = cache.createWork(); }
   catch (error) { throw new EyePlateError("plate_cache_unavailable", "XF Studio could not open its private eye plate cache.", (error as Error).message); }
   const fingerprint = contentFingerprint(gameRoot, recipe.source.archiveDirectory);
   const status = (state: "ready" | "missing" | "unsupported" | "failed", code: string | null, message: string, cacheName: string | null = null) => {
@@ -264,7 +293,11 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     catch { /* Status is advisory; the Build result carries the real outcome. */ }
   };
   const cancelled = () => { if (signal?.aborted) throw new EyePlateError("plate_cancelled", "Eye plate preparation was cancelled."); };
-  const missing = () => { status("missing", "plate_source_missing", MISSING_MESSAGE); return new EyePlateError("plate_source_missing", MISSING_MESSAGE); };
+  const missing = () => {
+    const message = missingMessage(recipe);
+    status("missing", "plate_source_missing", message);
+    return new EyePlateError("plate_source_missing", message);
+  };
   const unsupported = (hashes: { meshSha256: string; morphSha256: string }) => {
     const message = unsupportedMessage(recipe);
     status("unsupported", "plate_source_unsupported", message);
@@ -272,7 +305,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
   };
   try {
     // 1. Which head the route loads: winning archives and the `.xl` patches that may change plate data.
-    progress("Finding the female player head your game loads");
+    progress(`Finding the ${headNoun(recipe)} your game loads`);
     const resolution = options.headSource
       ? await options.headSource.resolve({ meshDepotPath: recipe.source.meshDepotPath, morphDepotPath: recipe.source.morphDepotPath, signal })
       : { plan: contentPlan(recipe, gameRoot), notes: [] };
@@ -302,7 +335,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     }
 
     // 2. Extract the chosen resources and patch sources, one WolvenKit call per archive.
-    progress("Reading the female player head from your game files");
+    progress(`Reading the ${headNoun(recipe)} from your game files`);
     const wanted: { archive: HeadArchive; entryPath: string }[] = [mesh, morph, ...patches];
     const byArchive = new Map<string, { archive: HeadArchive; paths: Set<string>; dir: string }>();
     for (const item of wanted) {

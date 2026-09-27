@@ -6,11 +6,13 @@
 // directory. Both hosts run this entry (desktop runs its bundled copy) as a bounded child process.
 //
 //   bun tools/build_collection_package.ts --collection <file> [--check] [--machine-result] [--diagnostics]
-//     [--prerequisites <json file>] [--plate <dir> [--plate-manifest <file>]] [--wolvenkit <WolvenKit.CLI.exe> --gamepath <game>]
+//     [--prerequisites <json file>] [--plate <dir> [--plate-manifest <file>]] [--plate-masculine <dir> [--plate-masculine-manifest <file>]]
+//     [--wolvenkit <WolvenKit.CLI.exe> --gamepath <game>]
 //     [--app-root <dir>] [--build-root <dir>] [--dist-root <dir>] [--output-root <dir>]
 //
 // --prerequisites names a JSON file of host prerequisite values by ID (the hosts write it); --plate and
-// --plate-manifest are a developer's shorthand for eye makeup's plate prerequisite. Check with a prepared plate's
+// --plate-manifest are a developer's shorthand for eye makeup's plate prerequisite, and --plate-masculine and
+// --plate-masculine-manifest for the masculine V's plate (without it a Build is for a feminine V only, and says so). Check with a prepared plate's
 // manifest also omits presets that never reach that plate; Build always plans on the plate it packages.
 //
 // --diagnostics honours a prepared collection's diagnostic export knobs (plate lifts, surface overrides, head UV, the
@@ -20,13 +22,14 @@ import { resolve } from "node:path";
 import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PrerequisiteStale } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
-import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
+import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { createWolvenKitPackageTools } from "../src/package-build-wolvenkit";
 import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");
-const valueOptions = ["--collection", "--prerequisites", "--plate", "--plate-manifest", "--wolvenkit", "--gamepath", "--app-root",
+const valueOptions = ["--collection", "--prerequisites", "--plate", "--plate-manifest", "--plate-masculine", "--plate-masculine-manifest",
+  "--wolvenkit", "--gamepath", "--app-root",
   "--build-root", "--dist-root", "--output-root"] as const;
 const flagOptions = ["--check", "--machine-result", "--diagnostics"] as const;
 
@@ -50,6 +53,9 @@ function prerequisites(values: Record<string, string>): Record<string, unknown> 
   if (values["--plate"] || values["--plate-manifest"])
     given[EYE_PLATE_PREREQUISITE] = { ...(values["--plate"] ? { directory: values["--plate"] } : {}),
       ...(values["--plate-manifest"] ? { manifest: values["--plate-manifest"] } : {}) };
+  if (values["--plate-masculine"] || values["--plate-masculine-manifest"])
+    given[EYE_PLATE_MASCULINE_PREREQUISITE] = { ...(values["--plate-masculine"] ? { directory: values["--plate-masculine"] } : {}),
+      ...(values["--plate-masculine-manifest"] ? { manifest: values["--plate-masculine-manifest"] } : {}) };
   return given;
 }
 

@@ -4,7 +4,7 @@ import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, rea
 import { resolve, sep } from "node:path";
 import type { LocalSettings } from "../src/local-settings";
 import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
-import { eyePlatePrerequisite } from "../src/eye-plate-prerequisite";
+import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/eye-plate-prerequisite";
 import { expressionsGamePrerequisite } from "../src/expressions-game-prerequisite";
 import { runProcessTree } from "../src/process-tree";
 import { hostFailure } from "../src/diagnostics/host-log";
@@ -182,6 +182,13 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
 /** Eye makeup's plate prerequisite for these desktop settings: cut from the head the saved launch route loads (PIPE-36). */
 export const desktopEyePlate = (settings: LocalSettings, dataRoot: string, tools?: (wolvenKitCli: string) => EyePlateTools): HostPrerequisite =>
   eyePlatePrerequisite({ route: { gameRoot: settings.gameRoot ?? "", launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot },
+  cacheRoot: desktopPlateCache(dataRoot), wolvenKitCli: settings.wolvenKitCli ?? "",
+  headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead), ...(tools ? { tools } : {}) });
+
+/** Eye makeup's optional masculine plate for these desktop settings: cut from the male head the saved launch route loads. */
+export const desktopMasculineEyePlate = (settings: LocalSettings, dataRoot: string, tools?: (wolvenKitCli: string) => EyePlateTools): HostPrerequisite =>
+  masculineEyePlatePrerequisite({ route: { gameRoot: settings.gameRoot ?? "", launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
     mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot },
   cacheRoot: desktopPlateCache(dataRoot), wolvenKitCli: settings.wolvenKitCli ?? "",
   headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead), ...(tools ? { tools } : {}) });

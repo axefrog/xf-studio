@@ -9,8 +9,11 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, packagePlateRecord, type EyePlateRoute,
-  type EyePlateTools } from "./eye-plate-service";
+import { cachedPlateReach, cachedPlateStatus, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, FEMININE_ONLY,
+  packagePlateRecord, unavailablePlate, type EyePlateRoute, type EyePlateTools, type UnavailablePlate } from "./eye-plate-service";
+import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, type EyePlateRecipe } from "./eye-plate-recipe";
+import { EYE_PLATE_HEAD_SETTING } from "./eye-plate-head-choice";
+import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { createInstalledHeadSource } from "./eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
@@ -28,7 +31,22 @@ export type EyePlatePrerequisiteOptions = {
   readonly override?: string;
   /** Test seam: the WolvenKit adapter the plate is cut with. */
   readonly tools?: (wolvenKitCli: string) => EyePlateTools;
+  /** Which body's plate (the feminine plate by default). */
+  readonly recipe?: EyePlateRecipe;
 };
+
+/** Why the masculine plate can't be used, in plain words with the one next step, by the plate service's code. */
+export function masculineUnavailable(code: string): UnavailablePlate {
+  const labels = EYE_PLATE_MASCULINE_RECIPE.source.supported.map(item => item.label).join(", ");
+  const why: Record<string, string> = {
+    plate_source_missing: "XF Studio couldn't find the male player head in your game files. Verify the game files in your launcher, then build again to include a masculine V.",
+    plate_source_unsupported: `your game's male player head isn't one XF Studio has checked (it supports ${labels}). Update XF Studio to include a masculine V.`,
+    plate_source_modded: `an installed head mod changes the male head in a way ${EYE_MAKEUP_MOD.modName} doesn't support yet. To include a masculine V, set “${EYE_PLATE_HEAD_SETTING.label}” to “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” in Settings › Game, then build again.`,
+    plate_source_incomplete: "XF Studio couldn't read every mod that might change the male head. Build again once your mods can be read to include a masculine V.",
+    plate_override: "the developer plate override has no masculine plate.",
+  };
+  return { unavailable: { code, message: `${FEMININE_ONLY}: ${why[code] ?? "XF Studio couldn't prepare the masculine eye plate this time. Build again to include a masculine V."}` } };
+}
 
 /** A failure the person sees as it is, with its code. */
 const coded = (code: string, message: string) => Object.assign(Error(message), { code });
@@ -59,15 +77,16 @@ async function overridePlate(directory: string, tools: EyePlateTools): Promise<P
 export function eyePlatePrerequisite(options: EyePlatePrerequisiteOptions): HostPrerequisite {
   const tools = () => (options.tools ?? createWolvenKitEyePlateTools)(options.wolvenKitCli);
   const routeKey = eyePlateRouteKeyFor(options);
+  const recipe = options.recipe ?? EYE_PLATE_RECIPE;
   return {
     cached() {
       if (options.override) return null;
-      return cachedPlateReach(options.cacheRoot, options.route.gameRoot || null, routeKey)?.plate ?? null;
+      return cachedPlateReach(options.cacheRoot, options.route.gameRoot || null, routeKey, recipe)?.plate ?? null;
     },
     async prepare(signal) {
       if (options.override) return overridePlate(options.override, tools());
       try {
-        const plate = await ensureEyePlate({ gameRoot: options.route.gameRoot, cacheRoot: options.cacheRoot, tools: tools(), signal,
+        const plate = await ensureEyePlate({ gameRoot: options.route.gameRoot, cacheRoot: options.cacheRoot, tools: tools(), signal, recipe,
           headSource: createInstalledHeadSource({ ...options.route, wolvenKitCli: options.wolvenKitCli }, join(options.cacheRoot, "resolver")),
           headOverride: options.headOverride, routeKey: routeKey ?? undefined });
         const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
@@ -88,5 +107,37 @@ export function eyePlatePrerequisite(options: EyePlatePrerequisiteOptions): Host
       const manifest = (prepared.builder as { manifest?: unknown }).manifest;
       if (typeof manifest === "string") discardCachedPlate(options.cacheRoot, manifest);
     },
+  };
+}
+
+/**
+ * The masculine V's eye plate as an optional host prerequisite: the same preparation from the male head the route loads,
+ * but a plate that can't be prepared never stops the Build. Its value then says why (`UnavailablePlate`), the plan makes the
+ * mod for a feminine V only and says so. Only cancellation stops the Build. Check plans on the last preparation for this
+ * route: a ready plate, a recorded reason it couldn't be, or nothing yet.
+ */
+export function masculineEyePlatePrerequisite(options: Omit<EyePlatePrerequisiteOptions, "recipe">): HostPrerequisite {
+  const plate = eyePlatePrerequisite({ ...options, override: undefined, recipe: EYE_PLATE_MASCULINE_RECIPE });
+  const routeKey = eyePlateRouteKeyFor(options);
+  const unavailable = (code: string): PreparedPrerequisite => { const value = masculineUnavailable(code); return { builder: value, plan: value }; };
+  return {
+    cached() {
+      if (options.override) return masculineUnavailable("plate_override");
+      const ready = plate.cached();
+      if (ready) return ready;
+      const status = cachedPlateStatus(options.cacheRoot, options.route.gameRoot || null, routeKey, EYE_PLATE_MASCULINE_RECIPE);
+      return status && status.state !== "ready" && status.code && ["plate_source_missing", "plate_source_unsupported", "plate_source_modded"].includes(status.code)
+        ? masculineUnavailable(status.code) : null;
+    },
+    async prepare(signal) {
+      if (options.override) return unavailable("plate_override");
+      try { return await plate.prepare(signal); }
+      catch (error) {
+        if (signal.aborted || (error as { code?: unknown })?.code === "plate_cancelled") throw error;
+        // The feminine route already logged the failure; here it only decides what the mod leaves out.
+        return unavailable(error instanceof EyePlateError ? error.code : "plate_failed");
+      }
+    },
+    discard(prepared) { if (!unavailablePlate(prepared.plan)) plate.discard(prepared); },
   };
 }

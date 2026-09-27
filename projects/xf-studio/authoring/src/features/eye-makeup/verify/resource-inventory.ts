@@ -27,12 +27,15 @@ export function archiveKey(path: string): string {
 
 export interface PlanResources {
   readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string;
+  /** The masculine V's own resources, when the plan includes him. */
+  readonly masculine?: { readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string };
   /** Each preset's texture paths; the channels present depend on its export route. */
   readonly presets: readonly { readonly textures: Readonly<Record<string, string | undefined>> }[];
 }
 
 export function plannedResources(plan: PlanResources): string[] {
-  const paths = [plan.mesh, plan.morph, plan.app, plan.customization,
+  const male = plan.masculine;
+  const paths = [plan.mesh, plan.morph, plan.app, plan.customization, ...(male ? [male.mesh, male.morph, male.app, male.customization] : []),
     ...plan.presets.flatMap(p => Object.values(p.textures).filter((path): path is string => path !== undefined))];
   if (new Set(paths).size !== paths.length) throw new Error("Plan lists a depot path twice");
   const bad = paths.filter(path => !canonicalResourcePath(path));

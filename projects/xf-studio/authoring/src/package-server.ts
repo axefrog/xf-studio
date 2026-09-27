@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
 import { eyePlateHeadOverride } from "./eye-plate-service";
-import { eyePlatePrerequisite, eyePlateRouteKeyFor } from "./eye-plate-prerequisite";
+import { eyePlatePrerequisite, eyePlateRouteKeyFor, masculineEyePlatePrerequisite } from "./eye-plate-prerequisite";
 import { expressionsGamePrerequisite } from "./expressions-game-prerequisite";
 import { runProcessTree } from "./process-tree";
 import { hostFailure } from "./diagnostics/host-log";
@@ -63,6 +63,11 @@ export const localPlateRouteKey = (tools: PackageTools) => eyePlateRouteKeyFor({
 /** Eye makeup's plate prerequisite for these localhost tools: the developer override, or the verified built-in plate. */
 export const localEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
   eyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
+    ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
+
+/** Eye makeup's optional masculine plate for these localhost tools: cut from the male head the route loads (none with the override). */
+export const localMasculineEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
+  masculineEyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
     ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
 
 /**

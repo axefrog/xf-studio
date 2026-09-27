@@ -1,4 +1,4 @@
-import { idListSha256, sha256Hex, selectedFaceIds, type EyePlateRecipe, type EyePlateTopology } from "./eye-plate-recipe";
+import { idListSha256, sha256Hex, selectedFaceIds, type EyePlateRecipe, type EyePlateSeams, type EyePlateTopology } from "./eye-plate-recipe";
 
 /**
  * Independent verifier for a derived eye plate. It reads the plate resources as WolvenKit
@@ -66,7 +66,12 @@ function diffs(blob: Doc): { targets: Diff[][]; quantization: string[] } {
   return { targets, quantization };
 }
 
-export function plateTopology(triangles: number[][], vertexCount: number): EyePlateTopology {
+/**
+ * Components, boundary edges and loops, and non-manifold edges of a triangle list. The boundary must form closed loops
+ * (every boundary vertex on exactly two boundary edges); `pinches: "count"` accepts a pinched boundary vertex (a raw
+ * selection with native seams, whose welded form is then held to the strict rule).
+ */
+export function plateTopology(triangles: number[][], vertexCount: number, options: { pinches?: "refuse" | "count" } = {}): EyePlateTopology {
   const edges = new Map<string, number>();
   const neighbours = Array.from({ length: vertexCount }, () => new Set<number>());
   for (const face of triangles) for (let corner = 0; corner < 3; corner++) {
@@ -88,10 +93,27 @@ export function plateTopology(triangles: number[][], vertexCount: number): EyePl
   const boundary = [...edges].filter(([, uses]) => uses === 1).map(([key]) => key.split(",").map(Number));
   const boundaryGraph = Array.from({ length: vertexCount }, () => new Set<number>());
   for (const [a, b] of boundary) { boundaryGraph[a].add(b); boundaryGraph[b].add(a); }
-  if (boundaryGraph.some(set => set.size !== 0 && set.size !== 2)) throw Error("open boundary does not form closed loops");
+  if (boundaryGraph.some(set => set.size !== 0 && set.size !== 2) && options.pinches !== "count") throw Error("open boundary does not form closed loops");
   return { componentVertexCounts: walk(neighbours, neighbours.keys()).sort((a, b) => a - b),
     boundaryEdges: boundary.length, boundaryLoops: walk(boundaryGraph, boundary.flat()).length,
     nonManifoldEdges: [...edges.values()].filter(uses => uses > 2).length };
+}
+
+/**
+ * The recipe's native seams, found from the plate's own bytes: plate vertices at the same position whose normal, skin
+ * indices and weights and every morph diff row are byte-identical, so they never part. Returns how many vertices weld
+ * into another and the topology of the welded surface (strict: closed loops, no pinch).
+ */
+export function weldedSeams(triangles: number[][], signatures: readonly string[], positions: readonly string[]): EyePlateSeams {
+  const first = new Map<string, number>(), weld = signatures.map((signature, vertex) => {
+    const key = `${positions[vertex]}|${signature}`;
+    if (!first.has(key)) first.set(key, vertex);
+    return first.get(key)!;
+  });
+  const used = [...new Set(triangles.flat().map(vertex => weld[vertex]))].sort((a, b) => a - b);
+  const compact = new Map(used.map((vertex, index) => [vertex, index]));
+  const topology = plateTopology(triangles.map(face => face.map(vertex => compact.get(weld[vertex])!)), used.length);
+  return { weldedVertices: signatures.length - used.length, topology };
 }
 
 export type EyePlateVerification = {
@@ -101,6 +123,8 @@ export type EyePlateVerification = {
   exactNativeSkinBytesMesh: true; exactNativeSkinBytesMorphBase: true; meshMorphSkinRowsEqual: true;
   exactTriangles: true; exactMorphDiffRows: true; headQuantizationRetained: true;
   topology: EyePlateTopology; meshSkinRowsSha256: string; morphSkinRowsSha256: string;
+  /** Only for a recipe that declares native seams: the welded vertices and topology found from the plate's bytes. */
+  seams?: EyePlateSeams;
 };
 
 /** Throws with every failed gate listed; returns an asset-free summary when all pass. */
@@ -163,13 +187,31 @@ export function verifyEyePlate(recipe: EyePlateRecipe, headMesh: Doc, headMorph:
   check(materials.length === 1 && materials[0].baseMaterial.DepotPath.$value === recipe.output.baseMaterial, "plate material differs");
   check(plateMesh.Data.RootChunk.parameters.length === 0, "plate mesh must not carry head parameters");
   let topology: EyePlateTopology = { componentVertexCounts: [], boundaryEdges: 0, boundaryLoops: 0, nonManifoldEdges: 0 };
-  try { topology = plateTopology(mesh.triangles, mesh.vertices); }
+  const declared = recipe.selection.seams;
+  try { topology = plateTopology(mesh.triangles, mesh.vertices, { pinches: declared ? "count" : "refuse" }); }
   catch (error) { failures.push(`topology: ${(error as Error).message}`); }
   check(JSON.stringify(topology) === JSON.stringify(recipe.selection.topology), "plate topology differs from the recipe");
+  // Native seams: weld only what can never part (position, normal, skin and every morph row byte-identical); the welded
+  // surface must then be closed, unpinched and exactly the recipe's.
+  let seams: EyePlateSeams | undefined;
+  if (declared) {
+    const rows = (usage: string) => [...mesh.rows].filter(([key]) => key.split(":")[0] === usage).map(([, list]) => list);
+    const [position, normal] = [rows("PS_Position"), rows("PS_Normal")];
+    const morphRows = Array.from({ length: mesh.vertices }, () => [] as string[]);
+    plateTargets.targets.forEach((target, index) => { for (const diff of target) morphRows[diff.vertex]?.push(`${index}:${diff.row.toString("hex")}`); });
+    const text = (lists: Buffer[][], vertex: number) => lists.map(list => list[vertex].toString("hex")).join(",");
+    const positions = Array.from({ length: mesh.vertices }, (_, vertex) => text(position, vertex));
+    const signatures = Array.from({ length: mesh.vertices }, (_, vertex) =>
+      [text(normal, vertex), meshSkin.subarray(vertex * 16, vertex * 16 + 16).toString("hex"), morphRows[vertex].join(";")].join("|"));
+    check(position.length === 1 && normal.length === 1, "native seams need exactly one position and one normal element");
+    try { seams = weldedSeams(mesh.triangles, signatures, positions); }
+    catch (error) { failures.push(`welded topology: ${(error as Error).message}`); }
+    check(JSON.stringify(seams) === JSON.stringify(declared), `native seams differ from the recipe: ${JSON.stringify(seams)}`);
+  }
   if (failures.length) throw Error(`Eye plate verification failed: ${failures.join("; ")}.`);
   return { schema: "xfs/eye-plate-verification-1", vertices: mesh.vertices, triangles: mesh.triangles.length,
     morphTargets: plateTargets.targets.length, morphDiffs, exactVertexElements: [...exact].sort(), droppedVertexElements: [...dropped].sort(),
     exactNativeSkinBytesMesh: true, exactNativeSkinBytesMorphBase: true, meshMorphSkinRowsEqual: true, exactTriangles: true,
     exactMorphDiffRows: true, headQuantizationRetained: true, topology,
-    meshSkinRowsSha256: sha256Hex(meshSkin), morphSkinRowsSha256: sha256Hex(baseSkin) };
+    meshSkinRowsSha256: sha256Hex(meshSkin), morphSkinRowsSha256: sha256Hex(baseSkin), ...(seams ? { seams } : {}) };
 }

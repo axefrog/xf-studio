@@ -402,6 +402,11 @@ export interface FeatureExporter<Plan = unknown> {
   readonly info: ExportInfo;
   /** Host prerequisites a Build of this feature needs, by ID (the host prepares them before the builder runs). */
   readonly prerequisites: readonly string[];
+  /**
+   * Host prerequisites a Build uses when the host offers them, by ID (eye makeup: the masculine eye plate). A host without
+   * one still builds; the plan then says what that leaves out.
+   */
+  readonly optionalPrerequisites?: readonly string[];
   /** Whether any look of the collection holds this feature's part (cheap; decides product membership). */
   present(collection: unknown): boolean;
   /** Eligibility and plan. Throws `ExportRefusal` when nothing can be packaged or the input is invalid. */

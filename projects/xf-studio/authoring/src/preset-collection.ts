@@ -157,7 +157,20 @@ export const diagnosticFlatEntry = (surface: NonNullable<PresetDiagnostics["surf
  */
 export const MAKEUP_COMPONENT_PREFIX = "hx_";
 
-export function planCollection(value: unknown) {
+/**
+ * The masculine V's resources, when a build makes the mod for him too (male V plan §4.3): his own customization resource
+ * and `.app` (ArchiveXL takes a dynamic appearance's template by name prefix, first match, so one `.app` per body keeps
+ * the feminine names and removes any ordering hazard) and his own plate, cut from his head. The looks, appearance names,
+ * selector name and label, materials and every texture are the feminine plan's, shared: both plates keep the head's UV0,
+ * and the male head uses the female head's UVs around the eyes.
+ */
+export type MasculinePlan = { app: string; customization: string; mesh: string; morph: string };
+export const masculinePlanPaths = (depot: string): MasculinePlan => ({ app: `${depot}/xfs_collection_pma.app`,
+  customization: `${depot}/xfs_collection_pma.inkcharcustomization`, mesh: `${depot}/models/xfs_eye_plate_pma.mesh`,
+  morph: `${depot}/models/xfs_eye_plate_pma.morphtarget` });
+
+/** `masculine`: also plan the masculine V's selector (his plate is ready); otherwise the plan is the feminine one alone. */
+export function planCollection(value: unknown, options: { readonly masculine?: boolean } = {}) {
   const collection = parseCollection(value), key = collection.id.replaceAll("-", "");
   // Diagnostic knobs travel only inside exported files (export-diagnostics.ts); a normal collection has none.
   const diagnostics = parseExportDiagnostics((value as { diagnostics?: unknown } | null)?.diagnostics, collection.presets.map(p => p.id));
@@ -210,6 +223,8 @@ export function planCollection(value: unknown) {
     selector:namespace, component:`${MAKEUP_COMPONENT_PREFIX}${namespace}_makeup`, offAppearance:"xfs_off", templateAppearance:`${namespace}__xfs_template`,
     app:`${depot}/xfs_collection.app`, customization:`${depot}/xfs_collection.inkcharcustomization`,
     mesh:`${depot}/models/xfs_eye_plate.mesh`, morph:`${depot}/models/xfs_eye_plate.morphtarget`,
+    // Only a plan that includes the masculine V carries it, so a feminine-only plan is unchanged.
+    ...(options.masculine ? { masculine:masculinePlanPaths(depot) } : {}),
     // The packaged plate: one render chunk per lift (mm along the head's normals), in this order; a diagnostic glitter
     // accent adds one last chunk (`accentChunk`) at its presets' lift.
     plate:{ liftsMm, ...(accentChunk !== undefined ? { accentChunk } : {}) },

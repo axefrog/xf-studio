@@ -279,8 +279,11 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   }
   // Which features this collection holds decides which prerequisites to prepare.
   const present = adapter.exporters.filter(entry => { try { return entry.exporter.present(collection); } catch { return false; } });
-  const needed = [...new Set(present.flatMap(entry => entry.exporter.prerequisites))];
-  const missing = needed.filter(id => !adapter.prerequisites[id]);
+  const required = [...new Set(present.flatMap(entry => entry.exporter.prerequisites))];
+  const missing = required.filter(id => !adapter.prerequisites[id]);
+  // Optional prerequisites are prepared when this host offers them (eye makeup: the masculine eye plate).
+  const needed = [...new Set([...required, ...present.flatMap(entry => entry.exporter.optionalPrerequisites ?? [])
+    .filter(id => adapter.prerequisites[id])])];
   if (missing.length) return failure("package_build_unavailable", "This host can't prepare everything these mod files need.");
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), timeoutMs);

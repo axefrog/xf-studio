@@ -97,7 +97,8 @@ export const originalPresetCount = (source: PresetCollection) =>
  * plate is omitted too, as a reported omission; the result then records that plate (`plateUv`). Without it
  * (Check before any plate has been prepared) nothing is judged against the plate and `plateUv` is null.
  */
-export function preparePackageCollection(value: unknown, region: Pick<LayeredMakeupRegion, "mirror" | "skin">, plate: PlateReachInput | null = null) {
+export function preparePackageCollection(value: unknown, region: Pick<LayeredMakeupRegion, "mirror" | "skin">, plate: PlateReachInput | null = null,
+  options: { readonly masculine?: boolean } = {}) {
   const source = parseCollection(value);
   // Looks without eye makeup and other features' parts, which the collection's eye-makeup view left out, come first.
   const omissions: PackageOmission[] = (source.omitted ?? []).map(item => item.feature === undefined
@@ -138,6 +139,6 @@ export function preparePackageCollection(value: unknown, region: Pick<LayeredMak
   // The omitted list is a report, not content: the packaged copy (and its hash) never carries it.
   const { omitted: _omitted, ...content } = source;
   const packaged: PresetCollection = { ...content, presets, ...(diagnostics ? { diagnostics } : {}) };
-  const plan = planCollection(packaged);
+  const plan = planCollection(packaged, options);
   return { source, packaged, plan, omissions, experimental, plateUv: plate ? plateUvRecord(plate) : null };
 }

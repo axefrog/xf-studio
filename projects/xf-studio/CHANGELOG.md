@@ -12,6 +12,8 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
+- **XF Eye Artistry for a masculine V too.** Build now makes your mod for both a feminine and a masculine V: the masculine character creator gets its own XF row (between Teeth and Eye makeup) with the same looks, on an eye-makeup area cut from the male head in your own game the same way as the female one, and the same textures, so the mod grows by only four small files. The first Build prepares his eye area once (about half a minute). If his head can't be used (for example a head mod XF Eye Artistry doesn't support yet), the mod is still built, for a feminine V only, and Check and Build say so and what to do. Checked by Build's own verifier on a real build (her files are exactly the same as before); not yet seen in game.
+
 ### Fixes and under the hood
 
 - **XF Eye Artistry makeup hides with V's head.** An item that hides V's whole head (a full mask or helmet made with ArchiveXL's `hide_Head` tag) would have left the makeup floating in the air. The makeup is now named the way the game names its own face makeup, so it hides with the head as the game's makeup does. Checked by Build's own verifier and automated tests against ArchiveXL's rules; not yet seen in game.

@@ -325,9 +325,34 @@ export interface VerifierPlan {
   readonly namespace: string; readonly selector: string; readonly selectorLabel: unknown; readonly component: string;
   readonly offAppearance: string; readonly templateAppearance: string;
   readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string;
+  /** The masculine V's own customization, `.app` and plate, when the build includes him. */
+  readonly masculine?: { readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string };
   readonly presets: readonly VerifierPreset[];
   /** The packaged plate's lifts in millimetres, one render chunk each; a glitter accent's chunk comes last. */
   readonly plate?: { readonly liftsMm: readonly number[]; readonly accentChunk?: number };
+}
+
+/** One body's selector resources as the verifier checks them. */
+export type VerifierBody = { readonly body: "female" | "male"; readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string };
+/**
+ * Restated per body, independently of the builder: vanilla eye makeup's appearances carry the visual tag `Female` (pwa)
+ * or `Male` (pma) (`hx_000__basehead_makeup_eyes_01.app`), and the option sits right after teeth in each creator (female
+ * teeth 310, male teeth 540; `female_cco_ep1`, `male_cco_ep1`), where no other option has that index.
+ */
+export const VERIFIER_BODY_RULES = Object.freeze({ female: { visualTag: "Female", optionIndex: 311 }, male: { visualTag: "Male", optionIndex: 541 } });
+/**
+ * The bodies a plan builds a selector for. The masculine resources follow a restated naming rule: each feminine file's
+ * name with `_pma` before its extension, in the same folder (the game's own name for the male head, `player_man_average`).
+ */
+export function verifierBodies(plan: VerifierPlan): VerifierBody[] {
+  const female: VerifierBody = { body: "female", mesh: plan.mesh, morph: plan.morph, app: plan.app, customization: plan.customization };
+  const male = plan.masculine;
+  if (!male) return [female];
+  const pma = (path: string) => path.replace(/(\.[a-z]+)$/, "_pma$1");
+  ensure(keysAre(male, ["mesh", "morph", "app", "customization"]) &&
+    (["mesh", "morph", "app", "customization"] as const).every(key => male[key] === pma(female[key])),
+    "The masculine resources are not the feminine ones' _pma twins");
+  return [female, { body: "male", mesh: male.mesh, morph: male.morph, app: male.app, customization: male.customization }];
 }
 
 /** Expected constants of a glitter accent (restated): red mask channel, the flake colour's sRGB bytes, the knob's EV, no threshold. */
@@ -463,15 +488,16 @@ export interface ResourceSummary {
  * null (a developer override plate) accepts the source plate's own non-zero count.
  */
 export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, artifactPaths: readonly string[],
-  uv: Readonly<Record<string, number>> | undefined, morphTargets: number | null): ResourceSummary {
+  uv: Readonly<Record<string, number>> | undefined, morphTargets: number | null, body: VerifierBody = verifierBodies(plan)[0]): ResourceSummary {
   const { mesh, morph, app, customization: cc } = r;
+  const rules = VERIFIER_BODY_RULES[body.body];
   // Everything the build does not own is the plate input's; the blobs are checked against the planned
   // lifts in plate-geometry.ts.
   sameAsSource("Mesh", mesh, r.sourceMesh, PLATE_MESH_BUILD_FIELDS);
   sameAsSource("Morph", morph, r.sourceMorph, PLATE_MORPH_BUILD_FIELDS);
   const chunks = Array.isArray(plan.plate?.liftsMm) ? plan.plate!.liftsMm.length : 0;
   ensure(chunks > 0, "Plan names no plate lift");
-  ensure(dep(morph.baseMesh) === plan.mesh, "Morph baseMesh does not reference the planned mesh");
+  ensure(dep(morph.baseMesh) === body.mesh, "Morph baseMesh does not reference the planned mesh");
   ensure(value(morph.baseMeshAppearance) === plan.presets[0]?.appearance, "Morph baseMeshAppearance is not the seed appearance");
   const targetCount = Array.isArray(morph.targets) ? morph.targets.length : 0;
   ensure(morphTargets === null ? targetCount > 0 : targetCount === morphTargets,
@@ -570,7 +596,8 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   ensure(value(template.name) === plan.templateAppearance && template.components?.length === 1, "Template must define exactly one component");
   const component = template.components[0];
   ensure(component.$type === "entMorphTargetSkinnedMeshComponent", "Template component is not a morph-target skinned mesh");
-  ensure(value(component.name) === plan.component && dep(component.morphResource) === plan.morph, "Template component name or morph resource differs");
+  ensure(value(component.name) === plan.component && dep(component.morphResource) === body.morph, "Template component name or morph resource differs");
+  ensure(sameJson(template.visualTags?.tags?.map(value), [rules.visualTag]), `Template visual tag is not ${rules.visualTag}`);
   const expectedId = componentId(plan.component);
   ensure(uint64(component.id, "Component id") === expectedId, "Component id is not the stable derived id");
   ensure(sameJson(template.compiledData?.Data?.CruidDict, { "0": expectedId.toString() }), "Compiled CRUID does not match the component id");
@@ -611,8 +638,9 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     ...plan.presets.map(p => p.appearance), ...plan.presets.map(p => p.appAppearance)];
   ensure(names.every(name => typeof name === "string" && name.startsWith("xfs_")), "A generated name lacks the xfs_ prefix");
   ensure(artifactPaths.every(path => baseName(path).startsWith("xfs_")), "A generated resource filename lacks the xfs_ prefix");
-  ensure(value(option.name) === plan.selector && plan.selector === value(option.uiSlot) && dep(option.resource) === plan.app,
+  ensure(value(option.name) === plan.selector && plan.selector === value(option.uiSlot) && dep(option.resource) === body.app,
     "Selector name, slot or resource differs from the plan");
+  ensure(option.index === rules.optionIndex, `Selector index is ${option.index}, not ${rules.optionIndex} (after teeth in the ${body.body === "female" ? "feminine" : "masculine"} creator)`);
   ensure(option.definitions?.length === plan.presets.length + 1, "Selector must list Off plus every preset");
   ensure(value(option.definitions[0].name) === plan.offAppearance && option.defaultIndex === 0, "Selector default must be Off");
   // Restated independently of the builder: the creator screen reads `character_customization`; gameplay and
@@ -668,29 +696,32 @@ const keysAre = (x: Node, keys: readonly string[]) => isMap(x) && sameJson(Objec
 const depotText = (path: string) => path.replaceAll("/", "\\");
 
 /**
- * The parsed `.archive.xl` declaration must hold exactly the female customization registration and the
- * app's `player_customization.app` scope membership, with the planned depot paths, and nothing else.
+ * The parsed `.archive.xl` declaration must hold exactly each planned body's customization registration (ArchiveXL
+ * merges `female` into the feminine creator and `male` into the masculine one) and each body's app in the
+ * `player_customization.app` scope, with the planned depot paths, and nothing else.
  */
 export function checkArchiveXl(plan: VerifierPlan, declaration: Node, alone = true): void {
+  const bodies = verifierBodies(plan);
+  const list = (value: Node) => value === undefined ? [] : Array.isArray(value) ? value : [value];
   if (alone) {
     ensure(keysAre(declaration, ["customizations", "resource"]), "ArchiveXL declaration must contain exactly customizations and resource");
     const custom = declaration.customizations;
-    ensure(keysAre(custom, ["female"]), "ArchiveXL customizations must declare only the female list");
-    const female = Array.isArray(custom.female) ? custom.female : [custom.female];
-    ensure(sameJson(female, [depotText(plan.customization)]), "ArchiveXL declaration does not register exactly the planned customization");
+    ensure(keysAre(custom, bodies.map(item => item.body)), `ArchiveXL customizations must declare exactly the ${bodies.map(item => item.body).join(" and ")} list`);
+    for (const item of bodies) ensure(sameJson(list(custom[item.body]), [depotText(item.customization)]),
+      `ArchiveXL declaration does not register exactly the planned ${item.body} customization`);
     ensure(keysAre(declaration.resource, ["scope"]) && keysAre(declaration.resource.scope, ["player_customization.app"]),
       "ArchiveXL resource section must hold only the player_customization.app scope");
-    const members = declaration.resource.scope["player_customization.app"];
-    ensure(sameJson(Array.isArray(members) ? members : [members], [depotText(plan.app)]),
-      "ArchiveXL scope does not list exactly the planned app");
+    ensure(sameJson(list(declaration.resource.scope["player_customization.app"]), bodies.map(item => depotText(item.app))),
+      "ArchiveXL scope does not list exactly the planned apps");
     return;
   }
   // Beside other features in one product (whose merged declaration the product verifier compared exactly):
-  // this feature's customization and app are each declared once.
-  const list = (value: Node) => value === undefined ? [] : Array.isArray(value) ? value : [value];
-  const female = list(declaration?.customizations?.female), apps = list(declaration?.resource?.scope?.["player_customization.app"]);
-  ensure(female.filter((path: unknown) => path === depotText(plan.customization)).length === 1,
-    "ArchiveXL declaration does not register the planned customization exactly once");
-  ensure(apps.filter((path: unknown) => path === depotText(plan.app)).length === 1,
-    "ArchiveXL scope does not list the planned app exactly once");
+  // this feature's customization and app of each body are each declared once.
+  const apps = list(declaration?.resource?.scope?.["player_customization.app"]);
+  for (const item of bodies) {
+    ensure(list(declaration?.customizations?.[item.body]).filter((path: unknown) => path === depotText(item.customization)).length === 1,
+      `ArchiveXL declaration does not register the planned ${item.body} customization exactly once`);
+    ensure(apps.filter((path: unknown) => path === depotText(item.app)).length === 1,
+      "ArchiveXL scope does not list the planned app exactly once");
+  }
 }

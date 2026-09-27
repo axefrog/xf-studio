@@ -40,7 +40,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { chainDimensions, readDdsChain, type DdsKind } from "./dds-reader";
 import { plannedResources, resourceRecords, type ResourceFile } from "./resource-inventory";
 import { checkPlateGeometry, VERIFIER_PLATE_LIFT_MM, type PlateGeometryReport } from "./plate-geometry";
-import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, glitterOf, GRADIENT_SIDE, routeOf, sameJson, textureDims, uvSpaceOf,
+import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, verifierBodies, fresnelPigment, glitterOf, GRADIENT_SIDE, routeOf, sameJson, textureDims, uvSpaceOf,
   VerificationError, type Node, type VerifierPlan, type VerifierRoute, type VerifierUvSpace } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, normalInputOf, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
@@ -83,6 +83,13 @@ export interface VerifyBuildOptions {
   readonly plate?: { readonly mesh: string; readonly morph: string; readonly meshSha256?: string; readonly morphSha256?: string };
   /** Morph target count from the plate recipe; absent accepts the source plate's own count. */
   readonly morphTargets?: number;
+  /**
+   * The masculine plate given to the builder, with the hashes the caller prepared, when the build includes the masculine
+   * V (`plan.masculine`). Defaults to the build record's `masculine.plateInputs`; either way they must agree.
+   */
+  readonly masculinePlate?: { readonly mesh: string; readonly morph: string; readonly meshSha256?: string; readonly morphSha256?: string };
+  /** Morph target count from the masculine plate recipe (100 on 2.31); absent accepts the source plate's own count. */
+  readonly masculineMorphTargets?: number;
 }
 
 export const VERIFICATION_LIMITS: readonly string[] = [
@@ -90,6 +97,7 @@ export const VERIFICATION_LIMITS: readonly string[] = [
   "A/B/Off component clearing and save persistence need runtime evidence.",
   "Decoded XBM mip texel centres checked against coverage-space BOX reductions; bilinear/trilinear filtering between centres and game rendering remain unverified.",
   "Plate lift checked against the vanilla face-decal offset (0.40 mm along the head's normals, morph-aware); depth behaviour, eyelid contact and deformation need in-game evidence.",
+  "A masculine V's selector (when built) is checked as resources, plate geometry against his own plate input and UV window equal to the feminine plate's; the shared textures are checked on the feminine plate's UVs. His selector, placement and lids need in-game evidence.",
   "Flat, faceted and Fresnel decal routes are checked as resources and pixels; the faceted normal sign, the Fresnel colour-parameter encoding and every finish's lit appearance need in-game evidence.",
   "The plate-local UV window is re-derived from the packaged plate's UVs; window maps are compared with the authored head-UV coverage at plate sample points through the restated mesh_decal UV transform and WolvenKit's stored row order (checked on each build). The game's own sampling of the window is untested.",
   "The Glitter finish has no export route; only Matte, Satin, Metallic and the experimental game-matched Glossy, Shimmer and Colour-shifting finishes are packaged from authored layers.",
@@ -125,6 +133,11 @@ export interface VerificationReport {
   archiveXlSha256: string;
   /** Plate input hashes, equal at the start and the end of verification. */
   plateInputs: { mesh: string; morph: string };
+  /** Whose creators get the selector: the feminine V, and the masculine V when the plan includes him. */
+  bodies: ("female" | "male")[];
+  /** The masculine selector and plate, when built: his plate against his input, his window (equal to hers) and inputs. */
+  masculine?: { plateGeometry: PlateGeometryReport; plateUvWindow: PlateUvWindowReport; selectorOptionCount: number; preservedMorphs: number;
+    meshAppearances: number; plateInputs: { mesh: string; morph: string } };
   installed: false; gameRenderingVerified: false; limits: string[];
 }
 
@@ -495,7 +508,7 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
 
 /** Plate input files and their hashes: the caller's, else the build record's; both must agree. */
 function plateInputs(build: Node, options: Pick<VerifyBuildOptions, "plate">) {
-  const recorded: Node[] = Array.isArray(build.plateInputs) ? build.plateInputs : [];
+  const recorded: Node[] = Array.isArray(build?.plateInputs) ? build.plateInputs : [];
   const byExtension = (extension: string) => recorded.filter(entry => typeof entry?.path === "string" &&
     entry.path.toLowerCase().endsWith(extension));
   const mesh = byExtension(".mesh"), morph = byExtension(".morphtarget");
@@ -577,6 +590,21 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
     copyFileSync(plate.files[role], plateCopy[role]);
     ensure(sha256(readFileSync(plateCopy[role])) === plate.start[role], `Plate ${role} input changed while it was copied`);
   }
+  // The masculine plate, when the plan includes him: its own inputs, hashed and copied into a folder of their own.
+  const bodies = verifierBodies(plan), male = bodies[1];
+  ensure(!!male === !!build.masculine, male ? "Build record lacks the masculine plate the plan includes" : "Build record has a masculine plate the plan lacks");
+  const hisDirs = { plate: join(work, "plate-pma"), json: join(work, "plate-pma-json") };
+  let his: ReturnType<typeof plateInputs> | null = null, hisCopy: { mesh: string; morph: string } | null = null;
+  if (male) {
+    for (const dir of Object.values(hisDirs)) mkdirSync(dir, { recursive: true });
+    his = plateInputs(build.masculine, { plate: options.masculinePlate });
+    hisCopy = { mesh: join(hisDirs.plate, basename(his.files.mesh)), morph: join(hisDirs.plate, basename(his.files.morph)) };
+    ensure(his.start.mesh !== plate.start.mesh && his.start.morph !== plate.start.morph, "The masculine plate input is the feminine plate");
+    for (const role of ["mesh", "morph"] as const) {
+      copyFileSync(his.files[role], hisCopy[role]);
+      ensure(sha256(readFileSync(hisCopy[role])) === his.start[role], `Masculine plate ${role} input changed while it was copied`);
+    }
+  }
 
   // This feature's files in the generated tree before packing must still equal its recorded inventory.
   const planned = new Set(plannedResources(plan));
@@ -638,6 +666,7 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   // The verifier's own conversions of the hash-checked members and plate inputs.
   runStep("serialize-members", () => tools.serialize(memberRoot, dirs.json));
   runStep("serialize-plate", () => tools.serialize(dirs.plate, dirs["plate-json"]));
+  if (male) runStep("serialize-masculine-plate", () => tools.serialize(hisDirs.plate, hisDirs.json));
   const converted = (dir: string, name: string) => {
     const path = join(dir, name + ".json");
     ensure(isFile(path), `WolvenKit did not serialize ${name}`);
@@ -674,6 +703,24 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   const plateGeometry = checkPlateGeometry(converted(dirs["plate-json"], basename(plateCopy.mesh)).Data.RootChunk,
     converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk, root(plan.mesh), root(plan.morph), liftsMm);
 
+  // The masculine selector: his own customization, app and plate, checked like hers against his own plate input. The
+  // textures are shared, so his plate's UV window must be hers (and so every window entry's UV transform).
+  let masculine: VerificationReport["masculine"];
+  if (male && his && hisCopy) {
+    const hisSamples = plateUvSamples(root(male.mesh)), hisWindow = expectedWindow(hisSamples.bounds);
+    ensure(sameWindow(hisWindow, window, 1e-12), "The masculine plate's UV window differs from the feminine plate's, so the shared textures would not fit him");
+    ensure(sameWindow(build.masculine?.plateUv?.window, hisWindow, 1e-12), "Build record's masculine plate UV window differs from the one his plate's UVs give");
+    const sourceMesh = converted(hisDirs.json, basename(hisCopy.mesh)).Data.RootChunk, sourceMorph = converted(hisDirs.json, basename(hisCopy.morph)).Data.RootChunk;
+    const hisSummary = checkResources(plan, { mesh: root(male.mesh), morph: root(male.morph), app: root(male.app), customization: root(male.customization),
+      sourceMesh, sourceMorph, texture: path => root(path), archiveHas: path => members.has(path) },
+      build.artifacts.map((a: Node) => a.path), expectedUvConstants(hisWindow), options.masculineMorphTargets ?? null, male);
+    ensure(sameJson(hisSummary.resolved, summary.resolved), "The masculine selector's looks resolve to other textures than the feminine selector's");
+    masculine = { plateGeometry: checkPlateGeometry(sourceMesh, sourceMorph, root(male.mesh), root(male.morph), liftsMm),
+      plateUvWindow: { bounds: hisSamples.bounds, window: hisWindow, constants: expectedUvConstants(hisWindow), samples: hisSamples.uv.length / 2 },
+      selectorOptionCount: hisSummary.selectorOptionCount, preservedMorphs: hisSummary.morphTargets, meshAppearances: hisSummary.meshAppearances,
+      plateInputs: { ...his.start } };
+  }
+
   const pixelResults: VerificationReport["decodedPixelChecks"] = [], mipResults: VerificationReport["decodedMipChecks"] = [];
   let dense: PlateUvSamples | undefined;
   const context: TextureContext = { exported, xbm: path => root(path), samples, window, uv, denseSamples: () => (dense ??= plateUvSamples(root(plan.mesh), DENSE_INSIDE)) };
@@ -687,6 +734,9 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   for (const role of ["mesh", "morph"] as const)
     ensure(isFile(plate.files[role]) && sha256(readFileSync(plate.files[role])) === plate.start[role],
       `Plate ${role} input changed during verification`);
+  if (his) for (const role of ["mesh", "morph"] as const)
+    ensure(isFile(his.files[role]) && sha256(readFileSync(his.files[role])) === his.start[role],
+      `Masculine plate ${role} input changed during verification`);
 
   return {
     build: out, presetCount: plan.presets.length, selectorCount: 1, selectorOptionCount: summary.selectorOptionCount,
@@ -696,6 +746,7 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
     plateGeometry, plateUvWindow: { bounds: samples.bounds, window, constants: uv, samples: samples.uv.length / 2 },
     resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
     decodedMipChecks: mipResults, presetRoutes, archiveXlSha256: view.xlSha256, plateInputs: { ...plate.start },
+    bodies: bodies.map(item => item.body), ...(masculine ? { masculine } : {}),
     installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
   };
 }

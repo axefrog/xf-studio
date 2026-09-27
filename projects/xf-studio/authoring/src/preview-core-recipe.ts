@@ -1,5 +1,4 @@
-import { canonicalJson, EYE_PLATE_RECIPE, eyePlateRecipeSha256, parseEyePlateRecipe, sha256Hex, type EyePlateRecipe } from "./eye-plate-recipe";
-import masculinePlateJson from "./eye-plate-recipe-pma.json" with { type: "json" };
+import { canonicalJson, EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, eyePlateRecipeSha256, sha256Hex, type EyePlateRecipe } from "./eye-plate-recipe";
 import { CORE_ASSET_PREFIX, CORE_BODIES, coreAssetName, type CoreBody, type CoreTextureSlot } from "./render-detail";
 export { CORE_ASSET_PREFIX, CORE_BODIES, coreAssetName, type CoreBody };
 
@@ -71,11 +70,10 @@ export const PREVIEW_CORE_RECIPE: PreviewCoreRecipe = Object.freeze({
 }) as PreviewCoreRecipe;
 
 /**
- * The masculine head's plate selection (male V plan §4.1: the male head's triangles over the feminine plate's UVs,
- * `tools/derive-plate-selection.ts`). **Preview only**: it has not passed the eye plate's skin-byte, lift and clearance
- * gates, so nothing in Build or the package verifier reads it (plan phase 5 audits it).
+ * The masculine head's plate (male V plan §4.1: the male head's triangles over the feminine plate's UVs,
+ * `tools/derive-plate-selection.ts`), the recipe Build cuts the masculine plate with (phase 5).
  */
-export const PREVIEW_MASCULINE_PLATE_RECIPE: EyePlateRecipe = parseEyePlateRecipe(masculinePlateJson);
+export const PREVIEW_MASCULINE_PLATE_RECIPE: EyePlateRecipe = EYE_PLATE_MASCULINE_RECIPE;
 
 /**
  * The masculine V's core: his own head and plate, and his eye mesh, whose chunk roles are swapped against the feminine

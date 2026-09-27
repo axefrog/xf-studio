@@ -18,6 +18,7 @@ import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/pl
 import { withGlitterKnob } from "./glitter-knob-fixture";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { FOOTPRINT } from "./fixtures/product-fixture";
+import { MASCULINE_UNCHECKED_NOTE } from "../src/features/eye-makeup/export";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const url = "http://127.0.0.1:4317/api/package";
@@ -157,7 +158,8 @@ test("PIPE-33: Check plans on the plate the cache last prepared for this game, r
     const result = await check(tools);
     expect(result.omissions).toEqual([]);
     expect((result.details.plateUv as { footprintSha256: string }).footprintSha256).toBe(plateReachInput(FOOTPRINT).sha256);
-    expect(result.notes).toEqual([]);
+    // No masculine plate prerequisite here: Check plans on including him and says Build checks his head.
+    expect(result.notes).toEqual([MASCULINE_UNCHECKED_NOTE]);
     // Another game folder, an MO2 route or the other head choice has no prepared plate yet: Check plans on none and says so.
     for (const changed of [{ ...tools, gamepath: join(directory, "other") },
       { ...tools, route: { launchRoute: "mo2" as const, mo2Root: join(directory, "mo2"), mo2ProfileId: "Default", manualModRoot: null } },
@@ -165,7 +167,7 @@ test("PIPE-33: Check plans on the plate the cache last prepared for this game, r
       const blind = await check(changed);
       expect(blind.omissions).toEqual([]);
       expect(blind.details.plateUv).toBeNull();
-      expect(blind.notes).toEqual([PLATE_REACH_UNCHECKED_NOTE]); // the Studio says so plainly
+      expect(blind.notes).toEqual([PLATE_REACH_UNCHECKED_NOTE, MASCULINE_UNCHECKED_NOTE]); // the Studio says so plainly
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
