@@ -217,7 +217,11 @@ export function createLightingSetupStage(options: {
       sex = next;
       apply(true);
     },
-    /** The preview quality (generated-texture size) the shadow maps follow. */
+    /**
+     * The preview quality (generated-texture size) the shadow maps follow. A notification that keeps the size keeps the maps (PREV-131: the
+     * old studio rig disposed them on every quality notification and never drew them again); a new size is a new fingerprint, so the next
+     * frame draws them at it.
+     */
     setShadowQuality(textureSize: number) { rig.setShadowMapSize(creatorShadowMapSize(textureSize)); },
     /** Camera state for a creator page, for the preview's camera port. */
     camera: (page: CreatorCameraPage) => creatorCamera(sex, page),
@@ -250,8 +254,11 @@ export function createLightingSetupStage(options: {
       gl.finish();
       return (performance.now() - start) / frames;
     },
-    /** After a restored context: prefilter the room again into the same texture. */
-    restore: () => environment.restore(),
+    /**
+     * After a restored context: prefilter the room again into the same texture, and draw the shadow maps again on the next frame (the
+     * restored context's maps are empty, and a still V would otherwise keep them: PREV-132).
+     */
+    restore() { environment.restore(); shadowKey = ""; },
     /** Test and evidence access. */
     rig,
     display,

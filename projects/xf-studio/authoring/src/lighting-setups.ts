@@ -18,8 +18,8 @@
  *
  * Everything here is workspace view state (the view graph's lights node): never recipes, look Undo or export.
  */
-import { CREATOR_EXPOSURE_RANGE, CREATOR_HEAD_SLOT, CREATOR_SHADOW, creatorRigSpecs, type BodySex, type CreatorLightingOptions,
-  type LightingPreset, type Vec3 } from "./creator-lighting";
+import { CREATOR_EXPOSURE_RANGE, CREATOR_HEAD_SLOT, CREATOR_RIGS, CREATOR_SHADOW, creatorRigSpecs, type BodySex, type CreatorLight,
+  type CreatorLightingOptions, type LightingPreset, type Rgb8, type Vec3 } from "./creator-lighting";
 import { DEFAULT_STUDIO_STAGE, lightDirection, matchingStudioSetup, STUDIO_BASE_INTENSITY, STUDIO_EXPOSURE_RANGE, STUDIO_FILL_POSITION,
   STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_COLOURS, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_LIGHT_TARGET, STUDIO_RIM_DIRECTION,
   STUDIO_SETUP_IDS, STUDIO_SETUPS, type StudioLights, type StudioStage } from "./studio-lighting";
@@ -48,7 +48,45 @@ export type SetupLight = {
   readonly penumbra: number;
   readonly decay: number;
   readonly distance: number;
+  /**
+   * The game's own values for a light that came from the game (the Character creator rig), kept so the light can be sent back to the
+   * game in its native units (research/runtime/lighting-mirror-design.md §9): the engine then converts them itself, and a linear-falloff
+   * light, drawn here with its falloff folded into one head-distance intensity, isn't lost. Absent on lights made in the Studio.
+   */
+  readonly game?: GameLightValues;
 };
+/**
+ * A light's values as the game stores them (knowledge/creator-lighting.md §2). Edits keep what still applies: a colour, cone or shadow
+ * change rewrites the matching fields, a strength change is carried by `studioIntensity` (the mirror scales the lumens by the ratio), and
+ * turning the light directional drops the block (the game light is a spot).
+ */
+export type GameLightValues = {
+  readonly lumen: number;
+  readonly unit: "lumen";
+  readonly falloff: "inverse-square" | "linear";
+  /** Attenuation radius, metres. */
+  readonly radius: number;
+  /** The engine's cone exponent. */
+  readonly softness: number;
+  /** Full cone angles in degrees, as the resource stores them. */
+  readonly outer: number;
+  readonly inner: number;
+  /** 8-bit sRGB; null = unset (white). */
+  readonly colour: Rgb8 | null;
+  readonly localShadows: boolean;
+  /** `CSR_CharacterOnly` is `character`. */
+  readonly contactShadows: "none" | "character" | "all";
+  /** The light's source radius in metres, when the game data gives one (the creator rig's table doesn't). */
+  readonly sourceRadius?: number;
+  readonly roughnessBias: number;
+  /** The Studio intensity when the values were taken. */
+  readonly studioIntensity: number;
+};
+const CONTACT_SHADOWS = Object.freeze(["none", "character", "all"] as const);
+/** A creator rig row's native values, with the Studio intensity the preview drew it at. */
+const gameValues = (l: CreatorLight, studioIntensity: number): GameLightValues => ({ lumen: l.lumen, unit: "lumen", falloff: l.falloff,
+  radius: l.radius, softness: l.softness, outer: l.outer, inner: l.inner, colour: l.colour ? [...l.colour] as unknown as Rgb8 : null,
+  localShadows: l.shadows, contactShadows: l.contactShadows ? "character" : "none", roughnessBias: l.roughnessBias, studioIntensity });
 export type SetupDisplay = "aces" | "game";
 export const SETUP_DISPLAYS: readonly SetupDisplay[] = Object.freeze(["aces", "game"]);
 export type SetupBackdrop = "studio" | "black";
@@ -166,10 +204,12 @@ export function studioStageSetup(stage: Readonly<StudioStage>): LightingSetup {
 export function creatorSetup(sex: BodySex, calibration: CreatorLightingOptions, yawOffset?: number): LightingSetup {
   const specs = creatorRigSpecs(sex, { intensity: calibration.intensity, cone: calibration.cone, shadows: calibration.shadows,
     ...(yawOffset === undefined ? {} : { yawOffset }) });
+  // The specs follow the rig table's rows in order; turning the rig moves a light but changes none of its native values.
+  const rows = CREATOR_RIGS[sex];
   return {
-    lights: specs.map(spec => ({ id: spec.name, name: spec.name.replace(/_/g, " "), type: "spot", position: [...spec.position] as unknown as Vec3,
+    lights: specs.map((spec, i) => ({ id: spec.name, name: spec.name.replace(/_/g, " "), type: "spot", position: [...spec.position] as unknown as Vec3,
       target: [...spec.target] as unknown as Vec3, colour: [...spec.colour] as unknown as Vec3, intensity: spec.intensity, shadows: spec.castShadow,
-      angle: spec.angle, penumbra: spec.penumbra, decay: spec.decay, distance: spec.distance })),
+      angle: spec.angle, penumbra: spec.penumbra, decay: spec.decay, distance: spec.distance, game: gameValues(rows[i]!, spec.intensity) })),
     focus: [...CREATOR_HEAD_SLOT[sex]] as unknown as Vec3, environment: 0, backdrop: "black", display: "game", exposure: calibration.exposure,
   };
 }
@@ -281,15 +321,30 @@ const mapLight = (setup: LightingSetup, id: string, change: (light: SetupLight) 
 export function setLightNumber(setup: LightingSetup, id: string, key: LightNumberKey, value: number): LightingSetup {
   return mapLight(setup, id, light => {
     if (key === "intensity") return { ...light, intensity: value };
-    if (key === "cone") return { ...light, angle: value * RAD };
-    if (key === "softness") return { ...light, penumbra: value };
+    if (key === "cone") return withGameCone({ ...light, angle: value * RAD });
+    if (key === "softness") return withGameCone({ ...light, penumbra: value });
     const placement = { ...lightPlacement(light, setup.focus), [key]: value };
     return { ...light, position: along(setup.focus, lightDirection(placement.azimuth, placement.elevation), placement.distance) };
   });
 }
-export const setLightColour = (setup: LightingSetup, id: string, colour: Vec3) => mapLight(setup, id, light => ({ ...light, colour: [...colour] as unknown as Vec3 }));
-export const setLightShadows = (setup: LightingSetup, id: string, shadows: boolean) => mapLight(setup, id, light => ({ ...light, shadows }));
-export const setLightType = (setup: LightingSetup, id: string, type: LightType) => mapLight(setup, id, light => ({ ...light, type }));
+/** The Studio's cone as the game's full angles (the default "full" reading: outer = 2 × half-angle, inner = outer × (1 − penumbra)). */
+function withGameCone(light: SetupLight): SetupLight {
+  if (!light.game) return light;
+  const outer = 2 * light.angle / RAD;
+  return { ...light, game: { ...light.game, outer, inner: outer * (1 - light.penumbra) } };
+}
+const srgb8 = (colour: Vec3): Rgb8 => colourHex(colour).slice(1).match(/../g)!.map(pair => Number.parseInt(pair, 16)) as unknown as Rgb8;
+export const setLightColour = (setup: LightingSetup, id: string, colour: Vec3) => mapLight(setup, id, light => ({ ...light,
+  colour: [...colour] as unknown as Vec3, ...(light.game ? { game: { ...light.game, colour: srgb8(colour) } } : {}) }));
+/** Shadows on or off: the game's flags follow (off clears both kinds; on turns the local shadow map on and keeps a contact flag). */
+export const setLightShadows = (setup: LightingSetup, id: string, shadows: boolean) => mapLight(setup, id, light => ({ ...light, shadows,
+  ...(light.game ? { game: { ...light.game, localShadows: shadows,
+    contactShadows: shadows ? light.game.contactShadows : "none" as const } } : {}) }));
+/** A directional light has no game counterpart (the game's light is a spot), so its native values go. */
+export const setLightType = (setup: LightingSetup, id: string, type: LightType) => mapLight(setup, id, light => {
+  const { game, ...rest } = light;
+  return type === "spot" && game ? { ...rest, type, game } : { ...rest, type };
+});
 export const renameLight = (setup: LightingSetup, id: string, name: string) => mapLight(setup, id, light => ({ ...light, name: name.trim() }));
 export const aimLightAtHead = (setup: LightingSetup, id: string) => mapLight(setup, id, light => ({ ...light, target: [...setup.focus] as unknown as Vec3 }));
 export const removeLight = (setup: LightingSetup, id: string): LightingSetup => ({ ...setup, lights: setup.lights.filter(light => light.id !== id) });
@@ -326,6 +381,19 @@ const vector = (value: unknown, limit: number): value is Vec3 =>
 export const validSetupName = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 &&
   value.trim().length <= LIGHTING_LIMITS.name && !/[\u0000-\u001f\u007f]/.test(value);
 const LIGHT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/, USER_ID = /^u[1-9][0-9]{0,3}$/;
+const byte = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 255;
+/** Stored native values, normalised to their known fields, or undefined when any is missing or out of range. */
+export function parseGameLightValues(value: unknown): GameLightValues | undefined {
+  const g = value as Partial<GameLightValues> | undefined;
+  if (!g || typeof g !== "object" || !finiteIn(g.lumen, 0, 1e6) || g.unit !== "lumen" || (g.falloff !== "inverse-square" && g.falloff !== "linear") ||
+    !finiteIn(g.radius, 0, 1000) || !finiteIn(g.softness, 0, 100) || !finiteIn(g.outer, 0, 180) || !finiteIn(g.inner, 0, 180) ||
+    !(g.colour === null || Array.isArray(g.colour) && g.colour.length === 3 && g.colour.every(byte)) || typeof g.localShadows !== "boolean" ||
+    !CONTACT_SHADOWS.includes(g.contactShadows!) || !(g.sourceRadius === undefined || finiteIn(g.sourceRadius, 0, 100)) ||
+    !finiteIn(g.roughnessBias, -64, 64) || !finiteIn(g.studioIntensity, 0, LIGHTING_LIMITS.intensity)) return;
+  return { lumen: g.lumen, unit: "lumen", falloff: g.falloff, radius: g.radius, softness: g.softness, outer: g.outer, inner: g.inner,
+    colour: g.colour ? [...g.colour] as unknown as Rgb8 : null, localShadows: g.localShadows, contactShadows: g.contactShadows!,
+    ...(g.sourceRadius === undefined ? {} : { sourceRadius: g.sourceRadius }), roughnessBias: g.roughnessBias, studioIntensity: g.studioIntensity };
+}
 const MAX_SPOT_ANGLE = 89.9 * RAD;
 
 /** A stored light, normalised to its known fields, or undefined when any is missing or out of range. */
@@ -336,9 +404,11 @@ export function parseSetupLight(value: unknown): SetupLight | undefined {
     !finiteIn(l.intensity, 0, LIGHTING_LIMITS.intensity) || typeof l.shadows !== "boolean" || !finiteIn(l.angle, 1e-4, MAX_SPOT_ANGLE) ||
     !finiteIn(l.penumbra, 0, 1) || !finiteIn(l.decay, 0, 2) || !finiteIn(l.distance, 0, 100)) return;
   if (Math.hypot(l.position[0] - l.target[0], l.position[1] - l.target[1], l.position[2] - l.target[2]) < 1e-4) return;
+  const game = l.game === undefined ? undefined : parseGameLightValues(l.game);
+  if (l.game !== undefined && !game) return;
   return { id: l.id, name: l.name.trim(), type: l.type!, position: [...l.position] as unknown as Vec3, target: [...l.target] as unknown as Vec3,
     colour: [...l.colour] as unknown as Vec3, intensity: l.intensity, shadows: l.shadows, angle: l.angle, penumbra: l.penumbra, decay: l.decay,
-    distance: l.distance };
+    distance: l.distance, ...(game ? { game } : {}) };
 }
 /** A stored setup, normalised, or undefined. */
 export function parseLightingSetup(value: unknown): LightingSetup | undefined {

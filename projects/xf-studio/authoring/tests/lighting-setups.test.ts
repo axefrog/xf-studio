@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { creatorRigSpecs, DEFAULT_CREATOR_LIGHTING, type BodySex } from "../src/creator-lighting";
+import { CREATOR_RIG_FEMALE, creatorRigSpecs, DEFAULT_CREATOR_LIGHTING, type BodySex } from "../src/creator-lighting";
 import { createLightListRig } from "../src/lighting-setup-stage";
 import { BUILT_IN_SETUP_IDS, builtInSetup, colourHex, creatorSetup, hexToLinear, legacyStudioStage, lightingSource, lightPlacement,
   LIGHTING_LIMITS, migrateLegacyLighting, parseSetupLibrary, resolveLightingSource, studioStageSetup, type LightingSource,
@@ -449,4 +449,41 @@ test("the legacy mirror approximates an own studio setup for older builds, and i
   expect(mirrored.angle).toBeCloseTo(120, 9);
   expect(mirrored.lights).toMatchObject({ neutral: true, environment: 0.5, key: expect.closeTo(1.6, 12), elevation: expect.closeTo(20, 9) });
   expect(lightPlacement(library.setups[0]!.setup.lights[0]!, library.setups[0]!.setup.focus).azimuth).toBeCloseTo(120, 9);
+});
+
+test("creator lights carry the game's own values, kept through the edits they still describe (lighting-mirror-design.md §9)", () => {
+  const built = creatorSetup("female", DEFAULT_CREATOR_LIGHTING), rows = CREATOR_RIG_FEMALE;
+  built.lights.forEach((light, i) => {
+    const row = rows[i]!;
+    expect(light.game).toEqual({ lumen: row.lumen, unit: "lumen", falloff: row.falloff, radius: row.radius, softness: row.softness, outer: row.outer,
+      inner: row.inner, colour: row.colour ? [...row.colour] : null, localShadows: row.shadows, contactShadows: row.contactShadows ? "character" : "none",
+      roughnessBias: row.roughnessBias, studioIntensity: light.intensity });
+  });
+  expect(built.lights.find(light => light.id === "Rim_Left_Head")!.game).toMatchObject({ roughnessBias: -8, contactShadows: "character", falloff: "inverse-square" });
+  // Lights made in the Studio have none.
+  expect(studioStageSetup(DEFAULT_STUDIO_STAGE).lights.every(light => light.game === undefined)).toBe(true);
+  // Through a fork's edits.
+  const { actions } = setup();
+  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
+  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "intensity", value: 10 });
+  const face = () => actions.views().state<SetupLibrary>(MAIN_VIEW, "lights").setups[0]!.setup.lights.find(light => light.id === "Main_Face")!;
+  const before = built.lights.find(light => light.id === "Main_Face")!.game!;
+  expect(face().game).toEqual(before); // the strength is carried by the ratio to studioIntensity
+  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "azimuth", value: 300 });
+  expect(face().game).toEqual(before);
+  actions.dispatch({ kind: "preview.setLightColour", light: "Main_Face", colour: "#ff8040" });
+  expect(face().game!.colour).toEqual([255, 128, 64]);
+  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "cone", value: 20 });
+  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "softness", value: 0.5 });
+  expect(face().game).toMatchObject({ outer: expect.closeTo(40, 9), inner: expect.closeTo(20, 9), softness: before.softness });
+  actions.dispatch({ kind: "preview.setLightShadows", light: "Main_Face", enabled: false });
+  expect(face().game).toMatchObject({ localShadows: false, contactShadows: "none" });
+  actions.dispatch({ kind: "preview.setLightType", light: "Main_Face", type: "directional" });
+  expect(face().game).toBeUndefined();
+  // Stored and read back exactly; a damaged block drops the setups as a whole.
+  const library = parseSetupLibrary(JSON.parse(JSON.stringify({ setup: "u1", setups: actions.views().state<SetupLibrary>(MAIN_VIEW, "lights").setups })))!;
+  expect(library.setups[0]!.setup.lights.find(light => light.id === "Rim_Top")!.game).toEqual(built.lights.find(light => light.id === "Rim_Top")!.game);
+  const damaged = JSON.parse(JSON.stringify(library));
+  damaged.setups[0].setup.lights[1].game.unit = "candela";
+  expect(parseSetupLibrary(damaged)).toBeUndefined();
 });

@@ -11,7 +11,8 @@
 import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "./platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
 import type { CameraState, PreviewState } from "./workspace-state";
-import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
+import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
+  type LightingPreset } from "./creator-lighting";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { DEFAULT_SETUP_LIBRARY, legacyStudioStage, migrateLegacyLighting, parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
@@ -204,10 +205,18 @@ export function isDefaultViewGraph(data: ViewGraphData): boolean {
   return !!on && Object.keys(on).every(id => mirrored.has(id));
 }
 
-/** What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph. */
+/**
+ * What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph, with each
+ * lights node's calibration in its stored form (the untouched token), as `preview` has it, so every view keeps following a refit (PREV-135).
+ */
 export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
   const data = graph.data();
-  return isDefaultViewGraph(data) ? undefined : data;
+  if (isDefaultViewGraph(data)) return undefined;
+  const known = new Set<string>(LIGHTING_PRESETS);
+  return { ...data, lights: data.lights.map(node => {
+    const calibration = node.kind !== undefined && known.has(node.kind) ? readCreatorLighting(node.creatorLighting) : null;
+    return calibration ? { ...node, creatorLighting: storedCreatorLighting(calibration) } : node;
+  }) };
 }
 
 /**

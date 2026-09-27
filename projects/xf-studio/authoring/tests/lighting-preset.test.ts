@@ -9,7 +9,9 @@ import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/pr
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { createStudioViewGraph, storedViewGraph } from "../src/preview-view-graph";
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
@@ -370,4 +372,61 @@ test("the calibration is stored as the untouched token at its defaults, so an un
   expect(readCreatorLighting(storedCreatorLighting(tuned))).toEqual(tuned);
   const workspace = freshWorkspace();
   expect(parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS).preview.creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);
+});
+
+test("shadow maps survive a quality notice that keeps their size, and are drawn again after a lost context (PREV-131, PREV-132)", () => {
+  const scene = new THREE.Scene();
+  const caster = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  caster.castShadow = true; scene.add(caster);
+  const shadowMap = { enabled: false, type: 0, autoUpdate: true, needsUpdate: false };
+  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null, shadowMap,
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+  let restored = 0;
+  const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}),
+    createEnvironment: (r, s) => ({ ...room()(r, s), restore: () => { restored++; } }) });
+  expect([shadowMap.enabled, shadowMap.autoUpdate]).toEqual([true, false]);
+  const camera = new THREE.PerspectiveCamera(), drawn = () => { const was = shadowMap.needsUpdate; shadowMap.needsUpdate = false; return was; };
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.setShadowQuality(1024);
+  const key = stage.rig.objects[0]!, map = { dispose: () => { throw Error("disposed"); } } as unknown as THREE.WebGLRenderTarget;
+  key.shadow.map = map;
+  // The preview quality notifies again at the same size: the maps stay, nothing needs drawing.
+  stage.setShadowQuality(1024);
+  expect(key.shadow.map).toBe(map);
+  stage.render(camera);
+  expect(drawn()).toBe(false);
+  // A new size is a new fingerprint: the next frame draws the maps at it.
+  key.shadow.map = null;
+  stage.setShadowQuality(2048);
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.render(camera);
+  expect(drawn()).toBe(false);
+  // A restored context: the room is prefiltered again and the next frame draws the (empty) maps again.
+  stage.restore();
+  expect(restored).toBe(1);
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.dispose();
+});
+
+test("a chosen calibration equal to the token's reads back as chosen, and every view's lights node stores the token (PREV-135)", () => {
+  // An explicitly chosen 0.46 (the old default) is written with its shadow switch, so it isn't read as untouched.
+  const chosen = { ...DEFAULT_CREATOR_LIGHTING, exposure: 0.46 };
+  expect(storedCreatorLighting(chosen)).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46, shadows: true });
+  expect(readCreatorLighting(storedCreatorLighting(chosen))).toEqual(chosen);
+  expect(readCreatorLighting({ intensity: "isotropic", cone: "full", exposure: 0.46 })).toEqual(DEFAULT_CREATOR_LIGHTING);
+  const workspace = freshWorkspace();
+  workspace.preview.creatorLighting = chosen;
+  expect(parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS).preview.creatorLighting).toEqual(chosen);
+  // A second view with lights of its own: its node stores the untouched token like `preview`, so it keeps following refits.
+  const fresh = freshWorkspace(), views = createStudioViewGraph(fresh.preview);
+  const v2 = views.addView(MAIN_VIEW, { scene: true });
+  views.edit(v2, "lights", { kind: "creator", state: { setup: "creator" } });
+  const stored = storedViewGraph(views)!;
+  const node = stored.lights.find(entry => entry.id === views.node(v2, "lights").id)!;
+  expect(node.creatorLighting).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46 });
+  const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...fresh, views: stored }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  expect(createStudioViewGraph(read.preview, read.views).state(v2, "lights")).toMatchObject({ setup: "creator", creatorLighting: DEFAULT_CREATOR_LIGHTING });
 });
