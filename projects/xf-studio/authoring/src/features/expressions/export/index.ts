@@ -101,7 +101,9 @@ function plan(input: Parameters<FeatureExporter<ExpressionPlan>["plan"]>[0]): Ou
   }
   if (!eligible.length) {
     const reasons = [...new Set(omissions.map(item => item.reason))];
-    return refuse("no_exportable_content", `No expression in this set can become mod files${reasons.length === 1 ? `: ${reasons[0]}` : "."} Your set is unchanged.`);
+    // One reason is said once (the set's view adds that the set is unchanged); several name their expressions (the first three).
+    const each = omissions.slice(0, 3).map(item => `“${(item as { presetName: string }).presetName}”: ${item.reason}`).join(" ");
+    return refuse("no_exportable_content", `No expression in this set can become mod files. ${reasons.length === 1 ? reasons[0] : each}`);
   }
   // Clip names: the namespace and the saved expression's ID (stable across renames); the full ID if two would share a name.
   const short = eligible.map(item => `${namespace}_${compact(item.id).slice(0, 12)}`);
