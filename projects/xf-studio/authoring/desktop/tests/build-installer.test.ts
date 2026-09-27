@@ -26,3 +26,14 @@ test("the closing message names the setup relative to the checkout, its hash, ho
   expect(message).toContain("Help > Get the desktop app > Install from your build");
   expect(message).toContain("More info, then Run anyway");
 });
+
+test("a disposable trial identity's setup is named as Electrobun names it, never as the real app's setup", async () => {
+  const { artifactAppName } = await import("../release");
+  const { INSTALLER_NAME } = await import("../../src/desktop-app-host");
+  expect(artifactAppName("XF Studio")).toBe("XFStudio");
+  expect(artifactAppName("XF Studio UI Trial")).toBe("XFStudioUITrial");
+  expect(artifactAppName("XF Studio Build Trial")).toBe("XFStudioBuildTrial");
+  // "Install from your build" offers only the real app's setup, so a trial build in artifacts/ is never installed over it.
+  expect(INSTALLER_NAME.test(`canary-win-x64-${artifactAppName("XF Studio")}-Setup-canary.exe`)).toBe(true);
+  expect(INSTALLER_NAME.test(`canary-win-x64-${artifactAppName("XF Studio UI Trial")}-Setup-canary.exe`)).toBe(false);
+});

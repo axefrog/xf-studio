@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import desktopPackage from "./package.json";
 import { noticesPath, requireLicence } from "./notices";
 import { INNO_SETUP } from "./inno-setup";
+import electrobunConfig from "./electrobun.config";
 
 // Release metadata for the desktop app. `package.json` `version` is the single
 // source of truth: the Electrobun config, packaged version.json/About, the
@@ -15,10 +16,16 @@ export const desktopRoot = import.meta.dir;
 export const changelogPath = resolve(desktopRoot, "../../CHANGELOG.md");
 /** Electrobun 2.0.1 knows only dev/canary/stable; every pre-release channel builds as `canary`. */
 export const electrobunChannel = "canary";
+/**
+ * Electrobun names its artifacts after the app name without spaces: `XFStudio` for the real app, `XFStudioUITrial` or
+ * `XFStudioBuildTrial` for a disposable trial identity (electrobun.config.ts). Deriving it here keeps a trial build working end
+ * to end and gives its setup a name the Studio's "Install from your build" never offers as the real app.
+ */
+export const artifactAppName = (appName: string = electrobunConfig.app.name) => appName.replaceAll(" ", "");
 /** Electrobun's own setup: a setup program plus its hidden `.installer` payload, zipped. Build input only. */
-export const canarySetupZip = resolve(desktopRoot, "artifacts", "canary-win-x64-XFStudio-Setup-canary.zip");
+export const canarySetupZip = resolve(desktopRoot, "artifacts", `canary-win-x64-${artifactAppName()}-Setup-canary.zip`);
 /** The single self-contained setup program built from that ZIP (single-installer.ts); the released download. */
-export const canarySetupExe = resolve(desktopRoot, "artifacts", "canary-win-x64-XFStudio-Setup-canary.exe");
+export const canarySetupExe = resolve(desktopRoot, "artifacts", `canary-win-x64-${artifactAppName()}-Setup-canary.exe`);
 export const canaryUpdateJson = resolve(desktopRoot, "artifacts", "canary-win-x64-update.json");
 /** Attached to every release beside the setup program; the same file is installed with the app. */
 export const noticesAssetName = "THIRD_PARTY_NOTICES.md";

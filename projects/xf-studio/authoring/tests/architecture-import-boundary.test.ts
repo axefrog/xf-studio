@@ -1,8 +1,11 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { sourceText } from "./fixtures/source-files";
 import { COMPUTED, imports, importUses, resolveFrom } from "./fixtures/import-scan";
 import { codeOnly, pageGlobals, PAGE_GLOBALS } from "./fixtures/code-scan";
+
+// Whole-tree scans: the first test to read every module can pass 20 s while other suites load the machine.
+setDefaultTimeout(60_000);
 
 /** A module's text, read once per test process (tests/fixtures/source-files.ts). */
 const source = (name: string) => sourceText(fileURLToPath(new URL(`../src/${name}.ts`, import.meta.url)));

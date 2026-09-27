@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { createDesktopServer } from "../server";
+import { createDesktopServer, smokeMessage } from "../server";
 import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
@@ -467,4 +467,15 @@ test("?verify on the desktop edits its own copy of the settings and never adds a
     expect(install.status).toBe(503);
     expect((await install.json()).error).toContain("test workspace");
   } finally { host.stop(); rmSync(verifyRoot, { recursive: true, force: true }); }
+});
+
+test("the smoke report logs the page's startup times, and refuses malformed ones", () => {
+  const base = { schema: "xfs/desktop-smoke-1", state: "interactive", webgl2: true, worker: true };
+  expect(smokeMessage(base)).toBe("XF desktop smoke: interactive; WebGL2=true; Worker=true");
+  expect(smokeMessage({ ...base, timings: { firstPaintMs: 1036, editorReadyMs: 2140, previewReadyMs: undefined, characterFrameMs: 6356 } }))
+    .toBe("XF desktop smoke: interactive; WebGL2=true; Worker=true; first paint 1.0 s, editor ready 2.1 s, V drawn 6.4 s after the page started");
+  expect(smokeMessage({ ...base, timings: {} })).toBe("XF desktop smoke: interactive; WebGL2=true; Worker=true");
+  for (const timings of [{ firstPaintMs: -1 }, { editorReadyMs: Number.NaN }, { previewReadyMs: "3" }, { characterFrameMs: 1e12 }, [], "x"])
+    expect(smokeMessage({ ...base, timings })).toBeNull();
+  expect(smokeMessage({ ...base, state: "ready" })).toBeNull();
 });

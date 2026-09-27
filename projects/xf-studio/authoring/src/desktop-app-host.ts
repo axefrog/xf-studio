@@ -20,7 +20,7 @@ const UNINSTALL_KEY = /^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Current
  * The setup programs a checkout builds: `build:installer` / `build:canary` (Electrobun's channel name wrapped by
  * `single-installer.ts`) and the release asset `release.ts stage` writes under `artifacts/release/`.
  */
-const INSTALLER_NAME = /^(?:canary-win-x64-XFStudio-Setup-canary|XFStudio-\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?-win-x64-setup)\.exe$/;
+export const INSTALLER_NAME = /^(?:canary-win-x64-XFStudio-Setup-canary|XFStudio-\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?-win-x64-setup)\.exe$/;
 /** Where the app looks for its channels, stable first. */
 const CHANNELS = ["stable", "canary"] as const;
 

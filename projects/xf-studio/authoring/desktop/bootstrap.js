@@ -290,6 +290,8 @@ void initialSetup.then(() => {
 // About's readiness line follows every change Settings saves.
 setupActions.subscribe(() => { const view = setupActions.snapshot().view; if (view) showSetup(view); });
 let previewReady = false;
+/** When the editor mounted and the 3D preview became ready, in ms since the page started loading; the smoke report logs them. */
+const startup = { editorReadyMs: undefined, previewReadyMs: undefined };
 let flushRequest = null;
 window.addEventListener("xfs-desktop-close-flush", () => flushRequest?.());
 void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
@@ -302,9 +304,9 @@ void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   openLink,
   setupPlace: "Settings",
   about: openAbout,
-  onMounted: shell => { studio = shell; if (setupWanted) { setupWanted = false; shell.openGameSetup(); } },
+  onMounted: shell => { startup.editorReadyMs ??= Math.round(performance.now()); studio = shell; if (setupWanted) { setupWanted = false; shell.openGameSetup(); } },
   onFlushRequest: flush => { flushRequest = flush; },
-  onPreviewReady: () => { previewReady = true; },
+  onPreviewReady: () => { previewReady = true; startup.previewReadyMs ??= Math.round(performance.now()); },
 })).catch(() => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");
@@ -322,8 +324,11 @@ const report = () => {
   catch { /* Missing worker support. */ }
   const state = document.querySelector(".boot-error") ? "error" :
     studio?.classList.contains("studio-ready") ? previewReady ? "interactive" : "uv-only" : "starting";
+  const mark = name => { const entry = performance.getEntriesByName(name)[0]; return entry ? Math.round(entry.startTime) : undefined; };
+  const timings = { firstPaintMs: mark("first-contentful-paint"), editorReadyMs: startup.editorReadyMs,
+    previewReadyMs: startup.previewReadyMs, characterFrameMs: mark("xfs:character:frame") };
   void fetch("/api/desktop/smoke", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ schema: "xfs/desktop-smoke-1", state, webgl2, worker }) });
+    body: JSON.stringify({ schema: "xfs/desktop-smoke-1", state, webgl2, worker, timings }) });
 };
 setTimeout(report, 3000);
 setTimeout(report, 12000);
