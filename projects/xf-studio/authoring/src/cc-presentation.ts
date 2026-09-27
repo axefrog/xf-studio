@@ -10,9 +10,12 @@
  *   `final.redscripts`. The Studio uses that list as its section order and titles.
  * - **Icons** [source]: a choice's `icon` is a `UIIcon` record; the creator tints the swatch background with the choice's
  *   `color` and draws the icon's `atlasPartName` from its `atlasResourcePath` inkatlas (`characterCreationBodyMorphListItem`
- *   `SetTintColor`). Icons that TweakXL mods add in YAML are not in the compiled blob; they stay unresolved (R11).
+ *   `SetTintColor`). Icons that TweakXL mods declare in YAML are not in the compiled blob: the TweakXL overlay (tweakxl-overlay.ts)
+ *   answers them, and answers first, as TweakXL's records replace the compiled ones at run time.
  */
+import { depotHash } from "./depot-path";
 import { childId, type TweakDbBlob, type TweakId, tweakDbId } from "./tweakdb-flats";
+import { overlayIcon, type TweakOverlay } from "./tweakxl-overlay";
 
 export const CATEGORY_LIST_RECORD = "CharacterRandomization.CharacterRandomizationCategories";
 
@@ -26,6 +29,8 @@ export interface CreatorCategory {
 export interface IconRef {
   /** The TweakDB record the choice names (`OptionsIcons.BrownLiquorice`), or `#<id>` when stored by ID only. */
   readonly record: string;
+  /** The TweakXL file that defines it, when the overlay did (its path below the game folder). */
+  readonly from?: string;
   /** The inkatlas's depot hash, and its path when known. */
   readonly atlas: { readonly hash: string; readonly path: string | null } | null;
   readonly part: string | null;
@@ -50,8 +55,11 @@ const idOf = (key: string): TweakId | null => {
   return key ? tweakDbId(key) : null;
 };
 
-/** Read the creator's categories and the named icons from a TweakDB blob. `source` labels the blob for evidence. */
-export function readCreatorPresentation(blob: TweakDbBlob, iconKeys: Iterable<string>, source: string): CreatorPresentation {
+/**
+ * Read the creator's categories and the named icons from a TweakDB blob, with the TweakXL overlay first for the icons. `source` labels
+ * the blob for evidence.
+ */
+export function readCreatorPresentation(blob: TweakDbBlob, iconKeys: Iterable<string>, source: string, overlay: TweakOverlay | null = null): CreatorPresentation {
   const gaps: { code: string; subject: string; detail: string }[] = [];
   const list = blob.lookup([childId(tweakDbId(CATEGORY_LIST_RECORD), ".list")]).values().next().value;
   const categories: CreatorCategory[] = [];
@@ -71,7 +79,21 @@ export function readCreatorPresentation(blob: TweakDbBlob, iconKeys: Iterable<st
   } else gaps.push({ code: "category-list-missing", subject: CATEGORY_LIST_RECORD, detail: "The TweakDB blob has no creator category list; sections follow the resource's own order." });
 
   const icons = new Map<string, IconRef>();
-  const wanted = [...new Set(iconKeys)].flatMap(key => { const id = idOf(key); return id === null ? [] : [[key, id] as const]; });
+  // The overlay's records by name, and by TweakDBID for choices that store the ID alone.
+  const byId = new Map<TweakId, string>();
+  if (overlay) for (const name of overlay.records.keys()) byId.set(tweakDbId(name), name);
+  let fromOverlay = 0;
+  const keys = [...new Set(iconKeys)].filter(key => {
+    const id = idOf(key), name = overlay ? overlay.records.has(key) ? key : id !== null ? byId.get(id) : undefined : undefined;
+    const found = name ? overlayIcon(overlay!, name) : null;
+    if (!found) return true;
+    const record = overlay!.records.get(name!)!;
+    icons.set(key, { record: key, atlas: found.atlasPath ? { hash: depotHash(found.atlasPath), path: found.atlasPath } : null, part: found.part,
+      from: record.from.at(-1) });
+    fromOverlay++;
+    return false;
+  });
+  const wanted = keys.flatMap(key => { const id = idOf(key); return id === null ? [] : [[key, id] as const]; });
   const values = blob.lookup(wanted.flatMap(([, id]) => [childId(id, ".atlasResourcePath"), childId(id, ".atlasPartName")]));
   let missing = 0;
   for (const [key, id] of wanted) {
@@ -81,6 +103,9 @@ export function readCreatorPresentation(blob: TweakDbBlob, iconKeys: Iterable<st
       part: part?.type === "CName" && part.value ? part.value : null });
   }
   if (missing) gaps.push({ code: "icons-not-in-tweakdb", subject: `${missing} icon record(s)`,
-    detail: "Some choices name icon records the compiled TweakDB lacks (typically added by TweakXL mods, which the Studio doesn't read yet); their swatches show the colour only." });
+    detail: overlay ? "Some choices name icon records neither the compiled TweakDB nor the installed TweakXL files define; their swatches show the colour only."
+      : "Some choices name icon records the compiled TweakDB lacks (typically added by TweakXL mods, whose files weren't read); their swatches show the colour only." });
+  if (overlay) for (const gap of overlay.gaps.slice(0, 40)) gaps.push({ code: "tweakxl-gap", subject: "TweakXL", detail: gap });
+  void fromOverlay;
   return { categories, icons, gaps, source };
 }

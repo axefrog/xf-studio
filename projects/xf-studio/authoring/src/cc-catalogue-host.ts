@@ -32,6 +32,7 @@ import { writeFileAtomic } from "./derived-cache";
 import { gameLanguageOf, readOnscreenEntries, type TextEntry, TextTable, textPlan } from "./game-text";
 import type { Installation } from "./resolver-host";
 import { TweakDbBlob } from "./tweakdb-flats";
+import { readTweakOverlay, type TweakFile, type TweakOverlay } from "./tweakxl-overlay";
 
 export interface CatalogueHostOptions {
   readonly installation: Installation;
@@ -210,13 +211,38 @@ export function labelsOf(installation: Pick<Installation, "fetcher" | "native">,
   return { next: "wolvenkit", message: LABELS_NEED_WOLVENKIT };
 }
 
-/** The TweakDB blob the installation's game uses, and its creator presentation for these icons. */
-export function loadPresentation(gameRoot: string, ep1: boolean, icons: Iterable<string>): CreatorPresentation | null {
+/** The TweakDB blob the installation's game uses, and its creator presentation for these icons (the TweakXL overlay first). */
+export function loadPresentation(gameRoot: string, ep1: boolean, icons: Iterable<string>, overlay: TweakOverlay | null = null): CreatorPresentation | null {
   const cache = join(gameRoot, "r6", "cache");
   const name = ep1 && existsSync(join(cache, "tweakdb_ep1.bin")) ? "tweakdb_ep1.bin" : "tweakdb.bin";
   const path = join(cache, name);
   if (!existsSync(path)) return null;
-  return readCreatorPresentation(new TweakDbBlob(readFileSync(path)), icons, `r6\\cache\\${name}`);
+  return readCreatorPresentation(new TweakDbBlob(readFileSync(path)), icons, `r6\\cache\\${name}`, overlay);
+}
+
+/** Largest TweakXL file read (a record file of the reference installation is at most a few hundred KB). */
+const TWEAK_FILE_MAX = 8 * 1024 * 1024;
+let tweakMemo = new Map<string, TweakFile | null>();
+/**
+ * The TweakXL overlay of an installation's `r6/tweaks` files (tweakxl-overlay.ts), each file read once per identity (path, size, time).
+ * Null for an installation without the list (a synthetic one).
+ */
+export function installedTweakOverlay(installation: Pick<Installation, "tweaks" | "plan">, log?: (message: string) => void): TweakOverlay | null {
+  if (!installation.tweaks) return null;
+  const next = new Map<string, TweakFile | null>(), files: TweakFile[] = [];
+  for (const file of installation.tweaks) {
+    const key = `${file.physicalPath}|${file.sizeBytes}|${file.modifiedMs}`;
+    let read = tweakMemo.get(key);
+    if (read === undefined) {
+      try { read = file.sizeBytes <= TWEAK_FILE_MAX ? { path: file.virtualPath, provider: file.providerName, text: readFileSync(file.physicalPath, "utf8") } : null; }
+      catch { read = null; }
+      if (!read) log?.(`A TweakXL file couldn't be read: ${file.virtualPath}`);
+    }
+    next.set(key, read);
+    if (read) files.push(read);
+  }
+  tweakMemo = next;
+  return readTweakOverlay(files, { dlc: new Set(installation.plan.ep1Installed ? ["EP1"] : []) });
 }
 
 /** Build one body gender's catalogue and the source the character context needs. */
@@ -238,7 +264,7 @@ export async function loadCreatorCatalogue(options: CatalogueHostOptions, bodyGe
   }
   let presentation: CreatorPresentation | null = null, tweakDb: string | null = null;
   try {
-    presentation = loadPresentation(options.gameRoot, installation.plan.ep1Installed, iconRecords(merged.merged.cco));
+    presentation = loadPresentation(options.gameRoot, installation.plan.ep1Installed, iconRecords(merged.merged.cco), installedTweakOverlay(installation, log));
     tweakDb = presentation?.source ?? null;
   } catch (error) { log?.(`TweakDB could not be read: ${(error as Error).message}`); }
   // A mod archive that wins the base resource's path replaces the game's creator options: they name that mod (PIPE-46).

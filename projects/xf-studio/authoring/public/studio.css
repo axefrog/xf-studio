@@ -480,8 +480,22 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-quick { padding: var(--sp-4); border: 1px solid var(--line); background: var(--bg-raised); border-radius: 0 var(--bevel) 0 0; }
 .cc-quick .btn { align-self: flex-start; }
 .cc-search { height: var(--control-h); }
+.cc-find { display: flex; flex-direction: column; }
+.cc-groups { display: flex; flex-direction: column; gap: var(--sp-7); }
+.cc-group { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cc-heading { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--control-h-sm); }
+.cc-group-head { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+.cc-group-title { margin: 0; flex: 1; font: 600 var(--fs-md)/1.2 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
+.cc-heading-toggle { flex: none; gap: var(--sp-2); min-height: 0; }
+.cc-heading-toggle .toggle-label { font-size: var(--fs-xs); color: var(--text-muted); }
+.cc-heading-toggle.unavailable { cursor: not-allowed; }
+.cc-heading-toggle.unavailable .switch-track, .cc-heading-toggle.unavailable .toggle-label { opacity: .45; }
+/* One line reserved under a heading with a switch: its note, or why it can't change (never appears or vanishes). */
+.cc-heading-note { margin: 0 0 var(--sp-1); height: calc(var(--fs-xs) * 1.42); font-size: var(--fs-xs); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-control { display: flex; flex-direction: column; gap: var(--sp-1); margin-bottom: var(--sp-2); }
 .cc-sections { display: flex; flex-direction: column; gap: var(--sp-5); }
-.cc-section-title { margin: 0 0 var(--sp-2); font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+.cc-section-title { margin: 0; flex: 1; font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+.cc-section-head { margin-bottom: var(--sp-1); }
 .cc-rows { display: flex; flex-direction: column; border-top: 1px solid var(--line-soft); }
 .cc-row { display: flex; flex-direction: column; border-bottom: 1px solid var(--line-soft); }
 .cc-row-head { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--row-h); }
@@ -512,8 +526,27 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-choice.swatch-choice { padding: 2px; aspect-ratio: 1; min-width: 0; }
 .cc-choice.swatch-choice .swatch { width: 100%; height: 100%; }
 .cc-choice.swatch-choice .swatch[data-empty] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line) 3px 4px); }
-.cc-choice.swatch-choice.off, .cc-choice.swatch-choice:has(.cc-choice-label) { aspect-ratio: auto; grid-column: span 2; }
+.cc-choice.swatch-choice.off { aspect-ratio: auto; grid-column: span 2; }
+/* A swatch derived from what wins for the choice: one colour, a root-to-tip gradient, or the game's icon cut from a sheet (cc-swatch.ts, cc-icons.ts). */
+.cc-choice.swatch-choice .swatch, .cc-row-swatch { background-color: var(--swatch); background-image: var(--swatch-image, none); background-size: var(--swatch-size, auto);
+  background-position: var(--swatch-position, 0 0); background-repeat: no-repeat; }
+.cc-choice.swatch-choice .swatch[data-empty="waiting"] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line-soft) 3px 4px); opacity: .7; }
 .cc-choice.swatch-choice .cc-choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Grid, not a flex column: a flex column sizes a group of aspect-ratio swatches too tall. */
+.cc-choices.grouped { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.cc-maker-items { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.cc-choices.grid .cc-maker-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.cc-maker-items[hidden], .cc-maker-lead:empty { display: none; }
+.cc-maker { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.cc-maker-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 20px; padding: 0; border: 0; background: transparent; color: var(--text-muted);
+  font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; text-align: left; cursor: pointer; }
+.cc-maker-head:hover { color: var(--text); }
+.cc-maker-chevron { flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translate(-1px, -1px); }
+.cc-maker-head[aria-expanded="false"] .cc-maker-chevron { transform: rotate(-45deg); }
+.cc-maker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-maker-count { flex: none; color: var(--text-faint); font-family: var(--font-mono); letter-spacing: 0; }
+.cc-maker-head[data-chosen][aria-expanded="false"] .cc-maker-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--sp-2);
+  border-radius: 50%; background: var(--signal); vertical-align: middle; }
 .cc-choices-status { margin: 0 var(--sp-3) var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); }
 .cc-more { margin: 0 0 var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); align-self: flex-start; }
 .cc-row-swatch { width: 12px; height: 12px; }

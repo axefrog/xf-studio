@@ -47,7 +47,7 @@ function fixture() {
 
 test("every context-menu section for every target kind holds an action; no informational-only sections", () => {
   const { rt, hits, menu } = fixture();
-  const view = { head: "Head view", uv: "UV view" } as const;
+  const view = { head: "3D view", uv: "UV view" } as const;
   for (const kind of ["head", "uv"] as const) {
     const cases = [...Object.values(hits).flat(), undefined];
     for (const hit of cases) {

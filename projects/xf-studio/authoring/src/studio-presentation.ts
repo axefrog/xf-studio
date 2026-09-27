@@ -114,7 +114,7 @@ export type StudioPresentationPort<Slot> = {
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
     "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" |
-    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch"> & {
+    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
@@ -140,6 +140,8 @@ export type StudioPresentationPort<Slot> = {
     modules(): readonly StudioModule[];
     tools(view: ViewId | undefined, filter: ViewToolFilter): readonly ViewToolEntry[];
     summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
+    /** Each view's derived title and its scene's subject, with the panel that shows it. */
+    titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
     /** Turn a view's tool on or off (`view.setTool` through the registry). */
     setTool(view: ViewId | undefined, tool: string, enabled: boolean): StudioDispatchResult;
   };
@@ -258,7 +260,8 @@ export function createStudioPresentation<Slot>(sources: {
     layerExport: layerId => a.layerExport(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
     characterPanel: () => a.characterPanel(), characterView: () => a.characterView(),
-    characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSearch: query => a.characterSearch(query),
+    characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSwatches: option => a.characterSwatches(option),
+    characterSearch: query => a.characterSearch(query),
     characterPrefetch: (option, positions, focus) => a.characterPrefetch(option, positions, focus), characterStopPrefetch: option => a.characterStopPrefetch(option),
   };
   const fallback = () => a.snapshot().document;
@@ -329,6 +332,7 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => a.views(), modules: () => a.modules(),
     tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
+    titles: () => a.viewTitles(),
     setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
   });
   const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {

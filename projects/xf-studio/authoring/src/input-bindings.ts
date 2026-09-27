@@ -355,7 +355,7 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
     const binding = pointerBinding(scope, input, target, mods);
     return binding && binding.strip !== false ? [{ input: pointerInputLabel(input), label: binding.label, ids: [binding.id] }] : [];
   }));
-  const heading = inside ? TARGET_LABELS[scope][target] : scope === "head" ? "Head" : "UV map";
+  const heading = inside ? TARGET_LABELS[scope][target] : scope === "head" ? "3D view" : "UV map";
   if (mods) {
     // Esc is offered once a held modifier arms an edit of the makeup under the pointer.
     const armed = MAKEUP_TARGETS.includes(target) && items.some(item => item.ids.some(id => EDIT_EFFECTS.includes(pointerBindingById(id).effect)));
@@ -427,7 +427,7 @@ const keyRows = (scope: KeyScope): ReferenceRow[] => KEY_BINDINGS.filter(binding
 export function bindingReference(): ReferenceSection[] {
   return [
     { id: "global", title: "Anywhere", rows: keyRows("global") },
-    { id: "head", title: "Head viewport", detail: "Shift always means a shape tool; editing on the head needs Surface controls on.",
+    { id: "head", title: "3D view", detail: "Shift always means a shape tool; editing on the head needs Surface controls on.",
       rows: [...pointerRows("head"), ...keyRows("head").map(row => ({ ...row, where: "viewport focused" }))] },
     { id: "uv", title: "UV map", detail: "View changes (zoom, pan, eye modes) are never edits.",
       rows: [...pointerRows("uv"), ...keyRows("uv").map(row => ({ ...row, where: "UV map focused" }))] },

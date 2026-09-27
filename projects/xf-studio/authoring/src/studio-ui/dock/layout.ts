@@ -315,6 +315,14 @@ export function openPanel(tree: DockTree, panel: PanelId, preferredSiblings: Pan
   if (first) return insertNode(base, group([panel]), { kind: "tab", groupId: first.id, index: first.panels.length });
   return insertNode(base, group([panel]), { kind: "float", x: area.x + area.w / 2 - 170, y: area.y + 60 });
 }
+/**
+ * Each split child's flex-grow: its share among the children that aren't collapsed (a collapsed group takes none). The shares are
+ * scaled to sum to 1, because flex children whose grow factors sum to less than 1 leave the rest of the split empty.
+ */
+export function openShares(sizes: readonly number[], collapsed: readonly boolean[]): number[] {
+  const open = sizes.reduce((sum, size, index) => collapsed[index] ? sum : sum + size, 0);
+  return sizes.map((size, index) => collapsed[index] ? 0 : open > 0 ? size / open : size);
+}
 /** Collapse or expand a tab group: its tab bar stays, its neighbours take the space. */
 export function setCollapsed(tree: DockTree, groupId: string, collapsed: boolean): DockTree {
   return mapGroups(clone(tree), item => {

@@ -108,6 +108,11 @@ export interface VortexModIdentity {
   /** Nexus Mods ids, as recorded by Vortex for a download from Nexus. */
   readonly nexus: { readonly gameDomain: string | null; readonly modId: number | null; readonly fileId: number | null } | null;
   readonly source: string | null;
+  /**
+   * Who made it: the mod's author as Vortex recorded it from Nexus Mods (`attributes.author`), else its uploader (`attributes.uploader`);
+   * null when neither is recorded (a mod installed from a local file) [source: Vortex v2.7.1 `nexus_integration/index.tsx`, `IMod.ts`].
+   */
+  readonly author: string | null;
   /** Enabled in the active profile; null when unknown. */
   readonly enabled: boolean | null;
 }

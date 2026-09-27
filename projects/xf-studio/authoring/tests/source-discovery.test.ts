@@ -136,3 +136,19 @@ test("links are skipped and never traversed", () => fixture(base => {
   const text = discoverSources({ ...defaultLocalSettings(), gameRoot: game });
   expect(text.issues.filter(x => x.code === "symlink_skipped").map(x => x.mayHideSources)).toEqual([false]);
 }));
+
+test("TweakXL files under r6/tweaks are found in the game folder and in MO2 mods; the game's folder is optional", () => fixture(base => {
+  const game = join(base, "game"), mo2 = join(base, "mo2");
+  mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
+  put(join(mo2, "profiles", "Profile", "modlist.txt"), "+Icons\n");
+  put(join(mo2, "mods", "Icons", "r6", "tweaks", "pack", "icons.yaml"), "OptionsIcons.a:\n  $type: UIIcon\n");
+  put(join(mo2, "mods", "Icons", "r6", "tweaks", "old.tweak"), "package a");
+  put(join(mo2, "mods", "Icons", "r6", "readme.yaml"), "not a tweak");
+  // Without the game's r6/tweaks folder nothing is missing: the scan stays complete.
+  const without = discoverSources({ ...defaultLocalSettings(), gameRoot: game, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Profile" });
+  expect(without.complete).toBe(true);
+  expect(without.candidates.filter(x => x.kind === "tweak").map(x => x.virtualPath).sort()).toEqual(["r6/tweaks/old.tweak", "r6/tweaks/pack/icons.yaml"]);
+  put(join(game, "r6", "tweaks", "base.yml"), "a: 1");
+  const withGame = discoverSources({ ...defaultLocalSettings(), gameRoot: game, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Profile" });
+  expect(withGame.candidates.find(x => x.kind === "tweak" && x.provider === "game")?.virtualPath).toBe("r6/tweaks/base.yml");
+}));

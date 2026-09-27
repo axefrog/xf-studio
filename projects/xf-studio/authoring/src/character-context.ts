@@ -462,8 +462,11 @@ export type CharacterContextAction =
   | ({ kind: "character.setOption" } & CharacterChange)
   /** Set several options in one step. */
   | { kind: "character.setOptions"; changes: CharacterChange[]; label?: string }
-  /** Turn every makeup row of the shown V Off in one step (the host's projection marks the makeup section). */
-  | { kind: "character.hideOwnMakeup" }
+  /**
+   * Show or hide the V's own makeup in the 3D view: the parts every row of the makeup section brings (the host's projection marks the
+   * section). A viewing setting, instant and undoable in the panel's Undo; it changes no creator choice, so nothing is prepared again.
+   */
+  | { kind: "character.setOwnMakeup"; shown: boolean }
   /** One option (and its link family) back to the V's own. */
   | { kind: "character.reset"; part: CcoPart; option: string }
   /** Every change back to the V's own; the V stays. */
@@ -499,7 +502,7 @@ const target = { part: input("enum", { values: CCO_PARTS }), option: input("stri
 export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.setOption": desc("viewport", "workspace", { ...target, choice: input("string", { maxLength: CREATOR_LIMITS.name }), activates: optional("object") }),
   "character.setOptions": desc("viewport", "workspace", { changes: input("object"), label: optional("string", { maxLength: 80 }) }),
-  "character.hideOwnMakeup": desc("viewport", "workspace", {}),
+  "character.setOwnMakeup": desc("viewport", "workspace", { shown: input("boolean") }),
   "character.reset": desc("viewport", "workspace", target),
   "character.resetAll": desc("viewport", "workspace", {}),
   "character.useDefault": desc("viewport", "workspace", { bodyGender: input("enum", { values: ["female", "male"] }) }),
@@ -520,7 +523,7 @@ const CHARACTER_ID = familyId("characterContext");
 export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scope, typeof CHARACTER_ID> = Object.freeze({
   owner: "system", id: CHARACTER_ID, label: "Character",
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
-    "character.setOption": true, "character.setOptions": true, "character.hideOwnMakeup": true, "character.reset": true, "character.resetAll": true,
+    "character.setOption": true, "character.setOptions": true, "character.setOwnMakeup": true, "character.reset": true, "character.resetAll": true,
     "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
     "character.undo": true, "character.redo": true, "character.setClothing": true, "character.setClothingArea": true,
     "character.undoClothing": true, "character.redoClothing": true }),

@@ -81,3 +81,12 @@ export type ViewHistoryState = { readonly undo?: string; readonly redo?: string;
 export const validViewId = (id: unknown): id is ViewId => typeof id === "string" && /^[a-z0-9][a-z0-9-]{0,31}$/.test(id);
 /** The dock panel that shows a view: `head` for the main view (kept so saved layouts restore), `view.<id>` for the others. */
 export const viewPanelId = (view: ViewId) => view === MAIN_VIEW ? "head" : `view.${view}`;
+/** A view's name when it has none of its own. */
+export const DEFAULT_VIEW_TITLE = "3D view";
+/**
+ * Each view's title, in graph order: its own name, else "3D view", numbered ("3D view 1", "3D view 2") when there are several.
+ * Derived, never stored, so the panel's ID and the saved layouts never depend on it. Pure.
+ */
+export function viewTitles(views: readonly Pick<ViewRecord, "id" | "title">[]): string[] {
+  return views.map((view, index) => view.title || (views.length > 1 ? `${DEFAULT_VIEW_TITLE} ${index + 1}` : DEFAULT_VIEW_TITLE));
+}
