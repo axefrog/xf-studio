@@ -85,7 +85,11 @@ test("far narrow-FOV framing survives reload but out-of-range orbit does not", (
   const state = freshWorkspace();
   state.preview.camera = { position: [.03, 1.69, -3.02], target: [.03, 1.69, .005], fov: 10 };
   expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.camera).toEqual(state.preview.camera);
-  state.preview.camera.position[2] = -5.5;
+  // A whole-body orbit at a narrow lens in a tall pane (the scene's limits reach well past the old 5-unit clamp) is kept too.
+  state.preview.camera.position[2] = -26;
+  expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.camera).toEqual(state.preview.camera);
+  // Beyond the stored range (0.02–100, camera-framing.ts) it is not.
+  state.preview.camera = { position: [0, 1.69, -60], target: [0, 1.69, 60], fov: 10 };
   expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.camera).toBeUndefined();
 });
 
