@@ -15,7 +15,7 @@ test("detection actions are catalogued read-only host requests", () => {
   const actions = new InstallDetectionActions(null);
   expect(actions.descriptors()).toEqual(DETECTION_DESCRIPTORS);
   expect(actions.capability({ kind: "detect.gameInstalls" })).toEqual({ available: false,
-    reason: "Install detection is unavailable on this host." });
+    reason: "Looking for your game isn't available here." });
 });
 
 test("dispatch publishes a detached result, refuses overlap and rejects unexpected payloads", async () => {

@@ -13,6 +13,7 @@ export const CONTROL_ANCHORS = {
   "header.history": { label: "History button" },
   "header.help": { label: "Help button" },
   "header.settings": { label: "Settings button" },
+  "header.layouts": { label: "Layouts button" },
   "header.palette": { label: "Commands button" },
   "layers.add": { panel: "layers", label: "Add layer" },
   "layers.list": { panel: "layers", label: "Layer list" },
@@ -22,7 +23,7 @@ export const CONTROL_ANCHORS = {
   "finish.picker": { panel: "finish", label: "Finish picker" },
   "presets.list": { panel: "presets", label: "Preset list" },
   "history.list": { panel: "history", label: "History list" },
-  "package.check": { panel: "package", label: "Check mod export" },
+  "package.check": { panel: "package", label: "Check" },
 } as const satisfies Record<string, { panel?: StudioPanelId; label: string }>;
 
 export type ControlAnchorId = keyof typeof CONTROL_ANCHORS;

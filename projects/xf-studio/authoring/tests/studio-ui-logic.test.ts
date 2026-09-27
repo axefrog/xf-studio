@@ -82,7 +82,8 @@ test("the library chip distinguishes unsaved, saved, newer-elsewhere and busy st
   expect(libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: false, dirtyPresets: [] })).label).toBe("Saved");
   const dirty = libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: true, dirtyPresets: ["a", "b"], structureDirty: true }));
   expect(dirty).toMatchObject({ label: "Unsaved changes", tone: "info" });
-  expect(dirty.detail).toContain("Last saved as version 3 in your library; saving creates version 4");
-  expect(dirty.detail).toContain("the collection name or preset order and 2 presets");
+  expect(dirty.detail).toContain("Changed since version 3");
+  expect(dirty.detail).toContain("Saving makes version 4.");
+  expect(dirty.detail).toContain("the collection's name or order and 2 presets");
   expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] })).label).toBe("Autosaved draft");
 });

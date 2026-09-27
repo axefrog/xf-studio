@@ -243,7 +243,7 @@ export class CollectionService {
     if (request.kind === "open" && !this.summaries.some(item => item.id === request.id))
       return refusal("invalid_value", "Saved collection is no longer in this list. Refresh it first.");
     if (request.kind === "import" && (!Number.isSafeInteger(request.bytes) || request.bytes < 0 || request.bytes > 16_000_000))
-      return refusal("limit", "Collection exceeds the current 16 MB import budget.");
+      return refusal("limit", "That collection is larger than 16 MB, the most XF Studio can import.");
     // A look this build cannot read is kept exactly as it came; the library never takes it (its older rows stay as they are).
     if ((request.kind === "save" || request.kind === "saveCopy") && this.actions.presetsForComparison().some(look => look.locked))
       return refusal("unavailable", NEWER_LOOKS_LIBRARY_MESSAGE);
@@ -347,10 +347,10 @@ export class CollectionService {
             look.parts = written.parts; draft.memory[id] = written.memory;
             this.actions = new CollectionActions(model, draft, this.read, this.show); this.content++;
             message = summaries.length
-              ? "Existing looks and your current draft are retained. Save collection to store this arrangement."
+              ? "Your looks and your current draft are kept. Save to library to keep this arrangement."
               : "Your starter collection is ready. Save it to the local library when you want to keep a revision.";
           } else {
-            message = "Collection draft restored without replacing unsaved edits from SQLite.";
+            message = "Your draft was restored; your unsaved edits are kept.";
             await this.loadBaseline(summaries);
           }
           result = { kind: "list", summaries }; break;
@@ -364,12 +364,12 @@ export class CollectionService {
           this.remember(stored.collection, stored.revision);
           this.content++;
           result = { kind: "opened", collection: stored };
-          message = `Opened “${stored.collection.name}”. Undo collection open restores the previous draft.`; break;
+          message = `Opened “${stored.collection.name}”. Undo open brings back your previous draft.`; break;
         }
         case "save": case "saveCopy": {
           const stored = await this.save(request.kind === "saveCopy");
           result = { kind: "saved", collection: stored };
-          message = `Saved “${stored.collection.name}” · revision ${stored.revision}. Changes made during saving remain in your draft.`; break;
+          message = `Saved “${stored.collection.name}” · version ${stored.revision}. Changes made while saving stay in your draft.`; break;
         }
         case "exportCollection": case "exportPlan": {
           if (request.kind === "exportCollection" && request.draft !== undefined) {
@@ -429,7 +429,7 @@ export class CollectionService {
           this.actions!.dispatch({ kind: "collection.open", collection });
           this.content++;
           result = { kind: "imported" };
-          message = "Imported collection draft. Existing IDs are preserved; Save a copy creates a separate collection. Undo collection open recovers the previous draft."; break;
+          message = "Imported the collection as your draft. Save as new collection keeps it separate; Undo import brings back your previous draft."; break;
         }
       }
       this.setProgress({ phase: "success", code: result.kind, message, requestId });

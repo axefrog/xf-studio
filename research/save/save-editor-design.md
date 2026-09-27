@@ -73,7 +73,7 @@ Root nodes of the 336-node quick save, grouped. **Encoding:** *P* self-describin
 | `WorldStateSystem` → `WeatherWorldState`, …; `MappinSystem*`, `GPSSystem`, `DelamainTaxi` | Weather and world toggles, map pins, discovered locations, routes | B | No | Mostly raw | – |
 | `VehicleSystem` | Player vehicles and forbidden areas | B | No | Raw | – |
 | `GameAudio` → `MusicSystem`, `RadioSystem`, … | Music, radio and conversation history | C + B | No | Parsed | – |
-| `photoModeSystem`, `PhotoMode_*` (5) | Photo-mode settings, lights, stickers, outfit and weather | B | No | Raw | – |
+| `photoModeSystem`, `PhotoMode_*` (5) | Photo mode's three save slots: vanilla attribute values, pose by clip name, camera, lights, stickers, outfit and weather ([layout](../../knowledge/photo-mode.md#92-what-a-slot-holds)) | B | No | Raw | Layout decoded offline (not in code) |
 | **`CharacetrCustomization_Appearances`** | The creator's resolved choices | B | No (bespoke, fully decoded) | Parsed and written | **Fully decoded, byte-exact round trip** ([save import](../eye-artistry/save-import.md)) |
 | `WardrobeSystem`, `WardrobeSystem_ClothingSets` | Known wardrobe appearances; transmog sets | B | No | Parsed, sets mostly unknown | Active set index only |
 | `TelemetrySystem`, `AchievementSystem`, `ActivityCardsSystem`, `ArcadeSystem`, `TutorialManager`, `PhoneManager`, `UIGameControllersState`, `AnimationPersistentDataSystem*`, `ModdingSystem`, … | Progress telemetry, achievements, arcade scores, UI state and small flags | B | No | Mixed | – |

@@ -76,6 +76,8 @@
   "preview.aimLightAtHead",
   "preview.addLight",
   "preview.removeLight",
+  "preview.moveLight",
+  "preview.duplicateLight",
   "preview.setKeyAngle",
   "preview.setEyeShape",
   "preview.setPiercings",
@@ -2453,6 +2455,51 @@
     }
    }
   },
+  "preview.moveLight": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "light": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "index": {
+     "type": "integer",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 15
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
+  "preview.duplicateLight": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "light": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "preview.setKeyAngle": {
    "scope": [
     "viewport"
@@ -3993,6 +4040,24 @@
   },
   {
    "id": "preview.removeLight",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.moveLight",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.duplicateLight",
    "family": "action",
    "scope": [
     "viewport"

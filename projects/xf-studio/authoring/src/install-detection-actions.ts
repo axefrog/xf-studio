@@ -56,7 +56,7 @@ export class InstallDetectionActions {
   private publish(state: InstallDetectionState) { this.state = state; for (const listener of this.listeners) listener(); }
   capability(action: InstallDetectionAction): { available: boolean; reason?: string } {
     if (!(action?.kind in DETECTION_DESCRIPTORS)) return { available: false, reason: "Unknown detection action." };
-    if (!this.transport) return { available: false, reason: "Install detection is unavailable on this host." };
+    if (!this.transport) return { available: false, reason: "Looking for your game isn't available here." };
     if (this.state.busy) return { available: false, reason: "Detection is already running." };
     return { available: true };
   }
@@ -76,7 +76,7 @@ export class InstallDetectionActions {
       this.publish({ ...this.state, busy: null, [target]: response.data });
       return { ok: true };
     } catch {
-      const message = "Could not reach install detection. Restart the studio server and retry.";
+      const message = "XF Studio couldn't look for your game. Restart XF Studio and try again.";
       this.publish({ ...this.state, busy: null, error: message });
       return { ok: false, code: "transport", message };
     }

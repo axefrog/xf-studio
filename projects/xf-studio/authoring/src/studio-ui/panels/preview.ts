@@ -1,7 +1,10 @@
 import type { PreviewTextureSize } from "../../preview-quality";
-import { applyCapability, badge, button, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
+import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
-import { helpTip } from "../help-tip";
+import { helpTip, setHelp } from "../help-tip";
+import { comingSoon, liveFeatures } from "../coming-soon";
+import { ChoiceList, DirectionDial, GroupSection, LightList, SliderWithValue } from "../components";
+import { openMenu, openValuePopover } from "../menu";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -11,9 +14,10 @@ import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-l
 import type { LightingStatus } from "../../preview-actions";
 import type { MotionState } from "../../motion-actions";
 import type { DetailLimit, DetailNotice } from "../../detail-limits";
+import type { LightType, SetupBackdrop, SetupDisplay } from "../../lighting-setups";
 
-/** The field-of-view line: what the slider does, in plain words (UI-85). */
-const FOV_NOTE = "The camera moves closer or further as you change the lens angle, so your V's face stays the same size.";
+/** What the field-of-view slider does, in plain words (UI-85): its help tip. The line under it is kept for limits and loading. */
+const FOV_HELP = "Changing the lens angle moves the camera, so your V's face stays the same size.";
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
 const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", teeth: "Teeth", piercings: "Piercings", body: "Body", clothing: "Clothes" } as const;
@@ -35,25 +39,49 @@ export const DETAIL_NOTICE_TEXT: Readonly<Record<DetailNotice, string>> = {
   "version-skew": "XF Studio was updated while it was running. Restart it to see your V's skin, face details, eyes, brows, lashes, hair, piercings and body.",
 };
 
-/** One plain line about the shown V's skin, face details, eyes, brows, lashes, hair, piercings and body, from the resolved-detail status. */
+/**
+ * One plain line about the shown V's details while they are on their way or couldn't be prepared; once they are ready the Character
+ * panel shows them as a list instead (`characterDetailRows`), so the line is empty.
+ */
 export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
   if (!details || details.phase === "idle") return { done: false, text: "" };
   const who = details.source === "save" ? "your V" : "the default V";
-  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, face details, eyes, brows, lashes, hair, piercings and body from your game files…` };
+  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s details from your game files…` };
   if (details.phase === "failed") return { done: true, text: details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message };
-  const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
+  return { done: true, text: "" };
+}
+/** One row of the V's details (the Character panel's "In the 3D view" list): a part of V, what the 3D view shows, and why when it doesn't. */
+export type CharacterDetailRow = { term: string; value: string; shown: boolean; note?: string };
+/**
+ * The shown V's details as rows, once they are ready (ui-copy-and-layout-review.md §3.10): each slot's label, "None" or "Not shown" with its
+ * reason; the renderer's limits, each sentence once and only for slots it draws; and the status's own line when no row already says it.
+ */
+export function characterDetailRows(details: DetailStatus | undefined): { rows: CharacterDetailRow[]; limits: string[]; message: string } | null {
+  if (!details || details.phase !== "ready") return null;
+  const capital = (text: string) => text ? text[0]!.toUpperCase() + text.slice(1) : text;
+  const rows = details.slots.map(slot => ({ term: SLOT_NAMES[slot.slot], shown: slot.state === "shown",
+    value: slot.state === "shown" ? capital(slot.label) : slot.state === "none" ? "None" : "Not shown", ...(slot.message ? { note: slot.message } : {}) }));
   const limits = [...new Set(details.slots.flatMap(slot => slot.state === "shown" ? slot.limits ?? [] : []))].map(limit => DETAIL_LIMIT_TEXT[limit]);
-  return { done: true, text: [`${parts.join(" · ")}.`, details.message, ...limits, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
+  return { rows, limits, message: details.message && !rows.some(row => row.note === details.message) ? details.message : "" };
 }
 
-/** One plain line about the lighting preset and where its colour grade came from. */
+/** One plain line about the shown setup's colour grade: where the game's grade came from, while it draws through it. */
 export function lightingPresetLine(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): string {
-  if (preset !== "creator") return "Pick a setup. Changing a built-in one makes your own copy of it, so nothing you change is lost.";
+  if (preset !== "creator") return "";
   const lut = status?.lut;
-  const grade = !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
-  return [`The game's character-creator lights (${status?.sex === "male" ? "male" : "female"} rig) on black, with fixed exposure.`, grade,
-    "Light strengths are still being calibrated."].filter(Boolean).join(" ");
+  return !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
 }
+/** What lighting setups are (the Light heading's help tip). */
+const LIGHT_HELP = ["Built-in setups are starting points and never change: changing one makes your own copy, so nothing you change is lost.",
+  "Character creator uses the game's creator lights for your V's body, on black, with the game's colour grade. Its light strengths are still being calibrated."];
+type LightView = NonNullable<Frame["preview"]["lightingSetups"]>["shown"]["lights"][number];
+/** One light's glance line in the list: its kind, strength and whether it casts shadows. */
+export function lightMeta(light: Pick<LightView, "type" | "intensity" | "shadows">): string {
+  const strength = light.intensity >= 100 ? Math.round(light.intensity) : Number(light.intensity.toPrecision(2));
+  return [light.type === "spot" ? "Spot" : "Directional", String(strength), light.shadows ? "shadows" : ""].filter(Boolean).join(" · ");
+}
+/** The strength slider's range for a kind of light (lux for directional, candela for spot). */
+const STRENGTH_RANGE = { directional: { min: 0, max: 20, step: .05 }, spot: { min: 0, max: 500, step: .5 } } as const;
 
 export function lightingPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -66,7 +94,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   };
   // A released slider (or the end of a keyboard burst) ends its View and lighting step: the next drag is a step of its own (CORE-95).
   const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
-  const presetNote = note("");
+  const capability = (action: Parameters<typeof port.authoring.capability>[0]) => port.authoring.capability(action);
+  const live = liveFeatures(port);
   const creatorFace = button({ label: "Creator face", icon: "front", small: true, title: "The creator's face-page camera: 15° lens, 1.2 m",
     onClick: () => rt.dispatch({ kind: "camera.creatorFraming", page: "face" }) });
   const creatorHair = button({ label: "Creator hair", icon: "front", small: true, title: "The creator's hair-page camera: 15° lens, 2 m",
@@ -91,15 +120,17 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
-      helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
+      helpTip("the calibration", "How the built-in Character creator reads the game's rig, for matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise. Your own setups keep what they copied.")),
     intensity.element, cone.element, creatorExposure.element, creatorShadows.element, h("div", { class: "row" }, resetCalibration));
-  const fovNote = note("");
-  const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
+  // A framing limit is said once, as a notice (no line is reserved under the slider for something this rare; the feedback shows a
+  // repeated notice once while it is on screen, so a drag at the limit doesn't flood it).
+  const fovLine = (text: string) => { if (text) rt.feedback.toast("info", "Camera", text); };
+  const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`, help: FOV_HELP,
     transaction: {
       edit: value => {
         const result = edit({ kind: "camera.setFov", degrees: value });
         const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-        setText(fovNote, limited ? "Framing reached the camera limit. Pan or use Front view to bring your V back." : FOV_NOTE);
+        fovLine(limited ? "The camera is at its limit. Pan, or use Front view to bring your V back." : "");
       },
       commit: () => { edit({ kind: "camera.endFovGesture" }); },
       cancel: () => { edit({ kind: "camera.endFovGesture" }); },
@@ -107,85 +138,190 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const front = button({ label: "Front view", icon: "front", small: true, onClick: () => {
     const result = edit({ kind: "camera.front" });
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-    if (limited) setText(fovNote, "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV.");
+    if (limited) fovLine("Too narrow for the whole front view. Widen the panel or raise the field of view.");
   } });
   const bodyView = button({ label: "Whole body", icon: "body", small: true, title: "Frame your V's whole body", onClick: () => {
     const result = edit({ kind: "camera.body" });
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-    if (limited) setText(fovNote, "This pane is too narrow to fit the whole body within the camera range. Widen the pane or increase FOV.");
+    if (limited) fovLine("Too narrow for the whole body. Widen the panel or raise the field of view.");
   } });
-  // Lighting setups (lighting-setups.ts): one flat list, from the preview's read model (StudioApplication.previewState().lightingSetups).
-  // Interim controls until the setup list and light editor land: choosing a setup, its exposure (in stops) and its room light.
-  let setupButtons: { id: string; button: HTMLButtonElement }[] = [];
-  const setupReadout = h("output", { class: "readout" });
-  const setupRow = h("div", { class: "chip-row", role: "group", "aria-label": "Lighting setup" });
-  const setups = h("div", { class: "control" }, h("span", { class: "control-label" }, h("span", { text: "Setup" }), setupReadout), setupRow);
-  const stops = (value: number) => Math.log2(value);
-  const exposure = new Slider({ label: "Exposure", min: stops(0.125), max: stops(8), step: .05,
-    format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
+
+  // ----- Lighting setups (lighting-setups.ts): one flat list, the built-ins first, then the person's own. -----
+  let shownId = "soft";
+  const setupList = new ChoiceList<string>({ label: "Setup", layout: "rows", reserveNote: true, quietReason: true,
+    onSelect: setup => rt.dispatch({ kind: "preview.selectLightingSetup", setup }) });
+  const shown = () => port.authoring.previewState().lightingSetups?.shown;
+  const newSetup = button({ label: "New setup", icon: "plus", small: true, onClick: () => rt.dispatch({ kind: "preview.createLightingSetup", from: shownId }) });
+  const renameSetup = button({ label: "Rename…", icon: "rename", small: true, onClick: event => {
+    const current = shown(); if (!current) return;
+    openValuePopover({ kind: "text", label: "Name", value: current.label, maxLength: 60 }, event.currentTarget as Element, { title: "Rename lighting setup", apply: "Rename",
+      validate: value => capability({ kind: "preview.renameLightingSetup", setup: current.id, name: String(value) }),
+      commit: value => rt.dispatch({ kind: "preview.renameLightingSetup", setup: current.id, name: String(value) }) });
+  } });
+  const resetSetup = button({ label: "Reset", icon: "reset", small: true, onClick: () => rt.dispatch({ kind: "preview.resetLightingSetup", setup: shownId }) });
+  const deleteSetup = button({ label: "Delete", icon: "trash", small: true, onClick: () => rt.dispatch({ kind: "preview.deleteLightingSetup", setup: shownId }) });
+  const setupActions = h("div", { class: "row wrap gap-s" }, newSetup, renameSetup, resetSetup, deleteSetup);
+  const presetNote = note("");
+  // The shown setup's surroundings: exposure (in stops, whichever display), the room's light, the backdrop and the colour grade.
+  const exposure = new SliderWithValue({ label: "Exposure", min: Math.log2(0.125), max: Math.log2(8), step: .05, unit: "EV",
+    format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(2)} EV`,
     transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); }, commit: endEdit, cancel: endEdit } });
-  const room = new Slider({ label: "Room light (ambient and reflections)", ...rt.range("preview.setRoomLight", "value"), step: .05,
-    format: value => `${Math.round(value * 100)}%`,
-    transaction: { edit: value => { edit({ kind: "preview.setRoomLight", value }); }, commit: endEdit, cancel: endEdit } });
-  const studioControls = h("div", { class: "section" }, setups, exposure.element, room.element);
+  const room = new SliderWithValue({ label: "Room light", min: 0, max: 300, step: 5, unit: "%", help: "Ambient light and reflections from the room around your V.",
+    format: value => `${Math.round(value)} %`,
+    transaction: { edit: value => { edit({ kind: "preview.setRoomLight", value: value / 100 }); }, commit: endEdit, cancel: endEdit } });
+  const backdrop = new Segmented<SetupBackdrop>({ label: "Backdrop", options: [{ value: "studio", label: "Studio" }, { value: "black", label: "Black" }],
+    onSelect: value => rt.dispatch({ kind: "preview.setBackdrop", backdrop: value }) });
+  const grade = new Segmented<SetupDisplay>({ label: "Colour", options: [
+    { value: "aces", label: "Studio", title: "The Studio's tone mapping (ACES)" }, { value: "game", label: "Game grade", title: "The game's colour grade from your game files" }],
+  onSelect: value => rt.dispatch({ kind: "preview.setDisplayTransform", display: value }) });
+  const surroundings = new GroupSection({ title: "Surroundings", key: "lighting.surroundings", level: "subsection", expanded: true });
+  surroundings.body.append(exposure.element, room.element, backdrop.element, grade.element);
+
+  // The shown setup's lights: the list, then the chosen light's controls.
+  let selectedLight: string | undefined;
+  const lightMenu = (id: string, anchor: Element | { x: number; y: number }, invoker: Element) => {
+    const light = shown()?.lights.find(item => item.id === id); if (!light) return;
+    openMenu([
+      { kind: "action", label: "Rename", icon: "rename", run: () => lights.rename(id) },
+      { kind: "action", label: "Duplicate", icon: "duplicate", capability: capability({ kind: "preview.duplicateLight", light: id }),
+        run: () => rt.dispatch({ kind: "preview.duplicateLight", light: id }) },
+      { kind: "action", label: "Aim at the head", icon: "target", run: () => rt.dispatch({ kind: "preview.aimLightAtHead", light: id }) },
+      { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => rt.dispatch({ kind: "preview.removeLight", light: id }) },
+    ], anchor, { label: `${light.name} actions`, invoker });
+  };
+  const lights = new LightList({ label: "Lights", maxLength: 60, onSelect: id => { selectedLight = id; paintLight(); },
+    onMove: (light, index) => rt.dispatch({ kind: "preview.moveLight", light, index }),
+    onRename: (light, name) => rt.dispatch({ kind: "preview.renameLight", light, name }),
+    onDelete: light => rt.dispatch({ kind: "preview.removeLight", light }),
+    onDuplicate: light => rt.dispatch({ kind: "preview.duplicateLight", light }), onMenu: lightMenu });
+  const addLight = button({ label: "Add light", icon: "plus", small: true, menu: true, onClick: event => openMenu([
+    { kind: "action", label: "Directional light", icon: "sun", capability: capability({ kind: "preview.addLight", type: "directional" }),
+      run: () => rt.dispatch({ kind: "preview.addLight", type: "directional" }) },
+    { kind: "action", label: "Spot light", icon: "lighting", capability: capability({ kind: "preview.addLight", type: "spot" }),
+      run: () => rt.dispatch({ kind: "preview.addLight", type: "spot" }) }], event.currentTarget as Element, { label: "Add light" }) });
+  const lightId = () => selectedLight ?? "";
+  const direction = new DirectionDial({ label: "Direction", transaction: {
+    edit: value => { edit({ kind: "preview.setLight", light: lightId(), key: "azimuth", value: value.azimuth });
+      edit({ kind: "preview.setLight", light: lightId(), key: "elevation", value: value.elevation }); },
+    commit: endEdit, cancel: endEdit } });
+  const lightSlider = (key: "distance" | "intensity" | "cone" | "softness", label: string, range: { min: number; max: number; step: number },
+    unit: string, toValue: (shown: number) => number, format: (value: number) => string, help?: string) => new SliderWithValue({ label, ...range, unit, format, help,
+    transaction: { edit: value => { edit({ kind: "preview.setLight", light: lightId(), key, value: toValue(value) }); }, commit: endEdit, cancel: endEdit } });
+  const strength = lightSlider("intensity", "Strength", STRENGTH_RANGE.directional, "", value => value, value => String(Number(value.toPrecision(3))),
+    "Lux for a directional light, candela for a spot light.");
+  const distance = lightSlider("distance", "Distance", { min: .1, max: 10, step: .05 }, "m", value => value, value => `${value.toFixed(2)} m`,
+    "How far the light is from your V's head. A spot light's strength falls off with it.");
+  const coneSlider = lightSlider("cone", "Cone", { min: 1, max: 89.5, step: .5 }, "°", value => value, value => `${value.toFixed(1)}°`, "Half the spot light's cone angle.");
+  const softness = lightSlider("softness", "Cone softness", { min: 0, max: 100, step: 1 }, "%", value => value / 100, value => `${Math.round(value)} %`);
+  const colour = new ColorField({ label: "Colour", transaction: {
+    edit: value => { edit({ kind: "preview.setLightColour", light: lightId(), colour: value }); }, commit: endEdit, cancel: endEdit } });
+  const kind = new Segmented<LightType>({ label: "Kind", options: [{ value: "directional", label: "Directional" }, { value: "spot", label: "Spot" }],
+    onSelect: type => rt.dispatch({ kind: "preview.setLightType", light: lightId(), type }) });
+  const shadows = new Toggle({ label: "Casts shadows", reserveNote: true, onChange: enabled => rt.dispatch({ kind: "preview.setLightShadows", light: lightId(), enabled }) });
+  const lightControls = h("div", { class: "light-editor" }, kind.element, direction.element, distance.element, strength.element, colour.element,
+    coneSlider.element, softness.element, shadows.element);
+  const noLights = emptyState("No lights", "Add a light to light your V directly; the room light still shows her.");
+  const lightsGroup = new GroupSection({ title: "Lights", key: "lighting.lights", level: "subsection", expanded: true });
+  lightsGroup.body.append(lights.element, h("div", { class: "row" }, addLight), noLights, lightControls);
+  let lastFrame: Frame | undefined;
+  /** Paint the chosen light's controls from the last frame (also straight after a selection, before the next frame). */
+  function paintLight() {
+    const view = lastFrame?.preview.lightingSetups, ready = !!lastFrame?.preview.preview;
+    const list = view?.shown.lights ?? [];
+    if (!list.some(light => light.id === selectedLight)) selectedLight = list[0]?.id;
+    lights.update(list.map(light => ({ id: light.id, name: light.name, meta: lightMeta(light), colour: light.colour, kind: light.type })), selectedLight, !ready);
+    const light = list.find(item => item.id === selectedLight);
+    noLights.hidden = !!light; lightControls.hidden = !light;
+    if (!light) return;
+    const gate = (action: Parameters<typeof port.authoring.capability>[0]) => {
+      if (!ready) return { disabled: true, reason: "The preview is still loading." };
+      const allowed = capability(action); return { disabled: !allowed.available, reason: allowed.reason };
+    };
+    kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The preview is still loading." });
+    direction.update({ azimuth: light.azimuth, elevation: light.elevation }, { colour: light.colour,
+      others: list.filter(item => item.id !== light.id).map(item => ({ azimuth: item.azimuth, elevation: item.elevation, colour: item.colour })),
+      ...gate({ kind: "preview.setLight", light: light.id, key: "azimuth", value: light.azimuth }) });
+    distance.update(light.distance, gate({ kind: "preview.setLight", light: light.id, key: "distance", value: light.distance }));
+    const range = STRENGTH_RANGE[light.type];
+    strength.update(light.intensity, { ...gate({ kind: "preview.setLight", light: light.id, key: "intensity", value: light.intensity }),
+      min: range.min, max: Math.max(range.max, light.intensity) });
+    colour.update(light.colour, !ready);
+    coneSlider.update(light.cone, gate({ kind: "preview.setLight", light: light.id, key: "cone", value: light.cone }));
+    softness.update(light.softness * 100, gate({ kind: "preview.setLight", light: light.id, key: "softness", value: light.softness }));
+    shadows.update(light.shadows, gate({ kind: "preview.setLightShadows", light: light.id, enabled: !light.shadows }));
+  }
+
   const normals = new Toggle({ label: "Preview normal map", onChange: enabled => rt.dispatch({ kind: "preview.setNormals", enabled }) });
   // The view's tool toggles (view-graph-design.md §3.9): the shown modules' tools, derived like the toolbar, one Toggle each.
   const toolToggles = h("div", { class: "view-tool-toggles" });
   const toggles = new Map<string, Toggle>();
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
+  // Skin scattering quality (shader-skin.md §11, "a viewing preference beside the lighting presets"): Coming soon until it lands.
+  const scatterEntry = comingSoon("lightingSubsurface", live);
+  const scatter = scatterEntry ? new Segmented<string>({ label: scatterEntry.label, showLabel: false, onSelect: () => {},
+    options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }] }) : undefined;
+  scatter?.update(undefined, () => ({ available: false, reason: scatterEntry!.reason }));
+  const scatterControl = scatterEntry && scatter ? h("div", { class: "control" }, h("div", { class: "control-line" },
+    h("span", { class: "control-label", text: scatterEntry.label }), helpTip(scatterEntry.label, scatterEntry.reason)), scatter.element) : null;
   const element = h("div", { class: "panel-content" },
-    section({ title: "Camera", help: ["Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export.",
-      "Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."] }, fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
-    section("Light", studioControls, presetNote),
+    section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
+      "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
+    section({ title: "Light", help: LIGHT_HELP }, setupList.element, setupActions, presetNote, surroundings.element, lightsGroup.element),
     diagnostics,
-    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)));
+    section("Display", toolToggles, normals.element, scatterControl, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
+      lastFrame = frame;
       const preview = frame.preview.preview, ready = !!preview, assets = frame.status.assets;
       const loading = { disabled: !ready, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading." };
       fov.update(preview?.camera.fov, loading);
-      const studioOnly = (action: Parameters<typeof port.authoring.capability>[0]) => {
-        const allowed = port.authoring.capability(action);
+      const gated = (action: Parameters<typeof port.authoring.capability>[0]) => {
+        const allowed = capability(action);
         return ready ? { disabled: !allowed.available, reason: allowed.reason } : loading;
       };
-      const offered = frame.preview.lightingSetups, shown = offered?.shown;
-      exposure.update(shown?.display === "aces" ? Math.log2(shown.exposure) : undefined, shown?.display === "aces"
-        ? studioOnly({ kind: "preview.setExposure", value: shown.exposure }) : { disabled: true, reason: "The game display's exposure is the calibration's." });
-      room.update(shown?.environment, studioOnly({ kind: "preview.setRoomLight", value: shown?.environment ?? 1 }));
-      const setupKey = JSON.stringify(offered?.setups ?? []);
-      if (setupRow.dataset.key !== setupKey) {
-        setupRow.dataset.key = setupKey;
-        setupButtons = (offered?.setups ?? []).map(entry => ({ id: entry.id, button: h("button", { class: "chip-button", type: "button",
-          "aria-pressed": "false", title: entry.title, "data-title": entry.title,
-          onclick: () => rt.dispatch({ kind: "preview.selectLightingSetup", setup: entry.id }) }, h("span", { text: entry.label })) }));
-        setupRow.replaceChildren(...setupButtons.map(item => item.button));
-      }
-      for (const { id, button: control } of setupButtons) {
-        control.setAttribute("aria-pressed", String(id === offered?.active));
-        applyCapability(control, ready ? port.authoring.capability({ kind: "preview.selectLightingSetup", setup: id }) : { available: false, reason: loading.reason });
-      }
-      setText(setupReadout, shown?.label ?? "");
+      // The setups: one flat list, the built-ins marked as such by their group.
+      const view = frame.preview.lightingSetups;
+      shownId = view?.active ?? "soft";
+      setupList.setOptions((view?.setups ?? []).map(entry => ({ value: entry.id, label: entry.label, group: entry.builtIn ? "Built-in" : "Your setups",
+        title: entry.builtIn ? `${entry.title}. Built in: changing it makes your own copy.` : entry.title })));
+      setupList.update(view?.active, setup => capability({ kind: "preview.selectLightingSetup", setup }), ready ? {} : loading);
+      const current = view?.shown;
+      setText(newSetup.querySelector("span")!, "New setup");
+      newSetup.title = current ? `A new setup of your own, starting from ${current.label}` : "";
+      applyCapability(newSetup, ready ? capability({ kind: "preview.createLightingSetup", from: shownId }) : { available: false, reason: loading.reason });
+      applyCapability(renameSetup, ready ? capability({ kind: "preview.renameLightingSetup", setup: shownId, name: current?.label ?? "" }) : { available: false, reason: loading.reason });
+      setText(resetSetup.querySelector("span")!, current && !current.builtIn ? `Reset to ${current.baseLabel}` : "Reset");
+      applyCapability(resetSetup, ready ? capability({ kind: "preview.resetLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
+      applyCapability(deleteSetup, ready ? capability({ kind: "preview.deleteLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
       setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
-      applyCapability(creatorFace, port.authoring.capability({ kind: "camera.creatorFraming", page: "face" }));
-      applyCapability(creatorHair, port.authoring.capability({ kind: "camera.creatorFraming", page: "hair" }));
+      presetNote.hidden = !presetNote.textContent;
+      if (current) {
+        const range = current.exposureRange;
+        exposure.update(Math.log2(current.exposure), { ...gated({ kind: "preview.setExposure", value: current.exposure }), min: Math.log2(range.min), max: Math.log2(range.max) });
+        room.update(current.environment * 100, gated({ kind: "preview.setRoomLight", value: current.environment }));
+        backdrop.update(current.backdrop, value => ready ? capability({ kind: "preview.setBackdrop", backdrop: value }) : { available: false, reason: loading.reason });
+        grade.update(current.display, value => ready ? capability({ kind: "preview.setDisplayTransform", display: value }) : { available: false, reason: loading.reason });
+      }
+      paintLight();
+      addLight.hidden = false;
+      applyCapability(addLight, ready ? capability({ kind: "preview.addLight", type: "spot" }) : { available: false, reason: loading.reason });
+      applyCapability(creatorFace, capability({ kind: "camera.creatorFraming", page: "face" }));
+      applyCapability(creatorHair, capability({ kind: "camera.creatorFraming", page: "hair" }));
       const creator = preview?.creatorLighting;
-      intensity.update(creator?.intensity, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "intensity", value }));
-      cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
-      creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
-        note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
-      creatorShadows.update(creator?.shadows ?? true, studioOnly({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
-      applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
-      // The panel's loading reason is said once, in the line that is always there (UI-90).
-      if (!ready) setText(fovNote, loading.reason);
-      else if (!fovNote.textContent || fovNote.textContent === loading.reason) setText(fovNote, FOV_NOTE);
+      intensity.update(creator?.intensity, value => capability({ kind: "preview.setCreatorLighting", key: "intensity", value }));
+      cone.update(creator?.cone, value => capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
+      creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...gated({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
+        note: "Scene light × k before the game's colour grade, for the built-in Character creator. Fitted to a capture's forehead." });
+      creatorShadows.update(creator?.shadows ?? true, gated({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
+      applyCapability(resetCalibration, ready ? capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // Research tools (UI-85): the calibration and the display studies show only when asked for.
       const research = !!frame.preferences?.researchTools;
       diagnostics.hidden = !research;
       for (const node of element.querySelectorAll<HTMLElement>(".research-only")) node.hidden = !research;
-      applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
-      applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
+      applyCapability(front, capability({ kind: "camera.front" }));
+      applyCapability(bodyView, capability({ kind: "camera.body" }));
       normals.update(!!preview?.normals, loading);
       const tools = frame.viewTools.filter(tool => tool.kind === "toggle" && tool.state === "tools");
       for (const tool of tools) if (!toggles.has(tool.id)) toggles.set(tool.id, new Toggle({ label: tool.label,
@@ -206,11 +342,11 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   // The body source: Still (the bind pose), one of the game's own preview idles (the creator's close-up and full body, the inventory…), or
-  // the photo-mode pose chosen in Poses (its own pressed button while one is held; choosing another source leaves it).
+  // the photo-mode pose chosen in Poses (its own chosen choice while one is held; choosing another source leaves it).
   const STILL = "still", POSE = "pose";
-  // Mutually exclusive buttons, one per idle prepared on this computer (the list can change), wrapping onto more rows as needed. The
-  // pressed button moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
-  const source = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
+  // One choice per source (the list can change), all shown, in the Character panel's choice look (ChoiceList). The chosen one moves at
+  // once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
+  const source = new ChoiceList<string>({ label: "Body", reserveNote: true, quietReason: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
     if (value === POSE) return;
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
@@ -224,9 +360,11 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     rt.dispatch({ kind: "motion.setContributions", body: body ?? motion.idleBody, face: face ?? motion.idleFace });
   };
   const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
-  const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value) });
-  const idleNote = note("");
-  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
+  const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value),
+    help: "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on." });
+  // The blink's reasons (the idle blinks on its own, still loading) are information, so they keep the muted tone.
+  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true, quietReason: true,
+    format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
     transaction: { edit: value => { const action = { kind: "motion.setBlink" as const, value }; rt.report(action.kind, port.authoring.dispatch(action)); } } });
   const play = button({ label: "Play blink", icon: "play", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.playBlink", playing: !motion?.blinkPlaying });
@@ -236,12 +374,12 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
   // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game.
-  const physics = new Toggle({ label: "Hair physics", reserveNote: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
+  const physics = new Toggle({ label: "Hair physics", reserveNote: true, quietReason: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
     help: "Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files." });
-  const element = h("div", { class: "panel-content" },
-    section("Game idle", source.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
-    section("Hair", physics.element),
-    section("Blink", blinkControls, blinkNote));
+  const idleSection = section({ title: "Game idle", help: IDLE_HELP }, source.element, h("div", { class: "row" }, pause), head.element, face.element);
+  const blinkSection = section({ title: "Blink", help: blinkHelp(undefined) }, blinkControls, blinkNote);
+  const blinkTip = blinkSection.querySelector<HTMLElement>(".help-tip")!;
+  const element = h("div", { class: "panel-content" }, idleSection, section("Hair", physics.element), blinkSection);
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
@@ -249,6 +387,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
+      // The Body buttons' reserved line says the one thing that matters now: loading, or why motion is off.
       source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
         ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") })),
         ...(motion?.pose ? [{ value: POSE, label: `Pose: ${motion.pose.label}`, title: "The photo-mode pose chosen in Poses. Choose Still or an idle to leave it." }] : [])]);
@@ -259,19 +398,18 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason
-        : motion.pose ? `V holds ${motion.pose.label} from Poses${motion.pose.moves ? ", which moves" : ""}. ${motion.idleFace ? "Her face keeps the idle's movement" : "Her face holds still"} unless an expression is shown.`
-        : motion.idle
-        ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
-        : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
-      blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
+      // Before motion is ready its reason is said once, on the Body line; Blink and Hair physics carry it only as their description.
+      const saidOnce = !motion?.available;
+      blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason, reasonOnLine: !saidOnce });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
       blinkControls.hidden = !!motion && !motion.blinkAvailable;
       setText(blinkNote, blinkNoteLine(motion));
+      blinkNote.hidden = !blinkNote.textContent;
+      setHelp(blinkTip, blinkHelp(motion));
       const physicsAllowed = port.authoring.capability({ kind: "motion.setPhysics", enabled: !motion?.physics });
-      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion) });
+      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion), reasonOnLine: !saidOnce });
     },
   };
 }
@@ -285,27 +423,31 @@ export function physicsNoteLine(motion: Pick<MotionState, "physics" | "physicsAv
 /** A body-source button's tooltip: where the game plays that idle. */
 const idleTitle = (screen: string) => `The idle the game plays on V in its ${screen === "creator" ? "character creator" : screen === "inventory" ? "inventory" : "gender selection"}.`;
 
-/** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
-export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError" | "blinkRepeatSeconds"> | undefined): string {
-  if (!motion) return "";
+/** What the game idles are (the Game idle heading's help tip). */
+const IDLE_HELP = ["Idles the game plays on V in its character creator and inventory, made from your game files.",
+  "Their timing may differ slightly from the game's."];
+/** What the blink is and how its controls work (the Blink heading's help tip). */
+export function blinkHelp(motion: Pick<MotionState, "blinkRepeatSeconds"> | undefined): string[] {
+  const every = motion ? `, every ${Number(motion.blinkRepeatSeconds.toFixed(2))} s` : "";
+  return ["The game's own blink, made from your game files: lids, lashes, brows and makeup move together.",
+    `Closure scrubs the closing half. Play blink plays it at the game's speed${every}.`];
+}
+/** The Motion panel's blink line: why the blink isn't available, or nothing (what it is lives in the heading's help tip). */
+export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError"> | undefined): string {
   // Not prepared: one plain line and nothing to do (UI-86). A damaged or mismatched one says so (it was prepared, and can be again).
-  if (!motion.blinkAvailable) return motion.blinkError ?? "";
-  const seconds = Number(motion.blinkRepeatSeconds.toFixed(2));
-  return "The game's own normal blink, solved from your game files: lids, lashes, brows and makeup move together. Closure scrubs its closing half; "
-    + `Play blink plays it at the game's speed, repeated every ${seconds} s (a Studio choice: the idle's average blink spacing). `
-    + "Off while the idle plays, which blinks on its own.";
+  return motion && !motion.blinkAvailable ? motion.blinkError ?? "" : "";
 }
 
 export function qualityPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const sizes: PreviewTextureSize[] = [512, 1024, 2048, 4096];
-  const tiers = new Segmented<PreviewTextureSize>({ label: "Generated texture resolution", options: sizes.map(size => ({ value: size, label: size === 512 ? "512" : `${size / 1024}K` })),
+  const tiers = new Segmented<PreviewTextureSize>({ label: "Texture size", options: sizes.map(size => ({ value: size, label: size === 512 ? "512" : `${size / 1024}K` })),
     onSelect: size => rt.dispatch({ kind: "quality.set", size }) });
   const stateLine = h("div", { class: "quality-state" });
   const rebuild = button({ label: "Rebuild preview", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
   const element = h("div", { class: "panel-content" },
-    section({ title: "Makeup preview textures", help: ["Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail.",
-      "Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
+    section({ title: "Makeup preview textures", help: ["The size of the makeup textures in the 3D view. The head and eyes keep their own detail.",
+      "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
   return {
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
@@ -318,7 +460,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
         const text = readinessText(frame);
         stateLine.replaceChildren(badge(text.label, readiness.phase === "ready" ? "success" : readiness.phase === "updating" ? "info" : "error"),
           h("span", { class: "small", text: text.detail }),
-          h("span", { class: "muted small", text: `The makeup textures use about ${Math.ceil(readiness.estimatedBytes / 1048576)} MB of memory at this size.` }));
+          h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));
     },
@@ -330,7 +472,7 @@ export function activityPanel(rt: StudioRuntime): PanelController {
   const empty = emptyState("Nothing yet", "Saves, checks, imports, exports and errors appear here for this session.");
   // What the log keeps, in a help tip on its heading (help-tip.ts).
   const head = h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow", text: "This session" }),
-    helpTip("the activity log", "This log lasts only until XF Studio closes. Results that matter (library revisions, package manifests) are stored by their own services.")));
+    helpTip("the activity log", "This log is cleared when XF Studio closes. Your saved versions and built mods are kept elsewhere.")));
   let count = -1;
   const element = h("div", { class: "panel-content" }, head, empty, list);
   const draw = () => {

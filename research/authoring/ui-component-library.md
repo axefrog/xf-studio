@@ -34,17 +34,18 @@ All of XF Studio's UI is composed from one component library, documented in the 
 
 | Category | Components |
 |---|---|
-| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
+| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView` |
 | Feature-specific | `LightList`, `DirectionDial` (lighting setups) |
 
 Components added on request:
 - For the expressions panel (`claude/expressions-p1`): SliderWithValue, PairControl, GroupSection (the expander with a count and reset), SearchField and Combobox.
 - For the Poses panel (`claude/pose-panel`): TreeView, favouriteToggle, and SearchField's Down into the list.
-- For settings discoverability and Game & tools: FolderSetting.
+- For settings discoverability and Game & tools: FolderSetting. For the copy and layout review (`claude/ui-copy-polish`): FolderSetting's found folders shown as choices (`found`, `onSelect`) and an optional folder's **Don't use a folder** (`onClear`), used by Settings › Game. `ChoiceList` and `choiceItem` (chips, rows, tiles; the Character panel's creator choices are built from `choiceItem`), replacing `Segmented`'s short-lived `wrap` mode.
 - For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
 - For the lighting setups (`claude/lighting-setups`): Light list (the Ordered list with a light's colour chip and kind glyph) and Direction dial (a top view of V: one handle for a light's angle and height, readouts typed in place).
+- For saved layouts (`claude/saved-layouts`): option switches in the value popover (`ValueOption`: Save layout's name with Remember shown modules and automatic switching, each with a default).
 
 ## The ratchet
 
@@ -72,7 +73,7 @@ Debt at introduction (27 September 2026, after the first consolidation round and
 | `features/eye-makeup/view/inspector.ts` | 4 | finish chooser, choice chips, help `details` |
 | `studio-ui/panels/character-choices.ts` | 3 | the creator choice listbox and its options |
 | `studio-ui/preview-setup-card.ts` | 3 | consent sheet, link buttons |
-| `studio-ui/panels/preview.ts` | 3 | choice chips, `details` section |
+| `studio-ui/panels/preview.ts` | 1 | the research `details` section (the setup chips became the Choice list) |
 | `studio-ui/app.ts` | 2 | the category menu trigger, the status-bar message button |
 | `studio-ui/panels/collection.ts` | 2 | the collection title field, result `details` |
 | `studio-ui/dock/dock-view.ts`, `guidance/desktop-app-sheet.ts`, `guidance/overlay.ts`, `panels/history.ts`, `panels/mod-install-sheet.ts` | 1 each | a sheet shell or row button each |

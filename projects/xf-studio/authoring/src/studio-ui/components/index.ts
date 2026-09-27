@@ -12,7 +12,7 @@ export { applyCapability, badge, bindRangeTransaction, button, ColorField, Empty
 export { ExpandAll, expander, expanderLabel, isExpanded, setExpanded, type ExpanderLevel } from "../expander";
 export { helpTip, installHelpTips, setHelp, type HelpText } from "../help-tip";
 export { installReasonTips } from "../reason-tip";
-export { closeMenus, menuFromSections, openMenu, openValuePopover, type Capability, type MenuItem, type MenuSection, type ValueField } from "../menu";
+export { closeMenus, menuFromSections, openMenu, openValuePopover, type Capability, type MenuItem, type MenuSection, type ValueField, type ValueOption } from "../menu";
 export { ItemList, type ItemListOptions, type ListItem, type ListRow } from "../item-list";
 export { iconButton, type IconButtonOptions } from "./icon-button";
 export { planTabs, TabStrip, TAB_STAGES, type TabItem, type TabStripOptions, type TabStripStage } from "./tab-strip";
@@ -27,7 +27,8 @@ export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, typ
 export { SplitView, type SplitViewOptions } from "./split-view";
 export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
-export { FolderSetting, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+export { ChoiceList, choiceItem, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
+export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
 // Feature-specific: lighting setups.
 export { LightList, type LightListItem, type LightListOptions } from "./light-list";
 export { azimuthWords, DirectionDial, dialDirection, dialPoint, type DialMark, type Direction, type DirectionDialOptions } from "./direction-dial";

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + lighting setups (claude/lighting-setups)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups)",
  "states": {
   "starter": {
    "modes": {
@@ -506,6 +506,13 @@
     "layer/preview.addLight": {
      "type": {}
     },
+    "layer/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "layer/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -1098,6 +1105,13 @@
     "point/preview.addLight": {
      "type": {}
     },
+    "point/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "point/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -1686,6 +1700,13 @@
     },
     "viewport/preview.addLight": {
      "type": {}
+    },
+    "viewport/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -2276,6 +2297,13 @@
     "collection/preview.addLight": {
      "type": {}
     },
+    "collection/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "collection/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -2864,6 +2892,13 @@
     },
     "preset/preview.addLight": {
      "type": {}
+    },
+    "preset/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -3288,7 +3323,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "layer/glitter.setIrregular/spread": {
@@ -3662,6 +3697,13 @@
     "layer/preview.addLight": {
      "type": {}
     },
+    "layer/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "layer/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -3887,7 +3929,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "point/glitter.setIrregular/spread": {
@@ -4260,6 +4302,13 @@
     },
     "point/preview.addLight": {
      "type": {}
+    },
+    "point/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -4850,6 +4899,13 @@
     "viewport/preview.addLight": {
      "type": {}
     },
+    "viewport/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "viewport/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -5439,6 +5495,13 @@
     "collection/preview.addLight": {
      "type": {}
     },
+    "collection/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "collection/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -6027,6 +6090,13 @@
     },
     "preset/preview.addLight": {
      "type": {}
+    },
+    "preset/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -6452,7 +6522,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "layer/glitter.setIrregular/spread": {
@@ -6826,6 +6896,13 @@
     "layer/preview.addLight": {
      "type": {}
     },
+    "layer/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "layer/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -7052,7 +7129,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "point/glitter.setIrregular/spread": {
@@ -7425,6 +7502,13 @@
     },
     "point/preview.addLight": {
      "type": {}
+    },
+    "point/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -8015,6 +8099,13 @@
     "viewport/preview.addLight": {
      "type": {}
     },
+    "viewport/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "viewport/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -8604,6 +8695,13 @@
     "collection/preview.addLight": {
      "type": {}
     },
+    "collection/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "collection/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -9192,6 +9290,13 @@
     },
     "preset/preview.addLight": {
      "type": {}
+    },
+    "preset/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -9990,6 +10095,13 @@
     "layer/preview.addLight": {
      "type": {}
     },
+    "layer/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "layer/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -10589,6 +10701,13 @@
     "point/preview.addLight": {
      "type": {}
     },
+    "point/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "point/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -11177,6 +11296,13 @@
     },
     "viewport/preview.addLight": {
      "type": {}
+    },
+    "viewport/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -11767,6 +11893,13 @@
     "collection/preview.addLight": {
      "type": {}
     },
+    "collection/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "collection/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -12355,6 +12488,13 @@
     },
     "preset/preview.addLight": {
      "type": {}
+    },
+    "preset/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -13153,6 +13293,13 @@
     "layer/preview.addLight": {
      "type": {}
     },
+    "layer/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "layer/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -13752,6 +13899,13 @@
     "point/preview.addLight": {
      "type": {}
     },
+    "point/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "point/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -14340,6 +14494,13 @@
     },
     "viewport/preview.addLight": {
      "type": {}
+    },
+    "viewport/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -14930,6 +15091,13 @@
     "collection/preview.addLight": {
      "type": {}
     },
+    "collection/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "collection/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -15518,6 +15686,13 @@
     },
     "preset/preview.addLight": {
      "type": {}
+    },
+    "preset/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -16319,6 +16494,13 @@
     "layer/preview.addLight": {
      "type": {}
     },
+    "layer/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "layer/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -16921,6 +17103,13 @@
     "point/preview.addLight": {
      "type": {}
     },
+    "point/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "point/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -17509,6 +17698,13 @@
     },
     "viewport/preview.addLight": {
      "type": {}
+    },
+    "viewport/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -18099,6 +18295,13 @@
     "collection/preview.addLight": {
      "type": {}
     },
+    "collection/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
+    },
     "collection/preview.setKeyAngle": {
      "degrees": {
       "min": 0,
@@ -18687,6 +18890,13 @@
     },
     "preset/preview.addLight": {
      "type": {}
+    },
+    "preset/preview.moveLight": {
+     "index": {
+      "min": 0,
+      "max": 15,
+      "unit": "index"
+     }
     },
     "preset/preview.setKeyAngle": {
      "degrees": {

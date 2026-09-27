@@ -31,7 +31,7 @@ test("eye makeup's region is what the engine used to hard-code", () => {
   expect(starterRecipe().layers.map(l => l.name)).toEqual(["Eye makeup"]);
   // The user-facing words the engine used to say.
   expect(finishCatalogue(EYE_MAKEUP_REGION.wording).find(item => item.id === "iridescent")!.description)
-    .toBe("A duochrome: the colour turns toward a chosen shift colour as the lid curves away from view. Multichrome is still to come.");
+    .toBe("The colour turns toward a chosen shift colour as the lid curves away from view.");
   expect(glitterModelCatalogue(EYE_MAKEUP_REGION.wording).find(item => item.id === "irregular")!.summary)
     .toBe("Irregular flakes are baked into a texture. Dense settings cover the eye UV area and can lose sparkle at face distance.");
   expect(rasterRegion(EYE_MAKEUP_REGION)).toEqual({ mirror: EYE_MAKEUP_REGION.mirror, skin: EYE_MAKEUP_REGION.skin,

@@ -35,13 +35,13 @@ const ALLOWANCE: Readonly<Record<string, number>> = {
   "studio-ui/guidance/desktop-app-sheet.ts": 1,
   "studio-ui/guidance/help-panel.ts": 12,
   "studio-ui/guidance/overlay.ts": 1,
-  "studio-ui/panels/character-choices.ts": 3,
-  "studio-ui/panels/character.ts": 5,
+  "studio-ui/panels/character-choices.ts": 1,
+  "studio-ui/panels/character.ts": 4,
   "studio-ui/panels/collection.ts": 2,
-  "studio-ui/panels/game-setup.ts": 7,
+  "studio-ui/panels/game-setup.ts": 4,
   "studio-ui/panels/history.ts": 1,
   "studio-ui/panels/mod-install-sheet.ts": 1,
-  "studio-ui/panels/preview.ts": 3,
+  "studio-ui/panels/preview.ts": 1,
   "studio-ui/preview-setup-card.ts": 3,
 };
 

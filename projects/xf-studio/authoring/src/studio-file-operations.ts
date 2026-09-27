@@ -139,8 +139,8 @@ export class StudioFileOperations {
         if (!base.available) return base;
         const build = this.sources.buildReadiness?.();
         return build === "needs-setup" ? { available: false, reason: BUILD_NEEDS_SETUP } :
-          build === "loading" ? { available: false, reason: "Build setup is still loading." } :
-          build === "damaged" ? { available: false, reason: "Your build settings file is damaged. Restore the previous copy in Build setup." } :
+          build === "loading" ? { available: false, reason: "Your settings are still loading." } :
+          build === "damaged" ? { available: false, reason: "Your settings file is damaged. Restore the previous copy in Settings › Game." } :
           base;
       }
       default: {
@@ -177,7 +177,7 @@ export class StudioFileOperations {
           const layer = structuredClone(this.sources.selectedLayer()!) as Layer;
           const blob = await this.port.bakeMask(layer);
           this.port.download(blob, `xfs-${layer.id}-alpha.png`);
-          outcome = { ok: true, code: "exported", message: "Exported 2048² white + alpha mask; palette remains separate." }; break;
+          outcome = { ok: true, code: "exported", message: "Exported the layer's shape as a 2048 × 2048 mask." }; break;
         }
         case "savedV.import": {
           const file = await this.port.pick("savedV");
