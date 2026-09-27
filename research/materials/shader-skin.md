@@ -405,13 +405,13 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 | Wetness | Not drawn | Faithful when dry |
 | Emissive | Not drawn; reported when a mask would glow | Gap |
 | Dual-lobe GGX, F0 0.04, Burley diffuse | Same | Faithful to the direct light |
-| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1. It is scaled by the surface's curvature (`min(1, 5 mm × κ)`, κ from screen-space derivatives of the interpolated normal), so each channel wraps over its scatter distance (blur size × falloff, read as millimetres [hypothesis]) rather than a fixed angle. The diffuse light uses the **macro normal** (normal and detail maps, without the tiled microdetail); specular keeps the full normal | Approximation. The game blurs irradiance in screen space with a decoded kernel and multiplies albedo afterwards (§6.3). That softens the terminator by millimetres and removes diffuse shading finer than its kernel, which is what the two stand-ins mimic. The earlier fixed-angle wrap spread a broad, saturated red band across gently curved cheeks under a strong side key (the 27 September Rim / dramatic capture). The port is planned in §11 |
+| SSS | **The game's screen-space scatter** (§11): the input variants write the irradiance, √albedo, metalness, class and slot; the two separable passes with the game's kernel and rules; the combine's delta added before the display transform. **Fallback** (no half-float target, study pages, switched off): a per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1, scaled by the surface's curvature (`min(1, 5 mm × κ)`, κ from screen-space derivatives of the interpolated normal; it can step at triangle edges, PREV-137), with the diffuse on the **macro normal** (normal and detail maps, without the tiled microdetail) | Faithful in mechanism; the screen scale is [hypothesis] until test ask 4 (§11.6). The wrap fallback is an approximation |
 | Translucency | Not drawn | Gap for thin, back-lit parts |
 | Ambient and reflections | Three's image-based light through both lobes | Approximation; the game adds one ambient term (probably the reflections) outside the scatter, tinted by `SubsurfaceSpecularTint` (§6.3.5) |
 
 **Browser follow-ups this study suggests** (separate reviewable changes with before/after evidence, per the backlog):
 
-1. Port the screen-space scatter with the game's own kernel (§11).
+1. Fit the scatter's screen scale from test ask 4 and compile its variants in the background (§11.7 ranks 6 and 7).
 2. The lip seam capture of §7 on the current preview.
 
 ## 9. Open questions
@@ -432,105 +432,143 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 3. **Neck seam**: head and body tone match at the neck under the creator light (with the body track's body test).
 4. **Scatter width and quality.** Photo mode, one hard key light raking across the cheek so its shadow terminator crosses the face, camera fixed: frames at Subsurface Scattering Quality Low and High, then High again at a second camera distance (about twice as far). Record the upscaler, ray-tracing mode and SSS quality. This gives the parity fit of §11.6 its data, and shows the 11- versus 25-sample difference. A Low/High pair that looks identical would suggest the stochastic blur, which ignores the quality setting.
 
-## 11. Preview port plan: screen-space scatter in Three.js
+## 11. Screen-space scatter in the preview (Three.js)
 
-A plan for a code track, ranked; nothing here is built yet. It replaces the wrap stand-in (§8) with the game's mechanism (§6.3) in the WebGL 2 renderer (Three.js 0.186). Grades on the game side are those of §6; statements about the Studio's code are [observed] in the files named, and costs are estimates to be measured.
+**Built (27 September 2026, claude/sss-port).** The preview draws the game's scatter (§6.3) in the WebGL 2 renderer (Three.js 0.186) under both lighting presets whenever the display's target is half float. The wrap of §8 is the fallback. Statements about the Studio's code are [observed] in the files named. Measurements are from headless Chrome (ANGLE D3D11, RTX 4070) on the maintainer's V from the 27 September matched pair (skin type 5, Creator face camera) and the default V. The game side keeps §6's grades.
 
-### 11.1 What to reproduce, and the shortcut that makes it cheap
+### 11.1 The delta scheme
 
-For a Subsurface pixel with blended metalness ≤ 0.1, the game outputs `lerp(E, B, P) · albedo + specular + tinted A`, where `E` is the direct diffuse irradiance (albedo 1), `B` its blurred copy, `P` the profile strength and `albedo` the pixel's final G-buffer colour after decals (§6.3.5). The preview's forward pass already writes `E · albedo + specular + ambient` for skin, decals and the plate. So the scatter can be added as a **delta**:
+For a Subsurface pixel with blended metalness ≤ 0.1, the game outputs `lerp(E, B, P) · albedo + specular + tinted A`, where `E` is the direct diffuse irradiance (albedo 1), `B` its blurred copy, `P` the profile strength and `albedo` the pixel's final G-buffer colour after decals (§6.3.5). The preview's forward pass already writes `E · albedo + specular + ambient` for skin, decals and the plate, so the scatter is added as a **delta**:
 
 ```
 Δ = (lerp(E, B, P) − E) · albedo        on class-1 pixels with metalness ≤ 0.1, else 0
 final = forward scene + Δ               before the display transform
 ```
 
-Specular and the image-based light never enter `E`, so they stay sharp exactly as in game, and the forward materials keep their outputs. The one requirement is that the forward skin diffuse is the same `E` that the scatter pass sees: the wrap must be off (`xfsWrap = 0`) whenever the scatter runs.
+Specular and the image-based light never enter `E`, so they stay sharp, as in game. The forward skin diffuse must be the same `E` the scatter blurs, so while the scatter runs every skin-lit material's wrap is gated off (`xfsWrapGate` 0).
 
-### 11.2 Render targets
+### 11.2 Targets
 
-All targets are single-sample, at the display target's drawing-buffer size (`linear-display.ts` `ensureTarget`), created and resized with it.
+All targets are single-sample, at the drawing-buffer size, and are created on the first frame that scatters. They are released on the first frame with no skin left in the scene (the V removed) or no half-float target, so no V costs nothing (`tests/webgl-scene-host.test.ts`); a skin only hidden (the body switched off) keeps them, like its own resources, so showing it again is instant (`tests/webgl-body.test.ts`).
 
 | Target | Format | Contents |
 |---|---|---|
-| **S0** scatter input | RGBA16F | RGB = `E`, the direct diffuse irradiance with albedo 1: Burley at the pixel's roughness, all direct lights with their shadows, no wrap, no image-based light. A = the pixel's **class-1 flag**, written opaque by skin and never changed by decals |
-| **S1** surface | RGBA8 (RGBA16F if Three.js 0.186 cannot mix attachment types) | RGB = `sqrt(albedo)`, blended by decals in that space exactly like GBuffer0. A = profile slot, (slot + 1)/8 |
-| **S2** metalness | same type as S1 | R = the blended metalness (the SSS gate) |
-| Depth | `DepthTexture` (float) | Linear view depth for the radius, from the camera's near/far |
-| **P0**, **P1** | RGBA16F | Blur ping-pong: P0 = horizontal result, P1 = `Δ` |
+| **S0** | RGBA16F | RGB = `E`: Burley at the pixel's roughness, every direct light with its shadow, no wrap, no image-based light, times (1 − metalness), as the forward diffuse is before the albedo. A = the pixel's **view depth** on a Subsurface pixel and 0 elsewhere: the class-1 flag and the blur's depth in one channel |
+| **S1** | RGBA8 | RGB = `√albedo`, blended by decals in that space, as GBuffer0 is. A = profile slot as (slot + 1)/8 |
+| **S2** | RGBA8 | R = the blended metalness (the gate) |
+| Depth | renderbuffer | the input pass's depth test only |
+| **P0**, **P1** | RGBA16F | P0 = the horizontal pass (RGB, and the depth again in A); P1 = `Δ` |
 
-S0–S2 are one multiple-render-target (`count: 3`) target. Blending uses each attachment's own output alpha, so a decal can blend S1 at its colour alpha and S0 at its normal alpha in one draw. With colour factors `SrcAlpha/OneMinusSrcAlpha` and alpha factors `Zero/One`, the class flag and slot are never touched, which matches the game's RGB write mask and untouched stencil (§6.3.1, [decal reference](shader-decal.md)).
+S0–S2 are one three-target draw (`WebGLRenderTarget` `count: 3`; Three.js 0.186 takes each attachment's own type, so S1 and S2 are 8-bit). A decal blends every target with colour factors `SrcAlpha/OneMinusSrcAlpha` and alpha factors `Zero/One`, so each target takes that output's own alpha as its weight and the class, depth and slot underneath never change: the game's RGB write mask.
 
-Memory is about 36 bytes per drawing-buffer pixel (S0–S2 and depth 20–28, P0–P1 16): about 75 MB at 1920 × 1080 and about 230 MB at 3200 × 2000 (a large canvas at pixel ratio 2). This is outside the preview-quality contract's 1 GiB generated-texture budget, which excludes framebuffers.
+Memory: 36 bytes per drawing-buffer pixel (S0 8, S1 4, S2 4, depth 4, P0 8, P1 8), as estimated. Measured by the scatter's own evidence: 23.1 MB at 990 × 648, 73.8 MB at 1920 × 1068, 143.8 MB at 2600 × 1536 (pixel ratio 2). 3200 × 2000 would take 230 MB. None of this counts toward the preview-quality contract's 1 GiB generated-texture budget, which excludes framebuffers.
 
 ### 11.3 Passes
 
-1. **Forward scene** (unchanged), with the wrap off when the scatter is on.
-2. **Scatter input** into S0–S2. Every mesh draws with an *input variant* of its material, swapped in for this pass:
-   - **Skin** (`skin-material.ts`): the same surface arithmetic; outputs `E`, `sqrt(albedo)`, metalness, class flag and slot.
-   - **Face decals and brows** (`face-decal-material.ts`, `brow-material.ts`): S1 = `sqrt(decal colour)` at the colour alpha, so the hardware blend *is* the game's square-root blend, with no underlay solve. S0 = `E` of the blended surface at the normal/surface alpha (the decal's normal and roughness change `E`). S2 = metalness at the surface alpha.
-   - **Authored plate** (`engine/render/plate-blend.ts`): it already forms the blended surface G and the skin under it S per fragment. S0 takes the same residual form it uses for light, `Y = (E(G) − (1 − A)·E(S)) / A` at alpha A. S1 and S2 take G's √colour and metalness at the colour and surface alphas.
-   - **Everything else that the game draws into the G-buffer** (eyes, hair and lash cards where their alpha test passes, clothing, piercings) writes class flag 0 and depth, so it occludes and is excluded. Forward-only passes (the `eye_shadow` shell, glitter plates) are skipped, as they come after the game's SSS.
-   - The teeth, once drawn (coverage audit rank 1), are skin with their own profile slot.
-3. **Horizontal blur**: S0 → P0, the §6.3.1 loop with the game's kernel.
-4. **Vertical blur and combine**: P0 → P1 = `Δ`, reading S1 (squared), S2 (gate), the slot's `P` and the unblurred `E` from S0.
-5. **Display**: the creator and studio passes (`linear-display.ts`) add `Δ` to the scene value they read, before exposure and grade; in the studio path `Δ` is weighted by coverage like the scene colour.
+1. **Forward scene** (unchanged), with the wrap gated off. `platform/scene/skin-scatter.ts` `prepare` decides before the forward pass: the scatter runs when it is switched on, the target is half float and some drawn mesh declares itself skin.
+2. **Input** into S0–S2 (`platform/scene/pass-variants.ts`, the input-variant swap). Every visible mesh draws once more through a *variant* of its own material: the forward material seen through a prototype, so maps, uniforms, side and polygon offset are read live, with the pass's define, blend state and program key of its own. A material declares its role through the scene port (`declarePass`, `platform/api/scene.ts`), and the variant's program is its own forward shader with `XFS_SCATTER_INPUT` defined:
+   - **Skin** (`skin-material.ts`, role `skin`): `E` accumulated in the skin light, the depth, `√albedo`, the slot and the metalness; opaque. The teeth's interior occlusion scales `E` too (`mouth-occlusion.ts`).
+   - **Face decals lit as skin** (`face-decal-material.ts`, role `decal`): S1 = √ of the decal's own colour (not the forward solve's) at the colour alpha, so the hardware blend *is* the game's square-root blend; S2 = the decal's metalness at the surface alpha; S0 = `E` of the forward's lit blend at the forward's drawn alpha, so S0 mixes exactly as the forward light does.
+   - **Brows** (`brow-material.ts`, role `decal`): S1 only (√colour at the coverage). They are lit as a standard surface, so they write no irradiance, and the skin's `E` and metalness stay under them.
+   - **Authored plate** (`engines/layered-makeup/render/plate-blend.ts`, role `decal` while it is lit as skin): S0 in the residual form it uses for light, `(E(G) − (1 − A)·E(S)) / A` at the drawn alpha A, with the skin's `E(S)` kept apart in its under-light block; S1 and S2 = the merged decal's √colour and metalness at the coverage.
+   - **Everything that declares nothing** follows the host's rules: a blended, non-depth-writing material is forward-only and left out (the eye's wetness shell, glitter and per-layer plates, the hair cap); every other built-in surface occludes (class 0, no irradiance), alpha-tested at half coverage when it draws by alpha-to-coverage or an alpha map (hair strands and lashes, as the parity design's `ids` pass wants); a custom shader or a surface without a depth test is left out. Lines, points and sprites are hidden.
+3. **Horizontal blur** S0 → P0 and 4. **vertical blur and combine** P0 → P1 = `Δ`: the §6.3.1 loop with the game's rules and nothing stricter. A tap counts on a pixel whose A (class) and red are positive, with no depth or normal test; taps are whole pixels (`int()`, `texelFetch`); weights renormalise per channel; only the centre's metalness gates, and P0 keeps the depth, so a pixel the first pass skipped reads as zero red in the second, as in game.
+5. **Display** (`linear-display.ts`): the display pass adds `Δ` at the same pixel before the creator's exposure and grade, or, in the studio path, to the coverage-divided scene value before tone mapping.
 
-Details to keep:
+Details:
 
-- **Kernel data.** A pure domain module (for example `skin-scatter-kernel.ts`) ports `0xae35f4` and the table layout of §6.3.2 and returns, per slot, the strength and the `n` entries for the chosen quality. The blur takes them as a uniform array (8 slots × 14 `vec4`, within WebGL 2's fragment uniform minimum), not a texture. It reimplements Jimenez et al.'s reference algorithm; if the code follows their published source, their licence notice goes into the release's third-party notices ([community credits](../../docs/community-credits.md#jimenez-et-al-2015)).
-- **Slots.** The adapter assigns slots to the distinct resolved `.sp` profiles among drawn skin chunks, in first-seen order, up to 8. A ninth profile falls back to slot 0 and is reported in diagnostics, since the game's behaviour there is unknown.
-- **The game's rules, not stricter ones.** Class mask and `red > 0` only, no depth test; whole-pixel taps (truncate, `texelFetch`); per-channel renormalisation; only the centre's metalness gates. The whole-pixel rule matters: it is why a distant face shows less scatter.
-- **Scissor** the full-screen passes to the projected bounds of the skin meshes: the WebGL stand-in for the game's tile list.
+- **Kernel.** `platform/scene/skin-scatter-kernel.ts` (pure) ports `0xae35f4` and §6.3.2's table: per slot the strength `P` and the `n` stored entries with offsets × `blurSize`, packed as a uniform array (8 slots × 14 `vec4`). It reproduces §6.3.2's 25-sample `default.sp` table to 1e-4. It is written from the decoded routine, which is Jimenez et al.'s published algorithm, so the release notices carry their notice ([community credits](../../docs/community-credits.md#jimenez-et-al-2015)).
+- **Slots.** The distinct resolved `.sp` profiles among the drawn skin, in first-seen order, up to 8, written to each skin material's slot uniform every drawn frame. A ninth falls back to slot 0 and is counted in the scatter's evidence. The maintainer's V fills two slots: the skin's profile (blur size 2.5, falloff 255/155/119) and the teeth's.
+- **Scissor.** The full-screen passes and the input draw are scissored to the projected bounds of the skin meshes: their bind-pose bounding spheres with a 15 cm margin for the idle. At the creator's face framing that is the whole frame; it pays off at body framings.
+- **Diffuse normal.** While the scatter runs the skin's Burley uses the full normal (microdetail included), as the game's G-buffer normal is; the macro normal (§8) stood in for the blur and stays with the wrap fallback.
+- **Screen scale** [hypothesis, §11.6]: one kernel unit is `blurSize` millimetres (`SCATTER_SCREEN_SCALE` 1), so a stored offset lands `offset · 1e-3 · focal / depth` pixels away. At the Creator face camera (1.2 m, 15°) that is about 2 px per millimetre, and the maintainer's profile reaches 15 px.
+- **Quality.** The game's High (25 samples) at every preview-quality size (`scatterQualityFor`): the cost below does not follow the generated-texture size, and whole-pixel taps make resolution part of the look, so a smaller canvas is not the first step down. Medium (17) and Low (11) are wired and tested.
+
+Departures from the earlier plan, each for a reason:
+
+| Plan | Built | Why |
+|---|---|---|
+| A separate `DepthTexture`, and the class flag in S0.A | The view depth in S0.A is both the flag and the depth | One fetch per tap gives class, red and depth; saves the depth texture |
+| P0 plain | P0 keeps the depth in A | The second pass also reads one texture per tap |
+| A decal's S0 at its normal or surface alpha | At the forward's drawn alpha | S0 then mixes as the forward light does, which the delta assumes |
+| Brows as decals with irradiance | Colour only | They are lit as a standard surface; there is no skin irradiance to write |
+| Macro-normal diffuse kept | Full normal while the scatter runs | The game's diffuse uses the G-buffer normal; the scatter does the smoothing now |
 
 ### 11.4 How it meets the existing materials
 
-- **Strength `P` and post-scatter albedo.** `P` is the profile's `diffuse` colour, sRGB-decoded (§6.3.2); `RenderSkinProfile` already carries it. The albedo is the *final* surface colour after decals and the plate (S1), so makeup and freckle colour stay sharp while shading under them softens, as in game.
-- **Decals are lit as skin.** A post-G-buffer decal never changes the class or slot. Under the delta scheme, decal pixels scatter with the skin's kernel because S0.A and S1.A come from the skin underneath. The forward decal and plate materials already light with `patchSkinLight`; their wrap goes to zero with the skin's.
-- **Metalness > 0.1.** S2 carries the blended metalness, so Metallic makeup switches the scatter off at the same coverage as the current wrap gate (about 15 % for the Metallic finish; [fact index](shader-fact-index.md)). Colour-shifting's 0.08 never crosses it.
-- **The wrap stays as the fallback**: without a renderable half-float target (the `direct` / `srgb8` paths), in study pages, and when the scatter is switched off.
-- **Parity passes share the machinery.** The input variant swap and the S1/depth targets are the `albedo`, `ids` and `depth` passes of the [parity measurement design](../authoring/game-parity-measurement.md) (phase P2). Build the swap once for both.
-- **The ownership gate changes.** The [diffuse SSS gate](../../projects/xf-studio/authoring/evidence/diffuse-sss-gate-2026-09-24.md) asked for a semantic lip partition and depth rejection before any blur. The game has neither: it blurs across the lip parting and onto the teeth wherever they are Subsurface (§6.3.1). Parity means matching the game's class mask, so the gate's no-bleed test is now "no scatter outside the class-1 mask" (adopted 27 September 2026; [preview fidelity](../backlog/preview-fidelity.md) row 4).
+- **Post-scatter albedo.** `Δ` multiplies S1², the *final* colour after decals and the plate, so makeup and freckle colour stay sharp while the shading under them softens.
+- **Decals scatter with the skin under them.** A decal never changes S0.A or S1.A, so it takes the skin's class, depth and kernel.
+- **Metalness > 0.1.** S2 carries the blended metalness, so a Metallic decal or plate switches the scatter off at the same coverage as the wrap's gate. Colour-shifting's 0.08 never crosses it.
+- **The wrap stays the fallback**: without a renderable half-float target (the `direct` and `srgb8` paths), in study pages (their own renderers), and when the verification switch turns the scatter off.
+- **Parity passes share the swap.** `createPassVariants(spec)` takes any `PassSpec` (defines, draw state, an occluder patch); the parity measurement's `albedo`, `ids` and `depth` passes (phase P2) are further specs over the same swap.
+- **The no-bleed rule** is the game's class mask ([preview fidelity](../backlog/preview-fidelity.md) row 4), tested on a real GPU (§11.8).
 
 ### 11.5 Performance
 
-- **Cost follows drawing-buffer pixels, not the preview quality presets.** The 512–4K presets size generated makeup textures ([preview quality contract](../authoring/preview-quality-contract.md)); the scatter's cost scales with canvas size × pixel ratio (at most 2) and the fraction covered by skin.
-- **Per pixel**, at High: 25 taps per pass with one fetch each (S0 carries the class flag, so no second fetch), plus 5 fetches for the combine: about 55 fetches. At Medium 17 + 17 + 5, at Low 11 + 11 + 5.
-- **Estimate** [hypothesis, to measure]: about 1–3 ms per frame on a mid-range discrete GPU at 1920 × 1080, and several times that at 3200 × 2000 or on integrated graphics. The input pass costs about one more draw of the skin with its full surface arithmetic.
+Measured on 27 September 2026 (RTX 4070, ANGLE D3D11, headless Chrome). Each figure is the minimum of six alternations of 60 frames (frames) or 30 runs (passes), because other work on the shared machine only ever adds time:
+
+| Canvas | Frame, scatter off → on | The scatter's passes alone | First scatter frame (compiles the variants) |
+|---|---:|---:|---:|
+| 990 × 648, default V head only | 0.42 → 0.90 ms | 0.25 ms | 82 ms |
+| 1920 × 1068, default V head only | 0.41 → 0.73 ms | 0.21 ms | 80 ms |
+| 2600 × 1536 (pixel ratio 2), default V head only | 0.38 → 0.64 ms | 0.22 ms | 80 ms |
+| 990 × 648, the maintainer's V (head) | 0.50 → 0.88 ms | 0.32 ms | 71 ms |
+| 990 × 648, default V with body and clothes | 0.71 → 1.46 ms | 0.44 ms | 122 ms |
+
+- **Cheap per frame, a one-off compile.** The passes cost a few tenths of a millisecond at every size measured. They barely grow with pixels on this GPU, so the figures are near the timing's own floor. The extra frame time beyond the passes is the input draw of the whole V. Integrated graphics are not measured. The first frame that scatters compiles one variant program per distinct drawn material: 19 on the maintainer's V (3 skin, 11 decal, 5 occluder) take 70–120 ms. Compiling them in the background while the wrap shows is the candidate fix ([performance track](../backlog/performance.md)).
 - **Only drawn frames pay.** The viewport renders on change, and continuously only while the idle plays.
-- **Default quality** follows the game's own setting; High (25 samples) is the default until the game-side default is known. Offer it as a viewing preference beside the lighting presets, not as a recipe property. If High costs too much at pixel ratio 2, Medium is the first step down, not a half-resolution blur: whole-pixel taps make resolution part of the look.
+- **3200 × 2000 at pixel ratio 2 was not reached** under the 4 GB guard: the headless Chrome with the V passed it before the scene drew. The 2600 × 1536 run stands in for it.
 
 ### 11.6 Unknowns a parity capture must settle
 
-1. **The screen scale `w · cb0[3].x`** (§6.3.3). Until then the preview uses one kernel unit = `blurSize` mm [hypothesis]. Fit: in-game test ask 4 (§10) gives a hard terminator at two distances and two qualities. Registered against the Studio's depth pass, the red fringe width versus depth fits the scale in one parameter, and the Low/High pair checks the kernel.
+1. **The screen scale `w · cb0[3].x`** (§6.3.3). The matched pair cannot fit it. Trial scales of 1.5, 2, 3 and 4 × on the pair's V raise the nose shadow's R/G toward the game's (1.0 → 2.3 against 3.1), but also its luminance (0.11 → 0.17 of the forehead, against the game's 0.084). They lower the face's contrast and worsen the per-region fit (rms 0.228 → 0.316). The wedge already holds too much light in the Studio, cyan fill that the game's wedge doesn't show (§11.8), so more scatter makes it brighter, not more like the game. Test ask 4 (§10) fits the scale free of that confound.
 2. **Separable or stochastic**, and the pass order (edge-only).
-3. **The tinted `A` term** (§6.3.5): whether the skin's image-based light in the preview should be multiplied by the `SubsurfaceSpecularTint` blend. A separate, small change once the input is known.
+3. **The tinted `A` term** (§6.3.5).
 4. **The game's SSS quality at the test profile**, recorded with every capture.
+5. **Shadows with no direct fill.** Where a shadow gets no direct light at all (`E` = 0), the game's rules take its scattered light only from lit taps, renormalised: a pixel just past the terminator takes a large share of its lit neighbours' red, and nothing once the kernel runs out. Under the Studio's **Rim / dramatic** setup (room light only, which is outside `E`) that draws a saturated red band with a hard outer edge along the key's terminator. The creator rig's fills keep `E` above zero, so it doesn't show there. Whether the game draws the same band under one hard light is test ask 4's third frame.
 
 ### 11.7 Ranked work
 
-| Rank | Step | Effort | Depends on |
-|---|---|---|---|
-| 1 | Kernel builder and table as a pure module, tested against §6.3.2's 25-sample table (to 1e-4), the channel sums and the offsets | S | – |
-| 2 | Input-variant swap and the S0–S2 + depth target, with resize and dispose; shared with parity P2 | M | – |
-| 3 | Blur, combine and display integration for both presets; wrap off while active; fallback kept | M | 1, 2 |
-| 4 | Decal, brow and plate input variants (√-space colour, `E` at the normal alpha, metalness) | M | 2 |
-| 5 | Scissor, quality setting, slot diagnostics, GPU timing at pixel ratio 1 and 2 | S | 3 |
-| 6 | Fit the scale from the parity capture; update `w` and this page | S | test ask 4 |
+| Rank | Step | State |
+|---|---|---|
+| 1 | Kernel builder and table as a pure module | **Done** (`tests/skin-scatter-kernel.test.ts`) |
+| 2 | Input-variant swap and the S0–S2 target, with resize, release and dispose | **Done** |
+| 3 | Blur, combine and display integration for both presets; wrap off while active; fallback kept | **Done** |
+| 4 | Decal, brow and plate input variants | **Done** |
+| 5 | Scissor, quality, slot diagnostics, GPU timing | **Done** (§11.5) |
+| 6 | Fit the scale from test ask 4; update `SCATTER_SCREEN_SCALE` and this page | Open |
+| 7 | Compile the variants in the background while the wrap shows, so a V's first frame doesn't pay 70–120 ms | Open |
 
-Total **M–L**, as the coverage audit ranks it. Ranks 1–3 alone give a correct scatter on bare skin; rank 4 is needed before made-up faces are compared.
+### 11.8 Checks and measurements
 
-### 11.8 Checks that validate it
+- **Unit** (`tests/skin-scatter-kernel.test.ts`): the 25-sample table to 1e-4, channel sums, offsets and ranges, the teeth profile, sRGB decoding, the packed table, slot assignment and overflow, whole-pixel truncation, and the CPU reference blur (spread into the unlit side, lit pixels never darkened, the metalness gate, collapse at distance).
+- **Real GPU** (`tests/webgl-skin-scatter.test.ts`, headless Chrome). A folded skin strip with a hard terminator, a Standard occluder in front of part of it and a Metallic decal band:
+  - the GPU passes match the CPU reference run on the GPU's own input targets;
+  - **no scatter outside the class-1 mask**: the occluder's pixels, taken from an independent mask render, carry neither class 1 nor `Δ`, while the unlit skin beside them scatters;
+  - the Metallic band gates `Δ` off, writes its √colour and keeps the skin's class and slot;
+  - red reaches furthest;
+  - the wrap gate is 0 while the scatter runs and 1 after it is switched off, and every mesh gets its material back after the pass;
+  - Low and High differ;
+  - the display adds `Δ` only where it is non-zero.
+- **Matched pair** (`tools/creator-pair-metrics.py`: regions carried from the game frame by a landmark affine; scene-linear through the installed Nova LUT; the eyes excluded). "Before" is the creator-lighting evidence (`v8-final-creator`), identical in every figure to this branch with the scatter off:
 
-- **Unit**: the kernel table (rank 1); a TypeScript reference blur on a small synthetic class mask and irradiance image, compared with a GPU readback of the same passes, including renormalisation at mask edges, the `red > 0` rule and whole-pixel truncation.
-- **Browser, in a `?verify=1` workspace**:
-  - `Δ` is zero outside class 1 (against the ID pass) and on a Metallic plate above the threshold;
-  - makeup colour sharpness is unchanged (the high-pass of the albedo-normalised image matches scatter off);
-  - with diffuse light off, the frame is identical to scatter off (specular untouched);
-  - the scatter fades out as the camera pulls away (whole-pixel collapse);
-  - Low, Medium and High differ.
-- **Parity**: test ask 4 fits the scale (§11.6), then the terminator's red fringe on cheek, nose wing and ear is compared per region with the [parity metrics](../authoring/game-parity-measurement.md#32-measures).
-- **In game**: test asks 2 and 4 (closed mouth; terminator at two qualities) are the acceptance frames.
-- **Skin hue under the creator rig** (acceptance metric from the 27 September matched pair, [creator lighting §12](../../knowledge/creator-lighting.md#12-calibration-against-a-matched-pair)): lit forehead R/G in scene-linear light, after inverting the installed grade, is 0.97 in the game and 1.17 in the Studio, while hair hue already matches (1.10 against 1.12). The scatter port should close most of that gap without retuning the wrap. The same pair's shadow-side nose flank, 0.075 × forehead in game and SSS bleed only (sRGB 46, 23, 17), is the second check. [runtime, one matched pair]
+| Measure | Game | Before (wrap) | After (scatter) | Bare (no wrap, no scatter) |
+|---|---:|---:|---:|---:|
+| Forehead R/G (the metric set on 27 September) | 0.97 | 1.32 | 1.32 | 1.32 |
+| Lit planes R/G, B/G (≥ 0.5 × forehead) | 1.08, 0.84 | 1.39, 0.80 | 1.41, 0.80 | 1.41, 0.79 |
+| Terminator band R/G, B/G (0.12–0.5) | 1.24, 0.80 | 1.38, 0.83 | 1.33, 0.85 | 1.27, 0.85 |
+| Shadow R/G, B/G (< 0.12) | 2.73, 0.67 | 0.96, 0.94 | 1.12, 0.95 | 0.88, 0.97 |
+| Nose shadow R/G, luminance / forehead | 3.11, 0.084 | 0.95, 0.119 | 0.98, 0.111 | 0.85, 0.107 |
+| Contrast, 95th / 5th percentile luminance of the face | 9.9 | 4.6 | 6.0 | 6.4 |
+| Per-region luminance, rms of log ratios (10 regions) | – | 0.241 | 0.228 | 0.222 |
+
+The creator-lighting pass reported 0.31 on its own boxes; 0.241 is the same frame on these boxes.
+
+**What the pair says** [runtime, one matched pair]:
+
+- **The lit skin's warmth is not subsurface scattering.** The forehead's R/G is 1.32 with the wrap, with the scatter and with neither. On a flat lit plane `B = E`, in game as in the preview, so no scatter changes it. The 27 September hypothesis that the wrap caused it is refuted. The gap lies in what reaches the G-buffer or the light: the skin's albedo and tone (`TintColor` encoding, materials open question 11), the light's colour on skin, or a term missing from the lit skin (such as the combine's tinted `A`). Hair still matches, which points at the skin.
+- **The scatter moves the shadows the right way, a little.** The shadow side gains red (R/G 0.96 → 1.12) and the terminator band loses the wrap's red (1.38 → 1.33, toward the game's 1.24). Contrast rises toward the game's (4.6 → 6.0), and the region fit improves slightly (0.241 → 0.228).
+- **The nose shadow shows the real gap.** The game's wedge is orange (R/G 3.1) at 8 % of the forehead; the Studio's is neutral (R/G 0.98) at 11 %. Profiles across it show the game's wedge lit almost only by scatter, and the Studio's lit mostly by the cyan fills, which nothing on the face occludes in the preview. So the fills, or their occlusion (the reference install runs ray-traced shadows, [creator lighting §12.4](../../knowledge/creator-lighting.md#124-what-remains)), are the next suspect. The grey patch on the upper lip is the same: the nose's cast shadow filled with cyan fill over skin type 5's baked contour, where the game shows scatter.
+- **Rim / dramatic** gains a saturated red band along the key's terminator (§11.6 item 5). The creator preset and the default V's stage frames otherwise change little.
 
 Related: [materials and shaders](../../knowledge/materials-and-shaders.md) · [head CC rendering](../../knowledge/head-cc-rendering.md) · [shader-system evidence](shader-system/README.md) · [annotation results](shader-system/annotation-results.md#basematerialsskinmt) · [hair reference](shader-hair.md) · [fact index](shader-fact-index.md).

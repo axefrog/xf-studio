@@ -180,6 +180,17 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     return found;
   }
 
+  /** Whether any mesh in the scene, shown or hidden, wears a material declared as skin. */
+  function sceneHasSkin(scene: THREE.Scene) {
+    let found = false;
+    scene.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (found || !mesh.isMesh) return;
+      found = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).some(material => passParticipation(material)?.role === "skin");
+    });
+    return found;
+  }
+
   /** The skin's projected bounds in drawing-buffer pixels (conservative), or null when the skin is behind the camera or off screen. */
   function scissorRect(camera: THREE.Camera, width: number, height: number) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -220,8 +231,9 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
       skins = [...new Set(found.filter(entry => entry.participation.role === "skin").map(entry => entry.mesh))];
       active = enabled && possible && skins.length > 0;
       for (const { participation } of found) if (participation.wrapGate) participation.wrapGate.value = active ? 0 : 1;
-      // Nothing to scatter: its targets leave GPU memory (a V switched off costs nothing; they come back with the next skin).
-      if (!active) { if (input) { disposeTargets(); quad.geometry.dispose(); } return false; }
+      // No skin left in the scene at all (the V removed) or no half-float target: the targets leave GPU memory, so no V costs nothing.
+      // A skin only hidden (the body switched off) keeps them, as its own GPU resources are kept, so showing it again is instant.
+      if (!active) { if (input && (!possible || !sceneHasSkin(scene))) { disposeTargets(); quad.geometry.dispose(); } return false; }
       const skinDeclarations = found.filter(entry => entry.participation.role === "skin" && entry.participation.profile);
       const assigned = assignScatterSlots(skinDeclarations.map(entry => entry.participation.profile!));
       skinDeclarations.forEach((entry, i) => { if (entry.participation.slot) entry.participation.slot.value = assigned.slotOf[i]!; });
