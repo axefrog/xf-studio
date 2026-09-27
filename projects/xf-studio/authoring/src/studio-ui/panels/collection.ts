@@ -17,7 +17,7 @@ import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { setupStatus } from "./game-setup";
-import { openModInstallSheet } from "./mod-install-sheet";
+import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
 
@@ -271,6 +271,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     setupLine, h("div", { class: "row wrap gap-s" }, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
+  // While the latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
+  const rebuild = button({ label: "Build mod files…", icon: "package", onClick: event => confirmBuild(event.currentTarget as Element) });
   // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
   const progressText = h("p", { class: "progress-text" });
   const progress = h("div", { class: "package-progress idle" }, progressBar({ label: "Package request in progress" }).element, progressText);
@@ -350,7 +352,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     section({ title: "Mod package", help: [`Builds your own copy of your XF mods from your current draft, unsaved edits included.`,
       `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`] },
       // Check, then the primary Build last; the progress takes the rest of the same row (one line, reserved), so it adds no band.
-      mods, h("div", { class: "row gap-s package-actions" }, check, build, progress)),
+      mods, h("div", { class: "row gap-s package-actions" }, check, build, rebuild, progress)),
     result,
     setup,
     section({ title: "What can be packaged", help: ["Check decides what is built; this list is a guide.",
@@ -362,6 +364,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
+      applyCapability(rebuild, buildCapability());
+      const builtCurrent = files.package?.kind === "packageBuild" && files.package.freshness === "current";
+      build.hidden = builtCurrent; rebuild.hidden = !builtCurrent;
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
       const line = setupStatus(frame);
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
@@ -380,13 +385,16 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       // The install rows follow every paint: availability, and what happened last.
       const installs = frame.modInstall, route = frame.localSetup.view?.fields.launchRoute;
       for (const [product, row] of installRows) {
-        setText(row.add.querySelector("span")!, route === "mo2" ? "Add to Mod Organizer 2…" : route === "direct" ? "Add to the game folder…" : "Add to my mod manager…");
+        setText(row.add.querySelector("span")!, modInstallLabel(route));
         applyCapability(row.add, port.modInstall.capability({ kind: "modInstall.review", product }));
         applyCapability(row.show, port.modInstall.capability({ kind: "modInstall.reveal", product }));
         const outcome = installs.outcomes[product];
         setText(row.line, outcome?.message ?? "");
         row.line.className = `install-line small${outcome ? outcome.ok ? " done" : " warning" : ""}`;
       }
+      const buildNext = result.querySelector<HTMLElement>("[data-build-next]");
+      const built = files.package?.kind === "packageBuild" ? files.package.result.products.map(product => product.productId) : [];
+      if (buildNext) buildNext.hidden = built.length > 0 && built.every(product => installs.outcomes[product]?.ok);
     },
   };
 }
@@ -464,8 +472,13 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
         item.kind === "feature" ? `${item.label} — ${item.reason}` :
         label ? `${label} of “${item.presetName}” — ${item.reason}` :
         `Whole preset “${item.presetName}” — ${item.reason}` }))))));
-  if (isBuild) card.append(note(`${r.products.length === 1 ? "Your mod was built and checked" : "Your mods were built and checked"}. Nothing is in your game yet: ` +
-    "add it to your mod manager, or show its folder to copy it by hand. How it looks in game hasn't been checked yet.", "info"));
+  // The next step until every mod is added (hidden then: each install line says where its mod is).
+  if (isBuild) {
+    const next = note(r.products.length === 1 ? "Add it to your mod manager, or show its folder to copy it by hand."
+      : "Add them to your mod manager, or show their folders to copy them by hand.", "info");
+    next.dataset.buildNext = "";
+    card.append(next);
+  }
   // Technical facts stay available for bug reports without crowding the result.
   card.append(technicalDetails([
     ...(isBuild ? (r as ReadonlyDeep<PackageBuildResult>).products.flatMap(product => [[`${product.modName} files`, product.package],

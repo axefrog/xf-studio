@@ -3,15 +3,17 @@
  * folder, only after they have read and accepted its plan. Both hosts serve it (`/api/mod-install`); the page names a build
  * by its candidate ID and never supplies a path.
  *
- * - **Plan first.** `plan` says in plain words exactly what would be added and where: the mod's two files into its own Mod
- *   Organizer 2 folder (or the game's `archive\pc\mod` folder on the direct route), and on MO2 the one row added to the
+ * - **Plan first.** `plan` says in plain words exactly what would be added and where: the mod's files into its own Mod
+ *   Organizer 2 folder (or the game folder on the direct route) at their paths below it, the archive and `.xl` (and any extra
+ *   archive) in `archive\pc\mod` and TweakXL files in `r6\tweaks\<archive>`, each file named when there are extras; a file of
+ *   a kind the install doesn't know where to put is refused, with copying by hand as the way on. On MO2, the one row added to the
  *   chosen profile's mod list, placed by the MO2 placement rule (mo2-placement.ts: the separator sections are respected,
  *   the file is the reverse of MO2's left pane, frameworks' sections are skipped). Nothing else in the list moves. A plan
  *   changes nothing of the person's, with one exception: an earlier install that was interrupted is finished or undone
  *   first, following its journal, and the plan says so (INSTALL-02).
  * - **Consent is to that plan.** `install` takes the plan's token and refuses, with nothing changed, when anything the plan
  *   named has changed since (the mod list and where the row would go, an earlier install, the settings, the build).
- * - **Ours only.** The trusted transport (mod-install-transport.ts) copies only the verified pair, never into a folder XF
+ * - **Ours only.** The trusted transport (mod-install-transport.ts) copies only the verified files, never into a folder XF
  *   Studio didn't create, never over a file it didn't put there, and keeps a receipt and backup to undo an update. The
  *   receipts are per user on this computer, shared by every XF Studio host (INSTALL-04). The user's frameworks and other
  *   mods are never installed, replaced, switched off or moved (AGENTS.md). A predecessor still switched on is named in the
@@ -31,8 +33,9 @@ import { readConfiguredMo2Instance } from "./install-detection-host";
 import { parseMo2Modlist } from "./mo2-instance";
 import { decodeModlist, encodeModlist, type ModlistEncoding } from "./mo2-modlist-text";
 import { applyMo2Placement, mo2ModlistEntry, planMo2Placement, type Mo2Placement } from "./mo2-placement";
-import { createModInstallTransport, findInstalledDuplicates, inspectLocalPackageCandidate } from "./mod-install-transport";
+import { createModInstallTransport, extraFileKind, findInstalledDuplicates, inspectLocalPackageCandidate } from "./mod-install-transport";
 import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries } from "./mod-branding";
+import { EYE_MAKEUP_FEATURE } from "./recipe-schema";
 import { modNameIssue } from "./platform/api";
 import { attributeVortexFile } from "./vortex-deployment";
 import { readVortexManifests } from "./vortex-host";
@@ -147,7 +150,7 @@ export class ModInstallHost {
     const running = await this.running();
     // Everything from here is synchronous, so nothing else runs between the checks and the change.
     const run = async () => {
-      const { plan, transport, modlist } = this.prepare(candidateId, running);
+      const { plan, transport, modlist, outcome } = this.prepare(candidateId, running);
       if (plan.blocked) throw new ModInstallError("install_blocked", plan.blocked);
       if (plan.token !== token) throw new ModInstallError("stale_plan",
         "Something changed since you reviewed this (your mod list, an earlier install or your settings), so nothing was changed. Review it again.");
@@ -164,8 +167,8 @@ export class ModInstallHost {
       }
       try { transport!.install(candidateId); }
       catch (error) { staged?.discard(); throw new ModInstallError("install_blocked", installIssue(error, plan.modName, this.issueContext()).text); }
-      if (plan.route === "direct" || !staged || !modlist) return result(plan, `${quoted(plan.modName)} is in your game's archive\\pc\\mod folder. ` +
-        "Start the game to see it in the character creator.");
+      if (plan.route === "direct" || !staged || !modlist) return result(plan, `${quoted(plan.modName)} is in ${outcome!.gameFolders}. ` +
+        `Start the game ${outcome!.seeIt}.`);
       try { staged.commit(this.ports.receiptsRoot); }
       catch {
         staged.discard();
@@ -173,14 +176,15 @@ export class ModInstallHost {
           `Open Mod Organizer 2, switch on ${quoted(plan.modName)} in the profile ${quoted(modlist.profile)}, then start the game from there.`);
       }
       return result(plan, `${quoted(plan.modName)} is in Mod Organizer 2 and switched on in the profile ${quoted(modlist.profile)}. ` +
-        "Start the game from Mod Organizer 2 to see it in the character creator.");
+        `Start the game from Mod Organizer 2 ${outcome!.seeIt}.`);
     };
     return this.ports.transaction ? this.ports.transaction(run) : run();
   }
 
   /** Show a build's files in the file manager (its `archive` folder, selected), for a manual install. */
   reveal(candidateId: string): void {
-    const { root } = this.candidate(candidateId);
+    // A build with a file of a kind this version can't place is still shown, for copying by hand.
+    const root = this.unknownKinds(candidateId) ? this.candidateFolder(candidateId) : this.candidate(candidateId).root;
     if (!this.ports.reveal) throw new ModInstallError("install_unavailable", "This version of XF Studio can't open a folder for you.");
     if (!this.ports.reveal(join(root, "archive"))) throw new ModInstallError("install_failed", "XF Studio couldn't open that folder. Try again.");
   }
@@ -201,9 +205,40 @@ export class ModInstallHost {
     catch { throw new ModInstallError("candidate_missing", "This build's files are no longer there, or were changed. Build your mod again."); }
   }
 
-  private prepare(candidateId: string, running: RunningApps): { plan: ModInstallPlan; transport?: ReturnType<typeof createModInstallTransport>; modlist?: ModlistChange } {
-    const { root, manifest } = this.candidate(candidateId);
-    const modName = manifest.modName ?? EYE_MAKEUP_MOD.modName;
+  /** The build's own folder in the store, refused when it isn't a real folder there. */
+  private candidateFolder(candidateId: string): string {
+    const store = resolve(this.ports.candidateStore), root = resolve(store, candidateId);
+    try { if (safeCandidate(candidateId) && dirname(root) === store && lstatSync(root).isDirectory() && !lstatSync(root).isSymbolicLink()) return root; }
+    catch { /* Gone. */ }
+    throw new ModInstallError("candidate_missing", "This build's files are no longer there, or were changed. Build your mod again.");
+  }
+
+  /**
+   * A build whose manifest lists a file of a kind this version doesn't know where to put (a newer XF Studio's): its mod name and
+   * those files' names, read from the manifest as written, before the manifest reader (which refuses such a build as unreadable).
+   */
+  private unknownKinds(candidateId: string): { modName: string | null; names: string[] } | null {
+    if (!safeCandidate(candidateId)) return null;
+    try {
+      const file = join(resolve(this.ports.candidateStore), candidateId, "manifest.json"), stat = lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1_000_000) return null;
+      const value = JSON.parse(readFileSync(file, "utf8")) as { archive?: unknown; namespace?: unknown; modName?: unknown; files?: unknown };
+      const archive = typeof value.archive === "string" ? value.archive : typeof value.namespace === "string" ? value.namespace : null;
+      if (!archive || !Array.isArray(value.files)) return null;
+      const names = value.files.slice(2).map(entry => (entry as { path?: unknown } | null)?.path)
+        .filter(path => extraFileKind(path, archive) === null).map(path => typeof path === "string" ? basename(path) : "?");
+      return names.length ? { modName: typeof value.modName === "string" ? value.modName : null, names } : null;
+    } catch { return null; }
+  }
+
+  private prepare(candidateId: string, running: RunningApps): { plan: ModInstallPlan; transport?: ReturnType<typeof createModInstallTransport>; modlist?: ModlistChange;
+    /** How the success message says where the mod went and where to see it. */
+    outcome?: { seeIt: string; gameFolders: string } } {
+    // A file of a kind the install doesn't know where to put is refused in plain words before the build is read (the manifest
+    // reader would call such a build unreadable), with copying by hand as the way on.
+    const unknownKinds = this.unknownKinds(candidateId);
+    const inspected = unknownKinds ? null : this.candidate(candidateId);
+    const modName = inspected?.manifest.modName ?? unknownKinds?.modName ?? EYE_MAKEUP_MOD.modName;
     const settings = this.ports.settings(), route: ModInstallRoute = settings.launchRoute;
     const profile = settings.mo2ProfileId ?? "";
     const readOnly = this.ports.readOnly;
@@ -213,10 +248,12 @@ export class ModInstallHost {
     const blocked = (why: string, next: ModInstallNextStep = "retry", changes: string[] = []): { plan: ModInstallPlan } =>
       ({ plan: { ...base, changes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next,
         token: sha(JSON.stringify([candidateId, route, why])) } });
-    // A product with files beside its archive (an expression set's TweakXL file and table archive) is copied in by hand for now.
-    if (manifest.files.length > 2)
-      return blocked(`XF Studio can't add ${quoted(modName)} for you yet: it has TweakXL files. Show it in its folder, then copy its archive and r6 folders ` +
-        "into your game folder or mod manager.", null);
+    // Files beside the archive are placed where the game and frameworks read them (extraFileKind).
+    const unknown = unknownKinds?.names ?? [];
+    if (unknown.length || !inspected)
+      return blocked(`This build has ${unknown.length === 1 ? "a file" : "files"} XF Studio can't place (${unknown.join(", ")}), so it can't add it for you. ` +
+        "Show it in its folder and copy its folders into your game folder or mod manager.", "reveal");
+    const { root, manifest } = inspected;
     if (modName !== modName.trim() || modNameIssue(modName) !== undefined)
       return blocked("This mod's name can't be used as a folder name. Rename it in Mod package, then build it again.", "rename");
     if (route === "mo2" && /_separator$/i.test(modName))
@@ -268,11 +305,12 @@ export class ModInstallHost {
       if (record && transport.adopt(record)) { earlier.retire(); break; }
     }
 
-    let target: string, replacing: boolean, reinstalling: boolean, files: number;
-    try {
-      const preflight = transport.preflight(candidateId);
-      target = preflight.target; replacing = preflight.replacingOwned; reinstalling = preflight.reinstalling; files = preflight.files.length;
-    } catch (error) { return refused(error); }
+    let preview: ReturnType<typeof transport.preflight>;
+    try { preview = transport.preflight(candidateId); } catch (error) { return refused(error); }
+    const { target, root: installRoot, replacingOwned: replacing, reinstalling } = preview, files = preview.files.length;
+    // A mod with extra files (or an update that removes some) names every file and the folder each goes into; a plain archive
+    // and `.xl` keep the one line.
+    const extras = files > 2 || preview.removing.length > 0;
     base.replacing = replacing;
     if (reinstalling) notes.push(`${quoted(modName)} was removed after XF Studio added it, so it is added again as new.`);
     const fileWords = `${files} file${files === 1 ? "" : "s"}`;
@@ -302,14 +340,19 @@ export class ModInstallHost {
     const duplicates = findInstalledDuplicates(readFileSync(join(root, ...xl.path.split("/")), "utf8"), places, file => resolve(file).toLowerCase() === ownXl);
     if (duplicates.length) wait(duplicateAdvice(duplicates, settings.gameRoot, profile));
 
+    const fileLines = extras ? describeFiles(preview, manifest.archive, modName) : [];
     if (route === "direct") {
-      changes.push(replacing ? `Replace the ${fileWords} XF Studio added for ${quoted(modName)} before, in ${target}.`
-        : `Copy ${fileWords} into your game's mod folder: ${target}.`);
+      changes.push(extras
+        ? replacing ? `Replace the ${fileWords} XF Studio added for ${quoted(modName)} before, in your game folder, ${installRoot}.`
+          : `Copy ${fileWords} into your game folder, ${installRoot}.`
+        : replacing ? `Replace the ${fileWords} XF Studio added for ${quoted(modName)} before, in ${target}.`
+          : `Copy ${fileWords} into your game's mod folder: ${target}.`, ...fileLines);
       notes.push("Mods in the game folder are shared with every mod you install there by hand or with Vortex. XF Studio only ever adds or replaces its own files.");
     } else {
       const { placement } = modlist!;
-      changes.push(replacing ? `Replace the ${fileWords} of the mod ${quoted(modName)} that XF Studio added before, in ${target}.`
-        : `Add the mod ${quoted(modName)} to Mod Organizer 2, with its ${fileWords} in ${target}.`);
+      const where = extras ? installRoot : target;
+      changes.push(replacing ? `Replace the ${fileWords} of the mod ${quoted(modName)} that XF Studio added before, in ${where}.`
+        : `Add the mod ${quoted(modName)} to Mod Organizer 2, with its ${fileWords} in ${extras ? "its own folder, " : ""}${where}.`, ...fileLines);
       const listed = mo2ModlistEntry(text!, modName);
       changes.push(placement.rule === "existing"
         ? listed === "+" ? `${quoted(modName)} is already switched on in the profile ${quoted(profile)}; it stays where it is.`
@@ -326,8 +369,38 @@ export class ModInstallHost {
     // Consent covers everything shown: the files, where the row goes and why (its placement), and the list it goes into (INSTALL-07).
     const token = sha(JSON.stringify([candidateId, route, target, settings.revision, modlist ? sha(modlist.bytes) : null, modlist?.placement ?? null,
       changes, receipt ? [receipt.candidateId, receipt.installedAt] : null]));
-    return { plan: { ...base, changes, notes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next, token }, transport, modlist };
+    return { plan: { ...base, changes, notes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next, token }, transport, modlist,
+      outcome: { seeIt: seeIt(manifest.features),
+        gameFolders: extras ? "your game folder (its archive\\pc\\mod and r6\\tweaks folders)" : "your game's archive\\pc\\mod folder" } };
   }
+}
+
+/** Where the person sees what the mod adds, by its features: eye makeup in the character creator, expressions in photo mode. */
+function seeIt(features: readonly { feature: string }[]): string {
+  const kinds = new Set(features.map(item => item.feature));
+  if (kinds.size === 1 && kinds.has(EYE_MAKEUP_FEATURE)) return "to see it in the character creator";
+  if (kinds.size === 1 && kinds.has("expressions")) return "to see its expressions in photo mode";
+  return "to see it";
+}
+
+/**
+ * Every file of a mod with extra files, by the folder it goes into, in plain words: the archive and its ArchiveXL file, any
+ * extra archive beside them, and TweakXL files in the mod's own `r6\tweaks` folder; then any file an update removes.
+ */
+function describeFiles(preview: { root: string; target: string; files: readonly { path: string }[]; removing: readonly { path: string }[] },
+  archive: string, modName: string): string[] {
+  const names = (files: readonly { path: string }[]) => files.map(file => quoted(basename(file.path))).join(", ");
+  const count = (n: number, one: string, many: string) => n === 1 ? one : many;
+  const overlays = preview.files.slice(2).filter(file => extraFileKind(file.path, archive) === "overlay-archive");
+  const tweaks = preview.files.slice(2).filter(file => extraFileKind(file.path, archive) === "tweakxl");
+  // Folders are named relative to the mod's folder (or the game folder), which the plan's first line names once in full.
+  const lines = [`${join("archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (${names(preview.files.slice(0, 2))})` +
+    (overlays.length ? `, and ${count(overlays.length, "an extra archive", "extra archives")} it loads (${names(overlays)}).` : ".")];
+  if (tweaks.length) lines.push(`${join("r6", "tweaks", archive)}: ${count(tweaks.length, "its TweakXL file", "its TweakXL files")} ` +
+    `(${names(tweaks)}), which TweakXL reads when the game starts.`);
+  if (preview.removing.length) lines.push(`Remove ${names(preview.removing)}, which XF Studio added for ${quoted(modName)} before: ` +
+    `this build no longer has ${count(preview.removing.length, "it", "them")}.`);
+  return lines;
 }
 
 type ModlistChange = { file: string; bytes: Uint8Array; text: string; encoding: ModlistEncoding; placement: Mo2Placement; profile: string };

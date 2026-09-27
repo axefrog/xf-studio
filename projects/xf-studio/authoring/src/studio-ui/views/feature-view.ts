@@ -113,6 +113,20 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
     capability(request: FeaturePresetRequest): StudioCapability;
     execute(request: FeaturePresetRequest): Promise<PartPresetOutcome>;
   };
+  /**
+   * "Add to my mod manager" for a mod this feature's view built (an expression set's Build): the shell's review-then-consent
+   * sheet over `port.modInstall`, the same flow the Mod package panel uses (UI-82). The view names the built mod by its product.
+   */
+  readonly modInstall: {
+    /** The button's words for the saved launch route ("Add to Mod Organizer 2…", "Add to the game folder…"). */
+    label(): string;
+    /** Whether the plan can be reviewed now, or why not (no verified Build, another install running, already added). */
+    capability(product: string): StudioCapability;
+    /** What happened last for this product's current build: added, or refused, in plain words. */
+    outcome(product: string): { ok: boolean; message: string } | undefined;
+    /** Open the review; `rename` renames the mod where its name is set, for a plan whose next step is renaming. */
+    review(product: string, options?: { rename?(): void }): void;
+  };
 };
 /** A part preset request without its feature (the view context adds its own). */
 export type FeaturePresetRequest = PartPresetRequest extends infer R ? R extends { kind: "partPreset.save" } ? Omit<R, "feature" | "part">

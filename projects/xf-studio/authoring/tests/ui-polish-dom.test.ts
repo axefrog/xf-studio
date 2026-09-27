@@ -191,7 +191,7 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     expect(shown.className).toContain("warning");
     expect(notes.filter(item => text(item) === warning.text)).toHaveLength(1);
     // Directly under the product block, before the build note.
-    expect(notes.indexOf(shown)).toBeLessThan(notes.findIndex(item => text(item).startsWith("Your mod was built")));
+    expect(notes.indexOf(shown)).toBeLessThan(notes.findIndex(item => text(item).startsWith("Add it to your mod manager")));
     buttonNamed(card, "Open Settings")!.click();
     expect(h.opened).toEqual(["game"]);
     h.panel.spec.element.remove();
@@ -220,6 +220,42 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     expect(h.sentInstall.at(-1)).toEqual({ action: "install", candidateId: "c1", token: "t1" });
     expect(sheet.open).toBe(false);
     expect(text(h.root.querySelector(".install-line")!)).toContain("switched on in the profile “Main”");
+    // Once added, the next-step note goes (the line above says where the mod is), and the unavailable Add says why.
+    expect(h.root.querySelector("[data-build-next]")!.hidden).toBe(true);
+    const again = buttonNamed(h.root, "Add to Mod Organizer 2…")!;
+    expect(again.getAttribute("aria-disabled")).toBe("true");
+    expect(again.getAttribute("title")).toBe("XF Eye Artistry is already added from this build. Build again to add a newer copy.");
+    h.panel.spec.element.remove();
+  });
+
+  test("after a current Build, Add is the one primary action: Build again is a secondary one, with the same step", async () => {
+    const h = await packageHarness();
+    const builds = buttons(h.root).filter(item => text(item) === "Build mod files…");
+    expect(builds.map(item => [item.className.includes("primary"), item.hidden])).toEqual([[true, true], [false, false]]);
+    expect(buttons(h.root).filter(item => item.className.includes("primary") && !item.hidden).map(text)).toEqual(["Add to Mod Organizer 2…"]);
+    expect(text(h.root.querySelector("[data-build-next]")!)).toBe("Add it to your mod manager, or show its folder to copy it by hand.");
+    h.panel.spec.element.remove();
+    // A stale Build: Build is the primary again.
+    const stale = await packageHarness({ files: { package: { ...BUILD, freshness: "stale" } } });
+    expect(buttons(stale.root).filter(item => text(item) === "Build mod files…").map(item => [item.className.includes("primary"), item.hidden])).toEqual([[true, false], [false, true]]);
+    stale.panel.spec.element.remove();
+  });
+
+  test("a plan whose next step is Show in folder makes it the sheet's primary button, focused, in place of Add", async () => {
+    const h = await packageHarness({ plan: PLAN({ changes: [], next: "reveal",
+      blocked: "This build has a file XF Studio can't place (x.reds), so it can't add it for you. Show it in its folder and copy its folders into your game folder or mod manager." }) });
+    buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
+    expect(await until(() => !!openSheet()?.querySelector(".install-status")?.textContent, h.paint)).toBe(true);
+    const sheet = openSheet()!;
+    const show = buttons(sheet).find(item => text(item) === "Show in folder")!;
+    expect(show.hidden).toBe(false);
+    expect(show.className).toContain("primary");
+    expect(lightDocument.activeElement).toBe(show);
+    expect(buttonNamed(sheet, "Add to Mod Organizer 2")!.hidden).toBe(true);
+    for (const name of ["Open Settings", "Check again", "Rename the mod"]) expect(buttonNamed(sheet, name)!.hidden).toBe(true);
+    show.click();
+    expect(await until(() => !sheet.open, h.paint)).toBe(true);
+    expect(h.sentInstall.at(-1)).toEqual({ action: "reveal", candidateId: "c1" });
     h.panel.spec.element.remove();
   });
 

@@ -11,8 +11,9 @@
  *   Add… lists the saved expressions not in the set yet, and is unavailable, with the reason, when there are none.
  * - **Mod:** the mod's line (its name and a menu with Rename and Use default name), what the mod is made for (your game, or sharing),
  *   Check, then Build mod files… with the collection Build's confirm, and the latest result in the mod-package pattern: a summary, one
- *   note, what was left out with a Start from it button, the next step after a Build (Show in folder) and a Details group. Nothing is
- *   ever added to the game or a mod manager from here.
+ *   note, what was left out with a Start from it button, the next step after a Build and a Details group. After a verified Build the
+ *   result offers Add to my mod manager (the shell's review-then-consent sheet, `ctx.modInstall`, exactly as the Mod package panel) and
+ *   Show in folder; nothing is added to the game or a mod manager until the person accepts the reviewed plan.
  */
 import { applyCapability, badge, button, emptyState, GroupSection, hasCommands, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
   section, Segmented, type MenuItem } from "../../../studio-ui/components";
@@ -106,12 +107,14 @@ export function expressionSets(ctx: Ctx): PanelController {
     onSelect: value => { const set = current(); if (set && (set.table ?? "installed") !== value) void ctx.presets.execute({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision, table: value }).then(report); } });
   const check = button({ label: "Check", icon: "check", small: true, title: "See which expressions can become mod files (creates no files)", onClick: () => void run("check") });
   const build = button({ label: "Build mod files…", icon: "package", small: true, variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
+  // While the set's latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
+  const rebuild = button({ label: "Build mod files…", icon: "package", small: true, onClick: event => confirmBuild(event.currentTarget as Element) });
   const progressText = h("span", { class: "muted small" });
   const progress = h("div", { class: "package-progress idle" }, progressBar({ label: "Set export in progress" }).element, progressText);
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   const modSection = section({ title: "Mod", help: ["Each set becomes its own mod: its expressions join photo mode's expression list, for female and male V.",
-    "Build makes the files and checks them. Nothing is added to your game or mod manager: Show in folder, then copy them in by hand or zip them for a mod page."] },
-  modLine, table.element, h("div", { class: "row gap-s package-actions" }, check, build, progress), result);
+    "Build makes the files and checks them. Nothing is added to your game or mod manager until you add it from the result, or show its folder to copy it by hand or zip it for a mod page."] },
+  modLine, table.element, h("div", { class: "row gap-s package-actions" }, check, build, rebuild, progress), result);
 
   const membersSection = h("section", { class: "section", "aria-label": "In this set", "data-view-key": "expressions.set-members" },
     h("div", { class: "section-head" }, h("h3", { class: "section-title" }, setTitle), h("span", { class: "block-actions" }, add)), members.element, membersEmpty);
@@ -257,7 +260,7 @@ export function expressionSets(ctx: Ctx): PanelController {
   function confirmBuild(anchor: Element) {
     const set = current();
     if (!set) return;
-    openMenu([{ kind: "heading", label: "Build this set's mod files?", detail: "Reads photo mode's expression list from your game files. Takes a minute or two. Nothing is added to your game or mod manager." },
+    openMenu([{ kind: "heading", label: "Build this set's mod files?", detail: "Reads photo mode's expression list from your game files. Takes a minute or two. Nothing is added to your game or mod manager until you choose to." },
       { kind: "action", label: "Build now", icon: "package", capability: ctx.presets.capability({ kind: "partPresetSet.build", id: set.id }), run: () => void run("build") },
       { kind: "action", label: "Check first", icon: "check", capability: ctx.presets.capability({ kind: "partPresetSet.check", id: set.id }), run: () => void run("check") }],
     anchor, { label: "Build mod files", invoker: anchor });
@@ -280,6 +283,23 @@ export function expressionSets(ctx: Ctx): PanelController {
     const group = new GroupSection({ title: "Details", key: "expressions.set-result-details", level: "subsection", heading: 5, expanded: false });
     group.body.append(...rows.map(text => h("p", { class: "muted small", text })));
     return group.element;
+  }
+  // After a verified Build: "Add to my mod manager…" (the shell's reviewed plan, then consent) and "Show in folder", as the Mod package
+  // panel offers them (UI-82). A row per built mod lives outside the result card, so each paint updates it in place.
+  const installRows = new Map<string, { element: HTMLElement; add: HTMLButtonElement; show: HTMLButtonElement; line: HTMLElement; note: HTMLElement; set: string }>();
+  function installRow(set: PartPresetSet, product: string) {
+    let row = installRows.get(product);
+    if (!row) {
+      const add: HTMLButtonElement = button({ label: "Add to my mod manager…", icon: "package", small: true, variant: "primary",
+        onClick: () => ctx.modInstall.review(product, { rename: () => renameModPopover(add) }) });
+      const show = button({ label: "Show in folder", icon: "folder", small: true, onClick: () => void ctx.presets.execute({ kind: "partPresetSet.reveal", id: set.id }).then(report) });
+      const line = h("p", { class: "install-line small", role: "status" });
+      // The next step until the mod is added; once it is, the line above says where it is.
+      const next = note("Add it to your mod manager, or show its folder to copy it by hand.", "info");
+      row = { element: h("div", { class: "install-row" }, h("div", { class: "row wrap gap-s" }, add, show), line), add, show, line, note: next, set: set.id };
+      installRows.set(product, row);
+    }
+    return row;
   }
   /** The latest Check or Build of the set shown, in the mod-package result pattern. */
   function renderResult(set: PartPresetSet, last: SetExportResult | undefined, presets: readonly PartPreset[]): HTMLElement[] {
@@ -307,12 +327,10 @@ export function expressionSets(ctx: Ctx): PanelController {
     const modName = r.products[0]?.modName ?? setModName(set);
     const card = h("div", { class: `result-card ${stale ? "stale" : "ok"}` }, head(isBuild ? "Build result" : "Check result"));
     if (isBuild) {
-      card.append(h("p", { class: "result-summary", text: `Built ${modName}: ${plural(packaged.length, "expression")}.` }),
-        h("p", { text: "Copy its archive and r6 folders into your game folder or mod manager." }));
-      const show = button({ label: "Show in folder", icon: "folder", small: true, onClick: () => void ctx.presets.execute({ kind: "partPresetSet.reveal", id: set.id }).then(report) });
-      applyCapability(show, ctx.presets.capability({ kind: "partPresetSet.reveal", id: set.id }));
-      card.append(h("div", { class: "row gap-s" }, show),
-        h("p", { class: "muted small", text: "In photo mode they're at the end of the Expression list, for female and male V." }));
+      card.append(h("p", { class: "result-summary", text: `Built ${modName}: ${plural(packaged.length, "expression")}.` }));
+      const product = r.products[0]?.productId;
+      if (product) { const row = installRow(set, product); card.append(row.element, row.note); }
+      card.append(h("p", { class: "muted small", text: "In photo mode they're at the end of the Expression list, for female and male V." }));
     } else {
       card.append(h("p", { class: "result-summary", text: `${packaged.length} of ${plural(r.originalPresetCount, "expression")} can become mod files. This check created no files.` }),
         h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: modName })),
@@ -369,10 +387,23 @@ export function expressionSets(ctx: Ctx): PanelController {
         note: (set.table ?? "installed") === "sharing" ? "For a mod you publish: carries only the game's own expressions." : "Keeps your other expression mods working." });
       applyCapability(check, ctx.presets.capability({ kind: "partPresetSet.check", id: set.id }));
       applyCapability(build, ctx.presets.capability({ kind: "partPresetSet.build", id: set.id }));
+      applyCapability(rebuild, ctx.presets.capability({ kind: "partPresetSet.build", id: set.id }));
+      const last = exports.results[set.id], builtCurrent = last?.kind === "build" && last.key === setExportKey(set, presets.items);
+      build.hidden = builtCurrent; rebuild.hidden = !builtCurrent;
       progress.classList.toggle("idle", !running || running === "reveal");
       setText(progressText, running === "build" ? "Building…" : running === "check" ? "Checking…" : "");
       const next = JSON.stringify([set.id, set.revision, exports.results[set.id], presets.items.map(item => [item.id, item.name, item.revision])]);
       if (next !== signature) { signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id], presets.items)); }
+      // The install rows follow every paint: availability, and what happened last.
+      for (const [product, row] of installRows) {
+        setText(row.add.querySelector("span")!, ctx.modInstall.label());
+        applyCapability(row.add, ctx.modInstall.capability(product));
+        applyCapability(row.show, ctx.presets.capability({ kind: "partPresetSet.reveal", id: row.set }));
+        const outcome = ctx.modInstall.outcome(product);
+        setText(row.line, outcome?.message ?? "");
+        row.line.className = `install-line small${outcome ? outcome.ok ? " done" : " warning" : ""}`;
+        row.note.hidden = !!outcome?.ok;
+      }
     },
   };
 }

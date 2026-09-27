@@ -1,6 +1,12 @@
 /** Trusted, offline transport for an independently verified local package.
  * A host supplies fixed private roots and parsed settings; browser input is only a
  * candidate ID from that root. This module never compiles or changes a recipe.
+ *
+ * A package is its archive and `.archive.xl`, then any **extra files** of a kind this module knows where to put
+ * (`extraFileKind`): overlay archives beside the main one in `archive/pc/mod`, and TweakXL files in
+ * `r6/tweaks/<archive>/`. Each file goes to its path below the install root (the mod's own MO2 folder, or the
+ * game folder on the direct route), is checked by hash after copying, and is named in the receipt, so an update,
+ * uninstall or rollback changes exactly those files. A package with a file of any other kind is refused.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
@@ -16,6 +22,21 @@ import { modNameIssue } from "./platform/api";
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
 type FileEntry = { path: string; sha256: string; bytes: number };
+/** The kinds of extra file a package may carry that an install knows where to put. */
+export type ExtraFileKind = "overlay-archive" | "tweakxl";
+/**
+ * Where an extra file (a package file after its archive and `.xl`) goes, by its path below the install root: an overlay
+ * archive in `archive/pc/mod` beside the main one (the game loads every archive there), or a TweakXL file in the package's
+ * own `r6/tweaks/<archive>/` folder (TweakXL reads every `.yaml` below `r6/tweaks`). Null for anything else: the install
+ * refuses a file it doesn't know how to place.
+ */
+export function extraFileKind(path: unknown, archive: string): ExtraFileKind | null {
+  if (typeof path !== "string" || !safeName(archive)) return null;
+  if (/^archive\/pc\/mod\/[0-9a-z_]{1,128}\.archive$/.test(path) && path !== `archive/pc/mod/${archive}.archive`) return "overlay-archive";
+  const tweaks = `r6/tweaks/${archive}/`;
+  if (path.startsWith(tweaks) && /^[a-z0-9_]{1,120}\.yaml$/.test(path.slice(tweaks.length))) return "tweakxl";
+  return null;
+}
 /** A verified candidate's manifest (`xfs/local-package-1` or `-2`), read by the platform's one reader (PIPE-09). */
 type PackageManifest = PackageManifestView & { namespace: string; files: FileEntry[] };
 export type InstallRoute = "direct" | "mo2";
@@ -39,7 +60,11 @@ export type InstallTransportConfig = { candidateStore: string; receiptsRoot: str
   /** Test seam: runs once the payload is staged, before the journal (a test makes an install fail there). */
   afterStaging?: () => void };
 export type InstallPreview = { route: InstallRoute; target: string; candidateId: string;
+  /** What the files' paths are below: the mod's own MO2 folder, or the game folder. */
+  root: string;
   files: FileEntry[]; replacingOwned: boolean; activation: string;
+  /** Files of the install being replaced that this build no longer has: the update removes them. */
+  removing: FileEntry[];
   /** An earlier install was recorded but its files are gone (removed in the mod manager or by hand): installed afresh (INSTALL-03). */
   reinstalling: boolean };
 
@@ -95,14 +120,16 @@ function parseManifest(root: string): PackageManifest {
   // Version 1 was written only by the eye-makeup exporter, whose feature namespace was its archive name.
   const value = readPackageManifest(JSON.parse(readFileSync(file, "utf8")), EYE_MAKEUP_FEATURE);
   assert(safeName(value.archive), "Candidate manifest is not a verified two-file package.");
-  for (let i = 0; i < 2; i++) {
-    const entry = value.files[i];
-    assert(entry.path === `archive/pc/mod/${value.archive}.${fileNames[i]}`, "Candidate manifest contains an unexpected file or hash.");
+  // Every file, extras too, must be the one the manifest hashed; whether an extra can be placed is the install's question.
+  value.files.forEach((entry, i) => {
+    assert(i >= 2 || entry.path === `archive/pc/mod/${value.archive}.${fileNames[i]}`, "Candidate manifest contains an unexpected file or hash.");
     const payload = join(root, ...entry.path.split("/"));
+    assert(!entry.path.split("/").some(part => !part || part === "." || part === "..") && inside(payload, root),
+      "Candidate manifest contains an unexpected file or hash.");
     noLinks(payload);
     assert(regular(payload).size === entry.bytes && hash(payload) === entry.sha256,
       "Candidate payload differs from the verified manifest.");
-  }
+  });
   return { ...value, namespace: value.archive, files: [...value.files] };
 }
 /** Read-only payload check for a host-owned candidate. This checks the exact
@@ -115,9 +142,15 @@ export function inspectLocalPackageCandidate(storePath: string, candidateId: str
   noLinks(store); noLinks(root); directory(store); directory(root);
   return { root, manifest: parseManifest(root) };
 }
+/**
+ * The files a receipt or journal may name: the pair, then extras this module can place, each once. File names are unique
+ * too (the kinds' folders and extensions make them so), since backups keep each file under its name.
+ */
 function validEntries(files: FileEntry[], namespace: string): boolean {
-  return Array.isArray(files) && files.length === 2 && safeName(namespace) && namespace.startsWith("xfs_") &&
-    files.every((entry, index) => entry?.path === `archive/pc/mod/${namespace}.${fileNames[index]}` &&
+  if (!Array.isArray(files) || files.length < 2 || !safeName(namespace) || !namespace.startsWith("xfs_")) return false;
+  const names = new Set(files.map(entry => typeof entry?.path === "string" ? basename(entry.path).toLowerCase() : ""));
+  return names.size === files.length && files.every((entry, index) =>
+    (index < 2 ? entry?.path === `archive/pc/mod/${namespace}.${fileNames[index]}` : extraFileKind(entry?.path, namespace) !== null) &&
       /^[a-f0-9]{64}$/.test(entry.sha256) && Number.isSafeInteger(entry.bytes) && entry.bytes > 0);
 }
 const readJson = <T>(path: string): T | null => existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as T : null;
@@ -130,7 +163,9 @@ function atomicJson(path: string, value: unknown) {
 }
 type Target = { route: InstallRoute; target: string; activation: string; legacyInstall: string | null;
   /** The mod's own MO2 folder (`mods/<mod name>`), or null on the direct route. */
-  modFolder: string | null };
+  modFolder: string | null;
+  /** What package paths are below: the mod's own MO2 folder, or the game folder on the direct route (`target` is its `archive/pc/mod`). */
+  root: string };
 function targetFor(settings: LocalSettings, modName: string): Target {
   const route = settings.installMode;
   assert(route !== "none" && route === settings.launchRoute, "Select a matching install and launch route.");
@@ -143,7 +178,7 @@ function targetFor(settings: LocalSettings, modName: string): Target {
     const target = join(settings.gameRoot, "archive", "pc", "mod");
     noLinks(target);
     return { route, target, activation: "Files are staged in the game's archive/pc/mod folder; game loading is unverified.",
-      legacyInstall: null, modFolder: null };
+      legacyInstall: null, modFolder: null, root: settings.gameRoot };
   }
   assert(settings.mo2Root && isAbsolute(settings.mo2Root) && settings.mo2ProfileId && profileSegment(settings.mo2ProfileId),
     "Configured MO2 instance and profile are missing.");
@@ -160,7 +195,7 @@ function targetFor(settings: LocalSettings, modName: string): Target {
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
   const target = join(paths.mods, modName, "archive", "pc", "mod");
   noLinks(target);
-  return { route, target, legacyInstall, modFolder: join(paths.mods, modName),
+  return { route, target, legacyInstall, modFolder: join(paths.mods, modName), root: join(paths.mods, modName),
     activation: `Enable the dedicated ${modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
 }
 
@@ -323,25 +358,51 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     writeFileSync(fd, JSON.stringify({ pid: process.pid, started: Date.now() })); fsyncSync(fd);
     try { return work(); } finally { closeSync(fd); rmSync(lockFile); }
   };
-  const destination = (entry: FileEntry) => join(target.target, basename(entry.path));
+  /** Where a package file goes: its path below the install root (the pair and overlay archives land in `target`). */
+  const destination = (entry: FileEntry) => {
+    const file = join(target.root, ...entry.path.split("/"));
+    assert(inside(file, target.root), "Install file escapes its install folder.");
+    return file;
+  };
+  const key = (entry: FileEntry) => entry.path.toLowerCase();
+  /** Whether the file at `entry`'s destination is exactly the one `entry` records. */
+  const matches = (entry: FileEntry) => { const file = destination(entry); noLinks(file);
+    return existsSync(file) && regular(file).size === entry.bytes && hash(file) === entry.sha256; };
   /**
    * Every file of `files` present at its destination must be the one `receipt` (the live install) or `gone` (a recorded install
-   * whose files are partly gone) says XF Studio put there; a live install's files must all be present.
+   * whose files are partly gone) says XF Studio put there; a live install's files must all be present, and so must every file it
+   * placed that `files` no longer has (the update removes those, so they must still be exactly XF Studio's).
    */
   const checkCurrent = (receipt: InstallReceipt | null, files: FileEntry[], gone: InstallReceipt | null = null) => {
-    const previous = new Map(receipt?.files.map(file => [basename(file.path), file]));
-    const forgotten = new Map(gone?.files.map(file => [basename(file.path), file]));
+    const previous = new Map(receipt?.files.map(file => [key(file), file]));
+    const forgotten = new Map(gone?.files.map(file => [key(file), file]));
     if (receipt && receipt.namespace !== basename(files[0].path, ".archive"))
       throw Error("Changing the installed namespace requires uninstalling the owned pair first.");
-    for (const entry of files) {
-      const file = destination(entry), old = previous.get(basename(entry.path)) ?? forgotten.get(basename(entry.path));
+    const wanted = new Set(files.map(key));
+    for (const entry of [...files, ...(receipt?.files ?? []).filter(file => !wanted.has(key(file)))]) {
+      const file = destination(entry), old = previous.get(key(entry)) ?? forgotten.get(key(entry));
       noLinks(file);
       if (existsSync(file)) {
         assert(old && regular(file).size === old.bytes && hash(file) === old.sha256,
           `Existing file is unowned or changed: ${file}`);
-      } else assert(!previous.get(basename(entry.path)), `Owned installed file is missing: ${file}`);
+      } else assert(!previous.get(key(entry)), `Owned installed file is missing: ${file}`);
     }
   };
+  /** Files `receipt` names that `files` doesn't (an update or rollback removes them). */
+  const droppedBy = (receipt: InstallReceipt | null, files: FileEntry[]) => {
+    const wanted = new Set(files.map(key));
+    return (receipt?.files ?? []).filter(file => !wanted.has(key(file)));
+  };
+  /**
+   * The folders that hold XF Studio's own files and nothing else once they're gone: the package's TweakXL folder
+   * (`r6/tweaks/<archive>`, named for its archive). Removed when empty; `r6/tweaks` itself and every shared folder stay.
+   */
+  const pruneOwnFolders = (namespace: string) => {
+    const folder = join(target.root, "r6", "tweaks", namespace);
+    try { noLinks(folder); if (existsSync(folder) && !readdirSync(folder).length) rmdirSync(folder); } catch { /* Not empty, or not ours to judge. */ }
+  };
+  /** The package's files XF Studio doesn't know where to put. */
+  const unplaceable = (manifest: PackageManifest) => manifest.files.slice(2).filter(file => extraFileKind(file.path, manifest.archive) === null).map(file => file.path);
   /**
    * An MO2 folder of this name that XF Studio didn't create (no live install of ours, and files in it): never written into,
    * whatever it holds (PIPE-90). An empty tree an interrupted first install left (with MO2's `meta.ini`) is ours to reuse, and
@@ -367,9 +428,12 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     const duplicated = duplicatedNamespaces(manifest, elsewhere);
     assert(!duplicated.length, `Part of this build is already installed in another XF mod (${duplicated.join(", ")}). ` +
       "Uninstall that mod first, or build both mods from the same package plan and install them together. Nothing was installed.");
+    const refused = unplaceable(manifest);
+    assert(!refused.length, `This build has files XF Studio doesn't know where to put (${refused.join(", ")}), so nothing was installed.`);
     checkCurrent(prior, manifest.files, gone);
-    const { legacyInstall: _legacy, ...route } = target;
-    return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior, reinstalling: !!gone };
+    const { legacyInstall: _legacy, modFolder: _folder, ...route } = target;
+    return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior, reinstalling: !!gone,
+      removing: droppedBy(prior, manifest.files) };
   };
   const readJournal = (): Journal | null => {
     noLinks(journalFile);
@@ -378,7 +442,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     assert(journal.schema === "xfs/install-journal-1" && journal.targetId === targetId &&
       journal.target === target.target && validEntries(journal.next,
         basename(journal.next?.[0]?.path ?? "", ".archive")) &&
-      Array.isArray(journal.names) && journal.names.length === 2 &&
+      Array.isArray(journal.names) && journal.names.length === journal.next.length &&
       journal.names.every((name, index) => name === basename(journal.next[index].path)) &&
       ((journal.prior === null && journal.backup === null) ||
         (validReceipt(journal.prior) && typeof journal.backup === "string" &&
@@ -388,9 +452,35 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       "Install journal target or files mismatch.");
     return journal;
   };
+  /** A verified copy of `entry` from `backup` put at its destination (staged beside it, then moved into place). */
+  const restore = (backup: string, entry: FileEntry) => {
+    const saved = join(backup, basename(entry.path));
+    noLinks(saved);
+    assert(regular(saved).size === entry.bytes && hash(saved) === entry.sha256, "Rollback backup differs from its receipt.");
+    const file = destination(entry);
+    mkdirSync(dirname(file), { recursive: true });
+    noLinks(dirname(file));
+    const temp = `${file}.${randomUUID()}.recover`;
+    copyFileSync(saved, temp);
+    flush(temp);
+    renameSync(temp, file);
+  };
+  /** Back up every file of `receipt` into a new private folder, each checked against the receipt; returns the folder. */
+  const backUp = (receipt: InstallReceipt): string => {
+    const backup = join(receipts, `${targetId}-${randomUUID()}`);
+    mkdirSync(backup);
+    for (const entry of receipt.files) {
+      const saved = join(backup, basename(entry.path));
+      copyFileSync(destination(entry), saved, constants.COPYFILE_EXCL);
+      assert(regular(saved).size === entry.bytes && hash(saved) === entry.sha256, "Backup differs from the installed receipt.");
+      flush(saved);
+    }
+    return backup;
+  };
   /**
    * Finish or undo an interrupted install, following its journal (INSTALL-02):
-   * - **forward** when every new file is already in place and the journal holds the receipt it was about to write;
+   * - **forward** when every new file is already in place and the journal holds the receipt it was about to write (files of the
+   *   earlier install the new one no longer has are removed, as the install would have);
    * - **cleared** when none of its files is there any more (removed in the mod manager or by hand): the record is forgotten;
    * - **back** otherwise: the earlier files come back from their verified backup, and new ones XF Studio added are removed.
    * A file that is neither the new nor the earlier one is a conflict: nothing is changed and it is named.
@@ -404,16 +494,20 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     }
     const conflicts: string[] = [];
     const present = new Map<string, string>();
-    for (const entry of journal.next) {
-      const file = destination(entry), previous = journal.prior?.files.find(p => basename(p.path) === basename(entry.path));
+    const next = new Map(journal.next.map(entry => [key(entry), entry]));
+    const prior = new Map((journal.prior?.files ?? []).map(entry => [key(entry), entry]));
+    for (const path of new Set([...next.keys(), ...prior.keys()])) {
+      const entry = (next.get(path) ?? prior.get(path))!, file = destination(entry);
       noLinks(file);
       if (!existsSync(file)) continue;
       const current = hash(file);
-      present.set(file, current);
-      if (current !== entry.sha256 && current !== previous?.sha256) conflicts.push(file);
+      present.set(path, current);
+      if (current !== next.get(path)?.sha256 && current !== prior.get(path)?.sha256) conflicts.push(file);
     }
     if (conflicts.length) return { recovered: false, conflicts };
-    if (journal.pending && journal.next.every(entry => present.get(destination(entry)) === entry.sha256)) {
+    if (journal.pending && journal.next.every(entry => present.get(key(entry)) === entry.sha256)) {
+      for (const entry of droppedBy(journal.prior, journal.next)) if (present.has(key(entry))) rmSync(destination(entry));
+      if (journal.prior) pruneOwnFolders(journal.prior.namespace);
       atomicJson(receiptFile, journal.pending);
       rmSync(journalFile);
       return { recovered: true, conflicts: [], direction: "forward" };
@@ -429,18 +523,10 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       assert(regular(saved).size === entry.bytes && hash(saved) === entry.sha256,
         "Rollback backup differs from its receipt.");
     }
-    for (const entry of journal.next) {
-      const file = destination(entry), previous = journal.prior?.files.find(p => basename(p.path) === basename(entry.path));
-      if (previous && journal.backup) {
-        const backup = join(journal.backup, basename(previous.path));
-        assert(regular(backup).size === previous.bytes && hash(backup) === previous.sha256,
-          "Rollback backup differs from its receipt.");
-        const temp = `${file}.${randomUUID()}.recover`;
-        copyFileSync(backup, temp);
-        flush(temp);
-        renameSync(temp, file);
-      } else if (existsSync(file)) rmSync(file);
-    }
+    for (const entry of journal.next) if (!prior.has(key(entry)) && present.has(key(entry))) rmSync(destination(entry));
+    if (journal.prior && journal.backup) for (const entry of journal.prior.files)
+      if (present.get(key(entry)) !== entry.sha256) restore(journal.backup, entry);
+    pruneOwnFolders(basename(journal.next[0]!.path, ".archive"));
     if (journal.prior) atomicJson(receiptFile, journal.prior);
     else if (existsSync(receiptFile)) rmSync(receiptFile);
     rmSync(journalFile);
@@ -450,25 +536,20 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     const plan = preflight(candidateId);
     const { root, manifest } = candidate(candidateId);
     const { live: prior, gone } = recorded();
+    const dropped = droppedBy(prior, manifest.files);
+    // A file of an install already counted as gone that this build no longer has is removed too, while it is exactly XF Studio's.
+    const leftovers = droppedBy(gone, manifest.files).filter(matches);
     // The folders this install creates are removed again if it fails before any file is in place, so MO2 never lists an
-    // empty mod (INSTALL-09).
-    const created = missingFolders(target.target);
-    mkdirSync(target.target, { recursive: true });
-    noLinks(target.target);
-    const backup = prior ? join(receipts, `${targetId}-${randomUUID()}`) : null;
-    if (backup) mkdirSync(backup);
+    // empty mod (INSTALL-09). Deepest first.
+    const folders = [...new Set(manifest.files.map(entry => dirname(destination(entry))))];
+    const created = [...new Set(folders.flatMap(missingFolders))].sort((a, b) => b.length - a.length);
+    for (const folder of folders) { mkdirSync(folder, { recursive: true }); noLinks(folder); }
+    let backup: string | null = null;
     const staged: string[] = [];
     try {
+      if (prior) backup = backUp(prior);
       for (const entry of manifest.files) {
         const file = destination(entry);
-        if (backup) {
-          const saved = join(backup, basename(entry.path));
-          copyFileSync(file, saved, constants.COPYFILE_EXCL);
-          const previous = prior!.files.find(p => basename(p.path) === basename(entry.path))!;
-          assert(regular(saved).size === previous.bytes && hash(saved) === previous.sha256,
-            "Backup differs from the installed receipt.");
-          flush(saved);
-        }
         const temp = `${file}.${randomUUID()}.stage`;
         staged.push(temp);
         copyFileSync(join(root, ...entry.path.split("/")), temp, constants.COPYFILE_EXCL);
@@ -484,9 +565,12 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
         names: manifest.files.map(f => basename(f.path)), next: manifest.files, prior, backup, pending: receipt } satisfies Journal);
       for (let i = 0; i < manifest.files.length; i++) renameSync(staged[i], destination(manifest.files[i]));
+      for (const entry of dropped) rmSync(destination(entry));
       for (const entry of manifest.files) assert(hash(destination(entry)) === entry.sha256, "Installed payload changed.");
       atomicJson(receiptFile, receipt);
       rmSync(journalFile);
+      for (const entry of leftovers) { try { rmSync(destination(entry)); } catch { /* Gone already. */ } }
+      if (prior ?? gone) pruneOwnFolders((prior ?? gone)!.namespace);
       return receipt;
     } catch (error) {
       for (const temp of staged) if (existsSync(temp)) rmSync(temp);
@@ -495,8 +579,8 @@ export function createModInstallTransport(config: InstallTransportConfig) {
         throw Error(`Install failed; recover the pending transaction before retrying: ${(error as Error).message}`);
       }
       if (backup) rmSync(backup, { recursive: true, force: true });
-      for (const folder of created.reverse()) {
-        try { rmdirSync(folder); } catch { break; /* Not empty (or gone): leave it and its parents. */ }
+      for (const folder of created) {
+        try { rmdirSync(folder); } catch { /* Not empty (or gone): leave it. */ }
       }
       throw error;
     } finally { for (const temp of staged) if (existsSync(temp)) rmSync(temp); }
@@ -518,21 +602,17 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     noLinks(receiptFile);
     if (existsSync(receiptFile)) renameSync(receiptFile, `${receiptFile}.adopted-${Date.now()}`);
   });
+  /** Remove exactly the files the receipt names (each checked by hash first), and the package's own TweakXL folder once empty. */
   const uninstall = (): void => withLock(() => {
     assert(!existsSync(journalFile), "Recover the pending transaction first.");
     const prior = owned();
     assert(prior, "No owned installation exists.");
     checkCurrent(prior, prior.files);
-    const backup = join(receipts, `${targetId}-${randomUUID()}`);
-    mkdirSync(backup);
-    for (const entry of prior.files) {
-      copyFileSync(destination(entry), join(backup, basename(entry.path)));
-      assert(hash(join(backup, basename(entry.path))) === entry.sha256, "Uninstall backup changed.");
-      flush(join(backup, basename(entry.path)));
-    }
+    const backup = backUp(prior);
     atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
       names: prior.files.map(f => basename(f.path)), next: prior.files, prior, backup } satisfies Journal);
     for (const entry of prior.files) rmSync(destination(entry));
+    pruneOwnFolders(prior.namespace);
     rmSync(receiptFile);
     rmSync(journalFile);
   });
@@ -545,20 +625,19 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     assert(prior.namespace === current.namespace, "Rollback namespace changed.");
     assert(inside(resolve(source), receipts), "Rollback backup escapes the private receipt root.");
     noLinks(source); directory(source);
-    const backup = join(receipts, `${targetId}-${randomUUID()}`);
-    mkdirSync(backup);
+    // A file the earlier install had and the current one doesn't must not have appeared since from anywhere else.
+    checkCurrent(current, prior.files);
+    const backup = backUp(current);
     const staged: string[] = [];
-    for (const entry of current.files) {
-      copyFileSync(destination(entry), join(backup, basename(entry.path)));
-      assert(hash(join(backup, basename(entry.path))) === entry.sha256, "Current backup changed.");
-      flush(join(backup, basename(entry.path)));
-    }
     for (const entry of prior.files) {
       const original = join(source, basename(entry.path));
       noLinks(original);
       assert(regular(original).size === entry.bytes && hash(original) === entry.sha256,
         "Prior backup differs from its receipt.");
-      const temp = `${destination(entry)}.${randomUUID()}.stage`;
+      const file = destination(entry);
+      mkdirSync(dirname(file), { recursive: true });
+      noLinks(dirname(file));
+      const temp = `${file}.${randomUUID()}.stage`;
       staged.push(temp);
       copyFileSync(original, temp, constants.COPYFILE_EXCL);
       assert(hash(temp) === entry.sha256, "Staged rollback changed.");
@@ -568,6 +647,8 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
         names: prior.files.map(f => basename(f.path)), next: prior.files, prior: current, backup } satisfies Journal);
       for (let i = 0; i < prior.files.length; i++) renameSync(staged[i], destination(prior.files[i]));
+      for (const entry of droppedBy(current, prior.files)) rmSync(destination(entry));
+      pruneOwnFolders(current.namespace);
       atomicJson(receiptFile, prior);
       rmSync(journalFile);
       return prior;

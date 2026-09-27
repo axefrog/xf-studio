@@ -34,10 +34,16 @@ const shown = (item: MenuItem): unknown => item.kind === "action"
 test("a feature view's context is its facade and the shell's services: no port, runtime or other facade", () => {
   const { shell, ctx, toasts } = fixture();
   expect(ctx.facade).toBe(shell.feature("eye-makeup"));
-  expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "dispatch", "easing", "facade", "facial", "feedback", "links", "openSettings", "platform", "presets", "range", "readiness",
+  expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "dispatch", "easing", "facade", "facial", "feedback", "links", "modInstall", "openSettings", "platform", "presets", "range", "readiness",
     "reveal", "targetMenu", "targetSections", "undoAction", "uv"]);
   expect(Object.isFrozen(ctx)).toBe(true);
   expect(Object.keys(ctx.uv).sort()).toEqual(["attach", "command", "commandCapability", "hints", "menu", "resize"]);
+  // "Add to my mod manager" for a mod the view built: the shell's review sheet over port.modInstall, named by product only.
+  expect(Object.keys(ctx.modInstall).sort()).toEqual(["capability", "label", "outcome", "review"]);
+  expect(Object.isFrozen(ctx.modInstall)).toBe(true);
+  expect(ctx.modInstall.capability("no-such-build").available).toBe(false);
+  expect(ctx.modInstall.outcome("no-such-build")).toBeUndefined();
+  expect(ctx.modInstall.label()).toMatch(/^Add to (Mod Organizer 2|the game folder|my mod manager)…$/);
   // A feature's own kind through the platform dispatch is refused at run time too (a cast gets past the type).
   const layers = ctx.facade.view().recipe().layers.length;
   expect(ctx.platform({ kind: "layer.edit", command: { kind: "add" } } as never)).toBe(false);

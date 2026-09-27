@@ -80,6 +80,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-152 | Low | Components (tooltip) | A disabled button's reason tooltip can run past the window's right edge at 300 px (seen on the Expression sets' Add to my mod manager, dark theme); keep the library tooltip inside the window | Open, UI track |
+| UI-153 | Low | Mod install (copy) | The disabled Add's tooltip leaves the mod name unquoted, where the rest of the install copy quotes it | Open |
 | PIPE-122 | Low | Masculine export | A damaged masculine plate value still reaches `planPlate`'s `refuse("invalid_collection")`, blocking the feminine Check and Build (`features/eye-makeup/export/index.ts:71-76`) [plausible]. Treat it as unavailable with a warning. | Open |
 | PREV-166 | Low | Creator lighting | The refit gains were fitted on feminine captures but apply by light name to `CREATOR_RIG_MALE` too (`creator-lighting.ts:144, 293`) [plausible]. Key the calibration by body, or record the male rig as not fitted. | Open |
 | UI-147 | Low | Mod package (copy) | The head-mod reason says "for both V's" next to "the masculine V's head"; "for both heads" reads cleaner (masculine export gate, 28 September) | Open |

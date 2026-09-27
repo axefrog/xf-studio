@@ -7,6 +7,7 @@
 import { modNameIssue, refusal, refusalOmissions, type Capability, type PackageBuildResult, type PackageCheckResult, type PartEnvelope } from "./platform/api";
 import { setCollection, setExportKey, setMembers, type PartPresetSet, type PartPresetSetList, type PartPresetSetTable, type SetExportResult,
   type SetExportState } from "./part-preset-sets";
+import { builtModsOf, type BuiltMod } from "./mod-install-actions";
 
 export type { PartPresetSet, PartPresetSetList, PartPresetSetTable, SetExportResult, SetExportState } from "./part-preset-sets";
 
@@ -91,6 +92,13 @@ export class PartPresetService {
   }
   /** Each set's latest Check or Build (dropped when the set is deleted), and what runs now. */
   exportState(): SetExportState { return this.exports; }
+  /**
+   * The mods the sets' latest verified Builds made, for "Add to my mod manager" (mod-install-actions.ts): each set whose last
+   * result is a Build, by its product, candidate and mod name. A Check, a failure or no result offers nothing to add.
+   */
+  builtMods(): BuiltMod[] {
+    return Object.values(this.exports.results).flatMap(entry => entry.kind === "build" ? builtModsOf({ kind: "packageBuild", result: entry.result }) : []);
+  }
   private set(feature: string, id: string) { return this.setLists.get(feature)?.items.find(item => item.id === id); }
   capability(request: PartPresetRequest): Capability {
     if (typeof request.feature !== "string" || !request.feature) return refusal("invalid_value", "That kind of preset isn't known.");

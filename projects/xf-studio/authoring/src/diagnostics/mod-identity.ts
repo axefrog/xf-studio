@@ -28,7 +28,8 @@
  * **local only**, and only a small local-only mod may be offered, unticked, for inclusion (`MOD_FILE_LIMIT`). Host-only (reads files).
  *
  * **XF Studio's own builds are known by their install receipts (PIPE-116).** A mod whose every located archive is a file XF Studio
- * placed itself (its receipt names the folder, the file, its size and SHA-256: mod-install-transport.ts) is **built by XF Studio**:
+ * placed itself (its receipt names each file's folder, name, size and SHA-256, extra archives and TweakXL files included:
+ * mod-install-transport.ts) is **built by XF Studio**:
  * the person's own designs, built again from their library, so it is never called a mod of unknown origin nor offered as files.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -56,8 +57,11 @@ export type ModSource = { site: "nexusmods"; modId: string | null; fileId: strin
   | { site: "vortex"; staging: string; modId: string | null }
   /** Built and placed by XF Studio (its install receipt): the build's ID and when it was placed. */
   | { site: "xf-studio"; build: string; installedAt: string };
-/** A build XF Studio placed, from its install receipt: the folder the files went into and each file's name, size and SHA-256. */
-export type OwnInstall = { folder: string; files: readonly { name: string; bytes: number; sha256: string }[]; build: string; installedAt: string };
+/**
+ * A build XF Studio placed, from its install receipt: its archive folder (`archive/pc/mod`) and each file's folder, name, size and
+ * SHA-256 (the archive and `.xl` and any extra archive in that folder, TweakXL files in the mod's `r6/tweaks/<archive>`).
+ */
+export type OwnInstall = { folder: string; files: readonly { name: string; folder: string; bytes: number; sha256: string }[]; build: string; installedAt: string };
 export type InvolvedArchive = { name: string; group: string | null; bytes: number | null; sha256: string | null; modified: string | null;
   /** How many of the V's resources it supplied, and how many it lost to another archive. */
   won: number; lost: number;
@@ -196,7 +200,7 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
 
 const samePath = (a: string, b: string) => process.platform === "win32" ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b);
 /**
- * The install that placed every located archive of a mod: each is in the receipt's folder under the receipt's file name, with the size
+ * The install that placed every located archive of a mod: each is where the receipt put a file of that name, with the size
  * the receipt records and, when it was hashed, the same SHA-256 (a file edited or replaced since is not XF Studio's any more).
  */
 export function ownInstallOf(mod: Pick<InvolvedMod, "kind" | "archives">, installs: readonly OwnInstall[]): OwnInstall | null {
@@ -204,7 +208,7 @@ export function ownInstallOf(mod: Pick<InvolvedMod, "kind" | "archives">, instal
   const located = mod.archives.filter(archive => archive.path);
   if (!located.length || located.length !== mod.archives.length) return null;
   for (const install of installs) {
-    const matches = located.every(archive => samePath(dirname(archive.path!), install.folder) && install.files.some(file =>
+    const matches = located.every(archive => install.files.some(file => samePath(dirname(archive.path!), file.folder) &&
       file.name.toLowerCase() === archive.name.toLowerCase() && file.bytes === archive.bytes && (archive.sha256 === null || archive.sha256 === file.sha256)));
     if (matches) return install;
   }
@@ -225,8 +229,12 @@ export function readOwnInstalls(folders: readonly string[]): OwnInstall[] {
         const receipt = JSON.parse(readFileSync(join(folder, name), "utf8")) as { schema?: unknown; target?: unknown; candidateId?: unknown; installedAt?: unknown;
           files?: { path?: unknown; bytes?: unknown; sha256?: unknown }[] };
         if (receipt.schema !== "xfs/install-receipt-1" || typeof receipt.target !== "string" || typeof receipt.candidateId !== "string" || !Array.isArray(receipt.files)) continue;
-        const files = receipt.files.flatMap(file => typeof file?.path === "string" && typeof file.bytes === "number" && typeof file.sha256 === "string"
-          ? [{ name: basename(file.path), bytes: file.bytes, sha256: file.sha256 }] : []);
+        // The receipt's paths are below the install root, whose `archive/pc/mod` is its target.
+        const target = receipt.target, root = resolve(target, "..", "..", "..");
+        const rooted = /[\\/]archive[\\/]pc[\\/]mod[\\/]?$/i.test(target);
+        const files = receipt.files.flatMap(file => typeof file?.path === "string" && typeof file.bytes === "number" && typeof file.sha256 === "string" &&
+          !file.path.split("/").some(part => !part || part === "..")
+          ? [{ name: basename(file.path), folder: rooted ? dirname(join(root, ...file.path.split("/"))) : target, bytes: file.bytes, sha256: file.sha256 }] : []);
         if (files.length) out.push({ folder: receipt.target, files, build: receipt.candidateId, installedAt: typeof receipt.installedAt === "string" ? receipt.installedAt : "" });
       } catch { /* Not a receipt we can read. */ }
     }

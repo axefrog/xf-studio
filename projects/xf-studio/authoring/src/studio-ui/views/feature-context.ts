@@ -14,6 +14,7 @@ import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
 import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
 import type { PartPresetRequest } from "../../part-presets";
+import { modInstallLabel, openModInstallSheet } from "../panels/mod-install-sheet";
 
 type Action = { kind: string };
 /** Only the keys that carry a value, so a rendered entry has exactly the fields its contribution gave. */
@@ -85,6 +86,15 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       exports: () => port.presets.exports(),
       capability: (request: FeaturePresetRequest) => port.presets.capability({ ...request, feature: owner } as PartPresetRequest),
       execute: (request: FeaturePresetRequest) => port.presets.execute({ ...request, feature: owner } as PartPresetRequest),
+    }),
+    modInstall: Object.freeze({
+      label: () => modInstallLabel(port.localSetup.snapshot().view?.fields.launchRoute),
+      capability: (product: string) => port.modInstall.capability({ kind: "modInstall.review", product }),
+      outcome: (product: string) => { const outcome = port.modInstall.snapshot().outcomes[product];
+        return outcome ? { ok: outcome.ok, message: outcome.message } : undefined; },
+      review: (product: string, options?: { rename?(): void }) => openModInstallSheet(rt, product, {
+        openSetup: () => rt.settings.open("game"), ...(options?.rename ? { rename: options.rename } : {}),
+        source: port.features().find(info => info.id === owner)?.label ?? "Mod package" }),
     }),
   } satisfies FeatureViewContext);
 }

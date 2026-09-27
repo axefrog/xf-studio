@@ -449,7 +449,7 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
     const involved = [{ archive: "xfs_eye_artistry.archive", provider: "XF Eye Artistry", group: "mod", alternatives: [] }];
     const own = readOwnInstalls([receipts, receipts]);
     expect(own).toEqual([{ folder, build: "build-01", installedAt: "2026-09-28T10:00:00.000Z",
-      files: files.map(([name, text]) => ({ name, bytes: Buffer.byteLength(text), sha256: sha(text) })) }]);
+      files: files.map(([name, text]) => ({ name, folder, bytes: Buffer.byteLength(text), sha256: sha(text) })) }]);
     const found = await involvedMods(involved, onMo2, none, { ownInstalls: own });
     expect(found.map(mod => [mod.name, mod.kind, mod.status, mod.source])).toEqual([["XF Eye Artistry", "mo2-mod", "built-by-xf-studio",
       { site: "xf-studio", build: "build-01", installedAt: "2026-09-28T10:00:00.000Z" }]]);
@@ -459,6 +459,31 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
     writeFileSync(join(folder, "xfs_eye_artistry.archive"), "edited by hand, same length");
     expect((await involvedMods(involved, onMo2, none, { ownInstalls: own }))[0]!.status).toBe("local-only");
     writeFileSync(join(folder, "xfs_eye_artistry.archive"), "built archive bytez");
+    expect((await involvedMods(involved, onMo2, none, { ownInstalls: own }))[0]!.status).toBe("local-only");
+  });
+
+  test("a mod XF Studio placed with extra files is its own too: the extra archive by its folder, the TweakXL file by its own", async () => {
+    const mo2 = join(root, "own-extras-mo2"), modFolder = join(mo2, "mods", "XF Expressions - Smiles"), receipts = join(root, "own-extras-receipts");
+    const archives = join(modFolder, "archive", "pc", "mod"), tweaks = join(modFolder, "r6", "tweaks", "xfs_m1");
+    for (const folder of [archives, tweaks, join(mo2, "profiles", "Default"), receipts]) mkdirSync(folder, { recursive: true });
+    const files = [["archive/pc/mod/xfs_m1.archive", "main"], ["archive/pc/mod/xfs_m1.archive.xl", "xl"],
+      ["archive/pc/mod/0xfs_m1_table.archive", "table rows"], ["r6/tweaks/xfs_m1/xfs_m1.yaml", "records"]] as const;
+    for (const [path, text] of files) writeFileSync(join(modFolder, ...path.split("/")), text);
+    const sha = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    writeFileSync(join(receipts, `${"c".repeat(24)}.json`), JSON.stringify({ schema: "xfs/install-receipt-1", targetId: "c".repeat(24), route: "mo2",
+      target: archives, candidateId: "set-build", namespace: "xfs_m1", installedAt: "2026-09-28T11:00:00.000Z", rollback: null,
+      files: files.map(([path, text]) => ({ path, sha256: sha(text), bytes: Buffer.byteLength(text) })) }));
+    const own = readOwnInstalls([receipts]);
+    expect(own[0]!.files.map(file => [file.name, file.folder])).toEqual([["xfs_m1.archive", archives], ["xfs_m1.archive.xl", archives],
+      ["0xfs_m1_table.archive", archives], ["xfs_m1.yaml", tweaks]]);
+    const onMo2: LocalSettings = { ...settings, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Default" };
+    // The table overlay wins its rows on its own: recognised as XF Studio's, like the main archive.
+    const involved = [{ archive: "0xfs_m1_table.archive", provider: "XF Expressions - Smiles", group: "mod", alternatives: [] },
+      { archive: "xfs_m1.archive", provider: "XF Expressions - Smiles", group: "mod", alternatives: [] }];
+    const found = await involvedMods(involved, onMo2, none, { ownInstalls: own });
+    expect(found.map(mod => [mod.name, mod.status])).toEqual([["XF Expressions - Smiles", "built-by-xf-studio"]]);
+    // An overlay changed since XF Studio placed it is not XF Studio's any more.
+    writeFileSync(join(archives, "0xfs_m1_table.archive"), "table rowz");
     expect((await involvedMods(involved, onMo2, none, { ownInstalls: own }))[0]!.status).toBe("local-only");
   });
 
