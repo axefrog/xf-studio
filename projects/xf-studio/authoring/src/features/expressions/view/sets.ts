@@ -283,11 +283,12 @@ export function expressionSets(ctx: Ctx): PanelController {
     const stale = last.revision !== set.revision;
     const staleNote = () => h("div", { class: "row gap-s" }, note("This set changed after this result.", "warning"),
       button({ label: "Check", icon: "check", small: true, onClick: () => void run("check") }));
-    const head = (title: string) => h("div", { class: "result-head" }, h("strong", { text: title }), stale ? badge("Stale", "warning") : badge("Current", "success"));
+    const head = (title: string, current = true) => h("div", { class: "result-head" }, h("strong", { text: title }),
+      stale ? badge("Stale", "warning") : current ? badge("Current", "success") : null);
     if (last.kind === "failed") {
       // Nothing could be packaged: a finished Check with what to fix, not a failure.
       if (last.code === "no_exportable_content" && last.omissions?.length) return [h("div", { class: "result-card stale" },
-        head("Nothing in this set can become mod files yet"), leftOut(last.omissions), stale ? staleNote() : null)];
+        head("Nothing in this set can become mod files yet", false), leftOut(last.omissions), stale ? staleNote() : null)];
       return [h("div", { class: "result-card error" }, icon("warning"),
         h("div", {}, h("strong", { text: last.action === "build" ? "Build didn't finish" : "Check didn't finish" }), h("p", { text: last.message })))];
     }
