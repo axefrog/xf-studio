@@ -97,6 +97,20 @@ describe("save loadout", () => {
     expect(worn.find(entry => entry.area === "Head")).toEqual({ area: "Head", item: String(HAT), hidden: true });
   });
 
+  test("SAVE-11: owners after the player's are counted but never decoded, so only the player's data is kept", () => {
+    const b = new PackageBuilder();
+    const entity = (hash: bigint) => b.object("entEntityID", [["hash", { type: "Uint64", bytes: b.u64(hash) }]]);
+    b.chunk(b.object("EquipmentSystemPlayerData", [["ownerID", entity(1n)], ["equipment", b.object("gameSLoadout", [["equipAreas", b.array("gameSEquipArea", [
+      b.object("gameSEquipArea", [["areaType", b.enumValue(AREA, "Legs")], ["equipSlots", b.array("gameSEquipSlot", [
+        b.object("gameSEquipSlot", [["itemID", b.object("gameItemID", [["id", b.tweak(PANTS)]])]])])]])])]])]]));
+    // An owner after the player's that no reader could decode: it claims five fields and holds none.
+    b.chunk({ type: "EquipmentSystemPlayerData", bytes: b.u16(5) });
+    const pkg = b.build(), systems = b.cat(b.u32(pkg.length), pkg);
+    const loadout = readSavedLoadout(systems, null);
+    expect(loadout.evidence).toEqual({ owner: "1", owners: 2, skipped: [] });
+    expect(loadout.equipped).toEqual([{ area: "Legs", item: String(PANTS) }]);
+  });
+
   test("the package reader refuses malformed frames and walks any class by its own field tables", () => {
     expect(() => readSavePackage(new Uint8Array(10))).toThrow(SavePackageError);
     const bytes = scriptSystems().subarray(4);

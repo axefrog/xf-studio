@@ -34,7 +34,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 
 | Category | Components |
 |---|---|
-| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `Segmented`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
+| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView` |
 | Feature-specific | none yet |
 
@@ -42,6 +42,7 @@ Components added on request:
 - For the expressions panel (`claude/expressions-p1`): SliderWithValue, PairControl, GroupSection (the expander with a count and reset), SearchField and Combobox.
 - For the Poses panel (`claude/pose-panel`): TreeView, favouriteToggle, and SearchField's Down into the list.
 - For settings discoverability and Game & tools: FolderSetting.
+- For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
 
 ## The ratchet
