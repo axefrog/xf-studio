@@ -25,6 +25,7 @@ import type { ViewComposition, ViewContext } from "./views/panels";
 import { featureCommands, featureViewContext } from "./views/feature-context";
 import type { FeatureViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
+import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
 
@@ -118,6 +119,22 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   rt.dock = dock;
   /**
+   * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden.
+   * Each keeps its on/off state, and no device acts on it (Surface controls neither draws nor edits) until it is offered again. The
+   * application gets tool IDs only, never which modules show (design §6.3 rule 6). Recomputed only when the filter changes (the
+   * registered tools are fixed for the session), so a paint costs one comparison.
+   */
+  let withdrawnKey = "";
+  const withdrawUnoffered = () => {
+    const filter = rt.toolFilter(), key = JSON.stringify(filter);
+    if (key === withdrawnKey) return;
+    withdrawnKey = key;
+    const all = port.views.tools(undefined, { modules: modules.map(module => module.id), research: true });
+    const offered = new Set(port.views.tools(undefined, filter).map(tool => tool.id));
+    port.views.withdraw(all.map(tool => tool.id).filter(id => !offered.has(id)));
+  };
+  withdrawUnoffered();
+  /**
    * Show or hide a module (design §4.3): its panels leave the dock with their places parked, or come back where they were; its view
    * tools and crumb follow at once because they are derived. An open gesture or form edit is finished first. Its data and exports
    * are untouched, and its actions stay dispatchable.
@@ -131,6 +148,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (control) port.authoring.controlCommit(control.id);
     }
     if (!setPreference(port, feedback, { kind: "modules.set", module: id, shown }, `${module.label} ${shown ? "shown" : "hidden"}`)) return;
+    withdrawUnoffered();
     const ids = panelsOf(module);
     if (shown) dock.addPanels(ids.map(panel => specOf(byId.get(panel)!)));
     else dock.removePanels(ids);
@@ -155,6 +173,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   const paint = () => {
     queued = false;
+    // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
+    withdrawUnoffered();
     const frame = new Frame(port);
     // Editor adapters report limits and rejected gestures; show each once.
     const message = frame.status.message;
@@ -162,12 +182,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       lastMessage = message.id;
       // Routine raster timings are not activity; failures also surface through readiness.
       if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
-      else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
+      else feedback.toast("warning", message.source === "uv" ? "UV map" : "3D view", message.text);
     }
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
     if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
     header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
+    // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
+    for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form.
     if (frame.previewSetup.setupRequests !== setupRequests) {
       setupRequests = frame.previewSetup.setupRequests;
@@ -524,7 +546,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("character.useDefault.male", "Show the default masculine V", "Character", { kind: "character.useDefault", bodyGender: "male" },
       { icon: "character", keywords: "default v creator male man masculine" }),
     file("savedV.export", "Export appearance data", "Character", { kind: "savedV.export" }, { icon: "export" }),
-    act("character.hideOwnMakeup", "Hide my V's own makeup", "Character", { kind: "character.hideOwnMakeup" }, { icon: "eye", keywords: "makeup off creator options" }),
+    act("character.setOwnMakeup", character?.ownMakeup === false ? "Show my V's own makeup" : "Hide my V's own makeup", "Character",
+      { kind: "character.setOwnMakeup", shown: character?.ownMakeup === false }, { icon: "eye", keywords: "makeup off on show hide creator options" }),
     act("character.resetAll", "Reset every creator change", "Character", { kind: "character.resetAll" }, { icon: "reset", keywords: "creator options undo back to my v" }),
     act("character.undo", character?.undo ? `Undo in the Character panel: ${character.undo}` : "Undo in the Character panel", "Character", { kind: "character.undo" },
       { icon: "undo", keywords: "character creator clothing undo" }),
@@ -537,7 +560,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     // Viewport keys work while that viewport has focus; the palette names the scope.
     ...port.views.tools(undefined, rt.toolFilter()).filter(tool => tool.state !== "scene").map(tool => act(`tool.${tool.id}`,
       tool.kind === "toggle" ? `${tool.on ? "Hide" : "Show"} ${tool.label.toLowerCase()}` : tool.label, tool.placement === "research" ? "Research" : "View",
-      tool.action, { icon: isIconName(tool.icon) ? tool.icon : "dot", ...(tool.binding ? { shortcut: `${shortcutLabel(tool.binding)} in Head` } : {}),
+      tool.action, { icon: isIconName(tool.icon) ? tool.icon : "dot", ...(tool.binding ? { shortcut: `${shortcutLabel(tool.binding)} in the 3D view` } : {}),
         ...(tool.keywords ? { keywords: tool.keywords } : {}) })),
     act("camera.back", "Camera: back to where it was", "View", { kind: "camera.back" }, { icon: "undo", keywords: "camera previous position jump return" }),
     act("camera.forward", "Camera: forward again", "View", { kind: "camera.forward" }, { icon: "redo", keywords: "camera next position jump" }),
@@ -602,6 +625,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       keywords: "research calibration glitter model study compiler plan developer ids advanced", ...always, run: () => view.setResearch(!view.research()) },
     { id: "help.about", title: "About XF Studio", group: "Help", icon: "info", keywords: "version licence license update data folder",
       capability: () => port.about.capability(), run: () => port.about.open() },
+    // Localhost only (the desktop app leaves it out): open the installed desktop app, or how to get it.
+    ...(port.desktopApp.offered() ? [(() => { const entry = desktopAppEntry(port.desktopApp.snapshot());
+      return { id: "help.desktopApp", title: entry.label, group: "Help", icon: "monitor" as const, keywords: "desktop app windows install setup download installer",
+        ...always, run: () => { if (entry.opens) void openDesktopApp(rt); else openDesktopAppSheet(rt); } }; })()] : []),
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
     { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",

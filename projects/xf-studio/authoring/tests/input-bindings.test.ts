@@ -123,6 +123,17 @@ test("hints follow the target and held modifiers; outside the viewport modifiers
   expect(targetTip({ ...base, target: "empty" })).toBeUndefined();
 });
 
+test("a viewport that offers no editing tool (its module is hidden) hints camera input only (UI-102)", () => {
+  const base = { scope: "head" as const, modifiers: held(""), editing: false };
+  const idle = viewportHints({ ...base, target: "empty" });
+  expect(idle.hold.map(item => `${item.input}: ${item.label}`)).toEqual(["Ctrl: pan"]);
+  expect(idle.items.map(item => `${item.input}: ${item.label}`)).toEqual(["Drag: orbit view", "Wheel: zoom view", "Right-drag: pan view", "F: front view"]);
+  expect(idle.note).toBeUndefined();
+  // Shift is reserved for shape tools, which aren't offered: only what Shift doesn't change is hinted.
+  expect(viewportHints({ ...base, target: "empty", modifiers: held("shift") }).items.map(item => `${item.input}: ${item.label}`)).toEqual(["Right-drag: pan view"]);
+  expect(viewportHints({ ...base, target: "empty", modifiers: held("ctrl") }).items.map(item => item.label)).toContain("pan view");
+});
+
 test("cursors derive from the same bindings and every custom cursor has a crisp CSS rule with its fallback", () => {
   const ctx = (target: ViewportInputContext["target"], mods: ModifierKey, gesture?: GestureKind): ViewportInputContext =>
     ({ scope: "head", target, modifiers: held(mods), gesture });

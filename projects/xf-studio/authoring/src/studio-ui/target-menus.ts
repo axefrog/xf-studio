@@ -161,7 +161,7 @@ function viewSection(rt: StudioRuntime, kind: ViewportHostKind): MenuSection {
     return { label: "UV view", items: [command("both", "Both eyes"), command("single", "Single eye"), command("other", "Other eye"), command("fit", "Fit shape")] };
   }
   // The same derived tool list as the view's toolbar (view-graph-design.md §3.9): research tools only with research tools on.
-  return { label: "Head view", items: port.views.tools(undefined, rt.toolFilter()).filter(tool => tool.shown).map(tool => ({
+  return { label: "3D view", items: port.views.tools(undefined, rt.toolFilter()).filter(tool => tool.shown).map(tool => ({
     kind: "action" as const, label: tool.label, icon: isIconName(tool.icon) ? tool.icon : "dot",
     ...(tool.binding ? { shortcut: shortcutLabel(tool.binding) } : {}), ...(tool.state === "tools" ? { checked: !!tool.on } : {}),
     capability: tool.capability, run: () => { rt.dispatch(tool.action); } })) };
@@ -189,5 +189,5 @@ export function viewportSections(rt: StudioRuntime, kind: ViewportHostKind, anch
   return sections;
 }
 export function viewportMenu(rt: StudioRuntime, kind: ViewportHostKind, anchor: MenuAnchor, at?: { x: number; y: number }, invoker?: Element) {
-  openMenu(menuFromSections(viewportSections(rt, kind, anchor, at)), anchor, { label: `${kind === "head" ? "Head" : "UV map"} commands`, invoker });
+  openMenu(menuFromSections(viewportSections(rt, kind, anchor, at)), anchor, { label: `${kind === "head" ? "3D view" : "UV map"} commands`, invoker });
 }

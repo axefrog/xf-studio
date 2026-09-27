@@ -175,6 +175,14 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     followBody();
     releases.push(preview.subscribe(followBody));
     releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));
+    // The V's own makeup shows or hides at once: the prepared parts of the makeup rows are hidden in the view, nothing is prepared again.
+    let hiddenOptions: readonly string[] | null = null;
+    const followMakeup = () => {
+      const next = characterContext.hiddenOptions();
+      if (next !== hiddenOptions) { hiddenOptions = next; scene.setHiddenOptions(next); }
+    };
+    followMakeup();
+    releases.push(characterContext.subscribe(followMakeup));
     // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts), on a head of its body.
     releases.push(followCharacter({ context: characterContext, details: characterDetails, savedV: savedAppearance,
       setFaceMorphs: morphs => scene.setFaceMorphs(morphs), headBody: scene.body }));

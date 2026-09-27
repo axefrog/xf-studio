@@ -16,7 +16,7 @@ export const CONTROL_ANCHORS = {
   "layers.add": { panel: "layers", label: "Add layer" },
   "layers.list": { panel: "layers", label: "Layer list" },
   "uv.canvas": { panel: "uv", label: "UV map" },
-  "head.view": { panel: "head", label: "Head preview" },
+  "head.view": { panel: "head", label: "3D view" },
   "finish.color": { panel: "finish", label: "Colour" },
   "finish.picker": { panel: "finish", label: "Finish picker" },
   "presets.list": { panel: "presets", label: "Preset list" },

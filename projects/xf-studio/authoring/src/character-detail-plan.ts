@@ -193,7 +193,8 @@ const chunkTemplate = (material: ResolvedChunkMaterial, identities: TemplateIden
 };
 
 /** Plan one chunk of a slot's component. On the face only decal-family templates draw, with the decal family's inputs. */
-function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
+/** One resolved chunk's effective inputs for its template's adapter (also the creator swatches', cc-swatch.ts). */
+export function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
   identities: TemplateIdentities, slot: DetailSlot): PlannedChunk {
   const faceDetail = slot === "face", decals = decalFamilySlot(slot);
   const template = material.template ? refLabel(material.template.ref) : null;

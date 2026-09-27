@@ -6,6 +6,7 @@
 import { LOCALHOST_SETUP_PLACE } from "./alpha-availability";
 import { createBrowserPreviewPreparation } from "./preview-preparation";
 import { startStudio } from "./studio-startup";
+import { createBrowserDesktopApp } from "./browser-desktop-app-device";
 import { createBrowserWolvenKitSetup } from "./wolvenkit-setup";
 
 void startStudio({
@@ -13,4 +14,6 @@ void startStudio({
   previewPreparation: createBrowserPreviewPreparation("/api/preview-core"),
   wolvenKitSetup: createBrowserWolvenKitSetup("/api/wolvenkit"),
   setupPlace: LOCALHOST_SETUP_PLACE,
+  // Localhost-only: offer the desktop app (a verification workspace checks it too, but never starts anything).
+  desktopApp: createBrowserDesktopApp(new URLSearchParams(location.search).has("verify") ? "/api/verification/desktop-app" : "/api/desktop-app"),
 });
