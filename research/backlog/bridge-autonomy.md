@@ -4,6 +4,8 @@
 
 Effort is rough agent effort once the bridge's redscript actions layer is in place: **S** is under half a day, **M** one to two days, **L** longer or research-heavy. Every write keeps the bridge's rules: behind `allow_writes` and its class, reversible with an `undo`, cleared by the kill switch, logged ([design §4](../runtime/runtime-bridge-design.md#4-safety-model)).
 
+
+**Proposed ownership (27 September 2026):** under the [XF Core architecture](../runtime/xf-core-architecture.md), the features on this page keep their command names but move into plugins: the photo-mode ones into XF Photo Mode, rank 10 into XF Lighting, and the creator, clock, input and research ones into XF Lab (test profile only). The safety rules below carry over unchanged.
 ## Ranked features
 
 | Rank | Feature | Technique | Source (see the knowledge page) | Effort | Risk |
