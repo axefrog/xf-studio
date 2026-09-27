@@ -96,6 +96,8 @@ export function createCharacterRenderer(input: {
   // Profile stops are decoded from sRGB before the shader's overlay (see
   // knowledge/hair-shading.md). One explicit choice for hair and lashes.
   const profileEncoding: ProfileEncoding = "srgb-decoded";
+  // The view's Hair look (0 Crisp … 1 Game-like): one uniform every strand material of this scene reads (hair-shading.ts).
+  const hairLook: NonNullable<AdapterContext["hairLook"]> = { value: 0 };
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
   const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(rig.albedo), coreRoughness: coreRoughnessReader(rig.roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
@@ -124,7 +126,7 @@ export function createCharacterRenderer(input: {
   let normalsEnabled = true;
   const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
-    return { overMakeup: slot === "lashes", profileEncoding,
+    return { overMakeup: slot === "lashes", profileEncoding, hairLook,
       ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => skinPlacement.surfaceUnderlay(mesh, skin ?? null) } : {}),
       // The body's decals (tattoos, scars, the underwear cover) blend against the body's own skin, read on its chunks (knowledge/body-rendering.md).
       ...(slot === "body" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null, skins?: readonly ResolvedSkinSurface[]) => {
@@ -392,6 +394,9 @@ export function createCharacterRenderer(input: {
     setHiddenOptions,
     refreshVisibility: refreshDetailVisibility,
     setEyeOptics,
+    /** The Hair look the strands show (0 Crisp … 1 Game-like; preview only, never exported). */
+    setHairLook(value: number) { hairLook.value = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0)); },
+    hairLook: () => hairLook.value,
     eyeAppearance,
     contextRestored,
     /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */

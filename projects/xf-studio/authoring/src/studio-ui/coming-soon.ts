@@ -24,8 +24,6 @@ export const COMING_SOON = {
     key: "action:view.create", design: "research/authoring/view-graph-design.md (P4)" },
   viewsDuplicate: { label: "Duplicate view (shared camera)", reason: "Coming soon: a second view of this scene that moves with this view's camera.",
     key: "action:view.duplicate", design: "research/authoring/view-graph-design.md (P4)" },
-  lightingSubsurface: { label: "Skin scattering", reason: "Coming soon: how softly light spreads under the skin, as the game's quality setting does.",
-    key: "action:preview.setSubsurfaceQuality", design: "research/materials/shader-skin.md §11" },
   expressionHandles: { label: "Face handles", reason: "Coming soon: drag handles on the face to shape the expression.",
     key: "tool:expressions.handles", design: "research/animation/expression-editor-design.md (phase 2)" },
   expressionSculpt: { label: "Sculpt", reason: "Coming soon: push and pull the face directly, and the controls follow.",

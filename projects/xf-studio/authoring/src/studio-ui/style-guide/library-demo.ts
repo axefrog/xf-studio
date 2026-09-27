@@ -45,7 +45,10 @@ const MOUNTS: Record<string, Mount> = {
     rest.update(0);
     const off = new SliderWithValue({ label: "Lid squint", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, reserveNote: true, transaction: { edit: () => {} } });
     off.update(0, { disabled: true, reason: "Choose a face shape first." });
-    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, s.element, rest.element, off.element)); },
+    const look = new SliderWithValue({ label: "Hair look", min: 0, max: 100, step: 1, format: v => v < .5 ? "Crisp" : v > 99.5 ? "Game-like" : `${Math.round(v)} % game-like`,
+      ends: { min: "Crisp", max: "Game-like" }, defaultValue: 0, reset: true, transaction: { edit: v => look.update(v) } });
+    look.update(60);
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, s.element, rest.element, off.element, look.element)); },
   "lib-pair": () => {
     const make = (label: string, values: { left: number; right: number }, linked: boolean) => {
       const pair: PairControl = new PairControl({ label, min: 0, max: 100, step: 1, format: v => `${Math.round(v)} %`, defaultValue: 0, reset: true,

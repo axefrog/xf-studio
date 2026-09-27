@@ -236,6 +236,24 @@ export function hairResolvedCoverage(alpha: number): number {
   return saturate((alpha - HAIR_DITHER.offset) / (5 * HAIR_DITHER.step));
 }
 
+/**
+ * The preview's Hair look (a viewing preference, never exported; knowledge/hair-shading.md §8): 0 is Crisp, the faithful coverage above;
+ * 1 is Game-like, an approximation of the thicker, softer strands the game shows after TAA/DLSS. It blends three terms:
+ * - `coverageBoost`: the ×1.33 the compiled `hair_alpha_accum` applies when a global flag is set [source]; whether the flag is set in
+ *   game is unconfirmed (open question 4);
+ * - `cutoffScale`: the remap threshold lowered to this fraction of AlphaCutoff, so a strand's soft edge counts (a slight widening);
+ * - `smoothingBias`: a mip bias on the strand alpha, a hair-only blur standing in for TAA's temporal smoothing.
+ */
+export const HAIR_LOOK = Object.freeze({ coverageBoost: 1.33, cutoffScale: 0.7, smoothingBias: 1 });
+
+/** Remapped alpha under a Hair look (0 Crisp … 1 Game-like), before the dither stretch; `hairCoverage` at 0. Mirrors STRAND_COVERAGE_GLSL. */
+export function hairLookCoverage(strandAlpha: number, alphaCutoff: number, look: number): number {
+  const t = saturate(look);
+  if (alphaCutoff >= 1) return 0;
+  const cutoff = alphaCutoff * (1 - t * (1 - HAIR_LOOK.cutoffScale));
+  return hairCoverage(strandAlpha, cutoff) * (1 + t * (HAIR_LOOK.coverageBoost - 1));
+}
+
 /** Time-resolved coverage of a pixel crossed by several layers: the shared threshold makes it the most opaque layer's. */
 export function hairPixelCoverage(layerAlphas: readonly number[]): number {
   return hairResolvedCoverage(layerAlphas.reduce((a, b) => Math.max(a, b), 0));

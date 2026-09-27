@@ -5,6 +5,7 @@ import type { DesktopAppAction } from "./desktop-app";
 import type { ModInstallAction } from "./mod-install-actions";
 import type { PoseAction } from "./pose-actions";
 import { STUDIO_KEY_ANGLE_RANGE } from "./studio-lighting";
+import { HAIR_LOOK_RANGE } from "./preview-view-graph";
 import { LIGHT_NUMBER_KEYS, LIGHT_RANGES, LIGHT_TYPES, LIGHTING_LIMITS, SETUP_BACKDROPS, SETUP_DISPLAYS, SETUP_ENVIRONMENT_RANGE } from "./lighting-setups";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
@@ -109,6 +110,10 @@ export const ACTION_DESCRIPTORS = {
   "preview.setEyeOptics": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setHair": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setDetail": inView("viewport", "workspace", "none", { detail: enumerated(["brows", "lashes"]), enabled: input("boolean") }),
+  // The Rendering options: how the view draws (its display node), workspace view state in the View and lighting history, never the looks.
+  "preview.setSkinScatter": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setFaceShadows": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setHairLook": inView("viewport", "workspace", "none", { value: input("number", HAIR_LOOK_RANGE.min, HAIR_LOOK_RANGE.max) }),
   "motion.setIdle": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "motion.setIdleClip": inView("viewport", "workspace", "none", { clip: inputText(1, 40) }),
   "motion.setPaused": inView("viewport", "workspace", "none", { paused: input("boolean") }),

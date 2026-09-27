@@ -282,8 +282,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
       const state = port.authoring.previewState();
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
-      // Undo follows focus (view-graph-design.md §3.6): in Camera & light it steps the View and lighting history, not the look's.
-      if (byId.get("lighting")?.spec.element.contains(document.activeElement)) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
+      // Undo follows focus (view-graph-design.md §3.6): in Camera & light and Preview quality (its Rendering options) it steps the View
+      // and lighting history, not the look's.
+      if (["lighting", "quality"].some(id => byId.get(id)?.spec.element.contains(document.activeElement))) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
       rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo" });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
@@ -664,6 +665,13 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       { kind: "preview.setCreatorShadows", enabled }, { icon: "lighting", keywords: "creator calibration shadow nose rim" })),
     act("lighting.creator.reset", "Creator lighting calibration: restore defaults", "Research",
       { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" })]),
+    // Rendering options (the Preview quality panel's Rendering group): each switch both ways, and the Hair look's two ends.
+    ...([true, false] as const).map(enabled => act(`rendering.scatter.${enabled ? "on" : "off"}`, `Rendering: skin scattering ${enabled ? "on" : "off"}`, "View",
+      { kind: "preview.setSkinScatter", enabled }, { icon: "quality", keywords: "skin scatter subsurface sss soft shadow warm" })),
+    ...([true, false] as const).map(enabled => act(`rendering.shadows.${enabled ? "on" : "off"}`, `Rendering: face shadows ${enabled ? "on" : "off"}`, "View",
+      { kind: "preview.setFaceShadows", enabled }, { icon: "quality", keywords: "shadow maps nose face lights" })),
+    ...([[0, "crisp"], [1, "game-like"]] as const).map(([value, label]) => act(`rendering.hairLook.${value ? "game" : "crisp"}`,
+      `Rendering: hair look ${label}`, "View", { kind: "preview.setHairLook", value }, { icon: "quality", keywords: "hair strands soft thick taa dlss coverage" })),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
     act("idle", motion?.idle ? "Stop the game idle" : "Play the game idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),

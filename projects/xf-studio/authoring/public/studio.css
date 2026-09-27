@@ -288,6 +288,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .slider-with-value.inline.set .control-label-text::after { content: none; }
 .slider-with-value.owner-text .readout-value { color: var(--text-muted); }
 .slider-with-value .control-note { margin-top: var(--sp-2); }
+/* The ends' words under the track (`ends`), as the Bipolar and Scrub sliders show theirs. */
+.slider-ends { display: flex; justify-content: space-between; gap: var(--sp-4); margin-top: -2px; font-size: var(--fs-2xs); line-height: 1.2; color: var(--text-faint); }
 .slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
 .slider-with-value.set .control-label-text { color: var(--text); font-weight: 600; }
 .slider-with-value.set .control-label-text::after { content: ""; width: 5px; height: 5px; margin-left: var(--sp-2); background: var(--signal); }

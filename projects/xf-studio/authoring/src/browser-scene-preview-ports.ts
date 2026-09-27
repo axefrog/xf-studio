@@ -20,6 +20,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       endFovGesture: scene.endFovGesture, restoreCamera: scene.restoreCamera, distanceLimits: scene.distanceLimits,
       setSurfaceControls: options.setSurfaceControls, setWire: scene.setWire,
       setNormals: scene.setNormals, setEyeOptics: scene.setEyeOptics,
+      setSkinScatter: scene.setSkinScatter, setFaceShadows: scene.setFaceShadows, setHairLook: scene.setHairLook,
       setHair: scene.setHair, setDetail: scene.setDetail, setEyeShape: scene.eyeShape,
       setPiercings: scene.setPiercings, setPhysics: scene.setPhysics,
       setBody: scene.setBody, frameBody: scene.frameBody,

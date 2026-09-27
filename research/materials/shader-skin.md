@@ -435,7 +435,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 
 ## 11. Screen-space scatter in the preview (Three.js)
 
-**Built (27 September 2026, claude/sss-port).** The preview draws the game's scatter (§6.3) in the WebGL 2 renderer (Three.js 0.186) under both lighting presets whenever the display's target is half float. The wrap of §8 is the fallback. Statements about the Studio's code are [observed] in the files named. Measurements are from headless Chrome (ANGLE D3D11, RTX 4070) on the maintainer's V from the 27 September matched pair (skin type 5, Creator face camera) and the default V. The game side keeps §6's grades.
+**Built (27 September 2026, claude/sss-port).** The preview draws the game's scatter (§6.3) in the WebGL 2 renderer (Three.js 0.186) under both lighting presets whenever the display's target is half float. The wrap of §8 is the fallback. The person can switch it off for the wrap under Preview quality › Rendering › **Skin scattering** (`preview.setSkinScatter`, a view preference, on by default); the developer hook `xfStudioCreatorRig.scatter` keeps the `bare` mode for A/B evidence. Statements about the Studio's code are [observed] in the files named. Measurements are from headless Chrome (ANGLE D3D11, RTX 4070) on the maintainer's V from the 27 September matched pair (skin type 5, Creator face camera) and the default V. The game side keeps §6's grades.
 
 ### 11.1 The delta scheme
 

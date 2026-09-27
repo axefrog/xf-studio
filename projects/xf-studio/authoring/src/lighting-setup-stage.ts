@@ -160,6 +160,8 @@ export function createLightingSetupStage(options: {
   let shadowKey = "";
   let source: LightingSource = { kind: "setup", setup: studioStageSetup(DEFAULT_STUDIO_STAGE) };
   let sex: BodySex = "female";
+  // The view's Face shadows preference: off draws every light of the shown setup without its shadow map.
+  let shadowsEnabled = true;
   // Verification-only trials of the game rig (a yaw, a set of casting lights), kept across each other; never stored.
   let trial: { yawOffset?: number; casters?: readonly string[] } = {};
   let shown: LightingSetup = source.kind === "setup" ? source.setup : studioStageSetup(DEFAULT_STUDIO_STAGE);
@@ -198,7 +200,7 @@ export function createLightingSetupStage(options: {
   function apply(announce: boolean) {
     const wasGame = game();
     shown = resolveLightingSource(source, sex, trial);
-    rig.apply(shown.lights, shown.focus);
+    rig.apply(shadowsEnabled ? shown.lights : shown.lights.map(light => light.shadows ? { ...light, shadows: false } : light), shown.focus);
     const lit = shown.environment > 0;
     scene.environment = lit ? room : null;
     scene.environmentIntensity = shown.environment;
@@ -231,13 +233,23 @@ export function createLightingSetupStage(options: {
      * frame draws them at it.
      */
     setShadowQuality(textureSize: number) { rig.setShadowMapSize(creatorShadowMapSize(textureSize)); scatter.setQuality(scatterQualityFor(textureSize)); },
+    /**
+     * The Face shadows preference (the Rendering group): off, no light of any setup casts its shadow map onto the V; on again, the
+     * setup's own shadow choices return. The setup itself is unchanged either way.
+     */
+    setShadowsEnabled(enabled: boolean) {
+      if (enabled === shadowsEnabled) return;
+      shadowsEnabled = enabled;
+      apply(false);
+    },
+    get shadowsEnabled() { return shadowsEnabled; },
     /** Camera state for a creator page, for the preview's camera port. */
     camera: (page: CreatorCameraPage) => creatorCamera(sex, page),
     /** Draw one frame through the shown setup's display transform. */
     render(camera: THREE.Camera) {
       // Everything the V shows receives the lights' shadows (makeup and decals included, so they darken with the skin under them);
       // which meshes cast is the character renderer's choice (skin, body and clothing).
-      if (shown.lights.some(light => light.shadows)) scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; });
+      if (shadowsEnabled && shown.lights.some(light => light.shadows)) scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; });
       if (renderer.shadowMap) {
         const key = shadowState(scene);
         if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
@@ -256,8 +268,8 @@ export function createLightingSetupStage(options: {
     /** Developer evidence (verification only): a trial set of the game rig's shadow-casting lights by name (null: the budgeted flagged ones). */
     trialCasters(names: readonly string[] | null) { trial = { ...trial, casters: names ?? undefined }; apply(false); },
     /**
-     * Developer evidence (verification only): switch the skin scatter off (the wrap stand-in) or on again, or to `bare` (the wrap off and
-     * no Δ: the direct light alone), for A/B captures.
+     * The skin scatter on, or off (the wrap stand-in): the Rendering group's Skin scattering (`preview.setSkinScatter`). Developer evidence
+     * may also ask for `bare` (the wrap off and no Δ: the direct light alone), for A/B captures.
      */
     setScatter(mode: boolean | "bare") { scatter.setEnabled(mode !== false); scatter.setBare(mode === "bare"); },
     /** Developer evidence (verification only): a trial scatter screen scale (null: the default), for fitting it from captures. */

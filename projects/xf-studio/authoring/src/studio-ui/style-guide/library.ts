@@ -71,7 +71,7 @@ export const LIBRARY: readonly LibraryEntry[] = [
   { id: "lib-slider-value", title: "Slider with value", category: "General", module: "components/slider-with-value.ts", exports: ["SliderWithValue"],
     what: "A slider whose one readout is also where its exact value is typed, with an optional reset: one readout per value, never a second number box.",
     anatomy: "Label (with help tip) · the readout (typed into in place) · reset, shown only while the value is set · range under them · a note line only when asked for. Inline: a short label, the range, the readout and reset on one line (a pair's sides).",
-    variants: "<code>reset</code> with <code>defaultValue</code>; <code>inline</code> with <code>accessibleLabel</code>; <code>reserveNote</code>; <code>update(value, { text })</code> for a readout the owner words itself (a pair's \"14 / 10 %\", shown muted).",
+    variants: "<code>reset</code> with <code>defaultValue</code>; <code>inline</code> with <code>accessibleLabel</code>; <code>reserveNote</code>; <code>ends</code> (the two ends' words small under the track, as the Bipolar and Scrub sliders: \"Crisp … Game-like\"); <code>update(value, { text })</code> for a readout the owner words itself (a pair's \"14 / 10 %\", shown muted).",
     states: "default; <em>set</em> (away from its default: the label emphasised with a signal mark, the reset shown); dragging; typing an exact value; the owner's readout; disabled (its reason on the note line when reserved, else in the tooltip and description).",
     sizes: "Label line 22 px; track as Slider; about 44 px a control stacked, 22 px inline, so a list of them stays dense at 300 px.",
     when: "Values people also type, with a meaningful default (expression and shape values).",

@@ -159,16 +159,28 @@ The engine's coverage (§2) is a shared per-pixel threshold, resolved over frame
 - **Nesting.** MSAA alpha-to-coverage (`STRAND_COVERAGE_MATERIAL` in `src/hair-shading.ts`) gives each fragment a sample mask that grows with its alpha, so overlapping layers cover about as much as the most opaque one, as in the game. Stochastic or hashed alpha with an independent threshold per layer would give `1 − Π(1−a)` and make hair denser than the game. Alpha blending also combines layers independently, and it is order-dependent as well.
 - **Range.** The fragment alpha is `hairResolvedCoverage(remapped alpha)`, which stretches coverage over the dither range, so strands above about 0.84 are solid.
 
-Alpha-to-coverage is deterministic, so there is no grain to accumulate over frames and render-on-demand needs nothing extra. Its limits: four MSAA samples quantise coverage (the driver dithers the masks); colour within a pixel comes from whichever layer owns each sample, not from the alpha-weighted average of the three nearest layers; and TAA's temporal smoothing is not reproduced.
+Alpha-to-coverage is deterministic, so there is no grain to accumulate over frames and render-on-demand needs nothing extra. Its limits: four MSAA samples quantise coverage (the driver dithers the masks); colour within a pixel comes from whichever layer owns each sample, not from the alpha-weighted average of the three nearest layers; and TAA's temporal smoothing is not reproduced (the [Hair look](#hair-look) approximates it on request).
 
 **The canvas is opaque.** Three.js always creates its WebGL context with an alpha channel (its `alpha: false` only clears alpha to one), and alpha-to-coverage and the cap wrote their partial alpha into it. The page's CSS stage then showed through the hair, most of all where strands cross the scalp, so saved hair looked much lighter in the light UI theme than in the dark one. The Studio now creates the context with `alpha: false` and draws the theme's stage gradient itself (`src/viewport-backdrop.ts`). The gradient is an untone-mapped background that does not light the scene. After the fix, hair over the character measures the same in both themes ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
+
+### Hair look
+
+The preview's faithful coverage (above) draws strands thinner and crisper than the game shows them: the game's dithered coverage is smoothed over frames by TAA or DLSS, and may be boosted by the ×1.33 flag (§2), neither of which the preview reproduces. **Hair look** (Preview quality › Rendering) is a viewing preference from **Crisp** (0, the default: exactly the coverage above) to **Game-like** (1). It blends three terms linearly with the slider, all in the strand coverage shader (`STRAND_COVERAGE_GLSL` in `src/hair-shading.ts`, mirrored by `hairLookCoverage` in `src/hair-colour-model.ts`, constants `HAIR_LOOK`):
+
+| Term | At Game-like | Grade |
+|---|---|---|
+| Coverage boost | Remapped alpha × 1.33, the factor `hair_alpha_accum` applies when its global flag is set | The factor is [source]; whether the flag is set in game is **unconfirmed** (open question 4), and whether `hair_gbuffer_solid` applies it too is not decoded |
+| Widening | The remap threshold lowered to 0.7 × `AlphaCutoff`, so a strand's soft edge counts | Approximation, no game counterpart |
+| Smoothing | The strand alpha sampled with a mip bias of 1, a hair-only blur standing in for TAA's temporal smoothing | Approximation of TAA/DLSS, not a model of it |
+
+Every strand of a scene reads one uniform, so moving the slider recompiles nothing, and each view keeps its own value (the view graph's display node). At 1920 × 1080 on an RTX 4070 (headless Chrome, ANGLE D3D11, the default masculine V, 27 September 2026, minimum of six alternations of 60 frames) a frame took 1.34 ms at Crisp and 1.37 ms at Game-like, within the timing's noise. The export is unaffected: the mod ships the game's own `hair.mt` data. A side-by-side capture against the creator's hair page in game would settle how far Game-like should go; until then its extent is a visual judgement.
 
 ## Open questions
 
 1. Our own runtime dump of the hair options in a session, to confirm that no CET preset or other mod changes them (the defaults themselves are read from the executable).
 2. Which `brown_liquorice.hp` the game binds for the saved lashes. NPC hair in game weakly favours the mod copy (§7); a controlled with/without comparison is [head CC rendering test ask 7](head-cc-rendering.md). Expected: base (172, 130, 15), Alliekat (59, 28, 0).
 3. Whether hair in ambient light really carries its albedo twice (§5): a ladder in the mirror (no ambient) against the same ladder lit only by ambient light should show roughly squared ratios ([hair reference test ask 3](../research/materials/shader-hair.md#13-in-game-test-asks-batch-into-the-prepared-session)).
-4. The global flag that multiplies coverage by 1.33, and whether the dither's per-frame register is a plain frame counter.
+4. The global flag that multiplies coverage by 1.33, and whether the dither's per-frame register is a plain frame counter. The preview's [Hair look](#hair-look) applies the factor at its Game-like end without knowing whether the game sets the flag.
 5. Sign of the strand direction (root→tip) as stored in GBuffer1, which sets the direction of the R/TRT shifts.
 6. How much self-shadowing, contact shadows, rain wetness and tone mapping darken hair in typical scenes. The base-colour pass alone scales colour by down to 0.25 when the character is wet. The game's SDR display transform (LogC3 into a 3D grading LUT) is decoded in [creator lighting §5](creator-lighting.md#5-tone-mapping-and-grading).
 7. Which of the eight ambient-composite variants a frame uses, and the ray-traced and path-traced hair paths.
