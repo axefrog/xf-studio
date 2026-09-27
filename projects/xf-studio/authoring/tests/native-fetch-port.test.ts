@@ -25,12 +25,12 @@ const testWorker = new URL("./fixtures/native-decode-test-worker.ts", import.met
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "xfs-native-port-")); roots.push(root);
-  const profile = resource("CHairProfile"), other = resource("animRig", []);
+  const profile = resource("CHairProfile"), other = resource("Multilayer_Mask", []);
   const path = join(root, "mod.archive");
   writeFileSync(path, syntheticArchive([
     { path: "mod\\hair.hp", segments: [{ bytes: profile }] },
     { path: "mod\\slow.hp", segments: [{ bytes: profile, compress: true }] },
-    { path: "mod\\rig.rig", segments: [{ bytes: other }] },
+    { path: "mod\\mask.mlmask", segments: [{ bytes: other }] },
     { path: "mod\\broken.mi", segments: [{ bytes: new Uint8Array([1, 2, 3]) }] },
   ], { names: true }));
   const archive = { id: path, name: "mod.archive" } as MountedArchive;
@@ -63,9 +63,9 @@ test("the native-first port answers verified types itself and hands everything e
     const byHash = await port.fetch(archive, { hash: refFromPath("mod\\hair.hp").hash, path: null }, null);
     expect(byHash!.path).toBe("mod\\hair.hp");
     // Unverified root class, undecodable bytes and a missing hash all go to the fallback, whose transient rule then applies.
-    for (const item of ["mod\\rig.rig", "mod\\broken.mi", "mod\\missing.mi"]) expect((await port.fetch(archive, refFromPath(item), null))!.document).toEqual({ from: "fallback" });
-    expect(asked).toEqual(["mod\\rig.rig", "mod\\broken.mi", "mod\\missing.mi"]);
-    expect(port.transient(archive, refFromPath("mod\\rig.rig"))).toBe(true);
+    for (const item of ["mod\\mask.mlmask", "mod\\broken.mi", "mod\\missing.mi"]) expect((await port.fetch(archive, refFromPath(item), null))!.document).toEqual({ from: "fallback" });
+    expect(asked).toEqual(["mod\\mask.mlmask", "mod\\broken.mi", "mod\\missing.mi"]);
+    expect(port.transient(archive, refFromPath("mod\\mask.mlmask"))).toBe(true);
     expect(port.stats).toMatchObject({ native: 2, fallback: 3 });
     expect(port.stats.byKind).toMatchObject({ "not-verified": 1, malformed: 1, "not-indexed": 1, internal: 0 });
     // Only the informative kinds keep a message sample.
@@ -110,7 +110,7 @@ test("a worker decodes with a time budget: a resource over it falls back and the
     const answers = await Promise.all(["mod\\hair.hp", "mod\\slow.hp"].map(path => port.fetch(archive, refFromPath(path), "hp")));
     for (const answer of answers) expect((answer!.document as any).Data.RootChunk).toMatchObject({ $type: "CHairProfile", sampleCount: 16 });
     expect((await port.fetch(archive, { hash: refFromPath("mod\\hair.hp").hash, path: null }, null))!.path).toBe("mod\\hair.hp");
-    expect((await port.fetch(archive, refFromPath("mod\\rig.rig"), null))!.document).toEqual({ from: "fallback" });
+    expect((await port.fetch(archive, refFromPath("mod\\mask.mlmask"), null))!.document).toEqual({ from: "fallback" });
     expect(port.stats.byKind["not-verified"]).toBe(1);
   } finally { port.close(); }
 

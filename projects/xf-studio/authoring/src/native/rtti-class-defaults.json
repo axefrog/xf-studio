@@ -350,7 +350,145 @@
  "animAnimGraph": {
   "timeDeltaMultiplier": 1
  },
+ "animAnimNodeSourceChannel_WeightedQuat": {
+  "weight": 1
+ },
+ "animAnimNodeSourceChannel_WeightedVector": {
+  "weight": 1
+ },
+ "animAnimNode_AimConstraint": {
+  "id": 4294967295,
+  "weight": 1
+ },
+ "animAnimNode_AimConstraint_ObjectUp": {
+  "id": 4294967295,
+  "weight": 1
+ },
+ "animAnimNode_BlendOverride": {
+  "blendAllTracks": 1,
+  "blendTrackMode": "AGBT_Interpolate",
+  "id": 4294967295
+ },
+ "animAnimNode_ConditionalSegmentEnd": {
+  "id": 4294967295
+ },
+ "animAnimNode_Dangle": {
+  "id": 4294967295
+ },
+ "animAnimNode_DirectConnConstraint": {
+  "id": 4294967295,
+  "weight": 1
+ },
+ "animAnimNode_Drag": {
+  "hasOvershoot": 1,
+  "id": 4294967295,
+  "overshootDetectionMaxSpeed": 4,
+  "overshootDetectionMinSpeed": 0.400000006,
+  "overshootDuration": 1,
+  "simulationFps": 100,
+  "sourceSpeedMultiplier": 10,
+  "stepsTargetSpeedMultiplier": 10000,
+  "timeBetweenSteps": 0.100000001,
+  "timeInStep": 0.100000001
+ },
+ "animAnimNode_FloatConstant": {
+  "id": 4294967295
+ },
+ "animAnimNode_FloatTrackDirectConnConstraint": {
+  "id": 4294967295,
+  "mulFactor": 1,
+  "weight": 1
+ },
+ "animAnimNode_Join": {
+  "id": 4294967295
+ },
+ "animAnimNode_LODBegin": {
+  "id": 4294967295
+ },
+ "animAnimNode_LODEnd": {
+  "id": 4294967295
+ },
+ "animAnimNode_MathExpressionVector": {
+  "id": 4294967295
+ },
+ "animAnimNode_OrientConstraint": {
+  "id": 4294967295,
+  "weight": 1
+ },
+ "animAnimNode_OrientConstraint_WeightedTransform": {
+  "weight": 1
+ },
+ "animAnimNode_Output": {
+  "id": 4294967295
+ },
+ "animAnimNode_ParentConstraint": {
+  "id": 4294967295,
+  "interpolationType": "Slerp",
+  "weight": 1
+ },
+ "animAnimNode_PointConstraint": {
+  "id": 4294967295,
+  "weight": 1
+ },
+ "animAnimNode_PointConstraint_WeightedTransform": {
+  "weight": 1
+ },
+ "animAnimNode_PoseLsToMs": {
+  "id": 4294967295
+ },
+ "animAnimNode_PoseMsToLs": {
+  "id": 4294967295
+ },
+ "animAnimNode_ReferencePoseTerminator": {
+  "id": 4294967295
+ },
  "animAnimNode_Root": {
+  "id": 4294967295
+ },
+ "animAnimNode_SetBoneTransform": {
+  "id": 4294967295
+ },
+ "animAnimNode_SharedMetaPose": {
+  "id": 4294967295
+ },
+ "animAnimNode_SimpleBounce": {
+  "id": 4294967295,
+  "multiplier": 1,
+  "negativeMultiplier": 1,
+  "smoothStep": 1
+ },
+ "animAnimNode_SimpleSpline": {
+  "defaultProgress": 0.5,
+  "id": 4294967295
+ },
+ "animAnimNode_SkipPerformanceModeEnd": {
+  "id": 4294967295
+ },
+ "animAnimNode_StackTracksExtender": {
+  "id": 4294967295
+ },
+ "animAnimNode_StackTracksShrinker": {
+  "id": 4294967295
+ },
+ "animAnimNode_StackTransformsExtender": {
+  "id": 4294967295
+ },
+ "animAnimNode_StackTransformsShrinker": {
+  "id": 4294967295
+ },
+ "animAnimNode_StaticSwitch": {
+  "id": 4294967295
+ },
+ "animAnimNode_TranslationLimit": {
+  "id": 4294967295
+ },
+ "animAnimNode_TwistConstraint": {
+  "id": 4294967295
+ },
+ "animAnimNode_VectorConstant": {
+  "id": 4294967295
+ },
+ "animAnimNode_VectorInput": {
   "id": 4294967295
  },
  "animAnimSetupEntry": {
@@ -371,6 +509,39 @@
   "frameClampingEndFrame": -1,
   "frameClampingStartFrame": -1
  },
+ "animDangleConstraint_SimulationDyng": {
+  "alpha": 1,
+  "jsonCollisionShapesLoadedSuccessfully": 1,
+  "rotateParentToLookAtDangle": 1,
+  "solverIterations": 1,
+  "substepTime": 0.00999999978
+ },
+ "animDyngConstraintCone": {
+  "halfOfMaxApertureAngle": 45,
+  "projectionType": "ShortestPathRotational"
+ },
+ "animDyngConstraintEllipsoid": {
+  "constraintRadius": 1,
+  "constraintScale1": 1,
+  "constraintScale2": 1
+ },
+ "animDyngConstraintLink": {
+  "lengthLowerBoundRatioPercentage": 100,
+  "lengthUpperBoundRatioPercentage": 100
+ },
+ "animDyngParticle": {
+  "damping": 1,
+  "isFree": 1,
+  "mass": 1,
+  "projectionType": "ShortestPath"
+ },
+ "animDyngParticlesContainer": {
+  "gravityWS": 9.81000042
+ },
+ "animFloatClamp": {
+  "max": 1,
+  "min": -1
+ },
  "animRig": {
   "turnOffLOD": -1
  },
@@ -380,8 +551,24 @@
  "animRigPartBoneTree": {
   "weight": 1
  },
+ "animSetBoneTransformEntry": {
+  "setMethod": "WholeTransform"
+ },
+ "animSimpleBounceTrackOutput": {
+  "multiplier": 1
+ },
+ "animSimpleBounceTransformOutput": {
+  "multiplier": 1
+ },
+ "animSimpleBounceTransformOutput_ChannelEntry": {
+  "multiplier": 1
+ },
  "animTransformMask": {
   "index": -1
+ },
+ "animTwistOutput": {
+  "negativeScale": 1,
+  "positiveScale": 1
  },
  "appearanceAppearanceResource": {
   "proxyPolyCount": 1400

@@ -36,6 +36,8 @@ const RESOURCES = [
   "base\\vehicles\\common\\materials\\vehicle_modding_destruction.mt",
   "base\\gameplay\\gui\\fullscreen\\main_menu\\female_cco.inkcharcustomization",
   "engine\\textures\\small_flat_normal.xbm",
+  "base\\characters\\common\\hair\\hh_033_wa__player\\hh_033_wa__player_dangle.rig",
+  "base\\characters\\common\\hair\\hh_033_wa__player\\hh_033_wa__player_dangle.animgraph",
 ];
 
 const walk = (root: string, folder = root, out = new Map<string, string>()) => {

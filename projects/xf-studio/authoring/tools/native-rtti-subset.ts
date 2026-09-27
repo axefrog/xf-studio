@@ -37,7 +37,9 @@ export const ROOTS = ["CMesh", "MorphTargetMesh", "appearanceAppearanceResource"
   "CMaterialParameterStructBuffer", "CMaterialParameterDynamicTexture", "CMaterialParameterTerrainSetup", "CMaterialParameterFoliageParameters",
   "CMaterialParameterCpuNameU64", "rendRenderMeshBlob", "rendRenderMorphTargetMeshBlob", "rendRenderTextureBlobPC",
   // The creator catalogue's on-screen texts (`JsonResource` holding `localizationPersistenceOnScreenEntries`).
-  "JsonResource", "localizationPersistenceOnScreenEntries"];
+  "JsonResource", "localizationPersistenceOnScreenEntries",
+  // Dangle (hair physics) and deformation rigs and graphs (dangle-host.ts, deformation-rig-host.ts; NATIVE-64).
+  "animRig", "animAnimGraph"];
 
 type DumpProp = { name: string; type: string };
 type DumpClass = { name: string; parent?: string; props?: DumpProp[] };
