@@ -76,6 +76,18 @@ export interface Installation {
   readonly fetcher: ResolverFetcher;
   /** The route's native decoder or why there is none (null: not asked for; WolvenKit reads everything). */
   readonly native?: NativeRoute | null;
+  /**
+   * The TweakXL files the game would load from `r6/tweaks` on this route (MO2: the profile's merged view, overwrite and higher priority
+   * first), in no particular order (tweakxl-overlay.ts orders them). Absent for synthetic installations.
+   */
+  readonly tweaks?: readonly { readonly virtualPath: string; readonly physicalPath: string; readonly providerName: string; readonly sizeBytes: number;
+    readonly modifiedMs: number }[];
+  /**
+   * The game-folder providers Vortex deployed and still vouches for (source-discovery.ts `deployedBy`, state `deployed`): provider name to
+   * Vortex mod id (its staging folder), so a reader of Vortex's own records (mod-makers.ts) can say more about them. Absent for synthetic
+   * installations; empty without Vortex.
+   */
+  readonly vortexMods?: ReadonlyMap<string, string>;
   readonly summary: {
     readonly route: "direct" | "mo2";
     /** Whether the Studio reads resources itself (then WolvenKit only for what it can't), and why not when it doesn't. */
@@ -845,7 +857,10 @@ export function openInstallation(options: InstallationOptions): Installation {
   const xl = readArchiveXlConfig(documents);
   const native = options.native ?? null;
   const { graph, fetcher } = installationView({ depot, xl, native }, options);
-  return { plan, depot, xl, graph, fetcher, native, watch, summary: { route: options.launchRoute, nativeReader: nativeReaderState(native), scanComplete: discovery.complete,
+  const tweaks = visibleLoose(candidates.filter(c => c.kind === "tweak")).map(({ virtualPath, physicalPath, providerName, sizeBytes, modifiedMs }) =>
+    ({ virtualPath, physicalPath, providerName, sizeBytes, modifiedMs }));
+  const vortexMods = new Map(candidates.flatMap(c => c.deployedBy?.state === "deployed" ? [[c.providerName, c.deployedBy.modId] as const] : []));
+  return { plan, depot, xl, graph, fetcher, native, watch, tweaks, vortexMods, summary: { route: options.launchRoute, nativeReader: nativeReaderState(native), scanComplete: discovery.complete,
     scanIssues: discovery.issues.filter(issue => issue.blocking).map(issue => `${issue.code}: ${issue.detail}`),
     scanGaps: discovery.issues.filter(issue => issue.blocking && issue.mayHideSources !== false).map(issue => `${issue.code}: ${issue.detail}`),
     readErrors: [...indexErrors, ...xlReadErrors, ...discovery.issues.filter(issue => UNREADABLE_ISSUES.has(issue.code)).map(issue => `${issue.code}: ${issue.detail}`)],

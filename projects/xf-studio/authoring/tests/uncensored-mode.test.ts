@@ -99,7 +99,7 @@ describe("the creator rows' coverage (cc-render-coverage.ts)", () => {
   const nudity = (action: "activate" | "deactivate") => ({ flag: "Censor_Nudity", action });
 
   test("what the underwear covers reads `uncensored` (drawn only in the uncensored look); another rule's hidden option is not drawn", () => {
-    expect(CC_PANEL_SCHEMA).toBe("xfs/cc-panel-3");
+    expect(CC_PANEL_SCHEMA).toBe("xfs/cc-panel-5");
     const options = [option("skin", "body_color", nudity("deactivate"), { link: { key: "skin color", controller: false } }),
       option("skin_censored", "body_color", nudity("activate"), { link: { key: "skin color", controller: false } }),
       option("cover", "underpants", nudity("activate")), option("nipples_02", "nipples", nudity("deactivate")),

@@ -1,12 +1,12 @@
 /**
  * Browser device for the character context's host side (cc-catalogue-server.ts): the installed creator options for the Character
  * panel, their choices page by page, searches over every choice, the view of a context, a portable preset of it, Try again after a
- * failed catalogue, the choices an earlier build's tried piercing style stands for, a row's choices prepared ahead and the prepared game
+ * failed catalogue, the choices an earlier build's tried piercing style stands for, a colour row's swatches and icon sheets, a row's choices prepared ahead and the prepared game
  * files' size and clearing. Same endpoint on both hosts. Answers are read
  * with the panel's own readers (cc-panel.ts); every refusal becomes one plain line by its code, never the host's own words (UI-69).
  */
 import type { BodyGender } from "./cc-catalogue";
-import { type CreatorState, type CreatorView, readChoicePage, readChoiceSearch, readCcPanel } from "./cc-panel";
+import { type CreatorState, type CreatorView, readChoicePage, readChoiceSearch, readCcPanel, readSwatches } from "./cc-panel";
 import type { CreatorPort } from "./character-context-actions";
 import { characterChoiceOf, type CharacterChoice } from "./character-context";
 import type { CharacterRequest } from "./character-detail-request";
@@ -60,6 +60,11 @@ export function createBrowserCreatorDevice(transport: Fetch = (url, init) => fet
       const value = await answer(await fetcher(`${CREATOR_ENDPOINT}?gender=${gender}&option=${encodeURIComponent(option)}&offset=${offset}${search}`, { signal }));
       return read(() => readChoicePage(value, mods));
     },
+    async swatches(gender, option, signal) {
+      const value = await answer(await fetcher(`${CREATOR_ENDPOINT}?gender=${gender}&swatches=${encodeURIComponent(option)}`, { signal }));
+      return read(() => readSwatches(value));
+    },
+    sheetUrl: (gender, id, key) => `${CREATOR_ENDPOINT}?gender=${gender}&sheet=${id}&key=${key}`,
     async search(gender, query, signal) {
       const value = await answer(await fetcher(`${CREATOR_ENDPOINT}?gender=${gender}&search=${encodeURIComponent(query)}`, { signal }));
       return read(() => readChoiceSearch(value));

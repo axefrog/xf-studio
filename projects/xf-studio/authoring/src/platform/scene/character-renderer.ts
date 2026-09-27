@@ -192,8 +192,11 @@ export function createCharacterRenderer(input: {
   /** Whether a feature renderer replaces this component now (a `supersede` entry for its slot, for all its options or this one's). */
   const supersededNow = (item: LoadedCharacterComponent) => input.superseded().some(part => part.slot === item.component.slot &&
     (!part.options || part.options.includes(item.component.option)));
-  /** Whether a component shows: its slot's viewer preference, unless an active feature renderer replaces it (PREV-89). */
-  const componentShown = (item: LoadedCharacterComponent) => detailVisible[item.component.slot] && !supersededNow(item);
+  /** Head options whose parts the viewer hid (the V's own makeup, character-context-actions.ts `hiddenOptions`). */
+  let hiddenOptions: ReadonlySet<string> = new Set();
+  const optionHidden = (item: LoadedCharacterComponent) => item.component.slot !== "body" && item.component.slot !== "clothing" && hiddenOptions.has(item.component.option);
+  /** Whether a component shows: its slot's viewer preference and its option's, unless an active feature renderer replaces it (PREV-89). */
+  const componentShown = (item: LoadedCharacterComponent) => detailVisible[item.component.slot] && !optionHidden(item) && !supersededNow(item);
   function refreshDetailVisibility() {
     for (const item of drawnDetails()) item.root.visible = componentShown(item);
     // A layered part of a slot that was hidden is baked when the slot is first shown (PREV-63); its outcome reaches the panel (PREV-74).
@@ -216,6 +219,16 @@ export function createCharacterRenderer(input: {
   }
   /** Show or hide a slot's resolved part (a visibility preference: the V's own part, or a tried one, arrives with the record and follows it). */
   function setSlotVisible(slot: DetailSlot, visible: boolean) { detailVisible[slot] = visible; refreshDetailVisibility(); }
+  /**
+   * Hide the parts these head options bring (and show every other again): a visibility preference over the prepared V, applied at once;
+   * a V that arrives later follows it.
+   */
+  function setHiddenOptions(options: readonly string[]) {
+    const next = new Set(options);
+    if (next.size === hiddenOptions.size && [...next].every(name => hiddenOptions.has(name))) return;
+    hiddenOptions = next;
+    refreshDetailVisibility();
+  }
   /**
    * Swap in a character's resolved details, replacing the previous ones completely (null removes them). Components the new details
    * took over unchanged from the previous ones (a tried piercing style keeps the rest of the V; PREV-68) stay as they are: their
@@ -344,6 +357,7 @@ export function createCharacterRenderer(input: {
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
     setSlotVisible,
+    setHiddenOptions,
     refreshVisibility: refreshDetailVisibility,
     setEyeOptics,
     eyeAppearance,

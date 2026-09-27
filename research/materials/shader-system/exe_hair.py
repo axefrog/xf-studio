@@ -7,6 +7,7 @@ the CPU bake of `.hp` profiles. Never modifies the game; prints to stdout only.
   python exe_hair.py options   # every hair GameOption: default, range, storage address
   python exe_hair.py fill      # the function copying options into cb0; register of each option
   python exe_hair.py dis RVA [END]   # disassemble (hex RVAs), e.g. the bake at 0xaeb374 0xaeb690
+  python exe_hair.py dangle    # the dangle (Dyng) solver's methods and the Dangle/* engine settings
 
 Needs the Capstone Python package (pure disassembler, BSD-3-Clause): either importable, or
 unpacked under <XF_TOOLS_DIR>/capstone/<version>/site (XF_TOOLS_DIR defaults to a `tools`
@@ -168,6 +169,103 @@ def fill(opts: list[dict]) -> None:
         print(f"  cb0[{12 + reg}].{'xyzw'[comp // 4]}  {o['group']}/{o['name']} (default {o['default']:g})")
 
 
+def _cstr_rva(text: str) -> int | None:
+    """RVA of a NUL-terminated string that starts at a word boundary."""
+    needle = text.encode() + b"\0"
+    i = DATA.find(needle)
+    while i > 0 and (DATA[i - 1:i].isalnum() or DATA[i - 1:i] == b"_"):
+        i = DATA.find(needle, i + 1)
+    for _, va, _, raw, rsize in SECTIONS:
+        if i >= 0 and raw <= i < raw + rsize:
+            return va + i - raw
+    return None
+
+
+def class_vtable(name: str) -> dict:
+    """RTTI class name -> registration function, instance size, and the instance vtable.
+
+    The registrar loads the type object into rdi and passes the size in r8d; the class's
+    GetType method is a `mov rax, [rip+X]; ret` on the stored type pointer, and the vtable
+    that holds it (two slots, GetNativeType and GetType) starts at the lower slot.
+    """
+    out: dict = {"name": name}
+    s = _cstr_rva(name)
+    if s is None:
+        return out
+    for pos, _ in rip_refs({s}):
+        for ins in disasm(*function_of(pos)):
+            t = rip_target(ins)
+            if ins.mnemonic == "lea" and ins.op_str.startswith("rdi") and t:
+                out["type"] = t
+            elif ins.mnemonic == "mov" and ins.op_str.startswith("r8d, 0x"):
+                out["size"] = int(ins.op_str.split(",")[1], 16)
+            elif ins.mnemonic == "mov" and ins.op_str.startswith("qword ptr [rip") and ins.op_str.endswith("rdi"):
+                out["store"] = t
+    slots = []
+    for t in (out.get("type"), out.get("store")):
+        if not t:
+            continue
+        for pos, _ in rip_refs({t}):
+            o = off(pos)
+            if DATA[o + 4:o + 5] == b"\xc3":  # getter: the disp32 is followed by ret
+                ptr = struct.pack("<Q", BASE + pos - 3)
+                for n, va, _, raw, rsize in SECTIONS:
+                    if n == ".text":
+                        continue
+                    i = DATA.find(ptr, raw, raw + rsize)
+                    while i >= 0:
+                        slots.append(va + i - raw)
+                        i = DATA.find(ptr, i + 1, raw + rsize)
+    if slots:
+        out["vtable"] = min(slots)
+    return out
+
+
+def vslot(vtable: int, index: int) -> int:
+    return struct.unpack_from("<Q", DATA, off(vtable + 8 * index))[0] - BASE
+
+
+# The 2.31 dangle solver: vtable slots (index = byte offset / 8) that the Dyng classes override.
+DANGLE_SLOTS = {
+    "animDangleConstraint_SimulationDyng": {32: "Update (frame dt into the step accumulator)",
+                                            33: "Initialise (particle order, look-at links)",
+                                            36: "Evaluate (substep loop and output)"},
+    "animDyngConstraintLink": {27: "Setup", 29: "Rest length (reference pose)", 30: "Look-at links", 32: "Project"},
+    "animDyngConstraintCone": {27: "Setup (cos, half-angle quaternion)", 32: "Project", 33: "Capsule collision"},
+    "animDyngConstraintEllipsoid": {32: "Project"},
+    "animDyngConstraintMulti": {32: "Project each inner constraint", 33: "Collide each inner constraint"},
+}
+
+
+def dangle() -> None:
+    """Locate the Dyng solver's methods and print the Dangle/* engine settings."""
+    for name, slots in DANGLE_SLOTS.items():
+        c = class_vtable(name)
+        size = f"{c['size']:#x}" if "size" in c else "?"
+        if "vtable" not in c:
+            print(f"{name}: vtable not found")
+            continue
+        print(f"{name}: size {size}, vtable {c['vtable']:#x}")
+        for i, role in slots.items():
+            print(f"  slot {i} (+{8 * i:#x}) {vslot(c['vtable'], i):#x}  {role}")
+    group = _cstr_rva("Dangle")
+    print("Dangle/* settings (group 'Dangle'): default")
+    for pos, _ in rip_refs({group}):
+        default, key = None, None
+        for ins in disasm(*function_of(pos)):
+            t = rip_target(ins)
+            if ins.mnemonic == "movss" and t is not None and ins.op_str.startswith("xmm0"):
+                default = f32(t)
+            elif ins.mnemonic == "lea" and t is not None and ins.op_str.startswith("r8"):
+                key = cstr(t)
+            elif ins.mnemonic == "lea" and t is not None and ins.op_str.startswith("rcx"):
+                var = t
+            elif ins.mnemonic == "call":
+                break
+        if key:
+            print(f"  {key}: {default:g}  (value RVA {var + 0x30:#x})")
+
+
 def main() -> None:
     cmd = sys.argv[1] if len(sys.argv) > 1 else "options"
     if cmd == "options":
@@ -175,6 +273,8 @@ def main() -> None:
             print(f"{o['group']}/{o['name']}: default {o['default']:g}, range [{o['min']:g}, {o['max']:g}], value RVA {o['value']:#x}")
     elif cmd == "fill":
         fill(options())
+    elif cmd == "dangle":
+        dangle()
     elif cmd == "dis":
         start = int(sys.argv[2], 16)
         end = int(sys.argv[3], 16) if len(sys.argv) > 3 else start + 0x100

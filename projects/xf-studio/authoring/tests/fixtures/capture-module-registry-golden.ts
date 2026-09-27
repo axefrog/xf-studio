@@ -10,7 +10,8 @@ export function moduleRegistrySnapshot() {
   const r = STUDIO_MODULE_REGISTRATION;
   return {
     modules: r.modules.map(({ id, group, stage, feature, shownByDefault }) => ({ id, group, stage, feature: feature ?? null, shownByDefault })),
-    tools: r.tools.map(({ id, module, order, scenes, placement, kind, state }) => ({ id, module, order, scenes, placement, kind, state })),
+    tools: r.tools.map(({ id, module, order, scenes, placement, kind, state, dispatches, editing }) =>
+      ({ id, module, order, scenes, placement, kind, state, dispatches, editing: editing ?? false })),
     summaries: r.summaries, scenes: r.scenes,
   };
 }

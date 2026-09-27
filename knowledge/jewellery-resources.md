@@ -70,7 +70,7 @@ The generic resolver renders the shown V's piercings, vanilla or from any instal
 3. How do helmets and masks hide creator piercings, and would ours hide the same way?
 4. What does the game do with a saved piercing choice whose mod was removed?
 5. Can patterned finishes (rainbow, mixed, wood) share the vanilla `.mlmask` on new geometry, or does each look need its own setup and mask?
-6. Does a dangle animation graph inside a creator `.app` give earrings physics in both the creator and gameplay?
+6. Does a dangle animation graph inside a creator `.app` give earrings physics in both the creator and gameplay? **Partly answered [resource]:** the cached vanilla creator piercing `.app` files carry no dangle component; worn physics earrings add one controlled by V's skeleton but skin their mesh to `root`, which leaves how their joints reach the mesh open ([dangle physics §2.1](hair-physics.md#21-components-and-bindings), in-game check H5).
 
 ## In-game test asks
 
