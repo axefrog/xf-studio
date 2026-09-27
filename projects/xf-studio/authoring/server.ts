@@ -34,6 +34,8 @@ import { preparedBudgetFrom } from "./src/prepared-files";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
+import { IdleHost, idlePrepared } from "./src/idle-host";
+import { createIdleHandler, IDLES_ENDPOINT } from "./src/idle-server";
 import { createPosePreferencesHandler, PosePreferencesStore } from "./src/features/poses/host/preferences-store";
 import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "./src/pose-endpoint";
 import { PoseCatalogueHost } from "./src/pose-catalogue-host";
@@ -141,6 +143,16 @@ const poseSettings = () => {
 const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")), log: diagnostics.log.logger("poses") });
 const poseRequest = createPoseHandler(poses);
+// The game's preview idles (V's body idle), read from the same launch route by XF Studio's own reader, as the desktop does.
+// `XFS_IDLE_SOURCE=prepared` plays the developer preparation's files instead (the Python oracle); `XFS_PREPARED_MOTION=off` hides that
+// preparation's motion files (idle faces, blink) so this server shows what the desktop app shows.
+const preparedMotion = process.env.XFS_PREPARED_MOTION !== "off";
+const idleResolverCache = resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache"));
+const idles = new IdleHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+  resolverCache: idleResolverCache, source: process.env.XFS_IDLE_SOURCE === "prepared" ? "prepared" : "game",
+  preparedAssets: () => preparedMotion ? (assetOverlay && existsSync(resolve(assetOverlay, "cc-idle-catalogue.json")) ? assetOverlay : resolve(import.meta.dir, "public", "assets")) : null,
+  log: diagnostics.log.logger("preview") });
+const idleRequest = createIdleHandler(idles);
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
 const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
@@ -166,6 +178,7 @@ const facial = new FacialHost({ cacheRoot: previewCacheRoot,
 const facialRequest = createFacialHandler(facial);
 // "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
 characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
+characterDetails.attachPrepared(idlePrepared(idles, idleResolverCache));
 // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
 const commit = (() => {
   try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });
@@ -187,6 +200,8 @@ const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 /** Retired piercing intake payloads (vanilla and PRC manifests and their files), never served. */
 const RETIRED_ASSET_DIRS = /^(?:prc|piercings)(?:[\\/]|$)/i;
+/** The developer preparation's motion files (the Python tools' idles, their faces and the blink). */
+const PREPARED_MOTION_ASSETS = /^(?:cc-idle-[^\\/]*|game-blink\.glb)$/i;
 // The Save Explorer's read-only endpoints: the player's saves (the folder chosen in Settings › Saves, else the detected one) and the
 // installed scripts' names. XFS_SAVES_DIR points an isolated server at a folder of copies instead; nothing here writes. A verification
 // workspace reads its own settings' folder (UI-98), so a folder chosen while testing stays there.
@@ -228,6 +243,7 @@ const server = Bun.serve({
     if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
+    if (url.pathname === IDLES_ENDPOINT) return idleRequest(request);
     if (url.pathname === POSE_PREFERENCES_ENDPOINT) return posePreferencesRequest(request);
     if (url.pathname === VERIFICATION_POSE_PREFERENCES_ENDPOINT) return verificationPosePreferencesRequest(request);
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
@@ -268,6 +284,8 @@ const server = Bun.serve({
     // The retired piercing intakes' payloads may still sit in an old checkout's ignored public/assets; piercings come only from the
     // resolver now, so nothing serves them (UI-50).
     if (assetName !== null && RETIRED_ASSET_DIRS.test(assetName)) return new Response("Not found", { status: 404 });
+    // With the developer preparation's motion hidden, its idle and blink files aren't served, as the desktop serves none.
+    if (!preparedMotion && assetName !== null && PREPARED_MOTION_ASSETS.test(assetName)) return new Response("Not found", { status: 404 });
     if (!research && assetName !== null && coreFiles.has(assetName.replaceAll(sep, "/"))) {
       // The core preview has one source: the derivation from the player's own game files.
       const derived = previewCore.assetPath(assetName.replaceAll(sep, "/"));

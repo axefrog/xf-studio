@@ -39,8 +39,9 @@ describe("animation requests through the native decoders", () => {
     expect(index.ok && index.index!.clips.map(c => c.name)).toEqual(["held", "idle_stand_01", "keyless", "simd"]);
     const clip = decodeAnimFromPool(pool, fakeDecompress, { archivePath, hash: depotHash(SET), op: "clip", clip: "idle_stand_01" });
     expect(clip.ok && clip.clip!.counts.compressed).toBe(2);
-    const refused = decodeAnimFromPool(pool, fakeDecompress, { archivePath, hash: depotHash(SET), op: "clip", clip: "simd" });
-    expect(refused.ok ? "ok" : refused.kind).toBe("unsupported");
+    // A SIMD clip decodes too (the preview idles' format): every frame of its moving joint.
+    const simd = decodeAnimFromPool(pool, fakeDecompress, { archivePath, hash: depotHash(SET), op: "clip", clip: "simd" });
+    expect(simd.ok && simd.clip!.buffer).toBe("simd");
     const missing = decodeAnimFromPool(pool, fakeDecompress, { archivePath, hash: depotHash("none.anims"), op: "index" });
     expect(missing.ok ? "ok" : missing.kind).toBe("not-indexed");
     const inProcess = new InProcessDecoder(pool, fakeDecompress, { roots: new Set(), identity: "test" }, depotHash);

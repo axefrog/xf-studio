@@ -23,7 +23,7 @@ import type { MountedArchive } from "./archive-precedence";
 import { currentGameLanguage, installedTweakOverlay, loadTextTable } from "./cc-catalogue-host";
 import { writeFileAtomic } from "./derived-cache";
 import { depotHash, refFromHash } from "./depot-path";
-import { ANIM_DECODER_VERSION, type AnimClip, type AnimRig, type AnimSetIndex, sampleClip } from "./native/anim-set";
+import { ANIM_DECODER_VERSION, type AnimClip, type AnimRig, type AnimSetIndex, clipSampler, sampleClip } from "./native/anim-set";
 import type { NativeAnimOutcome, NativeAnimRequest } from "./native/anim-decode";
 import { buildPoseCatalogue, POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseBodyGender, type PoseCatalogueLoad, type PoseCatalogueState, type PoseMotion, type PoseSample, type PoseSet,
   type PoseTimings } from "./pose-catalogue";
@@ -212,7 +212,7 @@ export async function loadPoseCatalogue(installation: Installation, options: { g
       seen.add(set.hash);
       const { index, archive } = indexes.get(set.hash) ?? { index: null, archive: null };
       sets.push({ path: set.path, hash: set.hash, archive: archive?.name ?? null, provider: archive?.providerName ?? null, from: set.from, priority: set.priority,
-        clips: index ? new Map(index.clips.map(clip => [clip.name, { frames: clip.frames, duration: clip.duration, decodable: clip.buffer === "compressed",
+        clips: index ? new Map(index.clips.map(clip => [clip.name, { frames: clip.frames, duration: clip.duration, decodable: clip.buffer === "compressed" || clip.buffer === "simd",
           animatedKeys: clip.animatedKeys }] as const)) : null });
     }
     setTimings = { puppetMs: puppetMs0, setsMs: lap(), setsRead: read, setsCached: cached };
@@ -356,8 +356,9 @@ export function clipMotion(clip: AnimClip, rig: AnimRig): PoseMotion | null {
   if (!addressed.size) return null;
   const channels = [...addressed.values()].sort((a, b) => a.joint - b.joint || a.channel.localeCompare(b.channel))
     .map(({ joint, channel }) => ({ joint, channel, values: [] as number[] }));
+  const sample = clipSampler(clip);
   for (let frame = 0; frame < frames; frame++) {
-    const sampled = sampleClip(clip, frame / rate);
+    const sampled = sample(frame / rate);
     for (const channel of channels) {
       const joint = sampled.joints.get(channel.joint), reference = rig.reference[channel.joint]!;
       const value = channel.channel === "rotation" ? joint?.rotation ?? reference.rotation : channel.channel === "position" ? joint?.translation ?? reference.translation

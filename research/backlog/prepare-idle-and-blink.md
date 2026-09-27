@@ -1,6 +1,6 @@
 # One-click "prepare idle and blink" in the desktop app
 
-**Status: open, not started.** Raised by the game-blink code-health review (UI-62, 26 September 2026). Falls under the "It just works" policy in [AGENTS.md](../../AGENTS.md): the app does what it can for the user, asks consent before downloading, and otherwise gives one friendly next step.
+**Status: the body half is done without Python; the face half is open.** Since 28 September both hosts read the idles' body motion natively from the player's game files (`idle-host.ts`, [body animation §2](../../knowledge/body-animation.md#how-the-studio-reads-them)), so the desktop app plays the body idle and poses with nothing to prepare. What still needs this flow is the face: the idle's face clip, the blink and the live Expressions face, which need the facial solver. The better route there is a native solver (DESK-10), which would make this one-click preparation unnecessary. Raised by the game-blink code-health review (UI-62, 26 September 2026). Falls under the "It just works" policy in [AGENTS.md](../../AGENTS.md): the app does what it can for the user, asks consent before downloading, and otherwise gives one friendly next step.
 
 ## Why
 

@@ -16,7 +16,7 @@ The goal is to drop XF Studio's dependency on WolvenKit entirely, both for readi
 | The core preview's head and eyes (exported with WolvenKit's materials file from the whole content folder) | phase 4 integration |
 | `.mlmask` layer images | phase 3 follow-up |
 | `C2dArray` factory `.csv` files (clothing, first use) | a phase 2 root class (PIPE-105) |
-| Animation clips (`anim-export` for the idle; pose clips) | a clip decoder (the pose library P0) |
+| Animation clips (`anim-export` for the idle; pose clips) | **done**: compressed clips (the pose library P0) and SIMD clips (the idle's body, 28 September); `anim-export` remains the oracle for the face clips' bakes |
 | Build: writing CR2W resources and packing the `.archive` | a phase 6 writer (to be planned; byte-level verification against WolvenKit-packed output) |
 
 Until the list is empty, WolvenKit stays optional where it can be (the resolver and catalogue already run without it) and the app asks for it only when a remaining step needs it.

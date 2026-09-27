@@ -1,7 +1,7 @@
 import type { ViewId } from "./platform/api/view-graph";
 import type { PreviewState } from "./workspace-state";
 import { refusal, type Capability } from "./platform/api";
-import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
+import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
 import { pageFailure } from "./diagnostics/page-sink";
 import { DEFAULT_IDLE, type IdleEntry } from "./idle-catalogue";
 import type { PoseSample } from "./pose-sample";
@@ -12,21 +12,28 @@ export type MotionPose = { readonly id: string; readonly label: string; readonly
 
 /**
  * Why the idle is off, in plain words (UI-88). The rig's own error (an exception's text) goes to the diagnostics log once, where a
- * problem report can show it; a person never sees it.
+ * problem report can show it; a person never sees it. It doesn't blame the person's game files (DESK-03): the idle is read by XF Studio.
  */
-export const IDLE_UNAVAILABLE = "The character creator's idle couldn't be prepared from your game files, so your V holds still. Everything else works.";
+export const IDLE_UNAVAILABLE = "XF Studio couldn't read the character creator's idle, so your V holds still. Everything else works.";
 /** Why hair physics can't be turned on, in plain words (hair-physics-plan.md §3.6). */
 export const PHYSICS_NO_DANGLES = "This hairstyle has no physics in the game.";
 export const PHYSICS_UNSUPPORTED = "This hairstyle's physics can't run here yet.";
-export const PHYSICS_NO_RIG = "Needs the idle, which couldn't be prepared.";
+/**
+ * Hair physics runs on the idle's rig, so without the idle it can't run. Said without claiming a failure: for a masculine V the idle isn't
+ * part of this version (`PHYSICS_MASCULINE`), and otherwise the idle simply isn't there to use.
+ */
+export const PHYSICS_NO_RIG = "Needs the idle, which isn't available.";
+export const PHYSICS_MASCULINE = "Needs the idle, which isn't part of this version for a masculine V yet.";
 export const PHYSICS_WAITING = "Available once your V's hair has loaded.";
-export { IDLE_MASCULINE };
+export { IDLE_FACE_MISSING, IDLE_MASCULINE };
 
 /** One of the game's preview idles as the Motion controls offer it. */
 export type IdleChoice = Pick<IdleEntry, "id" | "label" | "screen" | "puppet" | "clip">;
 export type MotionState = Pick<PreviewState,
   "idle" | "idleTime" | "idlePaused" | "idleBody" | "idleFace" | "blink" | "blinkPlaying"> &
   { available: boolean; error?: string; blinkAvailable: boolean; blinkError?: string;
+    /** Whether the idle moves V's face too (a face clip was prepared on this computer), and the plain reason when only her body moves. */
+    faceAvailable: boolean; faceError?: string;
     /**
      * Which of the game's preview idles plays while the idle is on (idle-catalogue.ts), the idles prepared on this computer, and whether the
      * chosen one is still loading (the previous one keeps playing meanwhile).
@@ -58,6 +65,8 @@ type MotionActionBody =
   | { kind: "motion.setPhysics"; enabled: boolean };
 export type MotionPort = {
   available: boolean; error?: string;
+  /** Whether the idle moves the face, and the plain reason when it doesn't (absent: it does whenever the idle is available). */
+  face?: { available: boolean; error?: string };
   /** The game's blink (game-blink.ts): whether it was prepared on this computer, the plain reason when not, and its repeat. */
   blink: { available: boolean; error?: string; repeatSeconds?: number };
   idle?: { enabled: boolean; time: number; paused: boolean; bodyEnabled: boolean; faceEnabled: boolean; seek(time: number): void };
@@ -72,7 +81,7 @@ export type MotionPort = {
   dangles?(): { parts: number; simulated: boolean; loaded?: boolean };
 };
 /** Why a pose can't be held, in plain words. */
-export const POSE_UNAVAILABLE = "Poses play on V once her motion is prepared from your game files.";
+export const POSE_UNAVAILABLE = "Poses play on V's idle, which XF Studio couldn't read, so she holds still.";
 /** Where the motion service reads and edits the scene's motion settings (the view graph's scene node, through the preview service). */
 export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view?: ViewId): void };
 
@@ -120,7 +129,7 @@ export class MotionActions {
   private notify() { for (const listener of this.listeners) listener(); }
   snapshot(): Readonly<MotionState> {
     const idle = this.port.idle;
-    return { available: this.port.available, error: this.idleError(),
+    return { available: this.port.available, error: this.idleError(), ...this.faceStatus(),
       idle: idle?.enabled ?? false, idleTime: idle?.time ?? this.initial.idleTime,
       idlePaused: idle?.paused ?? this.initial.idlePaused,
       idleBody: idle?.bodyEnabled ?? this.initial.idleBody,
@@ -136,11 +145,19 @@ export class MotionActions {
   /** Whether hair physics can be turned on, and the plain reason when not. */
   private physicsStatus(): { physicsAvailable: boolean; physicsReason?: string; physicsParts: number } {
     const dangles = this.port.dangles?.();
-    if (!dangles || !this.port.available) return { physicsAvailable: false, physicsReason: PHYSICS_NO_RIG, physicsParts: 0 };
+    if (!this.port.available) return { physicsAvailable: false, physicsReason: this.port.error === IDLE_MASCULINE ? PHYSICS_MASCULINE : PHYSICS_NO_RIG, physicsParts: 0 };
+    // The idle is there but the drawn parts haven't reported their dangles yet: a wait, not a failure.
+    if (!dangles) return { physicsAvailable: false, physicsReason: PHYSICS_WAITING, physicsParts: 0 };
     if (dangles.loaded === false) return { physicsAvailable: false, physicsReason: PHYSICS_WAITING, physicsParts: 0 };
     if (!dangles.parts) return { physicsAvailable: false, physicsReason: PHYSICS_NO_DANGLES, physicsParts: 0 };
     if (!dangles.simulated) return { physicsAvailable: false, physicsReason: PHYSICS_UNSUPPORTED, physicsParts: dangles.parts };
     return { physicsAvailable: true, physicsParts: dangles.parts };
+  }
+  /** Whether the idle moves the face (only while the idle itself is available), and why not. */
+  private faceStatus(): { faceAvailable: boolean; faceError?: string } {
+    if (!this.port.available) return { faceAvailable: false };
+    const face = this.port.face;
+    return !face || face.available ? { faceAvailable: true } : { faceAvailable: false, faceError: face.error || IDLE_FACE_MISSING };
   }
   private blinkError() {
     return this.port.blink.available ? undefined : this.port.blink.error || GAME_BLINK_MISSING;
@@ -170,7 +187,8 @@ export class MotionActions {
     // Kept as the code the facade gave this refusal before codes were structured (see the code-health ledger).
     if (blinking && this.pose) return refusal("asset_unavailable", "Blink is off while V holds a pose: her face follows the pose's idle or your expression.");
     if (blinking && this.snapshot().idle)
-      return refusal("asset_unavailable", "Blink is off while the game idle plays: the idle blinks on its own.");
+      return refusal("asset_unavailable", this.faceStatus().faceAvailable ? "Blink is off while the game idle plays: the idle blinks on its own."
+        : "Blink is off while the game idle plays; choose Still to use it.");
     return { available: true };
   }
   /** Restore composition before clock and camera; pause never passes through the reset path. */

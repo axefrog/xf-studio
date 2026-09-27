@@ -10,6 +10,8 @@ An animation clip describes how bones move over time. The rig describes how thos
 
 We extracted the female UI animation set and its `ui_closeup_shot` clip. **Its body motion lasts about 12.33 seconds.** The set also contains full-body idles, transitions and shorter close-ups for eyes, nose, lips, chin and hair. The exact live character-creator animation graph and its selection/blending rules still need tracing, so the clip’s presence does not establish every detail of the game’s default presentation.
 
+XF Studio now reads this body clip, and the creator's and inventory's other preview idles, straight from your own game files with its own reader, in the desktop app too: nothing to prepare and no Python ([body animation](../knowledge/body-animation.md#how-the-studio-reads-them)). The face's motion still needs the offline solver described below, so without it V's body idles while her face holds still.
+
 The studio can play this decoded body clip on its existing head, makeup, brows and lashes. It transfers movement by named bones while preserving their original attachment positions, then combines it with facial movement. Each eyeball now follows its own game eye joint, allowing the gaze to change.
 
 ## Why facial animation is a separate job

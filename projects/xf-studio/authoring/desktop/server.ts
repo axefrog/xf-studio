@@ -38,6 +38,8 @@ import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server"
 import { createPosePreferencesHandler, PosePreferencesStore } from "../src/features/poses/host/preferences-store";
 import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/pose-endpoint";
 import { PoseCatalogueHost } from "../src/pose-catalogue-host";
+import { IdleHost, idlePrepared } from "../src/idle-host";
+import { createIdleHandler, IDLES_ENDPOINT } from "../src/idle-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
@@ -215,6 +217,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), log: logTo("poses") });
   const poseRequest = createPoseHandler(poses);
+  // The game's preview idles (V's body idle), read by XF Studio's own reader from the same route; no Python, no prepared files.
+  const idles = new IdleHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+    resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), log: logTo("preview") });
+  const idleRequest = createIdleHandler(idles);
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
   const gradingLut = new GradingLutHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     settings: () => {
@@ -237,6 +243,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const facialRequest = createFacialHandler(facial);
   // "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
   characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
+  characterDetails.attachPrepared(idlePrepared(idles, resolve(desktopPreviewCache(dataRoot), "resolver")));
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
   const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,
@@ -303,6 +310,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
+      if (url.pathname === IDLES_ENDPOINT) return idleRequest(routedRequest);
       if (url.pathname === POSE_PREFERENCES_ENDPOINT) return posePreferencesRequest(routedRequest);
       if (url.pathname === VERIFICATION_POSE_PREFERENCES_ENDPOINT) return verificationPosePreferencesRequest(routedRequest);
       if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(routedRequest);
