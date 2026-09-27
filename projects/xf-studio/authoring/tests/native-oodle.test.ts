@@ -83,7 +83,9 @@ function junctionGame(): { root: string; real: string; repoint: () => void } {
     writeFileSync(path, `MZ ${text}`);
     return path;
   };
-  const real = library("real", "checked");
+  // The long form of the checked library's path, as a handle's final path reads: the temporary folder may be named by its 8.3 short
+  // form (runner~1 on GitHub's Windows runner).
+  const real = realpathSync.native(library("real", "checked"));
   library("other", "swapped");
   const root = join(base, "game");
   mkdirSync(root);
@@ -95,8 +97,7 @@ onWindows("NATIVE-21: the library is hashed through the held handle and loaded b
   const first = junctionGame();
   const held = holdFile(import.meta.require("bun:ffi"), join(first.root, ...GAME_OODLE_LIBRARY));
   try {
-    // The final path is the long form; the temporary folder may be named by its 8.3 short form (runner~1 on CI).
-    expect(held.finalPath.toLowerCase()).toBe(realpathSync.native(first.real).toLowerCase());
+    expect(held.finalPath.toLowerCase()).toBe(first.real.toLowerCase());
     first.repoint();
     expect(readFileSync(join(first.root, ...GAME_OODLE_LIBRARY), "utf8")).toBe("MZ swapped");
     expect(new TextDecoder().decode(held.read(1024))).toBe("MZ checked");
