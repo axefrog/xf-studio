@@ -183,6 +183,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); color: var(--text); }
 .icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 .icon-btn[aria-pressed="true"] { color: var(--signal); }
+/* A mode toggle (iconButton `mode`: mirror, snap) shows its on state as a tinted square too, so the mode reads at a glance. */
+.icon-btn.mode[aria-pressed="true"] { background: var(--signal-bg); }
+.icon-btn.mode[aria-pressed="true"]:hover:not([aria-disabled="true"]) { background: color-mix(in oklab, var(--signal-bg), var(--signal) 14%); color: var(--signal); }
 .icon-btn.small { width: 22px; height: 22px; }
 .chip { display: inline-flex; align-items: center; gap: var(--sp-2); height: 20px; padding: 0 var(--sp-4); border: 1px solid var(--line); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm);
   font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
@@ -267,6 +270,34 @@ span.category { border-color: transparent; background: transparent; padding-left
 .slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
 .slider-with-value.set .control-label-text { color: var(--text); font-weight: 600; }
 .slider-with-value.set .control-label-text::after { content: ""; width: 5px; height: 5px; margin-left: var(--sp-2); background: var(--signal); }
+/* Readout field (components/readout-field.ts): the one readout, typed into in place. */
+.readout-field { display: inline-flex; align-items: center; justify-content: flex-end; flex: none; min-width: 5ch; height: 20px; }
+.readout-value { cursor: text; white-space: nowrap; border-bottom: 1px dotted transparent; padding: 0 1px; }
+.readout-value:hover { border-bottom-color: var(--line-strong); }
+.readout-field.disabled .readout-value { cursor: default; color: var(--text-muted); border-bottom-color: transparent; }
+.readout-input { width: 7ch; height: 20px; padding: 0 var(--sp-2); text-align: right; font: var(--fs-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
+/* Bipolar slider (components/bipolar-slider.ts): fill from the centre mark to the thumb, the directions at the ends. The track's
+   percentages follow the thumb's centre, which travels 6 px inside each end. */
+.bipolar-slider { gap: 0; }
+.bipolar-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 22px; min-width: 0; }
+.bipolar-line .control-label-text { min-width: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.bipolar-line .control-label-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bipolar-slider.set .control-label-text { color: var(--text); font-weight: 600; }
+.bipolar-slider.set .control-label-text::after { content: ""; flex: none; width: 5px; height: 5px; background: var(--signal); }
+.bipolar-slider.mixed .readout-value { color: var(--text-muted); }
+.bipolar-reset.idle { visibility: hidden; }
+.bipolar-track { --zero: .5; --lo: .5; --hi: .5; position: relative; display: block; }
+.bipolar-track::before { content: ""; position: absolute; top: 5px; width: 1px; height: 12px; left: calc(6px + (100% - 12px) * var(--zero)); margin-left: -.5px; background: var(--line-strong); pointer-events: none; }
+.bipolar-range { position: relative; display: block; }
+.bipolar-range::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--line) calc(6px + (100% - 12px) * var(--lo)), var(--signal) calc(6px + (100% - 12px) * var(--lo)),
+  var(--signal) calc(6px + (100% - 12px) * var(--hi)), var(--line) calc(6px + (100% - 12px) * var(--hi))); }
+.bipolar-range::-moz-range-track { background: linear-gradient(90deg, var(--line) calc(5px + (100% - 10px) * var(--lo)), var(--signal) calc(5px + (100% - 10px) * var(--lo)),
+  var(--signal) calc(5px + (100% - 10px) * var(--hi)), var(--line) calc(5px + (100% - 10px) * var(--hi))); }
+.bipolar-range::-moz-range-progress { background: transparent; }
+.bipolar-slider.mixed .bipolar-range::-webkit-slider-thumb { border-style: dashed; }
+.bipolar-slider.mixed .bipolar-range::-moz-range-thumb { border-style: dashed; }
+.bipolar-ends { display: flex; justify-content: space-between; gap: var(--sp-4); margin-top: -2px; font-size: var(--fs-2xs); line-height: 1.2; color: var(--text-faint); }
+.bipolar-slider .control-note { margin-top: var(--sp-2); }
 /* Pair control (components/pair-control.ts). */
 .pair-control { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 .pair-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }

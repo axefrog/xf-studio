@@ -19,6 +19,7 @@ export { planTabs, TabStrip, TAB_STAGES, type TabItem, type TabStripOptions, typ
 export { DRAG_MIN, HeaderFitter, PanelHeader, type PanelHeaderOptions } from "./panel-header";
 export { SliderWithValue, type SliderWithValueOptions } from "./slider-with-value";
 export { PairControl, type PairControlOptions, type PairEdit, type Side } from "./pair-control";
+export { BipolarSlider, type BipolarSliderOptions } from "./bipolar-slider";
 export { GroupSection, resetGroupSections, type GroupSectionOptions } from "./group-section";
 export { SearchField, type SearchFieldOptions } from "./search-field";
 export { Combobox, type ComboboxOptions, type ComboGroup, type ComboOption } from "./combobox";
