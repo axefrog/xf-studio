@@ -1,0 +1,146 @@
+{
+  "feature": "expressions",
+  "name": "Warm smile (natural)",
+  "part": {
+    "schema": "xfs/expression-part-1",
+    "body": {
+      "label": "Warm smile",
+      "controls": {
+        "eye_l_blink": 0.08,
+        "eye_l_brows_lower": 0.06,
+        "eye_l_oculi_squint_inner": 0.3,
+        "eye_l_oculi_squint_outer_lower": 0.9,
+        "eye_l_oculi_squint_outer_upper": 0.35,
+        "eye_r_blink": 0.08,
+        "eye_r_brows_lower": 0.06,
+        "eye_r_oculi_squint_inner": 0.26,
+        "eye_r_oculi_squint_outer_lower": 0.85,
+        "eye_r_oculi_squint_outer_upper": 0.3,
+        "jaw_mid_open": 0.07,
+        "lips_apart_dn": 0.2,
+        "lips_apart_up": 0.5,
+        "lips_l_corner_sharp_up": 0.36,
+        "lips_l_corner_up": 0.6,
+        "lips_l_corner_wide": 0.1,
+        "lips_l_nasolabialDeepener": 0.35,
+        "lips_l_upper_raise": 0.15,
+        "lips_r_corner_sharp_up": 0.3,
+        "lips_r_corner_up": 0.54,
+        "lips_r_corner_wide": 0.08,
+        "lips_r_nasolabialDeepener": 0.3,
+        "lips_r_upper_raise": 0.12
+      },
+      "links": {
+        "eye_oculi_squint_inner": false,
+        "eye_oculi_squint_outer_lower": false,
+        "eye_oculi_squint_outer_upper": false,
+        "lips_corner_sharp_up": false,
+        "lips_corner_up": false,
+        "lips_corner_wide": false,
+        "lips_nasolabialDeepener": false,
+        "lips_upper_raise": false
+      },
+      "origin": {
+        "kind": "rest"
+      }
+    }
+  },
+  "facs": {
+    "closestVanilla": "facial_happy",
+    "actionUnits": [
+      {
+        "au": "AU6",
+        "name": "Cheek raiser",
+        "intensity": "D",
+        "note": "Orbicularis oculi, orbital part: lower lids and cheeks rise, the outer brow and upper lid come down a little, so the eyes narrow.",
+        "controls": [
+          "eye_l_oculi_squint_outer_lower",
+          "eye_r_oculi_squint_outer_lower",
+          "eye_l_oculi_squint_outer_upper",
+          "eye_r_oculi_squint_outer_upper",
+          "eye_l_blink",
+          "eye_r_blink",
+          "eye_l_brows_lower",
+          "eye_r_brows_lower"
+        ]
+      },
+      {
+        "au": "AU7",
+        "name": "Lid tightener",
+        "intensity": "A",
+        "controls": [
+          "eye_l_oculi_squint_inner",
+          "eye_r_oculi_squint_inner"
+        ]
+      },
+      {
+        "au": "AU12",
+        "name": "Lip corner puller",
+        "intensity": "C",
+        "controls": [
+          "lips_l_corner_up",
+          "lips_r_corner_up"
+        ]
+      },
+      {
+        "au": "AU13",
+        "name": "Sharp lip puller",
+        "intensity": "B",
+        "controls": [
+          "lips_l_corner_sharp_up",
+          "lips_r_corner_sharp_up"
+        ]
+      },
+      {
+        "au": "AU14",
+        "name": "Dimpler",
+        "intensity": "A",
+        "controls": [
+          "lips_l_corner_wide",
+          "lips_r_corner_wide"
+        ]
+      },
+      {
+        "au": "AU11",
+        "name": "Nasolabial deepener",
+        "intensity": "B",
+        "controls": [
+          "lips_l_nasolabialDeepener",
+          "lips_r_nasolabialDeepener"
+        ]
+      },
+      {
+        "au": "AU10",
+        "name": "Upper lip raiser",
+        "intensity": "A",
+        "controls": [
+          "lips_l_upper_raise",
+          "lips_r_upper_raise"
+        ]
+      },
+      {
+        "au": "AU25",
+        "name": "Lips part",
+        "intensity": "B",
+        "controls": [
+          "lips_apart_up",
+          "lips_apart_dn"
+        ]
+      },
+      {
+        "au": "AU26",
+        "name": "Jaw drop",
+        "intensity": "A",
+        "controls": [
+          "jaw_mid_open"
+        ]
+      }
+    ],
+    "why": [
+      "It is a Duchenne smile (AU6 + AU12): the eyes take part. The cheeks lift and the lower lids rise and narrow the eyes, which is what separates a felt smile from a polite one.",
+      "The mouth is moderate (AU12 at C, not E), with the upper teeth just showing and the jaw barely open.",
+      "The left side is a little stronger than the right on every pair, as real smiles are."
+    ],
+    "source": "XF Studio experiment 026 (research/animation/natural-expressions.md): authored values, tuned in the live preview."
+  }
+}

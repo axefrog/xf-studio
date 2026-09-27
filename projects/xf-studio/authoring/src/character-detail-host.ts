@@ -178,9 +178,12 @@ export class CharacterDetailHost {
   /**
    * Prefetch batches still settling, each as a promise that never rejects. A stopped batch answers the prefetcher at once, so a
    * person's own change isn't held up by reads already in WolvenKit; the batch itself runs to its end in the background (it no longer
-   * forgets cache entries or writes manifests once stopped), and Clear waits for it before removing files (PREV-102).
+   * forgets cache entries or writes manifests once stopped), and Clear waits for it before removing files (PREV-102). The batch is given
+   * the stop, so it asks for nothing further down its resource chains, and the next batch starts only once it settled (PREV-120).
    */
   private readonly warming = new Set<Promise<void>>();
+  /** Resolves once every prefetch batch has settled (`warming`). */
+  private async warmingSettled(): Promise<void> { while (this.warming.size) await Promise.all([...this.warming]); }
   /** A person's requests being answered now (the installation check before a preparation starts): background work waits for them. */
   private asking = 0;
   /** When the page last asked for its V or read one of its files (`noteAsk`): background work waits until the page has been quiet a moment. */
@@ -193,6 +196,7 @@ export class CharacterDetailHost {
       readiness: () => this.readiness(),
       warm: (requests, signal) => this.warm(requests, signal),
       foregroundIdle: () => this.foregroundIdle(),
+      settled: () => this.warmingSettled(),
       preparedBytes: async () => (await preparedSize(this.preparedRoots)).bytes,
       afterBatch: () => this.keepWithinBudget(),
       needsSetup: () => this.needsSetup(),
@@ -444,8 +448,16 @@ export class CharacterDetailHost {
 
   // ---- Prepared game files (prepared-files.ts) ----
 
-  /** The prepared files' size on disk. */
-  preparedFiles(): Promise<PreparedSize> { return preparedSize(this.preparedRoots); }
+  /** Other hosts' prepared game files that "Prepared game files" counts and Clear removes (the facial host's cache, CORE-102). */
+  private readonly otherPrepared: { bytes(): Promise<number>; clear(): Promise<{ freed: number }> }[] = [];
+  /** Count another host's prepared game files with these, and clear them with these. */
+  attachPrepared(source: { bytes(): Promise<number>; clear(): Promise<{ freed: number }> }): void { this.otherPrepared.push(source); }
+  /** The prepared files' size on disk (other hosts' included in `bytes` and `others`). */
+  async preparedFiles(): Promise<PreparedSize & { others: number }> {
+    const [own, ...others] = await Promise.all([preparedSize(this.preparedRoots), ...this.otherPrepared.map(source => source.bytes().catch(() => 0))]);
+    const extra = others.reduce((sum, bytes) => sum + bytes, 0);
+    return { ...own, bytes: own.bytes + extra, others: extra };
+  }
   /** Keep exports and extracted JSON within their budget (at most once a minute; never what this session used). */
   keepWithinBudget(): Promise<void> {
     if (this.evicting || Date.now() - this.evictedAt < EVICT_INTERVAL_MS) return this.evicting ?? Promise.resolve();
@@ -470,9 +482,13 @@ export class CharacterDetailHost {
     await this.settled().catch(() => {});
     // A stopped prefetch batch lets go of the cache and finishes its reads before anything is removed (PREV-102).
     await this.prefetch.idle();
-    while (this.warming.size) await Promise.all([...this.warming]);
+    await this.warmingSettled();
     await this.evicting;
     const result = await clearPrepared(this.preparedRoots);
+    for (const source of this.otherPrepared) {
+      try { result.freed += (await source.clear()).freed; }
+      catch (error) { this.options.log?.(`Some prepared game files couldn't be cleared: ${(error as Error)?.message ?? error}`); }
+    }
     this.shared = null;
     this.states.clear();
     this.degraded.clear();

@@ -76,7 +76,9 @@ export interface NativeReader {
  */
 const dataHash = createHash("sha256").update(JSON.stringify(rttiSubset)).update(JSON.stringify(rttiDefaults)).update(JSON.stringify(rttiClassDefaults)).update(JSON.stringify(rttiClassHashes))
   .update(JSON.stringify([...NATIVE_ROOTS].sort())).update(JSON.stringify([...NATIVE_JSON_PAYLOADS].sort())).update(JSON.stringify(DEFAULT_LIMITS)).digest("hex").slice(0, 12);
-export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATIVE_READER_VERSION}:${dataHash}:${decompressor}`;
+/** The resource reader's version and data hash: part of every identity built on its documents (the mesh and texture readers'; NATIVE-61). */
+export const NATIVE_READER_DATA = `${NATIVE_READER_VERSION}:${dataHash}`;
+export const nativeReaderIdentity = (decompressor: string) => `xfs-native:${NATIVE_READER_DATA}:${decompressor}`;
 
 /** Opened, or why not; `permanent` when trying again can't help until the library file or the platform changes (NATIVE-26). */
 type Opened<T> = { reader: T } | { reader: null; reason: string; permanent: boolean };

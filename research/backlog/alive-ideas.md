@@ -23,6 +23,15 @@
 - **Skin that responds:** wetness in rain, flushed cheeks after sprinting, sweat or grime building up and washing off, scars that stay. These are material parameters driven live, building on the skin and decal shader study.
 - **Physics on everything that should move:** hair (planned), earrings, jewellery, coat tails and straps, all through the same solver.
 - **Photo-mode direction:** live posing from the Studio, look-at targets, expression and pose timelines. "Directing" V rather than choosing presets.
+- **New voiced lines with lip sync:** voice new lines for V or other characters and have the mouth follow them, as JALI's baked clips do for the game's own lines. Later this could feed consented real-time voice swap and the quest designer.
+
+  **Feasibility (27 September 2026, offline study; details in [lip sync](../../knowledge/lipsync.md) and the [lip-sync design](../animation/lipsync-design.md)):**
+  - *How the game does it.* Every voiced line has a baked 30 fps facial clip found through a per-language lip-sync map (scene, voice tag, line). The clip drives a separate lip-sync channel: a fade envelope, JALI's jaw and lip strengths, pose values added over the expression, and override weights that mute the expression's mouth. V has such clips in 456 scenes, despite the wiki's "V has no lipsync".
+  - *What modders do today.* They reuse vanilla clips (WolvenKit's generator, Audioware's guide, installed quest mods). Nobody generates new lip sync.
+  - *What we showed.* Rhubarb (MIT) phone timing plus our own JALI-style rules produced a clip in the game's channel whose solved lip gap, mouth width and jaw rotation match a vanilla V clip's ranges, with lips closed on every bilabial ([experiment 027](../../experiments/027-lipsync-poc/README.md)).
+  - *Plan.* Play vanilla lip-sync clips on V in the preview (S), then generate from audio and a transcript with a timeline (M), then export clip, lipmap, voice-over map and scene (L), then one in-game session (M), then quest integration.
+  - *Risks.* Game audio (`.wem`) needs the user's own Wwise; whether V's face shows lip sync outside mirror scenes and in photo mode is untested; rule-based speech may look mechanical beside JALI's; JALI patents need a check; voices need consent, and the game's actors are never cloned.
+  - *Questions for the maintainer:* in the [design](../animation/lipsync-design.md#6-questions-for-the-maintainer), each with a proposed default.
 
 ### The world
 

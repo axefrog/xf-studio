@@ -96,7 +96,7 @@ Across all 1,000 installed mod folders only the Mega Pack touches `PhotoModeFace
 | `modding-guides/animations/animations/archivexl-adding-photo-mode-poses/README.md` and its 2.2/2.3 update pages | manavortex; nutboy; nutboy and Zwei Valerie | Pose registration (images `archivexl_photomode_anim.png`, `archivexl_photomode_yaml_1..3.png`) |
 | `…/poses-animations-make-your-own/README.md` | mana vortex, updated by LadyLea; process and templates by xbaebsae / Angy | Blender → WolvenKit Import Tool (Anims) workflow (image `animations_blender_wolvenkit_import.png`) |
 | `modding-guides/npcs/fixing-eye-clipping-in-npvs-by-replacing-facial-rigs.md` | saltypigloaf | `face_rig` component fields (image `wiki_component.png`); vanilla V always uses rig 000 |
-| `modding-guides/quest/generating-vanilla-lipsync-animation-sets.md` | Akiway | V has no lipsync |
+| `modding-guides/quest/generating-vanilla-lipsync-animation-sets.md` | Akiway | V has no lipsync (true of the generator, which skips player actors; the game ships V lip-sync sets, see [lip sync](../../knowledge/lipsync.md)) |
 
 Screenshots inspected are editor illustrations, not runtime proof.
 

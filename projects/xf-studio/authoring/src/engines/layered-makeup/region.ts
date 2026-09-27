@@ -8,6 +8,8 @@
 import type { FlakeRegion } from "./flake-field";
 import type { LayerModelRegistry } from "./layer-models";
 import type { Layer, Recipe } from "./recipe";
+import type { SkinScale } from "./mottle";
+export type { SkinScale } from "./mottle";
 
 /**
  * The line a symmetric layer is mirrored across: `u = centre` (a mirror left to right in UV) or `v = centre`.
@@ -49,6 +51,8 @@ export interface LayeredMakeupRegion {
   /** The layer models this feature's layers may hold; every engine edit and read validates with it. */
   readonly models: LayerModelRegistry;
   readonly mirror: Mirror;
+  /** Millimetres on the skin per unit UV and the export texel size: mottle's grain is set in skin millimetres. */
+  readonly skin: SkinScale;
   readonly fineGlitter: FineGlitterScope;
   readonly textures: RegionTextures;
   readonly wording: RegionWording;
@@ -59,9 +63,9 @@ export interface LayeredMakeupRegion {
 }
 
 /** The plain-data part of a region a raster worker needs: it crosses a worker boundary with each request. */
-export type RasterRegion = Readonly<{ mirror: Mirror; fineGlitter: FineGlitterScope; wording: Pick<RegionWording, "area"> }>;
-export const rasterRegion = (region: Pick<LayeredMakeupRegion, "mirror" | "fineGlitter" | "wording">): RasterRegion =>
-  ({ mirror: region.mirror, fineGlitter: region.fineGlitter, wording: { area: region.wording.area } });
+export type RasterRegion = Readonly<{ mirror: Mirror; skin: SkinScale; fineGlitter: FineGlitterScope; wording: Pick<RegionWording, "area"> }>;
+export const rasterRegion = (region: Pick<LayeredMakeupRegion, "mirror" | "skin" | "fineGlitter" | "wording">): RasterRegion =>
+  ({ mirror: region.mirror, skin: region.skin, fineGlitter: region.fineGlitter, wording: { area: region.wording.area } });
 
 /** Where a symmetric layer's sample at (u, v) is mirrored to. */
 export function mirrored(mirror: Mirror): (u: number, v: number) => [number, number] {

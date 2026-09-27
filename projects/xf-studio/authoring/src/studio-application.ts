@@ -37,6 +37,7 @@ import type { FacialPreviewSnapshot } from "./platform/api/facial";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./engines/layered-makeup/finish-catalogue";
+import { mottleCatalogue } from "./engines/layered-makeup/mottle";
 import { layerExport, planPresetExport, type LayerExport } from "./engines/layered-makeup/finish-export";
 
 /**
@@ -497,6 +498,8 @@ export class StudioApplication {
     return excluded ? { exportable: false, reason: excluded.reason, blockedBy: "preset" } : alone;
   }
   glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
+  /** Mottle's presets (ID, label and every setting but the seed): the inspector's preset row and which one a layer matches. */
+  mottleCatalogue() { return mottleCatalogue(); }
   /** The registered Studio modules in catalogue order (the Modules menu's rows; visibility is the presentation's). */
   modules(): readonly StudioModule[] { return structuredClone(this.services.viewActions?.registration.modules ?? []); }
   /** The planned modules still to come (listed as Planned in the Modules menu; never shown). */

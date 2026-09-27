@@ -1,6 +1,6 @@
 # Reported missing brow-region idle motion
 
-23 September 2026. A user report describes movement above the eyes in the game's character creator that appears absent in the studio. This bounded offline audit does **not** reproduce or explain the visual discrepancy conclusively. Keep the investigation with the eyebrow fidelity work after makeup, as requested; no app, source asset or game installation changed here.
+Opened 23 September 2026 on a report of movement above V's eyes in the game's character creator that the Studio's idle lacks; a later report named a slight squint with the brows lowered and the lids narrowed at moments. **Current reading (27 September, [below](#27-september-the-loop-is-played-faithfully-the-eyes-section-is-what-moves-the-brows)):** the Studio plays the close-up loop faithfully and that loop barely moves the brows; the movement is most likely the creator's eyes-section showcase, which the Studio now offers as its own idle, with wrinkle shading and live gaze as further contributors [hypothesis until the in-game check in [facial animation](../../knowledge/facial-animation.md#in-game-test-asks), ask 5]. The sections below are the investigation in order.
 
 ## What is present
 
@@ -96,6 +96,23 @@ The 30 Hz right outer-raise range is slightly above the earlier 221-phase result
 The saved D05 material chain already identifies inherited face detail, **wrinkle stretch and squash normal maps**, and a bloodflow mask in [the source trace](../eye-artistry/saved-skin-resource-chain.md). The inspected installed 2.31 `skin` G-buffer variant samples the optional wrinkle normals through registers 20/21 and blends their reconstructed RG normals before tangent-basis conversion; see [shader-channel evidence](../eye-artistry/saved-skin-shader-and-winner.md). This establishes material capacity for wrinkle-driven surface detail in the inspected variant. **No offline binding yet connects facial output index 381–413 to either normal map, a spatial mask, or an influence parameter on this head**, and effective runtime material/clip selection remains unobserved. The current preview does not render these outputs.
 
 The two [user-supplied game frames](../backlog/preview-fidelity-references.json) visibly change the brow contour and brow-to-eye spacing, while the eyebrow pixels and lighting also change. The solver output could contribute to **shading appearance**, especially around the right outer brow, but it cannot by itself move a card or skin silhouette and therefore cannot fully explain that apparent geometric change. Since the frames have no recorded matched camera, phase, or active UI animation layer, their difference cannot be assigned to this 10.57-second event. The exact next discriminator is a matched fixed-camera game/studio phase pair with head motion disabled and clip/layer IDs captured from the live character-creator graph; compare brow-card landmarks and skin contour first, then hold geometry fixed while checking whether wrinkle normal/mask response changes the remaining pixel difference. This can join a later batched runtime session; no game launch was used here.
+
+## 27 September: the loop is played faithfully; the eyes section is what moves the brows
+
+A read-only audit of the whole chain (clip, setup, solve, bake, preview skeleton, face graph), with the pinned solver, answered each suspect with numbers. The graded summary is [facial animation §6](../../knowledge/facial-animation.md#6-the-idles-upper-face).
+
+- **Clip** [resource]: in `ui_closeup_shot` the envelopes stay at 1 and the muzzles at 0; brow raises reach 0.0012 (inner) and 0.086 (right outer); `brows_lower` is a constant 0.4064–0.4065; outer lower squint 0–0.30 / 0–0.35; nose sneer up to 0.11; gaze at most 0.13.
+- **Setup** [source]: a muzzle multiplies its poses by 1 − muzzle, so nothing is muted; the brow controls scale by `upperFace` (1).
+- **Solve** at 30 Hz [measured offline]: brows swing at most 0.55 mm (0.7°), upper lids 8.2 mm (blinks), lower lids 1.46 mm, the cheek (`eye_check`) joints 1.70 mm. Solving only the brow and eye controls gives the same brows (0.54 mm).
+- **Bake** [measured offline]: the shipped `cc-idle-face.glb` matches the solve to 6 × 10⁻⁶ mm; the axis conversion and the translation formula are correct for these joints (identity rest rotations). The re-factored bake reproduces the asset byte for byte (SHA-256 `5a52d9b9…`).
+- **Preview** [measured offline]: the prepared head (254 joints) has every moving upper-face joint with weights, and the brows mesh all 26 moving brow joints.
+- **Male setup** [measured offline]: brows swing 0.80 mm.
+- **Face graph** [resource]: no node writes brow or squint tracks; `EyesTracksLookAt` drives gaze; gaze-change blinks add a little brow lowering and squint; a `TrackSetter` writes `pla_eyes_squint_weight`, whose use is not established [hypothesis].
+- **Eyes section** [resource] [source] [measured offline]: `ui_closeup_shot_eyes` swings the brows about 5.8 mm (brow raises about 0.7, `brows_lower` 0.12–0.32, squint about 0.30 around 1.5–2.25 s), 11 times the loop; the eye camera serves the eyes, eyebrows, lash colour and eye makeup rows, and a row's hover requests its camera ([photo mode](../../knowledge/photo-mode.md)), so moving between rows can replay it.
+
+**Change.** The Studio adds **Creator close-up, eyes section** to the Motion panel's idles: the showcase once, then the loop ([CC idle](cc-idle.md#the-games-other-preview-idles)); the close-up stays the default. Frames at matched phases with the body muted (close-up against eyes section, 0.5–4 s, plus the loop at 7 and 11 s) are in the private `projects/xf-studio/authoring/evidence/screenshots/idle-brows/`: the close-up's brows stay put while the eyes section raises and lowers them and narrows the lids.
+
+**Still open.** Which of the three the reports saw (the showcase, wrinkle shading, gaze) needs the matched in-game capture (test ask 5); wrinkle shading remains unrendered.
 
 ## 26 September: the creator graph selects the eyes clip when the eyes section opens
 

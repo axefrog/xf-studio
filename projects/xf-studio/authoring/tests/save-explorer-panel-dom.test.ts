@@ -6,7 +6,7 @@ import { SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type 
 import { explorerPanel } from "../src/features/save-explorer/view/panel";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
-import { syntheticSave } from "./fixtures/synthetic-explorer-save";
+import { nestedSave, syntheticSave } from "./fixtures/synthetic-explorer-save";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
@@ -148,5 +148,25 @@ describe("Save Explorer panel", () => {
     resume();
     await settle();
     expect(root.querySelector("span.count")!.textContent).toBe("0 saves");
+  });
+
+  test("an inspected field's children are built when it is first opened (SAVE-03)", async () => {
+    const { panel, root, facade } = harness({ read: async () => nestedSave(200) });
+    panel.spec.visibility?.(true);
+    await settle();
+    root.querySelector("button.save-row")!.dispatchEvent(lightEvent("click"));
+    await settle(20);
+    const node = facade.tree().find(row => row.encoding === "package")!.id;
+    await facade.dispatch({ kind: "saves.selectNode", node });
+    await facade.dispatch({ kind: "saves.inspect", ref: { node, kind: "chunk", index: 0 } });
+    await settle();
+    const rows = root.querySelector("div.save-object")!.querySelector("details.save-field")!;
+    const list = rows.querySelector("ul")!;
+    expect(list.childElementCount).toBe(0);
+    rows.open = true;
+    rows.dispatchEvent(lightEvent("toggle"));
+    expect(list.childElementCount).toBe(200);
+    // Each row is closed and empty in turn until opened.
+    expect(list.querySelector("details.save-field")!.querySelector("ul")!.childElementCount).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 # Vector engine extensions: text, gradients, strokes, compound shapes and mottle
 
-**Status:** design for discussion, 27 September 2026; nothing built. The vector features are designed once, for eye makeup, [Nail Salon](../nails/nail-salon-design.md) and later decal features such as [tattoos](../character-customization/tattoos-brief.md). They extend the layered-makeup engine (`projects/xf-studio/authoring/src/engines/layered-makeup/`) without changing what any existing recipe looks like. Code paths below are relative to that folder unless stated.
+**Status:** design for discussion, 27 September 2026. **V4 (mottle) is built** ([§7](#7-mottle-skin-like-breakup-for-eye-makeup), [phase status](#v4-status)); V1–V3 are not. The vector features are designed once, for eye makeup, [Nail Salon](../nails/nail-salon-design.md) and later decal features such as [tattoos](../character-customization/tattoos-brief.md). They extend the layered-makeup engine (`projects/xf-studio/authoring/src/engines/layered-makeup/`) without changing what any existing recipe looks like. Code paths below are relative to that folder unless stated.
 
 It follows the [feature-module platform](feature-module-platform.md) (§2 migration on read, per-model versioning), the [architecture contract](architecture-contract.md) (domain owns validation, Undo and persistence; typed actions; grow the catalogue) and the engine's contracts: [projected tangents](projected-tangent-controls.md), [directional softness](directional-softness-contract.md), [shape gestures](shape-gesture-contract.md), [raster performance](raster-performance.md) and the [editor invariants](editor-invariants.md).
 
@@ -30,7 +30,7 @@ It follows the [feature-module platform](feature-module-platform.md) (§2 migrat
 | **Fills** | Solid (today's) or gradient: linear, radial, **edge** (by distance inside the shape) and along-path, with independent colour stops and opacity stops, interpolated in OKLab |
 | **Strokes** | On open or closed paths: per-point **before** and **after** segment settings (width, visibility, cap) in path direction, so tapers, width changes and gaps are defined at points; alignment centre, inside or outside; joins; feather; optional dashes |
 | **Mottle** | An optional per-layer effect that modulates coverage with a seeded, tileable, skin-scale noise (pores and clumps, optional streaks) inside the shared coverage evaluator. So it is baked into the exported texture and shown identically in the preview, at no in-game cost |
-| **Compatibility** | Every new field is optional; absent means today's exact arithmetic, byte for byte. A structural part bump (`xfs/eye-makeup-part-3`) is written only when a layer uses a new structure, and Mottle is a registered layer model (`mottle-1`) |
+| **Compatibility** | Every new field is optional; absent means today's exact arithmetic, byte for byte. A structural part bump (`xfs/eye-makeup-part-3`) is written only when a layer uses a new structure, and Mottle is a registered layer model (`mottle-1`, first held by recipe file `xfs/recipe-12`) |
 
 **Plan.** V1 (spaces, compound shapes, gradients) 6–7 days, V2 strokes 6–7, V3 text 7–9, V4 mottle 2–3: about **21–26 agent-days** (§9).
 
@@ -223,6 +223,8 @@ type PointStroke = {
 
 **The request.** Makeup seen close up, especially mascara and lash-line product, is not a uniform film. It sits unevenly on skin texture and in pores and clumps. The request is a cheap, optional mottle.
 
+**Built** in `mottle.ts` (the model, tile and evaluation) and `recipe.ts` (where the evaluator applies it); the sections below describe it as built, with the differences from the first design noted.
+
 ### 7.1 Where it applies
 
 **In the shared coverage evaluator**, as a per-layer effect. It is therefore:
@@ -232,11 +234,13 @@ type PointStroke = {
 
 ### 7.2 The noise
 
-- A **seeded, tileable noise tile** per (model version, seed), 512², generated once in the worker and cached (a few tens of milliseconds, 1 MB as floats or 256 KB as bytes). It has two components:
-  - **pores**: inverted cellular (Worley F1) noise, small pits where product collects or skips;
-  - **clumps**: 2–3 octaves of value noise, a patchy build-up.
-- **Skin-aligned scale.** Grain is set in **millimetres on the skin** and converted through the space's `mmPerUnit`, so pores are the same physical size wherever the layer sits. It is floored at 2 export texels (about 0.26 mm on the eye plate): anything finer would vanish in the texture and its mips.
-- **Streaks** (optional): anisotropic stretch at an angle, or **along the stroke normal** for stroke layers, which gives mascara-like strands off a lash-line stroke.
+- A **seeded, tileable noise tile** per seed, 512² with 8 texels per grain (a period of 64 grains), generated once per worker or process and cached with its box-filtered mip chain (four seeds; about 2.8 MB each as floats). It has two components, each normalised to zero mean and a largest magnitude of 1, and mixed by `clumping` (the mixture is cached too, eight at a time):
+  - **pores**: inverted cellular noise, one jittered pit per grain cell with its own depth, each pit **one grain across** (so the grain is the size of the smallest visible feature), where product skips;
+  - **clumps**: three octaves of periodic value noise (cells of 2, 1 and ½ grain), a patchy build-up.
+- **Deterministic by construction.** The tile uses integer hashing (lowbias32) and + − × ÷ √ only, so a seed gives the same tile in every JavaScript engine (the preview worker in the browser, the compiler in Bun).
+- **Skin-aligned scale.** Grain is set in **millimetres on the skin** and converted through the region's `skin` scale (`mmPerUv`; eye makeup's is the plate measure, 569 × 405 mm per UV unit), so pores are the same physical size wherever the layer sits. The noise is fixed to the skin, not the shape: moving or warping the shape moves it over the pattern, and a symmetric layer's two copies get different (unmirrored) patterns, as real skin would. It is floored at 2 export texels (`skin.texelMm` 0.13 mm, so 0.26 mm on the eye plate): anything finer would vanish in the texture and its mips.
+- **Footprint.** Each raster samples the tile at the mip level of its own texel spacing (trilinear), the way the game's mips average the exported texture. The export window (0.13 mm texels) and the 4K preview (0.14 × 0.10 mm) sample nearly the same level; a 1K preview shows the same pattern as its mips would, softer. Rasters with equal sample points (a window raster at preview density, the verifier's 4096 head reference) are identical.
+- **Streaks** (optional) average the noise along a line kernel of seven samples, which stretches pores into strands (the kernel's gain restores about one independent sample per grain of length): at a fixed **angle** on the skin, or **across the nearest contour edge** (the edge the evaluator already finds for each sample), which gives mascara-like strands off a lash-line shape. "Along the stroke normal" of the first design is this same rule; it applies to strokes when they exist (V2). A symmetric layer's mirrored copy mirrors its streak direction.
 
 ### 7.3 The arithmetic
 
@@ -246,38 +250,49 @@ w       = where == "edges" ? 4·c·(1 − c) : c       // edges: breakup only in
 c'      = saturate(c + amount · w · (n − 0.5) · 2)
 ```
 
-- It is **mean-preserving** away from clamping: at a distance, or down the mip chain, a mottled layer averages to the same coverage as an unmottled one. Turning mottle on changes texture, not overall strength.
+- It is **mean-preserving** away from clamping: at a distance, or down the mip chain, a mottled layer averages to the same coverage as an unmottled one. Turning mottle on changes texture, not overall strength. Measured: under 1 % on a half-opaque film in "everywhere" mode and under 2 % for Powder and Mascara smudge on a soft-edged shape. A fully opaque film in "everywhere" mode can only lose product (coverage cannot exceed 1), so there it thins a little: that is forced by the arithmetic, not a choice.
 - "Edges" (the default) keeps the centre of a shape solid and breaks up only its soft edge, the realistic look of powder and smudged liner. "Everywhere" gives an allover patchy film (cream products, mascara on the lash line).
-- **Optional colour variation**: `amount × (n − 0.5)` applied to lightness, off by default, for pigment build-up.
+- **Optional colour variation** (not built): `amount × (n − 0.5)` applied to lightness, off by default, for pigment build-up. It needs per-texel paint, which arrives with V1 (§8.3); `mottle-1` varies coverage only.
 - **Optional shine variation** (later): pits a little rougher, only where the route carries roughness per texel.
 
 ### 7.4 Controls
 
 | Control | Range | Default |
 |---|---|---|
-| Mottle (on or off) | — | Off |
-| Amount | 0–1 | 0.35 |
-| Grain | 0.25–3 mm (floored by texel size) | 0.6 mm |
-| Clumping | 0 (pores) – 1 (clumps) | 0.4 |
+| Mottle (on or off) | — | Off; on starts from Powder |
+| Amount | 0–1 | 0.55 (Powder) |
+| Grain | 0.25–3 mm (floored at two export texels, with a note under the slider when the floor applies) | 0.4 mm (Powder) |
+| Clumping | 0 (pores) – 1 (clumps) | 0.2 (Powder) |
 | Where | Edges / Everywhere | Edges |
-| Streaks | Off / Angle / Along stroke | Off |
-| Seed | integer, with "shuffle" | derived from the layer ID |
+| Streaks | Off / Angle (0–180° on the skin) / Across edge, with a length of 1–8 grains | Off (new streaks: 90°, 4 grains) |
+| Seed | integer, with **Shuffle pattern** (the next seed after the layer's, decided in the domain) | derived from the layer ID |
 
-Presets set these at once: **Powder** (edges, fine, pores), **Cream** (everywhere, low amount, clumps), **Mascara smudge** (along stroke, streaky, high amount), **Sponge** (for nails' ombré). On nails the same effect gives sponge-applied gradients.
+Presets set everything but the seed at once, and the inspector shows the matching preset as pressed:
+
+| Preset | Where | Amount | Grain | Clumping | Streaks |
+|---|---|---|---|---|---|
+| **Powder** | Edges | 0.55 | 0.4 mm | 0.2 | — |
+| **Cream** | Everywhere | 0.2 | 1.2 mm | 0.85 | — |
+| **Mascara smudge** | Edges | 0.75 | 0.3 mm | 0.3 | Across edge, 5 grains |
+| **Sponge** | Everywhere | 0.5 | 1.6 mm | 0.55 | — |
+
+They were tuned on a lash-liner layer at export density, not yet against close-up references or in game (§11). On nails the same effect gives sponge-applied gradients.
 
 ### 7.5 Cost
 
 | Where | Cost |
 |---|---|
 | Tile | Generated once per seed and version, cached in the worker |
-| Per covered texel | One bilinear tile read plus a few operations, about 5–10 ns in the worker; about 5–10 ms more for a million covered texels, well within the [raster performance](raster-performance.md) budget |
+| Per covered texel | One trilinear tile read (eight texels) plus a few operations; seven reads along a streak. The test bounds it at 150 ns (600 ns with streaks) per covered texel so a busy machine doesn't fail; unmottled layers are unchanged ([raster performance](raster-performance.md#mottle)) |
 | Texel skip | Mottle changes only texels with 0 < c. Fully outside texels stay culled; fully inside texels are evaluated only in "everywhere" mode |
 | Export | No extra textures; the alpha channel already exists |
 | Game | None |
 
 ### 7.6 Versioning
 
-Mottle is a **layer model**, `mottle-1`, in a new model slot `effects`, validated by the region's `LayerModelRegistry`, exactly as Glitter models are. If its arithmetic ever changes appearance, it gets a new model ID ("version the model whenever appearance changes"). A layer without `effects` is byte-identical to today's.
+Mottle is a **layer model**, `mottle-1`, in the model slot `mottle` (stored as `effects.mottle`), validated by the region's `LayerModelRegistry`, exactly as Glitter models are. An effect name or mottle model this build doesn't know is a newer build's (`NewerDataError`); an empty or malformed `effects` is refused. If its arithmetic, tile or constants ever change appearance, it gets a new model ID ("version the model whenever appearance changes"); `tests/mottle.test.ts` freezes two mottled rasters to catch that. A layer without `effects` is byte-identical to today's, and turning mottle off removes `effects`, so the layer is byte-identical to before it was turned on.
+
+Recipe files: `xfs/recipe-12` holds `mottle-1` (and everything recipe-11 does); a recipe is written as recipe-12 only while a layer is mottled. The in-memory part stays `xfs/eye-makeup-part-2`: a model, not a structural change.
 
 ## 8. Data model, migration and actions
 
@@ -303,8 +318,8 @@ export type Point = { /* u, v, weight, feather?, handles? */ stroke?: PointStrok
 |---|---|---|---|
 | `xfs/eye-makeup-part-2` and every older portable form | Unchanged readers; new fields absent | Layers with today's meaning | Unchanged |
 | A part whose layers use `geometry`, `fill`, `stroke`, `clip`, `space` or point strokes | `xfs/eye-makeup-part-3` reader (a structural bump, as the platform reserves bumps for structure) | Extended layers | `part-3` only when a layer needs it; otherwise the oldest schema that holds the content exactly (the platform's rule) |
-| Mottle | Model registry, `effects` slot | — | Any part version that allows model blocks: a model, not a structural change |
-| Portable recipe files | `xfs/recipe-12` for part-3 content; "Export recipe" writes the oldest recipe schema that holds it | — | — |
+| Mottle | Model registry, `mottle` slot (`effects.mottle`) | — | Part-2 as it is; recipe files `xfs/recipe-12` (built) |
+| Portable recipe files | `xfs/recipe-12` is taken by mottle; part-3 content gets the next recipe schema. "Export recipe" writes the oldest recipe schema that holds it | — | — |
 
 **Parity gates** (as in [platform §2](feature-module-platform.md#migration-on-read-with-no-appearance-change)):
 
@@ -328,7 +343,7 @@ New typed actions, each with a capability check, one Undo entry per gesture, and
 | Text | `text.setContent`, `text.setFont`, `text.setMetrics` (size, tracking, leading), `text.setAlign`, `text.setLayout`, `text.nudgeGlyph` |
 | Paint | `fill.set`, `gradient.setShape`, `gradient.addStop`/`moveStop`/`removeStop`/`setStop` (colour and opacity rows) |
 | Stroke | `stroke.set`, `point.setStroke` (before or after: width, visibility, cap), `stroke.split` |
-| Effects | `effect.mottle.set`, `effect.mottle.preset` |
+| Effects | `effect.mottle.enable` (on or off: a boolean has its own action because the key/value payload is a number or text), `effect.mottle.set`, `effect.mottle.shuffle` (the next seed, decided by the domain so replay is deterministic), `effect.mottle.preset`, and the facade's `mottleCatalogue()` for the presets (built; [action catalogue](ui-action-catalogue.md#exact-commands-layer-structure-and-recipe-editing)) |
 | Operations | `layer.setClip` |
 
 Refusals are plain: "This font isn't on this computer", "Text is limited to 256 characters", "A layer can hold up to 512 points".
@@ -342,9 +357,20 @@ Effort in agent-days, after the view graph's module work (the editor panels). Ea
 | V1 | Spaces, compound shapes, gradients | `SurfaceSpace` in regions (identity for eye makeup); compound geometry and fill rules; edge grid; shape library; clip and knockout; `Paint` with linear, radial and edge gradients, stops, OKLab, dithering; per-texel paint in compiler and preview; part-3 reader and writer | Byte-identical fixtures; scalar-vs-raster parity for compound shapes and gradients; `?verify=1` gradient editing | 6–7 |
 | V2 | Strokes | Open paths; stroke band evaluation, alignment, caps, joins, feather, dashes; per-point before and after; along-path gradients; split stroke | Geometric tests per cap and join; width-interpolation exactness at equal widths; `?verify=1` eyeliner wing | 6–7 |
 | V3 | Text | opentype.js in the worker; bundled OFL fonts with licence files and credits; local fonts through the host; `FontRef` by hash; point, box, path and slots layouts; on-skin proportions; convert and split; legibility hint; missing-font flows | Deterministic outlines per font hash; round trips; `?verify=1` typing, font switch, text on path, fallback | 7–9 |
-| V4 | Mottle | `effects` model slot; `mottle-1`; tile cache; controls and presets | Mean preservation within tolerance; determinism by seed; export equals preview mask | 2–3 |
+| V4 | Mottle | `effects` model slot; `mottle-1`; tile cache; controls and presets | Mean preservation within tolerance; determinism by seed; export equals preview mask | 2–3 (**built**) |
 
 **Total about 21–26 days.** V4 can go first on its own (it touches only the evaluator and the model registry). Nails need V1 and V3 at minimum; eye makeup gains from each phase as it lands.
+
+### V4 status
+
+Built on claude/mottle (27 September 2026):
+
+- **Engine.** `mottle.ts` (model, validation, presets, seeds, tile and `prepareMottle`); `layer-models.ts` slot `mottle`; `recipe.ts` applies it in `raster`, `rasterWindow`, `createRasterJob` (mirrored pixel pairing kept, streaks included) and the scalar `coverage` oracle; regions carry `skin` (to the worker too, in `RasterRegion`); the mask cache key gains the mottle settings only when present.
+- **Lineage.** `xfs/recipe-12` in `recipe-schema.ts`; older schemas refuse mottle; part-2 unchanged.
+- **Export.** Every compiler route (flat and faceted windows, the Fresnel head mask, the diagnostic Glitter route) and the verifier's head reference go through the same rasters with the region's skin scale; Check and Build treat mottle as a layer property (no new eligibility rule). The [pipeline guide](studio-to-mod-pipeline.md) says where it is applied.
+- **Editing.** Actions `effect.mottle.enable`, `effect.mottle.set`, `effect.mottle.shuffle`, `effect.mottle.preset` with Undo (sliders one step per drag), and the presets as data through the eye-makeup facade (`mottleCatalogue()`, so the view imports no engine values); a Mottle section in the Pigment & edge inspector composed of library controls (switch, segmented presets, placement and streaks, sliders, a Shuffle button).
+- **Tests.** `tests/mottle.test.ts` (validation, newer-data refusals, recipe-12 lineage, frozen unmottled and mottled hashes, tile determinism and zero mean, mean preservation, window equals preview, paired/sliced/scalar parity with streaks, grain floor, the time budget) `tests/mottle-actions.test.ts` (capabilities, Undo and labels, byte-identical off, duplicate and reset), and a mapping-gate case in `tests/plate-reach.test.ts` (strongly mottled looks stay well inside the verifier's limits against their head-UV reference).
+- **Open.** Presets are tuned offline and in the UV map only; the in-game session should compare Powder and Mascara smudge at close range (§11). Colour variation waits for V1's per-texel paint.
 
 ## 10. Export constraints per material route
 
@@ -383,7 +409,7 @@ Every feature flattens to rasters per material route, and the vector model is au
 | VQ3 | Text on the face: on-skin proportions by default? | Yes; raw UV as an option |
 | VQ4 | Rich text (per-character colour or font inside one text layer)? | Not in v1; "Split to letters" instead |
 | VQ5 | True vector booleans (union, subtract, intersect)? | Deferred; clip and knockout cover most uses without losing editability |
-| VQ6 | Mottle default when on: edges or everywhere? | Edges, with the Powder preset |
+| VQ6 | Mottle default when on: edges or everywhere? | Edges, with the Powder preset (built that way) |
 | VQ7 | Gradient interpolation default? | OKLab |
 | VQ8 | Stroke and fill with different finishes in one layer? | No: split into two layers with one action |
 

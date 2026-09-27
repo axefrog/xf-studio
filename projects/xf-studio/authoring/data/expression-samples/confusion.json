@@ -1,0 +1,114 @@
+{
+  "feature": "expressions",
+  "name": "Confusion (natural)",
+  "part": {
+    "schema": "xfs/expression-part-1",
+    "body": {
+      "label": "Confused",
+      "controls": {
+        "eye_l_brows_lateral": 0.5,
+        "eye_l_brows_lower": 0.55,
+        "eye_l_oculi_squint_inner": 0.4,
+        "eye_r_brows_lateral": 0.3,
+        "eye_r_brows_lower": 0.1,
+        "eye_r_brows_raise_in": 0.3,
+        "eye_r_brows_raise_out": 0.55,
+        "eye_r_oculi_squint_inner": 0.15,
+        "eye_r_widen": 0.1,
+        "lips_chin_raise": 0.25,
+        "lips_mid_shift_r": 0.3,
+        "lips_r_corner_dn": 0.1,
+        "lips_r_corner_wide": 0.3
+      },
+      "links": {
+        "eye_brows_lateral": false,
+        "eye_brows_lower": false,
+        "eye_brows_raise_in": false,
+        "eye_brows_raise_out": false,
+        "eye_oculi_squint_inner": false,
+        "eye_widen": false,
+        "lips_corner_dn": false,
+        "lips_corner_wide": false
+      },
+      "origin": {
+        "kind": "rest"
+      }
+    }
+  },
+  "facs": {
+    "closestVanilla": "facial_pissed",
+    "actionUnits": [
+      {
+        "au": "AU4",
+        "name": "Brow lowerer",
+        "intensity": "C (left) / A (right)",
+        "note": "Corrugator and depressor: the brows knit, one side much more.",
+        "controls": [
+          "eye_l_brows_lower",
+          "eye_r_brows_lower",
+          "eye_l_brows_lateral",
+          "eye_r_brows_lateral"
+        ]
+      },
+      {
+        "au": "AU1+2",
+        "name": "Inner and outer brow raiser (right only)",
+        "intensity": "C",
+        "note": "The other brow goes up: the questioning brow.",
+        "controls": [
+          "eye_r_brows_raise_out",
+          "eye_r_brows_raise_in"
+        ]
+      },
+      {
+        "au": "AU7",
+        "name": "Lid tightener",
+        "intensity": "B (left)",
+        "controls": [
+          "eye_l_oculi_squint_inner",
+          "eye_r_oculi_squint_inner"
+        ]
+      },
+      {
+        "au": "AU5",
+        "name": "Upper lid raiser (right)",
+        "intensity": "A",
+        "controls": [
+          "eye_r_widen"
+        ]
+      },
+      {
+        "au": "AU14",
+        "name": "Dimpler (unilateral)",
+        "intensity": "B",
+        "note": "The mouth pulls to one side.",
+        "controls": [
+          "lips_r_corner_wide",
+          "lips_mid_shift_r"
+        ]
+      },
+      {
+        "au": "AU15",
+        "name": "Lip corner depressor (right)",
+        "intensity": "A",
+        "controls": [
+          "lips_r_corner_dn"
+        ]
+      },
+      {
+        "au": "AU17",
+        "name": "Chin raiser",
+        "intensity": "B",
+        "controls": [
+          "lips_chin_raise"
+        ]
+      }
+    ],
+    "why": [
+      "Confusion is carried by the brows: AU4 knits and lowers them, and it is the most reported action unit for confusion in the literature.",
+      "One brow down and the other up makes the face a question rather than anger. Vanilla faces with knitted brows (furious, pissed) lower both brows hard.",
+      "The mouth stays closed and is pulled to one side (unilateral AU14) with a small chin raise (AU17): puzzled, not upset."
+    ],
+    "source": "XF Studio experiment 026 (research/animation/natural-expressions.md): authored values, tuned in the live preview."
+  }
+}

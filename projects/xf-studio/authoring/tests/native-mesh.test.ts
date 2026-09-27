@@ -18,7 +18,7 @@ import { NativeArchivePool } from "../src/native/archive-reader";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { DecodeSession } from "../src/native/limits";
 import { decodeGeometryFromPool, MESH_READ_LIMITS } from "../src/native/mesh-decode";
-import { dec4, halfToFloat } from "../src/native/mesh-blob";
+import { dec4, DEFAULT_MESH_LIMITS, halfToFloat } from "../src/native/mesh-blob";
 import { meshGeometry, morphGeometry } from "../src/native/mesh-glb";
 import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { classifyNativeFailure } from "../src/native/native-errors";
@@ -264,6 +264,9 @@ test("a skin addressing more joints than bone positions takes them from the rig 
   expect(made.joints).toBe(3);
   expect(made.notes[0]).toContain("lists 1 bone position for 3 bones");
   expect(() => meshGeometry(read(meshResource({ chunks: [chunk], bones: ["A", "B"], bonePositions: 2 })))).toThrow(/joint 2 of a rig of 2/);
+  // The count taken from the names is capped like stored positions (NATIVE-62).
+  const capped = { ...DEFAULT_MESH_LIMITS, maxBones: 2 };
+  expect(() => meshGeometry(read(meshResource({ chunks: [chunk], bones: ["A", "B", "C"], bonePositions: 1 })), capped)).toThrow(/needs 3 joints \(at most 2\)/);
 });
 
 test("layouts and parameters the reader doesn't decode are refused as unsupported; bad indices as malformed", () => {
@@ -273,6 +276,10 @@ test("layouts and parameters the reader doesn't decode are refused as unsupporte
   expect(kind(meshResource({ chunks: [{ vertices: quad(), indices: [0, 1, 2] }], cloth: true }))).toBe("unsupported");
   expect(kind(meshResource({ chunks: [{ vertices: quad(), indices: [0, 1, 9] }] }))).toBe("malformed");
   expect(kind(meshResource({ chunks: [{ vertices: quad(), indices: [0, 1] }] }))).toBe("malformed");
+  // A LOD 1 chunk without vertices or triangles can't be written as valid glTF: WolvenKit exports it (NATIVE-63).
+  expect(kind(meshResource({ chunks: [{ vertices: [], indices: [] }] }))).toBe("unsupported");
+  expect(kind(meshResource({ chunks: [{ vertices: quad(), indices: [] }] }))).toBe("unsupported");
+  expect(kind(meshResource({ chunks: [{ vertices: quad(), indices: [0, 1, 2] }, { vertices: [], indices: [], lod: 2 }] }))).toBe("ok");
 });
 
 const morphTargets = (): Target[] => [
@@ -397,7 +404,8 @@ test("the native-first exporter reads meshes itself, caches them by its identity
   const [second] = await again.exportAll!([{ ...request, geometry: ["base\\m\\ok.mesh"], textures: [] }]);
   expect(second!.geometry.get("base\\m\\ok.mesh")!.cached).toBe(true);
   expect(decodes).toBe(3);
-  expect(NATIVE_MESH_IDENTITY).toMatch(/^xfs-native-mesh:\d+$/);
+  // The resource reader's version and data hash are part of it (NATIVE-61).
+  expect(NATIVE_MESH_IDENTITY).toMatch(/^xfs-native-mesh:\d+:\d+:[0-9a-f]{12}$/);
   // Geometry asked for with WolvenKit's materials file, and a folder of archives, go to WolvenKit.
   asked.length = 0;
   await again.exportAll!([{ ...request, geometry: ["base\\m\\ok.mesh"], textures: [], materials: true }]);
@@ -478,10 +486,14 @@ test("a morph target's skin comes from the base mesh the resolver says wins, whe
   const skinOf = (answer: ExportAnswer) => parseGlb(new Uint8Array(readFileSync(answer.geometry.get("base\\m\\nails.morphtarget")!.glb!))).json.skins?.[0]?.joints.length ?? 0;
   const [first] = await exporter.exportAll!([{ source, geometry: ["base\\m\\nails.morphtarget"], textures: [], masks: [], bases }]);
   expect(skinOf(first!)).toBe(3);
+  // The readiness check agrees with the cache: the entry answers only for the base its skin came from (NATIVE-60).
+  const base = bases["base\\m\\nails.morphtarget"];
+  expect([exporter.has!("geometry", "base\\m\\nails.morphtarget", source, base), exporter.has!("geometry", "base\\m\\nails.morphtarget", source)]).toEqual([true, false]);
   const [again] = await exporter.exportAll!([{ source, geometry: ["base\\m\\nails.morphtarget"], textures: [], masks: [], bases }]);
   expect([again!.geometry.get("base\\m\\nails.morphtarget")!.cached, decodes]).toEqual([true, 1]);
   const [own] = await exporter.exportAll!([{ source, geometry: ["base\\m\\nails.morphtarget"], textures: [], masks: [] }]);
   expect([own!.geometry.get("base\\m\\nails.morphtarget")!.cached, skinOf(own!), decodes]).toEqual([false, 0, 2]);
+  expect([exporter.has!("geometry", "base\\m\\nails.morphtarget", source, base), exporter.has!("geometry", "base\\m\\nails.morphtarget", source)]).toEqual([false, true]);
 });
 
 test("the plan names a morph component's effective base mesh, and only a morph component's", () => {
