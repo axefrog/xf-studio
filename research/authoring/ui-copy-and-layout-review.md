@@ -461,7 +461,7 @@ These strings are asserted by tests and change deliberately with the plan. Anyth
 
 ## 6. Coming soon placeholders
 
-A decided feature that isn't built yet shows where it will live, as a **visible, disabled** control: greyed, focusable, with a short **"Coming soon: \<what it will let you do\>"** reason, or a help tip. Planned modules are listed in the Modules menu as **Planned** and can't be turned on. Nothing speculative is shown: every entry below has an agreed design.
+**The product shows only what exists** (the 1.0 "honest surfaces" default, 28 September 2026). The catalogue below is the roadmap record: its entries appear only while **research tools** are on (View preferences › Show research tools), as disabled rows with a neutral **Soon** tag and a short **"Coming soon: \<what it will let you do\>"** reason. With research tools off, which is the default, nothing unbuilt is listed. Module views show none of them. Nothing speculative is recorded: every entry below has an agreed design.
 
 **One catalogue.** Every placeholder is an entry in `src/studio-ui/coming-soon.ts`, and each planned module is an entry in `PLANNED_MODULES` (`compose/modules.ts`). Each names the key of the live feature that replaces it:
 - a module ID (`module:`);
@@ -470,10 +470,10 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 - an exporter's feature (`exporter:`).
 
 **How they disappear.**
-- **At runtime,** the presentation hides a placeholder whose feature is registered (`plannedModules()` drops a planned module whose ID is a live module; the placeholder helper checks the action registry).
+- **At runtime,** the presentation lists placeholders only with research tools on (`comingSoon(id, live, research)` and `plannedShown`), and hides one whose feature is registered (`plannedModules()` drops a planned module whose ID is a live module; the placeholder helper checks the action registry).
 - **In tests,** `tests/coming-soon.test.ts` fails while a placeholder and its live feature both exist. It checks module IDs against `STUDIO_MODULES`, exporters against `STUDIO_EXPORTERS`, and action kinds and tool IDs against the source. So the feature that lands deletes its placeholder in the same change, and no dead UI survives.
 
-| Placeholder | Where | Key | Owning design |
+| Placeholder | Where (research tools on) | Key | Owning design |
 |---|---|---|---|
 | Nail Salon | Modules menu › Character, Planned | `module:nails` | [Nail Salon design](../nails/nail-salon-design.md) |
 | Hair colours | Modules menu › Character, Planned | `module:hair-colours` | [Hair colour authoring feasibility](../hair/hair-colour-authoring-feasibility.md) |
@@ -482,11 +482,9 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 | Tattoos | Modules menu › Character, Planned | `module:tattoos` | [Tattoos brief](../character-customization/tattoos-brief.md) |
 | New view | Panels flyout › Views | `action:view.create` | [View graph design](view-graph-design.md) P4 |
 | Duplicate view (shared camera) | Panels flyout › Views | `action:view.duplicate` | [View graph design](view-graph-design.md) P4 |
-| Skin scattering quality | Camera & light › Display | `action:preview.setSubsurfaceQuality` | [Skin shader §11](../materials/shader-skin.md) ("a viewing preference beside the lighting presets") |
-| Face handles | Expression, a disabled button | `tool:expressions.handles` | [Expression editor design](../animation/expression-editor-design.md) phase 2 |
-| Sculpt | Expression, a disabled button | `tool:expressions.sculpt` | [Expression editor design](../animation/expression-editor-design.md), "sculpt mode (Option 3)", confirmed as a later mode |
-| Export to game | Expression, a disabled button | `exporter:expressions` | [Expression editor design](../animation/expression-editor-design.md) phase 3 |
-| Edit values | Save Explorer › object inspector, a disabled button | `action:saves.setValue` | [Save editor design](../save/save-editor-design.md) §7.2 (the writer's phase 1: scalar values) |
+| Face handles | Not shown (module views show no placeholders) | `tool:expressions.handles` | [Expression editor design](../animation/expression-editor-design.md) phase 2 |
+| Sculpt | Not shown | `tool:expressions.sculpt` | [Expression editor design](../animation/expression-editor-design.md), "sculpt mode (Option 3)", confirmed as a later mode |
+| Edit values | Not shown | `action:saves.setValue` | [Save editor design](../save/save-editor-design.md) §7.2 (the writer's phase 1: scalar values) |
 
 **Not placed, and why:**
 - **Pose (body source)**: the Poses module landed with a real "Pose: …" choice in Motion › Body, so no placeholder is needed.
@@ -494,7 +492,7 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 - **Selectors panel, "Add selector"**: waits for the Selectors panel ([selectors design](selectors-design.md) S1). A panel holding only a disabled button would be an empty section.
 - **Shadows (key light)**: no agreed design. The [creator lighting](../../knowledge/creator-lighting.md) page says the first release goes without shadow maps. The Light tip says shadows aren't drawn yet.
 
-**For the teams building these:** the key in the table is what the placeholder waits for. If a feature lands under another name, change the key in `coming-soon.ts` (or remove the entry) in the same change. The catalogue is one of the pure helpers a feature view may import (`tests/studio-ui-boundary.test.ts`).
+**For the teams building these:** the key in the table is what the placeholder waits for. If a feature lands under another name, change the key in `coming-soon.ts` (or remove the entry) in the same change. Feature views don't import the catalogue (`tests/studio-ui-boundary.test.ts`): only the shell lists placeholders.
 
 ## 6a. Show the options, don't hide them (dropdowns)
 
@@ -534,7 +532,7 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 **Review round (coordinator):**
 - The Character panel's empty band is gone: the "In the 3D view" heading leads the panel's fixed-height status line, so an empty status no longer leaves a band of its own, and the folded list's wrapper takes no room.
 - FolderSetting reserves its refusal line only while its text box is open, so Settings › Game keeps the normal rhythm between folders.
-- Planned entries in menus carry a neutral **Soon** tag and their "Coming soon: …" in the muted colour (menu `tag`, `quietReason`), never the warning colour.
+- Planned entries in menus carry a neutral **Soon** tag and their "Coming soon: …" in the muted colour (menu `tag`, `quietReason`), never the warning colour. Since the 1.0 honest-surfaces pass they are listed only with research tools on (§6), and preview modules carry the **Preview** stage tag instead of a "Preview ·" hint prefix.
 - Creator choice rows show every choice: "Show N more" is gone, the row loads its pages one after another, and when a row opens the V's choice is scrolled into view and the maker group holding it opens. Measured on the reference setup (the Hairstyle row, 283 choices): every page loaded in about 0.3–0.4 s, and reopening the row (every choice rendered from the cached pages) took 26 ms to the next painted frame, so no virtualisation is needed.
 
 **Gate review fixes (UI visual QA checklist):** the Field of view note line is gone (a framing limit is a notice); the Setup readout that repeated the pressed chip is gone; the Character legend is one line and the status line gives back 4 px, so both gaps read 16 px; every note line is one 16 px line, clamped with its text in the tooltip, so a reason appearing never moves the next section (measured: Blink's heading stays put when the Hair physics reason shows); waits and information (Hair physics, Body before the preview, Blink) use the muted note tone (`quietReason` on Toggle, Slider and ChoiceList); the Colour & finish export line drops the badge that repeated the finish's group; the Poses module line is one sentence; the MO2 profile reads "2025 (again) · last used"; a found folder's path wraps between folders.

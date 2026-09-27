@@ -1,6 +1,7 @@
 import { h, setAttr, setText } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu } from "../menu";
+import { stageLabel, stageTag, type Stage } from "./stage-tag";
 
 /**
  * Tab strip (style guide "Tab strip"): a row of tabs, or a column when its group is folded to a vertical strip, that never overflows
@@ -23,6 +24,11 @@ export type TabItem = {
   tooltip?: string;
   /** Whether the active tab shows a close mark (the keyboard closes with the strip's own key binding). */
   closable?: boolean;
+  /**
+   * The release stage of what the tab shows: a preview's tab carries a Preview stage tag after its label while its label shows (every
+   * tab in the full stage, the active tab while condensed), and its name and tooltip say "Preview" at every stage.
+   */
+  stage?: Stage;
 };
 export type TabStripStage = "full" | "truncated" | "icons" | "overflow";
 export const TAB_STAGES: readonly TabStripStage[] = ["full", "truncated", "icons", "overflow"];
@@ -71,7 +77,7 @@ export function planTabs(input: TabPlanInput): TabPlan {
   return { stage: "overflow", shown: all.filter(index => shown.has(index)), activeIconOnly: true };
 }
 
-type TabEntry = { item: TabItem; tab: HTMLButtonElement; label: HTMLElement; close: HTMLElement };
+type TabEntry = { item: TabItem; tab: HTMLButtonElement; label: HTMLElement; close: HTMLElement; tag: HTMLElement | null };
 
 export class TabStrip {
   readonly element: HTMLElement;
@@ -127,16 +133,20 @@ export class TabStrip {
   }
   private describe(entry: TabEntry) {
     setText(entry.label, entry.item.label);
-    setAttr(entry.tab, "aria-label", entry.item.label);
-    entry.tab.title = entry.item.tooltip ?? entry.item.label;
+    const stage = stageLabel(entry.item.stage), tip = entry.item.tooltip ?? entry.item.label;
+    setAttr(entry.tab, "aria-label", stage ? `${entry.item.label}, ${stage}` : entry.item.label);
+    entry.tab.title = stage ? `${stage} · ${tip}` : tip;
     entry.close.title = `Close ${entry.item.label}`;
   }
   private create(item: TabItem): TabEntry {
     const id = item.id, prefix = this.options.idPrefix;
     const label = h("span", { class: "dock-tab-label" });
     const close = h("span", { class: "dock-tab-close", "aria-hidden": "true" }, icon("close"));
+    // The stage tag is read as part of the tab's name (`describe`), so it is hidden from the accessibility tree here.
+    const tag = stageTag(item.stage, "dock-tab-stage");
+    tag?.setAttribute("aria-hidden", "true");
     const tab = h("button", { class: "dock-tab", type: "button", role: "tab", id: prefix ? `${prefix}${id}` : undefined,
-      "aria-controls": this.options.controls, ...this.options.tabData?.(item) }, icon(item.icon), label, close);
+      "aria-controls": this.options.controls, ...this.options.tabData?.(item) }, icon(item.icon), label, tag, close);
     close.addEventListener("pointerdown", event => event.stopPropagation());
     close.addEventListener("click", event => { event.stopPropagation(); this.options.onClose?.(id); });
     tab.addEventListener("click", () => this.options.onSelect(id));
@@ -144,7 +154,7 @@ export class TabStrip {
     tab.addEventListener("contextmenu", event => this.options.onContextMenu?.(event, id, tab));
     tab.addEventListener("pointerdown", event => this.options.onPointerDown?.(event, id, tab));
     tab.addEventListener("auxclick", event => this.options.onAuxClick?.(event, id));
-    return { item, tab, label, close };
+    return { item, tab, label, close, tag };
   }
   private setStage(stage: TabStripStage, activeIconOnly = false) {
     this.current = stage;

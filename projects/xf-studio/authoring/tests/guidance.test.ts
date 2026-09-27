@@ -422,3 +422,21 @@ test("the callout is placed beside, inside or as a sheet, always within the wind
   expect(css).toMatch(/\.guidance-callout \{ position: fixed;/);
   expect(css).toMatch(/--guidance-scrim: light-dark\(oklch\(\.985[^)]*\), oklch\(\.1 /);
 });
+
+test("Help covers every stable part of the Studio, with a page on what isn't in this version yet (C7)", async () => {
+  const { STUDIO_MODULES } = await import("../src/compose/modules");
+  // The stable modules and the shell's own stable panels, each with the topics (and tour) that explain it.
+  const HELP_FOR: Record<string, readonly string[]> = { "eye-makeup": ["layers", "drawing", "finishes"], character: ["character"], lighting: ["camera"],
+    package: ["package", "install"], settings: ["settings"] };
+  for (const module of STUDIO_MODULES.filter(item => item.stage === "stable")) expect({ module: module.id, help: !!HELP_FOR[module.id] }).toEqual({ module: module.id, help: true });
+  const topics = new Map(HELP_TOPICS.map(topic => [topic.id, topic]));
+  for (const [part, ids] of Object.entries(HELP_FOR)) for (const id of ids) expect({ part, id, found: topics.has(id) }).toEqual({ part, id, found: true });
+  // Every stable part is also in a tour: eye makeup and the mod in Getting started, the rest in the Studio tour.
+  const toured = new Set(TOURS.flatMap(tour => tour.steps.map(step => step.anchor)));
+  for (const anchor of ["layers.add", "finish.picker", "header.package", "panel.character", "panel.lighting", "header.settings"]) expect(toured.has(anchor as AnchorId)).toBe(true);
+  const limits = topics.get("limitations")!;
+  expect(limits.title).toBe("What's not in this version yet");
+  expect(searchTopics("not in this version")[0]!.id).toBe("limitations");
+  // For the people using it: no developer words.
+  expect(limits.body).not.toMatch(/\b(TweakXL|ArchiveXL|hide_Head|WebView|Python|solver|shader|adapter|API)\b/);
+});

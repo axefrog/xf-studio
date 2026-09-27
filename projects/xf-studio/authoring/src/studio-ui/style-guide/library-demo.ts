@@ -2,7 +2,7 @@
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, previewTile, previewStage, ScrollMemory, VIEW_KEY, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 
@@ -154,6 +154,22 @@ const MOUNTS: Record<string, Mount> = {
     { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
     button({ label: "Delete a saved expression", icon: "trash", onClick: event => openConfirmPopover(event.currentTarget as Element,
       { title: "Delete saved expression", message: "Delete “Smirk” from your library? This can't be undone.", confirm: "Delete", danger: true, onConfirm: () => {} }) })),
+  "lib-stage-tag": () => {
+    const physics = new Toggle({ label: "Hair physics", stage: "preview", help: "A preview: how the hair moves hasn't been matched to the game yet.", onChange: checked => physics.update(checked) });
+    physics.update(false);
+    const strip: TabStrip = new TabStrip({ label: "Sample preview panels", onSelect: () => {} });
+    strip.update([{ id: "expression", label: "Expression", icon: "character", stage: "preview", closable: true }, { id: "sets", label: "Expression sets", icon: "package", stage: "preview" }], "expression");
+    const menu = button({ label: "Modules", icon: "category", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Modules" },
+      { kind: "action", label: "Eye makeup", icon: "category", checked: true, hint: "Design layered eye makeup for your V.", run: () => {} },
+      { kind: "action", label: "Expressions", icon: "character", checked: false, stage: "preview", hint: "Pose V's face with the game's own face controls.", run: () => {} }],
+      event.currentTarget as Element, { label: "Modules" }) });
+    // Fitted like the dock fits its groups: whole labels (and tags) at this width; narrower, the tags go and the names keep "Preview".
+    const fitted = new PanelHeader({ strip, actions: [], drag: { title: "Drag area", onPointerDown: () => {} } });
+    requestAnimationFrame(() => fitted.fit());
+    return stack({ gap: "normal" }, h("div", { class: "row wrap gap-s" }, stageTag("preview"), menu),
+      h("section", { class: "dock-group", style: "width:460px" }, fitted.element, h("div", { class: "dock-body", style: "height:24px" })),
+      h("div", { style: "max-width:320px" }, physics.element));
+  },
   "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy", secondary: "shows as “Wing”" }]; let selected = "a";
     const list: ItemList<{ id: string; name: string; meta: string; secondary?: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,
       onSelect: id => { selected = id; list.update(items, selected); }, onMove: (id, index) => { const item = items.find(i => i.id === id)!; items = items.filter(i => i.id !== id); items.splice(index, 0, item); list.update(items, selected); },

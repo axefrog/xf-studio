@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { plannedModules } from "../src/platform/api";
 import { PLANNED_MODULES, STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "../src/compose/modules";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
-import { COMING_SOON, comingSoon, isLive, type ComingSoonEntry } from "../src/studio-ui/coming-soon";
+import { COMING_SOON, comingSoon, isLive, plannedShown, type ComingSoonEntry } from "../src/studio-ui/coming-soon";
 
 /**
  * Coming soon placeholders (ui-copy-and-layout-review.md §6) never outlive their feature: a placeholder and the live feature it waits
@@ -60,8 +60,21 @@ test("placeholders say Coming soon plainly and name their design", () => {
 test("the presentation hides a placeholder whose feature it can see", () => {
   const live = { actions: () => ["saves.setValue"], modules: () => ["poses"], tools: () => ["expressions.handles"] };
   const none = { actions: () => [], modules: () => [], tools: () => [] };
-  expect(comingSoon("savesEdit", live)).toBeUndefined();
-  expect(comingSoon("expressionHandles", live)).toBeUndefined();
-  expect(comingSoon("savesEdit", none)?.label).toBe("Edit values");
+  expect(comingSoon("savesEdit", live, true)).toBeUndefined();
+  expect(comingSoon("expressionHandles", live, true)).toBeUndefined();
+  expect(comingSoon("savesEdit", none, true)?.label).toBe("Edit values");
   expect(isLive("exporter:expressions", live)).toBe(false);
+});
+
+test("the product shows only what exists: placeholders and planned modules only with research tools on", () => {
+  const none = { actions: () => [], modules: () => [], tools: () => [] };
+  for (const id of Object.keys(COMING_SOON) as (keyof typeof COMING_SOON)[]) expect({ id, shown: comingSoon(id, none, false) }).toEqual({ id, shown: undefined });
+  expect(plannedShown(PLANNED_MODULES, false)).toEqual([]);
+  expect(plannedShown(PLANNED_MODULES, true)).toEqual(PLANNED_MODULES);
+});
+
+test("module views show no Coming soon placeholders", () => {
+  const views = sources(resolve(src, "features")).filter(path => /[\\/]view[\\/]/.test(path));
+  expect(views.length).toBeGreaterThan(0);
+  expect(views.filter(path => /coming-soon|tag: "Soon"/.test(readFileSync(path, "utf8")))).toEqual([]);
 });

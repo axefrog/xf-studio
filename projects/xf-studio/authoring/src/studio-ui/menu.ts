@@ -1,6 +1,7 @@
 import { Toggle } from "./controls";
 import { clamp, h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
+import { stageTag, type Stage } from "./components/stage-tag";
 
 /**
  * Accessible menu and popover primitives. Items carry their own capability, so a
@@ -11,8 +12,10 @@ export type Capability = { available: boolean; reason?: string };
 export type MenuItem =
   | { kind: "action"; label: string; icon?: IconName; shortcut?: string; hint?: string;
       capability?: Capability; checked?: boolean; danger?: boolean; run(): void;
-      /** A small neutral tag after the label ("Soon" on a planned entry). */
+      /** A small neutral tag after the label ("Soon" on a planned entry, research tools only). */
       tag?: string;
+      /** The release stage of what the entry shows or turns on: a Preview stage tag after the label (components/stage-tag.ts). */
+      stage?: Stage;
       /** The unavailable reason is information, not a problem (a planned feature's "Coming soon: …"): shown in the muted colour. */
       quietReason?: boolean }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[] }
@@ -128,7 +131,8 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       "aria-haspopup": item.kind === "submenu" ? "menu" : undefined,
       "aria-describedby": reason || item.hint ? descId : undefined },
       h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
-      h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null),
+      h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null,
+        item.kind === "action" ? stageTag(item.stage, "menu-tag") : null),
         reason || item.hint ? h("small", { id: descId, class: reason && !(item.kind === "action" && item.quietReason) ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
           : null),
       item.kind === "action" && item.shortcut ? h("kbd", { text: item.shortcut }) : null,

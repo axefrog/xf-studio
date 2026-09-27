@@ -7,6 +7,8 @@ import type { Tour } from "./types";
  * command and key token against the registries.
  */
 export const ONBOARDING_TOUR_ID = "onboarding";
+/** The tour of the Studio's other stable parts: your V, the camera and light, and Settings. */
+export const STUDIO_TOUR_ID = "your-v-and-view";
 
 export const TOURS: readonly Tour[] = [
   {
@@ -36,6 +38,23 @@ export const TOURS: readonly Tour[] = [
         buttons: [{ label: "Open Mod package", action: { kind: "panel", panel: "package" } }] },
       { anchor: "header.help", content: { title: "Help is always here",
         body: "Open **Help** with [[key:shell.help]] for tours, answers and every keyboard and mouse shortcut. [[key:shell.palette]] finds any command by name." } },
+    ],
+  },
+  {
+    id: STUDIO_TOUR_ID, audience: "howto", title: "Your V, the camera and Settings",
+    summary: "Where your V's creator options, the camera and lights, and your game and mod manager settings live.",
+    steps: [
+      { anchor: "panel.character", content: { title: "Your V",
+        body: "The **Character** panel holds your V's character-creator options, read from your game and mods.\n\n- Load a save to see your own V.\n- Change any option to try your looks on another face, and save a set of options as a preset.\n\nYour looks never change when you do." },
+        buttons: [{ label: "Load V from a save…", action: { kind: "file", action: { kind: "savedV.import" } } }] },
+      { anchor: "panel.lighting", content: { title: "Camera and light",
+        body: "**Camera & light** frames the view and lights your V. Choose a lighting setup, such as **Character creator** to compare with the game, or make your own and aim its lights with the direction dial.\n\nCamera and light never change your looks or your mod." },
+        buttons: [{ label: "Show the front view", action: { kind: "studio", action: { kind: "camera.front" } } }] },
+      { anchor: "header.settings", content: { title: "Your game and mod manager",
+        body: "**Settings** holds what XF Studio needs to know about your computer: your game folder, your mod manager, your saves and WolvenKit. XF Studio finds these for you; change one here if it guessed wrong." },
+        buttons: [{ label: "Open Settings", action: { kind: "panel", panel: "settings" } }] },
+      { anchor: "header.help", content: { title: "Help is always here",
+        body: "Open **Help** with [[key:shell.help]] for the other tours, answers for each part of the Studio, and **What's not in this version yet**." } },
     ],
   },
   {

@@ -81,3 +81,24 @@ test("update reuses tabs by ID and retitle changes a label in place", async () =
   first!.click();
   expect(chosen).toEqual(["p1"]);
 });
+
+test("a preview's tab carries a Preview stage tag, says Preview in its name and tooltip, and keeps it through a retitle", async () => {
+  const { TabStrip } = await import("../src/studio-ui/components/tab-strip");
+  const view = new TabStrip({ label: "Expression panels", onSelect: () => {} });
+  view.update([{ id: "expr", label: "Expression", icon: "character", tooltip: "Expression · drag to move", stage: "preview" }, { id: "light", label: "Camera & light", icon: "lighting" }], "expr");
+  const [preview, stable] = view.tabs as unknown as LightElement[];
+  expect([preview!.getAttribute("aria-label"), preview!.title]).toEqual(["Expression, Preview", "Preview · Expression · drag to move"]);
+  const tag = preview!.querySelector(".stage-tag")!;
+  expect([tag.textContent, tag.getAttribute("aria-hidden")]).toEqual(["Preview", "true"]);
+  expect([stable!.getAttribute("aria-label"), stable!.querySelector(".stage-tag")]).toEqual(["Camera & light", null]);
+  view.retitle("expr", "Smirk", "Smirk · your saved expression");
+  expect([preview!.getAttribute("aria-label"), preview!.title]).toEqual(["Smirk, Preview", "Preview · Smirk · your saved expression"]);
+});
+
+test("a stable part carries no stage tag; anything not yet stable reads Preview", async () => {
+  const { stageLabel, stageTag } = await import("../src/studio-ui/components/stage-tag");
+  expect([stageLabel("stable"), stageLabel(undefined), stageLabel("preview"), stageLabel("dev")]).toEqual([undefined, undefined, "Preview", "Preview"]);
+  expect(stageTag("stable")).toBeNull();
+  const tag = stageTag("preview", "menu-tag") as unknown as LightElement;
+  expect([tag.className, tag.textContent, tag.dataset.stage]).toEqual(["stage-tag menu-tag", "Preview", "preview"]);
+});

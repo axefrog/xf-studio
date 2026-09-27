@@ -59,8 +59,6 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/panels/viewports", ["contextMenuGate", "keyDescription"]],
   ["studio-ui/views/contribution", ["panelMeta"]],
   ["studio-ui/views/feature-view", ["featureView", "moduleView"]],
-  // The Coming soon catalogue (ui-copy-and-layout-review.md §6): pure data, so a feature view can show a decided feature's placeholder.
-  ["studio-ui/coming-soon", ["COMING_SOON"]],
   // Preset sets (part-preset-sets.ts): pure naming and membership rules, so a set's view names its mod as its export does.
   ["part-preset-sets", ["defaultSetModName", "setMembers", "setModName"]],
 ]);

@@ -34,7 +34,6 @@
 import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
   ScrubSlider, Segmented, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, RememberedSet, type MenuItem, type TreeGroupData, type TreeItemRef,
   type TreeRowData } from "../../../studio-ui/components";
-import { COMING_SOON } from "../../../studio-ui/coming-soon";
 import { centredAmount, EASING_IDS, EASING_LABELS, easingPreset, type EasingId } from "../../../platform/api/easing";
 import { EASING_ICONS } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
@@ -355,9 +354,6 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       { kind: "separator" },
       // Export: saved expressions are grouped into sets, each built as a photo-mode mod (the Expression sets panel).
       { kind: "action", label: "Export to photo mode…", icon: "package", run: () => ctx.reveal("expressions.sets", true) },
-      // Decided but not built yet (coming-soon.ts): face handles and sculpting (phase 2 and later).
-      ...(["expressionHandles", "expressionSculpt"] as const).map((id): MenuItem => ({ kind: "action", label: COMING_SOON[id].label,
-        icon: "handles", tag: "Soon", quietReason: true, capability: { available: false, reason: COMING_SOON[id].reason }, run: () => {} })),
     ], anchor, { label: "Face commands" });
   }
   function renamePreset(id: string, anchor: Element | { x: number; y: number }) {
@@ -401,6 +397,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     const step = preview?.next;
     if (step === "game-setup") ctx.openSettings("game");
     else if (step === "guide") void ctx.links.open("project-knowledge");
+    else if (step === "export") ctx.reveal("expressions.sets", true);
     else if (step === "stop-idle") ctx.platform({ kind: "motion.setIdle", enabled: false });
     else if (step === "retry") ctx.facial.retry();
   }
@@ -478,10 +475,11 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   /** A problem with the live preview, in plain words with its one next step; nothing while all is well (or while it only updates). */
   function statusText(snapshot: FacialPreviewSnapshot | undefined): { text: string; tone: "muted" | "warning" | "info"; next?: string } | undefined {
     if (!snapshot) return { text: "The live face preview isn't connected here.", tone: "muted" };
-    const nextLabel = { "game-setup": "Open Settings", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again" } as const;
+    const nextLabel = { "game-setup": "Open Settings", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again",
+      export: "Open Expression sets" } as const;
     const label = snapshot.next ? nextLabel[snapshot.next] : undefined;
-    // A limit of this version (its next step is the guide) is said calmly; something the person can fix is a warning.
-    const tone = snapshot.next === "guide" ? "muted" : "warning";
+    // A limit of this version (its next step is the guide or the export) is said calmly; something the person can fix is a warning.
+    const tone = snapshot.next === "guide" || snapshot.next === "export" ? "muted" : "warning";
     switch (snapshot.phase) {
       case "ready": return snapshot.reason ? { text: snapshot.reason, tone, next: label } : undefined;
       case "updating": case "idle": return undefined;

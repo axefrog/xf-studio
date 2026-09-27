@@ -388,9 +388,11 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   // person is never sent to a developer guide.
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
-  // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game.
-  const physics = new Toggle({ label: "Hair physics", reserveNote: true, quietReason: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
-    help: "Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files." });
+  // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game,
+  // so it is labelled a preview (components/stage-tag.ts).
+  const physics = new Toggle({ label: "Hair physics", stage: "preview", reserveNote: true, quietReason: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
+    help: ["Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files.",
+      "A preview: how the hair moves hasn't been matched to the game yet."] });
   const idleSection = section({ title: "Game idle", help: IDLE_HELP }, source.element, h("div", { class: "row" }, pause), head.element, face.element);
   const blinkSection = section({ title: "Blink", help: blinkHelp(undefined) }, blinkControls, blinkNote);
   const blinkTip = blinkSection.querySelector<HTMLElement>(".help-tip")!;

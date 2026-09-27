@@ -7,6 +7,7 @@ import { HeaderFitter, PanelHeader } from "../components/panel-header";
 import { iconButton } from "../components/icon-button";
 import { Splitter } from "../components/splitter";
 import { TabStrip } from "../components/tab-strip";
+import type { Stage } from "../components/stage-tag";
 import { ScrollMemory } from "../scroll-anchor";
 import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate,
   openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
@@ -20,6 +21,8 @@ export type PanelSpec = {
   id: PanelId; title: string; icon: IconName; description: string;
   /** What the panel shows, for its tab's tooltip (a view's subject); set with `DockView.retitle`. */
   context?: string;
+  /** The release stage of the module the panel belongs to: a preview module's panels carry a Preview tag on their tab. */
+  stage?: Stage;
   element: HTMLElement;
   /** Called after each layout when the panel becomes shown or hidden. */
   visibility?(visible: boolean): void;
@@ -266,7 +269,7 @@ export class DockView {
     });
     strip.update(group.panels.map(id => {
       const spec = this.panels.get(id)!;
-      return { id, label: spec.title, icon: spec.icon, tooltip: tabTip(spec.title, spec.context ?? ""), closable: id === group.active };
+      return { id, label: spec.title, icon: spec.icon, tooltip: tabTip(spec.title, spec.context ?? ""), closable: id === group.active, stage: spec.stage };
     }), group.active);
     const window = floating ? this.tree.floating.find(item => findGroup({ root: item.node, floating: [], closed: [] }, group.id)) : undefined;
     const soleWindowGroup = window && window.node.kind === "group";

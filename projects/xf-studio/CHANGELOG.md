@@ -4,13 +4,17 @@ What changed in each XF Studio desktop release, newest first, written for the pe
 
 - **New and improved:** features and changes you can see, in plain language.
 - **Fixes and under the hood:** bug fixes, performance, reliability and maintenance.
-- **Known limitations** (optional): what the version doesn't do yet, and what hasn't been seen in the game. When it's there, the release's warning points to it.
+- **Known limitations** (optional): what the version doesn't do yet, and what hasn't been seen in the game. When it's there, the release's warning points to it. The app's Help page "What's not in this version yet" (`authoring/src/studio-ui/guidance/help-topics.ts`) says the same for the people using it: change both together.
 
 When a change lands, add a line to **Unreleased**. When a version is tagged, rename **Unreleased** to that version (for example `## 0.1.0-alpha.2`) and start a new, empty **Unreleased** above it. The release workflow copies the tagged version's section into the GitHub release and refuses to create the release if that section is missing or any of its parts is empty. Say what was checked and how; never describe something as tested in the game until it has been.
 
 ## Unreleased
 
 ### New and improved
+
+- **Only what's there.** The Modules menu no longer lists modules that aren't built yet, and the Panels menu, the Expression panel and the Save Explorer no longer show "Coming soon" buttons. Expressions, Poses and Save Explorer, which are still previews and hidden until you turn them on, now say **Preview** wherever they appear: in the Modules and Panels menus and on their panels' tabs. So does Hair physics in the Motion panel.
+- **More help.** A new tour, **Your V, the camera and Settings**, and a Help answer for **Camera and light**, so every part of the Studio has one. Help also has a page on **What's not in this version yet**.
+- **Expressions without a live face say what you can do.** Where the live face preview isn't available (the desktop app), the Expression panel now offers **Open Expression sets**, to build your expression into a photo-mode mod.
 
 ### Fixes and under the hood
 
