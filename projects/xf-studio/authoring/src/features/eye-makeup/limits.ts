@@ -45,7 +45,7 @@ export const EYE_MAKEUP_LIMITS: Partial<Record<EyeMakeupAction["kind"], Limits>>
     if (variant === "radius") limits.value = { ...limits.value, dependsOn: ["count"],
       min: dense ? REGION_FLAKE_STUDY_LIMITS.minRadius : FLAKE_LIMITS.minRadius,
       max: dense ? REGION_FLAKE_STUDY_LIMITS.maxRadius : FLAKE_LIMITS.maxRadius,
-      ...(dense ? { note: "Dense fields are restricted to the eye UV regions and small flakes." } : {}) };
+      ...(dense ? { note: "Dense fields: eye regions and small flakes only." } : {}) };
     if (variant === "count") {
       const threshold = FLAKE_LIMITS.count.toLocaleString("en");
       // A radius valid only for one side of the dense threshold pins the count to that side.
