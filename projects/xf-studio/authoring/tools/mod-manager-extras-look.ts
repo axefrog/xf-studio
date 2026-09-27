@@ -172,6 +172,11 @@ try {
       await toastShot(page, `${tag}-sets-03b-added-toast.png`);
       await groupShot(page, ".expr-sets", `${tag}-sets-03-added.png`);
       report[`${tag}-sets-added`] = await page.evaluate(`document.querySelector('.expr-sets .install-line').innerText`);
+      // The unavailable Add says why when pressed (the reason tip; its title holds the same words).
+      await page.evaluate(`document.querySelector('.expr-sets .install-row button[aria-disabled="true"]')?.click()`); await page.wait(400);
+      report[`${tag}-sets-add-reason`] = await page.evaluate(`document.querySelector('.expr-sets .install-row button[aria-disabled="true"]')?.title ?? null`);
+      await groupShot(page, ".expr-sets", `${tag}-sets-03c-add-reason.png`);
+      await page.key("Escape"); await page.wait(200);
       report[`${tag}-placed`] = existsSync(join(mo2, "mods", "XF Expressions - Smiles", "r6", "tweaks", SET, `${SET}.yaml`));
       // ---- The unknown-kind refusal ----
       await chooseSet(page, "Newer build"); await page.wait(300);
@@ -215,7 +220,7 @@ try {
   // Comparison sheets: each Expression sets state beside the Mod package panel's same step, at the same width.
   const pairs: [string, string, string][] = [["After Build: Add and Show in folder", "sets-01-built", "package-01-built"],
     ["The plan (a mod with extra files; a plain archive and .xl)", "sets-02-plan-with-extras", "package-02-plan"],
-    ["Added", "sets-03-added", "package-03-added"], ["Added: the toast", "sets-03b-added-toast", "package-03b-added-toast"], ["A file of an unknown kind (refused; Mod package has no such build: its plan shown for the sheet pattern)", "sets-04-unknown-kind", "package-02-plan"]];
+    ["Added", "sets-03-added", "package-03-added"], ["Added: the toast", "sets-03b-added-toast", "package-03b-added-toast"], ["Added: why Add is unavailable", "sets-03c-add-reason", "package-03-added"], ["A file of an unknown kind (refused; Mod package has no such build: its plan shown for the sheet pattern)", "sets-04-unknown-kind", "package-02-plan"]];
   const tags = passes.map(pass => `${pass.scheme}-${pass.width}`);
   for (const tag of tags) writeFileSync(resolve(out, `compare-${tag}.html`), `<!doctype html><meta charset=utf-8><style>body{font:13px system-ui;background:#888;margin:12px}section{display:flex;gap:16px;align-items:flex-start;margin-bottom:24px}figure{margin:0}figcaption{font-weight:600;margin-bottom:4px}img{border:1px solid #444}</style><h1>${tag}</h1>` +
     pairs.map(([title, own, pattern]) => `<h2>${title}</h2><section><figure><figcaption>Expression sets</figcaption><img src="${tag}-${own}.png"></figure><figure><figcaption>Mod package</figcaption><img src="${tag}-${pattern}.png"></figure></section>`).join(""));

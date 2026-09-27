@@ -249,11 +249,10 @@ export class ModInstallHost {
       ({ plan: { ...base, changes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next,
         token: sha(JSON.stringify([candidateId, route, why])) } });
     // Files beside the archive are placed where the game and frameworks read them (extraFileKind).
-    const unknown = (unknownKinds?.names ?? []).map(quoted);
+    const unknown = unknownKinds?.names ?? [];
     if (unknown.length || !inspected)
-      return blocked(`XF Studio doesn't know where ${unknown.length === 1 ? `the file ${unknown[0]}` : `the files ${unknown.join(", ")}`} of ` +
-        `${quoted(modName)} ${unknown.length === 1 ? "goes" : "go"}, so it can't add this mod for you. Show it in its folder, then copy its folders ` +
-        "into your game folder or mod manager.", null);
+      return blocked(`This build has ${unknown.length === 1 ? "a file" : "files"} XF Studio can't place (${unknown.join(", ")}), so it can't add it for you. ` +
+        "Show it in its folder and copy its folders into your game folder or mod manager.", "reveal");
     const { root, manifest } = inspected;
     if (modName !== modName.trim() || modNameIssue(modName) !== undefined)
       return blocked("This mod's name can't be used as a folder name. Rename it in Mod package, then build it again.", "rename");
@@ -394,9 +393,10 @@ function describeFiles(preview: { root: string; target: string; files: readonly 
   const count = (n: number, one: string, many: string) => n === 1 ? one : many;
   const overlays = preview.files.slice(2).filter(file => extraFileKind(file.path, archive) === "overlay-archive");
   const tweaks = preview.files.slice(2).filter(file => extraFileKind(file.path, archive) === "tweakxl");
-  const lines = [`In ${preview.target}: the mod's archive and its ArchiveXL file (${names(preview.files.slice(0, 2))})` +
+  // Folders are named relative to the mod's folder (or the game folder), which the plan's first line names once in full.
+  const lines = [`${join("archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (${names(preview.files.slice(0, 2))})` +
     (overlays.length ? `, and ${count(overlays.length, "an extra archive", "extra archives")} it loads (${names(overlays)}).` : ".")];
-  if (tweaks.length) lines.push(`In ${join(preview.root, "r6", "tweaks", archive)}: ${count(tweaks.length, "its TweakXL file", "its TweakXL files")} ` +
+  if (tweaks.length) lines.push(`${join("r6", "tweaks", archive)}: ${count(tweaks.length, "its TweakXL file", "its TweakXL files")} ` +
     `(${names(tweaks)}), which TweakXL reads when the game starts.`);
   if (preview.removing.length) lines.push(`Remove ${names(preview.removing)}, which XF Studio added for ${quoted(modName)} before: ` +
     `this build no longer has ${count(preview.removing.length, "it", "them")}.`);

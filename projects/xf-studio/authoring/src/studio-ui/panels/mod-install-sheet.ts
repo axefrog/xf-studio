@@ -14,7 +14,8 @@ export const modInstallLabel = (route: string | null | undefined) =>
  * "Add to my mod manager" (UI-82): the review before consent. It asks the host for the plan, shows in plain words exactly what
  * would be added and where (the mod's folder, the one mod-list row and its section, or the game folder), anything to know first
  * and, when it can't be done now, why with the one next step (a button where there is one). The primary button is the consent
- * to that plan; nothing is added until it is pressed. Acts only through `port.modInstall`.
+ * to that plan; nothing is added until it is pressed. When the plan's one next step is showing the build in its folder (a build
+ * XF Studio can't place), Show in folder takes the primary place, focused, and Add is not offered. Acts only through `port.modInstall`.
  */
 export function openModInstallSheet(rt: StudioRuntime, product: string, options: { openSetup(): void; rename?(): void;
   /** The panel the success toast names (default Mod package). */
@@ -32,12 +33,14 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
   const again = button({ label: "Check again", icon: "refresh", small: true, onClick: () => void review() });
   const rename = button({ label: "Rename the mod", icon: "rename", small: true, onClick: () => { close(); options.rename?.(); } });
   const add = button({ label: "Add", icon: "package", variant: "primary", onClick: () => void apply() });
+  // A build XF Studio can't place: its one next step, showing it in its folder, takes the primary place (and focus).
+  const show = button({ label: "Show in folder", icon: "folder", variant: "primary", onClick: () => void reveal() });
   const cancel = button({ label: "Cancel", variant: "quiet", onClick: () => close() });
   const dialog = h("dialog", { class: "sheet install-sheet", "aria-labelledby": titleId },
     h("div", { class: "sheet-head" }, title,
       iconButton({ label: "Close", icon: "close", onClick: () => close() })),
     where, changes, notes, h("div", { class: "install-state" }, status, again, rename, setup),
-    h("div", { class: "report-foot" }, add, h("span", { class: "grow" }), cancel));
+    h("div", { class: "report-foot" }, add, show, h("span", { class: "grow" }), cancel));
   let said = "";
 
   async function review() {
@@ -58,6 +61,13 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     said = outcome.message;
     render();
   }
+  async function reveal() {
+    const outcome = await install.dispatch({ kind: "modInstall.reveal", product });
+    if (outcome.ok) { close(); return; }
+    said = outcome.message;
+    render();
+  }
+  let focusedShow = false;
   function render() {
     const state = install.snapshot(), plan = state.plans[product], busy = state.busy?.product === product ? state.busy.kind : null;
     const target = plan?.route === "mo2" ? "Mod Organizer 2" : "your game folder";
@@ -76,13 +86,17 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     status.className = `install-status${said || blocked ? " warning" : ""}`;
     // The one next step as a button, as the plan names it (UI-99): Settings, renaming the mod, or Check again once the
     // person has done what it says. A refused Add offers Check again.
-    const next = blocked ? plan!.next : said ? "retry" : null;
+    const next = blocked ? plan!.next : said && plan?.next !== "reveal" ? "retry" : null;
     setup.hidden = next !== "setup";
     rename.hidden = next !== "rename" || !options.rename;
     again.hidden = next !== "retry" && !(next === "rename" && !options.rename);
     applyCapability(again, busy ? { available: false, reason: "Wait a moment." } : { available: true });
     setText(add.querySelector("span")!, plan ? plan.route === "mo2" ? "Add to Mod Organizer 2" : "Add to the game folder" : "Add");
     applyCapability(add, install.capability({ kind: "modInstall.apply", product }));
+    const revealing = plan?.next === "reveal" && !!blocked;
+    add.hidden = revealing; show.hidden = !revealing;
+    applyCapability(show, install.capability({ kind: "modInstall.reveal", product }));
+    if (revealing && !focusedShow) { focusedShow = true; show.focus(); }
   }
   const unsubscribe = port.subscribe(render);
   function close() {

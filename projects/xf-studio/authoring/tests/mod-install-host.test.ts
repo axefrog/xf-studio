@@ -560,8 +560,8 @@ test("MO2: a mod with extra files is added with every file in its own folder, na
     expect(plan).toMatchObject({ modName: SET_MOD, blocked: null, replacing: false });
     expect(plan.changes).toEqual([
       `Add the mod “${SET_MOD}” to Mod Organizer 2, with its 4 files in its own folder, ${folder}.`,
-      `In ${archives}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”), and an extra archive it loads (“0${NS}_table.archive”).`,
-      `In ${tweaks}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
+      `${join("archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”), and an extra archive it loads (“0${NS}_table.archive”).`,
+      `${join("r6", "tweaks", NS)}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
       // Separator placement is unchanged: the bottom of the first section without frameworks.
       `Add “${SET_MOD}” to the profile “Main (2026)”, switched on. At the bottom of the "Looks" section, where Mod Organizer puts newly installed mods.`,
       "Nothing else in your mod list changes.",
@@ -592,8 +592,8 @@ test("direct: a mod with extra files goes into the game's archive\\pc\\mod and r
     const plan = await f.host.plan("set");
     expect(plan.changes).toEqual([
       `Copy 4 files into your game folder, ${f.game}.`,
-      `In ${archives}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”), and an extra archive it loads (“0${NS}_table.archive”).`,
-      `In ${tweaks}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
+      `${join("archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”), and an extra archive it loads (“0${NS}_table.archive”).`,
+      `${join("r6", "tweaks", NS)}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
     ]);
     const result = await f.host.install("set", plan.token);
     expect(result.message).toBe(`“${SET_MOD}” is in your game folder (its archive\\pc\\mod and r6\\tweaks folders). Start the game to see its expressions in photo mode.`);
@@ -616,8 +616,8 @@ test("replacing a mod with extra files names every file, and removes one the new
     expect(plan.replacing).toBe(true);
     expect(plan.changes.slice(0, 4)).toEqual([
       `Replace the 3 files of the mod “${SET_MOD}” that XF Studio added before, in ${folder}.`,
-      `In ${join(folder, "archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”).`,
-      `In ${join(folder, "r6", "tweaks", NS)}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
+      `${join("archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”).`,
+      `${join("r6", "tweaks", NS)}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
       `Remove “0${NS}_table.archive”, which XF Studio added for “${SET_MOD}” before: this build no longer has it.`,
     ]);
     await f.host.install("second", plan.token);
@@ -662,9 +662,10 @@ test("a build with a file of a kind XF Studio doesn't know where to put is refus
     manifest.files.push({ path, sha256: digest(body), bytes: Buffer.byteLength(body) });
     writeFileSync(manifestFile, JSON.stringify(manifest));
     const plan = await f.host.plan("newer");
-    expect(plan).toMatchObject({ modName: SET_MOD, next: null, changes: [] });
-    expect(plan.blocked).toBe(`XF Studio doesn't know where the file “${NS}.reds” of “${SET_MOD}” goes, so it can't add this mod for you. ` +
-      "Show it in its folder, then copy its folders into your game folder or mod manager.");
+    // Its one next step is showing it in its folder (the sheet's primary button then).
+    expect(plan).toMatchObject({ modName: SET_MOD, next: "reveal", changes: [] });
+    expect(plan.blocked).toBe(`This build has a file XF Studio can't place (${NS}.reds), so it can't add it for you. ` +
+      "Show it in its folder and copy its folders into your game folder or mod manager.");
     expect(await refusal(() => f.host.install("newer", plan.token))).toMatchObject({ code: "install_blocked" });
     expect(existsSync(join(f.mo2, "mods", SET_MOD))).toBe(false);
     expect(readFileSync(f.modlistFile, "utf8")).toBe(MODLIST);

@@ -17,10 +17,11 @@ export const MOD_INSTALL_PLAN = "xfs/mod-install-plan-1" as const;
 export const MOD_INSTALL_RESULT = "xfs/mod-install-result-1" as const;
 export type ModInstallRoute = "mo2" | "direct";
 /**
- * The one next step a blocked plan offers as a button (UI-99): open Settings, rename the mod in Mod package, or check again
- * once the person has done what `blocked` says. Null when there is nothing to press (a test workspace).
+ * The one next step a blocked plan offers as a button (UI-99): open Settings, rename the mod in Mod package, check again
+ * once the person has done what `blocked` says, or show the build in its folder to copy it by hand (a build XF Studio can't
+ * place: the sheet's primary button then). Null when there is nothing to press (a test workspace).
  */
-export type ModInstallNextStep = "setup" | "rename" | "retry" | null;
+export type ModInstallNextStep = "setup" | "rename" | "retry" | "reveal" | null;
 /** What the host's `install` would do, in plain words, and whether it can now (mod-install-host.ts). */
 export type ModInstallPlan = {
   schema: typeof MOD_INSTALL_PLAN;
