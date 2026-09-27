@@ -1,6 +1,6 @@
 # UI copy and layout review
 
-**Status:** audit and plan, 27 September 2026, branch `claude/ui-copy-polish`. It covers every panel, sheet, menu, toolbar, status line, empty state and hint of XF Studio as it stood at `f4f21a7`, which is `main` with the component library merged. The review rewrites text and presentation only; behaviour stays as it is. It also plans the **Coming soon** placeholders for features whose design is agreed ([§6](#6-coming-soon-placeholders)). The copy rules that come out of it are in [§2](#2-copy-style-guide) and in the style guide ("Copy and wording", section 01). Progress on the plan is recorded in [§7](#7-implementation-status).
+**Status:** audit, plan and implementation, 27 September 2026, branch `claude/ui-copy-polish` ([§7](#7-implementation-status)). It covers every panel, sheet, menu, toolbar, status line, empty state and hint of XF Studio as it stood at `f4f21a7`, which is `main` with the component library merged. The review rewrites text and presentation only; behaviour stays as it is. It also plans the **Coming soon** placeholders for features whose design is agreed ([§6](#6-coming-soon-placeholders)). The copy rules that come out of it are in [§2](#2-copy-style-guide) and in the style guide ("Copy and wording", section 01). Progress on the plan is recorded in [§7](#7-implementation-status).
 
 **How it was made.** The live UI was walked in an isolated `?verify=1` workspace, on its own port, with scratch settings and data. A screenshot and the visible text of every panel were captured under the worktree's ignored `evidence/screenshots/ui-copy-polish/before/`. Four read-only inventories of the source then listed every user-visible string with its file, line, conditions and the tests that assert it. Screenshots and text captures stay local because they show installed mods' names.
 
@@ -283,12 +283,12 @@ Each row gives the tier (§ intro), where the text sits, the current text (abrid
 | Search legend | "○ Not prepared yet: the first time, XF Studio reads it from your game files, which takes a few seconds. ◌ Being prepared in the background." | S + H | "○ Not prepared yet · ◌ Preparing", with a tip: "Choosing a choice that isn't prepared reads it from your game files, which takes a few seconds the first time." |
 | Legend, stopped | "Preparing ahead has paused: it used its disk space for this session. Every choice still works; the first time takes a few seconds." | S | "Preparing ahead has paused (disk space for this session is used). Every choice still works." |
 | Heading switches | visible "Shown" | K | Keep (the switch's name is "Show hair in the 3D view") |
-| Hair tip | "Hair physics is not simulated: the 3D view shows each hairstyle at rest, as it is modelled." | K | Keep (becomes the hair physics placeholder's context, §6) |
+| Hair tip | "Hair physics is not simulated: the 3D view shows each hairstyle at rest, as it is modelled." | K | Keep until hair physics lands (`claude/hair-physics`), which rewrites it |
 | Eye shape label + tip | "Eye shape in the 3D view" | K | Keep |
 | Eye shape note | "Overriding the saved eye shape (Eye shape 3) in this viewport only." | S | "Your V's own is Eye shape 3; this changes the 3D view only." |
 | Uncensored toggle | "Show my V uncensored, as the game can" | S | "Show my V uncensored" (the tip says what it does) |
 | Clothes label + tip | "Clothes in the 3D view" + tip | K | Keep |
-| Default V clothing note | "The default V wears nothing of her own; Underwear only dresses her in the game's basic underwear." | H | Tip on "Clothes in the 3D view", second paragraph, while the default V shows |
+| Default V clothing note | "The default V wears nothing of her own; Underwear only dresses her in the game's basic underwear." | K | Keep: it is one of the application's clothing notes (the others are actionable), so moving only this one would need a new field |
 | Other clothing notes | "This save was loaded before XF Studio read clothes. Load it again to see what your V wears." | K | Keep (actionable) |
 | Files tip | "A save is read on this computer and never changed or uploaded." | K | Keep |
 | Prepared files line | "Prepared game files on this computer: 8.9 GB." | S | "Prepared game files: 8.9 GB", beside Clear |
@@ -435,7 +435,7 @@ Ranked by visibility.
 | L2 | T2 | Character › Your V | Five text buttons of three purposes wrap onto two lines, with an empty status line and a long summary before the first control. Reset all sits alone in its own box | Two labelled rows: "V" (Load a save…, both Default V buttons) and "Presets" (Load preset…, Save preset…). Undo, Redo and Reset all go at the right of the first row. The summary becomes the folded list |
 | L3 | T2 | Mod package | Check (outline) and Build (primary) are stacked at different widths. A tall reserved gap sits before "No check yet" | One row, Build primary at the right. The progress line stays reserved but only one line high |
 | L4 | T2 | Library | Save to library and Save as new collection are stacked at different widths | One row |
-| L5 | T2 | Motion | Select, a lone button row, two switches and a note line: four vertical groups for one idea | The select and Pause share a row. The switches follow. No free note line |
+| L5 | T2 | Motion | Select, a lone button row, two switches and a note line: four vertical groups for one idea | The free note line is gone (its text is the Facial movement switch's reserved note). The Body select becomes a button set on `claude/hair-physics`; its row is settled there |
 | L6 | T2 | Camera & light › Light | Seven studio sliders in one run with no grouping | A "Key light" subgroup (direction, height, strength) and a "Fill and room" subgroup (room, fill, rim); Exposure stays at the top. Presentation only |
 | L7 | T1 | Colour & finish | The export line's badge, note and button wrap into a box whose note wraps to two lines at the default width | With the shortened notes (§3.5) it fits one line at the default width |
 | L8 | T2 | Mod package | Game & tools sits below the result card, so a Build blocker shows far from Build | The setup line moves directly under Check / Build while it blocks Build; when ready it stays in its section |
@@ -482,8 +482,7 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 | Tattoos | Modules menu › Character, Planned | `module:tattoos` | [Tattoos brief](../character-customization/tattoos-brief.md) |
 | New view | Panels flyout › Views | `action:view.create` | [View graph design](view-graph-design.md) P4 |
 | Duplicate view (shared camera) | Panels flyout › Views | `action:view.duplicate` | [View graph design](view-graph-design.md) P4 |
-| Hair physics | Motion, a disabled switch | `action:motion.setPhysics` | [Hair physics plan](../animation/hair-physics-plan.md) P3 ("the Motion panel's switch") |
-| Pose (body source) | Motion › Body, a disabled choice | `module:poses` | [Pose library design](../animation/pose-library-design.md), [view graph §5.1](view-graph-design.md#51-poses-v-centric-no-document-part); the Poses module is in progress on `claude/pose-panel` |
+| Pose (body source) | Motion › Body, a disabled choice | `module:poses` | [Pose library design](../animation/pose-library-design.md), [view graph §5.1](view-graph-design.md#51-poses-v-centric-no-document-part). In the catalogue (`motionPose`); placed once the Body select becomes a button set (`claude/hair-physics`), whose `Segmented` extension it reuses. The Poses module is in progress on `claude/pose-panel` |
 | Skin scattering quality | Camera & light › Display | `action:preview.setSubsurfaceQuality` | [Skin shader §11](../materials/shader-skin.md) ("a viewing preference beside the lighting presets") |
 | Face handles | Expression, a disabled button | `tool:expressions.handles` | [Expression editor design](../animation/expression-editor-design.md) phase 2 |
 | Sculpt | Expression, a disabled button | `tool:expressions.sculpt` | [Expression editor design](../animation/expression-editor-design.md), "sculpt mode (Option 3)", confirmed as a later mode |
@@ -491,24 +490,43 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 | Edit values | Save Explorer › object inspector, a disabled button | `action:saves.setValue` | [Save editor design](../save/save-editor-design.md) §7.2 (the writer's phase 1: scalar values) |
 
 **Not placed, and why:**
+- **Hair physics**: being built for real on `claude/hair-physics` (the Motion panel's switch and `motion.setPhysics`), so a placeholder would be dead on arrival.
 - **Selectors panel, "Add selector"**: waits for the Selectors panel ([selectors design](selectors-design.md) S1). A panel holding only a disabled button would be an empty section.
 - **Shadows (key light)**: no agreed design. The [creator lighting](../../knowledge/creator-lighting.md) page says the first release goes without shadow maps. The Light tip says shadows aren't drawn yet.
 
-**For the teams building these:** the key in the table is what the placeholder waits for. If a feature lands under another name, change the key in `coming-soon.ts` (or remove the entry) in the same change.
+**For the teams building these:** the key in the table is what the placeholder waits for. If a feature lands under another name, change the key in `coming-soon.ts` (or remove the entry) in the same change. The catalogue is one of the pure helpers a feature view may import (`tests/studio-ui-boundary.test.ts`).
+
+## 6a. Show the options, don't hide them (dropdowns)
+
+The rule (AGENTS.md): show every choice at once (a button set, a swatch row, an expandable tree for long or grouped lists) unless a dropdown has a real reason. Every dropdown in the UI:
+
+| Dropdown | Verdict | To | State |
+|---|---|---|---|
+| Motion › Body (Still or an idle) | Convert | `Segmented` with dynamic options | Owned by `claude/hair-physics` |
+| Character › Eye shape in the 3D view (1–22 by head) | Convert | Numbered button set that wraps | Waits for `Segmented`'s dynamic options and wrapping (`claude/hair-physics`) |
+| Character › Clothes in the 3D view (up to 4 states, only those offered) | Convert | Button set | Same |
+| Settings › Head used for the eye plate (2 long options) | Convert | Button set that stacks | Same |
+| Colour & finish › Glitter preview model (research only, 5 long options) | Convert | Button set that stacks | Same |
+| Settings › Cyberpunk 2077 folder, Mod Organizer 2 instance, extra mod folder | Convert | `FolderSetting` with every found folder shown as a choice | **Done**: the library's FolderSetting gained `found`/`onSelect` and an optional folder's `onClear`; the first found folder is saved while none is chosen (defaults first) |
+| Settings › Mod Organizer 2 profile | Keep | — | An open-ended list of the person's own profile names, which can run to dozens. A short list (5 or fewer) as buttons is optional later |
+| Expression › Start from (about 100 grouped expressions, used as a command) | Convert | `SearchField` plus `TreeView` grouped by provider | Folded into the expressions drawer follow-up |
 
 ## 7. Implementation status
 
-Phase 2 applies §3–§6 with the component library's help tips, sections, property list and disabled states, one area per commit. Behaviour is unchanged. Before and after screenshots are under the worktree's ignored `evidence/screenshots/ui-copy-polish/` (`before/`, `after/`).
+Phase 2 applied §3–§6a with the component library's help tips, sections, property list and disabled states, one area per commit on `claude/ui-copy-polish`. Behaviour is unchanged, with one deliberate exception asked for with the dropdown pass: Settings › Game saves the first folder XF Studio found while none is chosen (defaults first). Before and after screenshots of every panel are under the worktree's ignored `evidence/screenshots/ui-copy-polish/` (`before/`, `after/`), with the Modules and Panels menus.
 
 | Area | State |
 |---|---|
-| Copy style guide (style guide `f-copy`) | Planned |
-| Motion | Planned |
-| Camera & light, Preview quality, Activity | Planned |
-| Pigment & edge, Shape, Warp | Planned |
-| Colour & finish, Layers | Planned |
-| Character | Planned |
-| Library, Mod package, History | Planned |
-| Shell, Settings, Help, Expression, Save Explorer | Planned |
-| Toasts and reasons (§3.20) | Planned |
-| Coming soon placeholders (§6) | Planned |
+| Copy style guide (style guide `f-copy`) | Done |
+| Motion | Done (idle and blink explanations in tips, one reserved line; the Body select left to `claude/hair-physics`) |
+| Camera & light, Preview quality, Activity | Done (L6's slider sub-groups not done: a later layout pass) |
+| Pigment & edge, Shape, Warp | Done |
+| Colour & finish, Layers | Done (finish descriptions and export notes shortened in the engine's finish table) |
+| Character | Done (the V's details list, two button rows, legend tip) |
+| Library, Mod package, History | Done (L3, L4: the buttons already share a row and wrap only in a narrow panel; L8 not done) |
+| Shell, Settings, Help, Expression, Save Explorer | Done (Save Explorer's tree keys note kept: the tree has no heading to hold a tip) |
+| Toasts and reasons (§3.20) | Done |
+| Coming soon placeholders (§6) | Done, except the Pose choice (waits for the Body button set) |
+| Dropdowns (§6a) | Settings folders done; four button-set conversions wait for `Segmented`'s dynamic options and wrapping |
+
+**Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and the §6a conversions above.
