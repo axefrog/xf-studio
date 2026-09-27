@@ -49,6 +49,19 @@ On the way there, the semantics that did not reproduce the reference were:
 
 Cost: compiling takes about 5 ms; one evaluation about 0.3 ms (100 in 27 to 30 ms) in Bun on the development machine. The host's rig step took 0.3 s on the reference route.
 
+## Rotation units under bent-elbow poses
+
+A pack pose with the hands at the waist (bend 62°) showed both elbows kinked (PREV-149). The clip decodes as WolvenKit exports it (the anim oracle: 3 frames, 213 channels, 426 keys, worst 6.9 × 10⁻⁸, for this pose and its neighbour). With the pose's main joints in model space and the graph run on them, the helper joints turned more than 40° from their bind (in their parent's space) were:
+
+| Pose | Bend measure, left / right (mm) | Elbow correctives, radians | Elbow correctives, degrees |
+|---|---|---|---|
+| `idle_stand_01` | −5.0 / −4.3 | 6° (zero slope) | 6° |
+| `idle_stand_09` (vanilla) | 5.5 / 8.5 | −63° to −146° written | −1.1° to −2.5° written |
+| Pack Pose 1 | 10.3 / 23.1 | 107–166° from bind | 7–17° from bind (mostly the 55 % orient blend) |
+| Pack Pose 2 | 9.0 / −9.6 | −104° / −155° written (left) | −1.8° / −2.7° written |
+
+The bend measure is `l_elbow_bend_A_mscl_end_GRP`'s X in `l_elbow_bend_A_mscl_start_GRP`'s space. The same op writes `PosX` at −0.001 of the value, and the neighbouring ops scale the muscle by `1 − 8x` and `1 + 20x`: sized for a value of a few units, i.e. degrees. Private before/after captures of the three poses are in the local captures tree (`local/captures/rendering/2026-09-28-pose-arms/`).
+
 ## Waist measurement
 
 The reference V's body morph target (the full export, eight chunks) was posed at t = 0 in two ways: with the Studio's nearest-segment helpers, and with the graph. For the vertices weighted more than 0.25 to each joint pair, the table gives the inward move of the lateral coordinate in `Spine3`'s frame, relative to the bind pose in `Spine3`'s rest frame (mean / max, mm):

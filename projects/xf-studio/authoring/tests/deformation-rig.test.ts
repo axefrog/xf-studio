@@ -100,6 +100,22 @@ test("a bounce measures end in start's space and writes offset plus slope times 
   expect(run(program, { B: translation(0, 0, 0) }).tracks[0]).toBeCloseTo(310, 6);
 });
 
+test("a bounce's rotation channels are Euler degrees, measured and written (PREV-149)", () => {
+  // The vanilla elbow corrective's shape: RotZ at −200 per metre of the bend measure. A 10 mm bend is −2°, not −2 rad (−115°), which
+  // turned the elbow's muscle joints inside out under bent-arm poses.
+  const elbow = compile([{ $type: "animAnimNode_SimpleBounce", startTransform: ti("A"), endTransform: ti("B"), offset: 0, multiplier: -200, negativeMultiplier: 0,
+    transformOutputs: [{ targetTransform: ti("H"), parentTransform: ti("Root"), targetTransformChannel: "PosX", multiplier: 1,
+      channelEntries: [{ transformChannel: "RotZ", multiplier: 1 }] }] }]);
+  const turn = (m: Mat4) => Math.atan2(m[1]!, m[0]!) * 180 / Math.PI;
+  expect(turn(run(elbow, { B: translation(1.01, 0, 0) }).at("H"))).toBeCloseTo(-2, 6);
+  expect(run(elbow, { B: translation(1.01, 0, 0) }).at("H").slice(12, 15).map(x => +x.toFixed(9))).toEqual([0, 1, 0]);
+  // A rotation measure reads degrees too: B turned 30° about Z in A's space, doubled, is 60°.
+  const measured = compile([{ $type: "animAnimNode_SimpleBounce", startTransform: ti("A"), endTransform: ti("B"), offset: 0, multiplier: 2, negativeMultiplier: 2,
+    transformOutputs: [{ targetTransform: ti("H"), parentTransform: ti("Root"), targetTransformChannel: "RotZ", multiplier: 1,
+      channelEntries: [{ transformChannel: "RotZ", multiplier: 1 }] }] }]);
+  expect(turn(run(measured, { B: rotationZ(Math.PI / 6, [2, 0, 0]) }).at("H"))).toBeCloseTo(60, 6);
+});
+
 test("a spline follows a float track a bounce wrote, and added transforms sit at their parent times their offset", () => {
   const program = compile([
     { $type: "animAnimNode_StackTransformsExtender", transformInfos: [{ name: cn("M_GRP"), parentName: cn("A"), referenceTransformLs: qs([0, 1, 0]) }] },
