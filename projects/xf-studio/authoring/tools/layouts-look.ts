@@ -101,6 +101,9 @@ try {
   await page.evaluate(`(() => { const s = ${shell}; s.layouts.switchTo(s.layouts.library().layouts[0].id); s.layouts.saveNamed("Laptop", true, "compact"); s.layouts.switchTo(s.layouts.library().layouts[0].id); return true; })()`);
   await page.viewport(1000, 800); await page.wait(900);
   await shot("6-narrow-auto-switch");
+  // The narrow header: the Layouts button is its icon alone, beside Panels.
+  await shot("6b-narrow-header", { x: 0, y: 0, width: 1000, height: 48 });
+  await page.wait(300);
   await openMenu();
   await shot("7-narrow-menu", await menuClip());
   await closeMenus();

@@ -213,14 +213,14 @@ The desktop first-run **Continue without paths** control dispatches the existing
 | `layouts.revert` | `{}` | Revert to saved: the saved arrangement and modules become live. Refused before any library exists |
 | `layouts.switch` | `{id, modified, shown}` | The current layout keeps its working state when `modified`; the target's working state (else its saved one) becomes live, with its modules if it remembers them. Refused: unknown layout, already current |
 | `layouts.rename` | `{id, name, shown}` | Same name rules as saveAs |
-| `layouts.duplicate` | `{id, shown}` | A copy (`<name> copy`) after it, not current, without automatic switching |
+| `layouts.duplicate` | `{id, shown}` | A copy (`<name> copy`) after it, not current, without automatic switching. No control offers it: beside Save as new layout… it was ambiguous (UI gate review) |
 | `layouts.delete` | `{id, shown}` | Deleting the current layout makes its neighbour current. Refused for the only layout. The notice's Undo is `layouts.insert` |
 | `layouts.insert` | `{layout, index, activate, modified, shown}` | Puts a layout back (validated; a clashing ID or name is renamed), optionally switching to it |
 | `layouts.setModules` | `{remember, shown}` | Whether the current layout remembers shown modules |
 | `layouts.setAutoSize` | `{size: "wide"\|"compact"\|null, shown}` | The size class the current layout is switched to in; one layout per class |
 | `layouts.seen` | `{size}` | The size class last seen (only once a library exists), so a window opening in another class counts as crossing into it |
 
-Controls: the header's **Layouts** menu (`studio-ui/layouts.ts`) and the palette's Layout group ("Layout: <name>", Save layout…, Save changes, Revert, Rename, Duplicate, Delete, Reset to factory layout). Automatic switching happens only when the window crosses into a class (or opens in another class than last seen), so a manual choice wins within a class. Never Undo: layout changes touch no look, scene, camera or light; the kept working state, Revert and the delete notice's Undo are their recovery. Tests: `tests/saved-layouts.test.ts`.
+Controls: the header's **Layouts** menu (`studio-ui/layouts.ts`) and the palette's Layout group ("Layout: <name>", Save layout…, Save changes, Revert, Rename, Delete, Reset to factory layout). Automatic switching happens only when the window crosses into a class (or opens in another class than last seen), so a manual choice wins within a class. Never Undo: layout changes touch no look, scene, camera or light; the kept working state, Revert and the delete notice's Undo are their recovery. Tests: `tests/saved-layouts.test.ts`.
 
 **Folded headings (`folded.set {keys, folded}`).** A UI preference (`UIPreferences.folded`: the headings a panel shows folded, by the panel's key for them, e.g. `character:head/hair`; stored only while something is folded): the Character panel's group and section expanders set it, and its palette commands (Open every Character section, Fold every Character section, and Expand/Collapse everything in each section with two rows or more, which also opens or closes its rows and unfolds their author groups) come from the panel itself (`PanelController.commands`). Presentation state: never Undo, never read by the application. A row's and an author group's fold last while the panel is open.
 

@@ -383,7 +383,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
   // Saved layouts (view-graph-design.md §4.5): the current layout's name, collapsing to its icon in narrow windows.
-  const layoutsButton = button({ label: "Layouts", icon: "dock", variant: "ghost", menu: true, className: "layouts-btn", onClick: event => {
+  const layoutsButton = button({ label: "Layouts", icon: "layouts", variant: "ghost", menu: true, className: "layouts-btn", onClick: event => {
     const anchor = event.currentTarget as Element;
     openMenu(layouts.menuItems(anchor), anchor, { label: "Layouts", invoker: anchor });
   } });
@@ -423,7 +423,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       verify.hidden = !frame.status.verification;
       const layout = layouts.label(), layoutText = layoutsButton.querySelector("span");
       if (layoutText) setText(layoutText, layout.name);
-      layoutsButton.title = layout.title; setAttr(layoutsButton, "aria-label", layout.title);
+      layoutsButton.title = layout.title; layoutsButton.dataset.title = layout.title; setAttr(layoutsButton, "aria-label", layout.accessible);
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
     },

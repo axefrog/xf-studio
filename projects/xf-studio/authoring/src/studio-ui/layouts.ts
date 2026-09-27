@@ -104,7 +104,7 @@ export function layoutController(host: LayoutHost) {
   /** Save the live arrangement as a new layout, which becomes the current one. */
   function saveNamed(name: string, remember: boolean, autoSize?: LayoutSizeClass) {
     if (!dispatch({ kind: "layouts.saveAs", name, remember, ...(autoSize ? { autoSize } : {}), shown: shown() })) return false;
-    feedback.toast("success", "Layouts", `Layout ${quoted(activeLayout(library()).name)} saved. Switch back to any layout from the Layouts menu.`);
+    feedback.toast("success", "Layouts", `Saved layout ${quoted(activeLayout(library()).name)}.`);
     return true;
   }
   function update() {
@@ -156,47 +156,51 @@ export function layoutController(host: LayoutHost) {
     dock.reset();
   }
 
-  /** A layout's state for its menu row. */
+  /** What is different about a layout, for its menu row: nothing when it is as saved and chosen by hand (the check marks the current one). */
   const describe = (layout: SavedLayout, active: boolean) => [
-    active ? modified() ? "Changed since saved" : "Current" : layout.working ? "Has changes you haven't saved; they come back when you switch to it" : "",
-    layout.autoSize ? `Chosen automatically in ${layout.autoSize} windows` : "",
-    layout.modules ? "Remembers shown modules" : ""].filter(Boolean).join(" · ");
+    (active ? modified() : !!layout.working) ? "Changed" : "",
+    layout.autoSize ? `In ${layout.autoSize} windows` : ""].filter(Boolean).join(" · ");
   const unchanged = { available: false, reason: "No changes since it was saved." };
 
   return {
     library, modified, switchTo, saveAs, saveNamed, update, revert, rename, duplicate, remove, setRemember, setAuto, resetFactory,
-    /** The header button's label and title. */
+    /** The header button's label and its tooltip ("Layout: <name>"). */
     label() {
-      const name = activeLayout(library()).name, changed = modified();
-      return { name, title: `Layouts: ${name}${changed ? " (changed since saved)" : ""}. Save, switch and restore panel arrangements` };
+      const name = activeLayout(library()).name;
+      return { name, title: `Layout: ${name}`, accessible: `Layout: ${name}${modified() ? ", changed" : ""}` };
     },
-    /** The Layouts menu: the layouts, then the current one's commands, then the factory reset. */
+    /** The Layouts menu: the layouts, then the current one's commands in groups, then the factory reset. */
     menuItems(anchor: MenuAnchor): MenuItem[] {
       const current = library(), active = activeLayout(current), changed = modified(), only = current.layouts.length <= 1;
+      const row = (layout: SavedLayout): MenuItem => {
+        const hint = describe(layout, layout.id === current.active);
+        return { kind: "action", label: layout.name, icon: "layouts", checked: layout.id === current.active, ...(hint ? { hint } : {}),
+          run: () => { if (layout.id !== current.active) switchTo(layout.id); } };
+      };
+      // Unavailable because nothing changed is information, not a problem: the reason is muted.
+      const whenChanged = changed ? {} : { capability: unchanged, quietReason: true };
       return [
-        { kind: "heading", label: "Layouts", detail: "Your panel arrangements, the same for every collection" },
-        ...current.layouts.map((layout): MenuItem => ({ kind: "action", label: layout.name, icon: "dock", checked: layout.id === current.active,
-          hint: describe(layout, layout.id === current.active), run: () => { if (layout.id !== current.active) switchTo(layout.id); } })),
+        { kind: "heading", label: "Layouts" },
+        ...current.layouts.map(row),
         { kind: "separator" },
-        { kind: "heading", label: active.name, detail: changed ? "Changed since saved" : "Saved" },
-        { kind: "action", label: "Save changes", icon: "save", hint: "This arrangement becomes the layout's saved one", ...(changed ? {} : { capability: unchanged }), run: update },
-        { kind: "action", label: "Revert to saved", icon: "undo", hint: "Back to the arrangement it was saved with", ...(changed ? {} : { capability: unchanged }), run: revert },
-        { kind: "action", label: "Save as new layout…", icon: "plus", hint: "Keep this arrangement under a new name", run: () => saveAs(anchor) },
+        { kind: "action", label: "Save changes", icon: "save", ...whenChanged, run: update },
+        { kind: "action", label: "Revert to saved", icon: "undo", ...whenChanged, run: revert },
+        { kind: "separator" },
+        { kind: "action", label: "Save as new layout…", icon: "plus", run: () => saveAs(anchor) },
         { kind: "action", label: "Rename…", icon: "rename", run: () => rename(anchor) },
-        { kind: "action", label: "Duplicate", icon: "duplicate", run: duplicate },
-        { kind: "action", label: "Delete", icon: "trash", danger: true, hint: "You can undo this from the notice",
-          ...(only ? { capability: { available: false, reason: "This is your only layout. Save another before deleting it." } } : {}), run: remove },
-        { kind: "action", label: "Remember shown modules", icon: "category", checked: !!active.modules,
-          hint: "Switching to this layout shows and hides modules to match. Your work is never affected", run: () => setRemember(!active.modules) },
-        { kind: "submenu", label: "Switch to it automatically", icon: "monitor", hint: active.autoSize ? `In ${active.autoSize} windows` : "Never", items: () => [
-          { kind: "action", label: "Never", checked: !active.autoSize, run: () => setAuto(null) },
-          ...(["wide", "compact"] as const).map((size): MenuItem => ({ kind: "action", label: `In ${SIZE_TEXT[size]}`, checked: active.autoSize === size,
-            hint: current.layouts.find(layout => layout.autoSize === size && layout.id !== active.id)
-              ? `Instead of ${quoted(current.layouts.find(layout => layout.autoSize === size)!.name)}` : "When the window becomes this size; your own choice wins until it changes size again",
-            run: () => setAuto(size) }))] },
+        { kind: "action", label: "Delete", icon: "trash", danger: true,
+          ...(only ? { capability: { available: false, reason: "This is your only layout. Save another before deleting it." }, quietReason: true } : {}), run: remove },
         { kind: "separator" },
-        { kind: "action", label: "Reset to factory layout", icon: "reset",
-          hint: "This window size's panels go back to how XF Studio arranges them; Revert to saved brings yours back", run: resetFactory },
+        { kind: "action", label: "Remember shown modules", icon: "category", checked: !!active.modules, run: () => setRemember(!active.modules) },
+        { kind: "submenu", label: "Switch to it automatically", icon: "monitor", ...(active.autoSize ? { hint: `In ${active.autoSize} windows` } : {}), items: () => [
+          { kind: "action", label: "Never", checked: !active.autoSize, run: () => setAuto(null) },
+          ...(["wide", "compact"] as const).map((size): MenuItem => {
+            const other = current.layouts.find(layout => layout.autoSize === size && layout.id !== active.id);
+            return { kind: "action", label: `In ${SIZE_TEXT[size]}`, checked: active.autoSize === size, ...(other ? { hint: `Instead of ${quoted(other.name)}` } : {}),
+              run: () => setAuto(size) };
+          })] },
+        { kind: "separator" },
+        { kind: "action", label: "Reset to factory layout", icon: "reset", hint: "Revert to saved brings yours back", run: resetFactory },
       ];
     },
     /** The palette's Layout commands. */
@@ -205,7 +209,7 @@ export function layoutController(host: LayoutHost) {
       const always = { capability: () => ({ available: true }) };
       const keywords = "layout workspace arrangement panels";
       return [
-        ...current.layouts.map(layout => ({ id: `layout.switch.${layout.id}`, title: `Layout: ${layout.name}`, group: "Layout", icon: "dock" as const, keywords: `${keywords} switch`,
+        ...current.layouts.map(layout => ({ id: `layout.switch.${layout.id}`, title: `Layout: ${layout.name}`, group: "Layout", icon: "layouts" as const, keywords: `${keywords} switch`,
           capability: () => layout.id === current.active ? { available: false, reason: "This is the current layout." } : { available: true }, run: () => switchTo(layout.id) })),
         { id: "layout.saveAs", title: "Save layout…", group: "Layout", icon: "save", keywords: `${keywords} save new name`, ...always, run: () => saveAs(centre()) },
         { id: "layout.update", title: `Save changes to layout ${quoted(active.name)}`, group: "Layout", icon: "save", keywords,
@@ -213,7 +217,6 @@ export function layoutController(host: LayoutHost) {
         { id: "layout.revert", title: `Revert layout ${quoted(active.name)} to saved`, group: "Layout", icon: "undo", keywords: `${keywords} restore undo`,
           capability: () => changed ? { available: true } : unchanged, run: revert },
         { id: "layout.rename", title: `Rename layout ${quoted(active.name)}…`, group: "Layout", icon: "rename", keywords, ...always, run: () => rename(centre()) },
-        { id: "layout.duplicate", title: `Duplicate layout ${quoted(active.name)}`, group: "Layout", icon: "duplicate", keywords: `${keywords} copy`, ...always, run: duplicate },
         { id: "layout.delete", title: `Delete layout ${quoted(active.name)}`, group: "Layout", icon: "trash", keywords: `${keywords} remove`,
           capability: () => current.layouts.length > 1 ? { available: true } : { available: false, reason: "This is your only layout. Save another before deleting it." }, run: remove },
       ];

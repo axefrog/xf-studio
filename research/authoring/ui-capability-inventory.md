@@ -47,7 +47,7 @@ The same contour, tangent and warp data can be edited in UV or directly on the d
 
 ### Panel layouts — working
 
-Panels dock, float, group as tabs, join magnetically and collapse to their tab bars, with separate wide and compact arrangements. **Saved layouts** name whole arrangements (both size classes, floating windows, collapsed groups, active tabs, parked places) and, by default, which modules are shown; the header's Layouts menu and the palette save, switch, update, revert, rename, duplicate and delete them, and a layout can switch itself in when the window becomes wide or compact. A changed layout keeps its working state when left. Layouts are workspace preferences shared by every collection, never part of a look, Undo or an export ([view graph design §4.5](view-graph-design.md#45-saved-layouts-option-c-first-step), [action catalogue](ui-action-catalogue.md)).
+Panels dock, float, group as tabs, join magnetically and collapse to their tab bars, with separate wide and compact arrangements. **Saved layouts** name whole arrangements (both size classes, floating windows, collapsed groups, active tabs, parked places) and, by default, which modules are shown; the header's Layouts menu and the palette save, switch, update, revert, rename and delete them, and a layout can switch itself in when the window becomes wide or compact. A changed layout keeps its working state when left. Layouts are workspace preferences shared by every collection, never part of a look, Undo or an export ([view graph design §4.5](view-graph-design.md#45-saved-layouts-option-c-first-step), [action catalogue](ui-action-catalogue.md)).
 
 ### Colour and optical behavior — working selection, mixed preview maturity
 

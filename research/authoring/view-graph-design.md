@@ -455,7 +455,7 @@ Named layouts are option C without the view graph: a **layout** is a dock arrang
 
 **Undo.** Layout changes are neither look history nor View and lighting history: they change no look, scene, camera or light, and Ctrl+Z in a panel must not rearrange the dock. The kept working state, Revert to saved and a delete's Undo notice are their recovery.
 
-**Where.** A **Layouts** button in the header beside Panels (the active layout's name, collapsing to its icon in narrow windows): the layouts, then the active layout's commands, then Reset to factory layout. Names are entered in the library's value popover with its options (no `prompt` or `confirm`). The palette has "Layout: <name>" for each layout and every command.
+**Where.** A **Layouts** button in the header beside Panels (a stacked-windows icon and the active layout's name, the icon alone in narrow windows; tooltip "Layout: <name>"): the layouts, each row saying only what differs (Changed, In compact windows), then the active layout's commands in groups (Save changes and Revert; Save as new layout…, Rename and Delete; Remember shown modules and automatic switching), then Reset to factory layout. `layouts.duplicate` has no control, since it was ambiguous beside Save as new layout…. Names are entered in the library's value popover with its options (no `prompt` or `confirm`). The palette has "Layout: <name>" for each layout and every command.
 
 ## 5. Placeholder modules
 
