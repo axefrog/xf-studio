@@ -431,6 +431,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 2. **Closed-mouth close-up** under a slowly moving key light: is there a thin bright line along the parting in the game at all?
 3. **Neck seam**: head and body tone match at the neck under the creator light (with the body track's body test).
 4. **Scatter width and quality.** Photo mode, one hard key light raking across the cheek so its shadow terminator crosses the face, camera fixed: frames at Subsurface Scattering Quality Low and High, then High again at a second camera distance (about twice as far). Record the upscaler, ray-tracing mode and SSS quality. This gives the parity fit of §11.6 its data, and shows the 11- versus 25-sample difference. A Low/High pair that looks identical would suggest the stochastic blur, which ignores the quality setting.
+5. **Key-light colour (high priority; [next sessions](../runtime/next-sessions-plan.md) ask 5.5).** The creator's silver piercing at the face framing: its highlights show the colour of the lights that store none. Neutral: the lit skin's extra warmth in the preview lies in the albedo's decode (§11.8). Cool: the unset light colour is not white. It gates the fill-strength refit ([creator lighting §12.5](../../knowledge/creator-lighting.md#125-refitting-from-new-matched-captures)).
 
 ## 11. Screen-space scatter in the preview (Three.js)
 
