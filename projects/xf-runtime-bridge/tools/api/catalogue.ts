@@ -39,7 +39,10 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     label: "Change V's appearance",
     description: "Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile).",
   },
-  control: { label: "Stop the bridge", description: "Switches the game bridge off until the game restarts. Always allowed." },
+  control: {
+    label: "Stop the bridge",
+    description: "Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed.",
+  },
 };
 
 export type CommandResult = { value: unknown; images?: ImageRef[] };
@@ -135,6 +138,22 @@ function wrapCapture(run: () => CaptureRecord): CommandResult {
   }
 }
 
+/** pose.live.apply: the catalogue's list of {joint, rotation} becomes the bridge's map of joint to rotation. */
+export function livePoseParams(input: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (Array.isArray(input.joints)) {
+    const joints: Record<string, unknown> = {};
+    for (const entry of input.joints as { joint: string; rotation: number[] }[]) {
+      if (Object.hasOwn(joints, entry.joint)) throw planError("bad_input", `Joint ${entry.joint} is given twice.`);
+      joints[entry.joint] = entry.rotation;
+    }
+    out.joints = joints;
+  }
+  if (input.hips !== undefined) out.hips = input.hips;
+  if (input.restore !== undefined) out.restore = input.restore;
+  return out;
+}
+
 /** Sends one bridge method from inside a local command; a refusal becomes a plain error. */
 async function bridgeCall(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
   const response = await context.api.callBridge(method, params, context.cid);
@@ -155,6 +174,8 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   // allow_writes and the photo class in the plugin's config.ini.
   const classes = Array.isArray(status.write_classes) ? (status.write_classes as string[]) : [];
   if (status.allow_writes !== true || !classes.includes("photo")) throw Object.assign(new Error("writes"), { plain: plainBridgeError(status.allow_writes === true ? "write_class_disabled" : "writes_disabled") });
+  // The in-game panel can pause writes; the key press is a write too.
+  if (status.writes_paused === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("writes_paused") });
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
@@ -335,10 +356,10 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "bridge.kill",
     title: "Switch the bridge off",
     description:
-      "Emergency stop: switches the game bridge off until the game restarts. Nothing can reach the game through it afterwards. The game itself keeps running.",
+      "Emergency stop: switches the game bridge off and puts back what it left switched on (a frozen world, a hidden photo-mode menu, a live-posed carrier). Nothing can reach the game through it afterwards, until the player presses Reconnect in the game's XF Runtime Bridge window (Cyber Engine Tweaks overlay, test builds) or restarts the game. The game itself keeps running.",
     permission: "control",
     input: obj(),
-    undo: "Restart the game to switch the bridge on again.",
+    undo: "In the game, press Reconnect in the XF Runtime Bridge window (Cyber Engine Tweaks overlay; test builds), or restart the game.",
     bridge: { method: "bridge.kill" },
   },
 
@@ -652,6 +673,70 @@ export const CATALOGUE: readonly CommandDef[] = [
     bridge: { method: "photo.expression.index" },
   },
   {
+    name: "photo.pose.set",
+    title: "Select a photo-mode pose",
+    description:
+      "Selects V's photo-mode pose through the menu, as the player does: by pose record (record, for example xfs_live_carrier or PhotoModePoses.idle_stand_01), by the labels the menu shows (pose, optionally with category), or by option data from photo_state (category_value with pose_value). Photo mode only.",
+    permission: "write-photo",
+    input: obj({
+      record: str("A pose record: its id (xfs_live_carrier) or full name (PhotoModePoses.xfs_live_carrier).", { pattern: "^[A-Za-z0-9_.]{1,128}$", maxLength: 128 }),
+      pose: str("The pose's label as the menu shows it.", { maxLength: 128 }),
+      category: str("The category's label as the menu shows it (with pose).", { maxLength: 128 }),
+      category_value: int("The category's option data (photo_state), with pose_value.", 0, 1000000),
+      pose_value: int("The pose's option data (photo_state), with category_value.", 0, 1000000),
+    }),
+    undo: "the result's undo selects the earlier category and pose again; leaving photo mode also resets the pose.",
+    bridge: { method: "photo.pose.set" },
+  },
+  {
+    name: "pose.live.read",
+    title: "Check the live-pose carrier in memory (research)",
+    description:
+      "Research tool for live posing: finds a loaded animation clip in the game's memory (by default the XF live carrier from the test package, while photo mode shows it) and checks that its keys are laid out as the bridge expects: counts, key runs, joint indices and the carrier contract (one constant rotation key per joint). If anything differs it stops and lists every mismatch; otherwise it returns the decoded keys and a hash to compare with the Studio's offline decode (expect_hash). Changes nothing.",
+    permission: "read",
+    input: obj({
+      set: str("The animation set's depot path (default: the XF carrier's).", { pattern: "^[A-Za-z0-9_.\\\\/-]{7,216}$", maxLength: 216 }),
+      clip: str("The clip's name (default: xfs_live_carrier).", { pattern: "^[A-Za-z0-9_.-]{1,128}$", maxLength: 128 }),
+      expect_hash: str("The carrier build's keys_hash (16 hex digits), to compare.", { pattern: "^[0-9a-f]{16}$", maxLength: 16 }),
+    }),
+    bridge: { method: "pose.live.read" },
+  },
+  {
+    name: "pose.live.apply",
+    title: "Pose V live through the carrier (research)",
+    description:
+      "Research tool for live posing: writes joint rotations (unit quaternions [x, y, z, w], by joint name or index) and optionally the Hips translation into the XF live carrier clip in the game's memory, so the photo-mode pose changes without a reload if the engine reads those keys every frame (the experiment's question). Only in the XF test profile's -writes build (allow_live_pose), in photo mode with the carrier selected (photo_pose_set record xfs_live_carrier), and only after the same layout checks as pose_live_read. restore: true puts the carrier's own keys back.",
+    permission: "write-photo",
+    input: obj({
+      joints: {
+        type: "array",
+        description: "The joints to set, each a joint name (or index) and a rotation.",
+        items: {
+          description: "One joint: its name (or index) and its rotation.",
+          ...obj(
+          {
+            joint: str("The joint's name in the rig (for example RightForeArm), or its index.", { pattern: "^[A-Za-z0-9_]{1,64}$", maxLength: 64 }),
+            rotation: {
+              type: "array",
+              description: "A unit quaternion [x, y, z, w] in the joint's local space.",
+              items: num("A component.", -1.01, 1.01),
+              minItems: 4,
+              maxItems: 4,
+            },
+          },
+          ["joint", "rotation"],
+          ),
+        },
+        minItems: 1,
+        maxItems: 128,
+      },
+      hips: { type: "array", description: "The Hips joint's translation [x, y, z] in metres.", items: num("A coordinate, in metres.", -3, 3), minItems: 3, maxItems: 3 },
+      restore: bool("Put the carrier's own keys back instead."),
+    }),
+    undo: "pose_live_apply with restore: true (the result's undo); the kill switch also puts the carrier's keys back, and leaving photo mode unloads the carrier.",
+    bridge: { method: "pose.live.apply", params: livePoseParams },
+  },
+  {
     name: "face.rig.read",
     title: "Read V's photo-mode face setup",
     description:
@@ -720,7 +805,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "cc.open",
     title: "Open the appearance screen",
     description:
-      "Opens the appearance screen (the mirror's character creator) from normal play, the way a mirror does, and waits until it is open. mode mirror (the default) allows the rows a mirror allows (hair, make-up, eye colour, piercings and the XF rows); ripperdoc also allows the face-shape, skin and cyberware rows. Refused in combat, a scene, a vehicle or a menu, and unless saving is locked first (it locks saving itself, until a save is loaded). Only in the XF test profile.",
+      "Opens the appearance screen (the mirror's character creator) from normal play, the way a mirror does, and waits until it is open. mode mirror (the default) allows the rows a mirror allows (hair, make-up, eye colour, piercings and the XF rows); ripperdoc also allows the face-shape, skin and cyberware rows. Refused in combat, a scene, a vehicle or a menu, when the player isn't V (a Johnny section), and until the game has registered the bridge's own save lock (it locks saving itself, until a save is loaded). If the wait runs out after the game took the request, the answer says the screen may still open (check game_status). Only in the XF test profile.",
     permission: "write-character",
     input: obj({
       mode: oneOf("Which rows can be changed: mirror (default) or ripperdoc (adds the eye shape, nose, skin and cyberware rows).", ["mirror", "ripperdoc"]),

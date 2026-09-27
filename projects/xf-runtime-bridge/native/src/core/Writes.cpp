@@ -329,6 +329,40 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
     return out;
 }
 
+namespace
+{
+constexpr const char* kSaveLockNote = "saving stays locked until a save is loaded (the bridge took its save lock first)";
+
+// Withdraws cc.open's request; never throws. Returns what the game said ({withdrawn}, {taken} or {}).
+json WithdrawCreatorOpen(const CreatorOpenOps& aOps)
+{
+    try
+    {
+        auto answer = aOps.cancel();
+        return answer.is_object() ? answer : json::object();
+    }
+    catch (const std::exception&)
+    {
+        return json::object();
+    }
+}
+
+std::string WithdrawnText(const json& aWithdrawal)
+{
+    if (aWithdrawal.value("withdrawn", false))
+    {
+        return "the request was withdrawn, so nothing will open";
+    }
+    if (aWithdrawal.value("taken", false))
+    {
+        return "the menu had already taken the request, so the appearance screen may still open: check game.status and "
+               "use cc.back to close it";
+    }
+    return "the bridge couldn't confirm that the request was withdrawn, so the appearance screen may still open: check "
+           "game.status and use cc.back to close it";
+}
+} // namespace
+
 json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOps& aOps)
 {
     const auto mode = std::string(params::CreatorModeName(aRequest.mode));
@@ -341,38 +375,169 @@ json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOp
                     {"undo", nullptr},
                     {"undo_note", "nothing was opened by this call"}};
     }
-    aOps.settle();
-    auto requested = aOps.open();
+    try
+    {
+        aOps.settle();
+    }
+    catch (const MethodError& e)
+    {
+        throw MethodError(e.code, std::string(e.what()) + "; " + kSaveLockNote);
+    }
+
+    json requested;
+    try
+    {
+        requested = aOps.open();
+    }
+    catch (const MethodError& e)
+    {
+        // Stage 2 refused (the moment passed, the save lock isn't confirmed, ...) or the call failed
+        // part-way: make sure no request is left pending, and say that the lock stays (RB-43, RB-46).
+        const auto withdrawal = WithdrawCreatorOpen(aOps);
+        std::string message = std::string(e.what()) + "; " + kSaveLockNote;
+        if (!withdrawal.value("withdrawn", false) && (withdrawal.value("taken", false) || withdrawal.empty()))
+        {
+            message += "; " + WithdrawnText(withdrawal);
+        }
+        throw MethodError(e.code, message);
+    }
+
+    const auto opened = [&](int32_t aWaited, bool aLate) {
+        json out{{"changed", true}, {"opened", true}, {"mode", mode}, {"waited_ms", aWaited}};
+        for (const char* key : {"edit_mode", "saving_locked", "route"})
+        {
+            if (requested.contains(key))
+            {
+                out[key] = requested[key];
+            }
+        }
+        if (aLate)
+        {
+            out["note"] = "the appearance screen opened after the wait ran out (the menu had already taken the request)";
+        }
+        out["undo"] = {{"method", "cc.back"}, {"params", json::object()}};
+        out["undo_note"] = "cc.back (or Back in the appearance screen) discards every change made there and closes it";
+        return out;
+    };
+
     constexpr auto kStep = std::chrono::milliseconds(100);
     int32_t waited = 0;
-    for (;;)
+    try
     {
-        if (aOps.phase() == "character_menu")
+        for (;;)
         {
-            json out{{"changed", true}, {"opened", true}, {"mode", mode}, {"waited_ms", waited}};
-            for (const char* key : {"edit_mode", "saving_locked", "route"})
+            if (aOps.phase() == "character_menu")
             {
-                if (requested.contains(key))
+                return opened(waited, false);
+            }
+            if (waited >= aRequest.timeoutMs)
+            {
+                break;
+            }
+            aOps.sleep(kStep);
+            waited += static_cast<int32_t>(kStep.count());
+        }
+    }
+    catch (const MethodError& e)
+    {
+        const auto withdrawal = WithdrawCreatorOpen(aOps);
+        throw MethodError(e.code, std::string("while waiting for the appearance screen: ") + e.what() + "; " +
+                                      WithdrawnText(withdrawal) + "; " + kSaveLockNote);
+    }
+
+    const auto withdrawal = WithdrawCreatorOpen(aOps);
+    if (withdrawal.value("withdrawn", false))
+    {
+        throw MethodError("creator_open_timeout",
+                          "asked the game to open the appearance screen, but it wasn't open after " +
+                              std::to_string(aRequest.timeoutMs) +
+                              " ms; the request was withdrawn and nothing opened (a menu or the pause screen may have been "
+                              "open); " + kSaveLockNote);
+    }
+    int32_t late = 0;
+    if (withdrawal.value("taken", false))
+    {
+        // The menu took the request: the screen is on its way, or the menu refused it (the moment passed).
+        try
+        {
+            while (late < kCreatorLateOpenMs)
+            {
+                aOps.sleep(kStep);
+                late += static_cast<int32_t>(kStep.count());
+                if (aOps.phase() == "character_menu")
                 {
-                    out[key] = requested[key];
+                    return opened(waited + late, true);
                 }
             }
-            out["undo"] = {{"method", "cc.back"}, {"params", json::object()}};
-            out["undo_note"] = "cc.back (or Back in the appearance screen) discards every change made there and closes it";
-            return out;
         }
-        if (waited >= aRequest.timeoutMs)
+        catch (const MethodError&)
         {
-            break;
         }
-        aOps.sleep(kStep);
-        waited += static_cast<int32_t>(kStep.count());
     }
-    aOps.cancel();
-    throw MethodError("creator_open_timeout",
-                      "asked the game to open the appearance screen, but it wasn't open after " +
-                          std::to_string(aRequest.timeoutMs) + " ms; the request was withdrawn and nothing opened (a menu "
-                          "or the pause screen may have been open). Saving stays locked until a save is loaded");
+    throw MethodError("creator_open_uncertain", "asked the game to open the appearance screen, but it wasn't open after " +
+                                                    std::to_string(waited + late) + " ms; " + WithdrawnText(withdrawal) +
+                                                    "; " + kSaveLockNote);
+}
+
+json PoseSet(const PoseSetOps& aOps)
+{
+    auto category = aOps.category();
+    const bool beforeKnown = category.value("before_known", false) && category.contains("before_category") &&
+                             category["before_category"].is_number() && category.contains("before_pose") &&
+                             category["before_pose"].is_number();
+    const bool categoryChanged = category.value("changed", false);
+    json pose;
+    try
+    {
+        if (categoryChanged)
+        {
+            aOps.settle();
+        }
+        pose = aOps.pose();
+    }
+    catch (const std::exception& e)
+    {
+        const auto* methodError = dynamic_cast<const MethodError*>(&e);
+        std::string what = categoryChanged ? "the pose category had already changed" : "no pose was changed";
+        if (categoryChanged && beforeKnown)
+        {
+            try
+            {
+                aOps.restoreCategory(category["before_category"].get<int32_t>());
+                what = "the pose category was put back";
+            }
+            catch (const std::exception&)
+            {
+                what = "the pose category stays changed (putting it back failed)";
+            }
+        }
+        throw MethodError(methodError ? methodError->code : "failed", std::string(e.what()) + " (" + what + ")");
+    }
+    const bool changed = categoryChanged || pose.value("changed", false);
+    json out{{"category", category.value("category_text", std::string())},
+             {"category_value", category.value("category_value", -1)},
+             {"pose", pose.value("pose_text", std::string())},
+             {"pose_value", pose.value("pose_value", -1)},
+             {"changed", changed}};
+    if (pose.contains("animation"))
+    {
+        out["animation"] = pose["animation"];
+    }
+    if (!changed)
+    {
+        AttachUndo(out, "photo.pose.set", json::object(), {}, "that pose was already selected");
+    }
+    else if (beforeKnown)
+    {
+        AttachUndo(out, "photo.pose.set",
+                   json{{"category_value", category["before_category"]}, {"pose_value", category["before_pose"]}});
+        out["undo_note"] = "selects the earlier category and pose again through the menu";
+    }
+    else
+    {
+        AttachUndo(out, "photo.pose.set", json::object(), {"the pose"}, "");
+    }
+    return out;
 }
 
 bool WaitTicks(const GameThreadQueue& aQueue, uint64_t aTicks, std::chrono::milliseconds aTimeout)
@@ -403,6 +568,22 @@ bool RestoreOnce::WritesUsed() const
 bool RestoreOnce::Done() const
 {
     return m_done.load();
+}
+
+bool RestoreOnce::Pending() const
+{
+    return m_writes.load() && !m_done.load();
+}
+
+bool RestoreOnce::Reset()
+{
+    if (Pending())
+    {
+        return false;
+    }
+    m_writes.store(false);
+    m_done.store(false);
+    return true;
 }
 
 bool RestoreOnce::Tick(bool aReady, const std::function<void()>& aRestore,
