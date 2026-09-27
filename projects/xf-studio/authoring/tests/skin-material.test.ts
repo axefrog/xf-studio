@@ -152,7 +152,7 @@ describe("skin shader", () => {
     expect(f).toContain("#define RE_Direct RE_Direct_XfsSkin");
     expect(f).toContain("xfsSkinIBL( geometryViewDir, geometryNormal, material.roughness )");
     expect(f).toContain("textureGrad( xfsMicroDetail");
-    // A light flagged for character contact shadows is scaled by the march's visibility, diffuse, specular and scatter input alike (PREV-147).
+    // A light flagged for character contact shadows is scaled by the march's visibility, diffuse, specular and scatter input alike (PREV-148).
     expect(f).toContain("float xfsContactVisibility(");
     expect(f).toContain("vec3 xfsLightColour = directLight.color * xfsContactVisibility( geometryPosition, geometryNormal, directLight.direction );");
     expect(f.match(/directLight\.color \*/g)?.length).toBe(1);

@@ -309,7 +309,7 @@ vec3 xfsSkinIBL( const in vec3 viewDir, const in vec3 normal, const in float rou
 #endif
 void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
 	float xfsNoL = dot( geometryNormal, directLight.direction );
-	// A light flagged for character contact shadows is hidden where a caster lies just toward it (contact-shadow.ts, PREV-147).
+	// A light flagged for character contact shadows is hidden where a caster lies just toward it (contact-shadow.ts, PREV-148).
 	vec3 xfsLightColour = directLight.color * xfsContactVisibility( geometryPosition, geometryNormal, directLight.direction );
 	vec3 irradiance = saturate( xfsNoL ) * xfsLightColour;
 #ifdef XFS_SKIN_DIFFUSE_NORMAL

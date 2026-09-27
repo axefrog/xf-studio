@@ -1,6 +1,6 @@
 /**
  * Browser page for tests/webgl-contact-shadow.test.ts (bundled there, run in headless Chrome with a real WebGL 2 context): the character
- * contact shadows (contact-shadow.ts, PREV-147) on a synthetic crease, with no shadow maps.
+ * contact shadows (contact-shadow.ts, PREV-148) on a synthetic crease, with no shadow maps.
  *
  * The scene, seen from 0.3 m in front: a skin plane facing the camera and, standing on it along y at x = 0, a skin ridge 3 mm tall and
  * 1 mm thick (a fold's lip). A spot light low on the +x side grazes the plane at about 20°, so the ridge hides the plane for about 8 mm on

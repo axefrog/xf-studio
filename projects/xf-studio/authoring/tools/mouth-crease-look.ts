@@ -84,7 +84,7 @@ try {
   await run({ kind: "preview.setNormals", enabled: false });
   await capture("creator-nonormals");
   await run({ kind: "preview.setNormals", enabled: true });
-  // Without the character contact shadows (PREV-147): what they take away.
+  // Without the character contact shadows (PREV-148): what they take away.
   await page.evaluate(`window.xfStudioCreatorRig.contact?.(false)`);
   await capture("creator-nocontact");
   await page.evaluate(`window.xfStudioCreatorRig.contact?.(true)`);
@@ -102,7 +102,7 @@ try {
       await page.evaluate(`window.xfStudioCreatorRig.solo(${JSON.stringify(name)})`);
       await capture(`solo-${name}`);
     }
-    // The key alone without its contact shadows: what they take away (PREV-147).
+    // The key alone without its contact shadows: what they take away (PREV-148).
     await page.evaluate(`window.xfStudioCreatorRig.solo("Main_Face")`);
     await page.evaluate(`window.xfStudioCreatorRig.contact?.(false)`);
     await capture("solo-Main_Face-nocontact");

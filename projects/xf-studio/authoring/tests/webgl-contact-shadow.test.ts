@@ -5,7 +5,7 @@ import { CHROME, chromeInstalled, runProbePage } from "./webgl-harness";
 import type { ContactProbe } from "./webgl-contact-shadow-probe-page";
 
 /**
- * Character contact shadows on a real GPU (tests/webgl-contact-shadow-probe-page.ts; PREV-147): a 3 mm ridge on a skin plane hides the
+ * Character contact shadows on a real GPU (tests/webgl-contact-shadow-probe-page.ts; PREV-148): a 3 mm ridge on a skin plane hides the
  * plane behind it from a grazing light flagged for contact shadows, which no shadow map in the preview resolves at that scale; the same
  * light unflagged, or the term switched off, leaves it lit. Needs a local Chrome; public CI has none and skips.
  */

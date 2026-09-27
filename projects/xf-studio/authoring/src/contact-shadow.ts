@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 /**
- * Screen-space contact shadows for the character (renderer adapter, PREV-147), for the lights the game flags `contactShadows`
+ * Screen-space contact shadows for the character (renderer adapter, PREV-148), for the lights the game flags `contactShadows`
  * `CSR_CharacterOnly` (creator-lighting.ts: Main_Face, Rim_Right, Rim_Top and the magenta head rim) [resource flags; the game's own
  * march is not decoded, so its length, steps and thickness here are a Studio choice, hypothesis].
  *

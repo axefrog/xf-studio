@@ -247,7 +247,7 @@ export function createLightingSetupStage(options: {
         const key = shadowState(scene);
         if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
       }
-      // Contact shadows' caster depth first: the forward skin, its scatter input and the plate all read it (PREV-147).
+      // Contact shadows' caster depth first: the forward skin, its scatter input and the plate all read it (PREV-148).
       if (contactOn) contact.prepare(scene, camera); else contact.off();
       // The scatter decides first, so the forward skin lights with the same irradiance it blurs (the wrap off while it runs).
       const scattering = scatter.prepare(scene, display.scatterPossible);
@@ -267,7 +267,7 @@ export function createLightingSetupStage(options: {
      * no Δ: the direct light alone), for A/B captures.
      */
     setScatter(mode: boolean | "bare") { scatter.setEnabled(mode !== false); scatter.setBare(mode === "bare"); },
-    /** Developer evidence (verification only): switch the character contact shadows off or on again, for A/B captures (PREV-147). */
+    /** Developer evidence (verification only): switch the character contact shadows off or on again, for A/B captures (PREV-148). */
     setContactShadows(on: boolean) { contactOn = on; },
     /** Developer evidence (verification only): a trial scatter screen scale (null: the default), for fitting it from captures. */
     setScatterScale(scale: number | null) { scatter.setScale(scale); },
