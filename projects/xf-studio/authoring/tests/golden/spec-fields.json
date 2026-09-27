@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer)",
  "states": {
   "starter": {
    "modes": {
@@ -535,6 +535,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -1090,6 +1105,21 @@
       "unit": "fraction"
      }
     },
+    "point/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "point/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -1634,6 +1664,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -2186,6 +2231,21 @@
       "unit": "fraction"
      }
     },
+    "collection/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "collection/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -2730,6 +2790,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -3490,6 +3565,21 @@
       "unit": "fraction"
      }
     },
+    "layer/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "layer/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -4048,6 +4138,21 @@
       "unit": "fraction"
      }
     },
+    "point/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "point/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -4592,6 +4697,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -5144,6 +5264,21 @@
       "unit": "fraction"
      }
     },
+    "collection/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "collection/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -5688,6 +5823,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -6449,6 +6599,21 @@
       "unit": "fraction"
      }
     },
+    "layer/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "layer/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -7008,6 +7173,21 @@
       "unit": "fraction"
      }
     },
+    "point/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "point/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -7552,6 +7732,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -8104,6 +8299,21 @@
       "unit": "fraction"
      }
     },
+    "collection/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "collection/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -8648,6 +8858,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -9408,6 +9633,21 @@
       "unit": "fraction"
      }
     },
+    "layer/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "layer/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -9966,6 +10206,21 @@
       "unit": "fraction"
      }
     },
+    "point/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "point/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -10510,6 +10765,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -11062,6 +11332,21 @@
       "unit": "fraction"
      }
     },
+    "collection/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "collection/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -11606,6 +11891,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -12366,6 +12666,21 @@
       "unit": "fraction"
      }
     },
+    "layer/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "layer/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -12924,6 +13239,21 @@
       "unit": "fraction"
      }
     },
+    "point/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "point/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -13468,6 +13798,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -14020,6 +14365,21 @@
       "unit": "fraction"
      }
     },
+    "collection/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "collection/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -14564,6 +14924,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -15327,6 +15702,21 @@
       "unit": "fraction"
      }
     },
+    "layer/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "layer/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -15888,6 +16278,21 @@
       "unit": "fraction"
      }
     },
+    "point/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "point/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -16432,6 +16837,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
@@ -16984,6 +17404,21 @@
       "unit": "fraction"
      }
     },
+    "collection/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
     "collection/expression.linkPair": {
      "pair": {
       "minLength": 1,
@@ -17528,6 +17963,21 @@
      },
      "value": {
       "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.setAxis": {
+     "negative": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "positive": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": -1,
       "max": 1,
       "unit": "fraction"
      }
