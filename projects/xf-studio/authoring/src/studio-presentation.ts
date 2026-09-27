@@ -95,6 +95,7 @@ export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
   controlCommit(id: string): void;
   controlCancel(id: string): void;
   layerExport: StudioApplication["layerExport"];
+  layerSurfaceEdge: StudioApplication["layerSurfaceEdge"];
   finishCatalogue: StudioApplication["finishCatalogue"];
   glitterModelCatalogue: StudioApplication["glitterModelCatalogue"];
   mottleCatalogue: StudioApplication["mottleCatalogue"];
@@ -127,7 +128,7 @@ export type StudioPresentationPort<Slot> = {
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" | "layerSurfaceEdge" |
     "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch" | "characterPreviews"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
@@ -300,6 +301,7 @@ export function createStudioPresentation<Slot>(sources: {
     previewState: () => a.previewState(), history: () => a.history(),
     historyTimeline: () => a.historyTimeline(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
     layerExport: layerId => a.layerExport(layerId),
+    layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
     characterPanel: () => a.characterPanel(), characterView: () => a.characterView(),
     characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSwatches: option => a.characterSwatches(option),
@@ -341,7 +343,7 @@ export function createStudioPresentation<Slot>(sources: {
     const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
       controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, action),
       controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
-      layerExport: layerId => a.layerExport(layerId), finishCatalogue: () => a.finishCatalogue(),
+      layerExport: layerId => a.layerExport(layerId), layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId), finishCatalogue: () => a.finishCatalogue(),
       glitterModelCatalogue: () => a.glitterModelCatalogue(), mottleCatalogue: () => a.mottleCatalogue() };
     return [info.id, Object.freeze(eye)];
   }));

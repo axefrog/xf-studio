@@ -225,6 +225,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     selected: () => core.presentation.selected, ...fieldHooks,
     canvases: () => previewDevice.canvases,
     albedo: () => scene?.albedo.image as HTMLImageElement | undefined,
+    surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
     begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id); },
     apply: proposal => core.app.applyGesture("uv", proposal),
     cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),

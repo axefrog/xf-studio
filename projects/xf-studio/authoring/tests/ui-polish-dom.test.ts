@@ -364,11 +364,14 @@ describe("the layer list says what the flag shows (UI-95)", () => {
   test("a layer left out of the mod files is described to screen readers, not only drawn", async () => {
     const { layersPanel } = await import("../src/features/eye-makeup/view/layers");
     const recipe = { layers: [{ id: "a", name: "Glitter lid", color: "#ffffff", opacity: 1, symmetry: true, enabled: true, finish: "glitter" },
-      { id: "b", name: "Liner", color: "#000000", opacity: 1, symmetry: true, enabled: true, finish: "matte" }] };
+      { id: "b", name: "Liner", color: "#000000", opacity: 1, symmetry: true, enabled: true, finish: "matte" },
+      { id: "c", name: "Wash", color: "#000000", opacity: .6, symmetry: true, enabled: true, finish: "matte" }] };
     const facade = { view: () => ({ recipe: () => recipe, layer: () => recipe.layers[0], selected: () => 0 }),
       finishCatalogue: () => [{ id: "glitter", label: "Glitter", stored: [], exportAdapter: "none" }, { id: "matte", label: "Matte", stored: [], exportAdapter: "flat-provisional" }],
       glitterModelCatalogue: () => [{ id: "classic", label: "Classic", summary: "", stored: [] }],
       layerExport: (id: string) => id === "a" ? { exportable: false, reason: "Glitter can't be built into a mod yet.", blockedBy: "layer" } : { exportable: true, experimental: false, note: "" },
+      // The wash still has coverage where the plate ends (PREV-146).
+      layerSurfaceEdge: (id: string) => new Float64Array(id === "c" ? [0.4, 0.18, 0.41, 0.18] : []),
       capability: () => ({ available: true }), contextCapability: () => ({ available: true }) };
     const ctx = { facade, dispatch: () => true, platform: () => true, feedback: { toast() {}, announce() {} }, anchors: { register() {} }, links: { open: async () => ({ ok: true }) } };
     const panel = layersPanel(ctx as never);
@@ -377,6 +380,10 @@ describe("the layer list says what the flag shows (UI-95)", () => {
     const glitter = rows.find(row => row.textContent.includes("Glitter lid"))!, liner = rows.find(row => row.textContent.includes("Liner"))!;
     expect(glitter.getAttribute("aria-description")).toBe("Left out of your mod files: Glitter can't be built into a mod yet.");
     expect(liner.getAttribute("aria-description")).toBeNull();
+    // A layer cut off at the plate's edge gets the gentle flag, which says what to do.
+    const wash = rows.find(row => row.textContent.includes("Wash"))!;
+    expect(wash.getAttribute("aria-description")).toContain("cut off where the makeup area ends");
+    expect(wash.getAttribute("aria-description")).toContain("Pull the shape in or make its edge less soft.");
   });
 });
 

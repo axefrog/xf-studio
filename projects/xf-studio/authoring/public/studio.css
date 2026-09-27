@@ -660,6 +660,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .swatch[data-finish="iridescent"] { background: linear-gradient(135deg, var(--swatch), oklch(.75 .12 300) 60%, oklch(.8 .12 190)); }
 .finish-flag { display: inline-grid; color: var(--warning); }
 .finish-flag .icon { width: 13px; height: 13px; }
+/* A gentle hint, not a problem: the layer is cut off where the makeup area ends (PREV-146). */
+.finish-flag[data-reason="edge"] { color: var(--text-muted); }
 .visibility[aria-pressed="false"] { color: var(--text-faint); }
 .layer-strip { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-5); background: var(--bg-raised); border-bottom: 1px solid var(--line);
   margin: calc(var(--sp-5) * -1) calc(var(--sp-5) * -1) 0; position: sticky; top: calc(var(--sp-5) * -1); z-index: 2; font-size: var(--fs-sm); }

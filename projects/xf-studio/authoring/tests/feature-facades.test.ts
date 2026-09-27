@@ -38,6 +38,8 @@ test("the port lists the registered features and eye makeup's facade owns exactl
   expect(shell.authoring.history().undo?.label).toBe("Opacity");
   expect(eye.finishCatalogue()).toEqual(shell.authoring.finishCatalogue());
   expect(eye.layerExport(layer.id)).toEqual(shell.authoring.layerExport(layer.id));
+  // Before a head is loaded there is no plate outline to judge a layer's edge against.
+  expect(eye.layerSurfaceEdge(layer.id)).toBeUndefined();
 });
 
 test("a second feature gets a generic facade with a detached view of its live document", () => {

@@ -23,6 +23,11 @@ type Hooks = {
   input?(state: EditorInputState): void;
   /** The live feature's region: the layer models shape edits validate with and the mirror hit tests reflect across. */
   region: Pick<LayeredMakeupRegion, "models" | "mirror">;
+  /**
+   * The edited surface's outer boundary and where the selected layer is cut off by it (`u0, v0, u1, v1` per segment; surface-edge.ts,
+   * PREV-146), once the head is loaded.
+   */
+  surfaceEdge?(): { outline: ArrayLike<number>; cut: ArrayLike<number> } | undefined;
 };
 type Handle = { kind: "point" | "origin" | "field" | "tangent"; index: number; fieldId?: string;
   side?: "in" | "out"; mirror: boolean; uv: UV; endpoint?: UV; collapsed?: boolean };
@@ -31,6 +36,8 @@ const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", t
 
 /** Custom properties the host's CSS sets to keep the fitted frame clear of overlays (hint strip, chips). */
 const INSET_PROPERTIES = { top: "--uv-safe-top", right: "--uv-safe-right", bottom: "--uv-safe-bottom", left: "--uv-safe-left" } as const;
+/** The makeup area's outline, and the part of it where the selected layer is cut off (drawn over the atlas, like the handles' colours). */
+const PLATE_OUTLINE = "#c4ddca66", PLATE_CUT = "#ffb45a";
 /** Texture base under the albedo; the stage around the atlas is the host's CSS background. */
 const ATLAS_BASE = "#253132", ATLAS_EDGE = "rgba(138, 148, 154, .75)";
 
@@ -143,6 +150,22 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const centre = pixel({ u: .5, v: 0 }), centreEnd = pixel({ u: .5, v: 1 });
     ctx.setLineDash([3 * unit, 4 * unit]); ctx.strokeStyle = "#c4ddca55";
     ctx.beginPath(); ctx.moveTo(centre.x, centre.y); ctx.lineTo(centre.x, centreEnd.y); ctx.stroke(); ctx.setLineDash([]);
+    // Where the makeup area (the plate) ends: its outline faint, and bright where the selected layer's makeup is cut off (PREV-146).
+    const edge = hooks.surfaceEdge?.();
+    if (edge) {
+      const strokeSegments = (segments: ArrayLike<number>) => {
+        ctx.beginPath();
+        for (let s = 0; s + 3 < segments.length; s += 4) {
+          const a = pixel({ u: segments[s]!, v: segments[s + 1]! }), b = pixel({ u: segments[s + 2]!, v: segments[s + 3]! });
+          ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+        }
+        ctx.stroke();
+      };
+      ctx.lineCap = "round";
+      ctx.strokeStyle = PLATE_OUTLINE; ctx.lineWidth = unit; strokeSegments(edge.outline);
+      if (edge.cut.length) { ctx.strokeStyle = PLATE_CUT; ctx.lineWidth = 2.5 * unit; strokeSegments(edge.cut); }
+      ctx.lineCap = "butt";
+    }
     const l = hooks.layer();
     if (!l) { if (elements) elements.note.textContent = "Add a layer to edit its shape."; return; }
     for (const mirror of l.symmetry ? [false, true] : [false]) {
