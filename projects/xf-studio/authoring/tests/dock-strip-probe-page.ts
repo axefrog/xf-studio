@@ -23,7 +23,9 @@ const PANELS: [string, string, IconName][] = [["edge", "Pigment & edge", "edge"]
   ["shape", "Shape", "shape"], ["layers", "Layers", "layers"], ["head", "3D view", "head"]];
 const RIGHT = PANELS.slice(0, 5).map(([id]) => id);
 
-const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+// A turn of the event loop, not an animation frame: a headless page that isn't painted may throttle requestAnimationFrame, and every
+// measurement below forces a synchronous layout anyway.
+const frame = () => new Promise(resolve => setTimeout(resolve, 0));
 const box = (element: Element): Box => { const r = element.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
 const shown = (element: Element | null) => !!element && getComputedStyle(element).display !== "none" && element.getBoundingClientRect().width > 0;
 
