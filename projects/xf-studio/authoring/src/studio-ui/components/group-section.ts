@@ -1,4 +1,4 @@
-import { h, setText, setUnavailable, uid } from "../dom";
+import { h, setText, uid } from "../dom";
 import { expander, expanderLabel, isExpanded, setExpanded, type ExpanderLevel } from "../expander";
 import { helpTip, type HelpText } from "../help-tip";
 import { iconButton } from "./icon-button";
@@ -7,9 +7,10 @@ import { iconButton } from "./icon-button";
  * Group section (style guide "Group section"): a foldable group of controls under the shared expander, for panels with many groups
  * (a face's expression controls, a creator page's sections).
  *
- * - **Heading row:** the expander (chevron and title, at any expander level), an "N set" count that is hidden at 0, an optional help
- *   tip, and an optional icon-only reset for the whole group. The reset sits outside the expander button, so pressing it never folds
- *   or unfolds the group; it is unavailable (with its reason) when nothing in the group is set.
+ * - **Heading row:** the expander (chevron and title, at any expander level), an "N set" count in plain muted mono (hidden at 0), an
+ *   optional help tip, the group's own actions (`actions`: a region's mirror toggle) and an optional icon-only reset for the whole
+ *   group. The reset sits outside the expander button, so pressing it never folds or unfolds the group; it shows only while something
+ *   in the group is set (or editing is available), keeping its place otherwise.
  * - **Open state** is kept per session under `key` (a module-level map, never saved), so a group stays as the person left it while
  *   the panel is rebuilt.
  * - **Search:** `forceOpen` shows the group open while a search matches inside it, without changing the kept state; `hidden` hides
@@ -30,8 +31,10 @@ export type GroupSectionOptions = {
   heading?: 3 | 4 | 5;
   expanded?: boolean;
   help?: HelpText;
-  /** Show the group reset; it calls this. */
+  /** Show the group reset; it calls this. It shows only while something in the group is set, keeping its place otherwise. */
   onReset?(): void;
+  /** The group's own controls in its heading, before the reset (a mirror toggle for a face region). */
+  actions?: readonly HTMLElement[];
   /** Heard after the person folds or unfolds the group. */
   onToggle?(expanded: boolean): void;
   className?: string;
@@ -40,7 +43,8 @@ export class GroupSection {
   readonly element: HTMLElement;
   readonly body: HTMLElement;
   readonly button: HTMLButtonElement;
-  private readonly count = h("span", { class: "badge info group-count", hidden: true });
+  /** How many values are set, as plain muted text (a count, not a status badge). */
+  private readonly count = h("span", { class: "group-count", hidden: true });
   private readonly resetButton?: HTMLButtonElement;
   /** A search is showing the group open (`forceOpen`)… */
   private forced = false;
@@ -57,7 +61,7 @@ export class GroupSection {
     this.body.hidden = !open;
     this.element = h("section", { class: `group-section${options.className ? ` ${options.className}` : ""}`, "data-level": options.level ?? "section" },
       h("div", { class: "group-section-head" }, h(tag, { class: "group-section-title" }, this.button),
-        options.help !== undefined ? helpTip(options.title, options.help) : null, this.resetButton), this.body);
+        options.help !== undefined ? helpTip(options.title, options.help) : null, ...(options.actions ?? []), this.resetButton), this.body);
     this.button.addEventListener("click", () => { if (this.forced) this.overridden = true; this.setOpen(!isExpanded(this.button), true); });
   }
   get expanded() { return isExpanded(this.button); }
@@ -76,8 +80,8 @@ export class GroupSection {
     const set = state.set ?? 0;
     setText(this.count, `${set} set`);
     this.count.hidden = set === 0;
-    if (this.resetButton) setUnavailable(this.resetButton, !!state.disabled || set === 0,
-      state.disabled ? state.reason : `Nothing in ${this.options.title} is changed.`);
+    // Out of sight (its place kept) when there is nothing to reset or editing is unavailable: no column of faded icons.
+    this.resetButton?.classList.toggle("idle", !!state.disabled || set === 0);
     if (state.forceOpen) {
       // Each update of a search re-opens the group only until the person folds it (UI-124).
       if (!this.forced) { this.forced = true; this.overridden = false; }

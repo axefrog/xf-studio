@@ -39,16 +39,20 @@ const MOUNTS: Record<string, Mount> = {
   "lib-switch": () => { const t = new Toggle({ label: "Show my V's own makeup", help: "Draws the makeup saved with your V under your layers.", onChange: checked => t.update(checked) }); t.update(true); return t.element; },
   "lib-slider": () => { const s = new Slider({ label: "Opacity", min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)}%`, transaction: { edit: v => s.update(v) } }); s.update(.85); return s.element; },
   "lib-slider-value": () => { let value = .4; const s: SliderWithValue = new SliderWithValue({ label: "Brow raise", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`,
-      defaultValue: 0, reset: true, reserveNote: true, transaction: { edit: v => { value = v; s.update(value); } } });
+      defaultValue: 0, reset: true, transaction: { edit: v => { value = v; s.update(value); } } });
     s.update(value);
+    const rest = new SliderWithValue({ label: "Brow lower", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, transaction: { edit: v => rest.update(v) } });
+    rest.update(0);
     const off = new SliderWithValue({ label: "Lid squint", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, reserveNote: true, transaction: { edit: () => {} } });
     off.update(0, { disabled: true, reason: "Choose a face shape first." });
-    return stack({ gap: "normal" }, s.element, off.element); },
-  "lib-pair": () => { const values = { left: .2, right: .5 }; let linked = true;
-    const pair: PairControl = new PairControl({ label: "Brow height", min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true,
-      onLinkChange: next => { linked = next; pair.update(values, { linked }); },
-      transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
-    pair.update(values, { linked }); return pair.element; },
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, s.element, rest.element, off.element)); },
+  "lib-pair": () => {
+    const make = (label: string, values: { left: number; right: number }, linked: boolean) => {
+      const pair: PairControl = new PairControl({ label, min: 0, max: 100, step: 1, format: v => `${Math.round(v)} %`, defaultValue: 0, reset: true,
+        transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
+      pair.update(values, { linked }); return pair.element; };
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, make("Inner brow raise", { left: 35, right: 35 }, true), make("Brow lower", { left: 14, right: 10 }, true),
+      make("Squint, inner", { left: 30, right: 26 }, false))); },
   "lib-bipolar": () => {
     const make = (label: string, ends: { negative: string; positive: string }, start: number, mixed = false) => {
       let value = start, isMixed = mixed;
@@ -77,11 +81,12 @@ const MOUNTS: Record<string, Mount> = {
     return stack({ gap: "normal" }, search.element, list, empty); },
   "lib-expander": () => { const b = expander("section", { expanded: true }, expanderLabel("Face")); b.addEventListener("click", () => b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true")));
     return stack({ gap: "tight" }, h("h4", { style: "margin:0" }, b), expander("row", { expanded: false }, expanderLabel("Eyebrows"))); },
-  "lib-group-section": () => { const g: GroupSection = new GroupSection({ title: "Brows", key: "guide.brows", expanded: true, help: "The brow region's controls.", onReset: () => g.update({ set: 0 }) });
+  "lib-group-section": () => { const g: GroupSection = new GroupSection({ title: "Brows", key: "guide.brows", expanded: true, help: "The brow region's controls.", level: "subsection",
+      actions: [iconButton({ label: "Mirror sides: Brows", icon: "mirror", small: true, mode: true, pressed: true })], onReset: () => g.update({ set: 0 }) });
     const s = new SliderWithValue({ label: "Brow raise", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, transaction: { edit: () => {} } }); s.update(.4);
     g.body.append(s.element); g.update({ set: 1 });
-    const folded = new GroupSection({ title: "Mouth", key: "guide.mouth", onReset: () => {} }); folded.update({ set: 0 });
-    return stack({ gap: "normal" }, g.element, folded.element); },
+    const folded = new GroupSection({ title: "Mouth", key: "guide.mouth", level: "subsection", onReset: () => {} }); folded.update({ set: 0 });
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, g.element, folded.element)); },
   "lib-help-tip": () => h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Finish" }), helpTip("Finish", "How the makeup catches the light.")),
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
   "lib-menu": () => h("div", { class: "row wrap gap-s" }, button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },

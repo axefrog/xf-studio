@@ -1,71 +1,56 @@
-import { h, isUnavailable, setAttr, setUnavailable } from "../dom";
-import { icon } from "../icons";
+import { h } from "../dom";
 import type { HelpText } from "../help-tip";
 import { SliderWithValue, type SliderWithValueOptions } from "./slider-with-value";
 
 /**
- * Pair control (style guide "Pair control"): a left/right pair of values (a brow's two sides, two eyelids) with a link toggle.
+ * Pair control (style guide "Pair control"): a left/right pair of values (a brow's two sides, two eyelids), edited together or apart.
+ * Whether a pair is linked is its owner's state, set where the person decides it: a group heading's mirror toggle or a whole-panel
+ * switch, never a toggle on every pair.
  *
- * - **Linked:** one row, "<label>, both sides", whose edits set both sides.
- * - **Separate:** two rows, "<label>, left" and "<label>, right", each editing its own side.
- * - **Uneven:** linked while the sides differ (they were set separately, or came from a save that way). The linked row shows the left
- *   side's value with a small "Sides differ" note, and its next edit sets both sides to the new value.
- * - **The link toggle** is a small button named "Link sides" whose `aria-pressed` carries the state (its name never changes with it,
- *   as the WAI toggle-button pattern asks); its icon shows the link whole or broken, and its tooltip says what a press does. While the
- *   pair is unavailable it stays focusable and says why (`aria-disabled` and the reason, as every main action does).
- * - Every row is a SliderWithValue, so each has the exact-entry box, reset and the same transaction rules; the note line is reserved,
- *   so switching states never moves what follows.
+ * - **Linked:** one Slider with value under the pair's name, whose edits set both sides (its accessible name says "both sides").
+ * - **Uneven:** linked while the sides differ (set separately, or read that way). The one readout says both values, muted
+ *   ("14 / 10 %"), the slider sits at the left side's value, and the next edit sets both sides to the new value.
+ * - **Separate:** the pair's name, then one compact line per side (short side label, slider, readout, reset), named "<label>, left"
+ *   and "<label>, right".
+ * - Only one layout shows at a time; both are built once, so switching never rebuilds what someone may be focusing.
  */
 export type Side = "left" | "right";
 export type PairEdit = { sides: "both" | Side; value: number };
-export type PairControlOptions = Omit<SliderWithValueOptions, "transaction" | "label" | "id" | "reserveNote" | "help"> & {
+export type PairControlOptions = Omit<SliderWithValueOptions, "transaction" | "label" | "id" | "reserveNote" | "help" | "inline" | "accessibleLabel"> & {
   label: string; help?: HelpText;
-  /** Side names (default "left", "right"): what the separate rows are called. */
+  /** The sides' short visible labels (default "L", "R") and their names (default "left", "right"). */
   sideLabels?: Record<Side, string>;
+  sideNames?: Record<Side, string>;
   transaction: { begin?(sides: PairEdit["sides"]): void; edit(edit: PairEdit): void; commit?(): void; cancel?(): void };
-  onLinkChange(linked: boolean): void;
 };
 
 export class PairControl {
   readonly element: HTMLElement;
-  readonly link: HTMLButtonElement;
   private readonly both: SliderWithValue;
   private readonly rows: Record<Side, SliderWithValue>;
-  private readonly bothRow: HTMLElement;
-  private readonly sideRows: HTMLElement;
-  private linked = true;
-  private linkIcon: SVGSVGElement = icon("link");
+  private readonly separate: HTMLElement;
   constructor(private readonly options: PairControlOptions) {
-    const names = options.sideLabels ?? { left: "left", right: "right" };
-    const row = (sides: PairEdit["sides"], label: string) => new SliderWithValue({ ...options, label, reserveNote: true, help: sides === "both" ? options.help : undefined,
-      transaction: { begin: () => options.transaction.begin?.(sides), edit: value => options.transaction.edit({ sides, value }),
-        commit: () => options.transaction.commit?.(), cancel: () => options.transaction.cancel?.() } });
-    this.both = row("both", `${options.label}, both sides`);
-    this.rows = { left: row("left", `${options.label}, ${names.left}`), right: row("right", `${options.label}, ${names.right}`) };
-    this.link = h("button", { class: "btn ghost small pair-link", type: "button", "aria-pressed": "true" }, this.linkIcon, h("span", { text: "Link sides" }));
-    this.link.addEventListener("click", () => { if (!isUnavailable(this.link)) options.onLinkChange(!this.linked); });
-    this.bothRow = h("div", { class: "pair-both" }, this.both.element);
-    this.sideRows = h("div", { class: "pair-sides" }, this.rows.left.element, this.rows.right.element);
-    this.element = h("div", { class: "pair-control", role: "group", "aria-label": options.label },
-      h("div", { class: "pair-head" }, h("span", { class: "pair-label", text: options.label }), this.link), this.bothRow, this.sideRows);
+    const labels = options.sideLabels ?? { left: "L", right: "R" }, names = options.sideNames ?? { left: "left", right: "right" };
+    const tx = (sides: PairEdit["sides"]) => ({ begin: () => options.transaction.begin?.(sides), edit: (value: number) => options.transaction.edit({ sides, value }),
+      commit: () => options.transaction.commit?.(), cancel: () => options.transaction.cancel?.() });
+    const { sideLabels: _l, sideNames: _n, ...slider } = options;
+    this.both = new SliderWithValue({ ...slider, label: options.label, accessibleLabel: `${options.label}, both sides`, transaction: tx("both") });
+    const side = (s: Side) => new SliderWithValue({ ...slider, help: undefined, label: labels[s], accessibleLabel: `${options.label}, ${names[s]}`, inline: true, transaction: tx(s) });
+    this.rows = { left: side("left"), right: side("right") };
+    this.separate = h("div", { class: "pair-sides", role: "group", "aria-label": options.label },
+      h("p", { class: "pair-label", text: options.label }), this.rows.left.element, this.rows.right.element);
+    this.element = h("div", { class: "pair-control" }, this.both.element, this.separate);
   }
   update(values: Record<Side, number | undefined>, state: { linked: boolean; disabled?: boolean; reason?: string } = { linked: true }) {
-    this.linked = state.linked;
-    if (this.link.getAttribute("aria-pressed") !== String(state.linked)) {
-      setAttr(this.link, "aria-pressed", String(state.linked));
-      const next = icon(state.linked ? "link" : "unlink");
-      this.link.insertBefore(next, this.linkIcon); this.linkIcon.remove(); this.linkIcon = next;
-    }
-    // The tooltip when available (setUnavailable shows the reason instead while it isn't).
-    this.link.dataset.title = state.linked ? "Linked: one value sets both sides. Press to set each side separately."
-      : "Separate: each side has its own value. Press to link them (the next edit sets both).";
-    setUnavailable(this.link, !!state.disabled, state.reason);
-    this.bothRow.hidden = !state.linked;
-    this.sideRows.hidden = state.linked;
-    const uneven = state.linked && values.left !== undefined && values.right !== undefined && Math.abs(values.left - values.right) > this.options.step / 2;
+    this.both.element.hidden = !state.linked;
+    this.separate.hidden = state.linked;
+    const { left, right } = values, format = this.options.format;
+    const uneven = state.linked && left !== undefined && right !== undefined && Math.abs(left - right) > this.options.step / 2;
     this.element.classList.toggle("uneven", uneven);
-    this.both.update(values.left, { disabled: state.disabled, reason: state.reason, note: uneven ? "Sides differ: the next change sets both." : undefined });
-    this.rows.left.update(values.left, { disabled: state.disabled, reason: state.reason });
-    this.rows.right.update(values.right, { disabled: state.disabled, reason: state.reason });
+    // "14 / 10 %": both numbers, the unit once (the formatted right side carries it).
+    const text = uneven ? `${format(left!).replace(/[^\d.,−-]+$/, "").trim()} / ${format(right!)}` : undefined;
+    this.both.update(left, { disabled: state.disabled, reason: state.reason, ...(text ? { text } : {}) });
+    this.rows.left.update(left, { disabled: state.disabled, reason: state.reason });
+    this.rows.right.update(right, { disabled: state.disabled, reason: state.reason });
   }
 }

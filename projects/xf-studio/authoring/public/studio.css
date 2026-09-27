@@ -263,12 +263,17 @@ span.category { border-color: transparent; background: transparent; padding-left
 .swatch-input::-webkit-color-swatch-wrapper { padding: 0; }
 .swatch-input::-webkit-color-swatch { border: 0; }
 .hex { width: 88px; flex: none; text-transform: lowercase; }
-/* Slider with value (components/slider-with-value.ts): slider, exact number and reset on one line; "set" emphasises the label. */
-.slider-value-row { display: flex; align-items: center; gap: var(--sp-4); min-width: 0; }
-.slider-value-row .slider { flex: 1 1 auto; min-width: 60px; }
-.slider-number-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); flex: none; }
-.slider-number { width: 7ch; height: var(--control-h-sm); padding: 0 var(--sp-3); text-align: right; font-variant-numeric: tabular-nums; }
-.slider-unit { font-size: var(--fs-xs); color: var(--text-muted); }
+/* Slider with value (components/slider-with-value.ts): label, the one readout (typed into in place) and reset on a line, the range
+   under them; inline, a pair side's short label, range, readout and reset on one line. "set" emphasises the label. */
+.slider-with-value { gap: 0; }
+.slider-value-line, .slider-inline-row { display: flex; align-items: center; gap: var(--sp-2); min-height: 22px; min-width: 0; }
+.slider-value-line .control-label-text { min-width: 0; }
+.slider-value-line .control-label-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slider-inline-row .control-label-text { flex: none; width: 2.2em; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; }
+.slider-inline-row .slider { flex: 1 1 auto; min-width: 60px; }
+.slider-reset.idle { visibility: hidden; }
+.slider-with-value.owner-text .readout-value { color: var(--text-muted); }
+.slider-with-value .control-note { margin-top: var(--sp-2); }
 .slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
 .slider-with-value.set .control-label-text { color: var(--text); font-weight: 600; }
 .slider-with-value.set .control-label-text::after { content: ""; width: 5px; height: 5px; margin-left: var(--sp-2); background: var(--signal); }
@@ -301,17 +306,17 @@ span.category { border-color: transparent; background: transparent; padding-left
 .bipolar-ends { display: flex; justify-content: space-between; gap: var(--sp-4); margin-top: -2px; font-size: var(--fs-2xs); line-height: 1.2; color: var(--text-faint); }
 .bipolar-slider .control-note { margin-top: var(--sp-2); }
 /* Pair control (components/pair-control.ts). */
-.pair-control { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
-.pair-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
-.pair-label { font-size: var(--fs-sm); color: var(--text-muted); }
-.pair-link[aria-pressed="false"] { color: var(--text-muted); background: transparent; }
-.pair-sides { display: flex; flex-direction: column; gap: var(--sp-3); }
+.pair-control { display: flex; flex-direction: column; min-width: 0; }
+.pair-control > [hidden] { display: none; }
+.pair-label { margin: 0 0 var(--sp-1); font-size: var(--fs-sm); color: var(--text-muted); }
+.pair-sides { display: flex; flex-direction: column; gap: var(--sp-1); }
 /* Group section (components/group-section.ts). */
 .group-section { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
 .group-section-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .group-section-title { margin: 0; min-width: 0; flex: 1 1 auto; display: flex; font: inherit; }
 .group-section-title .expander { flex: 1 1 auto; }
-.group-count { margin-left: var(--sp-3); height: 17px; letter-spacing: .04em; }
+.group-count { margin-left: var(--sp-3); font: var(--fs-2xs)/1 var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+.group-reset.idle { visibility: hidden; }
 .group-section-body { display: flex; flex-direction: column; gap: var(--sp-4); padding-left: calc(10px + var(--sp-3)); }
 /* Search field (components/search-field.ts): the clear button keeps its place, so the field never changes width. */
 .search-field { position: relative; display: flex; align-items: center; min-width: 0; }

@@ -11,62 +11,71 @@ const key = (element: HTMLElement, name: string) => (element as unknown as Light
 const fire = (element: HTMLElement, type: string) => (element as unknown as LightElement).dispatchEvent(lightEvent(type));
 const log = () => { const calls: string[] = []; return { calls, t: { begin: () => calls.push("begin"), edit: (v: unknown) => calls.push(`edit ${JSON.stringify(v)}`), commit: () => calls.push("commit"), cancel: () => calls.push("cancel") } }; };
 
-test("slider with value: the number commits clamped and snapped as one step; Escape restores; reset is one step and unavailable at the default", async () => {
+test("slider with value: one readout, typed into in place (clamped and snapped, one step); Escape changes nothing; reset shows only when set", async () => {
   const { SliderWithValue } = await lib();
   const { calls, t } = log();
   const control = new SliderWithValue({ label: "Brow raise", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, transaction: t, defaultValue: 0, reset: true, reserveNote: true });
+  document.body.append(control.element);
+  const readout = control.element.querySelector<HTMLElement>(".readout-value")!, field = control.element.querySelector<HTMLInputElement>(".readout-input")!;
   control.update(.4);
-  expect([control.number.value, control.number.getAttribute("aria-label"), control.input.getAttribute("aria-valuetext")]).toEqual(["0.4", "Brow raise, exact value", "40 %"]);
-  expect(control.element.classList.contains("set")).toBe(true);
-  control.number.value = "1.33"; fire(control.number, "change");
-  expect(calls).toEqual(["begin", "edit 1", "commit"]);
-  expect(control.number.value).toBe("1");
+  expect([readout.textContent, field.getAttribute("aria-label"), control.input.getAttribute("aria-valuetext"), control.element.querySelectorAll("input").length])
+    .toEqual(["40 %", "Brow raise, exact value", "40 %", 2]);
+  expect([control.element.classList.contains("set"), control.resetButton!.classList.contains("idle")]).toEqual([true, false]);
+  // Enter on the slider types in the readout's place; the typed value is clamped and snapped, one step; focus returns to the slider.
+  key(control.input, "Enter");
+  expect([field.hidden, field.value]).toEqual([false, "0.4"]);
+  field.value = "1.33"; key(field, "Enter");
+  expect([calls, document.activeElement === (control.input as unknown)]).toEqual([["begin", "edit 1", "commit"], true]);
   calls.length = 0;
-  control.number.value = "0.52"; key(control.number, "Enter");
+  readout.click(); field.value = "0.52"; key(field, "Enter");
   expect(calls).toEqual(["begin", "edit 0.5", "commit"]);
   calls.length = 0;
   control.update(.5);
-  control.number.value = "0.9"; key(control.number, "Escape");
-  expect([control.number.value, calls]).toEqual(["0.5", []]);
+  readout.click(); field.value = "0.9"; key(field, "Escape");
+  expect([readout.textContent, calls]).toEqual(["50 %", []]);
+  // Delete returns to the default, as the reset does.
+  key(control.input, "Delete");
+  expect(calls).toEqual(["begin", "edit 0", "commit"]);
+  calls.length = 0;
   control.resetButton!.click();
   expect(calls).toEqual(["begin", "edit 0", "commit"]);
   control.update(0);
-  expect([control.element.classList.contains("set"), control.resetButton!.getAttribute("aria-disabled"), control.resetButton!.getAttribute("aria-label")])
-    .toEqual([false, "true", "Reset Brow raise"]);
-  // Disabled: both inputs, the reason on the reserved note line.
+  expect([control.element.classList.contains("set"), control.resetButton!.classList.contains("idle"), control.resetButton!.getAttribute("aria-label")])
+    .toEqual([false, true, "Reset Brow raise"]);
+  // The owner's words for the readout (a pair's sides), muted, until the next edit.
+  control.update(.1, { text: "10 / 30 %" });
+  expect([readout.textContent, control.element.classList.contains("owner-text")]).toEqual(["10 / 30 %", true]);
+  // Disabled: the range, the typed field can't open, the reason on the reserved note line.
   control.update(0, { disabled: true, reason: "Choose a face first." });
+  readout.click();
   const note = control.element.querySelector<HTMLElement>(".control-note")!;
-  expect([control.input.disabled, control.number.disabled, note.textContent, note.hidden]).toEqual([true, true, "Choose a face first.", false]);
+  expect([control.input.disabled, field.hidden, note.textContent, note.hidden]).toEqual([true, true, "Choose a face first.", false]);
+  // Without reserveNote there is no note line to hold empty space.
+  const plain = new SliderWithValue({ label: "Lid", min: 0, max: 1, step: .05, format: String, transaction: t });
+  expect(plain.element.querySelector<HTMLElement>(".control-note")!.hidden).toBe(true);
 });
 
-test("pair control: linked is one row for both sides, separate is two, uneven says so and the next edit sets both", async () => {
+test("pair control: linked is one slider for both sides, uneven says both values in its one readout, separate is one short line per side", async () => {
   const { PairControl } = await lib();
-  const edits: string[] = [], links: boolean[] = [];
-  const pair = new PairControl({ label: "Brow height", min: 0, max: 1, step: .01, format: String, onLinkChange: linked => links.push(linked),
+  const edits: string[] = [];
+  const pair = new PairControl({ label: "Brow height", min: 0, max: 100, step: 1, format: v => `${v} %`,
     transaction: { edit: edit => edits.push(`${edit.sides}=${edit.value}`) } });
-  pair.update({ left: .2, right: .2 }, { linked: true });
-  const both = pair.element.querySelector<HTMLElement>(".pair-both")!, sides = pair.element.querySelector<HTMLElement>(".pair-sides")!;
-  expect([both.hidden, sides.hidden, pair.link.getAttribute("aria-pressed"), pair.link.textContent]).toEqual([false, true, "true", "Link sides"]);
-  expect(both.querySelector<HTMLElement>("label")!.textContent).toBe("Brow height, both sides");
-  pair.update({ left: .2, right: .6 }, { linked: true });
-  expect([pair.element.classList.contains("uneven"), both.querySelector<HTMLElement>(".control-note")!.textContent]).toEqual([true, "Sides differ: the next change sets both."]);
-  const range = both.querySelector<HTMLElement>("input")! as unknown as HTMLInputElement;
-  range.value = "0.3"; fire(range, "input");
-  expect(edits).toEqual(["both=0.3"]);
-  pair.link.click();
-  expect(links).toEqual([false]);
-  pair.update({ left: .2, right: .6 }, { linked: false });
-  // The toggle's name never changes with its state: aria-pressed carries it (UI-124).
-  expect([both.hidden, sides.hidden, pair.link.textContent, pair.link.getAttribute("aria-pressed"), Array.from(sides.querySelectorAll<HTMLElement>("label")).map(label => label.textContent)])
-    .toEqual([true, false, "Link sides", "false", ["Brow height, left", "Brow height, right"]]);
-  // Unavailable, it stays focusable and says why (aria-disabled with its reason, never native disabled), and a press does nothing.
-  pair.update({ left: .2, right: .6 }, { linked: false, disabled: true, reason: "Choose a face first." });
-  expect([pair.link.disabled, pair.link.getAttribute("aria-disabled"), pair.link.getAttribute("aria-description"), pair.link.title])
-    .toEqual([false, "true", "Choose a face first.", "Choose a face first."]);
-  pair.link.click();
-  expect(links).toEqual([false]);
-  pair.update({ left: .2, right: .6 }, { linked: true });
-  expect([pair.link.getAttribute("aria-disabled"), pair.link.title]).toEqual([null, "Linked: one value sets both sides. Press to set each side separately."]);
+  document.body.append(pair.element);
+  pair.update({ left: 20, right: 20 }, { linked: true });
+  const [both, sides] = (pair.element as unknown as LightElement).children as unknown as HTMLElement[];
+  const labels = (host: HTMLElement) => Array.from(host.querySelectorAll<HTMLElement>("label")).map(label => label.textContent);
+  // One visible name: no "both sides" label, no link button on the pair.
+  expect([both!.hidden, sides!.hidden, labels(both!), both!.querySelector("input.slider")!.getAttribute("aria-label"), pair.element.querySelectorAll("button.pair-link").length])
+    .toEqual([false, true, ["Brow height"], "Brow height, both sides", 0]);
+  pair.update({ left: 14, right: 10 }, { linked: true });
+  expect([pair.element.classList.contains("uneven"), both!.querySelector<HTMLElement>(".readout-value")!.textContent]).toEqual([true, "14 / 10 %"]);
+  const range = both!.querySelector<HTMLElement>("input.slider")! as unknown as HTMLInputElement;
+  range.value = "30"; fire(range, "input");
+  expect(edits).toEqual(["both=30"]);
+  pair.update({ left: 20, right: 60 }, { linked: false });
+  expect([both!.hidden, sides!.hidden, labels(sides!), Array.from(sides!.querySelectorAll<HTMLElement>("input.slider")).map(input => input.getAttribute("aria-label"))])
+    .toEqual([true, false, ["L", "R"], ["Brow height, left", "Brow height, right"]]);
+  expect(sides!.querySelector<HTMLElement>(".pair-label")!.textContent).toBe("Brow height");
 });
 
 test("group section: the count hides at 0, reset never folds the group, the open state lasts the session and search can force or hide it", async () => {
@@ -76,9 +85,9 @@ test("group section: the count hides at 0, reset never folds the group, the open
   const group = make();
   group.update({ set: 0 });
   const count = group.element.querySelector<HTMLElement>(".group-count")!, reset = group.element.querySelector<HTMLElement>(".group-reset")!;
-  expect([count.hidden, reset.getAttribute("aria-disabled"), group.expanded, group.body.hidden]).toEqual([true, "true", false, true]);
+  expect([count.hidden, reset.classList.contains("idle"), group.expanded, group.body.hidden, count.classList.contains("badge")]).toEqual([true, true, false, true, false]);
   group.update({ set: 2 });
-  expect([count.hidden, count.textContent, reset.getAttribute("aria-disabled")]).toEqual([false, "2 set", null]);
+  expect([count.hidden, count.textContent, reset.classList.contains("idle")]).toEqual([false, "2 set", false]);
   reset.click();
   expect([resets, group.expanded]).toEqual([1, false]);
   group.button.click();

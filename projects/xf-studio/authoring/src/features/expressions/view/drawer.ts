@@ -53,7 +53,10 @@ const SLIDER = { min: 0, max: 100, step: 1, unit: "%", format: (percent: number)
 const percent = (weight: number | undefined) => Math.round((weight ?? 0) * 1000) / 10;
 
 /** One drawer entry: a centre or direction control, or a left/right pair. */
-type Entry = { element: HTMLElement; group: string; search: string; names: readonly string[]; update(part: ExpressionPart, state: Availability): void };
+type Entry = { element: HTMLElement; group: string; search: string; names: readonly string[];
+  /** The link keys its sides follow each other by (a pair's), for its group's mirror toggle. */
+  links?: readonly string[];
+  update(part: ExpressionPart, state: Availability): void };
 
 /** The form-control transaction of one control (one Undo step per drag or exact entry). */
 function controlTransaction(ctx: Ctx, name: string) {
@@ -80,10 +83,10 @@ function pairEntry(ctx: Ctx, left: FacialControl, right: FacialControl): Entry {
   let active = tx.left;
   const pair = new PairControl({ ...SLIDER, label: left.label, help: left.note,
     transaction: { begin: sides => { active = sides === "right" ? tx.right : tx.left; active.begin(); }, edit: ({ value }) => active.edit(value),
-      commit: () => active.commit(), cancel: () => active.cancel() },
-    onLinkChange: linked => ctx.dispatch({ kind: "expression.linkPair", pair: left.link?.key ?? left.pair!, linked } as ExpressionAction) });
+      commit: () => active.commit(), cancel: () => active.cancel() } });
   pair.element.dataset.pair = left.pair ?? "";
   return { element: pair.element, group: left.group, search: `${left.text} ${right.text} ${left.name} ${right.name}`.toLowerCase(), names: [left.name, right.name],
+    links: left.link ? [left.link.key] : [],
     update: (part, state) => pair.update({ left: percent(part.controls[left.name]), right: percent(part.controls[right.name]) }, { linked: linkedPair(part, left), ...state }) };
 }
 
@@ -125,7 +128,7 @@ function axisPairEntry(ctx: Ctx, left: FacialAxisControl, right: FacialAxisContr
   const separate = h("div", { class: "expr-axis-sides", role: "group", "aria-label": name }, h("p", { class: "expr-caption", text: name }), sides.left.element, sides.right.element);
   const element = h("div", { class: "expr-axis-pair", "data-axis": left.key }, both.element, separate);
   return { element, group, search: `${name} ${left.label} ${right.label} ${left.negative} ${left.positive}`.toLowerCase(),
-    names: [left.negative, left.positive, right.negative, right.positive],
+    names: [left.negative, left.positive, right.negative, right.positive], links: left.link?.keys ?? [],
     update: (part, state) => {
       const linked = linkedAxis(part, left);
       both.element.hidden = !linked; separate.hidden = linked;
@@ -206,7 +209,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
         h("span", { class: "block-actions" }, symmetric.element, more, resetAll), updating.element, updatingText),
       controlSearch.element, waiting, noControls, groupsHost));
 
-  let entries: Entry[] = [], groups: { id: string; section: GroupSection; entries: Entry[] }[] = [], built = "";
+  let entries: Entry[] = [], groups: { id: string; title: string; section: GroupSection; entries: Entry[]; keys: string[]; mirror?: HTMLButtonElement }[] = [], built = "";
   let preview: FacialPreviewSnapshot | undefined, startPoints = new Map<string, FacialStartPoint>(), current = EMPTY, availability: Availability = { disabled: false };
   const part = (): ExpressionPart => (ctx.facade.view()?.part as ExpressionPart | undefined) ?? EMPTY;
 
@@ -338,6 +341,13 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       const visible = group.entries.filter(entry => !entry.element.hidden).length;
       shown += visible;
       group.section.update({ set: setCount(group.entries), forceOpen: !!query && visible > 0, hidden: visible === 0, ...availability });
+      if (group.mirror) {
+        const on = group.keys.every(key => current.links[key] ?? true);
+        group.mirror.setAttribute("aria-pressed", String(on));
+        group.mirror.title = on ? `Mirror sides: ${group.title} — each pair follows the other. Press to set each side on its own.`
+          : `Mirror sides: ${group.title} is off — each side is set on its own. Press to mirror them (the next change sets both).`;
+        applyCapability(group.mirror, availability.disabled ? { available: false, reason: availability.reason } : { available: true });
+      }
     }
     noControls.replaceChildren(...(query && entries.length && !shown ? [controlSearch.noMatches("controls")] : []));
   }
@@ -378,11 +388,17 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     }
     groups = (preview?.groups ?? []).map(group => {
       const own = entries.filter(entry => entry.group === group.id);
+      // The region's mirror toggle, where it has left/right pairs: on, each pair follows its counterpart (skin as a mirror image, the
+      // eyes looking the same way); off, each side is set on its own. One Undo step for the whole region.
+      const keys = [...new Set(own.flatMap(entry => entry.links ?? []))];
+      const mirror = keys.length ? iconButton({ label: `Mirror sides: ${group.label}`, icon: "mirror", small: true, mode: true, pressed: true,
+        onClick: () => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(keys.map(key => [key, mirror!.getAttribute("aria-pressed") !== "true"])) } as ExpressionAction) })
+        : undefined;
       const section = new GroupSection({ title: group.label, key: `expressions.${group.id}`, expanded: group.id === "mouth" || group.id === "brows",
-        className: "expr-group", onReset: () => ctx.dispatch({ kind: "expression.reset", scope: "group", target: group.id } as ExpressionAction) });
+        className: "expr-group", level: "subsection", actions: mirror ? [mirror] : [], onReset: () => ctx.dispatch({ kind: "expression.reset", scope: "group", target: group.id } as ExpressionAction) });
       section.element.dataset.group = group.id;
       section.body.append(...own.map(entry => entry.element));
-      return { id: group.id, section, entries: own };
+      return { id: group.id, title: group.label, section, entries: own, keys, mirror };
     }).filter(group => group.entries.length);
     groupsHost.replaceChildren(...groups.map(group => group.section.element));
   }
