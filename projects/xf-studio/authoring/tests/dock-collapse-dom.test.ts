@@ -85,3 +85,44 @@ test("the last expanded docked group offers no collapse; collapsing it through t
   expect(root.querySelector('[data-group="c"] .dock-collapse-btn')).toBeNull();
   expect(view.collapseBlocked("finish")).toBeUndefined();
 });
+
+test("a folded strip reads top to bottom: Up and Down switch and reorder its tabs, and Down on a bar still moves into the panel (UI-122)", async () => {
+  const { view, root } = await mount(tree(true, true, true));
+  const { findGroup } = await import("../src/studio-ui/dock/layout");
+  const group = (id: string) => findGroup(view.tree, id)!.group;
+  const press = (panel: string, key: string, mods: { altKey?: boolean; shiftKey?: boolean } = {}) => {
+    const event = lightEvent("keydown", { key, ...mods });
+    root.querySelector(`[data-panel="${panel}"]`)!.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(root.querySelector('[data-group="c"]')!.querySelector('[role="tablist"]')!.getAttribute("aria-orientation")).toBe("vertical");
+  expect(press("lighting", "ArrowDown")).toBe(true);
+  expect(group("c").active).toBe("motion");
+  press("motion", "ArrowUp"); press("lighting", "ArrowUp");
+  expect(group("c").active).toBe("quality");
+  // Alt+Shift+Up moves the tab one place up the strip; Left and Right still switch.
+  press("quality", "ArrowUp", { altKey: true, shiftKey: true });
+  expect(group("c").panels).toEqual(["lighting", "quality", "motion"]);
+  press("quality", "ArrowRight");
+  expect(group("c").active).toBe("motion");
+  // On an expanded group's horizontal bar, Down moves into the panel and never switches the tab.
+  const bar = await mount(tree(true, true, false));
+  expect(bar.root.querySelector('[data-group="c"]')!.querySelector('[role="tablist"]')!.getAttribute("aria-orientation")).toBeNull();
+  bar.root.querySelector('[data-panel="lighting"]')!.dispatchEvent(lightEvent("keydown", { key: "ArrowDown" }));
+  expect(findGroup(bar.view.tree, "c")!.group.active).toBe("lighting");
+});
+
+test("the dock's splitters are the library's: a focusable separator whose arrow keys resize and whose Enter shares evenly (UI-121)", async () => {
+  const { view, splitters } = await mount(tree(false, false, false));
+  const splitter = splitters("s-right")[0]!;
+  expect([splitter.getAttribute("role"), splitter.getAttribute("tabindex"), splitter.getAttribute("aria-orientation"), splitter.getAttribute("aria-label"),
+    splitter.getAttribute("aria-valuenow")]).toEqual(["separator", "0", "horizontal", "Resize rows", "50"]);
+  const sizes = () => { const r = view.tree.root; return r?.kind === "split" && r.children[1]!.kind === "split" ? r.children[1]!.sizes.map(v => Math.round(v * 1000) / 1000) : []; };
+  splitter.dispatchEvent(lightEvent("keydown", { key: "ArrowDown" }));
+  expect(sizes()).toEqual([.324, .276, .4]);
+  // Left and Right don't resize rows.
+  splitters("s-right")[0]!.dispatchEvent(lightEvent("keydown", { key: "ArrowRight" }));
+  expect(sizes()).toEqual([.324, .276, .4]);
+  splitters("s-right")[0]!.dispatchEvent(lightEvent("keydown", { key: "Enter" }));
+  expect(sizes()).toEqual([.3, .3, .4]);
+});

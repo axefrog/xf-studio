@@ -23,6 +23,7 @@ One typed catalogue, [`input-bindings.ts`](../../projects/xf-studio/authoring/sr
 - **Modifiers.** Matching is exact: Ctrl, Alt and Shift, with Cmd/Meta counted as Ctrl. An unbound input does nothing. Bindings that ignore modifiers (right-drag pan, the context menu) list every combination.
 - **Actions.** Each binding names a real action (`StudioAction` kind and variant, a collection request, a UV view command or a shell command), or `none` for a consumed no-op. A test checks every reference against the action registry.
 - **Inputs.** `pointerInputOf()` classifies a press the same way in both viewports: the left button, a pen or a first finger is `drag`, the middle button `middle-drag`, the right button `right-drag`, and a further finger while one is down `two-finger-drag`. Other buttons are no input.
+- **Folded strips.** A group folded to a vertical tab strip (`aria-orientation="vertical"`) reads top to bottom, so the dock resolves Up and Down there as the `tabs` scope's Left and Right: they switch tabs and, with Alt+Shift, reorder them. On a horizontal bar Down stays `tabs.content` (into the panel).
 - **Effects.** The effect is the handler an adapter runs. On the head, `camera-*` effects (`camera-orbit`, `camera-pan`, `camera-zoom`, and `camera-zoom-pan` for two fingers) are performed by three's orbit controls, configured per press by the head camera adapter.
 
 ## Head camera

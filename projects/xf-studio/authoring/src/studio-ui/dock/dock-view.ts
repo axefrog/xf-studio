@@ -5,6 +5,7 @@ import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
 import { HeaderFitter, PanelHeader } from "../components/panel-header";
 import { iconButton } from "../components/icon-button";
+import { Splitter } from "../components/splitter";
 import { TabStrip } from "../components/tab-strip";
 import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate,
   openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
@@ -54,7 +55,9 @@ export class DockView {
   private folds = new Map<string, "row" | "column">();
   /** Each rendered group's header (its tab strip condenses to fit, components/panel-header.ts). */
   private headers = new Map<string, PanelHeader>();
-  private readonly fitter = new HeaderFitter();
+  private readonly fitter = new HeaderFitter(header => this.sizeStrip(header));
+  /** The cells of the rendered stacks of vertical strips, by the header each holds (`sizeStrip`). */
+  private stripCells = new Map<PanelHeader, HTMLElement>();
 
   constructor(private options: DockViewOptions) {
     for (const panel of options.panels) this.panels.set(panel.id, panel);
@@ -159,6 +162,7 @@ export class DockView {
     this.surface.replaceChildren();
     this.floatingLayer.replaceChildren();
     this.headers.clear();
+    this.stripCells.clear();
     this.folds = new Map([...foldAxes(tree.root), ...tree.floating.flatMap(window => [...foldAxes(window.node)])]);
     const maximized = tree.maximized ? findGroup(tree, tree.maximized)?.group : undefined;
     if (maximized) this.surface.append(this.renderGroup(maximized, false, shown, true));
@@ -180,6 +184,19 @@ export class DockView {
     if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   }
 
+  /**
+   * A stack of vertical strips shares its column by each strip's natural length (every label whole), not by its current length: a
+   * strip condensed in a short window then gets its room back when the window grows (UI-120), and the result never depends on the
+   * order of past resizes. Called after each header fits; it changes the cell only when the length does.
+   */
+  private sizeStrip(header: PanelHeader) {
+    const cell = this.stripCells.get(header);
+    if (!cell?.isConnected || !header.strip.fullLength) return;
+    // The cell's length beyond its header (the group's borders), then the header's natural length.
+    const frame = cell.getBoundingClientRect().height - header.element.getBoundingClientRect().height;
+    const flex = `1 1 ${Math.ceil(header.naturalLength() + Math.max(0, frame))}px`;
+    if (cell.style.flex !== flex) cell.style.flex = flex;
+  }
   /** Fit every header's tab strip to its group again (a window resize; the headers also refit themselves when their size changes). */
   condenseTabs() { this.fitter.fitAll(); }
   private renderNode(node: DockNode, floating: boolean, shown: Set<PanelId>): HTMLElement {
@@ -195,6 +212,8 @@ export class DockView {
       cell.style.flex = folded[index] ? "0 0 auto" : strips ? "1 1 auto" : `${shares[index]} 1 0`;
       if (folded[index]) cell.dataset.collapsed = node.axis;
       cell.append(this.renderNode(child, floating, shown));
+      const header = strips && child.kind === "group" ? this.headers.get(child.id) : undefined;
+      if (header) this.stripCells.set(header, cell);
       element.append(cell);
     });
     return element;
@@ -217,7 +236,7 @@ export class DockView {
       },
       onClose: id => this.close(id),
       onAuxClick: (event, id) => { if (event.button === 1) { event.preventDefault(); this.close(id); } },
-      onKeyDown: (event, id) => this.tabKey(event, group, id),
+      onKeyDown: (event, id) => this.tabKey(event, group, id, orientation === "vertical"),
       onContextMenu: (event, id, tab) => { event.preventDefault(); this.openPanelMenu(id, { x: event.clientX, y: event.clientY }, tab); },
       onPointerDown: (event, id, tab) => this.pointerDown(event, { kind: "panel", panelId: id }, tab),
     });
@@ -299,10 +318,6 @@ export class DockView {
     const resized = splitterPair(folded, index);
     if (!resized) return h("div", { class: "dock-splitter inert", "aria-hidden": "true" });
     const [a, b] = resized;
-    const element = h("div", { class: "dock-splitter", role: "separator", tabindex: "0",
-      "aria-orientation": axis === "row" ? "vertical" : "horizontal",
-      "aria-label": `Resize ${axis === "row" ? "columns" : "rows"}`,
-      title: "Drag to resize · Arrow keys adjust · Double-click to equalize" });
     const find = (node: DockNode | null): DockNode | undefined => {
       if (!node || node.kind === "group") return;
       if (node.id === splitId) return node;
@@ -313,32 +328,22 @@ export class DockView {
       const node = find(tree.root) ?? tree.floating.map(window => find(window.node)).find(Boolean);
       return node?.kind === "split" ? [...node.sizes] : [];
     };
-    const setValue = (values: number[]) => {
-      const pct = Math.round(values[a] / (values[a] + values[b]) * 100);
-      setAttr(element, "aria-valuenow", String(pct)); setAttr(element, "aria-valuemin", "0"); setAttr(element, "aria-valuemax", "100");
-    };
-    setValue(sizes());
     const commit = (values: number[]) => this.update(setSizes(this.tree, splitId, values));
-    element.addEventListener("keydown", event => {
-      const grow: Record<string, number> = axis === "row" ? { ArrowRight: 1, ArrowLeft: -1 } : { ArrowDown: 1, ArrowUp: -1 };
-      const step = grow[event.key];
-      if (step) {
-        event.preventDefault();
-        const values = sizes(), pair = values[a] + values[b], delta = pair * .04 * step;
+    const equalize = () => { const values = sizes(), pair = values[a] + values[b]; values[a] = values[b] = pair / 2; commit(values); };
+    // The splitter itself is the library's (components/splitter.ts); the dock turns its intents into layout operations.
+    const splitter = new Splitter({ axis, className: "dock-splitter", label: `Resize ${axis === "row" ? "columns" : "rows"}`,
+      title: "Drag to resize · Arrow keys adjust · Double-click to equalize",
+      onStep: direction => {
+        const values = sizes(), pair = values[a] + values[b], delta = pair * .04 * direction;
         values[a] = clamp(values[a] + delta, pair * .08, pair * .92);
         values[b] = pair - values[a];
         commit(values);
         this.focusSplitter(splitId, index);
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        const values = sizes(), pair = values[a] + values[b];
-        values[a] = values[b] = pair / 2; commit(values); this.focusSplitter(splitId, index);
-      }
-    });
-    element.addEventListener("dblclick", () => {
-      const values = sizes(), pair = values[a] + values[b];
-      values[a] = values[b] = pair / 2; commit(values);
-    });
+      },
+      onEqualize: () => { equalize(); this.focusSplitter(splitId, index); } });
+    const element = splitter.element;
+    const setValue = (values: number[]) => splitter.setValue(values[a] / (values[a] + values[b]));
+    setValue(sizes());
     element.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
       event.preventDefault();
@@ -379,20 +384,27 @@ export class DockView {
     ([...(split?.children ?? [])].filter(child => child.classList.contains("dock-splitter"))[index - 1] as HTMLElement | undefined)?.focus();
   }
 
-  private tabKey(event: KeyboardEvent, group: GroupNode, id: PanelId) {
+  /**
+   * A tab's keys (input-bindings.ts, scope `tabs`). A folded strip reads top to bottom (`aria-orientation="vertical"`), so there Up
+   * and Down move along it as Left and Right do along a bar (UI-122): they switch and, with Alt+Shift, reorder; Left and Right still
+   * work.
+   */
+  private tabKey(event: KeyboardEvent, group: GroupNode, id: PanelId, vertical = false) {
     const index = group.panels.indexOf(id);
     const focusTab = (panel: PanelId) => this.element.querySelector<HTMLElement>(`[id="dock-tab-${panel}"]`)?.focus();
-    const command = keyBinding("tabs", event)?.id;
+    const along = vertical ? ({ ArrowUp: "ArrowLeft", ArrowDown: "ArrowRight" } as Record<string, string>)[event.key] : undefined;
+    const key = along ?? event.key;
+    const command = keyBinding("tabs", along ? { key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey } : event)?.id;
     if (command === "tabs.reorder") {
       event.preventDefault();
-      const to = clamp(index + (event.key === "ArrowRight" ? 2 : -1), 0, group.panels.length);
+      const to = clamp(index + (key === "ArrowRight" ? 2 : -1), 0, group.panels.length);
       const moved = applyDrop(this.tree, { kind: "panel", panelId: id }, { kind: "tab", groupId: group.id, index: to });
       this.update(moved, `${this.title(id)} moved to position ${(locate(moved, id)?.index ?? 0) + 1} of ${group.panels.length}`);
       focusTab(id);
     } else if (command === "tabs.switch") {
       event.preventDefault();
-      const next = event.key === "Home" ? 0 : event.key === "End" ? group.panels.length - 1 :
-        (index + (event.key === "ArrowRight" ? 1 : -1) + group.panels.length) % group.panels.length;
+      const next = key === "Home" ? 0 : key === "End" ? group.panels.length - 1 :
+        (index + (key === "ArrowRight" ? 1 : -1) + group.panels.length) % group.panels.length;
       this.update(activate(this.tree, group.panels[next]));
       focusTab(group.panels[next]);
     } else if (command === "tabs.close") { event.preventDefault(); this.close(id); }

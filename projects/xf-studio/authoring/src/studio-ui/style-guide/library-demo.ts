@@ -1,6 +1,6 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
-  PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
+  PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, type TabItem } from "../components";
 import { h } from "../dom";
 
@@ -121,6 +121,15 @@ const MOUNTS: Record<string, Mount> = {
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },
+  // The dock's splitter between two sample groups: the arrows step the share, Enter or a double-click evens it.
+  "lib-splitter": () => { let share = .5;
+    const side = (text: string) => h("div", { class: "dock-cell" }, h("section", { class: "dock-group", style: "flex:1;display:grid;place-items:center" }, h("span", { class: "muted", text })));
+    const start = side("Start"), end = side("End");
+    const apply = () => { start.style.flex = `${share} 1 0`; end.style.flex = `${1 - share} 1 0`; splitter.setValue(share); };
+    const splitter: Splitter = new Splitter({ axis: "row", className: "dock-splitter", label: "Resize the sample columns", title: "Arrow keys adjust · Double-click to equalize",
+      onStep: (direction, big) => { share = Math.min(.9, Math.max(.1, share + direction * (big ? .1 : .04))); apply(); }, onEqualize: () => { share = .5; apply(); } });
+    apply();
+    return h("div", { class: "dock-split", "data-axis": "row", style: "height:96px;max-width:520px" }, start, splitter.element, end); },
 };
 
 /** Build every live specimen on the page (again after the side-by-side comparison rebuilds the specimens). */

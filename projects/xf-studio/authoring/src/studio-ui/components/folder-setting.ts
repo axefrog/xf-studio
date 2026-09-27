@@ -14,7 +14,8 @@ import type { Capability } from "../menu";
  *   it opens a text box in place, with inline guidance, committed on Enter or Save and cancelled with Escape.
  * - **Use the detected folder** returns to what the app found, shown only when a detected folder differs from the chosen one.
  * - **Refusals** (a folder that isn't the game, a picker that failed) appear on the note line under the field, never as a toast; the
- *   line keeps its height, so a refusal appearing or clearing never moves anything. A cancelled picker says nothing.
+ *   line keeps its height, so a refusal appearing or clearing never moves anything. A cancelled picker says nothing. An owner's action
+ *   that fails outright (its promise rejects) is a refusal too, in plain words, and the controls come back.
  */
 export type FolderOutcome = { ok: true } | { ok: false; message: string; cancelled?: boolean };
 export type FolderSettingOptions = {
@@ -78,6 +79,10 @@ export class FolderSetting {
       const outcome = await action();
       if (!outcome.ok && !outcome.cancelled) this.refuse(outcome.message);
       return outcome.ok;
+    } catch {
+      // Never an unhandled rejection or a silent failure (UI-124): say so on the note line, and keep the typed folder to try again.
+      this.refuse("Couldn't change the folder. Try again.");
+      return false;
     } finally { this.busy = false; this.paint(); }
   }
   private async chooseAnother() {

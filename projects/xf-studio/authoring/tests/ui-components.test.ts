@@ -46,7 +46,7 @@ test("pair control: linked is one row for both sides, separate is two, uneven sa
     transaction: { edit: edit => edits.push(`${edit.sides}=${edit.value}`) } });
   pair.update({ left: .2, right: .2 }, { linked: true });
   const both = pair.element.querySelector<HTMLElement>(".pair-both")!, sides = pair.element.querySelector<HTMLElement>(".pair-sides")!;
-  expect([both.hidden, sides.hidden, pair.link.getAttribute("aria-pressed"), pair.link.textContent]).toEqual([false, true, "true", "Linked"]);
+  expect([both.hidden, sides.hidden, pair.link.getAttribute("aria-pressed"), pair.link.textContent]).toEqual([false, true, "true", "Link sides"]);
   expect(both.querySelector<HTMLElement>("label")!.textContent).toBe("Brow height, both sides");
   pair.update({ left: .2, right: .6 }, { linked: true });
   expect([pair.element.classList.contains("uneven"), both.querySelector<HTMLElement>(".control-note")!.textContent]).toEqual([true, "Sides differ: the next change sets both."]);
@@ -56,8 +56,17 @@ test("pair control: linked is one row for both sides, separate is two, uneven sa
   pair.link.click();
   expect(links).toEqual([false]);
   pair.update({ left: .2, right: .6 }, { linked: false });
-  expect([both.hidden, sides.hidden, pair.link.textContent, Array.from(sides.querySelectorAll<HTMLElement>("label")).map(label => label.textContent)])
-    .toEqual([true, false, "Separate", ["Brow height, left", "Brow height, right"]]);
+  // The toggle's name never changes with its state: aria-pressed carries it (UI-124).
+  expect([both.hidden, sides.hidden, pair.link.textContent, pair.link.getAttribute("aria-pressed"), Array.from(sides.querySelectorAll<HTMLElement>("label")).map(label => label.textContent)])
+    .toEqual([true, false, "Link sides", "false", ["Brow height, left", "Brow height, right"]]);
+  // Unavailable, it stays focusable and says why (aria-disabled with its reason, never native disabled), and a press does nothing.
+  pair.update({ left: .2, right: .6 }, { linked: false, disabled: true, reason: "Choose a face first." });
+  expect([pair.link.disabled, pair.link.getAttribute("aria-disabled"), pair.link.getAttribute("aria-description"), pair.link.title])
+    .toEqual([false, "true", "Choose a face first.", "Choose a face first."]);
+  pair.link.click();
+  expect(links).toEqual([false]);
+  pair.update({ left: .2, right: .6 }, { linked: true });
+  expect([pair.link.getAttribute("aria-disabled"), pair.link.title]).toEqual([null, "Linked: one value sets both sides. Press to set each side separately."]);
 });
 
 test("group section: the count hides at 0, reset never folds the group, the open state lasts the session and search can force or hide it", async () => {
@@ -84,6 +93,15 @@ test("group section: the count hides at 0, reset never folds the group, the open
   expect(again.expanded).toBe(false);
   again.update({ hidden: true });
   expect(again.element.hidden).toBe(true);
+  // Folded by the person during a search, it stays folded while that search updates (UI-124); the next search opens it again.
+  again.update({ forceOpen: true });
+  again.button.click();
+  again.update({ forceOpen: true }); again.update({ forceOpen: true, set: 1 });
+  expect(again.expanded).toBe(false);
+  again.update({});
+  expect(again.expanded).toBe(false);
+  again.update({ forceOpen: true });
+  expect(again.expanded).toBe(true);
 });
 
 test("search field: debounced filtering, Enter at once, Escape and the clear button clear, and a no-matches state with Clear search", async () => {
@@ -127,6 +145,12 @@ test("combobox: typing filters under the group headings, arrows move over unavai
   expect(list.querySelector<HTMLElement>(".combobox-empty")!.textContent).toBe("Nothing matches.");
   key(combo.input, "Escape");
   expect([combo.input.value, list.hidden]).toEqual(["Snarl", true]);
+  // A refused choice, the field still focused: the owner's value shows again at once (UI-124).
+  combo.input.focus();
+  key(combo.input, "ArrowDown"); key(combo.input, "ArrowUp"); key(combo.input, "Enter");
+  expect([chosen.at(-1), combo.input.value, document.activeElement === (combo.input as unknown)]).toEqual(["a", "Smile", true]);
+  combo.update([{ options: [{ value: "a", label: "Smile" }, { value: "c", label: "Snarl" }] }], "c");
+  expect(combo.input.value).toBe("Snarl");
 });
 
 test("layout primitives: the page header's rows, an empty meta line takes no room, property lists and a focusable code block", async () => {
@@ -234,6 +258,80 @@ test("tree view: only the items in view are in the page, and an update keeps the
   expect([document.activeElement?.getAttribute("data-id"), tree.element.querySelector(".tree-status")!.textContent]).toEqual(["g40r3", "Loading…"]);
 });
 
+test("tree view: focus stays in the tree when the focused row leaves it, by F, by its star or by a new list (UI-119)", async () => {
+  const { TreeView, favouriteToggle } = await lib();
+  let favs = ["p1", "p2", "p3"];
+  const expanded = new Set(["fav", "pack"]);
+  const groups = () => [{ id: "fav", label: "Favourites", rows: favs.map(id => ({ id: `fav:${id}`, label: `Pose ${id}`, trailingState: true })) },
+    { id: "pack", label: "Pack", rows: ["p1", "p2", "p3", "p4"].map(id => ({ id: `pack:${id}`, label: `Pose ${id}`, trailingState: favs.includes(id) })) }];
+  const unstar = (rowId: string) => { const id = rowId.split(":")[1]!; favs = favs.includes(id) ? favs.filter(f => f !== id) : [...favs, id]; paint(); };
+  const tree = new TreeView({ label: "Poses", onActivate: () => {}, onToggle: () => {},
+    onKey: (event, item) => { if (event.key === "f" && item.kind === "row") { unstar(item.id); return true; } },
+    trailing: row => favouriteToggle({ on: !!row.trailingState, onToggle: () => unstar(row.id) }) });
+  const paint = () => tree.update({ groups: groups(), expanded });
+  document.body.append(tree.element);
+  paint();
+  const focused = () => document.activeElement?.getAttribute("data-id");
+  const item = (id: string) => tree.element.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+  // F on a Favourites row removes it: the row that took its place is focused.
+  tree.focusItem("fav:p2");
+  key(tree.element.querySelector<HTMLElement>('[data-id="fav:p2"]')!, "f");
+  expect(focused()).toBe("fav:p3");
+  // The group's last row leaves: the next item (the next group) takes its place.
+  key(item("fav:p3"), "f");
+  expect(focused()).toBe("pack");
+  // A star clicked (focus on the star inside the row): the row and its emptied group go, focus stays in the tree.
+  tree.focusItem("fav:p1");
+  const star = item("fav:p1").querySelector<HTMLElement>(".favourite-toggle")!;
+  star.focus(); star.click();
+  expect([favs, focused()]).toEqual([[], "pack:p1"]);
+  // The very last item leaves: the one before takes focus.
+  tree.focusItem("pack:p4");
+  tree.update({ groups: groups().map(group => ({ ...group, rows: group.rows.filter(row => row.id !== "pack:p4") })), expanded });
+  expect(focused()).toBe("pack:p3");
+  paint();
+  // A star on a row that stays (its trailing slot rebuilds the row): focus moves to the rebuilt row, not to the page.
+  tree.focusItem("pack:p4");
+  const keep = item("pack:p4").querySelector<HTMLElement>(".favourite-toggle")!;
+  keep.focus(); keep.click();
+  expect([favs, focused(), item("pack:p4").querySelector(".favourite-toggle")!.getAttribute("aria-pressed")]).toEqual([["p4"], "pack:p4", "true"]);
+  // Without focus in the tree, nothing is focused for it.
+  (document as unknown as { activeElement: unknown }).activeElement = null;
+  favs = [];
+  paint();
+  expect(document.activeElement).toBeNull();
+});
+
+test("tree view: a group and a row may share an ID; the tree holds only its items, the status and empty message sit beside it (UI-123)", async () => {
+  const { TreeView } = await lib();
+  const activated: string[] = [], toggled: string[] = [];
+  const expanded = new Set(["x"]);
+  const tree = new TreeView({ label: "Shared", emptyText: "Nothing here.", onActivate: id => activated.push(id), onToggle: (id, open) => toggled.push(`${id}:${open}`) });
+  document.body.append(tree.element);
+  tree.update({ groups: [{ id: "x", label: "Group X", rows: [{ id: "x", label: "Row X" }, { id: "y", label: "Row Y" }] }], expanded, loading: "Loading Row X…" });
+  const el = tree.element as unknown as LightElement;
+  const treeEl = el.querySelector('[role="tree"]')!;
+  expect(treeEl.getAttribute("aria-label")).toBe("Shared");
+  // Two items with the ID "x", both in the page and told apart by their kind.
+  expect(treeEl.querySelectorAll(".tree-item").map(item => [item.dataset.id, item.dataset.kind])).toEqual([["x", "group"], ["x", "row"], ["y", "row"]]);
+  treeEl.querySelectorAll(".tree-row")[0]!.click();
+  treeEl.querySelectorAll(".tree-group")[0]!.click();
+  expect([activated, toggled]).toEqual([["x"], ["x:false"]]);
+  // Keys move through both, and focusItem prefers the row unless the kind is given.
+  tree.focusItem("x");
+  expect(document.activeElement?.getAttribute("data-kind")).toBe("row");
+  tree.focusItem("x", "group");
+  expect(document.activeElement?.getAttribute("data-kind")).toBe("group");
+  key(document.activeElement as HTMLElement, "ArrowDown"); key(document.activeElement as HTMLElement, "ArrowDown");
+  expect([document.activeElement?.getAttribute("data-id"), document.activeElement?.getAttribute("data-kind")]).toEqual(["y", "row"]);
+  // Everything inside role=tree is its items; the status and the empty message are outside it.
+  const status = el.querySelector('[role="status"]')!, empty = el.querySelector(".tree-empty")!;
+  expect([treeEl.contains(status), treeEl.contains(empty), status.textContent, status.hidden]).toEqual([false, false, "Loading Row X…", false]);
+  expect(treeEl.descendants().filter(node => node.getAttribute("role") !== "treeitem" && !node.closest(".tree-item") && !node.classList.contains("tree-spacer"))).toEqual([]);
+  tree.update({ groups: [], expanded });
+  expect([empty.hidden, empty.textContent, status.hidden]).toEqual([false, "Nothing here.", true]);
+});
+
 test("folder setting: says what it uses, a refusal shows inline on the reserved line, the typed box commits on Enter, the picker is used where there is one", async () => {
   const { FolderSetting } = await lib();
   const chosenPaths: string[] = []; let picks = 0;
@@ -258,4 +356,24 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   choose.click(); await new Promise(resolve => setTimeout(resolve, 0));
   // A cancelled picker says nothing.
   expect([picks, typed.hidden, note.textContent]).toEqual([1, true, ""]);
+});
+
+test("folder setting: an action that fails outright is a plain refusal on the note line, and the controls come back (UI-124)", async () => {
+  const { FolderSetting } = await lib();
+  const rejections: unknown[] = [];
+  const onRejection = (reason: unknown) => rejections.push(reason);
+  process.on("unhandledRejection", onRejection);
+  try {
+    const folder = new FolderSetting({ label: "Game folder", onChoose: async () => { throw Error("EACCES: internal detail"); } });
+    folder.update({ chosen: null });
+    const el = folder.element as unknown as LightElement, note = el.querySelector(".folder-note")!;
+    const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose another folder…")!;
+    choose.click(); await Promise.resolve();
+    folder.input.value = "D:\\Games\\Cyberpunk 2077"; key(folder.input, "Enter");
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const save = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Save")!;
+    expect([note.textContent, note.classList.contains("empty"), el.querySelector(".folder-typed")!.hidden, folder.input.value, save.getAttribute("aria-disabled")])
+      .toEqual(["Couldn't change the folder. Try again.", false, false, "D:\\Games\\Cyberpunk 2077", null]);
+    expect(rejections).toEqual([]);
+  } finally { process.off("unhandledRejection", onRejection); }
 });

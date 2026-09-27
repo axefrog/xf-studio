@@ -58,7 +58,10 @@ export class Combobox<T extends string> {
     const signature = JSON.stringify(groups);
     if (signature !== this.signature) { this.signature = signature; this.groups = groups; if (this.open) this.render(this.input.value); }
     this.value = value;
-    if (!this.open && document.activeElement !== this.input) this.input.value = this.label(value);
+    // Closed, the field shows the chosen option's label, focused or not: after a refused choice the owner's value comes back into
+    // view at once (UI-124). Typing opens the list, so this never overwrites what the person is typing.
+    const label = this.label(value);
+    if (!this.open && this.input.value !== label) this.input.value = label;
     setDisabled(this.input, disabled, reason);
   }
   private show(open: boolean) {
