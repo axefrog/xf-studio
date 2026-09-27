@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import { evaluateDeformationRig, type DeformationProgram, type Mat4 } from "./deformation-rig";
+
+/** The game's axes (Z up) from glTF's (Y up): game = GAME_FROM_GLTF · gl · GAME_FROM_GLTF⁻¹ (WolvenKit's export convention). */
+const GAME_FROM_GLTF = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+const GLTF_FROM_GAME = GAME_FROM_GLTF.clone().invert();
 
 /** Compose decoded body motion and an offline-solved facial clip in world bind space. */
 export class IdleAnimation {
@@ -26,6 +31,13 @@ export class IdleAnimation {
   /** Driver lookups and their bind-pose inverses, kept so bones loaded later bind to the same neutral pose. */
   private readonly drivers = new Map<string, { driver: THREE.Object3D; inverseBind: THREE.Matrix4 }>();
   private readonly faceDrivers = new Map<string, { driver: THREE.Object3D; inverseBind: THREE.Matrix4 }>();
+  /**
+   * The puppet's deformation rigs (deformation-rig.ts): each rig joint the body clip doesn't key is driven by a virtual driver whose
+   * world matrix is the joint's solved delta from its bind pose, so the body's helper joints move as the game's graph moves them.
+   */
+  private rigs: { program: DeformationProgram; driven: boolean[]; sources: (THREE.Object3D | string | null)[];
+    outputs: { joint: number; driver: THREE.Object3D; inverseBind: THREE.Matrix4 }[] }[] = [];
+  private readonly rigDrivers = new Set<string>();
   constructor(readonly source: THREE.Object3D, readonly clip: THREE.AnimationClip,
     targets: THREE.Object3D[], ancestry: Record<string, string | null>,
     readonly facial?: { source: THREE.Object3D; clip: THREE.AnimationClip }) {
@@ -124,6 +136,68 @@ export class IdleAnimation {
     for (let i = this.unmapped.length - 1; i >= 0; i--) if (targets.some(bone => bone.name === this.unmapped[i])) this.unmapped.splice(i, 1);
     this.onChange?.();
   }
+  /**
+   * Pose the joints the puppet's deformation rigs solve with those rigs (replacing any earlier ones). Bones bound before move to their
+   * rig joint's driver; bones bound later find it by name. Without rigs, helper joints follow their nearest segment (`nearestDriver`).
+   */
+  setDeformations(programs: readonly DeformationProgram[]) {
+    for (const name of this.rigDrivers) this.drivers.delete(name);
+    const before = new Set(this.rigDrivers);
+    this.rigDrivers.clear();
+    this.rigs = programs.map(program => {
+      const outputs: { joint: number; driver: THREE.Object3D; inverseBind: THREE.Matrix4 }[] = [];
+      // A joint's pose comes from the body clip, else from a rig before this one (one bound to it), else from this rig.
+      const sources: (THREE.Object3D | string | null)[] = [], driven: boolean[] = [];
+      for (let i = 0; i < program.joints; i++) {
+        const name = program.transforms[i]!.name, earlier = this.rigDrivers.has(name), clip = earlier ? undefined : this.drivers.get(name);
+        sources.push(earlier ? name : clip?.driver ?? null); driven.push(earlier || !!clip);
+        if (earlier || clip) continue;
+        const driver = new THREE.Object3D();
+        driver.name = name;
+        driver.matrixAutoUpdate = driver.matrixWorldAutoUpdate = false;
+        this.drivers.set(name, { driver, inverseBind: new THREE.Matrix4() });
+        this.rigDrivers.add(name);
+        outputs.push({ joint: i, driver, inverseBind: new THREE.Matrix4().fromArray(program.bind[i]!).invert() });
+      }
+      return { program, driven, sources, outputs };
+    });
+    // Helper joints already bound follow their rig joint from now on; ones a removed rig drove go back to their nearest segment.
+    for (const binding of [...this.bindings]) {
+      const name = binding.bone.name;
+      if (this.rigDrivers.has(name)) {
+        const rig = this.drivers.get(name)!;
+        binding.driver = rig.driver; binding.inverseDriverBind = rig.inverseBind;
+      } else if (before.has(name)) {
+        this.bindings.splice(this.bindings.indexOf(binding), 1);
+        binding.bone.position.copy(binding.position); binding.bone.quaternion.copy(binding.rotation); binding.bone.scale.copy(binding.scale);
+        binding.bone.updateWorldMatrix(true, false);
+        this.bind([binding.bone]);
+      }
+    }
+    this.solveRigs();
+    if (this.enabled) this.update(0);
+    this.onChange?.();
+  }
+  /** Joints a deformation rig solves (none without one). */
+  get rigJoints(): readonly string[] { return [...this.rigDrivers]; }
+  private readonly rigMatrix = new THREE.Matrix4();
+  /** Run each rig on the clip's current pose and set its virtual drivers: glTF-space deltas from the bind pose. */
+  private solveRigs() {
+    const solved = new Map<string, Mat4>();
+    for (const rig of this.rigs) {
+      const pose: Mat4[] = new Array(rig.program.transforms.length);
+      for (let i = 0; i < rig.program.joints; i++) {
+        const source = rig.sources[i];
+        pose[i] = typeof source === "string" ? solved.get(source)!.slice()
+          : source ? this.rigMatrix.copy(GAME_FROM_GLTF).multiply(source.matrixWorld).multiply(GLTF_FROM_GAME).toArray() : [];
+      }
+      evaluateDeformationRig(rig.program, pose, rig.driven);
+      for (const output of rig.outputs) {
+        solved.set(rig.program.transforms[output.joint]!.name, pose[output.joint]!);
+        output.driver.matrixWorld.fromArray(pose[output.joint]!).multiply(output.inverseBind).premultiply(GLTF_FROM_GAME).multiply(GAME_FROM_GLTF);
+      }
+    }
+  }
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;
     this.enabled = enabled; this.elapsed = 0; this.playbackPaused = false;
@@ -163,6 +237,7 @@ export class IdleAnimation {
       this.facial.source.updateMatrixWorld(true);
     }
     this.source.updateMatrixWorld(true);
+    this.solveRigs();
     if (!this.bodyContribution && !this.faceContribution) {
       this.restore();
       return;

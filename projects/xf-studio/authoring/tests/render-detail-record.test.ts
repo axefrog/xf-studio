@@ -340,3 +340,15 @@ describe("the underwear floor in the record (PIPE-97)", () => {
     expect(record.components.some(c => c.slot === "hair" || c.slot === "body")).toBe(false);
   });
 });
+
+test("a record keeps well-formed deformation rigs with a drawn body, and leaves out any other entry", () => {
+  const rig = (component: string, c: string) => ({ component, rig: "base\r.rig", graph: "base\g.animgraph", file: `${sha(c)}.json`, sha256: sha(c) });
+  const record = { ...character(), rigs: [rig("deformations", "1"), { ...rig("broken", "2"), file: "../x.json" }, { ...rig("mismatch", "3"), sha256: sha("4") }] };
+  expect(parseCharacterDetail(record).rigs).toEqual([rig("deformations", "1")]);
+  // Parsing its own output again changes nothing (the host writes this parser's output).
+  expect(parseCharacterDetail(parseCharacterDetail(record))).toEqual(parseCharacterDetail(record));
+  // Without a body there is nothing for a rig to pose.
+  const bodyless = { ...record, components: record.components.filter(item => item.slot !== "body") };
+  expect(parseCharacterDetail(bodyless).rigs).toBeUndefined();
+  expect(parseCharacterDetail(character()).rigs).toBeUndefined();
+});

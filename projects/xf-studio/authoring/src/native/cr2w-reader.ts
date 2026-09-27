@@ -21,6 +21,7 @@ import { readPackage } from "./red-package";
 import { RedBuffer, RedHandle, RedObject, type RedDocument } from "./red-model";
 import { cname, Cursor, emptyReference, importFlagsText, normalizedPath, noteStoredType, readValue, readVarString, type ValueContext } from "./red-values";
 import { propertyTypes } from "./rtti";
+import { float32Value } from "./json-numbers";
 
 /** Which buffers are parsed, by owning `Class.property` (others stay bytes). */
 const PARSED_BUFFERS: Record<string, "package" | "cr2w-list"> = {
@@ -108,6 +109,28 @@ export class Cr2wDecoder implements ValueContext {
         values.push({ $type: type, [name]: value });
       }
       object.fields.values = values;
+      return;
+    }
+    if (object.type === "animRig") {
+      // One entry per bone of `boneNames` (knowledge/archive-format.md §5): i16 parent indexes, then QsTransforms (translation,
+      // rotation i j k r, scale: twelve f32). Anything else is refused by the size check that follows.
+      const names = object.fields.boneNames;
+      const count = Array.isArray(names) ? names.length : 0;
+      if (cursor.remaining !== count * 50) throw new NativeUnsupportedError(`animRig has ${cursor.remaining} bytes after its properties, not the ${count * 50} its ${count} bones take.`);
+      this.session.nodes(count * 5);
+      const parents: number[] = [];
+      for (let i = 0; i < count; i++) parents.push(cursor.i16());
+      const f = () => float32Value(cursor.f32());
+      const vector = () => { const X = f(), Y = f(), Z = f(), W = f(); return new RedObject("Vector4", { W, X, Y, Z }); };
+      const transforms: RedObject[] = [];
+      for (let i = 0; i < count; i++) {
+        const Translation = vector();
+        const i_ = f(), j = f(), k = f(), r = f();
+        const Scale = vector();
+        transforms.push(new RedObject("QsTransform", { Rotation: new RedObject("Quaternion", { i: i_, j, k, r }), Scale, Translation }));
+      }
+      object.fields.boneParentIndexes = parents;
+      object.fields.boneTransforms = transforms;
       return;
     }
     if (object.type === "CMaterialTemplate") {

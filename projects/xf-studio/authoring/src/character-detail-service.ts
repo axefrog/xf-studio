@@ -48,12 +48,13 @@ import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
-  type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
+  type RenderRig, type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
+import { puppetDeformationRigs, type PuppetRigs } from "./deformation-rig-host";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
 
@@ -246,6 +247,27 @@ function store(storeRoot: string, file: string, extension: "glb" | "png"): { fil
   hashed.set(file, { stamp, sha256: stored.sha256, bytes: bytes.length, size });
   if (hashed.size > 20_000) hashed.delete(hashed.keys().next().value!);
   return { file: stored.file, sha256: stored.sha256, size };
+}
+/**
+ * The puppet's deformation rigs as content-addressed program files beside the records (`<sha256>.json` in `records/`, which the asset
+ * route serves by name). A rig that can't be read or interpreted leaves a plain note; the helper joints then follow their limbs.
+ */
+async function serveRigs(graph: ResourceGraph, gender: "female" | "male", storeRoot: string, notes: string[], log: (line: string) => void): Promise<RenderRig[]> {
+  let found: PuppetRigs;
+  try { found = await puppetDeformationRigs(graph, gender, log); }
+  catch (error) { log(`The player's deformation rigs couldn't be read: ${(error as Error)?.stack ?? error}`); return []; }
+  notes.push(...found.notes);
+  return found.rigs.map(({ component, program }) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(program)), hash = sha256(bytes), file = `${hash}.json`;
+    const target = join(storeRoot, "records", file);
+    if (!existsSync(target)) {
+      mkdirSync(join(storeRoot, "records"), { recursive: true, mode: 0o700 });
+      const staging = `${target}.${process.pid}.tmp`;
+      writeFileSync(staging, bytes, { mode: 0o600 });
+      renameSync(staging, target);
+    }
+    return { component, rig: program.rig, graph: program.graph, file, sha256: hash };
+  });
 }
 function storeBytes(storeRoot: string, bytes: Uint8Array, extension: "glb" | "png"): { file: string; sha256: string } {
   const hash = sha256(bytes), name = `${hash}.${extension}`, target = join(storeRoot, "files", name);
@@ -1184,12 +1206,15 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
   else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
   if (summary.scanGaps.length) whole.push("Some installed mod files could not be read; the resolved details may differ from the game.");
+  // The puppet's deformation rigs pose the body's helper joints the way the game solves them (deformation-rig-host.ts).
+  const rigs = scope === "drawn" && components.some(item => item.slot === "body") ? await serveRigs(graph, request.bodyGender, options.storeRoot, whole, log) : [];
+  if (rigs.length) time("rigs");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
     character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: recordNotes([...drops, ...whole], notes), ...(toolLabel ? { tool: toolLabel } : {}) },
-    components, slots: [...slots.values()],
+    components, slots: [...slots.values()], ...(rigs.length ? { rigs } : {}),
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
   // with a note here, not discovered by the page.
