@@ -45,6 +45,7 @@ Components added on request:
 - For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
 - For the expression drawer's rebuild (`claude/expressions-drawer`, UI-108): `openConfirmPopover` (ask before an action that can't be undone, in place of the browser's `confirm`) and TreeView's `onMenu` (an item's context menu by right-click, Shift+F10 or the Menu key).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
+- For the direction dial's follow-up (`claude/dial-polish`): its height scale, the drag's radius line and dimmed dots, Shift and Alt, and the resize bar, with the `controlSize.set` UI preference for kept control sizes.
 - For the lighting setups (`claude/lighting-setups`): Light list (the Ordered list with a light's colour chip and kind glyph) and Direction dial (a top view of V: one handle for a light's angle and height, readouts typed in place).
 - For the dock (UI-121): Splitter, the focusable bar between two resizable sides, which the dock's splitters and the Split view's gutter compose.
 - For saved layouts (`claude/saved-layouts`): option switches in the value popover (`ValueOption`: Save layout's name with Remember shown modules and automatic switching, each with a default).

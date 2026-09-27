@@ -723,3 +723,62 @@ test("scrub slider: rests at the middle, previews while moved, applies on releas
   easeIn!.click();
   expect(calls).toEqual(["curve in"]);
 });
+
+test("direction dial: Shift keeps the angle, Alt snaps the height to 15°, and the height scale hides the tick the marker would cover", async () => {
+  const { dragDirection, dialPoint, snapStep, heightTicks, HEIGHT_SNAP } = await lib();
+  const range = { min: -89, max: 89 }, start = { azimuth: 329, elevation: 22 };
+  const p = dialPoint({ azimuth: 90, elevation: 37 });
+  expect(dragDirection(p.x, p.y, start, {}, range)).toEqual({ azimuth: 90, elevation: 37 });
+  expect(dragDirection(p.x, p.y, start, { shift: true }, range)).toEqual({ azimuth: 329, elevation: 37 });
+  expect(dragDirection(p.x, p.y, start, { alt: true }, range)).toEqual({ azimuth: 90, elevation: 30 });
+  expect(dragDirection(p.x, p.y, start, { shift: true, alt: true }, range)).toEqual({ azimuth: 329, elevation: 30 });
+  const low = dialPoint({ azimuth: 10, elevation: -88 });
+  expect(dragDirection(low.x, low.y, start, { alt: true }, range).elevation).toBe(-89); // snapped within the range
+  expect(HEIGHT_SNAP).toBe(15);
+  expect([snapStep(22, 1, range), snapStep(22, -1, range), snapStep(30, 1, range), snapStep(30, -1, range), snapStep(80, 1, range)]).toEqual([30, 15, 45, 15, 89]);
+  expect(heightTicks(22, range)).toEqual([{ value: 89, hidden: false }, { value: 45, hidden: false }, { value: 0, hidden: false },
+    { value: -44, hidden: false }, { value: -89, hidden: false }]);
+  expect(heightTicks(40, range).filter(t => t.hidden).map(t => t.value)).toEqual([45]);
+  expect(heightTicks(3, range).filter(t => t.hidden).map(t => t.value)).toEqual([0]);
+  // In the drawing: the covered tick keeps its line but loses its label; the marker says the height.
+  const { DirectionDial } = await lib();
+  const dial = new DirectionDial({ label: "Direction", transaction: log().t });
+  dial.update({ azimuth: 0, elevation: 44 }, {});
+  const labels = [...dial.element.querySelectorAll(".dial-scale-label")].map(label => label.textContent);
+  expect(labels).toEqual(["+89°", "0°", "−44°", "−89°"]);
+  expect(dial.element.querySelector(".dial-height-label")!.textContent).toBe("+44°");
+  // Up and Down with Alt jump to the next 15° step.
+  const { calls, t } = log();
+  const keyed = new DirectionDial({ label: "Direction", transaction: t });
+  keyed.update({ azimuth: 0, elevation: 22 }, {});
+  (keyed.dial as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "ArrowUp", altKey: true }));
+  expect(calls).toEqual(["begin", 'edit {"azimuth":0,"elevation":30}']);
+});
+
+test("direction dial: the resize bar clamps between the minimum and what the control holds, a narrower panel draws it smaller, and the size is kept on release", async () => {
+  const { DirectionDial, DIAL_MIN_SIZE, fitDialSize } = await lib();
+  expect([fitDialSize(100, 400), fitDialSize(300, 400), fitDialSize(900, 400), fitDialSize(300, 250), fitDialSize(300, 120)]).toEqual([DIAL_MIN_SIZE, 300, 400, 250, DIAL_MIN_SIZE]);
+  const kept: [number, boolean][] = [];
+  const dial = new DirectionDial({ label: "Direction", transaction: log().t, onResize: (size, final) => kept.push([size, final]) });
+  dial.layout(420);
+  dial.update({ azimuth: 0, elevation: 0 }, { size: 300 });
+  expect(dial.shownSize).toBe(300);
+  // Keyboard on the bar: Down enlarges, End takes all the width there is, Home the minimum; each keeps the size.
+  key(dial.grip, "ArrowDown");
+  expect(dial.shownSize).toBe(316);
+  key(dial.grip, "End");
+  expect(dial.shownSize).toBe(420);
+  key(dial.grip, "Home");
+  expect(dial.shownSize).toBe(DIAL_MIN_SIZE);
+  expect(kept).toEqual([[316, true], [420, true], [DIAL_MIN_SIZE, true]]);
+  dial.resizeTo(5000, false);
+  expect(dial.shownSize).toBe(420);
+  expect(dial.grip.getAttribute("aria-valuenow")).toBe("420");
+  // The panel narrows: drawn just small enough to fit; widening again brings the chosen size back.
+  dial.layout(260);
+  expect(dial.shownSize).toBe(260);
+  expect(dial.grip.getAttribute("aria-valuemax")).toBe("260");
+  dial.layout(520);
+  expect(dial.shownSize).toBe(420);
+  expect([dial.grip.getAttribute("role"), dial.grip.getAttribute("aria-orientation")]).toEqual(["separator", "horizontal"]);
+});

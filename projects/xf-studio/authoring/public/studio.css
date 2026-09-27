@@ -326,12 +326,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* The name comes first: the glance line gives way (ellipsis) before the name does. */
 .light-list .item-name { flex: 0 1 auto; min-width: 7ch; }
 .light-list .item-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* Direction dial (components/direction-dial.ts): a top view of V, the handle in the light's colour. */
+/* Direction dial (components/direction-dial.ts): a top view of V, the handle in the light's colour, a height scale on the right. */
 .direction-dial { gap: var(--sp-2); }
 .direction-dial .control-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 22px; }
 .direction-dial .control-label-text { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .dial-readouts { display: inline-flex; gap: var(--sp-3); font: var(--fs-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
-.direction-dial-face { width: 100%; max-width: 208px; aspect-ratio: 140 / 118; margin: 0 auto; cursor: grab; touch-action: none; }
+.direction-dial-face { width: var(--dial-size, 280px); max-width: 100%; aspect-ratio: 150 / 124; margin: 0 auto; cursor: grab; touch-action: none; }
 .direction-dial-face:active { cursor: grabbing; }
 .direction-dial-face:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .direction-dial-face.disabled { cursor: default; opacity: .55; }
@@ -341,10 +341,29 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dial-axis { stroke: var(--line); stroke-width: .5; }
 .dial-head { fill: var(--bg-panel); stroke: var(--text-muted); stroke-width: .8; }
 .dial-nose { stroke: var(--text-muted); stroke-width: .8; }
-.dial-word { font: 6.5px var(--font-ui); fill: var(--text-faint); pointer-events: none; }
-.dial-mark { fill: var(--light); opacity: .8; stroke: var(--text-muted); stroke-width: .6; }
+.dial-word { font-family: var(--font-ui); font-size: calc(var(--fs-2xs) * var(--dial-unit, .6)); fill: var(--text-faint); pointer-events: none;
+  dominant-baseline: auto; }
+.dial-word-below { dominant-baseline: hanging; }
+.dial-mark { fill: var(--mark); opacity: .8; stroke: var(--text-muted); stroke-width: .6; transition: opacity .12s; }
 .dial-handle { fill: var(--light, var(--signal)); stroke: oklch(.18 .01 255); stroke-width: 1.2; }
 .direction-dial-face:focus-visible .dial-handle { stroke: var(--focus); stroke-width: 1.6; }
+/* While a light moves: the other dots step back and the radius through it shows (along it, only the height changes). */
+.dial-radius { visibility: hidden; stroke: var(--text-muted); stroke-width: .8; stroke-dasharray: 2.2 1.8; stroke-linecap: round; pointer-events: none; }
+.direction-dial-art.moving .dial-radius { visibility: visible; }
+.direction-dial-art.moving .dial-mark { opacity: .22; }
+/* The height scale: a hairline with labelled ticks, the current height marked in the light's colour. */
+.dial-scale { stroke: var(--line-strong); stroke-width: .6; }
+.dial-scale-tick { stroke: var(--line-strong); stroke-width: .6; }
+.dial-scale-label { font-family: var(--font-mono); font-size: calc(var(--fs-2xs) * var(--dial-unit, .6)); fill: var(--text-faint); pointer-events: none; dominant-baseline: middle; }
+.dial-height-mark { fill: var(--light, var(--signal)); stroke: oklch(.18 .01 255); stroke-width: .5; stroke-linejoin: round; }
+.dial-height-tick { stroke: var(--light, var(--signal)); stroke-width: .9; }
+.dial-height-label { font-family: var(--font-mono); font-weight: 600; font-size: calc(var(--fs-xs) * var(--dial-unit, .6)); fill: var(--text); pointer-events: none; dominant-baseline: middle; }
+/* The resize bar under the dial: drag down to enlarge, up to shrink. */
+.dial-grip { display: flex; justify-content: center; align-items: center; height: 12px; margin: 0 auto; width: min(var(--dial-size, 280px), 100%); cursor: ns-resize;
+  touch-action: none; border-radius: var(--bevel-sm); }
+.dial-grip::before { content: ""; width: 36px; height: 3px; border-radius: 2px; background: var(--line-strong); transition: background .12s, width .12s; }
+.dial-grip:hover::before, .dial-grip.dragging::before { background: var(--signal); width: 48px; }
+.dial-grip:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* Scrub slider (components/scrub-slider.ts): rests at the middle, fills from the centre mark to the thumb while it previews, springs back. */
 .scrub-slider { gap: 0; }
 .scrub-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 24px; min-width: 0; }
