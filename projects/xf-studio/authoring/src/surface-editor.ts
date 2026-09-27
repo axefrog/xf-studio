@@ -29,6 +29,11 @@ type Handle = {
   anchor: Anchor;
   world: THREE.Vector3;
   projected?: {parent:UV; visible:boolean; frame?:TangentFrame};
+  /**
+   * Drawn this frame. Depth-tested handles on the plate are always submitted (the GPU hides occluded ones); projected
+   * tangents and handles on an eye-opening bridge draw without depth, so the CPU decides whether they show.
+   */
+  shown: boolean;
 };
 type Hooks = {
   layer: () => Layer | undefined;
@@ -62,9 +67,12 @@ export function createSurfaceEditor(
   const { renderer, scene, camera, plate, head, controls } = viewer,
     canvas = renderer.domElement;
   const listeners = new AbortController();
-  const map = new SurfaceMap(plate.geometry),
+  // Interior UV holes (the eye openings) are bridged, so drags and controls cross the opening (see surface-map.ts).
+  const map = new SurfaceMap(plate.geometry, { bridgeHoles: true }),
     group = new THREE.Group();
   const headVisibility=createSurfaceOcclusion(head);
+  /** A plate vertex where it is drawn now (morphs, skin and world transform). */
+  const plateVertex=(i:number)=>plate.getVertexPosition(i,new THREE.Vector3()).applyMatrix4(plate.matrixWorld);
   const eyeVisibility=createSurfaceOcclusion(viewer.eyes);
   scene.add(group);
   const pointGeometry = new THREE.BufferGeometry(),
@@ -198,6 +206,14 @@ export function createSurfaceEditor(
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
   let hitRejection: {reason: string; plateDistance?: number; blockerDistance?: number} | undefined;
+  /** The bridge triangle under the last `hit`, when the hit came from a bridge. */
+  let bridgeHit: Anchor | undefined;
+  /**
+   * Where a control dragged over an eye opening was last put: the bridge point under the pointer. The slit's UV can overlap
+   * the lid margin's, so looking its UV up again could land on the margin instead of under the pointer. Editor state only,
+   * valid while that control keeps that UV.
+   */
+  let pin: { layerId: string; kind: Handle["kind"]; index: number; fieldId?: string; mirror: boolean; uv: UV; anchor: Anchor } | undefined;
   let lastDragRejection: {reason: string; x: number; y: number; uv?: UV; from?: UV;
     plateDistance?: number; blockerDistance?: number} | null = null;
 
@@ -228,7 +244,14 @@ export function createSurfaceEditor(
       side?: Handle["side"],
       parent?:UV,
     ) {
-      const anchor = map.anchor(parent ?? uv);
+      // A control inside an eye opening sits on its bridge. A tangent's parent frame needs a real plate triangle: the slit
+      // is so thin in UV that a bridge would stretch the arm across the eye, so such tangents stay with the UV pane.
+      const at = parent ?? uv, pinned = pin && pin.layerId === layer!.id && pin.kind === (parent ? "point" : kind)
+        && pin.index === index && pin.fieldId === fieldId && pin.mirror === mirror
+        && Math.abs(pin.uv.u - at.u) < 1e-7 && Math.abs(pin.uv.v - at.v) < 1e-7;
+      // A control dragged onto a bridge stays where it was dropped over the eye (its tangents wait for the plate).
+      if (pinned && parent) return;
+      const anchor = pinned ? pin!.anchor : parent ? map.anchor(parent) : map.anchor(uv, true);
       if (anchor)
         handles.push({
           kind,
@@ -239,6 +262,7 @@ export function createSurfaceEditor(
           mirror,
           anchor,
           world: new THREE.Vector3(),
+          shown: !parent && !anchor.bridge,
           ...(parent ? {projected:{parent,visible:false}} : {}),
         });
       else {
@@ -308,7 +332,7 @@ export function createSurfaceEditor(
       }
       return p;
     };
-    let anchoredCount=0,projectedCount=0;
+    let anchoredCount=0,overlayCount=0,tangentLineCount=0;
     const parentFrames=new Map<string,{frame:TangentFrame|undefined;visible:boolean}>();
     const tangentLinesPosition=tangentLineGeometry.getAttribute("position");
     handles.forEach((h) => {
@@ -320,12 +344,18 @@ export function createSurfaceEditor(
           parent={frame,visible:!!frame&&parentVisible(frame)};parentFrames.set(key,parent);}
         const {frame}=parent;
         h.projected.frame=frame;
-        h.projected.visible=parent.visible;
+        h.projected.visible=h.shown=parent.visible;
         if(!frame||!h.projected.visible)return;
         h.world.copy(tangentWorld(frame,h.uv));
-        geometry=tangentGeometry;index=projectedCount++;
-        tangentLinesPosition.setXYZ(index*2,frame.origin.x,frame.origin.y,frame.origin.z);
-        tangentLinesPosition.setXYZ(index*2+1,h.world.x,h.world.y,h.world.z);
+        geometry=tangentGeometry;index=overlayCount++;
+        const line=tangentLineCount++;
+        tangentLinesPosition.setXYZ(line*2,frame.origin.x,frame.origin.y,frame.origin.z);
+        tangentLinesPosition.setXYZ(line*2+1,h.world.x,h.world.y,h.world.z);
+      }else if(h.anchor.bridge){
+        h.world.copy(anchorPosition(h.anchor, vertex));
+        h.shown=overlayVisible(h.world);
+        if(!h.shown)return;
+        geometry=tangentGeometry;index=overlayCount++;
       }else {h.world.copy(anchorPosition(h.anchor, vertex, 0.0007));anchoredCount++;}
       const positions=geometry.getAttribute("position"),colors=geometry.getAttribute("color");
       positions.setXYZ(index, h.world.x, h.world.y, h.world.z);
@@ -351,8 +381,8 @@ export function createSurfaceEditor(
       );
       colors.setXYZ(index, c.r, c.g, c.b);
     });
-    pointGeometry.setDrawRange(0,anchoredCount);tangentGeometry.setDrawRange(0,projectedCount);
-    tangentLineGeometry.setDrawRange(0,projectedCount*2);tangentLinesPosition.needsUpdate=true;
+    pointGeometry.setDrawRange(0,anchoredCount);tangentGeometry.setDrawRange(0,overlayCount);
+    tangentLineGeometry.setDrawRange(0,tangentLineCount*2);tangentLinesPosition.needsUpdate=true;
     for(const geometry of [pointGeometry,tangentGeometry])
       for(const name of ["position","color"])geometry.getAttribute(name).needsUpdate=true;
     const p = lineGeometry.getAttribute("position");
@@ -373,26 +403,67 @@ export function createSurfaceEditor(
     );
     ray.setFromCamera(mouse, camera);
   }
-  function parentVisible(frame:TangentFrame) {
-    const projected=frame.origin.clone().project(camera);
+  /** Point the camera ray at a world position; false when it is outside the view. */
+  function rayTo(world:THREE.Vector3) {
+    const projected=world.clone().project(camera);
     if(![projected.x,projected.y,projected.z].every(Number.isFinite)||
       projected.z < -1 || projected.z > 1 || Math.abs(projected.x)>1 || Math.abs(projected.y)>1)return false;
     mouse.set(projected.x,projected.y);ray.setFromCamera(mouse,camera);
+    return true;
+  }
+  function parentVisible(frame:TangentFrame) {
+    if(!rayTo(frame.origin))return false;
     if(frame.normal.dot(ray.ray.direction)>=-1e-4)return false;
     const limit=ray.ray.origin.distanceTo(frame.origin)-.001;
     return !headVisibility.occluded(ray.ray,limit)&&!eyeVisibility.occluded(ray.ray,limit);
   }
+  /** Controls on a bridge draw without depth; they show wherever the head does not hide them (the eyeball never does). */
+  function overlayVisible(world:THREE.Vector3) {
+    return rayTo(world)&&!headVisibility.occluded(ray.ray,ray.ray.origin.distanceTo(world)-.001);
+  }
+  /**
+   * Whether a depth-tested plate handle can be seen where it is drawn: the same test the depth buffer makes against the
+   * head and the eyes (with the 1 mm allowance picks have always had), on a plate triangle that faces the camera. A rolled
+   * lid margin seen edge-on may lean slightly away and still show, so the facing test allows a grazing margin.
+   */
+  function surfaceVisible(h:Handle) {
+    if(!rayTo(h.world))return false;
+    const limit=ray.ray.origin.distanceTo(h.world)-.001;
+    if(headVisibility.occluded(ray.ray,limit)||eyeVisibility.occluded(ray.ray,limit))return false;
+    const [a,b,c]=h.anchor.indices.map(i=>plateVertex(i));
+    return b.sub(a).cross(c.sub(a)).normalize().dot(ray.ray.direction)<0.1;
+  }
   function projectedHit(h:Handle,x:number,y:number) {
     if(!h.projected)return;
-    const frame=tangentFrame(plate.geometry,h.anchor,h.projected.parent,
-      i=>plate.getVertexPosition(i,new THREE.Vector3()).applyMatrix4(plate.matrixWorld));
+    const frame=tangentFrame(plate.geometry,h.anchor,h.projected.parent,plateVertex);
     if(!frame||!parentVisible(frame)){hitRejection={reason:"tangent-parent-hidden-or-singular"};return;}
     setRay(x,y);
     const uv=tangentRayUV(frame,ray.ray);
     hitRejection=uv ? undefined : {reason:"tangent-plane-grazing"};
     return uv;
   }
-  function hit(x: number, y: number) {
+  /**
+   * The plate UV under the pointer: the nearest front-facing plate hit that the head and eyes leave visible. With `across`
+   * (an active drag, or a press on a control), the pointer may also cross an eye opening: where the plate gives no visible
+   * hit, the opening's bridge does, hidden only by the head. The eyeball never stops a drag, and a fresh press on the eye
+   * still belongs to the camera, because bare painted-shape hits never use a bridge.
+   */
+  function hit(x: number, y: number, across = false) {
+    bridgeHit = undefined;
+    const uv = plateHit(x, y);
+    if (uv || !across) return uv;
+    const cache = new Map<number, THREE.Vector3>();
+    const bridge = map.rayBridge(ray.ray, (i) => cache.get(i) ?? cache.set(i, plateVertex(i)).get(i)!);
+    if (!bridge) return;
+    if (headVisibility.occluded(ray.ray, bridge.distance - 0.001)) {
+      hitRejection = { reason: "bridge-head-occlusion", plateDistance: bridge.distance };
+      return;
+    }
+    hitRejection = undefined;
+    bridgeHit = bridge.anchor;
+    return bridge.uv;
+  }
+  function plateHit(x: number, y: number) {
     hitRejection = undefined;
     setRay(x, y);
     plate.computeBoundingSphere();
@@ -426,28 +497,24 @@ export function createSurfaceEditor(
     const ordered = [...handles].sort((a, b) =>
       Number(!!b.fieldId && b.fieldId === hooks.selectedField()) -
       Number(!!a.fieldId && a.fieldId === hooks.selectedField()));
+    // A handle is pickable exactly when it is drawn. Hidden handles are skipped, so they never shadow a visible one.
     for (const h of ordered) {
-      if(h.projected&&!h.projected.visible)continue;
+      if (!h.shown) continue;
       const p = h.world.clone().project(camera);
       if (p.z < -1 || p.z > 1) continue;
       const d = Math.hypot(
         r.left + ((p.x + 1) * r.width) / 2 - x,
         r.top + ((1 - p.y) * r.height) / 2 - y,
       );
-      if (d < distance - 0.1) {
+      // Plate handles are depth-tested when drawn, so test the same visibility here. Re-hitting the plate at the handle's
+      // screen position would refuse handles on a lid margin seen edge-on, drawn over the eye with no plate beneath them.
+      if (d < distance - 0.1 && (h.projected || h.anchor.bridge || surfaceVisible(h))) {
         distance = d;
         best = h;
       }
     }
     if (!best) return;
     if(best.projected) return projectedHit(best,x,y) ? best : undefined;
-    // Verify at the handle's centre, not at the edge of its clickable radius.
-    const p = best.world.clone().project(camera),
-      uv = hit(
-        r.left + ((p.x + 1) * r.width) / 2,
-        r.top + ((1 - p.y) * r.height) / 2,
-      );
-    if (!uv || Math.hypot(uv.u - best.uv.u, uv.v - best.uv.v) > 0.012) return;
     return best;
   }
   /** Visible character geometry (plate, skin, eyes, hair and other details) under the pointer. */
@@ -515,7 +582,7 @@ export function createSurfaceEditor(
   function targetAt(x: number, y: number, needUV = false) {
     const layer = hooks.layer(), editable = enabled && !!layer?.enabled;
     if (!editable || !layer) return { target: "empty" as PointerTarget, editable, layer };
-    const handle = handleAt(x, y), uv = !handle || needUV ? hit(x, y) : undefined;
+    const handle = handleAt(x, y), uv = !handle || needUV ? hit(x, y, !!handle) : undefined;
     const painted = handle ? { mirror: handle.mirror } : uv ? shapeHit(layer, uv, hooks.region.mirror) : undefined;
     return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget,
       editable, layer, handle, uv, painted };
@@ -548,7 +615,8 @@ export function createSurfaceEditor(
       if (effect === "none" || !layer || !painted) return;
       finishWheel();
       if (effect === "shape-translate" || effect === "shape-rotate") {
-        const uv = resolved.uv ?? hit(e.clientX, e.clientY), selected = hooks.selected(), pivot = layer.points[selected];
+        // A press on a control starts from the control itself when nothing lies under the pointer (a lid margin seen edge-on).
+        const uv = resolved.uv ?? hit(e.clientX, e.clientY, !!handle) ?? handle?.uv, selected = hooks.selected(), pivot = layer.points[selected];
         if (!uv || !pivot) return;
         const start = canonical(uv, painted.mirror);
         // Rotation at its pivot has no direction; consume it without moving/orbiting.
@@ -592,8 +660,8 @@ export function createSurfaceEditor(
         if (e.pointerId !== shapeDrag.pointer) return;
         e.preventDefault(); e.stopImmediatePropagation();
         if (!validShape(shapeDrag)) { stopShape(); return; }
-        const uv = hit(e.clientX, e.clientY), state = shapeDrag;
-        if (!uv || !map.continuous(state.last, uv)) {
+        const uv = hit(e.clientX, e.clientY, true), state = shapeDrag;
+        if (!uv || !map.continuous(state.last, uv, true)) {
           hooks.message("Drag paused at the surface edge; return to the shape or Esc to cancel");
           return;
         }
@@ -620,9 +688,10 @@ export function createSurfaceEditor(
       e.preventDefault();
       e.stopImmediatePropagation();
       if (!validDrag()) { stop(); return; }
-      let uv = drag.handle.projected ? projectedHit(drag.handle,e.clientX,e.clientY) : hit(e.clientX, e.clientY);
+      let uv = drag.handle.projected ? projectedHit(drag.handle,e.clientX,e.clientY) : hit(e.clientX, e.clientY, true);
+      const onBridge = drag.handle.projected ? undefined : bridgeHit;
       if(uv&&drag.grabOffset)uv={u:uv.u-drag.grabOffset.u,v:uv.v-drag.grabOffset.v};
-      if (!uv || (!drag.handle.projected&&!map.continuous(drag.last, uv))) {
+      if (!uv || (!drag.handle.projected&&!map.continuous(drag.last, uv, true))) {
         lastDragRejection = { ...(uv ? {reason:"uv-discontinuity"} : hitRejection ?? {reason:"no-hit"}),
           x:e.clientX,y:e.clientY,uv,from:{...drag.last} };
         hooks.message(
@@ -656,7 +725,10 @@ export function createSurfaceEditor(
             next: { du: clamp(u - field.u, -0.1, 0.1), dv: clamp(v - field.v, -0.1, 0.1) } });
         }
       }
-      if (accepted) drag.last = uv;
+      if (accepted) {
+        drag.last = uv;
+        pin = onBridge ? { layerId: l.id, kind: h.kind, index: h.index, fieldId: h.fieldId, mirror: h.mirror, uv, anchor: onBridge } : undefined;
+      }
     },
     { capture: true, signal: listeners.signal },
   );
@@ -781,6 +853,7 @@ export function createSurfaceEditor(
         : null,
       selectedField: hooks.selectedField(),
       segments: segments.length,
+      bridged: map.bridged,
       capacity: { handles: maxHandles, segments: maxSegments },
       overlay: { points: points.renderOrder, lines: lines.renderOrder,
         depthTest: pointMaterial.depthTest, depthWrite: pointMaterial.depthWrite,
@@ -801,6 +874,8 @@ export function createSurfaceEditor(
           fieldId: h.fieldId,
           mirror: h.mirror,
           projected:!!h.projected,
+          bridge:!!h.anchor.bridge,
+          shown:h.shown,
           parentUV:h.projected?.parent,
           parentVisible:h.projected?.visible,
           uv: h.uv,
