@@ -36,11 +36,10 @@ Offline verification is not in-game proof. Runtime evidence so far is in the [fi
 
 Every pending in-game ask below and on the knowledge pages is ranked into ten sittings of 20–30 minutes, driven through the bridge, in the [next-sessions plan](../research/runtime/next-sessions-plan.md).
 
-1. **Next bridge session** ([test card](../research/runtime/runtime-bridge-test-card.md)): autonomy checks A1–A13 (photo mode by key, framing, lights, cursor, burst, creator apply, Confirm and Back, the helmet check), the expression probes R1/R2, then session 2 continued, and the CCXL piercing probe ([experiment 024](../experiments/024-ccxl-piercings/README.md): XF Ears and XF Nose rows, 12 checks).
-2. **Second in-game session** ([experiment 020](../experiments/020-session-2/README.md)): partly done on 26 September (the 0.4 mm plate lift confirmed; creator captures of every preset); remaining: Gloss A–D, Shimmer and Metal verdicts under a light sweep, Depth D in motion and the Lines sharpness check, run through the bridge.
-3. **Third in-game session** ([experiment 022](../experiments/022-session-3/README.md)), after session 2: the Glitter board, the blink on several eye shapes, creator Off rows and linked hairstyles. The coordinator stages it once session 2 is in.
-4. **Calibration captures** at the mirror appearance screen with the Character creator preset's protocol ([creator lighting](../knowledge/creator-lighting.md)).
-5. **In-depth review of the new UI.**
+1. **Session 3** ([experiment 028](../experiments/028-session-3/README.md), prepared 27 September, about 80–90 minutes on one launch; the bridge 0.3.0 `-writes` build must be restaged with MO2 closed first): a bridge preflight, then session 2's close-out for alpha.2 (Gloss A–D, Shimmer and Metal under a light sweep, Depth C/D, Lines sharpness, headgear over XF makeup), closed lids and eyelid contact on four eye shapes, the silver-piercing highlight, tint and iris encoding, arasaka and target eyes, the calibration frames (point 4 below), creator day and night, creator feet and the brow showcase; expression probes R1/R2 and pose checks as a stretch.
+2. **The session after** ([experiment 022](../experiments/022-session-3/README.md) part A): the Glitter board, staged once session 3's Gloss verdicts are in, with an alpha.2-built export beside it; then the CCXL piercing probe ([experiment 024](../experiments/024-ccxl-piercings/README.md)).
+3. **Calibration captures** at the mirror appearance screen with the Character creator preset's protocol ([creator lighting](../knowledge/creator-lighting.md)): in session 3 (step D5).
+4. **In-depth review of the new UI.**
 
 ## Active direction
 

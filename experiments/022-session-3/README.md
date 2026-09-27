@@ -1,6 +1,6 @@
 # Session 3: Glitter board, blink and creator checks
 
-**Status:** prepared, not staged. This is the in-game session after [session 2](../020-session-2/README.md). The coordinator stages the Glitter board once session 2's results are in, replacing session 2's pair in the **XF Eye Artistry** mod of the test MO2 profile (`XF Studio diagnostic 2026-09-25`). Nothing here has been seen in game.
+**Status: superseded as "session 3" by [experiment 028](../028-session-3/README.md)** (27 September 2026), which closes session 2 for alpha.2 on one launch. Part A (the Glitter board) opens the session after it: the coordinator stages the board once 028's Gloss verdicts are in, replacing session 2's pair in the **XF Eye Artistry** mod of the test MO2 profile (`XF Studio diagnostic 2026-09-25`). Part B runs in 028 (step C1), part C's piercings and heart eye in 028 (D1), part C's linked hairstyle and rows stay in the [next-sessions plan](../../research/runtime/next-sessions-plan.md) (6.4, blocked items), and part D is superseded by the bridge's R1 and R2 (028 stretch E1–E2). Nothing here has been seen in game.
 
 One session, in four parts. Part A needs the staged board; parts B to D work with any XF Eye Artistry build, or none. Record the game version, the upscaler and mode, and whether ray or path tracing is on. Make a new manual save first (this profile shares the save folder) and load it again afterwards.
 

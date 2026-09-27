@@ -1,6 +1,6 @@
 # Next in-game sessions: ranked plan
 
-**Status (27 September 2026): nothing on this plan has been run.** It gathers every open in-game ask into ten sittings of 20–30 minutes, driven by the coordinator through the [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md). Sittings are ordered by value per minute and grouped by shared setup. When a sitting has run, record its results on the source pages and tick the row here with the date. Delete rows once their answers are on the source page. The bridge's conventions, failure handling and kill switch are on the [test card](runtime-bridge-test-card.md).
+**Status (27 September 2026): nothing on this plan has been run.** The next session is **[experiment 028](../../experiments/028-session-3/README.md)** (session 3, one launch, about 80–90 minutes): N1's bridge checks and Gloss verdicts, all of N2 except its kill-switch row (folded into the wrap-up), 5.2, 5.3, 5.5, 5.8, 6.7 and 6.10 from N5–N6, and R1–R2 (7.1–7.2) as a stretch, plus asks from outside this plan (creator feet, the brow showcase, pose G1 and G7). N3 (Glitter) opens the session after it. It gathers every open in-game ask into ten sittings of 20–30 minutes, driven by the coordinator through the [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md). Sittings are ordered by value per minute and grouped by shared setup. When a sitting has run, record its results on the source pages and tick the row here with the date. Delete rows once their answers are on the source page. The bridge's conventions, failure handling and kill switch are on the [test card](runtime-bridge-test-card.md).
 
 **Who does what.** The maintainer (**M**) starts MO2 and the game, loads the save, makes the safety save, opens the creator when asked (F12 with Character Customization Anywhere, or a mirror), and does anything in the inventory, MO2 or the game's settings. The coordinator (**C**) drives everything else with the bridge: MCP tools, or `bun tools/bridge-client.ts run <command>` (dotted names) in `projects/xf-runtime-bridge`. Scripted runs use `bun tools/session.ts <script> --out <folder> [--from <label>]`. Agents never launch the game or MO2.
 
@@ -25,10 +25,10 @@
 
 ## Before every sitting (C, offline)
 
-1. **Bridge:** the staged `-writes` build from `main` at `509f599` ([build record](runtime-bridge-test-card.md#build-record-staged)). No bridge code has changed since, so no restage is needed. Check that the plugin log shows `script_calls=on`.
+1. **Bridge:** the profile still holds the 0.2.0 `-writes` build from `509f599` ([build record](runtime-bridge-test-card.md#build-record-staged)). The session scripts need `cc.open` (batch 3 or later), so **restage 0.3.0 `-writes`** first, with MO2 closed ([batch 4 build record](runtime-bridge-test-card.md#build-record-batch-4-branch-build-not-staged); steps in [experiment 028](../../experiments/028-session-3/README.md#before-the-session-c-offline-nothing-launches)). Check that the plugin log shows `script_calls=on`.
 2. **Profile `XF Studio diagnostic 2026-09-25`:**
    - **XF Eye Artistry** holds the session 2 build until N3.
-   - **XF Piercings Probe:** check the hashes, then enable it while MO2 is closed ([staging](../../experiments/024-ccxl-piercings/README.md#staging)).
+   - **XF Piercings Probe:** enabled in the profile, with hashes matching the build record (checked 27 September; [staging](../../experiments/024-ccxl-piercings/README.md#staging)).
    - These are already enabled: PRC's framework plus two item packs, Realistic Complexion III, the KS UV framework, Alliekat's Natural Hair Tones, the Photomode Facial Expression Mega Pack, Character Customization Anywhere, the Character Rendering Editor and Winterkissed.
    - The legacy **XF Eye Artistry CCXL - Dev** stays disabled.
    - Re-run the [framework check](runtime-bridge-test-card.md#before-the-session-coordinator) if a sitting slips a day.
