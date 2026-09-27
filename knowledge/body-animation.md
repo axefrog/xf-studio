@@ -57,7 +57,7 @@ The main rig (`woman_base.rig`, 71 joints) is what every body clip keys. Every b
 **How the Studio uses it** [source: the Studio]:
 
 1. The host reads the player entity (`PLAYER_ENTITIES`, with every ArchiveXL patch) and takes each animated component bound to another animated component. It compiles each rig and graph, read natively, into a program (`deformation-rig.ts`) and serves it beside the character record (`rigs`).
-2. The idle (`idle-animation.ts`) runs each program on the clip's pose every frame, about 0.3 ms. It drives each joint a program solves through a virtual driver. Without a program, helper joints fall back to the rig segment nearest them (`nearestDriver`).
+2. The idle (`idle-animation.ts`) runs each program on the clip's pose every frame, about 0.3 ms. It drives each joint a program solves through a virtual driver. Without a program, helper joints fall back to the rig segment nearest them (`nearestDriver`). The drawn parts' dangle components (hair with physics) come after the rigs: their chain joints follow their own rig parents, or their simulation with Hair physics on ([hair physics §4](hair-physics.md#4-what-the-studio-does)), and never fall to `nearestDriver`.
 3. **What it fixes:** under the nearest-segment fallback, the latissimus, scapula and chest-side joints turned with the upper arm, so lowering the arms from the bind pose pulled the torso's sides in under the ribs. With the rig, the vertices mostly weighted to them move in by 11 mm on average in the close-up idle, against 38 mm before (17 against 44 in the inventory idle) [offline: the reference V's body posed both ways].
 
 ## 4. Feet states and the idles

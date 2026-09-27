@@ -255,8 +255,12 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   // person is never sent to a developer guide.
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
+  // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game.
+  const physics = new Toggle({ label: "Hair physics", reserveNote: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
+    help: "Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files." });
   const element = h("div", { class: "panel-content" },
     section("Game idle", source.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
+    section("Hair", physics.element),
     section("Blink", blinkControls, blinkNote));
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
@@ -281,8 +285,16 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
       blinkControls.hidden = !!motion && !motion.blinkAvailable;
       setText(blinkNote, blinkNoteLine(motion));
+      const physicsAllowed = port.authoring.capability({ kind: "motion.setPhysics", enabled: !motion?.physics });
+      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion) });
     },
   };
+}
+
+/** The hair physics note: what it does now (a held pose settles; the idle swings it). */
+export function physicsNoteLine(motion: Pick<MotionState, "physics" | "physicsAvailable" | "idle" | "idlePaused"> | undefined): string | undefined {
+  if (!motion?.physics || !motion.physicsAvailable) return undefined;
+  return motion.idle && !motion.idlePaused ? "The hair swings as your V moves." : "The hair hangs as it would at rest in this pose.";
 }
 
 /** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
