@@ -55,8 +55,9 @@
   --stage-strong: light-dark(oklch(.12 .01 255), oklch(1 0 0));
   /* Choice previews (style guide "Preview tokens"): a flat stage tone, the neutral subject, the choice's ink, and how much shadow darkens both. */
   --pv-ground: light-dark(oklch(.93 .004 255), oklch(.27 .006 255));
-  --pv-subject: light-dark(oklch(.82 .006 255), oklch(.42 .008 255));
-  --pv-ink: light-dark(oklch(.3 .012 255), oklch(.86 .006 255));
+  --pv-subject: light-dark(oklch(.82 .006 255), oklch(.38 .008 255));
+  /* The ink is a neutral mid-grey in the dark theme, so a picture reads as shape, not as a hair colour such as platinum (UI-132). */
+  --pv-ink: light-dark(oklch(.3 .012 255), oklch(.62 .006 255));
   --pv-shade-light: .72; --pv-shade-dark: .62; --pv-shade: var(--pv-shade-light);
   --stage-chip: light-dark(oklch(.985 .003 255 / .82), oklch(.17 .008 255 / .78));
   --stage-chip-strong: light-dark(oklch(.985 .003 255 / .9), oklch(.17 .008 255 / .86));
@@ -139,6 +140,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .btn.primary:hover:not(:disabled):not([aria-disabled="true"]) { background: oklch(.93 .15 100); }
 .btn.quiet { border-color: var(--line); background: transparent; }
 .btn.quiet:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); }
+/* A quiet button that holds a state (Poses: Stand still, Idle) shows it pressed: selected is cyan, with an inset edge (F1). */
+.btn.quiet[aria-pressed="true"] { color: var(--signal); background: var(--signal-bg); border-color: var(--signal); }
+.btn.quiet[aria-pressed="true"]:hover:not(:disabled):not([aria-disabled="true"]) { background: color-mix(in oklab, var(--signal-bg), var(--signal) 14%); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
 .btn.ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); color: var(--text); }
 .btn.ghost[aria-pressed="true"] { color: var(--signal); background: var(--signal-bg); }
@@ -223,7 +227,6 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* Hidden but in place; the empty-state box (`.empty`) shares the class name, so its padding and border are taken off (UI-115). */
 .control-note.empty { visibility: hidden; padding: 0; border: 0; }
 /* A note whose text changes length as it counts keeps room for its longer form. */
-.note.steady-note { min-height: 4.2em; }
 .field { height: var(--control-h); padding: 0 var(--sp-4); background: var(--bg-sunken); border: 1px solid var(--line-strong); border-radius: 0 var(--bevel-sm) 0 0; min-width: 0; width: 100%; }
 .field:hover:not(:disabled) { border-color: var(--text-muted); }
 .field:focus-visible { outline-offset: 0; }
@@ -781,11 +784,13 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-rows { display: flex; flex-direction: column; border-top: 1px solid var(--line-soft); }
 .cc-row { display: flex; flex-direction: column; border-bottom: 1px solid var(--line-soft); }
 .cc-row-head { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--row-h); }
+.cc-row-tip { flex: none; display: inline-grid; place-items: center; }
 /* How far a row's contents sit in from its chevron: its padding, the chevron and the expander's gap. */
 .cc-panel { --cc-indent: calc(var(--sp-3) + 10px + var(--sp-3)); }
 .cc-row-main { flex: 1; height: var(--row-h); padding: 0 var(--sp-3); }
 .cc-row-main:hover { background: var(--bg-hover); }
-.cc-row-label { flex: 1 1 40%; }
+/* The row's name keeps about 12 characters before the current choice gives way (UI-130, checklist I4); the choice is in the tooltip. */
+.cc-row-label { flex: 1 1 40%; min-width: min(14ch, 55%); }
 .cc-row-current { flex: 0 1 55%; min-width: 0; display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); color: var(--text-muted); font-size: var(--fs-sm); }
 .cc-row-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-row.changed .cc-row-value { color: var(--signal); font-weight: 600; }
@@ -1330,5 +1335,4 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 /* Poses panel (features/poses/view): the library's tree view, given a height in the panel. */
 .poses-panel { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
 .poses-panel .poses-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
-.poses-panel .poses-current { min-height: 1.4em; }
 .poses-panel .poses-tree { height: 62vh; }

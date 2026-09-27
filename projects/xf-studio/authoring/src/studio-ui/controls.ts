@@ -166,17 +166,23 @@ export class Segmented<T extends string | number> {
   private buttons: { value: T; button: HTMLButtonElement }[] = [];
   private readonly group: HTMLElement;
   private readonly note: NoteLine;
+  /** The help tip beside the label, when the group was given `help` (what the choice is; its state stays in the note). */
+  private readonly tip: HTMLButtonElement | null;
   private signature = "";
   constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
-    reserveNote?: boolean }) {
+    reserveNote?: boolean; help?: HelpText }) {
     const labelId = uid("seg");
     this.group = h("div", { class: "segmented", role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
       "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote);
+    this.tip = options.help !== undefined && options.showLabel !== false ? helpTip(options.label, options.help) : null;
+    const label = options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label }));
     this.element = h("div", { class: `control${options.compact ? " compact" : ""}` },
-      options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label })), this.group, this.note.element);
+      label && this.tip ? h("div", { class: "control-line" }, label, this.tip) : label, this.group, this.note.element);
     this.setOptions(options.options);
   }
+  /** Change the help tip's text (a group made with `help` only). */
+  setHelp(text: HelpText) { if (this.tip) setHelp(this.tip, text); }
   /** Replace the choices (a no-op when they are the same); focus stays on the same choice when it is still offered. */
   setOptions(options: readonly SegmentOption<T>[]) {
     const signature = JSON.stringify(options.map(option => [option.value, option.label, option.icon ?? "", option.title ?? ""]));

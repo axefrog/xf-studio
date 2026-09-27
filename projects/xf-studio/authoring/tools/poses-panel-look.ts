@@ -6,13 +6,15 @@
  * state; and beside the Character panel's first open choice row, for consistency. The 3D view is masked (MASK_VIEWPORTS), so no capture
  * holds V or game imagery; the tree shows installed mods' pose and pack names, so keep the outputs in the ignored evidence tree.
  *
- *   bun tools/poses-panel-look.ts <out dir under evidence/screenshots> [port]
+ *   bun tools/poses-panel-look.ts <out dir under evidence/screenshots> [port] [--widths 300,480]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { launch, MASK_VIEWPORTS } from "./cdp";
 
-const [outArg, portArg = "4466"] = process.argv.slice(2);
+const argv = process.argv.slice(2), widthsAt = argv.indexOf("--widths");
+const widths = widthsAt >= 0 ? argv.splice(widthsAt, 2)[1]!.split(",").map(Number) : [300, 480];
+const [outArg, portArg = "4466"] = argv;
 if (!outArg) throw Error("Usage: bun tools/poses-panel-look.ts <out dir> [port]");
 const out = resolve(outArg);
 mkdirSync(out, { recursive: true });
@@ -47,6 +49,8 @@ try {
   await page.waitFor(`!!window.xfStudioPresentation.snapshot`, 1000);
   const first = await page.evaluate(`(() => { const t = ${poses}.tree(""); const g = t.groups.find(g => g.kind === "category" && g.rows.some(r => !r.unavailable && !r.badges.length)); return g ? { group: g.id, pose: g.rows.find(r => !r.unavailable && !r.badges.length).id } : null; })()`) as { group: string; pose: string };
   const second = await page.evaluate(`(() => { const t = ${poses}.tree(""); const g = t.groups.find(g => g.kind === "category" && g.rows.some(r => r.badges.length)); return g ? { group: g.id, pose: g.rows.find(r => r.badges.length).id } : null; })()`) as { group: string; pose: string };
+  // Poses play once V's motion is prepared; until then a selection is refused.
+  await page.waitFor(`${poses}.snapshot().playable.available`, 240000).catch(() => {});
   // The held pose, a favourite and Recent (only then does Recent exist).
   await dispatch({ kind: "pose.select", id: second.pose });
   await dispatch({ kind: "pose.select", id: first.pose });
@@ -54,10 +58,16 @@ try {
   // Clothes with an outfit tag aren't guaranteed on the verification V: "Show them" is captured when it appears.
   for (const scheme of ["dark", "light"] as const) {
     await page.colorScheme(scheme);
-    for (const width of [300, 480]) {
+    for (const width of widths) {
       await page.evaluate(`window.xfStudioShell.dock.moveTo("poses.library", { kind: "float", x: ${1420 - width}, y: 30, w: ${width}, h: 900 }, "")`);
       await page.wait(600);
       const tag = `${scheme}-${width}`;
+      // Standing still: Stand still pressed, and the status line empty (UI-127); then the pose again.
+      await dispatch({ kind: "pose.clear", to: "still" });
+      await page.wait(400);
+      await snap(`${tag}-still`, panelWindow);
+      await dispatch({ kind: "pose.select", id: first.pose });
+      await page.wait(600);
       await snap(`${tag}-open`, panelWindow);
       await dispatch({ kind: "pose.openGroup", group: first.group, open: true });
       await page.wait(400);

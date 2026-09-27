@@ -228,7 +228,7 @@ export async function selectGradingLut(options: {
     const lut = await attempt(primary.winner, primaryPath);
     if (lut) return { lut, source: { kind: "installed", depotPath: primaryPath, archive: primary.winner.name, group: primary.winner.group,
       provider: primary.winner.providerName, alternatives: primary.candidates.slice(1).map(c => c.name), rule: primary.rule.basis, size: lut.size,
-      note: isBase(primary.winner) ? "Colour grading: the game's own LUT." : `Colour grading: the LUT your installed mods provide (${modLabel(primary.winner)}).`, skipped } };
+      note: isBase(primary.winner) ? "The game's own colour grade." : `The colour grade your installed mods provide (${modLabel(primary.winner)}).`, skipped } };
   } else skipped.push(`${primaryPath}: no mounted archive provides it.`);
   const fallbacks: { archive: MountedArchive; path: string }[] = [];
   for (const path of primaryPath.toLowerCase() === VANILLA_SDR_LUT ? [primaryPath] : [primaryPath, VANILLA_SDR_LUT]) {
@@ -239,10 +239,10 @@ export async function selectGradingLut(options: {
     const lut = await attempt(archive, path);
     if (lut) return { lut, source: { kind: "vanilla-fallback", depotPath: path, archive: archive.name, group: archive.group, provider: archive.providerName,
       alternatives: [], rule: "Base-game copy used because the effective LUT could not be read.", size: lut.size,
-      note: "Colour grading: your installed LUT couldn't be read, so the game's own LUT is used instead.", skipped } };
+      note: "Your installed colour grade couldn't be read, so the game's own is used instead.", skipped } };
   }
   return { lut: null, source: { kind: "neutral", depotPath: null, archive: null, group: null, provider: null, alternatives: [], rule: null, size: null,
-    note: "Colour grading: the game's LUT isn't available, so a neutral grade is shown. Colours will look less like the game.", skipped } };
+    note: "The game's colour grade isn't available, so a neutral grade is shown. Colours will look less like the game.", skipped } };
 }
 
 /** Parse a host LUT source from JSON (for the browser); returns null when malformed. */

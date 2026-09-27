@@ -65,11 +65,17 @@ export function characterDetailRows(details: DetailStatus | undefined): { rows: 
   return { rows, limits, message: details.message && !rows.some(row => row.note === details.message) ? details.message : "" };
 }
 
-/** One plain line about the shown setup's colour grade: where the game's grade came from, while it draws through it. */
-export function lightingPresetLine(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): string {
-  if (preset !== "creator") return "";
+/** What the Colour grade choice is (its help tip; UI-129). */
+const GRADE_HELP = "How colours are finished for the screen. Studio is XF Studio's own tone mapping; Game grade is the one your game uses, read from your game files.";
+/**
+ * The Colour grade control's state (UI-129): where the game's grade came from goes in its help tip (what it is); loading, or a stand-in
+ * grade while the Character creator setup draws through it, is said in place under the choice (what is happening now).
+ */
+export function colourGradeState(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): { note: string; source: string } {
   const lut = status?.lut;
-  return !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
+  if (!lut || lut.phase !== "ready") return { note: preset === "creator" ? "Loading the game's colour grade…" : "", source: "" };
+  const text = lut.source?.note ?? "";
+  return preset === "creator" && lut.source?.kind !== "installed" ? { note: text, source: "" } : { note: "", source: text };
 }
 /** What lighting setups are (the Light heading's help tip). */
 const LIGHT_HELP = ["Built-in setups are starting points and never change: changing one makes your own copy, so nothing you change is lost.",
@@ -161,7 +167,6 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const resetSetup = button({ label: "Reset", icon: "reset", small: true, onClick: () => rt.dispatch({ kind: "preview.resetLightingSetup", setup: shownId }) });
   const deleteSetup = button({ label: "Delete", icon: "trash", small: true, onClick: () => rt.dispatch({ kind: "preview.deleteLightingSetup", setup: shownId }) });
   const setupActions = h("div", { class: "row wrap gap-s" }, newSetup, renameSetup, resetSetup, deleteSetup);
-  const presetNote = note("");
   // The shown setup's surroundings: exposure (in stops, whichever display), the room's light, the backdrop and the colour grade.
   const exposure = new SliderWithValue({ label: "Exposure", min: Math.log2(0.125), max: Math.log2(8), step: .1, unit: "EV",
     format: value => `${value < -.05 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
@@ -171,7 +176,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     transaction: { edit: value => { edit({ kind: "preview.setRoomLight", value: value / 100 }); }, commit: endEdit, cancel: endEdit } });
   const backdrop = new Segmented<SetupBackdrop>({ label: "Backdrop", options: [{ value: "studio", label: "Studio" }, { value: "black", label: "Black" }],
     onSelect: value => rt.dispatch({ kind: "preview.setBackdrop", backdrop: value }) });
-  const grade = new Segmented<SetupDisplay>({ label: "Colour grade", options: [
+  const grade = new Segmented<SetupDisplay>({ label: "Colour grade", help: GRADE_HELP, options: [
     { value: "aces", label: "Studio", title: "The Studio's tone mapping (ACES)" }, { value: "game", label: "Game grade", title: "The game's colour grade from your game files" }],
   onSelect: value => rt.dispatch({ kind: "preview.setDisplayTransform", display: value }) });
   const surroundings = new GroupSection({ title: "Surroundings", key: "lighting.surroundings", level: "subsection", expanded: true });
@@ -218,8 +223,16 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const kind = new Segmented<LightType>({ label: "Kind", reserveNote: true, options: [{ value: "directional", label: "Directional" }, { value: "spot", label: "Spot" }],
     onSelect: type => rt.dispatch({ kind: "preview.setLightType", light: lightId(), type }) });
   const shadows = new Toggle({ label: "Casts shadows", reserveNote: true, onChange: enabled => rt.dispatch({ kind: "preview.setLightShadows", light: lightId(), enabled }) });
-  const lightControls = h("div", { class: "light-editor" }, kind.element, direction.element, distance.element, strength.element, colour.element,
-    coneSlider.element, softness.element, shadows.element);
+  // The chosen light's controls in titled subgroups (UI-126): where it is, what it gives, and the spot light's cone.
+  const lightGroup = (title: string, key: string, ...controls: HTMLElement[]) => {
+    const group = new GroupSection({ title, key: `lighting.light.${key}`, level: "row", heading: 5, expanded: true });
+    group.body.append(...controls);
+    return group.element;
+  };
+  const lightControls = h("div", { class: "light-editor" }, kind.element,
+    lightGroup("Position", "position", direction.element, distance.element),
+    lightGroup("Output", "output", strength.element, colour.element, shadows.element),
+    lightGroup("Spot cone", "cone", coneSlider.element, softness.element));
   const noLights = emptyState("No lights", "Add a light to light your V directly; the room light still shows her.");
   const lightsGroup = new GroupSection({ title: "Lights", key: "lighting.lights", level: "subsection", expanded: true });
   lightsGroup.body.append(lights.element, h("div", { class: "row" }, addLight), noLights, lightControls);
@@ -268,7 +281,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content" },
     section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
       "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
-    section({ title: "Light", help: LIGHT_HELP }, setupList.element, setupActions, presetNote, surroundings.element, lightsGroup.element),
+    section({ title: "Light", help: LIGHT_HELP }, setupList.element, setupActions, surroundings.element, lightsGroup.element),
     diagnostics,
     section("Display", toolToggles, normals.element, scatterControl, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
@@ -296,14 +309,15 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       resetSetup.title = current && !current.builtIn ? `Put ${current.label} back to ${current.baseLabel}` : "";
       applyCapability(resetSetup, ready ? capability({ kind: "preview.resetLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
       applyCapability(deleteSetup, ready ? capability({ kind: "preview.deleteLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
-      setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
-      presetNote.hidden = !presetNote.textContent;
       if (current) {
         const range = current.exposureRange;
         exposure.update(Math.log2(current.exposure), { ...gated({ kind: "preview.setExposure", value: current.exposure }), min: Math.log2(range.min), max: Math.log2(range.max) });
         room.update(current.environment * 100, gated({ kind: "preview.setRoomLight", value: current.environment }));
         backdrop.update(current.backdrop, value => ready ? capability({ kind: "preview.setBackdrop", backdrop: value }) : { available: false, reason: loading.reason });
-        grade.update(current.display, value => ready ? capability({ kind: "preview.setDisplayTransform", display: value }) : { available: false, reason: loading.reason });
+        const gradeState = colourGradeState(preview?.lightingPreset, frame.preview.lighting);
+        grade.update(current.display, value => ready ? capability({ kind: "preview.setDisplayTransform", display: value }) : { available: false, reason: loading.reason },
+          { note: gradeState.note });
+        grade.setHelp(gradeState.source ? [GRADE_HELP, gradeState.source] : GRADE_HELP);
       }
       paintLight();
       addLight.hidden = false;
