@@ -405,7 +405,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 | Wetness | Not drawn | Faithful when dry |
 | Emissive | Not drawn; reported when a mask would glow | Gap |
 | Dual-lobe GGX, F0 0.04, Burley diffuse | Same | Faithful to the direct light |
-| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1 | Approximation: the game blurs irradiance in screen space with a decoded kernel and multiplies albedo afterwards (§6.3); a wrap softens the terminator but not texture-scale shading. The port is planned in §11 |
+| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1. It is scaled by the surface's curvature (`min(1, 5 mm × κ)`, κ from screen-space derivatives of the interpolated normal), so each channel wraps over its scatter distance (blur size × falloff, read as millimetres [hypothesis]) rather than a fixed angle. The diffuse light uses the **macro normal** (normal and detail maps, without the tiled microdetail); specular keeps the full normal | Approximation. The game blurs irradiance in screen space with a decoded kernel and multiplies albedo afterwards (§6.3). That softens the terminator by millimetres and removes diffuse shading finer than its kernel, which is what the two stand-ins mimic. The earlier fixed-angle wrap spread a broad, saturated red band across gently curved cheeks under a strong side key (the 27 September Rim / dramatic capture). The port is planned in §11 |
 | Translucency | Not drawn | Gap for thin, back-lit parts |
 | Ambient and reflections | Three's image-based light through both lobes | Approximation; the game adds one ambient term (probably the reflections) outside the scatter, tinted by `SubsurfaceSpecularTint` (§6.3.5) |
 

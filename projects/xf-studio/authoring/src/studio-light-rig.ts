@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CREATOR_SHADOW, creatorShadowRadius } from "./creator-lighting";
 import { createStudioEnvironment } from "./studio-environment";
 import { DEFAULT_STUDIO_LIGHTS, DEFAULT_KEY_ANGLE, lightDirection, STUDIO_BASE_INTENSITY, STUDIO_FILL_POSITION, STUDIO_LIGHT_COLOURS,
   STUDIO_LIGHT_TARGET, STUDIO_RIM_DIRECTION, type StudioLights } from "./studio-lighting";
@@ -29,6 +30,23 @@ export function createStudioLightRig(renderer: THREE.WebGLRenderer, scene: THREE
   // The original key's distance from the head; a directional light only uses the direction.
   const KEY_DISTANCE = Math.hypot(Math.hypot(0.3, 0.5), 1.9 - 1.67);
   rim.position.copy(target).addScaledVector(new THREE.Vector3(...lightDirection(STUDIO_RIM_DIRECTION.azimuth, STUDIO_RIM_DIRECTION.elevation)), KEY_DISTANCE);
+  // The key and the rim shadow the V like the creator rig's flagged lights: a square orthographic map over the head and shoulders,
+  // soft PCF, the size following the preview quality (setShadowMapSize). The fill is a broad frontal light and stays unshadowed.
+  for (const light of [key, rim]) {
+    light.castShadow = true;
+    const camera = light.shadow.camera;
+    camera.left = camera.bottom = -CREATOR_SHADOW.focusRadius; camera.right = camera.top = CREATOR_SHADOW.focusRadius;
+    camera.near = -2 * CREATOR_SHADOW.focusRadius; camera.far = KEY_DISTANCE + 2 * CREATOR_SHADOW.focusRadius;
+    camera.updateProjectionMatrix();
+    light.shadow.bias = CREATOR_SHADOW.bias; light.shadow.normalBias = CREATOR_SHADOW.normalBias;
+  }
+  const setShadowMapSize = (size: number) => {
+    for (const light of [key, rim]) {
+      light.shadow.map?.dispose(); light.shadow.map = null;
+      light.shadow.mapSize.set(size, size); light.shadow.radius = creatorShadowRadius(size);
+    }
+  };
+  setShadowMapSize(1024);
   const tinted = { key: new THREE.Color(STUDIO_LIGHT_COLOURS.key), fill: new THREE.Color(STUDIO_LIGHT_COLOURS.fill), rim: new THREE.Color(STUDIO_LIGHT_COLOURS.rim) };
   // The same luminance without the tint (Rec. 709 weights in the linear working space).
   const neutral = Object.fromEntries(Object.entries(tinted).map(([name, colour]) =>
@@ -53,6 +71,8 @@ export function createStudioLightRig(renderer: THREE.WebGLRenderer, scene: THREE
     lights: [key, fill, rim, ...environment.lights] as THREE.Object3D[],
     setLights(next: Readonly<StudioLights>) { lights = { ...next }; apply(); },
     setKeyAngle(degrees: number) { angle = degrees; placeKey(); },
+    /** The key's and the rim's shadow-map size (the preview quality's; creatorShadowMapSize). */
+    setShadowMapSize,
     /** Evidence: what the lights are set to now. */
     state: () => ({ lights: { ...lights }, angle, environmentMode: environment.mode }),
     restore: () => environment.restore(),

@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { calibrationGain, coneFactor, coneFold, contribution, CREATOR_CALIBRATION, CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, CREATOR_RIG_MALE,
   CREATOR_SHADOW, creatorCamera, creatorRigSpecs, creatorShadowCasters, creatorShadowMapSize, creatorShadowRadius, DEFAULT_CREATOR_EXPOSURE,
   DEFAULT_CREATOR_LIGHTING, halfAngles, inverseSquareFalloff, lightColourLinear, linearFalloff, lumensToCandela, readCreatorLighting,
-  spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/creator-lighting";
+  rotateLight, spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/creator-lighting";
 import { aimShadowAtHead } from "../src/creator-lighting-rig";
 
 const byName = (name: string) => CREATOR_RIG_FEMALE.find(light => light.name === name)!;
@@ -164,4 +164,16 @@ test("creator camera pages: 15° at the head slot, 1.2 m for the face and 2 m fo
   expect(creatorCamera("female", "face")).toEqual({ position: [0, 1.62, -1.2], target: [0, 1.62, 0], fov: 15 });
   expect(creatorCamera("female", "hair").position).toEqual([0, 1.62, -2]);
   expect(creatorCamera("male", "face").target).toEqual([0, 1.67, 0]);
+});
+
+describe("rig yaw", () => {
+  test("a positive turn moves a front light toward V's left (Studio -X), and the rig uses the calibration's turn", () => {
+    const light = byName("Main_Eyes"), turned = rotateLight(light, 90);
+    expect(turned.position[0]).toBeCloseTo(light.position[2], 6); // front (-Z) goes to V's left (-X)
+    expect(turned.position[1]).toBe(light.position[1]);
+    expect(Math.hypot(...turned.axis)).toBeCloseTo(Math.hypot(...light.axis), 9);
+    const spec = creatorRigSpecs("female", DEFAULT_CREATOR_LIGHTING).find(s => s.name === "Main_Eyes")!;
+    expect(spec.position).toEqual(rotateLight(light, CREATOR_CALIBRATION.yawOffset).position);
+    expect(creatorRigSpecs("female", { ...DEFAULT_CREATOR_LIGHTING, yawOffset: 0 }).find(s => s.name === "Main_Eyes")!.position).toEqual(light.position);
+  });
 });

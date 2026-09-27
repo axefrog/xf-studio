@@ -4,6 +4,7 @@ import { creatorCamera, creatorShadowMapSize, DEFAULT_CREATOR_LIGHTING, type Bod
 import { createLinearDisplay } from "./linear-display";
 import { createCreatorLightRig } from "./creator-lighting-rig";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
+import { installShadowFilter } from "./shadow-filter";
 
 /** What the lighting preset device reports (read-only; the presentation turns it into plain text). */
 export type LightingPresetStatus = {
@@ -40,12 +41,17 @@ export function createLightingPresetStage(options: {
   /** The studio stage's own lights, hidden while the creator preset shows. */
   studioLights: readonly THREE.Object3D[];
   loadLut: GradingLutLoader;
+  /** The studio stage's shadow-map size, which follows the preview quality with the creator rig's. */
+  setStudioShadowMapSize?(size: number): void;
 }) {
   const { scene, renderer } = options;
   const rig = createCreatorLightRig(), display = createLinearDisplay(renderer);
   scene.add(rig.group);
-  // Shadow maps render only for lights that cast, and only the creator rig's do; soft PCF with a per-light radius.
-  if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; }
+  // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or
+  // lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
+  installShadowFilter();
+  if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false; }
+  let shadowKey = "";
   let preset: LightingPreset = "studio", sex: BodySex = "female";
   let creator: CreatorLightingOptions = { ...DEFAULT_CREATOR_LIGHTING };
   let lutStatus: LightingPresetStatus["lut"] = { phase: "idle", source: null };
@@ -117,18 +123,28 @@ export function createLightingPresetStage(options: {
       notify();
     },
     /** The preview quality (generated-texture size) the shadow maps follow. */
-    setShadowQuality(textureSize: number) { rig.setShadowMapSize(creatorShadowMapSize(textureSize)); },
+    setShadowQuality(textureSize: number) {
+      const size = creatorShadowMapSize(textureSize);
+      rig.setShadowMapSize(size);
+      options.setStudioShadowMapSize?.(size);
+    },
     /** Camera state for a creator page, for the preview's camera port. */
     camera: (page: CreatorCameraPage) => creatorCamera(sex, page),
     /** Draw one frame through the active preset. */
     render(camera: THREE.Camera) {
       // Everything the V shows receives the rig's shadows (makeup and decals included, so they darken with the skin under them);
-      // which meshes cast is the character renderer's choice (skin, body and clothing).
-      if (preset === "creator" && creator.shadows) scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; });
+      // which meshes cast is the character renderer's choice (skin, body and clothing). The studio stage's key and rim cast too.
+      if (preset === "studio" || creator.shadows) scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; });
+      if (renderer.shadowMap) {
+        const key = shadowState(scene);
+        if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
+      }
       display.render(scene, camera, preset);
     },
     status: (): LightingPresetStatus => structuredClone({ preset, sex, defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
+    /** Developer evidence (verification only): rebuild the rig turned by a trial yaw (null: the calibration's), for a refit. */
+    trialYaw(degrees: number | null) { rig.apply(sex, degrees === null ? creator : { ...creator, yawOffset: degrees }); },
     /** Developer evidence (verification only): show one rig light alone by name, or all of them again with null. */
     solo(name: string | null) {
       for (const child of rig.group.children) if ((child as THREE.SpotLight).isSpotLight) child.visible = name === null || child.name === `xfs-creator-${name}`;
@@ -149,3 +165,42 @@ export function createLightingPresetStage(options: {
   };
 }
 export type LightingPresetStage = ReturnType<typeof createLightingPresetStage>;
+
+/**
+ * A fingerprint of everything a shadow map depends on, so the maps are redrawn only when it changes: each visible shadow-casting
+ * light (identity, placement, map size) and each visible caster (identity, placement, its bones' local poses and its morph weights).
+ * The camera is not in it. Cheap: a few hundred bones per frame drawn.
+ */
+export function shadowState(scene: THREE.Scene): string {
+  // Placements as this frame will draw them (the renderer updates the world matrices again; the cost is small).
+  scene.updateMatrixWorld();
+  let lights = "", casters = 0, pose = 0;
+  const seenSkeletons = new Set<THREE.Skeleton>();
+  const mix = (value: number, weight: number) => { pose = (pose + value * weight) % 1e9; };
+  scene.traverseVisible(object => {
+    const light = object as THREE.Light & { shadow?: THREE.LightShadow };
+    if (light.isLight && light.castShadow && light.shadow) {
+      const e = light.matrixWorld.elements;
+      const t = (light as THREE.DirectionalLight).target?.matrixWorld.elements;
+      lights += `${light.uuid}:${light.shadow.mapSize.x}:${e[12]!.toFixed(4)},${e[13]!.toFixed(4)},${e[14]!.toFixed(4)}` +
+        (t ? `>${t[12]!.toFixed(4)},${t[13]!.toFixed(4)},${t[14]!.toFixed(4)};` : ";");
+      return;
+    }
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.castShadow) return;
+    casters++;
+    const e = mesh.matrixWorld.elements;
+    for (let i = 0; i < 16; i += 5) mix(e[i]! + e[12]! + e[13]! + e[14]!, i + casters);
+    mesh.morphTargetInfluences?.forEach((w, i) => mix(w, i + 17));
+    const skeleton = (mesh as THREE.SkinnedMesh).skeleton;
+    if (skeleton && !seenSkeletons.has(skeleton)) {
+      seenSkeletons.add(skeleton);
+      skeleton.bones.forEach((bone, i) => {
+        const q = bone.quaternion, p = bone.position;
+        mix(q.x + 2 * q.y + 3 * q.z + 5 * q.w + 7 * p.x + 11 * p.y + 13 * p.z, i + 31);
+      });
+    }
+    casters += mesh.id * 1e-6;
+  });
+  return `${lights}|${casters}|${pose.toFixed(6)}`;
+}

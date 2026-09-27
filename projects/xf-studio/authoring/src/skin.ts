@@ -116,7 +116,7 @@ export function extendSkin(
  * Three's stock depth material uses only the first four influences, which pulls the V's vertices toward the origin in the shadow map
  * and offsets every shadow. Morph targets need nothing extra (the depth material applies the mesh's own). One per mesh, cached on it.
  */
-export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh): THREE.MeshDepthMaterial {
+export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh, options: { strandAlpha?: boolean } = {}): THREE.MeshDepthMaterial {
   const cached = mesh.userData.xfsFullSkinDepth as THREE.MeshDepthMaterial | undefined;
   if (cached) return cached;
   const sets = skinSets(mesh.geometry);
@@ -129,8 +129,12 @@ export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh): THREE.MeshDepthM
       .replace("#include <common>", `#include <common>\n${declarations}`)
       .replace("#include <skinbase_vertex>", `#ifdef USE_SKINNING\n${sum}\n#endif`)
       .replace("#include <skinning_vertex>", "#ifdef USE_SKINNING\ntransformed = (bindMatrixInverse * fullSkin * bindMatrix * vec4(transformed,1.0)).xyz;\n#endif");
+    // Hair strands keep their coverage in the alpha map's red channel (hair-shading.ts); the renderer copies the map and, for an
+    // alpha-to-coverage material, an alpha test of 0.5 onto this material, so strands cast strand-shaped shadows.
+    if (options.strandAlpha) shader.fragmentShader = shader.fragmentShader.replace("#include <alphamap_fragment>",
+      "#ifdef USE_ALPHAMAP\n\tdiffuseColor.a *= texture2D( alphaMap, vAlphaMapUv ).r;\n#endif");
   };
-  material.customProgramCacheKey = () => `full-skin-depth-${sets.length}`;
+  material.customProgramCacheKey = () => `full-skin-depth-${sets.length}-${options.strandAlpha ? "strand" : "solid"}`;
   mesh.userData.xfsFullSkinDepth = material;
   return material;
 }

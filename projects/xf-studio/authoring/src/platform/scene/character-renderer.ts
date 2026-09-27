@@ -287,10 +287,12 @@ export function createCharacterRenderer(input: {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
-        // The skin, body and clothing cast the creator rig's shadows (lighting-preset-stage.ts); hair (alpha strands), eyes, decals and
-        // lashes don't. Only the creator rig has shadow-casting lights, so this changes nothing under the studio stage.
-        mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot);
-        if (mesh.castShadow && (mesh as THREE.SkinnedMesh).isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh as THREE.SkinnedMesh);
+        // The skin, body, clothing and hair strands cast the lights' shadows (lighting-preset-stage.ts); eyes, decals and lashes don't.
+        const material = mesh.material as THREE.MeshStandardMaterial;
+        // Hair strands (alpha-to-coverage cards) cast by their coverage; the cap decal and the other hair parts don't.
+        const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
+        mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
+        if (mesh.castShadow && (mesh as THREE.SkinnedMesh).isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh as THREE.SkinnedMesh, { strandAlpha: strand });
         // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
         if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the

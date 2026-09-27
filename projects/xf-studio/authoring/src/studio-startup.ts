@@ -261,6 +261,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     xfStudioCreatorRig: {
       lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
       solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
+      trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
       frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
       shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
     } });

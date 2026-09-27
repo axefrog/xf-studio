@@ -129,13 +129,16 @@ export const CREATOR_EXPOSURE_RANGE = Object.freeze({ min: 0.01, max: 20 });
  *   data-to-intensity conversion for that light is unknown, not that the light is misplaced.
  * - `exposure`: the scalar k before the grade, fitted on the forehead.
  */
-export const CREATOR_CALIBRATION: Readonly<{ fitted: string; gains: Readonly<Record<string, number>>; exposure: number }> = Object.freeze({
+export const CREATOR_CALIBRATION: Readonly<{ fitted: string; gains: Readonly<Record<string, number>>; exposure: number; yawOffset: number }> = Object.freeze({
   fitted: "2026-09-27, one matched face-page pair",
   // The pair's shading is carried mostly by Main_Face, the designers' key with character contact shadows (its nose shadow runs up
   // toward V's right inner eye). A luminance-only fit also wants the cyan floor fills far weaker, but that turns the skin redder, away
   // from the game, so the fills keep their data strength until the skin's scatter is ported (knowledge §12).
   gains: Object.freeze({ Main_Face: 3 }),
-  exposure: 0.5,
+  exposure: 0.53,
+  // V's world yaw: the table assumes the controller's yawDefault (−125°); the spawner nodes use −135°. Turning the rig by +10° (front
+  // lights toward V's left) fits the matched pair better than 0° or −10° (rms of the ten region ratios 0.31 against 0.37 and 0.47).
+  yawOffset: 10,
 });
 /** A light's calibration gain (1 when the calibration doesn't name it). */
 export const calibrationGain = (name: string) => CREATOR_CALIBRATION.gains[name] ?? 1;
@@ -287,9 +290,21 @@ export function spotLightSpec(l: CreatorLight, options: Pick<CreatorLightingOpti
   });
 }
 
-export function creatorRigSpecs(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone"> & { shadows?: boolean }): SpotLightSpec[] {
+export function creatorRigSpecs(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone"> & { shadows?: boolean; yawOffset?: number }): SpotLightSpec[] {
   const head = CREATOR_HEAD_SLOT[sex], casters = new Set(options.shadows ? creatorShadowCasters(sex, options) : []);
-  return CREATOR_RIGS[sex].map(l => spotLightSpec(l, options, head, casters.has(l.name)));
+  const yaw = options.yawOffset ?? CREATOR_CALIBRATION.yawOffset;
+  return CREATOR_RIGS[sex].map(l => spotLightSpec(yaw ? rotateLight(l, yaw) : l, options, head, casters.has(l.name)));
+}
+
+/**
+ * The rig turned about the vertical axis through V's feet by `degrees` (positive turns a light at V's front toward V's left, the
+ * Studio's −X). The table assumes V's world yaw is the controller's `yawDefault` −125°; the spawner nodes say −135°, and a turn
+ * between the two is what `CREATOR_CALIBRATION.yawOffset` fits (knowledge §2, §12).
+ */
+export function rotateLight(l: CreatorLight, degrees: number): CreatorLight {
+  const a = degrees * RAD, c = Math.cos(a), s = Math.sin(a);
+  const turn = (v: Vec3): Vec3 => [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c];
+  return Object.freeze({ ...l, position: turn(l.position), axis: turn(l.axis) });
 }
 
 /**

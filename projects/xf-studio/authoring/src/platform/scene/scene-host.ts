@@ -143,7 +143,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const studio = createStudioLightRig(renderer, scene);
   releases.push(() => studio.dispose());
   // Lighting presets: this studio stage (default) or the game's creator screen (lighting-preset-stage.ts).
-  const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: options.loadLut ?? (() => loadGradingLut()) });
+  const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: options.loadLut ?? (() => loadGradingLut()),
+    setStudioShadowMapSize: size => studio.setShadowMapSize(size) });
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body) => loadCoreDetail(renderer, fetch, body)))(renderer, options.body ?? "female");
