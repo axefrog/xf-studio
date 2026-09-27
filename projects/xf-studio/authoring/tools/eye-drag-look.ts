@@ -79,7 +79,7 @@ try {
   for (const action of [{ kind: "motion.setIdle", enabled: false }, { kind: "preview.setSurfaceControls", enabled: true },
     { kind: "camera.restore", camera }])
     await run(action).catch(error => console.log("action:", (action as { kind: string }).kind, error.message));
-  const layerId = await page.evaluate(`window.xfStudioPresentation.editor.layer()?.id ?? null`).catch(() => null);
+  const layerId = await page.evaluate(`window.xfStudioPresentation.feature("eye-makeup").view().layer()?.id ?? null`).catch(() => null);
   if (layerId) await run({ kind: "point.select", layerId, index: 0 }).catch(() => undefined);
   await page.wait(1500);
   const rect = await page.evaluate(`(() => { const r = document.querySelector('#device-head canvas').getBoundingClientRect();
@@ -106,8 +106,8 @@ try {
   const [, endY] = screen(new THREE.Vector3(world(lash[0]).x, lowerY - 0.003, centre.z));
   const end = [start[0], endY];
   report.pick = { pickable: !!found, guess: [gx, gy], start, end, pickPixels: inside.length };
-  const recipeNow = () => page.evaluate(`JSON.stringify(window.xfStudioPresentation.editor.layer()?.points?.[0] ?? null)`);
-  const depth = () => page.evaluate(`window.xfStudioPresentation.snapshot().authoring.document.history.length`);
+  const recipeNow = () => page.evaluate(`JSON.stringify(window.xfStudioPresentation.feature("eye-makeup").view().layer()?.points?.[0] ?? null)`);
+  const depth = () => page.evaluate(`window.xfStudioPresentation.authoring.history().depth`);
   const depthBefore = await depth();
   const clip = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
   await page.screenshot(resolve(out, "00-before.png"), clip);
@@ -133,6 +133,18 @@ try {
   await page.screenshot(resolve(out, "99-after.png"), clip);
   report.after = JSON.parse(await recipeNow() ?? "null");
   report.undoSteps = (await depth() as number) - (depthBefore as number);
+  report.undoLabel = await page.evaluate(`window.xfStudioPresentation.authoring.history().undo ?? null`);
+  // Back up into the opening and release there: a control inside the opening draws on its bridge, over the eye. Captured in
+  // both UI themes (the whole window) for the overlay's look.
+  const opening = [start[0], (start[1] + end[1]) / 2 - (end[1] - start[1]) * 0.1];
+  await page.drag(end as [number, number], opening as [number, number], { steps: 24 });
+  await page.mouse("mouseMoved", rect.x + 20, rect.y + 20, { button: "none", buttons: 0 });
+  await page.wait(800);
+  report.inOpening = JSON.parse(await recipeNow() ?? "null");
+  await page.screenshot(resolve(out, "opening-dark.png"));
+  await page.colorScheme("light");
+  await page.wait(800);
+  await page.screenshot(resolve(out, "opening-light.png"));
   report.console = page.console.filter(entry => entry.type === "error" || entry.type === "warning").slice(0, 20);
 } finally {
   writeFileSync(resolve(out, "report.json"), JSON.stringify(report, null, 2));

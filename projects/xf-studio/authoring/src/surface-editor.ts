@@ -206,6 +206,14 @@ export function createSurfaceEditor(
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
   let hitRejection: {reason: string; plateDistance?: number; blockerDistance?: number} | undefined;
+  /** The bridge triangle under the last `hit`, when the hit came from a bridge. */
+  let bridgeHit: Anchor | undefined;
+  /**
+   * Where a control dragged over an eye opening was last put: the bridge point under the pointer. The slit's UV can overlap
+   * the lid margin's, so looking its UV up again could land on the margin instead of under the pointer. Editor state only,
+   * valid while that control keeps that UV.
+   */
+  let pin: { layerId: string; kind: Handle["kind"]; index: number; fieldId?: string; mirror: boolean; uv: UV; anchor: Anchor } | undefined;
   let lastDragRejection: {reason: string; x: number; y: number; uv?: UV; from?: UV;
     plateDistance?: number; blockerDistance?: number} | null = null;
 
@@ -238,7 +246,12 @@ export function createSurfaceEditor(
     ) {
       // A control inside an eye opening sits on its bridge. A tangent's parent frame needs a real plate triangle: the slit
       // is so thin in UV that a bridge would stretch the arm across the eye, so such tangents stay with the UV pane.
-      const anchor = parent ? map.anchor(parent) : map.anchor(uv, true);
+      const at = parent ?? uv, pinned = pin && pin.layerId === layer!.id && pin.kind === (parent ? "point" : kind)
+        && pin.index === index && pin.fieldId === fieldId && pin.mirror === mirror
+        && Math.abs(pin.uv.u - at.u) < 1e-7 && Math.abs(pin.uv.v - at.v) < 1e-7;
+      // A control dragged onto a bridge stays where it was dropped over the eye (its tangents wait for the plate).
+      if (pinned && parent) return;
+      const anchor = pinned ? pin!.anchor : parent ? map.anchor(parent) : map.anchor(uv, true);
       if (anchor)
         handles.push({
           kind,
@@ -436,6 +449,7 @@ export function createSurfaceEditor(
    * still belongs to the camera, because bare painted-shape hits never use a bridge.
    */
   function hit(x: number, y: number, across = false) {
+    bridgeHit = undefined;
     const uv = plateHit(x, y);
     if (uv || !across) return uv;
     const cache = new Map<number, THREE.Vector3>();
@@ -446,6 +460,7 @@ export function createSurfaceEditor(
       return;
     }
     hitRejection = undefined;
+    bridgeHit = bridge.anchor;
     return bridge.uv;
   }
   function plateHit(x: number, y: number) {
@@ -674,6 +689,7 @@ export function createSurfaceEditor(
       e.stopImmediatePropagation();
       if (!validDrag()) { stop(); return; }
       let uv = drag.handle.projected ? projectedHit(drag.handle,e.clientX,e.clientY) : hit(e.clientX, e.clientY, true);
+      const onBridge = drag.handle.projected ? undefined : bridgeHit;
       if(uv&&drag.grabOffset)uv={u:uv.u-drag.grabOffset.u,v:uv.v-drag.grabOffset.v};
       if (!uv || (!drag.handle.projected&&!map.continuous(drag.last, uv, true))) {
         lastDragRejection = { ...(uv ? {reason:"uv-discontinuity"} : hitRejection ?? {reason:"no-hit"}),
@@ -709,7 +725,10 @@ export function createSurfaceEditor(
             next: { du: clamp(u - field.u, -0.1, 0.1), dv: clamp(v - field.v, -0.1, 0.1) } });
         }
       }
-      if (accepted) drag.last = uv;
+      if (accepted) {
+        drag.last = uv;
+        pin = onBridge ? { layerId: l.id, kind: h.kind, index: h.index, fieldId: h.fieldId, mirror: h.mirror, uv, anchor: onBridge } : undefined;
+      }
     },
     { capture: true, signal: listeners.signal },
   );

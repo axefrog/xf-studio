@@ -149,11 +149,10 @@ test("a lid-margin point drawn over the eye can be grabbed and dragged across th
     expect(inside.shown).toBe(true);
     expect(inside.selectable).toBe(true);
     // The outline never runs through the opening (nothing is painted there, and the thin UV slit would stretch it across
-    // the eye), and tangents need a plate triangle under their parent: on the bridge they stay with the UV pane.
+    // the eye), and tangents need a plate triangle under their parent: while it rests on the bridge they wait, silently.
     expect(editor.diagnostics().segments).toBeGreaterThan(0);
     expect(editor.diagnostics().handles.filter((h) => h.kind === "tangent")).toEqual([]);
-    expect(editor.diagnostics().unmappedTangents).toBe(2);
-    expect(messages.at(-1)).toContain("edit them in the UV pane");
+    expect(editor.diagnostics().unmappedTangents).toBe(0);
     emit("pointerdown", [inside.screen.x, inside.screen.y]);
     sweep(at(0, 0.006));
     emit("pointerup", at(0, 0.006));
@@ -252,12 +251,23 @@ derivedPreviewTest("real plate: an upper-lash-line point near the outer corner i
     // Straight down the screen to 3 mm below the lower lid margin, 4 px at a time: never paused, always moving on.
     const end = new THREE.Vector3(world(upper).x, lowerY - 0.003, centre.z).project(camera);
     const [x1, y1] = [(end.x + 1) * 500, (1 - end.y) * 500], steps = Math.ceil((y1 - handle.screen.y) / 4);
-    const visited: number[] = [];
+    const visited: number[] = [], drift: number[] = [];
+    let overEye = 0;
     for (let i = 1; i <= steps; i++) {
-      emit("pointermove", [handle.screen.x + (x1 - handle.screen.x) * i / steps, handle.screen.y + (y1 - handle.screen.y) * i / steps]);
+      const pointer = [handle.screen.x + (x1 - handle.screen.x) * i / steps, handle.screen.y + (y1 - handle.screen.y) * i / steps];
+      emit("pointermove", pointer);
       expect(editor.diagnostics().lastDragRejection).toBeNull();
       visited.push(layer.points[0].v);
+      // The point is drawn under the pointer all the way, over the eye too (not looked up again on the lid margin, whose
+      // UV the slit's overlaps), within the 0.7 mm lift it has on the skin.
+      frame();
+      const now = editor.diagnostics().handles.find((h) => h.kind === "point" && h.index === 0)!;
+      if (now.bridge) overEye++;
+      expect(now.shown).toBe(true);
+      drift.push(Math.hypot(now.screen.x - pointer[0], now.screen.y - pointer[1]));
     }
+    expect(overEye).toBeGreaterThan(steps * 0.4);
+    expect(Math.max(...drift)).toBeLessThan(16);
     emit("pointerup", [x1, y1]);
     expect(checkpoints).toBe(1);
     // It crossed the opening (onto the bridge) and ended on the lower lid's plate surface, below where it started.
