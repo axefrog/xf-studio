@@ -724,18 +724,18 @@ test("scrub slider: rests at the middle, previews while moved, applies on releas
   expect(calls).toEqual(["curve in"]);
 });
 
-test("direction dial: Shift keeps the angle, Alt snaps the height to 15°, and the height scale hides the tick the marker would cover", async () => {
-  const { dragDirection, dialPoint, snapStep, heightTicks, HEIGHT_SNAP } = await lib();
+test("direction dial: Shift keeps the angle, Alt snaps the angle around V to 15°, and the height scale hides the tick the marker would cover", async () => {
+  const { dragDirection, dialPoint, snapStep, heightTicks, ANGLE_SNAP } = await lib();
   const range = { min: -89, max: 89 }, start = { azimuth: 329, elevation: 22 };
-  const p = dialPoint({ azimuth: 90, elevation: 37 });
-  expect(dragDirection(p.x, p.y, start, {}, range)).toEqual({ azimuth: 90, elevation: 37 });
+  const p = dialPoint({ azimuth: 97, elevation: 37 });
+  expect(dragDirection(p.x, p.y, start, {}, range)).toEqual({ azimuth: 97, elevation: 37 });
   expect(dragDirection(p.x, p.y, start, { shift: true }, range)).toEqual({ azimuth: 329, elevation: 37 });
-  expect(dragDirection(p.x, p.y, start, { alt: true }, range)).toEqual({ azimuth: 90, elevation: 30 });
-  expect(dragDirection(p.x, p.y, start, { shift: true, alt: true }, range)).toEqual({ azimuth: 329, elevation: 30 });
-  const low = dialPoint({ azimuth: 10, elevation: -88 });
-  expect(dragDirection(low.x, low.y, start, { alt: true }, range).elevation).toBe(-89); // snapped within the range
-  expect(HEIGHT_SNAP).toBe(15);
-  expect([snapStep(22, 1, range), snapStep(22, -1, range), snapStep(30, 1, range), snapStep(30, -1, range), snapStep(80, 1, range)]).toEqual([30, 15, 45, 15, 89]);
+  expect(dragDirection(p.x, p.y, start, { alt: true }, range)).toEqual({ azimuth: 90, elevation: 37 }); // the angle snaps, the height is free
+  expect(dragDirection(p.x, p.y, start, { shift: true, alt: true }, range)).toEqual({ azimuth: 329, elevation: 37 }); // Shift wins
+  const nearFront = dialPoint({ azimuth: 356, elevation: 10 });
+  expect(dragDirection(nearFront.x, nearFront.y, start, { alt: true }, range).azimuth).toBe(0); // 360 wraps to 0
+  expect(ANGLE_SNAP).toBe(15);
+  expect([snapStep(22, 1), snapStep(22, -1), snapStep(30, 1), snapStep(30, -1), snapStep(350, 1), snapStep(5, -1)]).toEqual([30, 15, 45, 15, 0, 0]);
   expect(heightTicks(22, range)).toEqual([{ value: 89, hidden: false }, { value: 45, hidden: false }, { value: 0, hidden: false },
     { value: -44, hidden: false }, { value: -89, hidden: false }]);
   expect(heightTicks(40, range).filter(t => t.hidden).map(t => t.value)).toEqual([45]);
@@ -747,12 +747,13 @@ test("direction dial: Shift keeps the angle, Alt snaps the height to 15°, and t
   const labels = [...dial.element.querySelectorAll(".dial-scale-label")].map(label => label.textContent);
   expect(labels).toEqual(["+89°", "0°", "−44°", "−89°"]);
   expect(dial.element.querySelector(".dial-height-label")!.textContent).toBe("+44°");
-  // Up and Down with Alt jump to the next 15° step.
+  // Right and Left with Alt turn to the next 15° step around V; Up keeps its 5° height step.
   const { calls, t } = log();
   const keyed = new DirectionDial({ label: "Direction", transaction: t });
-  keyed.update({ azimuth: 0, elevation: 22 }, {});
+  keyed.update({ azimuth: 22, elevation: 22 }, {});
+  (keyed.dial as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "ArrowRight", altKey: true }));
   (keyed.dial as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "ArrowUp", altKey: true }));
-  expect(calls).toEqual(["begin", 'edit {"azimuth":0,"elevation":30}']);
+  expect(calls).toEqual(["begin", 'edit {"azimuth":30,"elevation":22}', 'edit {"azimuth":30,"elevation":27}']);
 });
 
 test("direction dial: the resize bar clamps between the minimum and what the control holds, a narrower panel draws it smaller, and the size is kept on release", async () => {

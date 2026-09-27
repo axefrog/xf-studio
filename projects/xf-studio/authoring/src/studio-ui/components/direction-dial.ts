@@ -13,13 +13,13 @@ import { ReadoutField } from "./readout-field";
  *   when you face her. Azimuth 0° is the front and rises toward V's right (90°), behind (180°) and V's left (270°).
  * - **Other lights** of the setup show as small dots in their own colours, for context; only the handle moves. While a light is dragged
  *   the other dots dim and a dashed radius runs from the centre to the edge through it: moving along that line changes only its height.
- * - **Modifiers while dragging:** Shift keeps the angle (height only, along the radius); Alt snaps the height to 15° steps.
+ * - **Modifiers while dragging:** Shift keeps the angle (height only, along the radius); Alt snaps the angle around V to 15° steps.
  * - **Height scale:** ticks at the range's ends, its quarters and level, each labelled; the current height is marked in the light's
  *   colour, and a labelled tick it would overlap is hidden (`heightTicks`).
  * - **One transaction per gesture.** A drag is begin, edits, commit (Escape during it restores the start and cancels); a burst of key
  *   presses is one transaction until a short pause or focus leaves; a typed value is one begin-edit-commit step.
  * - **Keyboard** (one tab stop, the dial): Left and Right turn the light by 5° (Page Up and Page Down by 15°), Up and Down raise and
- *   lower it by 5° (with Alt to the next 15° step), Home brings it to the front at its height. Enter types the angle exactly.
+ *   lower it by 5°; Alt with Left or Right turns it to the next 15° step; Home brings it to the front at its height. Enter types the angle exactly.
  * - **Resize.** The bar under the dial resizes it (drag down to enlarge, up to shrink; Up and Down arrows on the focused bar, Home and
  *   End for the smallest and largest). The size is clamped between `DIAL_MIN_SIZE` and what the control's width can hold, and drawn
  *   smaller when the panel narrows (`fitDialSize`); the owner keeps the chosen size (`onResize`).
@@ -53,8 +53,8 @@ const VIEW = Object.freeze({ x: -8, y: -12, width: 150, height: 124 });
 export const DIAL_MIN_SIZE = 180;
 export const DIAL_DEFAULT_SIZE = 280;
 const RESIZE_STEP = 16;
-/** Height steps Alt snaps to. */
-export const HEIGHT_SNAP = 15;
+/** Angle steps around V that Alt snaps to. */
+export const ANGLE_SNAP = 15;
 
 /** Where a direction draws on the dial: centre straight up, the ring (r = R/2) level, the edge straight down. */
 export function dialPoint(direction: Direction): { x: number; y: number } {
@@ -70,18 +70,17 @@ export function dialDirection(x: number, y: number, range: { min: number; max: n
 }
 /**
  * A drag's direction under the pointer, with the modifiers: Shift keeps the angle the drag started with (only the height follows the
- * pointer's distance from the centre), Alt snaps the height to `HEIGHT_SNAP` steps within the range.
+ * pointer's distance from the centre), Alt snaps the angle around V to `ANGLE_SNAP` steps (the height stays free).
  */
 export function dragDirection(x: number, y: number, start: Direction, modifiers: { shift?: boolean; alt?: boolean }, range: { min: number; max: number }): Direction {
   const free = dialDirection(x, y, range);
-  let elevation = free.elevation;
-  if (modifiers.alt) elevation = Math.min(range.max, Math.max(range.min, Math.round(elevation / HEIGHT_SNAP) * HEIGHT_SNAP));
-  return { azimuth: modifiers.shift ? start.azimuth : free.azimuth, elevation };
+  const azimuth = modifiers.shift ? start.azimuth : modifiers.alt ? (Math.round(free.azimuth / ANGLE_SNAP) * ANGLE_SNAP) % 360 : free.azimuth;
+  return { azimuth, elevation: free.elevation };
 }
-/** The next `HEIGHT_SNAP` step above or below a height (Alt with Up or Down), within the range. */
-export function snapStep(elevation: number, direction: 1 | -1, range: { min: number; max: number }): number {
-  const next = direction > 0 ? Math.floor(elevation / HEIGHT_SNAP + 1e-9) * HEIGHT_SNAP + HEIGHT_SNAP : Math.ceil(elevation / HEIGHT_SNAP - 1e-9) * HEIGHT_SNAP - HEIGHT_SNAP;
-  return Math.min(range.max, Math.max(range.min, next));
+/** The next `ANGLE_SNAP` step around V clockwise or anticlockwise from an angle (Alt with Right or Left), in [0, 360). */
+export function snapStep(azimuth: number, direction: 1 | -1): number {
+  const next = direction > 0 ? Math.floor(azimuth / ANGLE_SNAP + 1e-9) * ANGLE_SNAP + ANGLE_SNAP : Math.ceil(azimuth / ANGLE_SNAP - 1e-9) * ANGLE_SNAP - ANGLE_SNAP;
+  return ((next % 360) + 360) % 360;
 }
 /** Where a height sits on the scale (the drawing's y): +90° level with the dial's top, −90° with its bottom. */
 export const heightY = (elevation: number) => C - elevation / 90 * R;
@@ -265,9 +264,10 @@ export class DirectionDial {
     if (turn === undefined && lift === undefined && event.key !== "Home") return;
     event.preventDefault();
     const v = this.value;
-    const elevation = lift === undefined ? v.elevation : event.altKey ? snapStep(v.elevation, lift, this.range)
-      : Math.min(this.range.max, Math.max(this.range.min, v.elevation + 5 * lift));
-    const next = event.key === "Home" ? { ...v, azimuth: 0 } : turn !== undefined ? { ...v, azimuth: (((v.azimuth + turn) % 360) + 360) % 360 } : { ...v, elevation };
+    const elevation = lift === undefined ? v.elevation : Math.min(this.range.max, Math.max(this.range.min, v.elevation + 5 * lift));
+    const snapped = turn !== undefined && event.altKey && Math.abs(turn) === 5 ? snapStep(v.azimuth, turn > 0 ? 1 : -1) : undefined;
+    const next = event.key === "Home" ? { ...v, azimuth: 0 } : snapped !== undefined ? { ...v, azimuth: snapped }
+      : turn !== undefined ? { ...v, azimuth: (((v.azimuth + turn) % 360) + 360) % 360 } : { ...v, elevation };
     if (next.azimuth === v.azimuth && next.elevation === v.elevation) return;
     // A burst of presses is one transaction, committed after a short pause (or when focus leaves).
     if (this.burst) clearTimeout(this.burst); else { this.options.transaction.begin?.(); this.focusLine(true); }
