@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { parseDeformationProgram, type DeformationProgram } from "./deformation-rig";
+import { parseDangleSpec, type DangleSpec } from "./dangle-spec";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "./render-detail";
@@ -41,6 +42,8 @@ export type LoadedCharacterComponent = {
   layered?: { mesh: THREE.SkinnedMesh; handle: LayeredHandle }[];
   /** Why this component is drawn only in part, as codes (kept with it, so a reused component still reports them). */
   limits?: DetailLimit[];
+  /** The dangle component its mesh is skinned to (hair with physics): its rig and simulation (dangle-spec.ts). */
+  dangle?: DangleSpec;
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
@@ -606,6 +609,11 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         const item: LoadedCharacterComponent = { component, root, meshes, bones, ...(skin ? { skin } : {}),
           ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}),
           ...(partLimits.length ? { limits: partLimits } : {}) };
+        // Its dangle component's spec: without it the chain joints follow the body part nearest them, as before.
+        if (component.dangle) {
+          try { item.dangle = parseDangleSpec(JSON.parse(new TextDecoder().decode(await fetchBytes(component.dangle)))); }
+          catch (error) { aborted(); notes.push(`${component.slot} ${component.component}: its dangle rig couldn't be loaded (${(error as Error).message}).`); }
+        }
         ledger.parts.set(item, part);
         partKeys.set(item, key);
         components.push(item);

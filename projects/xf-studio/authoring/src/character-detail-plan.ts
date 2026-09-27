@@ -138,6 +138,12 @@ export type PlannedComponent = {
    * uncensored skin), which is drawn only while every cover is.
    */
   censor?: "cover" | "covered";
+  /**
+   * The dangle component this part's mesh is skinned to (its `skinning` binding names an animated component of the same appearance: hair
+   * with physics), with the rig and graph that simulate it and the component whose pose drives its base joints (knowledge/hair-physics.md
+   * §2.1). Absent when the mesh binds to V's own skeleton.
+   */
+  dangle?: { component: string; rig: Provenance; graph: Provenance | null; drivenBy: string };
 };
 export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[];
   /**
@@ -281,7 +287,25 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture,
     ...(component.type === "entMorphTargetSkinnedMeshComponent" && geometry.morphTarget && geometry.mesh?.status === "archive" ? { baseMesh: geometry.mesh } : {}),
     ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}),
-    ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}) };
+    ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}), ...dangleOf(entry, component) };
+}
+/**
+ * The dangle component a mesh is skinned to: an animated component of the same appearance with the name its `skinning` binding gives
+ * (knowledge/hair-physics.md §2.1). Several components may share that name (a CCXL pack names every part's `hair_dangle`); the one from the
+ * mesh's own part wins, else the first (the engine's rule for duplicate names is unread: hair-physics open question 3).
+ */
+export function dangleOf(entry: Pick<ResolvedAppearance, "components">, component: ResolvedComponent): { dangle?: NonNullable<PlannedComponent["dangle"]> } {
+  if (!component.skinning) return {};
+  const animated = entry.components.filter(other => other.animated?.rig?.status === "archive");
+  const named = animated.filter(other => other.name === component.skinning);
+  // A worn physics earring skins its mesh to V's skeleton (`Component`) while its one dangle component is controlled by that same skeleton:
+  // its mesh reads the dangle joints by name (knowledge/hair-physics.md §2.1 [hypothesis], in-game check H5). Only an unambiguous single
+  // candidate is taken; the joints it moves are only those V doesn't have.
+  const controlled = named.length ? [] : animated.filter(other => other.animated!.controlBinding === component.skinning);
+  const found = named.find(other => other.origin.source === component.origin.source) ?? named[0] ?? (controlled.length === 1 ? controlled[0] : undefined);
+  if (!found?.animated?.rig) return {};
+  return { dangle: { component: found.name, rig: found.animated.rig, graph: found.animated.graph?.status === "archive" ? found.animated.graph : null,
+    drivenBy: found.animated.controlBinding } };
 }
 /** The resolver's notes about how a file was read (resource-graph.ts `readerRuleNotes`). */
 const READER_RULES = new Set(["R11-stored-type", "R12-property-absent", "R13-array-past-count"]);

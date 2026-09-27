@@ -78,12 +78,14 @@ Program `4792354088802328889`; the arithmetic is [observed] and checked line by 
 
 ```
 mb = Microblend(offset_mb + mbTile·frac(uv));  k = 1 − mb.a
-mp = saturate(k + (m − k)·c)                 // c: the layer's contrast factor
+mp = saturate(k + (m − k)·c)                 // c = 1 / microblendContrast (see below)
 a  = mp · opacity
 w  = min(remaining, a);  remaining −= w       // each layer takes a share of what is left
 ```
 
-**Not a lerp stack**: two half-covering layers over a base give 0.5 / 0.5 / 0, and coverage left at the end is black with zero roughness and metalness [observed]. The microblend crossfades the mask edge with its own alpha, so a layer's boundary follows the microblend's pattern (scratches, chips, fibre) at a tiling independent of the mask's resolution.
+**Not a lerp stack**: two half-covering layers over a base give 0.5 / 0.5 / 0, and coverage left at the end is black with zero roughness and metalness [observed].
+
+**The contrast factor is the reciprocal of `microblendContrast`** [source-supported: the Blender add-on's curve is this form, the wiki's in-game contrast grid shows it, and game captures of the ring eye designs need it; the CPU upload is unread] ([evidence](multilayered-shader-evidence.md#the-ring-eye-designs-against-the-game-27-september-2026)). A contrast below 1 steepens the mask about the microblend's threshold `k`: authored masks with a faint fill (the ring's 0.11 centre, the target's 0.12 disc) then draw nothing there and a hard edge where the mask is bright. Contrast 1 leaves the mask as it is. The microblend crossfades the mask edge with its own alpha, so a layer's boundary follows the microblend's pattern (scratches, chips, fibre) at a tiling independent of the mask's resolution.
 
 ### 5.3 Per-layer values
 
@@ -143,7 +145,7 @@ The question the backlog asks is whether mixed cosmetic finishes, or transparenc
 | Step | Adapter | Status |
 |---|---|---|
 | Tile bits, front-to-back shares, bottom layer unmasked, black leftover | `accumulateLayer` / `LAYER_ACCUMULATE_GLSL` | Faithful; real-GPU test within 0.004 of the CPU reference |
-| Microblend crossfade, edge-weighted microblend normals | same | Faithful; `microblendContrast` → factor [hypothesis] |
+| Microblend crossfade, edge-weighted microblend normals | same | Faithful; `microblendContrast` → `1 / contrast` [source-supported, game capture] |
 | Levels chains, colour mask from the roughness map | same | Faithful; `(0, 0)` colour-mask levels read as "tint everywhere" [hypothesis] |
 | `GlobalNormal` and reoriented normal mapping | `resolveSurface` | Faithful |
 | UV frac, mask V flip, `matTile × tilingMultiplier`, ratio | bake coordinates | Faithful to the program; the `tilingMultiplier` fold is [hypothesis] |
@@ -158,7 +160,7 @@ The question the backlog asks is whether mixed cosmetic finishes, or transparenc
 
 ## 10. Open questions
 
-1. The CPU mappings behind the layer buffer: `colorMaskLevelsOut (0, 0)`, `microblendContrast`, `colorScale` linearisation, `matTile × tilingMultiplier`, `SurfaceTexAspectRatio`, `useNormal` and offset 112 ([evidence](multilayered-shader-evidence.md#open-questions-runtime-test-candidates)).
+1. The CPU mappings behind the layer buffer: `colorMaskLevelsOut (0, 0)` (tints, supported by the ring eye capture), `colorScale` linearisation, `matTile × tilingMultiplier`, `SurfaceTexAspectRatio`, `useNormal` and offset 112 ([evidence](multilayered-shader-evidence.md#open-questions-runtime-test-candidates)).
 2. When does the engine draw a mesh through `multilayered_baked` instead of the per-pixel program?
 3. What `MaterialModifiersConsts[0].y` (written to GBuffer0.a) carries, and which engine state drives the dissolve?
 4. What `transparent_mark_rt` marks for the clear coat.

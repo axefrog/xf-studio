@@ -1,5 +1,5 @@
 import type { PreviewTextureSize } from "../../preview-quality";
-import { applyCapability, badge, button, emptyState, note, section, Segmented, SelectField, Slider, Toggle } from "../controls";
+import { applyCapability, badge, button, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
 import { comingSoon, liveFeatures } from "../coming-soon";
@@ -260,11 +260,13 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
   const STILL = "still";
-  const source = new SelectField<string>({ label: "Body", onChange: value => {
+  // Mutually exclusive buttons, one per idle prepared on this computer (the list can change), wrapping onto more rows as needed. The
+  // pressed button moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
+  const source = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
-  }, help: "Still, or one of the idles the game plays on V in its creator and inventory screens." });
+  } });
   const pause = button({ label: "Pause idle", icon: "pause", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.setPaused", paused: !motion?.idlePaused });
   } });
@@ -273,8 +275,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     rt.dispatch({ kind: "motion.setContributions", body: body ?? motion.idleBody, face: face ?? motion.idleFace });
   };
   const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
-  // The idle's one line (UI-90): a reserved note under the last switch that says only what matters now (loading, or why motion is off).
-  const face = new Toggle({ label: "Facial movement", reserveNote: true, onChange: value => setContributions(undefined, value),
+  const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value),
     help: "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on." });
   const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true,
     format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
@@ -286,10 +287,13 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   // person is never sent to a developer guide.
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
+  // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game.
+  const physics = new Toggle({ label: "Hair physics", reserveNote: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
+    help: "Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files." });
   const idleSection = section({ title: "Game idle", help: IDLE_HELP }, source.element, h("div", { class: "row" }, pause), head.element, face.element);
   const blinkSection = section({ title: "Blink", help: blinkHelp(undefined) }, blinkControls, blinkNote);
   const blinkTip = blinkSection.querySelector<HTMLElement>(".help-tip")!;
-  const element = h("div", { class: "panel-content" }, idleSection, blinkSection);
+  const element = h("div", { class: "panel-content" }, idleSection, section("Hair", physics.element), blinkSection);
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
@@ -297,10 +301,12 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
-      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
-        motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
-      head.update(motion?.idleBody ?? true, unavailable);
-      face.update(motion?.idleFace ?? true, { ...unavailable, note: motion?.available && motion.idleLoading ? "Loading that idle; the previous one plays until it's ready." : undefined });
+      // The Body buttons' reserved line says the one thing that matters now: loading, or why motion is off.
+      source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
+        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") }))]);
+      source.update(motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
+        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready." : "" });
+      head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
@@ -312,9 +318,20 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       setText(blinkNote, blinkNoteLine(motion));
       blinkNote.hidden = !blinkNote.textContent;
       setHelp(blinkTip, blinkHelp(motion));
+      const physicsAllowed = port.authoring.capability({ kind: "motion.setPhysics", enabled: !motion?.physics });
+      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion) });
     },
   };
 }
+
+/** The hair physics note: what it does now (a held pose settles; the idle swings it). */
+export function physicsNoteLine(motion: Pick<MotionState, "physics" | "physicsAvailable" | "idle" | "idlePaused"> | undefined): string | undefined {
+  if (!motion?.physics || !motion.physicsAvailable) return undefined;
+  return motion.idle && !motion.idlePaused ? "The hair swings as your V moves." : "The hair hangs as it would at rest in this pose.";
+}
+
+/** A body-source button's tooltip: where the game plays that idle. */
+const idleTitle = (screen: string) => `The idle the game plays on V in its ${screen === "creator" ? "character creator" : screen === "inventory" ? "inventory" : "gender selection"}.`;
 
 /** What the game idles are (the Game idle heading's help tip). */
 const IDLE_HELP = ["Idles the game plays on V in its character creator and inventory, made from your game files.",

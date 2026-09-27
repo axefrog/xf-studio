@@ -30,6 +30,12 @@ const finishGroups: [string, string, [string, string][]][] = [
   ["Experimental", "warn", [["shimmer", "Shimmer"], ["glossy", "Glossy"], ["iridescent", "Colour-shift"]]],
   ["Preview only", "warn", [["glitter", "Glitter"]]]];
 
+/** A wrapping segmented specimen (the control's `wrap` layout, with a reserved note line when `note` is given). */
+const wrapped = (label: string, options: string[], selected: number, note?: string) => {
+  const longest = Math.max(...options.map(option => option.length));
+  return `<div class="control"><span class="control-label"><span>${label}</span></span><div class="segmented wrap" role="group" aria-label="${label}" style="--segment-min:calc(${longest}ch + 2 * var(--sp-4) + 2px)">${options.map((option, index) =>
+    `<button type="button" class="segment" aria-pressed="${index === selected}"><span>${option}</span></button>`).join("")}</div>${note ? `<small class="control-note info">${note}</small>` : ""}</div>`;
+};
 export function components() {
   return section("components", "04", "Components",
     `Components are presentation only. Each one names the application action or read-only state behind it, and shows the application's reason
@@ -111,9 +117,19 @@ export function components() {
       a11y: "Native checkbox with role=switch; the disabled reason is visible text, not only a tooltip." }),
     pattern({ id: "c-segmented", title: "Segmented control", status: "implemented",
       specimen: `<div class="stack-s">${segmented("Selected point handles", ["Smooth", "Symmetric", "Corner"], 0)}${segmented("Generated texture resolution", ["512", "1K", "2K", "4K"], 1, [3])}</div>`,
-      what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette.",
-      when: "Two to five short options that benefit from comparison. Longer or data-driven lists use a select or a menu.",
-      drives: `${code("choicesFor(target, kind, field)")} or per-value ${code("capability")}.` }),
+      what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette. A data-driven list (the Motion panel's Body source: Still and the game idles prepared on this computer) changes its choices with `setOptions`, which rebuilds the buttons only when the list differs and keeps focus on the same choice; `wrap` flows the buttons onto more rows when their labels don't fit; the whole group can be disabled with one visible reason, and a reserved note line under it carries a transient state (\"Loading that idle\") without moving anything.",
+      when: "Two to eight short options that benefit from comparison, fixed or data-driven (wrap them when they may not fit one row). Long lists that need search use a select or a menu.",
+      a11y: "A labelled group of toggle buttons with aria-pressed; a disabled group states its reason in the note line and as the group's description.",
+      drives: `${code("choicesFor(target, kind, field)")} or per-value ${code("capability")}; ${code("setOptions")} for a list that changes.` }),
+    pattern({ id: "c-segmented-wrap", title: "Segmented control, wrapping", status: "implemented", wide: true,
+      specimen: `<div style="display:grid;gap:var(--sp-5);max-width:320px">${wrapped("Body", ["Still", "Creator close-up", "Creator full body", "Inventory", "Creator nails", "Gender selection"], 3,
+        "Loading that idle; the previous one plays until it's ready.")}${wrapped("Eye shape", Array.from({ length: 22 }, (_, k) => String(k + 1)), 6)}${wrapped("Head used for the eye plate",
+        ["The head your mods install", "The unmodified game head"], 0)}</div>`,
+      what: "The same control with `wrap`: even tiles as wide as the longest label, as many a row as fit the panel. A numbered set (eye shapes 1–22) fills each row with equal tiles; two long labels that can't share a row stack one per row; a data-driven list (the Motion panel's Body source) changes with `setOptions`. The reserved note line under it carries a transient state (\"Loading that idle\") in its own place, and the pressed tile moves the moment it is chosen.",
+      when: "Exclusive choices whose count or labels vary, or that may not fit one row. Fixed short sets keep the one-row strip.",
+      combine: "Label above, tiles, then the reserved note line; a switch or slider that depends on the choice goes below the note, never beside the tiles.",
+      adapt: "Tiles never overflow: the row count grows as the panel narrows, and a label wider than the whole row wraps inside its tile. The pressed tile keeps its cyan underline in every row.",
+      drives: `${code("setOptions(choices)")}, then ${code("update(selected, capability, { disabled, reason, note })")}.` }),
     pattern({ id: "c-color", title: "Colour field", status: "implemented",
       specimen: `<div class="control" style="max-width:200px"><span class="control-label"><span>Colour</span></span><div class="color-field"><span class="swatch-frame"><input type="color" class="swatch-input" value="#b0587a" aria-label="Colour"></span><input class="field mono hex" value="#b0587a" aria-label="Colour hex value"></div></div>`,
       what: "Native picker plus a hex field. Picker changes are one transaction; hex entry commits on Enter/blur and flags invalid input without applying it.",

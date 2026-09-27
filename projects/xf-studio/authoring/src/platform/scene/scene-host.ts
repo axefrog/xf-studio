@@ -323,6 +323,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     onBakeLimits: character.onBakeLimits,
     // With the renderer's live geometry and texture counts, so a V switch or a tried style can be measured (PREV-63).
     characterDetailsEvidence: () => ({ ...character.evidence(), memory: { ...renderer.info.memory } }),
+    /** Developer evidence: the drawn parts' dangles (hair physics) and their chain bones' positions. */
+    dangleEvidence: () => idle?.dangleEvidence() ?? null,
     /** Piercings are a visibility preference: the V's own (or a tried style) arrive with the character record and follow it. */
     setPiercings: (enabled: boolean) => character.setSlotVisible("piercings", enabled),
     /** The V's body (body, arms, hands, feet and their decals, and the clothes on it) is a visibility preference too; it arrives with the character record. */
@@ -380,6 +382,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
       frameIdle();
     },
     setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
+    /** The scene's dangle simulation (hair with physics; the scene node's setting, off until calibrated). */
+    setPhysics: (enabled: boolean) => idle?.setPhysics(enabled),
+    /** The drawn parts with a dangle component, and whether any simulates (absent without the idle's rig). */
+    dangles: () => idle ? { parts: idle.dangleParts, simulated: idle.simulatedDangles, loaded: character.hasDetails() } : undefined,
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;
       idle.setContributions({ body, face }); frameIdle();
@@ -405,6 +411,6 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
-    "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
+    "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

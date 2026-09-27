@@ -15,7 +15,8 @@ import { clampLayer, type RenderChunkMaterial, type RenderLayer, type RenderLaye
  *   remaining: `w = min(remaining, a)`, `remaining −= w`; the bottom layer uses a full mask; coverage left over is black and zero
  *   roughness/metalness. This is not a lerp stack;
  * - a layer's coverage is its mask (bilinear, at `frac(uv)` in the exported image's rows), crossfaded with its microblend's
- *   `1 − alpha` by the contrast: `mp = saturate(k + (m − k)·c)`, `a = mp · opacity`; a masked layer with no mask data there is skipped;
+ *   `1 − alpha` by the contrast factor `c = 1 / microblendContrast`: `mp = saturate(k + (m − k)·c)`, `a = mp · opacity`; a masked layer
+ *   with no mask data there is skipped;
  * - maps are read at `offset + tile · frac(uv)` in the game's texture rows (tile = `matTile`, U times the setup's ratio); roughness and
  *   metalness go through their levels as a clamped scale/bias chain `saturate(saturate(x·in₀ + in₁)·out₀ + out₁)`; the colour is the
  *   map times `lerp(1, colorScale, cm)` with `cm` the same chain on the roughness map through the template's colour-mask levels;
@@ -49,12 +50,18 @@ const saturate = (value: number) => Math.min(1, Math.max(0, value));
 const finite = (value: number, fallback: number) => Number.isFinite(value) ? value : fallback;
 const frac = (value: number) => value - Math.floor(value);
 
+/** The smallest contrast the factor divides by: a contrast of 0 becomes a (finite) step at the microblend's threshold. */
+export const MIN_MICROBLEND_CONTRAST = 1e-3;
 /**
- * `microblendContrast` → the program's mask-contrast factor. Taken as the value itself [hypothesis: the CPU upload is unread; a direct
- * copy makes contrast a crossfade between the mask and the microblend, as the community guide describes it, and makes a contrast of 0
- * hide a layer whose microblend is opaque, as its warning says].
+ * `microblendContrast` → the program's mask-contrast factor: its **reciprocal**, so `mp = saturate(k + (m − k) / contrast)`. A low
+ * contrast steepens the mask about the microblend's threshold `k = 1 − alpha` (below it the layer covers nothing, above it fully);
+ * contrast 1 keeps the mask as it is. [community + in-game evidence, the CPU upload itself unread: the Blender add-on's curve
+ * `saturate((m − (1 − c)(1 − a)) / c)` is this form exactly; the community guide's in-game grid of contrast 0.25–1 against mask levels
+ * shows low contrast truncating, not flattening, the microblend; and the in-game ring eye designs (contrast 0.49 and 0.26 over a
+ * `default.xbm` microblend, alpha 104/255) draw a solid ring on a clean centre, which a direct copy of the value can't (it would lay
+ * 30–60 % of the ring's colour over every masked texel). knowledge/eye-rendering.md §6.6.]
  */
-export const microblendContrastFactor = (contrast: number) => Math.max(0, finite(contrast, 1));
+export const microblendContrastFactor = (contrast: number) => 1 / Math.max(MIN_MICROBLEND_CONTRAST, finite(contrast, 1));
 /**
  * The template's colour-mask levels as the program's scale/bias pairs. Most templates (every earring template) store `Out = (0, 0)`,
  * which as a straight copy would never tint; the game's gold and paint are tinted, so that pair reads as "tint everywhere"

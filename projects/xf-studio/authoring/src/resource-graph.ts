@@ -86,6 +86,13 @@ export interface ComponentModel {
   readonly mesh: DepotRef | null;
   meshAppearance: string;
   chunkMask: string;
+  /** A skinned mesh's skeleton: the component its `skinning` binding names (`hair_dangle`, `root`, `Component`), when it names one. */
+  readonly skinning?: string;
+  /**
+   * An animated component's rig and graph, and the components its `controlBinding` (whose pose drives its base joints) and
+   * `parentTransform` bindings name (knowledge/hair-physics.md §2.1).
+   */
+  readonly animated?: { readonly rig: DepotRef | null; readonly graph: DepotRef | null; readonly controlBinding: string; readonly parentTransform: string };
 }
 export interface ComponentOverride { readonly componentName: string; readonly meshAppearance: string; readonly chunkMask: string; readonly partResource: DepotRef | null }
 export interface AppDefinitionModel {
@@ -153,19 +160,27 @@ const RENDERABLE = new Set(["entMorphTargetSkinnedMeshComponent", "entSkinnedMes
   "entMeshComponent", "entSkinnedClothComponent", "entPhysicalMeshComponent"]);
 export const isRenderable = (type: string) => RENDERABLE.has(type);
 
-function readComponent(data: JsonObject): ComponentModel | null {
+function readComponent(data: JsonObject, scope: HandleScope): ComponentModel | null {
   const type = typeof data.$type === "string" ? data.$type : "";
   if (!type || type === "entEntity" || type === "gameObject") return null;
+  // Bindings are handles to `entSkinningBinding`, `entAnimatedComponentBinding` or `entHardTransformBinding`, each naming a component.
+  const bound = (value: unknown) => cname(scope.data(value)?.bindName);
+  const skinning = bound(data.skinning);
   return { name: cname(data.name), type, morphResource: depotRef(data.morphResource), mesh: depotRef(data.mesh),
-    meshAppearance: cname(data.meshAppearance), chunkMask: typeof data.chunkMask === "string" ? data.chunkMask : String(data.chunkMask ?? "18446744073709551615") };
+    meshAppearance: cname(data.meshAppearance), chunkMask: typeof data.chunkMask === "string" ? data.chunkMask : String(data.chunkMask ?? "18446744073709551615"),
+    ...(skinning ? { skinning } : {}),
+    ...(type === "entAnimatedComponent" ? { animated: { rig: depotRef(data.rig), graph: depotRef(data.graph), controlBinding: bound(data.controlBinding),
+      parentTransform: bound(data.parentTransform) } } : {}) };
 }
 
 /** Components of an appearance definition or entity template: its compiled package when present, else `components`. */
 export function readComponents(owner: JsonObject, scope: HandleScope): { components: ComponentModel[]; source: AppDefinitionModel["componentsSource"] } {
-  const compiled = packageChunks(owner.compiledData).map(readComponent).filter((c): c is ComponentModel => !!c);
+  // Compiled components dereference handles within their own package; an inline one may refer to a handle written first inside it.
+  const compiledScope = isObject(owner.compiledData) && isObject(owner.compiledData.Data) ? new HandleScope(owner.compiledData.Data) : null;
+  const compiled = compiledScope ? packageChunks(owner.compiledData).map(chunk => readComponent(chunk, compiledScope)).filter((c): c is ComponentModel => !!c) : [];
   if (compiled.length) return { components: compiled, source: "compiledData" };
   const inline = asArray(owner.components).map(item => scope.data(item)).filter((d): d is JsonObject => !!d)
-    .map(readComponent).filter((c): c is ComponentModel => !!c);
+    .map(chunk => readComponent(chunk, scope)).filter((c): c is ComponentModel => !!c);
   return { components: inline, source: inline.length ? "components" : "none" };
 }
 
