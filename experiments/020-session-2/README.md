@@ -69,5 +69,7 @@ Game 2.31 on the test profile, the session 2 build above, bridge build `c31156a`
 | 5–7. Gloss, Shimmer, Metal | Rendered in the character creator's fixed light (all ten presets captured); the verdicts need a light sweep the bridge can't drive yet, so they wait for the next session. |
 | 8–9 | Not run. |
 
+**Session 3** ([experiment 028](../028-session-3/README.md#5-results-28-september-2026), 28 September) answered steps 2, 4, 6 and 7: Lines · new is visibly sharper than old (the density gain is established), Depth D in motion passes, Shimmer · strong shows a static field of dots with no flash (it stays experimental), and the Metal ramp shows no angular highlights and no single hard seam. Step 5 (Gloss) stayed inconclusive under the creator's soft light and moves to a controlled light ([next-sessions plan](../../research/runtime/next-sessions-plan.md) 1.5).
+
 The open steps (4–9, Depth C at the extreme close-up and the Lines sharpness) are in the reworked [session 2 script](../../projects/xf-runtime-bridge/tools/sessions/session-2.json), which now opens photo mode, frames, lights and sweeps by itself; the bridge [test card](../../research/runtime/runtime-bridge-test-card.md#next-session-autonomy-checks-expression-checks-then-session-2-continued) runs it after the autonomy checks.
 

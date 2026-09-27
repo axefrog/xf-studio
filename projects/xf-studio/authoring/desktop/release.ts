@@ -62,13 +62,15 @@ export function checkTag(tag: string, version: ReleaseVersion): void {
       "Change the version in projects/xf-studio/authoring/desktop/package.json, not the tag.");
 }
 
-export type ChangelogSection = Readonly<{ version: string; newAndImproved: string; fixes: string }>;
+export type ChangelogSection = Readonly<{ version: string; newAndImproved: string; fixes: string; limitations?: string }>;
 const NEW = "New and improved";
 const FIXES = "Fixes and under the hood";
+/** Optional third part: what the version doesn't do yet, or hasn't been seen doing in the game. */
+const LIMITATIONS = "Known limitations";
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const meaningful = (text: string) => text.replace(/<!--[\s\S]*?-->/g, "").trim();
 
-/** Extract one version's user-facing section; both subsections must have content. */
+/** Extract one version's user-facing section; both required subsections must have content, and an optional "Known limitations" one too. */
 export function changelogSection(markdown: string, version: string): ChangelogSection {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const heading = new RegExp(`^## \\[?${escapeRegExp(version)}\\]?(?:\\s+[—–-]\\s+.*)?$`);
@@ -85,16 +87,17 @@ export function changelogSection(markdown: string, version: string): ChangelogSe
       if (subsections.has(sub[1])) throw Error(`CHANGELOG.md ${version} repeats "### ${sub[1]}".`);
       current = []; subsections.set(sub[1], current);
     } else if (current) current.push(line);
-    else if (meaningful(line)) throw Error(`CHANGELOG.md ${version} has text outside its two subsections.`);
+    else if (meaningful(line)) throw Error(`CHANGELOG.md ${version} has text outside its subsections.`);
   }
-  const unexpected = [...subsections.keys()].filter(name => name !== NEW && name !== FIXES);
+  const unexpected = [...subsections.keys()].filter(name => name !== NEW && name !== FIXES && name !== LIMITATIONS);
   if (unexpected.length) throw Error(`CHANGELOG.md ${version} has unexpected subsections: ${unexpected.join(", ")}.`);
   const text = (name: string) => {
     const value = meaningful((subsections.get(name) ?? []).join("\n"));
     if (!value) throw Error(`CHANGELOG.md ${version} needs a non-empty "### ${name}" subsection.`);
     return value;
   };
-  return { version, newAndImproved: text(NEW), fixes: text(FIXES) };
+  const section = { version, newAndImproved: text(NEW), fixes: text(FIXES) };
+  return subsections.has(LIMITATIONS) ? { ...section, limitations: text(LIMITATIONS) } : section;
 }
 
 export type ReleaseAsset = Readonly<{ name: string; sha256: string; bytes: number }>;
@@ -115,13 +118,17 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
   const setup = setupAssetName(version);
   if (!assets.some(asset => asset.name === setup)) throw Error(`Release assets do not include ${setup}.`);
   const rows = assets.map(asset => `| \`${asset.name}\` | \`${asset.sha256}\` |`).join("\n");
+  // With a "Known limitations" part, that part says what has and hasn't been seen in the game; without one, nothing has.
+  const tested = section.limitations ? "and what has been seen in the game is listed under Known limitations."
+    : "and the mod files it builds have not been tested in the game.";
   const warning = isPrerelease(version)
     ? `> **This is an ${version.stage === "rc" ? "release candidate" : version.stage} pre-release for testing.** It is unsigned, ` +
-      "has no automatic updates, and the mod files it builds have not been tested in the game. Keep backups of anything you make."
+      `has no automatic updates, ${tested} Keep backups of anything you make.`
     : "> This build is unsigned and has no automatic updates.";
   return [
     `## ${NEW}`, "", section.newAndImproved, "",
     `## ${FIXES}`, "", section.fixes, "",
+    ...(section.limitations ? [`## ${LIMITATIONS}`, "", section.limitations, ""] : []),
     "---", "",
     warning, "",
     "## Install", "",

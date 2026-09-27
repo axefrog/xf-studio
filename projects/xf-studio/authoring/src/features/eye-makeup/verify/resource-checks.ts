@@ -7,6 +7,13 @@ import { createHash } from "node:crypto";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Node = any;
 
+/** ArchiveXL's component prefix (`ComponentPrefixResolver::GetPrefix`): the text through the first "_" when it sits at index 2-5. */
+export function archiveXlPrefix(name: string): string | null {
+  let end = 2;
+  while (end < 6 && end < name.length && name[end] !== "_") end++;
+  return end < 6 && name[end] === "_" ? name.slice(0, end + 1) : null;
+}
+
 export class VerificationError extends Error {
   constructor(message: string) { super(message); this.name = "VerificationError"; }
 }
@@ -595,7 +602,12 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   // Branding is display text supplied by the Studio plan (src/mod-branding.ts), never an identity.
   ensure(typeof plan.selectorLabel === "string" && /^XF(\s|$)/.test(plan.selectorLabel), "Plan lacks an XF-branded selector label");
   ensure(option.localizedName === plan.selectorLabel, "Selector label differs from the plan");
-  const names = [plan.namespace, plan.selector, plan.component, value(off.name), value(template.name),
+  // The component is the one generated name that doesn't start with xfs_: restated here, ArchiveXL's prefix rule (the text
+  // up to the first "_" at index 2-5, Garment/Prefix.cpp) must give "hx_", which its bundled hide_Head tag hides with the
+  // head (VisualTags.xl), as it hides vanilla makeup; xfs_ must follow it (naming.md).
+  ensure(plan.component === `hx_${plan.namespace}_makeup`, "Makeup component is not hx_<namespace>_makeup");
+  ensure(archiveXlPrefix(plan.component) === "hx_", "Makeup component's ArchiveXL prefix is not hx_ (hide_Head would miss it)");
+  const names = [plan.namespace, plan.selector, plan.component.slice("hx_".length), value(off.name), value(template.name),
     ...plan.presets.map(p => p.appearance), ...plan.presets.map(p => p.appAppearance)];
   ensure(names.every(name => typeof name === "string" && name.startsWith("xfs_")), "A generated name lacks the xfs_ prefix");
   ensure(artifactPaths.every(path => baseName(path).startsWith("xfs_")), "A generated resource filename lacks the xfs_ prefix");

@@ -36,8 +36,12 @@ test("the morph target points at the collection mesh and the component ID is the
   expect(morph.baseMesh.DepotPath.$value).toBe(plan.mesh.replaceAll("/", "\\"));
   expect(morph.baseMeshAppearance.$value).toBe(plan.presets[0].appearance);
   const id = componentId(plan.component);
-  // The value the Python builder computed for this fixture: an unsigned 64-bit integer beyond 2^53, kept as a string.
-  expect(id).toBe("17706479484054453710");
+  // The component takes ArchiveXL's head-decal prefix before the xfs_ name (naming.md), so hide_Head hides it.
+  expect(plan.component).toBe(`hx_${plan.namespace}_makeup`);
+  // The value the Python builder computed for this fixture's earlier name (no hx_): an unsigned 64-bit integer beyond
+  // 2^53, kept as a string. The same derivation gives the current name's ID.
+  expect(componentId(plan.component.slice("hx_".length))).toBe("17706479484054453710");
+  expect(id).toBe("7015115489088265870");
   expect(componentId(plan.component + "x")).not.toBe(id);
 });
 

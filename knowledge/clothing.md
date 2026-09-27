@@ -169,7 +169,7 @@ An item's visual tags are the union of its root entity's `visualTagsSchema` and 
 | `hide_F1` | Face | `AttachmentSlots.Eyes` |
 | `hide_Genitals` | UnderwearBottom | `AttachmentSlots.UnderwearBottom` |
 
-Source: `InitializeClothingSlotsInfo`. `IsVisualTagActive` checks the active `Outfit` item and every visible clothing area; `hide_T1part` switches the inner torso to its partial (`&Part`) look while the outer chest is visible. Other base-game tags include `hide_Hair` [wiki: [tags]].
+Source: `InitializeClothingSlotsInfo`. `IsVisualTagActive` checks the active `Outfit` item and every visible clothing area; `hide_T1part` switches the inner torso to its partial (`&Part`) look while the outer chest is visible. Other base-game tags include `hide_Hair` [wiki: [tags]]. The 2.31 cooked preset (§4.1) also carries `hide_Beard`, `hide_Nails`, `hide_ArmCyberware` and, on the eight `outfit_01__q307__*` quest looks only, `hide_FacialCustomization` [resource]. The engine handles these natively; how `hide_FacialCustomization` picks what to hide is not in any source we have. None of the preset's tags, and no TweakDB string, is ArchiveXL's `hide_Head` [resource: the decoded preset; a byte search of `tweakdb_ep1.bin`], so no vanilla item hides V's head.
 
 ### 4.3 Masking the body [resource] [source] [wiki]
 
@@ -229,7 +229,7 @@ The [clothing render plan](../research/backlog/clothing-render.md)'s phases 1–
 2. Answered (§4.1): the cooked preset is `base\entities\appearancename_visualtags.json` (and the `ep1` superset); it holds the vanilla items' hide tags per root appearance. Still open: does the game read only the `ep1` one when Phantom Liberty is installed (the Studio assumes so)?
 3. Does the base game itself mask body submeshes for `hide_L1`, `hide_S1` and `hide_Genitals`, as the tag diagram lists?
 4. What exactly does the garment assembler compute per vertex, and can the cooked `entGarmentParameter` be reused offline for a fixed combination of layers?
-5. The XF Eye Artistry component is named `xfs_c<key>_makeup` (prefix `xfs_`), so ArchiveXL's `hide_Head` rule, which hides `h0_`, `hx_` and the other head prefixes, would not hide it [source: `preset-collection.ts`, `VisualTags.xl`]. Does a full-head item tagged `hide_Head` leave the makeup visible in game, and should the component take an `hx_` prefix like vanilla head decals? Vanilla helmets may not use that tag at all [hypothesis].
+5. Answered from source (28 September): the XF Eye Artistry component is now `hx_xfs_c<key>_makeup`. ArchiveXL reads its prefix as `hx_`, which its bundled `hide_Head` hides with the rest of the head, exactly as it hides vanilla makeup (`hx_000_pwa__basehead_makeup_eyes_01`) [source: `Garment/Prefix.cpp`, `VisualTags.xl`; resource]. Before, the name was `xfs_c<key>_makeup` with the prefix `xfs_`, which no rule hides. `hide_Head` works only from a mod item's `.app` definition; vanilla helmets don't carry it (§4.2) and cover the makeup instead. Still open: the in-game check (ask 4); [pipeline guide](../research/authoring/studio-to-mod-pipeline.md#how-those-maps-become-game-resources).
 6. How does the Studio learn EquipmentEx's runtime-created slot records (and their offsets) without a mod-specific adapter: a runtime TweakDB snapshot through the bridge, or only the bridge's worn-item snapshot?
 
 ## In-game test asks
@@ -239,7 +239,7 @@ Batch these into one prepared session; the save reader and resolver they compare
 1. A reference outfit per layer (inner shirt, jacket, trousers tucked into boots, a hat) in third person and photo mode, captured from fixed camera presets, against the Studio's render of the same save.
 2. The same V with a vanilla wardrobe set active and one area set to empty, to check the hide path.
 3. With EquipmentEx: an active outfit, then the bridge's worn-item snapshot compared with what the save alone predicts.
-4. A full-head item tagged `hide_Head` (and a vanilla helmet) over XF Eye Artistry makeup (question 5).
+4. A mod item tagged `hide_Head` (and a vanilla helmet) over XF Eye Artistry makeup built with the `hx_` component (question 5); [next-sessions plan](../research/runtime/next-sessions-plan.md#n2-finish-close-out-headgear-kill-switch) 2.6.
 5. A refit on one body mod, to check `{body}` resolution.
 
 ## Related pages

@@ -89,9 +89,11 @@ assert len(cc['headCustomizationOptions'])==1
 option=cc['headCustomizationOptions'][0]['Data']
 assert option['$type']=='gameuiAppearanceInfo' and option['enabled']==1 and option['hidden']==0
 # Branding is display text supplied by the Studio plan (src/mod-branding.ts), never an identity.
-assert isinstance(plan['selectorLabel'],str) and plan['selectorLabel'].startswith('XF ')
+assert isinstance(plan['selectorLabel'],str) and (plan['selectorLabel']=='XF' or plan['selectorLabel'].startswith('XF '))
 assert option['localizedName']==plan['selectorLabel']
-assert all(name.startswith('xfs_') for name in [plan['namespace'],plan['selector'],plan['component'],
+# The component takes ArchiveXL's head-decal prefix so hide_Head hides it (naming.md); the rest of its name follows xfs_.
+assert plan['component']=='hx_'+plan['namespace']+'_makeup'
+assert all(name.startswith('xfs_') for name in [plan['namespace'],plan['selector'],plan['component'][len('hx_'):],
     value(off['name']),value(template['name']),*[p['appearance'] for p in plan['presets']],
     *[p['appAppearance'] for p in plan['presets']]])
 assert all(Path(artifact['path']).name.startswith('xfs_') for artifact in build['artifacts'])

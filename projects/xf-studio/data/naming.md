@@ -12,10 +12,11 @@ The current product model is [one selector for complete authored presets](produc
 
 ## New generated game resources
 
-- Every new app and mesh appearance starts with lowercase `xfs_`, including explicit templates and generated fallback appearances.
+- Every new app and mesh appearance starts with lowercase `xfs_`, including explicit templates and generated fallback appearances. Component names are not appearances and have one exception, below.
 - A collection UUID produces `xfs_c<uuid-without-hyphens>`. A preset UUID produces `xfs_p<uuid-without-hyphens>`; the requested app appearance is `xfs_c<collection>__xfs_p<preset>`.
 - Off is `xfs_off`; the shared app template is `xfs_c<collection>__xfs_template`.
-- New collection packages, selectors, components, texture filenames and resource basenames use the same prefix. The collection builder derives filenames from its export plan so resource references stay aligned.
+- New collection packages, selectors, texture filenames and resource basenames use the same prefix. The collection builder derives filenames from its export plan so resource references stay aligned.
+- **Component-prefix exception.** A mesh component that belongs to V's head takes the vanilla head prefix its kind uses, with `xfs_` immediately after it. ArchiveXL finds components by that prefix, and its bundled `hide_Head` tag hides `h0_`, `he_`, `heb_`, `ht_`, `hx_` and `i1_`. So the XF Eye Artistry component is **`hx_xfs_c<collection>_makeup`**, where `hx_` is the prefix of vanilla makeup, freckles, tattoos and scars. Under a head-hiding item it then hides with the head, as vanilla eye makeup (`hx_000_pwa__basehead_makeup_eyes_01`) does. The earlier name `xfs_c<collection>_makeup` would have been left floating. Only the prefix is borrowed: everything after it follows the rules above, and appearance, resource, selector and archive names still start with `xfs_`. The verifier requires the component to be exactly `hx_<namespace>_makeup` and checks that ArchiveXL's prefix rule reads it as `hx_`. The [pipeline guide](../../../research/authoring/studio-to-mod-pipeline.md#how-those-maps-become-game-resources) has the evidence.
 - Keep `__`, `+` and `@` where required by ArchiveXL syntax. Display names, revisions and list order do not change UUID-based identities. Actual game save/index persistence across collection changes still needs runtime proof.
 - Referenced game/third-party appearances and identifiers read from existing saves retain their original spelling. These are inputs, not new XFS appearances.
 

@@ -8,7 +8,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { encodeFlatDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
 import { readDdsChain } from "../src/features/eye-makeup/verify/dds-reader";
 import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/features/eye-makeup/verify/resource-inventory";
-import { componentId, sameJson } from "../src/features/eye-makeup/verify/resource-checks";
+import { archiveXlPrefix, componentId, sameJson } from "../src/features/eye-makeup/verify/resource-checks";
 import { errorStats, expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
 import { verifyBuild, verifyEyeMakeupBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/features/eye-makeup/verify/verify-build";
 import { oracleTest } from "./optional-oracles";
@@ -53,7 +53,7 @@ const presets = ["a1", "b2"].map((id, i) => ({
 }));
 const plan = {
   schema: "xfas/export-plan-1", collectionId: "c", namespace: "xfs_cns", depot, selector: "xfs_cns", selectorLabel: "XF Test Artistry",
-  component: "xfs_cns_makeup", offAppearance: "xfs_off", templateAppearance: "xfs_cns__xfs_template",
+  component: "hx_xfs_cns_makeup", offAppearance: "xfs_off", templateAppearance: "xfs_cns__xfs_template",
   app: `${depot}/xfs_collection.app`, customization: `${depot}/xfs_collection.inkcharcustomization`,
   mesh: `${depot}/models/xfs_eye_plate.mesh`, morph: `${depot}/models/xfs_eye_plate.morphtarget`, presets,
   plate: { liftsMm: [0.4] },
@@ -294,6 +294,16 @@ test("resource failures: names, links, buffers, component id, morph count and XB
   expectFailure(/does not list exactly the selector/, (_b, d) => { d.cc.headGroups[1].options = []; });
   expectFailure(/Morph targets differs/, (_b, d) => { d.morph.targets.pop(); });
   expectFailure(/Mesh boneNames differs/, (_b, d) => { d.mesh.boneNames = [cname("other")]; });
+  // The makeup component must take ArchiveXL's head-decal prefix so hide_Head hides it with the head, like vanilla makeup.
+  const renameComponent = (name: string): Mutation => (_b, d) => {
+    const id = componentId(name).toString(), template = d.app.appearances[1].Data;
+    d.plan.component = name;
+    Object.assign(template.components[0], { name: cname(name), id });
+    template.partsOverrides[0].componentsOverrides[0].componentName = cname(name);
+    template.compiledData.Data.CruidDict = { "0": id };
+  };
+  expectFailure(/Makeup component is not hx_<namespace>_makeup/, renameComponent("xfs_cns_makeup"));
+  expectFailure(/Makeup component is not hx_<namespace>_makeup/, renameComponent("hx_xfs_other_makeup"));
   expectFailure(/stable derived id/, (_b, d) => { d.app.appearances[1].Data.components[0].id = "12345"; });
   expectFailure(/exact unsigned integer/, (_b, d) => { d.app.appearances[1].Data.components[0].id = 2 ** 60; });
   expectFailure(/Off appearance/, (_b, d) => { d.app.appearances[0].Data.components = [{}]; });
@@ -704,3 +714,13 @@ test("merged product: the real verifier checks only its own members and entries 
   failing(/exactly the planned customization|only the female list|exactly customizations/, { features: 1 });
   failing(/Unpacked 12 files; expected 10/, { features: 1, xl: declaration(plan) });
 }, 60_000);
+
+test("ArchiveXL's component prefix rule, as its hide_Head tag reads the makeup component", () => {
+  // Garment/Prefix.cpp: the text through the first "_" when that "_" sits at index 2-5.
+  expect(archiveXlPrefix("hx_xfs_c0123_makeup")).toBe("hx_");
+  expect(archiveXlPrefix("hx_000_pwa__basehead_makeup_eyes_01")).toBe("hx_");
+  expect(archiveXlPrefix("xfs_c0123_makeup")).toBe("xfs_");
+  expect(archiveXlPrefix("heb_000_pwa__basehead_morph")).toBe("heb_");
+  expect(archiveXlPrefix("MorphTargetSkinnedMesh3637")).toBeNull();
+  expect(archiveXlPrefix("abcdef_x")).toBeNull();
+});
