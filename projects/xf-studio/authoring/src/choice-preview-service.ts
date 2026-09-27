@@ -12,11 +12,14 @@
  * - **The person first.** While the V is being prepared with a person's change (`busy`), nothing new starts; the host also runs source
  *   derivations only in its background lane.
  * - **One job of each kind at a time:** one question to the host and one drawing in the worker, side by side.
+ * - **Turntables on request** (phase 2): the one choice the panel wants spinning (`spin`: the hovered tile in the large grid, the choice shown
+ *   large in details) gets its turntable strip drawn from the same source, right after the chosen and hovered stills, and stored under its
+ *   own key; nothing else ever draws one, so a row costs no more until someone looks. A strip once started is finished and kept.
  * - **Failures stay quiet.** A drawing that fails leaves the choice without a picture for the session (its tile keeps the glyph); a lost
  *   worker context is recreated once by the worker itself.
  */
 import type { CharacterRequest } from "./character-detail-request";
-import { type ChoicePreviewSource, type PreviewKind, previewKey } from "./choice-preview";
+import { type ChoicePreviewSource, type PreviewKind, previewKey, TURNTABLE } from "./choice-preview";
 
 export type PreviewSourceReply = { position: number; state: "ready" | "none" | "unprepared"; source?: ChoicePreviewSource };
 export type ChoicePreviewPort = {
@@ -26,15 +29,21 @@ export type ChoicePreviewPort = {
   subject(body: "female" | "male"): Promise<string>;
   /** The stored image's URL for a key, or null when there is none yet. */
   stored(key: string): Promise<string | null>;
-  /** Draw a source (in the worker), store it under its key and answer a URL to show it now, with the drawing's timings. */
-  render(source: ChoicePreviewSource, key: string): Promise<{ url: string; timings?: unknown }>;
+  /** Draw a source (in the worker; its turntable strip with `frames`), store it under its key and answer a URL to show it now, with the drawing's timings. */
+  render(source: ChoicePreviewSource, key: string, frames?: number): Promise<{ url: string; timings?: unknown }>;
 };
-/** A row's pictures as the panel reads them: URLs by position, the positions with no picture possible, and whether work remains. */
-export type ChoicePreviewRow = { readonly kind: PreviewKind; readonly urls: ReadonlyMap<number, string>; readonly none: ReadonlySet<number>; readonly busy: boolean };
+/**
+ * A row's pictures as the panel reads them: URLs by position, the turntable strips drawn so far (`frames` pictures side by side), the
+ * positions with no picture possible, and whether work remains.
+ */
+export type ChoicePreviewRow = { readonly kind: PreviewKind; readonly urls: ReadonlyMap<number, string>; readonly spins: ReadonlyMap<number, string>;
+  readonly frames: number; readonly none: ReadonlySet<number>; readonly busy: boolean };
 export type PreviewAsk = { option: string; kind: PreviewKind; request: CharacterRequest; body: "female" | "male";
   /** The row's positions in view order (in view first, then nearest). */
   positions: readonly number[];
   selected: number | null; focus: number | null;
+  /** The choice whose turntable is wanted now (hovered in the large grid, or shown large in details), or null. */
+  spin?: number | null;
   /** Preparing-ahead states by position (`r`: ready). */
   ready: (position: number) => boolean;
   /** A person's change is being prepared: nothing new starts. */
@@ -44,9 +53,14 @@ type Item = { position: number; state: "unknown" | "unprepared" | "source" | "dr
   /** The V the source was looked up for (a source is shared, but a lookup answers one request). */
   request: string;
   /** Derivations asked for (one stopped for a person's change is asked again, up to `DERIVE_TRIES`). */
-  tries: number };
-type Row = { option: string; kind: PreviewKind; items: Map<number, Item>; urls: Map<number, string>; none: Set<number>; view: ChoicePreviewRow; order: number };
-export type PreviewStats = { looked: number; derived: number; stored: number; drawn: number; failed: number; drawMs: number[]; timings: unknown[] };
+  tries: number;
+  /** Its turntable strip: being drawn (or looked up), there, or impossible. */
+  turn?: "drawing" | "done" | "failed" };
+type Row = { option: string; kind: PreviewKind; items: Map<number, Item>; urls: Map<number, string>; spins: Map<number, string>; none: Set<number>;
+  view: ChoicePreviewRow; order: number };
+export type PreviewStats = { looked: number; derived: number; stored: number; drawn: number; failed: number; drawMs: number[]; timings: unknown[];
+  /** Turntables: found stored, drawn, the time each drawing took end to end, and the wait from being wanted to being there. */
+  spinStored: number; spun: number; spinMs: number[]; spinWaitMs: number[]; spinTimings: unknown[] };
 
 const LOOKUP = 48, DERIVE_TRIES = 3;
 
@@ -59,7 +73,10 @@ export class ChoicePreviewService {
   private serial = 0;
   private controller = new AbortController();
   private disposed = false;
-  readonly stats: PreviewStats = { looked: 0, derived: 0, stored: 0, drawn: 0, failed: 0, drawMs: [], timings: [] };
+  readonly stats: PreviewStats = { looked: 0, derived: 0, stored: 0, drawn: 0, failed: 0, drawMs: [], timings: [], spinStored: 0, spun: 0, spinMs: [],
+    spinWaitMs: [], spinTimings: [] };
+  /** The turntable wanted last and since when (the wait is measured from then). */
+  private wanted: { option: string; position: number; at: number } | null = null;
 
   constructor(private readonly port: ChoicePreviewPort, private readonly changed: () => void, private readonly now: () => number = () => performance.now()) {
     // Measurement hook (tools and `?verify=1` sessions read the costs from the page).
@@ -76,10 +93,13 @@ export class ChoicePreviewService {
   /** The panel shows a row: remember what it shows and start work. Answers the row's pictures so far (frozen; a new object on change). */
   update(ask: PreviewAsk): ChoicePreviewRow {
     this.ask = ask;
+    const spin = ask.spin ?? null;
+    if (spin !== null && (this.wanted?.option !== ask.option || this.wanted.position !== spin)) this.wanted = { option: ask.option, position: spin, at: this.now() };
     let row = this.rows.get(ask.option);
     if (!row || row.kind !== ask.kind) {
-      const view: ChoicePreviewRow = Object.freeze({ kind: ask.kind, urls: new Map<number, string>(), none: new Set<number>(), busy: true });
-      row = { option: ask.option, kind: ask.kind, items: new Map(), urls: new Map(), none: new Set(), view, order: 0 };
+      const view: ChoicePreviewRow = Object.freeze({ kind: ask.kind, urls: new Map<number, string>(), spins: new Map<number, string>(), frames: TURNTABLE.frames,
+        none: new Set<number>(), busy: true });
+      row = { option: ask.option, kind: ask.kind, items: new Map(), urls: new Map(), spins: new Map(), none: new Set(), view, order: 0 };
       this.rows.set(ask.option, row);
     }
     row.order = ++this.serial;
@@ -104,7 +124,7 @@ export class ChoicePreviewService {
   }
   private publish(row: Row) {
     const busy = [...row.items.values()].some(item => item.state === "unknown" || item.state === "source" || item.state === "drawing" || item.state === "unprepared");
-    row.view = Object.freeze({ kind: row.kind, urls: new Map(row.urls), none: new Set(row.none), busy });
+    row.view = Object.freeze({ kind: row.kind, urls: new Map(row.urls), spins: new Map(row.spins), frames: TURNTABLE.frames, none: new Set(row.none), busy });
     if (!this.disposed) this.changed();
   }
 
@@ -143,14 +163,20 @@ export class ChoicePreviewService {
     }).finally(() => { this.asking = false; this.pump(); });
   }
 
-  /** One drawing in the worker: the current row's first choice with a source, else another row of the same kind (most recent first). */
+  /**
+   * One drawing in the worker: the chosen and hovered choices' stills, then the wanted turntable, then the current row's first choice with
+   * a source, else another row of the same kind (most recent first).
+   */
   private nextDrawing(): void {
     const ask = this.ask!, current = this.rows.get(ask.option)!;
     let pick: { row: Row; item: Item } | null = null;
-    for (const position of this.ordered(ask)) {
+    const order = this.ordered(ask), lead = new Set([ask.selected, ask.focus].filter(position => position !== null)).size;
+    for (const [index, position] of order.entries()) {
+      if (index === lead && this.nextTurn(ask, current)) return;
       const item = current.items.get(position);
       if (item?.state === "source") { pick = { row: current, item }; break; }
     }
+    if (!pick && this.nextTurn(ask, current)) return;
     if (!pick) {
       for (const row of [...this.rows.values()].filter(row => row !== current && row.kind === ask.kind).sort((a, b) => b.order - a.order)) {
         const item = [...row.items.values()].find(entry => entry.state === "source");
@@ -176,4 +202,31 @@ export class ChoicePreviewService {
       () => { item.state = "failed"; this.stats.failed++; })
       .finally(() => { this.drawing = false; this.publish(row); this.pump(); });
   }
+
+  /** Start the wanted choice's turntable when it has a source and no strip yet; answers whether it started. */
+  private nextTurn(ask: PreviewAsk, row: Row): boolean {
+    const position = ask.spin ?? null, item = position === null ? undefined : row.items.get(position);
+    if (!item?.source || item.turn || (item.state !== "done" && item.state !== "source")) return false;
+    item.turn = "drawing";
+    this.drawing = true;
+    if (this.subject?.body !== ask.body) this.subject = { body: ask.body, identity: this.port.subject(ask.body) };
+    const began = this.now();
+    this.subject.identity.then(async identity => {
+      const key = await previewKey(item.source!, identity, "turntable");
+      const stored = await this.port.stored(key);
+      if (stored) { this.stats.spinStored++; return stored; }
+      const drawn = await this.port.render(item.source!, key, TURNTABLE.frames);
+      this.stats.spun++;
+      this.stats.spinMs.push(this.now() - began);
+      if (drawn.timings && this.stats.spinTimings.length < 100) this.stats.spinTimings.push(drawn.timings);
+      return drawn.url;
+    }).then(url => {
+      item.turn = "done";
+      row.spins.set(item.position, url);
+      if (this.wanted?.option === row.option && this.wanted.position === item.position) this.stats.spinWaitMs.push(this.now() - this.wanted.at);
+    }, () => { item.turn = "failed"; })
+      .finally(() => { this.drawing = false; this.publish(row); this.pump(); });
+    return true;
+  }
 }
+

@@ -440,9 +440,12 @@ export class StudioApplication {
   /** A row's choices prepared ahead (visible ones first, `focus` first of all), and their states; `characterStopPrefetch` when it closes. */
   characterPrefetch(option: string, positions: readonly number[], focus?: number | null) { return this.services.characterContext?.prefetch(option, positions, focus ?? null) ?? null; }
   characterStopPrefetch(option: string) { this.services.characterContext?.stopPrefetch(option); }
-  /** A shape row's choice pictures (the chosen one and `focus` first, then `positions` in view order); null when the row has none. */
-  characterPreviews(option: string, positions: readonly number[], selected: number | null, focus?: number | null) {
-    return this.services.characterContext?.previews(option, positions, selected, focus ?? null) ?? null;
+  /**
+   * A shape row's choice pictures (the chosen one and `focus` first, then `positions` in view order), and `spin`'s turntable; null when the
+   * row has none.
+   */
+  characterPreviews(option: string, positions: readonly number[], selected: number | null, focus?: number | null, spin?: number | null) {
+    return this.services.characterContext?.previews(option, positions, selected, focus ?? null, spin ?? null) ?? null;
   }
   /** Why a character preset can't be loaded (`import`) or saved (`export`) now, or undefined (the files family's check). */
   characterPresetUnavailable(kind: "import" | "export"): string | undefined {

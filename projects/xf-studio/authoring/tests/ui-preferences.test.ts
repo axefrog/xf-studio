@@ -143,3 +143,20 @@ test("preference actions publish detached state and workspace composition captur
   expect(actions.snapshot().layout).toBeUndefined();
   unsubscribe();
 });
+
+test("choice picture layouts: a panel-wide default and an override per feature type; setting the default clears the overrides (choice previews §7.1)", () => {
+  const actions = new UIPreferenceActions(defaultUIPreferences());
+  actions.dispatch({ kind: "choiceLayout.set", type: "hair", layout: "details" });
+  expect(actions.snapshot().choiceLayouts).toEqual({ hair: "details" });
+  expect(actions.snapshot().choiceLayout).toBeUndefined();
+  actions.dispatch({ kind: "choiceLayout.set", type: null, layout: "list" });
+  expect(actions.snapshot().choiceLayout).toBe("list");
+  expect(actions.snapshot().choiceLayouts).toBeUndefined();
+  expect(actions.capability({ kind: "choiceLayout.set", type: "hair", layout: "carousel" as "list" })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "choiceLayout.set", type: "Bad Type", layout: "list" })).toMatchObject({ available: false });
+  actions.dispatch({ kind: "choiceLayout.set", type: "hair", layout: "grid" });
+  const parsed = parseUIPreferences({ ...actions.snapshot(), choiceLayouts: { hair: "grid", brows: "nope" }, choiceLayout: "list" });
+  expect(parsed.choiceLayouts).toEqual({ hair: "grid" });
+  expect(parsed.choiceLayout).toBe("list");
+  expect(parseUIPreferences({ ...defaultUIPreferences(), choiceLayout: "wall" }).choiceLayout).toBeUndefined();
+});

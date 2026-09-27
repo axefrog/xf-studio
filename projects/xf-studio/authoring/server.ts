@@ -115,7 +115,11 @@ const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // Brows, lashes and hair: resolved from the launch route Build uses and exported from the winning archives.
 // The resolver's JSON cache is shared with `tools/resolve-character.ts`; `XFS_RESOLVER_CACHE` relocates it.
 // Choice previews live in `choice-previews/` beside it; `XFS_CHOICE_PREVIEW_CACHE` relocates them (a verification server keeps its own).
-const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
+// `XFS_PREPARED_BUDGET_GB` sets the prepared files' disk budget (prepared-files.ts; `off` never evicts): a verification server borrowing
+// another server's warm caches turns eviction off so it never trims them.
+const preparedBudget = process.env.XFS_PREPARED_BUDGET_GB === "off" ? Infinity
+  : Number(process.env.XFS_PREPARED_BUDGET_GB) > 0 ? Number(process.env.XFS_PREPARED_BUDGET_GB) * 1024 ** 3 : undefined;
+const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, ...(preparedBudget ? { preparedBudget } : {}),
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
     const settings = localSettings.load().settings;

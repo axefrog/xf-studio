@@ -8,14 +8,18 @@
  *   resolved RGBA is the premultiplied channel image (A = covered fraction, B = feature fraction of it), unpremultiplied on readback.
  *   Hair strands use `Strand_Alpha` remapped by the template's cutoff and the game's dither range (render-templates.ts `coverage`).
  * - **One soft light**, both faces lit alike, no specular or shadow.
+ * - **Turntable strips.** Asked for `frames`, the same uploaded source is drawn at that many yaws one full turn apart
+ *   (choice-preview.ts `turntableYaw`) and the frames are laid side by side in one image: the upload, the costly part, is paid once.
  * - **One source at a time.** The subject head is loaded once; a source's geometry and textures are uploaded, drawn and disposed within
  *   its job. A lost context fails the job (the caller recreates the renderer once).
  */
 import { type Glb, parseGlb, readAccessor, type AccessorArray } from "./glb";
-import { type Bounds, type ChoicePreviewSource, PREVIEW_STYLES, type PreviewCoverage, type PreviewStyle, previewCamera } from "./choice-preview";
+import { type Bounds, type ChoicePreviewSource, PREVIEW_STYLES, type PreviewCoverage, type PreviewStyle, previewCamera, TURNTABLE, turntableYaw } from "./choice-preview";
 import { HAIR_DITHER } from "./hair-colour-model";
 
-export type PreviewTimings = { fetchMs: number; parseMs: number; decodeMs: number; drawMs: number; readMs: number; encodeMs: number; bytesIn: number; triangles: number };
+export type PreviewTimings = { fetchMs: number; parseMs: number; decodeMs: number; drawMs: number; readMs: number; encodeMs: number; bytesIn: number; triangles: number;
+  /** Pictures drawn (1 for a still, the turntable's frames for a strip). */
+  frames: number };
 export type RenderedPreview = { webp: Blob; width: number; height: number; timings: PreviewTimings;
   /** The unpremultiplied channel pixels (rows top-down), for probes. */
   pixels?: Uint8ClampedArray };
@@ -158,10 +162,11 @@ export class PreviewRenderer {
   }
 
   /** Draw one source into its channel image and encode it (WebP). */
-  async render(source: ChoicePreviewSource, options: { keepPixels?: boolean; urlOf: (file: string) => string }): Promise<RenderedPreview> {
+  async render(source: ChoicePreviewSource, options: { keepPixels?: boolean; urlOf: (file: string) => string; frames?: number }): Promise<RenderedPreview> {
     if (!this.headBounds) throw Error("The preview subject isn't loaded.");
     const gl = this.gl, style = PREVIEW_STYLES[source.kind];
-    const timings: PreviewTimings = { fetchMs: 0, parseMs: 0, decodeMs: 0, drawMs: 0, readMs: 0, encodeMs: 0, bytesIn: 0, triangles: 0 };
+    const frames = Math.max(1, Math.min(TURNTABLE.frames, Math.trunc(options.frames ?? 1)));
+    const timings: PreviewTimings = { fetchMs: 0, parseMs: 0, decodeMs: 0, drawMs: 0, readMs: 0, encodeMs: 0, bytesIn: 0, triangles: 0, frames };
     const meshes: Mesh[] = [], textures = new Map<string, WebGLTexture>();
     try {
       // Fetch every file first (geometry and coverage), one source at a time.
@@ -198,27 +203,33 @@ export class PreviewRenderer {
       timings.decodeMs = now() - at;
       files.clear();
       at = now();
-      const pixels = this.draw(style, drawn, textures);
+      const size = style.size, width = size * frames;
+      // One frame, or the strip: frame k's rows go to columns k × size onwards.
+      const pixels = frames === 1 ? this.draw(style, drawn, textures, 0) : new Uint8ClampedArray(width * size * 4);
+      for (let k = 0; frames > 1 && k < frames; k++) {
+        const frame = this.draw(style, drawn, textures, turntableYaw(k, frames));
+        for (let y = 0; y < size; y++) pixels.set(frame.subarray(y * size * 4, (y + 1) * size * 4), (y * width + k * size) * 4);
+      }
       timings.drawMs = now() - at;
       if (this.contextLost) throw Error("The preview context was lost.");
       at = now();
-      const image = new ImageData(pixels, style.size, style.size);
+      const image = new ImageData(pixels, width, size);
       timings.readMs = now() - at;
       at = now();
-      const canvas = new OffscreenCanvas(style.size, style.size);
+      const canvas = new OffscreenCanvas(width, size);
       canvas.getContext("2d")!.putImageData(image, 0, 0);
-      const webp = await canvas.convertToBlob({ type: "image/webp", quality: 0.92 });
+      const webp = await canvas.convertToBlob({ type: "image/webp", quality: frames === 1 ? 0.92 : TURNTABLE.quality });
       timings.encodeMs = now() - at;
-      return { webp, width: style.size, height: style.size, timings, ...(options.keepPixels ? { pixels } : {}) };
+      return { webp, width, height: size, timings, ...(options.keepPixels ? { pixels } : {}) };
     } finally {
       for (const mesh of meshes) this.disposeMesh(mesh);
       for (const texture of textures.values()) gl.deleteTexture(texture);
     }
   }
 
-  private draw(style: PreviewStyle, drawn: { mesh: Mesh; coverage: PreviewCoverage | null }[], textures: Map<string, WebGLTexture>): Uint8ClampedArray<ArrayBuffer> {
+  private draw(style: PreviewStyle, drawn: { mesh: Mesh; coverage: PreviewCoverage | null }[], textures: Map<string, WebGLTexture>, turn: number): Uint8ClampedArray<ArrayBuffer> {
     const gl = this.gl, big = style.size * style.supersample, t = this.targetsFor(style);
-    const camera = previewCamera(this.headBounds!, this.eyeBounds, style);
+    const camera = previewCamera(this.headBounds!, this.eyeBounds, style, turn);
     const viewProjection = multiplyColumn(camera.projection, camera.view);
     gl.bindFramebuffer(gl.FRAMEBUFFER, t.ms);
     gl.viewport(0, 0, big, big);
