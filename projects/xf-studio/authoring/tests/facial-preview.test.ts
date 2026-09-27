@@ -114,7 +114,8 @@ test("every unavailable state is plain words with a next step", async () => {
   noSolver.setPose({ jaw_mid_open: 0.2 });
   // Editing still works (the part is saved); nothing is sent to a solver that isn't there.
   expect(noSolver.requests.length).toBe(0);
-  expect(noSolver.preview.snapshot()).toMatchObject({ phase: "unavailable", next: "guide" });
+  // No solver on this computer: the expression still saves and exports, so the one next step is Expression sets.
+  expect(noSolver.preview.snapshot()).toMatchObject({ phase: "unavailable", next: "export" });
   const noHead = harness();
   noHead.preview.start(); await settle();
   noHead.setPose({ jaw_mid_open: 0.2 });

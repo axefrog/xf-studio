@@ -11,7 +11,6 @@ import { chordsLabel, keyBinding, keyBindingById } from "../../../input-bindings
 import { applyCapability, badge, blockSection, button, codeBlock, emptyState, helpTip, note, PageHeader, propertyList, Segmented, SplitView, stack }
   from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
-import { COMING_SOON } from "../../../studio-ui/coming-soon";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { InspectField, NodeInspection, ObjectInspection, ObjectRef, TreeRow } from "../explorer";
@@ -33,13 +32,6 @@ const PAGE = 50, OBJECTS_PAGE = 100;
 const number = (value: number) => value.toLocaleString();
 const bytes = (value: number) => value < 1024 ? `${value} B` : value < 1024 * 1024 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 / 1024).toFixed(2)} MB`;
 const when = (iso: string) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(); };
-
-/** Editing a save's values is decided (save-editor-design.md §7.2) but not built: a Coming soon button where it will live (coming-soon.ts). */
-function editValues(): HTMLButtonElement {
-  const entry = COMING_SOON.savesEdit, control = button({ label: entry.label, icon: "rename", small: true, variant: "quiet", onClick: () => {} });
-  applyCapability(control, { available: false, reason: entry.reason });
-  return control;
-}
 
 export function explorerPanel(ctx: Ctx): PanelController {
   const facade = ctx.facade;
@@ -222,7 +214,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const renderObject = (inspection: ObjectInspection | undefined) => {
     if (!inspection) { objectPane.replaceChildren(); return; }
     objectPane.replaceChildren(blockSection({ title: inspection.title, titleClass: "save-node-title",
-      actions: [editValues(), button({ label: "Close", icon: "close", iconOnly: true, small: true, variant: "quiet", onClick: () => inspect(null) })] },
+      actions: [button({ label: "Close", icon: "close", iconOnly: true, small: true, variant: "quiet", onClick: () => inspect(null) })] },
       h("p", { class: "note muted", text: inspection.subtitle }),
       ...inspection.notes.map(text => note(text, "info")),
       inspection.fields.length ? h("div", { class: "save-fields", role: "group", "aria-label": `Fields of ${inspection.title}` }, inspection.fields.map(fieldView))

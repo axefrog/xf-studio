@@ -1,6 +1,7 @@
 import { h, isUnavailable, setAttr, setDisabled, setText, setUnavailable, setValue, uid } from "./dom";
 import { helpTip, setHelp, type HelpText } from "./help-tip";
 import { icon, type IconName } from "./icons";
+import { stageTag, type Stage } from "./components/stage-tag";
 
 /**
  * Form controls for the Studio presentation. Continuous controls speak a
@@ -128,7 +129,9 @@ export class Toggle {
     /** Its unavailable reason is a wait or information (muted), not a problem (warning). */
     quietReason?: boolean;
     /** The label while mixed ("Symmetric · some regions"), so the state is said in words as well as by the mark. */
-    mixedLabel?: string }) {
+    mixedLabel?: string;
+    /** The release stage of what it turns on: an early-access setting carries an Early access stage tag after its label, part of its name. */
+    stage?: Stage }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
@@ -137,7 +140,7 @@ export class Toggle {
     // The tip sits outside the label, so pressing it never flips the switch.
     this.element = h("div", { class: "control toggle-row" },
       h("div", { class: "control-line" }, h("label", { class: "toggle", for: id }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
-        this.labelText), this.tip), this.note.element);
+        this.labelText, stageTag(options.stage, "toggle-stage")), this.tip), this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
   /**

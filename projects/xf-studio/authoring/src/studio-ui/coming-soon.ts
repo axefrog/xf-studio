@@ -1,7 +1,10 @@
 /**
- * Coming soon (research/authoring/ui-copy-and-layout-review.md §6): a decided feature that isn't built yet shows where it will live as a
- * visible, disabled control whose reason is "Coming soon: <what it will let you do>". Only features with an agreed design are listed,
- * each with the design it follows. Planned *modules* are listed in the module registry instead (`PLANNED_MODULES`, compose/modules.ts).
+ * Coming soon (research/authoring/ui-copy-and-layout-review.md §6): a decided feature that isn't built yet, recorded where it will live
+ * as "Coming soon: <what it will let you do>". Only features with an agreed design are listed, each with the design it follows. Planned
+ * *modules* are listed in the module registry instead (`PLANNED_MODULES`, compose/modules.ts).
+ *
+ * The product shows only what exists (the 1.0 "honest surfaces" default): these entries and the planned modules are the roadmap, shown
+ * as disabled "Soon" rows only while research tools are on (`comingSoon` takes that switch), and module views show none of them.
  *
  * Each entry names the key of the live feature that replaces it: a module ID (`module:`), an action kind (`action:`), a view tool ID
  * (`tool:`) or an exporter's feature (`exporter:`). The presentation hides an entry whose feature it can see is live (`comingSoon`),
@@ -44,11 +47,13 @@ export function isLive(key: ComingSoonKey, live: LiveFeatures): boolean {
   if (kind === "tool") return live.tools().includes(id);
   return false;
 }
-/** The placeholder to show, or nothing once its feature is live. */
-export function comingSoon(id: ComingSoonId, live: LiveFeatures): ComingSoonEntry | undefined {
+/** The placeholder to show: nothing unless research tools are on (`research`), or once its feature is live. */
+export function comingSoon(id: ComingSoonId, live: LiveFeatures, research: boolean): ComingSoonEntry | undefined {
   const entry: ComingSoonEntry = COMING_SOON[id];
-  return isLive(entry.key, live) ? undefined : entry;
+  return !research || isLive(entry.key, live) ? undefined : entry;
 }
+/** The planned modules to list: none unless research tools are on. */
+export function plannedShown<T>(planned: readonly T[], research: boolean): readonly T[] { return research ? planned : []; }
 /** The live features a runtime's port shows. */
 export function liveFeatures(port: { authoring: { registry(): readonly { id: string }[] };
   views: { modules(): readonly { id: string }[]; tools(view: undefined, filter: { modules: readonly string[]; research: boolean }): readonly { id: string }[] } }): LiveFeatures {

@@ -42,3 +42,4 @@ export { azimuthWords, DIAL_DEFAULT_SIZE, DIAL_MIN_SIZE, DirectionDial, dialDire
 export { installPreviewFilter, PREVIEW_FILTER_IDS, PreviewSpin, previewStage, previewTile, previewTokens, SPIN, type LiveFrames, type PreviewStage, type PreviewTile,
   type PreviewTileState } from "./choice-preview";
 export { pageStep, TypeAhead } from "./listbox-keys";
+export { stageLabel, stageShortLabel, stageTag, type Stage } from "./stage-tag";

@@ -1,5 +1,5 @@
 import { allowsNativeTextMenu } from "../context-menu";
-import { comingSoon, liveFeatures } from "./coming-soon";
+import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
 import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
 import { effectiveTheme, type ThemePreference } from "../ui-preferences";
@@ -111,7 +111,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const parkedAtStart = parkedPanels();
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart);
-  const specOf = (panel: PanelController) => ({ ...panel.spec, visibility: (visible: boolean) => {
+  // A preview module's panels carry its stage on their tabs (components/stage-tag.ts).
+  const specOf = (panel: PanelController) => ({ ...panel.spec, stage: moduleOfPanel(panel.spec.id)?.stage, visibility: (visible: boolean) => {
     panel.spec.visibility?.(visible);
     if (visible) panel.update(new Frame(port));
   } });
@@ -361,7 +362,7 @@ function viewPreferences(port: Port, feedback: Feedback) {
         { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference },
         { kind: "separator" },
         { kind: "action", label: "Show research tools", icon: "activity", checked: research(),
-          hint: "Lighting calibration, glitter model studies, compiler plans and developer IDs", run: () => setResearch(!research()) }];
+          hint: "Lighting calibration, glitter model studies, compiler plans, developer IDs and planned features", run: () => setResearch(!research()) }];
     },
   };
 }
@@ -379,7 +380,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   // The Modules menu (view-graph-design.md §4.2): the shown modules' names, and a menu to show or hide each.
   const categoryText = h("span");
   const category = h("button", { class: "category", type: "button", "aria-haspopup": "menu", title: "Modules: show or hide parts of the Studio",
-    onclick: (event: MouseEvent) => openMenu(moduleMenuItems(rt), event.currentTarget as Element,
+    onclick: (event: MouseEvent) => openMenu(moduleMenuItems(rt, view.research()), event.currentTarget as Element,
       { label: "Modules", invoker: event.currentTarget as Element }) }, icon("category"), categoryText);
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
@@ -399,7 +400,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
-    openMenu([...panelMenuItems(rt),
+    openMenu([...panelMenuItems(rt, view.research()),
       { kind: "separator" },
       { kind: "action", label: "Reset this layout", icon: "reset", run: () => rt.dock.reset() },
       { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
@@ -503,20 +504,20 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
 const MODULE_GROUPS: Record<StudioModule["group"], string> = { character: "Character", world: "World", assets: "Assets", tools: "Tools" };
 
 /**
- * The Modules menu (view-graph-design.md §4.2): one row per module, grouped, each a checkbox with its stage and what it adds. Hiding
+ * The Modules menu (view-graph-design.md §4.2): one row per module, grouped, each a checkbox with its stage (an Early access stage tag) and what it adds. Hiding
  * one keeps its work and exports; its panels and view tools leave until it is shown again.
  */
-function moduleMenuItems(rt: StudioRuntime): MenuItem[] {
+function moduleMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   const shown = rt.shownModules(), items: MenuItem[] = [{ kind: "heading", label: "Modules", detail: "Show or hide; your work and exports are kept either way" }];
   for (const [group, label] of Object.entries(MODULE_GROUPS)) {
     const members = rt.modules.list.filter(module => module.group === group);
-    const planned = rt.port.views.plannedModules().filter(module => module.group === group);
+    const planned = plannedShown(rt.port.views.plannedModules(), research).filter(module => module.group === group);
     if (!members.length && !planned.length) continue;
     items.push({ kind: "heading", label });
     for (const module of members) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
-      checked: shown.includes(module.id), hint: `${module.stage === "stable" ? "" : "Preview · "}${module.description} ${moduleAdds(rt, module)}`,
+      checked: shown.includes(module.id), stage: module.stage, hint: `${module.description} ${moduleAdds(rt, module)}`,
       run: () => rt.modules.set(module.id, !shown.includes(module.id)) });
-    // Planned modules (ui-copy-and-layout-review.md §6): listed, never shown; each says what it will let the person do.
+    // Planned modules (ui-copy-and-layout-review.md §6), only with research tools on (coming-soon.ts): each says what it will let the person do.
     for (const module of planned) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
       tag: "Soon", quietReason: true, capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
   }
@@ -534,7 +535,7 @@ function moduleAdds(rt: StudioRuntime, module: StudioModule) {
  * each with its state (open, collapsed, closed, or parked while its module is hidden), then the views. Derived from the view
  * catalogue, the module registry and the view graph; nothing is listed by hand.
  */
-function panelMenuItems(rt: StudioRuntime): MenuItem[] {
+function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   const dock = rt.dock, shown = rt.shownModules();
   const STATE = { open: "Open", collapsed: "Collapsed", closed: "Closed", parked: "Parked" } as const;
   const row = (id: string): MenuItem => {
@@ -542,7 +543,8 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
     const module = rt.modules.list.find(item => rt.modules.panels(item).includes(id));
     return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
       hint: `${STATE[state]} · ${meta?.description ?? ""}`,
-      ...(state === "parked" ? { capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
+      // Parked is a state the person chose (the module is hidden), not a problem: its reason is muted (UI-144 makes the row actionable).
+      ...(state === "parked" ? { quietReason: true, capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
       run: () => state === "collapsed" ? dock.reveal(id) : id === SETTINGS_PANEL && state === "closed" ? rt.settings.open() : dock.toggle(id) };
   };
   const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));
@@ -552,16 +554,16 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
     const on = shown.includes(module.id);
     // The module's group: its heading, its visibility toggle, then its panels.
     items.push({ kind: "separator" }, { kind: "heading", label: module.label, detail: on ? "Module · shown" : "Module · hidden" },
-      { kind: "action", label: `Show ${module.label}`, icon: isIconName(module.icon) ? module.icon : "category", checked: on,
+      { kind: "action", label: `Show ${module.label}`, icon: isIconName(module.icon) ? module.icon : "category", checked: on, stage: module.stage,
         hint: on ? "Turn off to hide its panels and view tools; your work is kept" : "Its panels are parked where they were and come back there",
         run: () => rt.modules.set(module.id, !on) },
       ...rt.modules.panels(module).map(row));
   }
-  // The views (view-graph-design.md §3.4): each 3D view and its panel, then New view and Duplicate view (shared camera), shown as
-  // Coming soon until P4 registers their actions (coming-soon.ts).
+  // The views (view-graph-design.md §3.4): each 3D view and its panel, then, only with research tools on, New view and Duplicate view
+  // (shared camera) as Coming soon until P4 registers their actions (coming-soon.ts).
   const graph = rt.port.views.snapshot();
   const live = liveFeatures(rt.port);
-  const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live);
+  const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live, research);
     return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", quietReason: true, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
   if (graph) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;

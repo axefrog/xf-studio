@@ -4,7 +4,7 @@ What changed in each XF Studio desktop release, newest first, written for the pe
 
 - **New and improved:** features and changes you can see, in plain language.
 - **Fixes and under the hood:** bug fixes, performance, reliability and maintenance.
-- **Known limitations** (optional): what the version doesn't do yet, and what hasn't been seen in the game. When it's there, the release's warning points to it.
+- **Known limitations** (optional): what the version doesn't do yet, and what hasn't been seen in the game. When it's there, the release's warning points to it. The app's Help page "What's not in this version yet" (`authoring/src/studio-ui/guidance/help-topics.ts`) says the same for the people using it: change both together.
 
 When a change lands, add a line to **Unreleased**. When a version is tagged, rename **Unreleased** to that version (for example `## 0.1.0-alpha.2`) and start a new, empty **Unreleased** above it. The release workflow copies the tagged version's section into the GitHub release and refuses to create the release if that section is missing or any of its parts is empty. Say what was checked and how; never describe something as tested in the game until it has been.
 
@@ -14,12 +14,13 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
-- **XF Eye Artistry makeup hides with V's head.** An item that hides V's whole head (a full mask or helmet made with ArchiveXL's `hide_Head` tag) would have left the makeup floating in the air. The makeup is now named the way the game names its own face makeup, so it hides with the head as the game's makeup does. Checked by Build's own verifier and automated tests against ArchiveXL's rules; not yet seen in game.
-- **Makeup no longer breaks into skin-coloured patches close up.** Build lifts the eye-makeup area 0.4 mm off the skin, as the game lifts its own face makeup. Seen in game: it holds at the creator's closest zoom and while V blinks and turns.
 ## 0.1.0-alpha.2
 
 ### New and improved
 
+- **Only what's there.** The Modules menu no longer lists modules that aren't built yet, and the Panels menu, the Expression panel and the Save Explorer no longer show "Coming soon" buttons. Expressions, Poses and Save Explorer, which are still unfinished and hidden until you turn them on, now say **Early access** wherever they appear: in the Modules and Panels menus and on their panels' tabs. So does Hair physics in the Motion panel.
+- **More help.** A new tour, **Your V, camera and settings**, and a Help answer for **Camera & light**, so every part of the Studio has one. Help also has a page on **What's not in this version yet**, with what to do next.
+- **Expressions without a live face say what you can do.** Where the live face preview isn't available (the desktop app), the Expression panel now offers **Export to photo mode…**, to build your expression into a photo-mode mod.
 - **The first published test version.** 0.1.0-alpha.1 was prepared but never published, so this release also brings everything listed under [0.1.0-alpha.1](https://github.com/axefrog/xf-studio/blob/main/projects/xf-studio/CHANGELOG.md#010-alpha1) in the changelog: layered eye makeup on the UV map, the library, Check and Build of your own XF Eye Artistry, and the 3D preview made from your own game.
 - **XF Eye Artistry holds up close, in motion and with the eyes closed.** Seen in game with a feminine V (26 and 28 September): the makeup stays on the skin at the character creator's closest zoom, shows no edge or lifted look while V blinks and turns their head, and covers the closed lid cleanly (no eye showing between the lids, lashes on the lid line, no bare skin between crease and lashes) on four eye shapes. Fine lines drawn in XF Studio come out visibly sharper than before.
 - **Put your expressions into photo mode (experimental).** Group saved expressions into **Expression sets** and build each set into its own XF Expressions mod with **Check** and **Build**: your expressions are added to photo mode's list, and with **For my game** the expressions your other expression mods add keep working. The mod is checked by its own verifier before it's offered. **Add to my mod manager** doesn't place its TweakXL file yet, so use **Show in folder** and copy the files by hand. Not yet seen in game.
@@ -84,6 +85,8 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
+- **XF Eye Artistry makeup hides with V's head.** An item that hides V's whole head (a full mask or helmet made with ArchiveXL's `hide_Head` tag) would have left the makeup floating in the air. The makeup is now named the way the game names its own face makeup, so it hides with the head as the game's makeup does. Checked by Build's own verifier and automated tests against ArchiveXL's rules; not yet seen in game.
+- **Makeup no longer breaks into skin-coloured patches close up.** Build lifts the eye-makeup area 0.4 mm off the skin, as the game lifts its own face makeup. Seen in game: it holds at the creator's closest zoom and while V blinks and turns.
 - Resizing a panel (dragging a divider, resizing the window, floating or docking it) keeps the rows you were looking at at the top instead of losing your place.
 - **Tidier panels.** Camera & light groups a light's controls under Position, Output and Spot cone, and says where the game's colour grade comes from in the Colour grade help icon. In Poses, Stand still and Idle show which one V is doing. Character rows keep their names readable in a narrow panel. Hairstyle pictures are drawn in a neutral grey in the dark theme, with room above tall styles.
 - Choosing a hairstyle picture (or any choice) in the Character panel no longer scrolls the panel away from where you were.
