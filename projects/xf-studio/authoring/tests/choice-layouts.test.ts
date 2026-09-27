@@ -127,6 +127,25 @@ describe("the turntable", () => {
     const medium = await list("grid", "m");
     expect(medium.item(3).querySelector(".pv-frame")!.hasAttribute("data-spinnable")).toBe(false);
   });
+
+  test("under reduced motion nothing turns by itself, but a drag still turns it", async () => {
+    const { SPIN } = await import("../src/studio-ui/components/choice-preview");
+    const saved = (globalThis as { matchMedia?: unknown }).matchMedia;
+    (globalThis as { matchMedia?: unknown }).matchMedia = (query: string) => ({ matches: query.includes("reduce") });
+    try {
+      const { item } = await list("grid", "l");
+      const frame = item(3).querySelector(".pv-frame")!;
+      pointer(frame, "pointerenter");
+      frame.querySelector(".pv-strip")!.dispatchEvent(lightEvent("load"));
+      await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs + 30));
+      expect(frame.hasAttribute("data-spin")).toBe(false);
+      pointer(frame, "pointerdown", { clientX: 0 });
+      pointer(frame, "pointermove", { clientX: 30 });
+      expect(frame.hasAttribute("data-spin")).toBe(true);
+      pointer(frame, "pointerup", { clientX: 30 });
+      pointer(frame, "pointerleave");
+    } finally { (globalThis as { matchMedia?: unknown }).matchMedia = saved; }
+  });
 });
 
 describe("keyboard", () => {

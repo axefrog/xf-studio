@@ -911,7 +911,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .pv-meta, .pv-state { overflow: hidden; font-size: var(--fs-2xs); line-height: 1.35; color: var(--text-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .pv-state:empty { display: none !important; }
 /* Group headings stay in view while their choices scroll past (§7.3). */
-.choices.previews .cc-maker-head { position: sticky; top: calc(var(--sp-5) * -1); z-index: 1; background: var(--bg-panel); }
+.choices.previews .cc-maker-head { position: sticky; top: 0; z-index: 1; background: var(--bg-panel); }
 /* The details layout's large picture: above the list in a narrow row, beside it (and kept in view) from 520 px. */
 .cc-choice-list[data-layout="details"] { container-type: inline-size; }
 .cc-choice-list[data-layout="details"] .cc-choice-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
@@ -922,7 +922,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .pv-stage .pv-meta { display: block; }
 @container (min-width: 520px) {
   .cc-choice-list[data-layout="details"] .cc-choice-body { grid-template-columns: 256px minmax(0, 1fr); align-items: start; }
-  .pv-stage { position: sticky; top: calc(var(--sp-5) * -1); z-index: 1; padding-right: 0; }
+  .pv-stage { position: sticky; top: 0; z-index: 1; padding-right: 0; }
   .pv-stage .pv-tile { width: 100%; }
   .cc-choice-list[data-layout="details"] .cc-choices { padding-left: 0; }
 }

@@ -183,6 +183,10 @@ export class PreviewSpin {
     if (!drag || event.pointerId !== drag.id) return;
     this.drag = null;
     if (drag.moved) {
+      // Held still, it rests on the nearest frame (a blend of two frames 15° apart shows ghost strands).
+      const step = 360 / this.frames;
+      this.angle = Math.round(this.angle / step) * step;
+      this.paint();
       this.swallow = true;
       // The click that ends a drag follows at once; if none comes (released outside), nothing waits for it.
       setTimeout(() => { this.swallow = false; }, 0);
