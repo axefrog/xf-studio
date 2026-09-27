@@ -189,7 +189,9 @@ The desktop first-run **Continue without paths** control dispatches the existing
 
 `snapshot()` holds `busy`, the reviewed `plans` and the last `outcomes` per product, for the current build only. Refusals: `unavailable` without a host installer, `missing_target` for a product the latest Build didn't make, `busy` while one runs. The review sheet (`studio-ui/panels/mod-install-sheet.ts`) and the result rows in Mod package are its only controls; the palette doesn't offer installs.
 
-**Folder picker (`setup.pickFolder`, UI-83).** `LocalSetupActions` takes the host's native folder picker (the desktop's `/api/desktop/pick-folder`, Electrobun `Utils.openFileDialog`); `setup.pickFolder {field: "gameRoot"|"mo2Root"|"manualModRoot"}` opens it and saves the chosen folder through `setup.update` at once, `cancelled` when none was chosen. Without a picker it is refused ("Choose a folder XF Studio found, or type the folder"), and `snapshot().canPickFolder` is false so a view offers no Browse…. Game & tools saves every choice through `setup.update` as it is made; it has no Save button (UI-03).
+**Folder picker (`setup.pickFolder`, UI-83).** `LocalSetupActions` takes the host's native folder picker (the desktop's `/api/desktop/pick-folder`, Electrobun `Utils.openFileDialog`); `setup.pickFolder {field: "gameRoot"|"mo2Root"|"manualModRoot"|"savesDirectory"}` opens it and saves the chosen folder through `setup.update` at once, `cancelled` when none was chosen. Without a picker it is refused ("Choose a folder XF Studio found, or type the folder"), and `snapshot().canPickFolder` is false so a view offers no Browse…. Settings saves every choice through `setup.update` as it is made; it has no Save button (UI-03).
+
+**Settings (UI-109).** One shell panel, `settings` (closed by default, `studio-ui/panels/settings.ts`), holds everything configured, in plain groups: Game (`setup.update` for the game folder, route, MO2 instance and profile, extra mod folder and eye plate head; `detect.*`), Saves (`savesDirectory` through `setup.update` and `setup.pickFolder`), Tools (WolvenKit), Appearance (`theme.set`, `inputHints.set`, `researchTools.set`) and Privacy & diagnostics (`diagnostics.setMode`, `diagnostics.prepareReport`). `rt.settings.open(section?)` opens it: floating when it was closed (it has no home among the docked groups), otherwise brought forward with its group expanded, then the group is shown and focused. Its controls: the header's gear button (anchor `header.settings`), View preferences › **All settings…**, the Panels menu row, the palette's `settings.open` ("Settings"), `settings.game` ("Game & tools"), `settings.saves` ("Where are my saves?") and `settings.tools`, Help's **Settings** link and topic, Mod package's **Open Settings**, the install sheet's **Open Settings** and every `previewSetup.openSetup`. A module's view opens a group through `ModuleViewContext.openSettings(section)` (the Save Explorer's **Open Settings › Saves**).
 
 **About (`port.about`, UI-87).** `capability()` is available where the host has an About view (the desktop's, `StudioHost.about`); `open()` shows it. The Help panel's **About XF Studio** and the palette's command are its controls.
 
@@ -211,7 +213,7 @@ The desktop first-run **Continue without paths** control dispatches the existing
 |---|---|
 | `previewSetup.show`, `previewSetup.dismiss` | Re-open the card, or hide it ("Not now"; refused while work runs, so Cancel stays reachable). Each `show` increments the snapshot's `showRequests`; the card takes focus only then, never when it opens by itself. |
 | `previewSetup.consent`, `previewSetup.consentClose` | Open or close the WolvenKit download consent (`snapshot().consent`: title, intro, facts, runtime note, links, and the `confirm`, `own` and `later` buttons). |
-| `previewSetup.openSetup` | Increments `setupRequests`; the Studio then reveals Mod package → Game & tools, finds folders if not yet done and focuses the first thing to choose. Both hosts use this one form (UI-03); a host may still pass its own `openSetup`. |
+| `previewSetup.openSetup` | Increments `setupRequests`; the Studio then opens Settings › Game, finds folders if not yet done and focuses the first thing to choose. Both hosts use this one form (UI-03); a host may still pass its own `openSetup`. |
 | `previewSetup.openLink {link}` | One named official page (`wolvenkit-licence`, `wolvenkit-release`, `runtime-installer`, `runtime-page`). |
 | `previewSetup.refresh` | Re-read the host state (after lost contact). |
 | `previewSetup.prepare`, `previewSetup.cancel`, `previewSetup.prepareAgain` | Start (turns the automatic start on), cancel (turns it off) or prepare again (`preview.rebuild`; refused while the head is showing). |
@@ -230,7 +232,7 @@ The snapshot holds the latest `xfs/game-install-detection-1`, `xfs/mo2-instance-
 - MO2 instances, each with its kind, game path, selected profile, configured directories and profile list;
 - framework versions (ArchiveXL, TweakXL, Codeware, RED4ext, redscript, CET) for the game folder and the configured MO2 profile, with the XF Eye Artistry minimums and a plain-language message and Nexus Mods/GitHub links for each shortfall. The host reads its own local settings for this check; the report carries mod and profile names, not paths. The same report feeds the advisory `frameworks` Local setup readiness entry. [Framework check](framework-version-check.md).
 
-These results are private host metadata. Detection changes no setting: Game & tools offers the candidates, the MO2 instances (the configured one too, so a portable copy chosen by hand keeps its profiles) and their profiles as choices, and saving a choice goes through `setup.update`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2|frameworks`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
+These results are private host metadata. Detection changes no setting: Settings › Game offers the candidates, the MO2 instances (the configured one too, so a portable copy chosen by hand keeps its profiles) and their profiles as choices, and saving a choice goes through `setup.update`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2|frameworks`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
 
 ### Save Explorer (a module without a document part)
 
@@ -238,7 +240,7 @@ The Save Explorer's service ([`src/features/save-explorer/actions.ts`](../../pro
 
 | Action | Payload | Effect |
 |---|---|---|
-| `saves.refresh` | none | Lists the player's saves (`GET /api/saves`): folder, kind, time, location, level, life path, patch, size, screenshot. Refused without a host device or while listing |
+| `saves.refresh` | none | Lists the player's saves (`GET /api/saves`, a verification workspace `/api/verification/saves`) from the folder in effect (Settings › Saves, else the detected one): folder, kind, time, location, level, life path, patch, size, screenshot, and the folder read (`folder`). A failed try is repeated after 0.5, 1, 2, 4 and 8 s with `reconnecting` set ("Reconnecting…"), and only then fails, in plain words. Refused without a host device or while listing, except during a wait, when it tries again at once. The device's `locationChanged` reads the list again when the saves folder changes |
 | `saves.open` | `{folder}` (a listed folder) | Reads that save's `sav.dat` (`GET /api/saves/file?save=&part=data`), then the name sources once (`GET /api/saves/types`), and opens it; the tree's decode status fills in one node at a time. Refused for a folder not in the list or while a save opens |
 | `saves.openFile` | none | The file picker for a save stored elsewhere; a cancelled pick changes nothing |
 | `saves.close` | none | Back to the list |
@@ -279,6 +281,29 @@ Localhost only. `DesktopAppActions` (`src/desktop-app.ts`; descriptors `DESKTOP_
 | `diagnostics.closeReport` | none | Forgets the prepared report on the page |
 
 The report window (`studio-ui/diagnostics/report-dialog.ts`), Help's **Report a problem…** and the palette's **Report a problem…** and **Turn diagnostic mode on/off** use only these. App services report a failure a person may see with `pageFailure(area, code, message, error, options)` on the page and `hostFailure(area, code, message, error)` on a host: one line at the catch site, with no logger to hold.
+
+## Part presets and expressions
+
+The Expressions feature (module #2, [expression editor design](../animation/expression-editor-design.md#phase-1-status)) is bound by the application's generic feature handler: its actions go through its facade (`port.feature("expressions")`), are refused with structured codes, and record `part` steps in the look history. Slider drags use the facade's form-control transaction (`controlBegin(id)`, `controlEdit(id, action)` per change, `controlCommit(id)`, or `controlCancel(id)` on Escape): one Undo step per drag, refused inside a gesture, another control or a look transaction, and Undo is refused while one is open. Control names are the rig's track names; the feature decides pairs, mirrors and groups from the names alone, so a name the head lacks is kept verbatim.
+
+| Exact action/payload | Target, effect and refusals |
+|---|---|
+| `expression.setControl` `{name,value}` | One main-pose control, weight `0..1` (float32). A linked mirror pair (the default for left/right pairs; direction pairs such as jaw shift or gaze start unlinked) sets both sides. `invalid_value` for a non-control name or a weight outside `0..1`. Setting the value it already has records nothing. |
+| `expression.linkPair` `{pair,linked}` | Link or separate a left/right pair (`pair` is the name without its side words, `lips_corner_up`). |
+| `expression.mirror` `{from:"left"|"right"}` | Copy every mirror pair's named side onto the other; centre controls and direction pairs are left alone. |
+| `expression.reset` `{scope:"all"|"group"|"control",target?}` | Clear every control, a drawer group (`brows`, `lids`, `gaze`, `nose`, `cheeks`, `mouth`, `jaw`, `neck`, `ears`, `advanced`, `other`) or one control (with its linked partner). |
+| `expression.startFrom` `{origin,controls}` | Replace the vector with a start point's; `origin` is `{kind:"rest"}`, `{kind:"installed",clip,set,row?,provider?}` (an installed photo-mode expression, from the facial preview's start points) or `{kind:"preset",id,name}` (a saved expression). The label and links are kept. |
+| `expression.setLabel` `{label}` | The photo-mode menu text (up to 64 characters; empty uses the preset's name). Export comes in phase 3. |
+
+Part presets are the async `presets` family (never Undo; [editor invariants](editor-invariants.md#part-presets)):
+
+| Exact request/payload | Effect and refusals |
+|---|---|
+| `partPreset.list` `{feature}` | The feature's saved presets from the library, by name (loaded on a view's first ask). |
+| `partPreset.save` `{feature,name,part?}` | Save a part under a name (1–120 characters; `needs_input` when blank). Without `part` the presentation saves the feature's live part, serialized with its own codec. |
+| `partPreset.rename` `{feature,id,name,revision}`; `partPreset.delete` `{feature,id,revision}` | Revision-guarded: a stale window gets a plain conflict; `missing_target` when the preset is gone. Delete removes it from the library for good. |
+
+Read-only: `port.facial.snapshot()` (the live face's readiness in plain words with its one next step: `game-setup`, `guide`, `stop-idle` or `retry`; the rig's controls and drawer groups; the installed start points; recent solve latency) and `port.facial.retry()`. A feature view reaches both, and its own part presets, only through its view context (`ctx.facial`, `ctx.presets`).
 
 ## Persistence, async boundaries and truthful state
 

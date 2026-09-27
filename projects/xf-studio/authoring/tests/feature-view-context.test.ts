@@ -34,7 +34,7 @@ const shown = (item: MenuItem): unknown => item.kind === "action"
 test("a feature view's context is its facade and the shell's services: no port, runtime or other facade", () => {
   const { shell, ctx, toasts } = fixture();
   expect(ctx.facade).toBe(shell.feature("eye-makeup"));
-  expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "dispatch", "facade", "feedback", "links", "platform", "range", "readiness",
+  expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "dispatch", "facade", "facial", "feedback", "links", "openSettings", "platform", "presets", "range", "readiness",
     "reveal", "targetMenu", "targetSections", "undoAction", "uv"]);
   expect(Object.isFrozen(ctx)).toBe(true);
   expect(Object.keys(ctx.uv).sort()).toEqual(["attach", "command", "commandCapability", "hints", "menu", "resize"]);

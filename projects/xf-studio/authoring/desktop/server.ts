@@ -3,10 +3,12 @@ import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
+import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
+import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
 import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
-import { savesHostSources } from "../src/saves-host-sources";
+import { savesFolderProbe, savesHostSources } from "../src/saves-host-sources";
 import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
   windowsRunningApps } from "../src/mod-install-host";
 import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
@@ -30,6 +32,7 @@ import { CharacterDetailHost, characterRoute, installationFingerprint } from "..
 import { installations } from "../src/installation-registry";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
 import { PoseCatalogueHost } from "../src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
@@ -90,6 +93,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
   const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
   const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
+  // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
+  const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
+  const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
@@ -136,13 +142,18 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
       frameworks: hostFrameworkCheck(settings) };
   };
-  const localSettings = createLocalSettingsHandler(settingsStore, {}, settingsFeatures, () => wolvenKit.managedExecutable());
-  const verificationLocalSettings = createLocalSettingsHandler(verificationSettings, {}, settingsFeatures, () => wolvenKit.managedExecutable());
+  // Settings › Saves describes the detected saves folder; a packaged app takes no folder override.
+  const savesProbe = savesFolderProbe({ allowOverride: false });
+  const localSettings = createLocalSettingsHandler(settingsStore, {}, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
+  const verificationLocalSettings = createLocalSettingsHandler(verificationSettings, {}, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
   const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
   // The Save Explorer's read-only endpoints (the player's saves, installed scripts' names); a packaged app takes no folder override.
+  // A verification workspace reads its own settings' saves folder (UI-98).
   const savesRequest = createSavesHandler(savesHostSources({ allowOverride: false, exists: existsSync, settings: () => settingsStore.load().settings }),
     diagnostics.log.logger("saves"));
+  const verificationSavesRequest = createSavesHandler(savesHostSources({ allowOverride: false, exists: existsSync, settings: () => verificationSettings.load().settings }),
+    diagnostics.log.logger("saves"), "/api/verification/saves");
   const token = randomBytes(32).toString("hex");
   // The core preview has one source: the derivation from the player's own game files.
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
@@ -179,6 +190,17 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: logTo("lut") });
   const gradingLutRequest = createGradingLutHandler(gradingLut);
+  // The live facial preview (facial-host.ts). The desktop has no Python and never reads developer environment paths: its preview shows
+  // why the solver isn't available until a consented setup exists; the face rig and installed expressions still load for editing.
+  const facial = new FacialHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    settings: () => {
+      const settings = savedSettings();
+      return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
+        mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
+    },
+    solver: () => locateFacialSolver({ toolsRoot: resolve(dataRoot, "tools"), script: resolve(import.meta.dir, "facial_solver_server.py") }),
+    log: logTo("facial") });
+  const facialRequest = createFacialHandler(facial);
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
   const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,
@@ -189,7 +211,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     openExternal: hostOptions.openExternal,
   });
-  // "Add to my mod manager" (UI-82): a verified build into the MO2 profile or game folder Game & tools names, only after the person
+  // "Add to my mod manager" (UI-82): a verified build into the MO2 profile or game folder Settings names, only after the person
   // accepted its plan; an update restart waits for it (the work activity).
   // Receipts are per user on this computer, shared with localhost (INSTALL-04); the app's own earlier folder is taken over.
   const receiptsRoot = resolve(hostOptions.installReceipts ?? installReceiptsRoot(dataRoot));
@@ -243,6 +265,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
       if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(routedRequest);
+      if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(routedRequest);
       if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);
       if (url.pathname === "/api/desktop/open-link") {
         // Only named official pages from the host's own state; the view never supplies a URL.
@@ -315,22 +338,25 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/mod-install") return modInstallRequest(routedRequest);
       if (url.pathname === "/api/verification/mod-install") return verificationModInstallRequest(routedRequest);
       if (url.pathname === "/api/desktop/pick-folder") {
-        // A native folder picker for Game & tools (UI-83); the host returns only the folder the person chose.
+        // A native folder picker for Settings (UI-83, UI-109); the host returns only the folder the person chose.
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
         let body: any;
         try { body = await routedRequest.json(); } catch { return new Response("Invalid request", { status: 400 }); }
         if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).join() !== "field" ||
-          !["gameRoot", "mo2Root", "manualModRoot"].includes(body.field)) return new Response("Invalid request", { status: 400 });
+          !FOLDER_FIELDS.includes(body.field)) return new Response("Invalid request", { status: 400 });
         if (!hostOptions.pickFolder) return Response.json({ code: "unavailable", error: "This version of XF Studio can't open a folder picker." }, { status: 409 });
         const saved = savedSettings();
-        const start = (body.field === "gameRoot" ? saved?.gameRoot : body.field === "mo2Root" ? saved?.mo2Root : saved?.manualModRoot) ?? null;
+        const start = saved?.[body.field as FolderField] ?? null;
         try { return Response.json({ path: await hostOptions.pickFolder(start) }, { headers: { "Cache-Control": "no-store" } }); }
         catch { return Response.json({ code: "picker_failed", error: "The folder picker couldn't open. Type the folder instead." }, { status: 500 }); }
       }
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
+      if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
+      for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
+        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
@@ -383,6 +409,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); library.close(); verificationLibrary.close(); },
   };
 }

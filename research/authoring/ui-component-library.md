@@ -56,13 +56,14 @@ Comments and strings don't count. The test enforces three rules:
 - An allowance must equal its file's count. When a control moves into the library, its file's allowance must be lowered in the same change, so the debt only shrinks.
 - The scan itself is tested on prose and code.
 
-Debt at introduction (27 September 2026, after the first consolidation round): 79 ad hoc controls in 17 files.
+Debt at introduction (27 September 2026, after the first consolidation round and the merge of `main` that brought the expressions drawer and the Settings links in Help): 88 ad hoc controls in 18 files.
 
 | File | Count | What is left |
 |---|---|---|
 | `features/save-explorer/view/panel.ts` | 20 | tree rows (role tree), link buttons, filter inputs, `details` disclosures |
 | `studio-ui/diagnostics/report-dialog.ts` | 9 | the sheet shell, raw checkboxes, `details` ×5, textarea |
-| `studio-ui/guidance/help-panel.ts` | 10 | search input, link buttons ×4, topic `details`, buttons |
+| `studio-ui/guidance/help-panel.ts` | 12 | search input, link buttons, topic `details`, buttons |
+| `features/expressions/view/drawer.ts` | 7 | search and number inputs, a select, a `details` group, a hand-built button (moving to SearchField, Combobox, SliderWithValue and GroupSection) |
 | `studio-ui/panels/game-setup.ts` | 7 | hand-copied select markup ×3, text fields ×3, `details` section |
 | `studio-ui/commands.ts` | 6 | the palette (dialog, combobox, listbox, options), the reference sheet |
 | `studio-ui/panels/character.ts` | 5 | heading switch, search field, off chip, row buttons |
@@ -82,7 +83,7 @@ A read-only inventory of every control and pattern in `studio-ui` and the featur
    - One implementation, but the header's action buttons were flex items that shrank (a 24 px icon button measured 16 px). The tab list scrolled instead of condensing, so on a crowded or collapsed header the expander could be squeezed or pushed out of reach.
    - Tabs condensed only to shortened labels, never to icons (the earlier UI-96 decision, which the maintainer has reversed).
    - A panel summoned while its group was collapsed, or with no home, was dropped into an arbitrary group (Help's `opensBeside` pointed at the inspectors).
-   - Fixed this round: UI-108, UI-109.
+   - Fixed this round: UI-110, UI-111.
 2. **Dialogs and sheets.**
    - Five `.sheet` dialogs each re-implement open, close, focus restore and cancel: mod install, problem report, desktop app, keyboard reference and the consent sheet.
    - Footer order differs: `report-foot` puts the primary first, the consent sheet puts it last. The consent sheet has no close button, and only two close on a backdrop click.
@@ -122,7 +123,7 @@ A read-only inventory of every control and pattern in `studio-ui` and the featur
     - Partly consolidated: `EmptyState`, used for the Layers panel's newer-version state. The rest is open.
 13. **Panel content spacing.**
     - Save Explorer: the title overlapped the back button, the meta line was cramped, the tree touched the inspector, and there was no space under a node's title or above its bytes.
-    - Fixed this round through the layout primitives (UI-112).
+    - Fixed this round through the layout primitives (UI-114).
 
 **Consolidated this round** (user-visible first):
 - **Dock:** the tab strip and panel header, the summon rule, header actions that never shrink.

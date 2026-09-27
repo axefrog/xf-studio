@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
 import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, SERVED_TEXTURE_MAX, STORE_FILE, TOOL_MISSING, warmCharacters,
   type CharacterRoute, type PrepareCharacterOptions, type WarmOptions } from "./character-detail-service";
-import { choiceKey, manifestHolds, readChoiceManifest, xlIdentity } from "./choice-manifest";
+import { choiceKey, manifestProblemSliced, readChoiceManifest, xlIdentity } from "./choice-manifest";
+import { timeSlicer } from "./event-loop";
 import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
 import { clearPrepared, evictPrepared, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
-import { backgroundExtraction, backgroundPriority, foregroundExtraction, type Installation, type InstallationOptions } from "./resolver-host";
+import { backgroundExtraction, backgroundPriority, foregroundExtraction, withArchiveFingerprints, type Installation, type InstallationOptions } from "./resolver-host";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
@@ -157,6 +158,9 @@ export function characterRoute(settings: CharacterDetailSettings): CharacterRout
     manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null };
 }
 
+/** How long the page must have been quiet (no change asked for, no file of its V read) before work prepared ahead goes on. */
+export const QUIET_MS = 400;
+
 export class CharacterDetailHost {
   /** Each open page's latest preparation (`request`'s `page`); they run one at a time, in the order they were asked for (PIPE-103). */
   private readonly running = new Map<string, { key: string; controller: AbortController; promise: Promise<void> }>();
@@ -177,6 +181,10 @@ export class CharacterDetailHost {
    * forgets cache entries or writes manifests once stopped), and Clear waits for it before removing files (PREV-102).
    */
   private readonly warming = new Set<Promise<void>>();
+  /** A person's requests being answered now (the installation check before a preparation starts): background work waits for them. */
+  private asking = 0;
+  /** When the page last asked for its V or read one of its files (`noteAsk`): background work waits until the page has been quiet a moment. */
+  private askedAt = 0;
   constructor(private readonly options: CharacterDetailHostOptions) {
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
       resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
@@ -188,6 +196,7 @@ export class CharacterDetailHost {
       preparedBytes: async () => (await preparedSize(this.preparedRoots)).bytes,
       afterBatch: () => this.keepWithinBudget(),
       needsSetup: () => this.needsSetup(),
+      slicer: () => this.backgroundSlicer(),
       log: options.log,
       failed: error => hostFailure("character", "prefetch_failed", "Some character choices couldn't be prepared ahead; they are read when picked.", error, "warn"),
     }, options.prefetchLimits);
@@ -246,6 +255,10 @@ export class CharacterDetailHost {
    * new preparation starts once every earlier one (a cancelled one too) has stopped.
    */
   request(request: CharacterRequest, page = ""): CharacterDetailState {
+    // A person's change pre-empts preparing ahead at once, even when its answer is ready: the batch stops (its choices are queued again,
+    // reads already started finish and are kept), so the page reads its record and files without sharing the host with it.
+    this.noteAsk();
+    this.prefetch.pause();
     const settings = this.options.settings();
     const fingerprint = installationFingerprint(settings);
     const key = characterRequestKey(request, fingerprint);
@@ -277,6 +290,8 @@ export class CharacterDetailHost {
     this.set({ key, phase: "preparing", message: PREPARING, progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: first.label }, record: null });
     // Whether this run still owns its key's state (a newer run for the same key takes it over).
     const owns = () => ![...this.running.values()].some(run => run.key === key && run.controller !== controller);
+    // The whole wait is logged, not only the preparation: queued (behind another page's run or a stopped batch), started, done.
+    const asked = Date.now();
     let started = 0;
     const run = () => {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
@@ -299,7 +314,9 @@ export class CharacterDetailHost {
         if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
         this.prefetch.prepared(request, !result.degraded);
         void this.keepWithinBudget();
-        this.options.log?.(`Skin, face details, eyes, brows, lashes, hair, piercings and body prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
+        const done = Date.now(), seconds = (ms: number) => (ms / 1000).toFixed(1);
+        this.options.log?.(`Skin, face details, eyes, brows, lashes, hair, piercings and body prepared in ${seconds(done - started)} s (${request.source} V; ` +
+          `waited ${seconds(started - asked)} s before starting, ${seconds(done - asked)} s in all).`);
       })
       .catch(error => {
         const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || controller.signal.aborted;
@@ -325,8 +342,23 @@ export class CharacterDetailHost {
   async refresh(): Promise<void> {
     const route = this.route();
     if (!route) return;
+    // A person's request: background work steps aside until it is answered (`backgroundSlicer`).
+    this.asking++;
     try { await installations.revalidate(route); }
     catch { /* The preparation checks again, and reports what it cannot read. */ }
+    finally { this.asking--; }
+  }
+  /**
+   * The turn background work takes between its units (research/backlog/performance.md, scheduling rule): it lets the event loop answer
+   * what is waiting once its slice is used (event-loop.ts), and waits while a person's own request is being answered or prepared, so the
+   * person's change never shares the host's one thread with checks made ahead of time.
+   */
+  private backgroundSlicer(): () => Promise<void> {
+    const slice = timeSlicer();
+    return async () => {
+      await slice();
+      if (this.running.size || this.asking || Date.now() - this.askedAt < QUIET_MS) await this.foregroundIdle();
+    };
   }
 
   /** The state for a request key; `unknown` when this host has not seen it (the page asks again). */
@@ -353,17 +385,23 @@ export class CharacterDetailHost {
     choices.push({ part: entry.part, option: entry.name, choice: choice.key, ...(choice.activates?.length ? { activates: [...choice.activates] } : {}) });
     return { ...base, choices };
   }
-  /** A check of whether requests are ready on the installation as it is now (their manifests hold). */
-  private async readiness(): Promise<(request: CharacterRequest) => boolean> {
+  /**
+   * A check of whether requests are ready on the installation as it is now (their manifests hold), a few entries at a time so the host
+   * keeps answering requests while a row's choices are checked (choice-manifest.ts `manifestProblemSliced`).
+   */
+  private async readiness(): Promise<(request: CharacterRequest) => Promise<boolean>> {
     const route = this.route();
-    if (!route) return () => false;
+    if (!route) return async () => false;
     const installation = await this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
     const exporter = this.exporterFor(route.wolvenKitCli), manifests = this.manifests(route);
     const check = { graph: installation.graph, fetcher: installation.fetcher, exporter, gameRoot: route.gameRoot, tool: installation.fetcher.tool,
       xl: xlIdentity(installation) };
-    return request => {
+    const slice = this.backgroundSlicer();
+    return async request => {
       const manifest = readChoiceManifest(manifests.dir, manifests.key(request));
-      return !!manifest && manifestHolds(manifest, check);
+      if (!manifest) return false;
+      const memo = new Map<string, string>();
+      return await manifestProblemSliced(manifest, check, slice, run => withArchiveFingerprints(run, memo)) === null;
     };
   }
   /** Whether preparing waits for setup (no game folder, or no WolvenKit): preparing ahead then stops early (NATIVE-48). */
@@ -389,10 +427,20 @@ export class CharacterDetailHost {
   private async backgroundInstallation(options: InstallationOptions): Promise<Installation> {
     return installations.peek(options) ?? acquireInstallation(options);
   }
-  /** Resolves once no person's own change is being prepared. */
+  /**
+   * Resolves once no person's own change is being prepared or answered and the page has been quiet for `QUIET_MS` (it reads a new
+   * record's files right after the answer): the next batch of choices prepared ahead starts only then.
+   */
   private async foregroundIdle(): Promise<void> {
-    while (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise.catch(() => { /* Settled. */ })));
+    for (;;) {
+      if (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise.catch(() => { /* Settled. */ })));
+      const quiet = QUIET_MS - (Date.now() - this.askedAt);
+      if (!this.running.size && !this.asking && quiet <= 0) return;
+      await new Promise(done => setTimeout(done, Math.max(5, Math.min(quiet, QUIET_MS))));
+    }
   }
+  /** The page asked for its V or read one of its files: a person is waiting on the host. */
+  noteAsk(): void { this.askedAt = Date.now(); }
 
   // ---- Prepared game files (prepared-files.ts) ----
 

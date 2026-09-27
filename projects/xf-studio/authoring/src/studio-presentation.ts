@@ -1,3 +1,5 @@
+import type { FacialPreviewSnapshot } from "./platform/api/facial";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest } from "./part-presets";
 import type { AuthoringPresentation } from "./authoring-presentation";
 import type { CollectionViewPort } from "./collection-application";
 import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
@@ -96,8 +98,18 @@ export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
   finishCatalogue: StudioApplication["finishCatalogue"];
   glitterModelCatalogue: StudioApplication["glitterModelCatalogue"];
 };
-/** Any other feature's facade: its live part and editor memory for the selected look, detached. */
-export type GenericFeatureFacade = FeatureFacade & { view(): ReadonlyDeep<{ part?: unknown; editor?: unknown }> | undefined };
+/**
+ * Any other feature's facade: its live part and editor memory for the selected look, detached, and its form-control transactions (a
+ * slider drag is one Undo step: `controlBegin`, then `controlEdit` per change, then `controlCommit`, or `controlCancel` on Escape).
+ */
+export type GenericFeatureFacade = FeatureFacade & { view(): ReadonlyDeep<{ part?: unknown; editor?: unknown }> | undefined;
+  controlBegin(id: string): boolean; controlEdit(id: string, action: { kind: string }): StudioDispatchResult;
+  controlCommit(id: string): void; controlCancel(id: string): void };
+/** The live facial preview a feature's drawer reads (facial-preview.ts), and its Try again. */
+export type FacialPort = { snapshot(): FacialPreviewSnapshot | undefined; retry(): void };
+/** Part presets in the library (part-presets.ts): list per feature, and the `presets` family's requests. */
+export type PartPresetPort = { list(feature: string): PartPresetList; capability(request: PartPresetRequest): StudioCapability;
+  execute(request: PartPresetRequest): Promise<PartPresetOutcome> };
 /** The facades with a typed view, by feature ID; every other registered feature gets a `GenericFeatureFacade`. */
 export type PresentationFeatures = { readonly "eye-makeup": EyeMakeupFacade };
 export type FeatureLookup = {
@@ -153,6 +165,10 @@ export type StudioPresentationPort<Slot> = {
   };
   /** The registered feature modules, in catalogue order (feature-module platform §4). */
   features(): readonly FeatureInfo[];
+  /** The live facial preview (the held expression on the head). */
+  readonly facial: FacialPort;
+  /** Part presets in the library. */
+  readonly presets: PartPresetPort;
   /** One feature's facade: typed for the features in `PresentationFeatures`, undefined for an unregistered ID. */
   readonly feature: FeatureLookup;
   /**
@@ -315,7 +331,9 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const facades = new Map<string, FeatureFacade>(infos.map(info => {
     const base = facade(info);
-    if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id) }) as GenericFeatureFacade];
+    if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id),
+      controlBegin: (id: string) => a.featureControlBegin(info.id, id), controlEdit: (id: string, action: { kind: string }) => a.featureControlEdit(info.id, id, action),
+      controlCommit: (id: string) => a.featureControlCommit(id), controlCancel: (id: string) => a.featureControlCancel(id) }) as GenericFeatureFacade];
     const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
       controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, action),
       controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
@@ -324,6 +342,8 @@ export function createStudioPresentation<Slot>(sources: {
     return [info.id, Object.freeze(eye)];
   }));
   const feature = ((id: string) => facades.get(id)) as FeatureLookup;
+  const withPart = (request: PartPresetRequest): PartPresetRequest => request.kind === "partPreset.save" && !request.part
+    ? { ...request, part: a.featureEnvelope(request.feature)! } : request;
   const library: CollectionViewPort = {
     view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
     subscribe: listener => l.subscribe(listener),
@@ -417,6 +437,10 @@ export function createStudioPresentation<Slot>(sources: {
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id), localSetup: Object.freeze(localSetup),
+    facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry() }),
+    // A save without a part saves the feature's live part, serialized with its own codec.
+    presets: Object.freeze({ list: (feature: string) => a.presetList(feature),
+      capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
     installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp,
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),

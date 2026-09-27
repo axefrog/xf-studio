@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { join, win32 } from "node:path";
 import { DesktopAppActions, type DesktopAppStatus, type DesktopAppTransport } from "../src/desktop-app";
-import { createDesktopAppHandler, detectDesktopApp, parseRegQuery, UNINSTALL_ROOT, type DesktopAppHostPort } from "../src/desktop-app-host";
+import { createDesktopAppHandler, detectDesktopApp, launchCommand, parseRegQuery, UNINSTALL_ROOT, type DesktopAppHostPort } from "../src/desktop-app-host";
 import { DESKTOP_APP_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { desktopAppEntry, installerSummary } from "../src/studio-ui/guidance/desktop-app-sheet";
 import { USER_FACING_JARGON } from "../src/alpha-availability";
@@ -122,6 +122,30 @@ describe("detection (read-only, over a fake host)", () => {
     const found = await detectDesktopApp(fakeHost({ ...installedFake, files: {} }), { desktopRoot: DESKTOP, siteConfig: SITE });
     expect(found.status.installed).toEqual({ version: "0.1.0-alpha.1", channel: "canary", registered: true, canOpen: false });
     expect(found.launcher).toBeNull();
+  });
+
+  test("an install that lives only in a Microsoft Store app's private storage is not installed for Windows", async () => {
+    // A setup started from inside such an app (27 September: a development server started by one) lands in its LocalCache.
+    const packaged = win32.join(LOCAL, "Packages", "SomeApp_abc123", "LocalCache", "Local", "dev.axefrog.xf-studio", "canary", "app", "bin", "launcher.exe");
+    const folderOnly: Fake = { files: installedFake.files };
+    const withPhysical = (fake: Fake, where: (path: string) => string | null) => ({ ...fakeHost(fake), physicalPath: where });
+    const privateCopy = await detectDesktopApp(withPhysical(folderOnly, path => path === LAUNCHER ? packaged : path), { desktopRoot: DESKTOP, siteConfig: SITE });
+    expect(privateCopy.status.installed).toBeNull();
+    expect(privateCopy.launcher).toBeNull();
+    // The same folder on disk (letter case aside), or no answer from the file system: installed as before.
+    const real = await detectDesktopApp(withPhysical(folderOnly, path => path.toUpperCase()), { desktopRoot: DESKTOP, siteConfig: SITE });
+    expect(real.launcher).toBe(LAUNCHER);
+    const unknown = await detectDesktopApp(withPhysical(folderOnly, () => null), { desktopRoot: DESKTOP, siteConfig: SITE });
+    expect(unknown.launcher).toBe(LAUNCHER);
+  });
+
+  test("setups and the app start through File Explorer on Windows, as a double-click would (outside any app's private storage)", () => {
+    const setup = "D:\\checkout\\desktop\\artifacts\\canary-win-x64-XFStudio-Setup-canary.exe";
+    expect(launchCommand(setup, "win32", { SystemRoot: "C:\\Windows" }))
+      .toEqual({ command: "C:\\Windows\\explorer.exe", args: [setup], cwd: "D:\\checkout\\desktop\\artifacts" });
+    // Explorer splits a path at commas: such a path is started directly.
+    expect(launchCommand("D:\\a, b\\setup.exe", "win32", { SystemRoot: "C:\\Windows" })).toEqual({ command: "D:\\a, b\\setup.exe", args: [], cwd: "D:\\a, b" });
+    expect(launchCommand("/opt/xf/setup", "linux", {})).toEqual({ command: "/opt/xf/setup", args: [], cwd: "/opt/xf" });
   });
 
   test("the newest setup built in this checkout (the canary build or a staged release asset); other files are ignored", async () => {

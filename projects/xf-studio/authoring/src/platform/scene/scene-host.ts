@@ -20,6 +20,7 @@ import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { createCharacterRenderer } from "./character-renderer";
+import { createCameraSettle } from "./camera-settle";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 
 /**
@@ -124,6 +125,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     return requested > distance;
   }
   front();
+  // The loop keeps drawing while the camera settles after a damped move, even under the controls' own change threshold (camera-settle.ts).
+  const settle = createCameraSettle(camera, controls.target);
   /** The whole-body view: the same frontal orbit, aimed at the body's middle and far enough to fit a standing V (camera-framing.ts). */
   function frameBody() {
     frontPending = false;
@@ -209,10 +212,11 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // the controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
   const scheduler = createRenderScheduler({
     clock: { request: callback => requestAnimationFrame(callback), cancel: handle => cancelAnimationFrame(handle), now: () => performance.now() },
-    animating: rigMotion.animating,
+    animating: () => rigMotion.animating() || settle.settling,
     frame(dt) {
       rigMotion.advance(dt);
       if (controls.enabled) controls.update();
+      settle.step();
       // At long orbits, move the near plane in front of a conservative head
       // envelope so the thin makeup plate retains depth precision.
       centre.set(0, 1.67, 0).add(idleFrameOffset);
@@ -271,7 +275,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     scene,
     camera,
     /** Releases the V's details, the feature renderers, the WebGL renderer, its canvas, the stage and observers; the host is unusable afterwards. */
-    dispose: () => { character.setCharacterDetails(null); releaseAll(releases); },
+    dispose: () => { character.dispose(); releaseAll(releases); },
     onFrame,
     /** Something the host can't see changed what it draws (for example the selected layer's handles): draw a frame. */
     requestRender: invalidate,
@@ -313,6 +317,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     /** The host's detail loader (§5): the V's resolved components, each chunk through the adapter for its template. */
     details: character.details,
     setCharacterDetails: character.setCharacterDetails,
+    /** Release the parts kept for later (another V is being shown: nothing of the previous one lingers in GPU memory). */
+    releaseKeptParts: character.releaseKeptParts,
     /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */
     onBakeLimits: character.onBakeLimits,
     // With the renderer's live geometry and texture counts, so a V switch or a tried style can be measured (PREV-63).
@@ -327,6 +333,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     idle,
     /** The game's blink (game-blink.ts); undefined with `evidence.blink.error` when it isn't prepared. */
     blink,
+    /** The facial pose sink (head-rig.ts `face`): a held expression's solved pose on the head; every change draws a frame. */
+    face: { ...rig.face, setRig: (joints: Parameters<typeof rig.face.setRig>[0]) => { try { rig.face.setRig(joints); } finally { invalidate(); } },
+      get ready() { return rig.face.ready; }, get holding() { return rig.face.holding; } },
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
     cameraState: (): SceneCameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
       target: controls.target.clone().sub(idleFrameOffset).toArray(), fov: camera.fov }),

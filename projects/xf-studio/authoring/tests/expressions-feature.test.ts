@@ -1,0 +1,112 @@
+/**
+ * The expressions feature (research/animation/expression-editor-design.md §3.1, §4): its part codec, its actions' capability and apply,
+ * and how it runs in the Studio: the generic handler records its Undo steps, a slider drag is one step through the feature control
+ * transaction, Escape restores the start, and the stored workspace keeps the part while a look that never used it stays unchanged.
+ */
+import { expect, test } from "bun:test";
+import { EXPRESSIONS, expressionPart, expressionPose } from "../src/features/expressions";
+import { applyExpression, expressionCapability, pairLinked, type ExpressionAction } from "../src/features/expressions/core";
+import type { ExpressionPart } from "../src/features/expressions/part";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { f32 } from "../src/engines/facial-rig/vector";
+import { freshWorkspace } from "./fixtures/eye-region";
+
+const state = (controls: Record<string, number> = {}, links: Record<string, boolean> = {}) => ({ part: { controls, links }, editor: {} });
+const apply = (action: ExpressionAction, from = state()) => applyExpression(from, action);
+
+test("the part codec validates, normalises and keeps unknown controls; it refuses what it can't read", () => {
+  const part = expressionPart.parse({ schema: "xfs/expression-part-1", body: { controls: { lips_l_corner_up: 0.3, some_future_control: 0.5, jaw_mid_open: 0 },
+    links: { eye_brows_raise_in: false }, label: "Soft smile", origin: { kind: "installed", clip: "facial_happy", set: "x.anims", row: 7 } } });
+  expect(part).toEqual({ label: "Soft smile", controls: { lips_l_corner_up: f32(0.3), some_future_control: 0.5 }, links: { eye_brows_raise_in: false },
+    origin: { kind: "installed", clip: "facial_happy", set: "x.anims", row: 7 } });
+  expect(expressionPart.parse(expressionPart.serialize(part))).toEqual(part);
+  expect(() => expressionPart.parse({ schema: "xfs/expression-part-1", body: { controls: { jaw_mid_open: 2 }, links: {} } })).toThrow("0 to 1");
+  expect(() => expressionPart.parse({ schema: "xfs/expression-part-1", body: { controls: {}, links: {}, extra: 1 } })).toThrow("doesn't know");
+  expect(() => expressionPart.parse({ schema: "xfs/expression-part-1", body: { controls: {}, links: {}, origin: { kind: "mystery" } } })).toThrow();
+  expect(expressionPose(part)).toBe(part.controls);
+  expect(expressionPose({ controls: {}, links: {} })).toBeUndefined();
+});
+
+test("a linked mirror pair moves both sides; a direction pair starts unlinked; links are stored per pair", () => {
+  expect(apply({ kind: "expression.setControl", name: "lips_l_corner_up", value: 0.4 }).part.controls)
+    .toEqual({ lips_l_corner_up: f32(0.4), lips_r_corner_up: f32(0.4) });
+  expect(apply({ kind: "expression.setControl", name: "jaw_mid_shift_l", value: 0.4 }).part.controls).toEqual({ jaw_mid_shift_l: f32(0.4) });
+  expect(apply({ kind: "expression.setControl", name: "jaw_mid_open", value: 0.2 }).part.controls).toEqual({ jaw_mid_open: f32(0.2) });
+  const unlinked = apply({ kind: "expression.linkPair", pair: "lips_corner_up", linked: false });
+  expect(pairLinked(unlinked.part, "lips_r_corner_up")).toBe(false);
+  expect(apply({ kind: "expression.setControl", name: "lips_r_corner_up", value: 0.5 }, unlinked).part.controls).toEqual({ lips_r_corner_up: f32(0.5) });
+  // Setting a control to its value records nothing (no Undo step).
+  const same = state({ jaw_mid_open: f32(0.2) });
+  expect(apply({ kind: "expression.setControl", name: "jaw_mid_open", value: 0.2 }, same).changed).toBe(false);
+});
+
+test("mirror, reset (all, a group, one control) and start from replace what they should", () => {
+  const face = state({ lips_l_corner_up: f32(0.4), eye_l_brows_lower: f32(0.3), jaw_mid_shift_l: f32(0.2), jaw_mid_open: f32(0.1) });
+  expect(apply({ kind: "expression.mirror", from: "left" }, face).part.controls).toEqual({ eye_l_brows_lower: f32(0.3), eye_r_brows_lower: f32(0.3),
+    jaw_mid_open: f32(0.1), jaw_mid_shift_l: f32(0.2), lips_l_corner_up: f32(0.4), lips_r_corner_up: f32(0.4) });
+  expect(apply({ kind: "expression.reset", scope: "group", target: "jaw" }, face).part.controls).toEqual({ eye_l_brows_lower: f32(0.3), lips_l_corner_up: f32(0.4) });
+  // Resetting one side of a linked pair resets its partner too.
+  const pair = state({ lips_l_corner_up: f32(0.4), lips_r_corner_up: f32(0.4), jaw_mid_open: f32(0.1) });
+  expect(apply({ kind: "expression.reset", scope: "control", target: "lips_r_corner_up" }, pair).part.controls).toEqual({ jaw_mid_open: f32(0.1) });
+  expect(apply({ kind: "expression.reset", scope: "all" }, face).part.controls).toEqual({});
+  const started = apply({ kind: "expression.startFrom", origin: { kind: "installed", clip: "facial_happy", set: "s", row: 7 }, controls: { lips_apart_up: 0.86 } }, face);
+  expect(started.part).toEqual({ controls: { lips_apart_up: f32(0.86) }, links: {}, origin: { kind: "installed", clip: "facial_happy", set: "s", row: 7 } });
+  expect(apply({ kind: "expression.setLabel", label: "  Grin  " }).part.label).toBe("Grin");
+  expect(apply({ kind: "expression.setLabel", label: "" }, { part: { controls: {}, links: {}, label: "x" } as ExpressionPart, editor: {} }).part).toEqual({ controls: {}, links: {} });
+});
+
+test("capability refuses with structured codes and plain reasons", () => {
+  const s = state();
+  expect(expressionCapability(s, { kind: "expression.setControl", name: "jaw_mid_open", value: 1.5 })).toMatchObject({ available: false, code: "invalid_value" });
+  expect(expressionCapability(s, { kind: "expression.setControl", name: "../x", value: 0.5 })).toMatchObject({ available: false, code: "invalid_value" });
+  expect(expressionCapability(s, { kind: "expression.reset", scope: "group", target: "elbows" })).toMatchObject({ available: false });
+  expect(expressionCapability(s, { kind: "expression.startFrom", origin: { kind: "rest" }, controls: { jaw_mid_open: -1 } })).toMatchObject({ available: false });
+  expect(expressionCapability(s, { kind: "expression.startFrom", origin: { kind: "preset", id: "p", name: "Mine" }, controls: {} })).toEqual({ available: true });
+  expect(() => apply({ kind: "expression.setControl", name: "jaw_mid_open", value: 2 })).toThrow();
+});
+
+const core = (workspace = freshWorkspace()) => createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+const part = (c: ReturnType<typeof core>) => c.app.featureState("expressions")?.part as { controls: Record<string, number> } | undefined;
+
+test("in the Studio: the generic handler records steps, a slider drag is one Undo step, Escape restores the start", () => {
+  const c = core();
+  expect(EXPRESSIONS.stage).toBe("preview");
+  expect(part(c)).toBeUndefined();
+  expect(c.app.dispatch({ kind: "expression.setControl", name: "jaw_mid_open", value: 0.1 } as never)).toMatchObject({ ok: true });
+  expect(part(c)?.controls).toEqual({ jaw_mid_open: f32(0.1) });
+  // A drag: begin, many edits, commit: one step named by its first change.
+  expect(c.app.featureControlBegin("expressions", "drag")).toBe(true);
+  for (const value of [0.1, 0.2, 0.3, 0.35]) c.app.featureControlEdit("expressions", "drag", { kind: "expression.setControl", name: "lips_l_corner_up", value } as { kind: string });
+  // Undo is refused while the drag is open.
+  expect(c.app.capability({ kind: "history.undo" })).toMatchObject({ available: false, code: "busy" });
+  c.app.featureControlCommit("drag");
+  expect(part(c)?.controls).toEqual({ jaw_mid_open: f32(0.1), lips_l_corner_up: f32(0.35), lips_r_corner_up: f32(0.35) });
+  expect(c.app.historyTimeline().steps.map(step => step.label)).toEqual(["Face control", "Face control"]);
+  // Escape: the drag's changes go, and no step is left.
+  c.app.featureControlBegin("expressions", "drag2");
+  c.app.featureControlEdit("expressions", "drag2", { kind: "expression.setControl", name: "jaw_mid_open", value: 0.9 } as { kind: string });
+  c.app.featureControlCancel("drag2");
+  expect(part(c)?.controls.jaw_mid_open).toBe(f32(0.1));
+  expect(c.app.historyTimeline().steps.length).toBe(2);
+  // Another feature's action can't ride in its transaction.
+  expect(c.app.featureControlEdit("expressions", "x", { kind: "layer.setOpacity" } as never)).toMatchObject({ ok: false, code: "invalid_value" });
+  // Undo walks back through both steps, the first removing the part again.
+  c.app.dispatch({ kind: "history.undo" });
+  expect(part(c)?.controls).toEqual({ jaw_mid_open: f32(0.1) });
+  c.app.dispatch({ kind: "history.undo" });
+  expect(part(c)).toBeUndefined();
+});
+
+test("the stored workspace keeps the expression; a workspace that never used it is unchanged", () => {
+  const untouched = core(), stored = JSON.stringify(serializeWorkspace({ ...freshWorkspace(), ...untouched.document.export() } as never, STUDIO_COMPOSITION.documents));
+  expect(stored).not.toContain("expression");
+  const c = core();
+  c.app.dispatch({ kind: "expression.setControl", name: "eye_l_brows_lower", value: 0.25 } as never);
+  const workspace = { ...freshWorkspace(), ...c.document.export() };
+  const again = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(workspace as never, STUDIO_COMPOSITION.documents))), STUDIO_COMPOSITION.documents);
+  expect(part(core(again))?.controls).toEqual({ eye_l_brows_lower: f32(0.25), eye_r_brows_lower: f32(0.25) });
+  // Saving the look's part as a preset uses the feature's own codec.
+  expect(c.app.featureEnvelope("expressions")).toEqual({ schema: "xfs/expression-part-1", body: { controls: { eye_l_brows_lower: f32(0.25), eye_r_brows_lower: f32(0.25) }, links: {} } });
+});

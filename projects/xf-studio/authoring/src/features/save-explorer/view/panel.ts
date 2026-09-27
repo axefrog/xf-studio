@@ -42,7 +42,9 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const listCount = h("span", { class: "count" });
   const listNote = note("", "info");
   const saveList = h("ul", { class: "save-list", "aria-label": "Your saves, newest first" });
-  const listEmpty = emptyState("No saves found", "Your Cyberpunk 2077 saves appear here, newest first. Save in the game, then choose Refresh.");
+  // No saves where XF Studio looked, or no saves folder there: what to do, with Settings › Saves one press away (UI-109).
+  const listEmpty = h("div", { class: "save-explorer-empty" });
+  const openSettings = () => ctx.openSettings("saves");
   const listView = h("div", { class: "save-explorer-list" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, listCount), h("div", { class: "row gap-xs" }, refresh, openFile)),
     listNote, listEmpty, saveList,
@@ -263,9 +265,18 @@ export function explorerPanel(ctx: Ctx): PanelController {
         if (key !== listKey) {
           listKey = key;
           const listing = state.listing;
-          setText(listCount, listing.phase === "loading" ? "Listing your saves…" : listing.phase === "ready" ? `${number(listing.saves.length)} save${listing.saves.length === 1 ? "" : "s"}` : "Your saves");
-          setText(listNote, listing.message ?? ""); listNote.hidden = !listing.message;
-          listEmpty.hidden = !(listing.phase === "ready" && listing.available && !listing.saves.length);
+          // A failed try is repeated shortly (the host may be restarting): "Reconnecting…", never a question about XF Studio running.
+          setText(listCount, listing.phase === "loading" ? listing.reconnecting ? "Reconnecting…" : "Listing your saves…"
+            : listing.phase === "ready" ? `${number(listing.saves.length)} save${listing.saves.length === 1 ? "" : "s"}` : "Your saves");
+          const missing = listing.phase === "ready" && !listing.available, none = listing.phase === "ready" && listing.available && !listing.saves.length;
+          // A missing folder says why in its empty state; a failed listing says so in the note.
+          const noteText = missing ? "" : listing.message ?? "";
+          setText(listNote, noteText); listNote.hidden = !noteText;
+          const settingsButton = () => button({ label: "Open Settings › Saves", icon: "settings", small: true, onClick: openSettings });
+          listEmpty.replaceChildren(...(none ? [emptyState(`No saves found in ${listing.folder?.display ?? "your saves folder"}`,
+            "Your Cyberpunk 2077 saves appear here, newest first. Save in the game, then choose Refresh. If your saves are in another folder, choose it in Settings.",
+            settingsButton())] : missing ? [emptyState("Saves folder not found", listing.message ?? "Choose the folder your saves are in.", settingsButton())] : []));
+          listEmpty.hidden = !(none || missing);
           renderList(listing.saves);
         }
         return;

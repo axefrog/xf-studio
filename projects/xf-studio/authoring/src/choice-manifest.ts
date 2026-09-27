@@ -108,19 +108,41 @@ export type ManifestCheck = {
 };
 /** Why a manifest doesn't hold on the installation opened now (see the module comment), or null when it does. Reads no resource. */
 export function manifestProblem(manifest: ChoiceManifest, check: ManifestCheck): string | null {
+  const header = headerProblem(manifest, check);
+  if (header) return header;
+  for (const read of manifest.reads) { const problem = readProblem(read, check); if (problem) return problem; }
+  for (const item of manifest.exports) { const problem = exportProblem(item, check); if (problem) return problem; }
+  return null;
+}
+/**
+ * `manifestProblem` a few entries at a time: each entry is a few file checks on the host's one thread, so the check lets the event loop
+ * answer what is waiting between entries (`slice`, event-loop.ts), and a manifest of hundreds of reads never holds a request back.
+ * `scope` runs each entry's synchronous checks (the host reads each archive's identity once per manifest: `withArchiveFingerprints`).
+ */
+export async function manifestProblemSliced(manifest: ChoiceManifest, check: ManifestCheck, slice: () => Promise<void>,
+  scope: <T>(run: () => T) => T = run => run()): Promise<string | null> {
+  const header = headerProblem(manifest, check);
+  if (header) return header;
+  for (const read of manifest.reads) { const problem = scope(() => readProblem(read, check)); if (problem) return problem; await slice(); }
+  for (const item of manifest.exports) { const problem = scope(() => exportProblem(item, check)); if (problem) return problem; await slice(); }
+  return null;
+}
+function headerProblem(manifest: ChoiceManifest, check: ManifestCheck): string | null {
   if (manifest.tool !== check.tool) return "another WolvenKit";
   if (manifest.xl !== check.xl) return "the ArchiveXL files changed";
   if (!check.exporter.has) return "the exporter can't be asked";
-  for (const [hash, entryHash, archive] of manifest.reads) {
-    const { entry, lookup } = check.graph.locate(refFromHash(hash));
-    if ((lookup.winner?.id ?? null) !== archive || entry.hash !== entryHash) return `another archive provides ${hash}`;
-    if (lookup.winner && !check.fetcher.isCached(lookup.winner, entry.hash)) return `${hash} isn't in the resolver's cache for ${lookup.winner.name}`;
-  }
-  for (const [kind, path, archive] of manifest.exports) {
-    const winner = check.graph.locate(refFromPath(path)).lookup.winner;
-    if (winner?.id !== archive) return `another archive provides ${path}`;
-    if (!check.exporter.has(kind, path, archiveExportSource(archive, check.gameRoot))) return `${path} isn't in the export cache for ${winner.name}`;
-  }
+  return null;
+}
+function readProblem([hash, entryHash, archive]: ChoiceManifest["reads"][number], check: ManifestCheck): string | null {
+  const { entry, lookup } = check.graph.locate(refFromHash(hash));
+  if ((lookup.winner?.id ?? null) !== archive || entry.hash !== entryHash) return `another archive provides ${hash}`;
+  if (lookup.winner && !check.fetcher.isCached(lookup.winner, entry.hash)) return `${hash} isn't in the resolver's cache for ${lookup.winner.name}`;
+  return null;
+}
+function exportProblem([kind, path, archive]: ChoiceManifest["exports"][number], check: ManifestCheck): string | null {
+  const winner = check.graph.locate(refFromPath(path)).lookup.winner;
+  if (winner?.id !== archive) return `another archive provides ${path}`;
+  if (!check.exporter.has!(kind, path, archiveExportSource(archive, check.gameRoot))) return `${path} isn't in the export cache for ${winner.name}`;
   return null;
 }
 /** Whether a manifest holds on the installation opened now. */

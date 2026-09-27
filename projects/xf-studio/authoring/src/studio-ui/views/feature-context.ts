@@ -11,7 +11,8 @@ import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../
 import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
-import type { FacadeOf, FeatureMenuItem, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
+import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
+import type { PartPresetRequest } from "../../part-presets";
 
 type Action = { kind: string };
 /** Only the keys that carry a value, so a rendered entry has exactly the fields its contribution gave. */
@@ -52,6 +53,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     }),
     anchors: Object.freeze({ register: (...args: Parameters<StudioRuntime["anchors"]["register"]>) => rt.anchors.register(...args) }),
     reveal: (panel, focus) => rt.dock.reveal(panel, focus),
+    openSettings: section => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof port.links.open>[0]) => port.links.open(link) }),
     changed: () => rt.changed(),
     targetSections,
@@ -66,6 +68,12 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       hints: (slot: HTMLElement, host: HTMLElement) => new ViewportInputHints(port.viewport, "uv", slot, host),
     }),
     readiness: () => readinessText(new Frame(port)),
+    facial: Object.freeze({ snapshot: () => port.facial.snapshot(), retry: () => port.facial.retry() }),
+    presets: Object.freeze({
+      list: () => port.presets.list(owner),
+      capability: (request: FeaturePresetRequest) => port.presets.capability({ ...request, feature: owner } as PartPresetRequest),
+      execute: (request: FeaturePresetRequest) => port.presets.execute({ ...request, feature: owner } as PartPresetRequest),
+    }),
   } satisfies FeatureViewContext);
 }
 
@@ -101,6 +109,7 @@ export function moduleViewContext(rt: StudioRuntime, owner: string): ModuleViewC
     }),
     anchors: Object.freeze({ register: (...args: Parameters<StudioRuntime["anchors"]["register"]>) => rt.anchors.register(...args) }),
     reveal: (panel: string, focus?: boolean) => rt.dock.reveal(panel, focus),
+    openSettings: (section?: Parameters<StudioRuntime["settings"]["open"]>[0]) => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof rt.port.links.open>[0]) => rt.port.links.open(link) }),
     changed: () => rt.changed(),
   } satisfies ModuleViewContext);

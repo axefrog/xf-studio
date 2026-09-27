@@ -22,7 +22,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
   const changes = h("ul", { class: "result-list install-changes", "aria-label": "What will change" });
   const notes = h("div", { class: "install-notes" });
   const status = h("p", { class: "install-status", role: "status", "aria-live": "polite" });
-  const setup = button({ label: "Open Game & tools", icon: "settings", small: true, onClick: () => { close(); options.openSetup(); } });
+  const setup = button({ label: "Open Settings", icon: "settings", small: true, onClick: () => { close(); options.openSetup(); } });
   const again = button({ label: "Check again", icon: "refresh", small: true, onClick: () => void review() });
   const rename = button({ label: "Rename the mod", icon: "rename", small: true, onClick: () => { close(); options.rename?.(); } });
   const add = button({ label: "Add", icon: "package", variant: "primary", onClick: () => void apply() });
@@ -68,7 +68,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     const blocked = plan?.blocked ?? null;
     setText(status, busy === "modInstall.apply" ? "Adding your mod…" : said || blocked || "");
     status.className = `install-status${said || blocked ? " warning" : ""}`;
-    // The one next step as a button, as the plan names it (UI-99): Game & tools, renaming the mod, or Check again once the
+    // The one next step as a button, as the plan names it (UI-99): Settings, renaming the mod, or Check again once the
     // person has done what it says. A refused Add offers Check again.
     const next = blocked ? plan!.next : said ? "retry" : null;
     setup.hidden = next !== "setup";

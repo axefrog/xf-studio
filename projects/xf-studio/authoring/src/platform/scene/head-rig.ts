@@ -6,6 +6,7 @@ import { IdleAnimation } from "../../idle-animation";
 import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_ASSET, parseIdleCatalogue, type IdleCatalogue } from "../../idle-catalogue";
 import { activeEyeShape, GAME_BLINK_MISSING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../game-blink";
 import { composePreviewMotion } from "../../preview-motion";
+import { FaceDriver, type FacePose, type FaceRigJoint } from "./face-driver";
 import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../eye-material";
 import type { LoadedCoreDetail } from "../../core-detail-loader";
 import type { CoreBody } from "../../render-detail";
@@ -190,8 +191,14 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
     replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; } }, core.body);
   const { idle, blink } = motion;
   const finalEyes = eyes;
-  // One owner of the rig's bones at a time: the idle while enabled, otherwise the blink (preview-motion.ts).
-  const rigMotion = composePreviewMotion(idle, blink);
+  // The held expression's face driver (face-driver.ts): bound to the head's bones now, at their neutral pose, like the blink; its rig
+  // arrives with the host's face data (`face.setRig`).
+  const faceTargets: THREE.Object3D[] = [];
+  scene.updateMatrixWorld(true);
+  scene.traverse(o => { if (o instanceof THREE.Bone) faceTargets.push(o); });
+  const face = new FaceDriver(faceTargets);
+  // One owner of the rig's bones at a time: the idle while enabled, else a held expression, else the blink (preview-motion.ts).
+  const rigMotion = composePreviewMotion(idle, blink, face);
   /**
    * The idle's head displacement at phase zero, where stored cameras are measured from (neutral space), or zero while the idle is
    * off. Always derived at phase zero so restoring a paused or nonzero phase never adds a different offset.
@@ -298,6 +305,17 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
     /** The default skin the core head shows until (and unless) the V's resolved skin is drawn on it. */
     skin, coreEye,
     motion: { ...motion, rig: rigMotion },
+    /**
+     * The platform's facial pose sink (design §4 `FacialPosePort`): the face skeleton's rest once known, and the held expression's solved
+     * pose. Holding or releasing hands the bones over by the motion rules (preview-motion.ts).
+     */
+    face: {
+      setRig: (joints: readonly FaceRigJoint[]) => face.setRig(joints),
+      hold(pose: FacePose) { face.hold(pose); rigMotion.faceChanged(); },
+      release() { if (!face.holding) return; face.release(); rigMotion.faceChanged(); },
+      get ready() { return face.ready; },
+      get holding() { return face.holding; },
+    },
     eyeShapeChoices, eyesFollowShape, idleOffset,
     eyeShape, setFaceMorphs, eyeShapeOptions, applySavedV,
     /** The default skin's normal map strength follows the viewer's normals toggle. */

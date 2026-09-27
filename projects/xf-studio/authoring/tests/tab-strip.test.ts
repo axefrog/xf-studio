@@ -1,4 +1,4 @@
-// The tab strip condenses instead of overflowing its header (UI-109): full labels, then the inactive labels cut short, then icon-only
+// The tab strip condenses instead of overflowing its header (UI-111): full labels, then the inactive labels cut short, then icon-only
 // tabs (the active one last), then an overflow menu; the active tab always stays in the strip, and every tab is named by its label.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { installLightDom, uninstallLightDom, type LightElement } from "./light-dom";

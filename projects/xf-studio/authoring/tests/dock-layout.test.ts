@@ -99,7 +99,7 @@ test("floating panels magnetize into a composite that grows instead of squeezing
 
 test("closing and reopening restores a panel beside its siblings", () => {
   let tree = closePanel(defaultWide(STUDIO_CATALOGUE), "warp");
-  expect(tree.closed).toEqual(["activity", "help", "warp"]);
+  expect(tree.closed).toEqual(["activity", "settings", "help", "warp"]);
   expect(locate(tree, "warp")).toBeUndefined();
   tree = openPanel(tree, "warp", ["shape", "edge"], area);
   expect(locate(tree, "warp")!.group.id).toBe("g-inspect");
@@ -149,8 +149,11 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   // A module's panel (the Save Explorer's, restored here as if its module were shown) joins beside the UV map the same way.
   locate(expected.wide, "uv")!.group.panels.push("save-explorer.explorer");
   locate(expected.compact, "uv")!.group.panels.push("save-explorer.explorer");
-  // Panels closed by default (Help) stay closed until someone opens them.
-  expected.wide.closed.push("help"); expected.compact.closed.push("help");
+  // The Expressions panel (a module hidden by default, which the shell parks) joins its default group too.
+  locate(expected.wide, "finish")!.group.panels.push("expressions.controls");
+  locate(expected.compact, "finish")!.group.panels.push("expressions.controls");
+  // Panels closed by default (Settings, Help) stay closed until someone opens them.
+  expected.wide.closed.push("settings", "help"); expected.compact.closed.push("settings", "help");
   expect(restored.state).toEqual(expected);
   expect(locate(restored.state.wide, "history")!.group.active).toBe("layers");
 });

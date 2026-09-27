@@ -13,7 +13,7 @@ import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from
 import { PROJECT_LINKS, type ProjectLink } from "./project-links";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
-import { createBrowserSaveExplorerDevice } from "./browser-save-explorer-device";
+import { createBrowserSaveExplorerDevice, savesLocationSignal } from "./browser-save-explorer-device";
 import { createModuleServices } from "./compose/module-services";
 import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf } from "./mod-install-actions";
@@ -39,7 +39,10 @@ import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
-import { STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
+import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
+import { combineFacePoses, FacialPreview } from "./facial-preview";
+import { createBrowserFacialDevice } from "./browser-facial-device";
+import { PartPresetService, partPresetTransport } from "./part-presets";
 import { UIPreferenceActions } from "./ui-preferences";
 import { storedViewGraph } from "./preview-view-graph";
 import { DiagnosticsActions } from "./diagnostics/actions";
@@ -59,15 +62,15 @@ export type StudioHost = {
   localSetup?: LocalSetupActions;
   /** Opens a named official page (WolvenKit's, or XF Studio's own); without it the page opens in a new browser tab. */
   openLink?: (link: WolvenKitLink | ProjectLink) => Promise<void>;
-  /** Where the game folder and WolvenKit CLI are set, in the host's own words ("Build setup", "Game & tools"). */
+  /** Where the game folder and WolvenKit CLI are set, in the host's own words ("Build setup", "Settings"). */
   setupPlace: string;
-  /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Game & tools is shown. */
+  /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Settings › Game is shown. */
   openSetup?: () => void;
   /** The host's About view (version, licences, updates); the Studio offers it in Help and the command palette (UI-87). */
   about?: () => void;
   /** "Get the desktop app": localhost only; the desktop app leaves it out, so it offers nothing about itself. */
   desktopApp?: DesktopAppActions;
-  /** Called once the Studio is mounted, with what the host may ask of it (the desktop's welcome and About open Game & tools). */
+  /** Called once the Studio is mounted, with what the host may ask of it (the desktop's welcome and About open Settings › Game). */
   onMounted?: (studio: { openGameSetup(): void }) => void;
   /** Lets the host ask for an immediate workspace save (the desktop does before closing). */
   onFlushRequest?: (flush: () => void) => void;
@@ -114,8 +117,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
-  // Part-less modules' services (the Save Explorer), over their browser devices.
-  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document) });
+  // Part-less modules' services (the Save Explorer), over their browser devices. The saves device reads the workspace's own saves
+  // folder and follows Settings › Saves (UI-109).
+  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
+    { verification, locationChanged: savesLocationSignal(localSetup) }) });
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
   const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
     verification ? "/api/verification/mod-install" : "/api/mod-install");
@@ -191,6 +196,16 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
   });
   core.app.attach({ quality: previewDevice.coordinator.quality });
+  // The live face (facial-preview.ts): the composition's face posers read the selected look's parts, the host solves them with the blink,
+  // and the head shows the result once it is loaded. Part presets (favourites) live in the library, the verification workspace's apart.
+  // The main view shows the held expression: the view graph's per-view scene input is the seam where another view could show another.
+  const facial = new FacialPreview(createBrowserFacialDevice());
+  const presets = new PartPresetService(partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets"));
+  core.app.attach({ facial, presets });
+  facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
+    () => motionActions?.snapshot());
+  core.app.subscribe(() => facial.changed());
+  facial.start();
   previewDevice.coordinator.quality.subscribe(persist);
   const fieldHooks = {
     selectedField: () => core.presentation.selectedField()?.id,
@@ -312,6 +327,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       });
       head = attached;
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
+      facial.attachScene(scene.face);
       status = { ...status, assets: { ...status.assets, loaded: true } };
       viewportDevice.headReady();
       session.setPreviewReady(); session.flush(); drawUV();
@@ -331,6 +347,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   /** Release the loaded head (or a part-attached one) and forget its services. */
   function releaseHead(attached: AttachedHead | undefined) {
     if (head === attached) head = undefined;
+    facial.attachScene(undefined);
     attached?.dispose();
     scene = undefined; savedAppearance = undefined; previewActions = undefined; motionActions = undefined;
   }

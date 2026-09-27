@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, win32 } from "node:path";
 
@@ -84,13 +84,30 @@ export type DotNetPorts = {
   list(path: string): string[];
 };
 
+const REGISTRY_QUERY = ["query", "HKLM\\SOFTWARE\\dotnet\\Setup\\InstalledVersions\\x64", "/v", "InstallLocation", "/reg:32"];
+const registryValue = (stdout: string | undefined) => /^\s*InstallLocation\s+REG_SZ\s+(.+?)\s*$/m.exec(stdout ?? "")?.[1] ?? null;
+/** How long a registry answer is used before it is asked again, in the background. */
+export const REGISTRY_REFRESH_MS = 60_000;
+let registry: { value: string | null; at: number } | null = null, refreshing = false;
+/**
+ * The registered location, asked with `reg query` once synchronously, then again in the background at most once a minute: the setup
+ * state is asked for on many requests, and a synchronous `reg` launch (about 80 ms) each time held the host's event loop up.
+ */
 const registryLocation = () => {
-  try {
-    const run = spawnSync("reg", ["query", "HKLM\\SOFTWARE\\dotnet\\Setup\\InstalledVersions\\x64", "/v", "InstallLocation", "/reg:32"],
-      { encoding: "utf8", windowsHide: true, timeout: 5000 });
-    return /^\s*InstallLocation\s+REG_SZ\s+(.+?)\s*$/m.exec(run.stdout ?? "")?.[1] ?? null;
-  } catch { return null; }
+  if (!registry) {
+    try { registry = { value: registryValue(spawnSync("reg", REGISTRY_QUERY, { encoding: "utf8", windowsHide: true, timeout: 5000 }).stdout), at: Date.now() }; }
+    catch { registry = { value: null, at: Date.now() }; }
+  } else if (Date.now() - registry.at > REGISTRY_REFRESH_MS && !refreshing) {
+    refreshing = true;
+    execFile("reg", REGISTRY_QUERY, { encoding: "utf8", windowsHide: true, timeout: 5000 }, (error, stdout) => {
+      refreshing = false;
+      registry = { value: error ? registry?.value ?? null : registryValue(stdout), at: Date.now() };
+    });
+  }
+  return registry.value;
 };
+/** Ask the registry again on the next detection (the person installed .NET: check again). */
+export function forgetDotNetRegistry() { registry = null; }
 export const hostDotNetPorts = (): DotNetPorts => ({
   env: process.env, platform: process.platform, registeredLocation: registryLocation,
   isDirectory: path => { try { return statSync(path).isDirectory(); } catch { return false; } },

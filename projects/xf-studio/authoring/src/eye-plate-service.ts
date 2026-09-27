@@ -126,7 +126,7 @@ const MISSING_MESSAGE = "Build could not find the female player head in your Cyb
 function moddedMessage(providers: string[]): string {
   const names = providers.length ? providers.join(", ") : "an installed mod";
   return `Your installed head mod ${names} changes the head's shape data in a way ${EYE_MAKEUP_MOD.modName} doesn't support yet, so nothing was built. ` +
-    `To build anyway, set “${EYE_PLATE_HEAD_SETTING.label}” to “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” under Game & tools in the Mod package panel, ` +
+    `To build anyway, set “${EYE_PLATE_HEAD_SETTING.label}” to “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” in Settings › Game, ` +
     "then build again (the makeup may then not sit exactly on your modded head). Or disable that mod in the profile chosen in Local setup.";
 }
 

@@ -98,8 +98,9 @@ export class AuthoringDocument {
    */
   contentKey(features?: readonly string[]): string {
     const own = !features || features.includes(this.parts.feature) ? JSON.stringify(this.state.recipe) : "";
-    const others = this.others;
-    return others ? `${own}\n${others.content(features ?? others.features())}` : own;
+    // Only features holding a part add to the key: with none, it is the recipe's JSON, as while eye makeup was alone.
+    const others = this.others, rest = others?.content(features ?? others.features());
+    return rest && rest !== "[]" ? `${own}\n${rest}` : own;
   }
   /** Tell listeners that another feature's live part changed (its action was published). */
   partChanged() { this.otherRevision++; this.notify("part"); }
@@ -266,9 +267,9 @@ export class AuthoringDocument {
   snapshot(): ReadonlyDeep<DocumentState> { return this.export(); }
   /** The editor state with its look history as data (steps and chunks, never whole recipes per step). */
   export(): DocumentState {
-    const others = this.others;
+    const others = this.others?.export();
     return { ...structuredClone(this.state), history: this.history.data(),
-      ...(this.history.trimmed ? { historyTrimmed: true } : {}), ...(others ? { liveFeatures: others.export() } : {}) };
+      ...(this.history.trimmed ? { historyTrimmed: true } : {}), ...(others && Object.keys(others).length ? { liveFeatures: others } : {}) };
   }
   /** For collection switches and workspace restore, publish the whole validated editor state at once. */
   restore(value: DocumentState) {

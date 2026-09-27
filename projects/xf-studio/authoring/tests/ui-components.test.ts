@@ -1,4 +1,4 @@
-// The component library's controls (UI-110): behaviour, states and accessibility of the components features compose, in the light DOM.
+// The component library's controls (UI-112): behaviour, states and accessibility of the components features compose, in the light DOM.
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { installLightDom, lightEvent, uninstallLightDom, type LightElement } from "./light-dom";
 

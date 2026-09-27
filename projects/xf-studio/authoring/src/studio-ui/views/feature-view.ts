@@ -12,7 +12,8 @@
  */
 import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../studio-application";
 import type { StudioContextHit } from "../../studio-context-targets";
-import type { FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
+import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest } from "../../part-presets";
 import type { ModuleService } from "../../platform/api";
 import type { Command } from "../commands";
 import type { Feedback, FeedbackAction } from "../feedback";
@@ -23,6 +24,7 @@ import type { MenuAnchor, MenuSection } from "../menu";
 import type { PanelController } from "../panels/collection";
 import type { DispatchFeedback, Port } from "../runtime";
 import type { ViewContribution } from "./contribution";
+import type { SettingsSection } from "../settings-sections";
 
 /** The action type a facade dispatches. */
 export type FacadeAction<F> = F extends { dispatch(action: infer A): unknown } ? A : never;
@@ -83,6 +85,8 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   readonly anchors: Pick<AnchorRegistry, "register">;
   /** Open (or bring forward) a panel. */
   reveal(panel: string, focus?: boolean): void;
+  /** Open the Settings panel at one of its groups (the game folder and WolvenKit are chosen in Settings › Game and › Tools). */
+  openSettings(section?: SettingsSection): void;
   /** XF Studio's own public pages. */
   readonly links: ProjectLinkPort;
   /** Presentation-local changes that need a repaint. */
@@ -94,7 +98,18 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   readonly uv: UvViewportSlot;
   /** The makeup preview's readiness in the shell's one wording (UI-92), for a view's readiness badge. */
   readiness(): ViewBadge;
+  /** The live facial preview (the held expression on the head): its readiness, controls and start points; `retry` tries again. */
+  readonly facial: FacialPort;
+  /** This feature's part presets in the library: its list, and save, rename and delete (the `presets` family, feature filled in). */
+  readonly presets: {
+    list(): PartPresetList;
+    capability(request: FeaturePresetRequest): StudioCapability;
+    execute(request: FeaturePresetRequest): Promise<PartPresetOutcome>;
+  };
 };
+/** A part preset request without its feature (the view context adds its own). */
+export type FeaturePresetRequest = PartPresetRequest extends infer R ? R extends { kind: "partPreset.save" } ? Omit<R, "feature" | "part">
+  : R extends { feature: string } ? Omit<R, "feature"> : never : never;
 
 /** A view's corner badge (the readiness a module contributes, view-graph-design.md §3.9). */
 export type ViewBadge = { phase: string; label: string; detail: string };
@@ -145,6 +160,8 @@ export type ModuleViewContext<F extends ModuleService = ModuleService> = {
   readonly anchors: Pick<AnchorRegistry, "register">;
   /** Open (or bring forward) a panel. */
   reveal(panel: string, focus?: boolean): void;
+  /** Open the Settings panel at one of its groups (a saves folder is chosen in Settings › Saves). */
+  openSettings(section?: SettingsSection): void;
   readonly links: ProjectLinkPort;
   /** Presentation-local changes that need a repaint. */
   changed(): void;

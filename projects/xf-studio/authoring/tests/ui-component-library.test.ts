@@ -1,4 +1,4 @@
-// The component library is documented in full (UI-111): every export of src/studio-ui/components has a style-guide entry with every
+// The component library is documented in full (UI-113): every export of src/studio-ui/components has a style-guide entry with every
 // field of its contract and a live specimen built by the production component, and the generated guide carries them.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";

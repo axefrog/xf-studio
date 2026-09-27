@@ -23,6 +23,8 @@ export interface LocalSettings {
   updates: { channel: UpdateChannel; checkAutomatically: boolean };
   /** "base-game" builds with the unmodified head when an installed head mod isn't supported yet. */
   eyePlateHead: EyePlateHead;
+  /** Where the game's saves are, when the person chose a folder; null uses the detected Saved Games folder. */
+  savesDirectory: string | null;
 }
 
 export type LocalSettingsDraft = Omit<LocalSettings, "schema" | "revision">;
@@ -40,6 +42,7 @@ export const defaultLocalSettings = (): LocalSettings => ({
   installMode: "none",
   updates: { channel: "stable", checkAutomatically: false },
   eyePlateHead: "installed",
+  savesDirectory: null,
 });
 
 const object = (value: unknown, name: string): Record<string, unknown> => {
@@ -81,7 +84,7 @@ const RETIRED_FIELDS = ["plateInput", "pythonExecutable", "bunExecutable"] as co
 export function parseLocalSettings(value: unknown): LocalSettings {
   const root = object(value, "Settings");
   keys(root, ["schema", "revision", "gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-    "wolvenKitCli", "sourceCache", "preview", "installMode", "updates", "eyePlateHead"], "Settings");
+    "wolvenKitCli", "sourceCache", "preview", "installMode", "updates", "eyePlateHead", "savesDirectory"], "Settings");
   if (root.schema !== LOCAL_SETTINGS_SCHEMA) throw Error("Unsupported local settings version.");
   if (!Number.isSafeInteger(root.revision) || (root.revision as number) < 0) throw Error("Settings revision is invalid.");
   const cache = object(root.sourceCache, "Source cache");
@@ -110,6 +113,8 @@ export function parseLocalSettings(value: unknown): LocalSettings {
       checkAutomatically: updates.checkAutomatically as boolean },
     // Settings saved before this choice existed use the head the game loads.
     eyePlateHead: root.eyePlateHead === undefined ? "installed" : choice(root.eyePlateHead, EYE_PLATE_HEAD_CHOICES, "Eye plate head"),
+    // Settings saved before this choice existed use the detected saves folder.
+    savesDirectory: root.savesDirectory === undefined ? null : path(root.savesDirectory, "Saves folder"),
   };
 }
 

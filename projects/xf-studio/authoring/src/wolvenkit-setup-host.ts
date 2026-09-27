@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { fileSha256 } from "./derived-cache";
-import { detectDotNet, missingFramework, runtimeGuidance, runtimeRequirementFor, type DotNetInstall, type FrameworkReference } from "./dotnet-runtime";
+import { detectDotNet, forgetDotNetRegistry, missingFramework, runtimeGuidance, runtimeRequirementFor, type DotNetInstall, type FrameworkReference } from "./dotnet-runtime";
 import { DownloadError, downloadVerified, type DownloadOptions } from "./tool-download";
 import { probeWolvenKitCliAsync, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "./wolvenkit-cli";
 import { extractionIssue, MANAGED_INSTALL_SCHEMA, megabytes, parseInstallManifest, WOLVENKIT_RELEASE,
@@ -128,6 +128,7 @@ export class WolvenKitSetupHost {
   /** Forget cached runtime and tool detection (the user installed something; check again). */
   recheck(): WolvenKitSetupState {
     this.dotnetMemo = null; this.existingMemo = null; this.installMemo = null;
+    forgetDotNetRegistry();
     return this.snapshot();
   }
 

@@ -1,5 +1,5 @@
 // Summoning a panel (the palette, the Panels menu, Help, guidance, any reveal) shows it and moves focus to it, whatever state it was
-// in (UI-108): in an expanded group its tab becomes active; in a collapsed group the group expands; a panel not in the layout goes back
+// in (UI-110): in an expanded group its tab becomes active; in a collapsed group the group expands; a panel not in the layout goes back
 // to an obvious home (where it was closed from, or its factory group) and otherwise opens floating, never into an arbitrary group
 // (the maintainer's "I summoned Help, where is it?").
 import { afterAll, beforeAll, expect, test } from "bun:test";

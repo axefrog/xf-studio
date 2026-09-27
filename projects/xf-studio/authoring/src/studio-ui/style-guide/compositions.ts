@@ -87,7 +87,7 @@ export function compositions() {
       when: "Before building: Check, read omissions, fix or accept them, then Build (confirmed in place).",
       combine: "Result freshness turns Stale as soon as the draft changes; the finish status and the omission list use the same catalogue wording." }),
     pattern({ id: "k-compact", title: "Compact workspace", status: "implemented", wide: true, specimen: compact,
-      what: "Head and UV map side by side above two condensed tab groups; the head keeps a portrait cell; header actions become icons. Crowded tab strips condense in stages: shortened labels, then icon-only inactive tabs (named by tooltip and accessible name), then an overflow menu (UI-109).",
+      what: "Head and UV map side by side above two condensed tab groups; the head keeps a portrait cell; header actions become icons. Crowded tab strips condense in stages: shortened labels, then icon-only inactive tabs (named by tooltip and accessible name), then an overflow menu (UI-111).",
       when: "Windows narrower than 1100 px, tablets, or a narrow browser beside the game." }),
     pattern({ id: "k-future", title: "A future category joining", status: "future", wide: true, specimen: future,
       what: "How a later category (eyebrows is only an example) would join: an entry in the category switcher, its own panel registry and default layouts, reuse of the shell, dock, lists, controls, library and package patterns — and its own concepts.",

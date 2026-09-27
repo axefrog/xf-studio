@@ -19,7 +19,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
@@ -163,8 +163,25 @@ function visibleLoose(candidates: readonly SourceCandidate[]): SourceCandidate[]
 }
 
 function fingerprint(path: string): string {
+  const known = fingerprintMemo?.get(path);
+  if (known !== undefined) return known;
   const stat = statSync(path);
-  return createHash("sha256").update(`${path}|${stat.size}|${stat.mtimeMs}`).digest("hex").slice(0, 24);
+  const value = createHash("sha256").update(`${path}|${stat.size}|${stat.mtimeMs}`).digest("hex").slice(0, 24);
+  fingerprintMemo?.set(path, value);
+  return value;
+}
+/** Archive fingerprints read during one synchronous check (`withArchiveFingerprints`), or null outside one. */
+let fingerprintMemo: Map<string, string> | null = null;
+/**
+ * Run a synchronous check that asks about many resources of the same archives (a prepared choice's manifest: every read's cache entry
+ * is keyed by its archive's fingerprint) with each archive's size and modification time read once, not once per resource. Only for the
+ * length of the call (or of one check run in slices, each slice passing the same `memo`): nothing is remembered after it, so a changed
+ * archive is seen by the next check.
+ */
+export function withArchiveFingerprints<T>(check: () => T, memo: Map<string, string> = new Map()): T {
+  if (fingerprintMemo) return check();
+  fingerprintMemo = memo;
+  try { return check(); } finally { fingerprintMemo = null; }
 }
 
 /**
@@ -624,6 +641,7 @@ export class NativeAnswerFiles implements NativeAnswerLedger {
   /** Markers being written now (they count as present). */
   private readonly writing = new Set<string>();
   private readonly tag: string;
+  private folderMade = false;
   constructor(private readonly cacheDir: string, identity: string) {
     this.tag = createHash("sha256").update(identity).digest("hex").slice(0, 12);
     pruneStaleMarkers(cacheDir, this.tag);
@@ -641,10 +659,14 @@ export class NativeAnswerFiles implements NativeAnswerLedger {
     // Written again when it is gone (Clear removed it this session; NATIVE-27).
     if (!file || this.writing.has(file) || (this.known.has(file) && existsSync(file))) return;
     this.known.add(file);
-    try { mkdirSync(join(this.cacheDir, "native"), { recursive: true }); }
-    catch { return; } // Advisory: the choice is checked by preparing it next time.
     this.writing.add(file);
-    writeFile(file, "").catch(() => {}).finally(() => this.writing.delete(file));
+    // Off the event loop, and the folder made once per ledger rather than with a synchronous call per answer (that held the host up);
+    // a write that fails because Clear removed the folder makes it again and writes once more. Advisory: a marker that can't be
+    // written means the choice is checked by preparing it next time.
+    const folder = join(this.cacheDir, "native"), write = () => writeFile(file, "");
+    const made = () => mkdir(folder, { recursive: true }).then(() => { this.folderMade = true; });
+    (this.folderMade ? write().catch(() => made().then(write)) : made().then(write))
+      .catch(() => { this.known.delete(file); }).finally(() => this.writing.delete(file));
   }
 }
 
