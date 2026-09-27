@@ -43,9 +43,12 @@ export type DialMark = { azimuth: number; elevation: number; colour: string };
 
 const SIZE = 100, R = 44, C = SIZE / 2;
 /** The height scale's x in the drawing, and where its labels start. */
-const AXIS_X = 142, LABEL_X = AXIS_X + 5;
-/** The drawing's box: the dial, the four direction words outside its edge, and the height scale on the right. */
-const VIEW = Object.freeze({ x: -20, y: -9, width: 186, height: 118 });
+const AXIS_X = 108, LABEL_X = AXIS_X + 5;
+/**
+ * The drawing's box: the dial, the four direction words outside its edge (the side ones turned upright), and the height scale on the
+ * right with room for its labels. The words keep one type size whatever the drawing's size (`--dial-unit` counter-scales them).
+ */
+const VIEW = Object.freeze({ x: -8, y: -12, width: 150, height: 124 });
 /** The smallest the dial is drawn, and the resize bar's keyboard step, in CSS pixels of the drawing's width. */
 export const DIAL_MIN_SIZE = 180;
 export const DIAL_DEFAULT_SIZE = 280;
@@ -148,8 +151,9 @@ export class DirectionDial {
     const word = (text: string, x: number, y: number, anchor: string, className = "dial-word") => {
       const t = svg("text", { x, y, "text-anchor": anchor, class: className }); t.textContent = text; return t; };
     // The words sit outside the edge, clear of the rings and axes.
-    this.art.append(word("Front", C, C + R + 7, "middle"), word("Behind", C, C - R - 3, "middle"), word("V's right", C - R - 3, C + 2, "end"),
-      word("V's left", C + R + 3, C + 2, "start"));
+    const side = (text: string, x: number, turn: number) => { const t = word(text, x, C, "middle"); t.setAttribute("transform", `rotate(${turn} ${x} ${C})`); return t; };
+    this.art.append(word("Front", C, C + R + 3, "middle", "dial-word dial-word-below"), word("Behind", C, C - R - 3, "middle"),
+      side("V's right", C - R - 3, -90), side("V's left", C + R + 3, 90));
     // The height scale: its line, the labelled ticks, and the current height's marker.
     this.ticks = svg("g", { class: "dial-ticks" });
     this.markerLabel = word("", LABEL_X, 0, "start", "dial-height-label");
@@ -203,6 +207,8 @@ export class DirectionDial {
   private applySize() {
     const shown = this.shownSize;
     this.element.style.setProperty("--dial-size", `${shown}px`);
+    // Drawing units per CSS pixel: the words and numbers are sized in px times this, so they stay one type size as the drawing scales.
+    this.element.style.setProperty("--dial-unit", (VIEW.width / shown).toFixed(4));
     setAttr(this.grip, "aria-valuenow", String(shown));
     setAttr(this.grip, "aria-valuemax", String(fitDialSize(Number.POSITIVE_INFINITY, this.available === Number.POSITIVE_INFINITY ? 1e5 : this.available)));
     setAttr(this.grip, "aria-valuetext", `${shown} pixels wide`);
@@ -274,7 +280,8 @@ export class DirectionDial {
     if (this.disabled || event.button !== 0) return;
     event.preventDefault();
     this.endBurst();
-    this.dial.focus();
+    // Focus without the keyboard ring: a pointer drag isn't keyboard focus (Shift or Alt held must not bring the ring).
+    (this.dial.focus as (options?: { preventScroll?: boolean; focusVisible?: boolean }) => void)({ preventScroll: true, focusVisible: false });
     this.dial.setPointerCapture(event.pointerId);
     const at = (e: PointerEvent) => { const box = this.art.getBoundingClientRect();
       return dragDirection(VIEW.x + (e.clientX - box.left) / box.width * VIEW.width, VIEW.y + (e.clientY - box.top) / box.height * VIEW.height,
@@ -310,14 +317,14 @@ export class DirectionDial {
     const e = Math.round(direction.elevation), az = Math.round(direction.azimuth);
     this.marker.setAttribute("transform", `translate(0 ${heightY(e).toFixed(2)})`);
     this.markerLabel.textContent = signed(e);
-    this.markerLabel.setAttribute("y", "2.2");
+    this.markerLabel.setAttribute("y", "0");
     const ticks = heightTicks(e, this.range), key = JSON.stringify(ticks);
     if (key !== this.tickKey) {
       this.tickKey = key;
       this.ticks.replaceChildren(...ticks.flatMap(tick => {
         const y = heightY(tick.value).toFixed(2), line = svg("line", { x1: AXIS_X, y1: y, x2: AXIS_X + 3, y2: y, class: "dial-scale-tick" });
         if (tick.hidden) return [line];
-        const label = svg("text", { x: LABEL_X, y: (heightY(tick.value) + 2.2).toFixed(2), class: "dial-scale-label" });
+        const label = svg("text", { x: LABEL_X, y: heightY(tick.value).toFixed(2), class: "dial-scale-label" });
         label.textContent = signed(tick.value);
         return [line, label];
       }));

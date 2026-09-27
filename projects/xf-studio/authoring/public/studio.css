@@ -331,7 +331,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .direction-dial .control-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 22px; }
 .direction-dial .control-label-text { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .dial-readouts { display: inline-flex; gap: var(--sp-3); font: var(--fs-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
-.direction-dial-face { width: var(--dial-size, 280px); max-width: 100%; aspect-ratio: 186 / 118; margin: 0 auto; cursor: grab; touch-action: none; }
+.direction-dial-face { width: var(--dial-size, 280px); max-width: 100%; aspect-ratio: 150 / 124; margin: 0 auto; cursor: grab; touch-action: none; }
 .direction-dial-face:active { cursor: grabbing; }
 .direction-dial-face:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .direction-dial-face.disabled { cursor: default; opacity: .55; }
@@ -341,7 +341,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dial-axis { stroke: var(--line); stroke-width: .5; }
 .dial-head { fill: var(--bg-panel); stroke: var(--text-muted); stroke-width: .8; }
 .dial-nose { stroke: var(--text-muted); stroke-width: .8; }
-.dial-word { font: 6.5px var(--font-ui); fill: var(--text-faint); pointer-events: none; }
+.dial-word { font-family: var(--font-ui); font-size: calc(var(--fs-2xs) * var(--dial-unit, .6)); fill: var(--text-faint); pointer-events: none;
+  dominant-baseline: auto; }
+.dial-word-below { dominant-baseline: hanging; }
 .dial-mark { fill: var(--mark); opacity: .8; stroke: var(--text-muted); stroke-width: .6; transition: opacity .12s; }
 .dial-handle { fill: var(--light, var(--signal)); stroke: oklch(.18 .01 255); stroke-width: 1.2; }
 .direction-dial-face:focus-visible .dial-handle { stroke: var(--focus); stroke-width: 1.6; }
@@ -352,10 +354,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* The height scale: a hairline with labelled ticks, the current height marked in the light's colour. */
 .dial-scale { stroke: var(--line-strong); stroke-width: .6; }
 .dial-scale-tick { stroke: var(--line-strong); stroke-width: .6; }
-.dial-scale-label { font: 6.2px var(--font-mono); fill: var(--text-faint); pointer-events: none; }
+.dial-scale-label { font-family: var(--font-mono); font-size: calc(var(--fs-2xs) * var(--dial-unit, .6)); fill: var(--text-faint); pointer-events: none; dominant-baseline: middle; }
 .dial-height-mark { fill: var(--light, var(--signal)); stroke: oklch(.18 .01 255); stroke-width: .5; stroke-linejoin: round; }
 .dial-height-tick { stroke: var(--light, var(--signal)); stroke-width: .9; }
-.dial-height-label { font: 600 6.8px var(--font-mono); fill: var(--text); pointer-events: none; }
+.dial-height-label { font-family: var(--font-mono); font-weight: 600; font-size: calc(var(--fs-xs) * var(--dial-unit, .6)); fill: var(--text); pointer-events: none; dominant-baseline: middle; }
 /* The resize bar under the dial: drag down to enlarge, up to shrink. */
 .dial-grip { display: flex; justify-content: center; align-items: center; height: 12px; margin: 0 auto; width: min(var(--dial-size, 280px), 100%); cursor: ns-resize;
   touch-action: none; border-radius: var(--bevel-sm); }
