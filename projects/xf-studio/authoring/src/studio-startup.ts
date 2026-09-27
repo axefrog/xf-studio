@@ -274,8 +274,34 @@ async function start(host: StudioHost, root: HTMLElement) {
       lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
       solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
       trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
+      trialCasters: (names: string[] | null) => { scene?.lighting.trialCasters(names); scene?.requestRender(); },
+      casters: () => scene?.lighting.rig.specs.filter(spec => spec.castShadow).map(spec => spec.name) ?? [],
       frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
       shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
+      // The skin scatter (platform/scene/skin-scatter.ts): switch it off for the wrap stand-in and on again (A/B evidence), and its state.
+      scatter: (mode: boolean | "bare") => { scene?.lighting.setScatter(mode); scene?.requestRender(); },
+      scatterEvidence: () => scene ? scene.lighting.scatter.evidence() : null,
+      scatterScale: (scale: number | null) => { scene?.lighting.setScatterScale(scale); scene?.requestRender(); },
+      // The scatter's own passes (input, both blurs), `passes` times back to back after one frame, the GPU finished at both ends.
+      scatterPassMs: (passes: number) => {
+        if (!scene) return null;
+        const gl = scene.renderer.getContext(), { scene: world } = scene, scatter = scene.lighting.scatter;
+        scene.lighting.render(scene.camera); gl.finish();
+        const start = performance.now();
+        for (let i = 0; i < passes; i++) scatter.render(world, scene.camera);
+        gl.finish();
+        return (performance.now() - start) / passes;
+      },
+      // One frame right after the scatter's input variants are dropped: their compile cost, as a V's first scatter frame pays it.
+      scatterColdFrameMs: () => {
+        if (!scene) return null;
+        const gl = scene.renderer.getContext();
+        scene.lighting.render(scene.camera); gl.finish();
+        scene.lighting.scatter.resetVariants();
+        const start = performance.now();
+        scene.lighting.render(scene.camera); gl.finish();
+        return performance.now() - start;
+      },
     } });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).

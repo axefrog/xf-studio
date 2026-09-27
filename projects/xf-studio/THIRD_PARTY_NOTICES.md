@@ -61,6 +61,12 @@ Statically linked libraries, as listed by Bun:
 
 Bun also embeds these MIT-licensed npm packages as Node.js polyfills: acorn, acorn-walk, assert, browserify-zlib, buffer, constants-browserify, crypto-browserify, domain-browser, events, https-browserify, os-browserify, path-browserify, process, punycode, querystring-es3, stream-browserify, stream-http, string_decoder, timers-browserify, tty-browserify, url, util and vm-browserify. Bun credits Evan Wallace's [esbuild](https://github.com/evanw/esbuild) (MIT), from which its transpiler, CSS lexer and module resolver were ported, and the [Lightning CSS](https://github.com/parcel-bundler/lightningcss) and [Servo](https://github.com/servo/servo) projects for its CSS parser. Each library's full licence is in its linked repository.
 
+## Algorithms the app reproduces
+
+The 3D preview's skin light spread follows the game's own subsurface-scattering kernel and separable blur, which is Jorge Jimenez and Diego Gutierrez's published Separable Subsurface Scattering algorithm. It was written from the game's decoded routine, not copied from their code. As a precaution, the notice their licence asks binary redistributions to reproduce:
+
+> Uses Separable SSS. Copyright (C) 2012 by Jorge Jimenez and Diego Gutierrez.
+
 ## Licence texts
 
 ### Bun (MIT)

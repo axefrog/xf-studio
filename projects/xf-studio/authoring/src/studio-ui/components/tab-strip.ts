@@ -81,6 +81,7 @@ export class TabStrip {
   private active = "";
   private hidden: string[] = [];
   private current: TabStripStage = "full";
+  private natural = 0;
   constructor(private readonly options: TabStripOptions) {
     const vertical = options.orientation === "vertical";
     this.tablist = h("div", { class: "dock-tabs", role: "tablist", "aria-label": options.label, "aria-orientation": vertical ? "vertical" : undefined });
@@ -90,6 +91,11 @@ export class TabStrip {
     this.element = h("div", { class: "tab-strip", "data-stage": "full", "data-orientation": vertical ? "vertical" : "horizontal" }, this.tablist, this.more);
   }
   get stage(): TabStripStage { return this.current; }
+  /**
+   * The strip's length with every label whole (the full stage), measured by the last `fit`. It doesn't depend on the stage the strip
+   * is at, so an owner can size a strip by it without the size following the condensing (UI-120).
+   */
+  get fullLength(): number { return this.natural; }
   /** The tabs that live in the overflow menu at the current stage. */
   get overflowed(): readonly string[] { return this.hidden; }
   tab(id: string): HTMLButtonElement | undefined { return this.entries.find(entry => entry.item.id === id)?.tab; }
@@ -171,6 +177,7 @@ export class TabStrip {
     for (const stage of ["full", "truncated", "icons"] as const) {
       this.setStage(stage);
       sizes[stage] = this.entries.map(entry => size(entry.tab));
+      if (stage === "full") this.natural = sizes.full.reduce((sum, value) => sum + value, 0);
       // Stop measuring once a stage fits: the common case costs one layout.
       if (sizes[stage].reduce((sum, value) => sum + value, 0) <= available) return;
     }

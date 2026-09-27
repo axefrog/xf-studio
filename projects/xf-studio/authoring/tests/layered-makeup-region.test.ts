@@ -19,6 +19,8 @@ const sampled = (l: Layer, size: number, mirror: Mirror) => {
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) out[y * size + x] = Math.round(255 * coverage((x + .5) / size, (y + .5) / size, l, mirror));
   return out;
 };
+/** A skin scale of another region (the engine's rasters require one; these unmottled layers never read it). */
+const SKIN = { mmPerUv: { u: 300, v: 300 }, texelMm: .1 };
 const alpha = (rgba: Uint8ClampedArray) => Uint8Array.from({ length: rgba.length / 4 }, (_, i) => rgba[i * 4 + 3]);
 
 test("eye makeup's region is what the engine used to hard-code", () => {
@@ -43,7 +45,7 @@ test("eye makeup's region is what the engine used to hard-code", () => {
 test("the raster mirrors a symmetric layer across the region's own line, exactly as its scalar coverage does", () => {
   const l = layer();
   for (const mirror of [{ axis: "u", centre: .5 }, { axis: "u", centre: .4 }, { axis: "v", centre: .3 }] as Mirror[]) {
-    const size = 64, mask = alpha(raster(l, size, mirror));
+    const size = 64, mask = alpha(raster(l, size, mirror, SKIN));
     expect(mask).toEqual(sampled(l, size, mirror));
     // The reflection is covered as the shape itself is.
     const twice = 2 * mirror.centre;
@@ -53,17 +55,17 @@ test("the raster mirrors a symmetric layer across the region's own line, exactly
     }
   }
   // Another region's mirror paints elsewhere: the reflection of a u = ½ layer is not where a v = 0.3 mirror puts it.
-  expect(alpha(raster(l, 64, { axis: "v", centre: .3 }))).not.toEqual(alpha(raster(l, 64, { axis: "u", centre: .5 })));
+  expect(alpha(raster(l, 64, { axis: "v", centre: .3 }, SKIN))).not.toEqual(alpha(raster(l, 64, { axis: "u", centre: .5 }, SKIN)));
   // A cooperative job gives the same bytes as the one-shot raster.
-  const job = createRasterJob(l, 64, { axis: "v", centre: .3 });
+  const job = createRasterJob(l, 64, { axis: "v", centre: .3 }, SKIN);
   while (!job.advance(97));
-  expect(alpha(job.data)).toEqual(alpha(raster(l, 64, { axis: "v", centre: .3 })));
+  expect(alpha(job.data)).toEqual(alpha(raster(l, 64, { axis: "v", centre: .3 }, SKIN)));
 });
 
 test("a window raster samples the same coverage in the window as the head raster, for any mirror", () => {
   const l = layer(), area = { u0: .25, u1: .75, v0: 0, v1: .5 };
   for (const mirror of [{ axis: "u", centre: .5 }, { axis: "v", centre: .3 }] as Mirror[]) {
-    const head = alpha(raster(l, 64, mirror)), window = alpha(rasterWindow(l, 32, 32, area, mirror));
+    const head = alpha(raster(l, 64, mirror, SKIN)), window = alpha(rasterWindow(l, 32, 32, area, mirror, SKIN));
     for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) expect(window[y * 32 + x]).toBe(head[y * 64 + x + 16]);
   }
 });

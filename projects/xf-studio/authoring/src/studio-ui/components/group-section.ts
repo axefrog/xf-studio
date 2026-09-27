@@ -13,7 +13,8 @@ import { iconButton } from "./icon-button";
  * - **Open state** is kept per session under `key` (a module-level map, never saved), so a group stays as the person left it while
  *   the panel is rebuilt.
  * - **Search:** `forceOpen` shows the group open while a search matches inside it, without changing the kept state; `hidden` hides
- *   the whole group when the search matches nothing in it.
+ *   the whole group when the search matches nothing in it. A group the person folds (or opens) during a search stays as they left it
+ *   while that search goes on; the next search opens it again.
  * - **Access:** the WAI disclosure pattern (the button's `aria-expanded` and `aria-controls` point at the body); the heading keeps
  *   its level (`h3` to `h5` around the button).
  */
@@ -41,7 +42,10 @@ export class GroupSection {
   readonly button: HTMLButtonElement;
   private readonly count = h("span", { class: "badge info group-count", hidden: true });
   private readonly resetButton?: HTMLButtonElement;
+  /** A search is showing the group open (`forceOpen`)… */
   private forced = false;
+  /** …and the person folded or opened it themselves since, so later updates of that search leave it alone. */
+  private overridden = false;
   constructor(private readonly options: GroupSectionOptions) {
     const bodyId = uid("group");
     const open = openState.get(options.key) ?? options.expanded ?? false;
@@ -54,12 +58,12 @@ export class GroupSection {
     this.element = h("section", { class: `group-section${options.className ? ` ${options.className}` : ""}`, "data-level": options.level ?? "section" },
       h("div", { class: "group-section-head" }, h(tag, { class: "group-section-title" }, this.button),
         options.help !== undefined ? helpTip(options.title, options.help) : null, this.resetButton), this.body);
-    this.button.addEventListener("click", () => this.setOpen(!isExpanded(this.button), true));
+    this.button.addEventListener("click", () => { if (this.forced) this.overridden = true; this.setOpen(!isExpanded(this.button), true); });
   }
   get expanded() { return isExpanded(this.button); }
   /** Open or fold the group; `remember` keeps the choice for the session (the person's own fold, not a search). */
   setOpen(open: boolean, remember = false) {
-    if (remember) { openState.set(this.options.key, open); this.forced = false; }
+    if (remember) openState.set(this.options.key, open);
     setExpanded(this.button, open);
     this.body.hidden = !open;
     if (remember) this.options.onToggle?.(open);
@@ -74,8 +78,15 @@ export class GroupSection {
     this.count.hidden = set === 0;
     if (this.resetButton) setUnavailable(this.resetButton, !!state.disabled || set === 0,
       state.disabled ? state.reason : `Nothing in ${this.options.title} is changed.`);
-    if (state.forceOpen) { this.forced = true; this.setOpen(true); }
-    else if (this.forced) { this.forced = false; this.setOpen(openState.get(this.options.key) ?? this.options.expanded ?? false); }
+    if (state.forceOpen) {
+      // Each update of a search re-opens the group only until the person folds it (UI-124).
+      if (!this.forced) { this.forced = true; this.overridden = false; }
+      if (!this.overridden) this.setOpen(true);
+    } else if (this.forced) {
+      // The search ended: the kept state returns (what the person last chose, during the search or before it).
+      this.forced = this.overridden = false;
+      this.setOpen(openState.get(this.options.key) ?? this.options.expanded ?? false);
+    }
     this.element.hidden = !!state.hidden;
   }
 }

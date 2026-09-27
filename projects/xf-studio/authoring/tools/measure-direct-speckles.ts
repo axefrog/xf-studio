@@ -7,7 +7,7 @@ import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/reg
 
 const size=1024,seed=2077,density=.88,fineShare=.88;
 const layer=initialRecipe().layers[0]!;
-const alpha=raster(layer, size, EYE_MAKEUP_REGION.mirror);
+const alpha=raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);
 const at=(u:number,v:number)=>alpha[(Math.floor(v*size)*size+Math.floor(u*size))*4+3]??0;
 const unit=(x:number,y:number,salt:number)=>{
   let h=(2166136261^salt^seed)>>>0;

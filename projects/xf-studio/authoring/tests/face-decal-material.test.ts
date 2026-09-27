@@ -99,7 +99,8 @@ describe("the decal family material", () => {
   const program = () => ({ uniforms: {} as Record<string, { value: unknown }>,
     vertexShader: "#include <common>\n#include <begin_vertex>",
     fragmentShader: ["#include <common>", "#include <lights_physical_pars_fragment>", "#include <map_fragment>", "#include <alphamap_fragment>",
-      "#include <roughnessmap_fragment>", "#include <metalnessmap_fragment>", "#include <normal_fragment_maps>", "#include <lights_fragment_maps>"].join("\n") });
+      "#include <roughnessmap_fragment>", "#include <metalnessmap_fragment>", "#include <normal_fragment_maps>", "#include <lights_fragment_maps>",
+      "#include <dithering_fragment>"].join("\n") });
 
   test("the program carries the engine's arithmetic: transformed UV, squared coverage, the sqrt-space solve and the skin light", () => {
     const shader = patchFaceDecalShader(program(), { underlay: true, skinLight: true });
@@ -119,6 +120,11 @@ describe("the decal family material", () => {
     expect(fragment).toContain("xfsSkinIBL");
     for (const gone of ["#include <map_fragment>", "#include <alphamap_fragment>", "#include <roughnessmap_fragment>", "#include <lights_fragment_maps>"])
       expect(fragment).not.toContain(gone);
+    // Its scatter input blends the decal's own colour at the colour alpha, E at the drawn alpha, metalness at the surface alpha.
+    expect(fragment).toContain("vec3 xfsTrueColour = xfsColour;");
+    expect(fragment).toContain("gl_FragColor = vec4( xfsScatterE, xfsDrawn );");
+    expect(fragment).toContain("xfsScatterOut1 = vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA );");
+    expect(fragment).toContain("xfsScatterOut2 = vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA );");
     // Without a skin light the decal keeps Three's standard lighting.
     expect(patchFaceDecalShader(program(), { underlay: false, skinLight: false }).fragmentShader).not.toContain("RE_Direct_XfsSkin");
     expect(() => patchFaceDecalShader({ vertexShader: "", fragmentShader: "#include <common>" }, { underlay: false, skinLight: false })).toThrow("expects");

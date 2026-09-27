@@ -51,6 +51,7 @@ import { carryPreset, type CharacterChange, type CharacterChoice, characterChoic
   type SavedDescriptors, savedDescriptorsOf, summariseMissing } from "./character-context";
 import { characterRequestOf, type CharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
+import { type DisplayedSwatchState, SwatchDisplayMemo } from "./cc-swatch-display";
 import { refusal, type Capability } from "./platform/api";
 import type { SavedV } from "./save-reader";
 import { CLOTHING_AREA_LABELS, CLOTHING_STATE_LABELS, CLOTHING_STATES, type ClothingSetting, clothingSettingOf, type ClothingState, DEFAULT_CLOTHING,
@@ -241,6 +242,7 @@ export class CharacterContextActions {
   private pages = new Map<string, { choices: CcPanelChoice[]; total: number; loading: boolean; error: string | null }>();
   /** Colour rows' swatches by option, and the rows being asked about now. */
   private swatchRows = new Map<string, CharacterSwatchState>();
+  private readonly swatchDisplay = new SwatchDisplayMemo();
   private swatchLoading = new Set<string>();
   private searching: (CharacterSearchState & { controller: AbortController | null }) | null = null;
   private currentView: CreatorView | null = null;
@@ -428,9 +430,16 @@ export class CharacterContextActions {
    * A colour row's swatches and icons (derived on the host from what wins for each choice; cc-swatch.ts), or null before they arrive or
    * when the host doesn't offer them. Asking loads them, and asks again while the host is still working them out.
    */
-  swatches(option: string): CharacterSwatchState | null {
+  swatches(option: string): DisplayedSwatchState | null {
     if (!this.swatchRows.has(option) || this.swatchRows.get(option)!.pending) void this.loadSwatches(option);
-    return this.swatchRows.get(option) ?? null;
+    const state = this.swatchRows.get(option);
+    if (!state) return null;
+    // Shown per set (maker group, or the whole row), each tightly clustered set contrast-enhanced (cc-swatch-display.ts); the true
+    // colours stay in `truth`. Recomputed only when the swatches, the loaded choices or the grouping change.
+    const entry = this.byId.get(option), panel = this.catalogue.panel;
+    const choices = this.pages.get(pageKey(option, searchQuery("")))?.choices ?? [];
+    const grouping = entry && panel && entry.groups > 1 ? { modGroups: panel.modGroups, pooled: panel.pools[entry.pool] ?? [] } : null;
+    return this.swatchDisplay.get(option, state, choices, grouping);
   }
   private async loadSwatches(option: string) {
     const port = this.ports.creator;
@@ -614,7 +623,7 @@ export class CharacterContextActions {
     this.session = controller;
     this.loading = true;
     this.catalogue = { phase: "preparing", message: "", panel: null, gender };
-    this.byId.clear(); this.pages.clear(); this.swatchRows.clear(); this.swatchLoading.clear();
+    this.byId.clear(); this.pages.clear(); this.swatchRows.clear(); this.swatchLoading.clear(); this.swatchDisplay.clear();
     this.publish();
     const live = () => !controller.signal.aborted && generation === this.generation && !this.disposed;
     void (async () => {

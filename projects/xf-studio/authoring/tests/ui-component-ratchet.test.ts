@@ -4,20 +4,43 @@
 // component track for the component), and when a file's count drops its allowance must drop with it, so the debt only shrinks.
 import { expect, test } from "bun:test";
 import { join, relative, resolve } from "node:path";
-import { codeOnly } from "./fixtures/code-scan";
+import { codeOnly, withoutComments } from "./fixtures/code-scan";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
 
 const root = resolve(import.meta.dir, "..", "src");
 const rel = (file: string) => relative(root, file).replaceAll("\\", "/");
 /** The library: components/ and the established primitives it re-exports, plus the style guide that documents them. */
 const LIBRARY = [/^studio-ui\/components\//, /^studio-ui\/(controls|expander|help-tip|reason-tip|item-list|menu|dom|icons)\.ts$/, /^studio-ui\/style-guide\//];
-/** What counts as building a control: an interactive element, an interactive role, or a library class written by hand. */
-const AD_HOC = [
-  /\bh\(\s*"(button|input|select|textarea|dialog|details)"/g,
-  /\bdocument\.createElement\(\s*"(button|input|select|textarea|dialog|details)"/g,
-  /\brole:\s*"(tab|tablist|tabpanel|listbox|option|switch|progressbar|slider|combobox|tree|treeitem|radiogroup|radio|dialog|menu|menuitem|spinbutton|checkbox)"/g,
-  /\bclass:\s*["`](btn|icon-btn|link-button|chip-button)\b/g,
+
+/**
+ * What counts as building a control: an interactive element (in any quotes, through an `h` alias, a tag held in a variable, any
+ * document's `createElement`, or markup in a string), an interactive role (as a key, a quoted key or an attribute; a separator only
+ * when it is focusable, i.e. a splitter), or a library class written by hand (anywhere in a class list, but never a longer class such
+ * as `btn-row`). UI-121 closed the gaps the first version of the scan had.
+ */
+const TAGS = "button|input|select|textarea|dialog|details";
+const ROLES = "button|tab|tablist|tabpanel|listbox|option|switch|progressbar|slider|combobox|tree|treeitem|treegrid|grid|radiogroup|radio|dialog|"
+  + "alertdialog|menu|menubar|menuitem|menuitemcheckbox|menuitemradio|spinbutton|checkbox|searchbox|textbox|scrollbar";
+const CLASSES = "btn|icon-btn|link-button|chip-button";
+/** Any quote a literal can open with. */
+const Q = String.raw`["'${"`"}]`;
+/** A class list naming a library class: bounded by the list's start or a space, and by the list's end or a space. */
+const CLASS_LIST = String.raw`${Q}(?:[^"'${"`"}\n]*?\s)?(?:${CLASSES})(?=[\s"'${"`"}$])`;
+/** Where a property key starts: not part of a longer name, nor a member access. */
+const KEY = String.raw`(?<![\w$.])`;
+const adHocPatterns = (elementCalls: readonly string[]) => [
+  new RegExp(String.raw`${KEY}(?:${elementCalls.join("|")})\(\s*${Q}(?:${TAGS})${Q}`, "g"),
+  new RegExp(String.raw`\.createElement\(\s*${Q}(?:${TAGS})${Q}`, "g"),
+  new RegExp(String.raw`(?:${KEY}role|${Q}role${Q})\s*:\s*${Q}(?:${ROLES})${Q}`, "g"),
+  new RegExp(String.raw`\b(?:setAttribute|setAttr)\(\s*(?:[\w$.]+\s*,\s*)?${Q}role${Q}\s*,\s*${Q}(?:${ROLES})${Q}`, "g"),
+  new RegExp(String.raw`(?:${KEY}(?:class|className)|${Q}class${Q})\s*:\s*${CLASS_LIST}`, "g"),
+  new RegExp(String.raw`\.className\s*=\s*${CLASS_LIST}`, "g"),
+  new RegExp(String.raw`\.classList\.(?:add|toggle)\(\s*(?:${Q}[^"'${"`"}]*${Q}\s*,\s*)*${Q}(?:${CLASSES})${Q}`, "g"),
 ];
+/** A separator role; it counts only in an object literal that also sets a tab index (a focusable splitter, not a divider). */
+const SEPARATOR = new RegExp(String.raw`(?:${KEY}role|${Q}role${Q})\s*:\s*${Q}separator${Q}`, "g");
+/** Markup in a string or template (`innerHTML` and the like): a control element, or an interactive role attribute. */
+const MARKUP = new RegExp(String.raw`<(?:${TAGS})[\s>/]|\brole\s*=\s*\\?["'](?:${ROLES})\\?["']`, "g");
 
 /**
  * The debt at the time the ratchet was introduced (27 September 2026, after the first consolidation round), by file. Lower a number
@@ -43,13 +66,29 @@ const ALLOWANCE: Readonly<Record<string, number>> = {
   "studio-ui/preview-setup-card.ts": 3,
 };
 
-/** Every ad hoc control a composition file builds (outside comments and strings, so prose never counts). */
+/** Every ad hoc control a composition file builds (in its code, so prose and messages never count; markup only inside literals). */
 function adHoc(text: string): string[] {
-  const code = codeOnly(text), found: string[] = [];
-  for (const pattern of AD_HOC) for (const match of text.matchAll(pattern)) {
-    const at = match.index!;
-    if (code[at] === text[at]) found.push(match[0].replace(/\s+/g, " "));
+  const code = codeOnly(text), literals = withoutComments(text), found: string[] = [];
+  const inCode = (at: number) => code[at] === text[at];
+  const tidy = (match: string) => match.replace(/\s+/g, " ");
+  // `import { h as el }` makes `el(...)` an element call too.
+  const elementCalls = ["h", ...[...code.matchAll(/\bimport\s*(?:type\s*)?\{[^}]*\}/g)]
+    .flatMap(match => [...match[0].matchAll(/\bh\s+as\s+([\w$]+)/g)].map(alias => alias[1]!))];
+  for (const pattern of adHocPatterns(elementCalls)) for (const match of text.matchAll(pattern)) if (inCode(match.index!)) found.push(tidy(match[0]));
+  // A tag held in a variable: `h(tag, …)` where the file assigns `tag` a control's tag.
+  const calls = new RegExp(String.raw`${KEY}(?:${elementCalls.join("|")})\(\s*([A-Za-z_$][\w$]*)\s*[,)]`, "g"), tag = new RegExp(String.raw`${Q}(?:${TAGS})${Q}`);
+  for (const match of code.matchAll(calls)) {
+    const name = match[1]!.replace(/\$/g, "\\$"), assignments = new RegExp(String.raw`${KEY}${name}\s*(?::[^=\n]+)?=(?![=>])([^;\n]*)`, "g");
+    if ([...text.matchAll(assignments)].some(assigned => inCode(assigned.index!) && tag.test(assigned[1]!))) found.push(`h(${match[1]}`);
   }
+  for (const match of text.matchAll(SEPARATOR)) {
+    const at = match.index!;
+    if (!inCode(at)) continue;
+    const open = code.lastIndexOf("{", at), close = code.indexOf("}", at);
+    if (/\btab[iI]ndex\b/.test(code.slice(open, close < 0 ? undefined : close))) found.push(`${tidy(match[0])} (focusable)`);
+  }
+  // Markup sits inside a literal: blanked in the code, kept once only comments are blanked.
+  for (const match of literals.matchAll(MARKUP)) if (!inCode(match.index!) && literals[match.index!] === text[match.index!]) found.push(`markup ${match[0].trim()}`);
   return found;
 }
 const composition = () => [...sourceFiles(join(root, "studio-ui")), ...sourceFiles(join(root, "features"))]
@@ -75,4 +114,40 @@ test("the ratchet only tightens: every allowance matches its file's count", () =
 test("the scan sees controls in code and ignores prose", () => {
   expect(adHoc(`const a = h("button", { class: "btn" }); // h("input") in a comment\nconst b = "h(\\"select\\")"; const c = h("div", { role: "listbox" });`))
     .toEqual(["h(\"button\"", "role: \"listbox\"", "class: \"btn"]);
+});
+
+test("the scan sees every way of writing a control (UI-121), and nothing that only looks like one", () => {
+  const sees: Record<string, string> = {
+    singleQuoted: `const a = h('button', {});`,
+    template: "const a = h(`input`, {});",
+    variableTag: `const tag = "button"; const a = h(tag, {});`,
+    aliasedH: `import { h as el } from "../dom"; const a = el("select", {});`,
+    quotedRoleKey: `const a = h("div", { "role": "listbox" });`,
+    setAttributeRole: `const a = h("div"); a.setAttribute("role", "tab");`,
+    setAttrRole: `const a = h("div"); setAttr(a, "role", "switch");`,
+    roleButton: `const a = h("div", { role: "button", tabindex: "0" });`,
+    focusableSeparator: `const a = h("div", { class: "splitter", role: "separator", tabindex: "0" });`,
+    roleSearchbox: `const a = h("div", { role: "searchbox", contenteditable: "true" });`,
+    roleGrid: `const a = h("div", { role: "grid" });`,
+    laterClass: `const a = h("span", { class: "small btn" });`,
+    classListAdd: `const a = h("span"); a.classList.add("icon-btn");`,
+    className: `const a = h("span"); a.className = "quiet btn";`,
+    ownerDocument: `const a = el.ownerDocument.createElement("button");`,
+    innerHTML: "host.innerHTML = `<button class=\"x\">Go</button>`;",
+    markupRole: `host.innerHTML = '<div role="tab">A</div>';`,
+    afterRegex: "if (x) { y(); }\n/`/.test(s);\nconst a = h(\"button\");\nconst b = `x`;",
+  };
+  expect(Object.entries(sees).filter(([, text]) => adHoc(text).length !== 1).map(([name, text]) => `${name}: ${JSON.stringify(adHoc(text))}`)).toEqual([]);
+  const ignores: Record<string, string> = {
+    longerClass: `const a = h("div", { class: "btn-row" });`,
+    longerClassLater: `const a = h("div", { class: "row btn-group" });`,
+    classListLonger: `a.classList.add("btn-row");`,
+    divider: `const a = h("div", { role: "separator" });`,
+    typeAttribute: `const a = button({ label: "Go", type: "button" });`,
+    variableNotATag: `const tag = level > 1 ? "h4" : "h3"; const a = h(tag, {});`,
+    markupInComment: "// host.innerHTML = '<button>';\nconst a = 1;",
+    prose: `const message = "Press the button to choose a role: tab";`,
+    arrowParameter: `const make = (tag: string) => h(tag, {}); const tagName = "button";`,
+  };
+  expect(Object.entries(ignores).filter(([, text]) => adHoc(text).length).map(([name, text]) => `${name}: ${JSON.stringify(adHoc(text))}`)).toEqual([]);
 });

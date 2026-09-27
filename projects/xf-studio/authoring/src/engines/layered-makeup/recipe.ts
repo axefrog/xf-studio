@@ -6,6 +6,7 @@ import type {DirectGlintFlakes} from "./direct-glint-settings";
 import type { LayerModel, LayerModelRegistry } from "./layer-models";
 import { mirrored, type Mirror } from "./region";
 import { prepareMottle, type LayerEffects, type PreparedMottle, type SkinScale } from "./mottle";
+import { NewerDataError } from "../../platform/api";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
@@ -103,9 +104,16 @@ export type RecipeForms = Readonly<{ fields: boolean; strength: boolean; path: b
 export const CURRENT_FORMS: RecipeForms = Object.freeze({ fields: true, strength: true, path: true, softness: true });
 
 /**
+ * Every layer key a build has written: the current fields, and `field` (one unnamed warp field, before recipe-3).
+ * A record over `keyof Layer`, so a new layer field does not compile until it is listed here.
+ */
+const LAYER_KEYS: ReadonlySet<string> = new Set(Object.keys({ id: 1, name: 1, enabled: 1, color: 1, finish: 1, flakes: 1, optics: 1,
+  opacity: 1, feather: 1, symmetry: 1, pathMode: 1, points: 1, fields: 1, field: 1, strength: 1, softness: 1, effects: 1 } satisfies Record<keyof Layer | "field", 1>));
+/**
  * Validate and copy a recipe's layers, bounding imported work before it reaches raster loops (imports are
  * atomic). `holds` limits which registered models the layers may hold (an older form's gate); without it every
- * registered model is valid and an unregistered model ID is named as a newer build's (`NewerDataError`).
+ * registered model is valid, and an unregistered model ID or a layer key this build does not know is named as a
+ * newer build's (`NewerDataError`).
  */
 export function readLayers(input: readonly unknown[], models: LayerModelRegistry, forms: RecipeForms = CURRENT_FORMS,
   holds?: (model: LayerModel) => boolean): Layer[] {
@@ -136,6 +144,12 @@ export function readLayers(input: readonly unknown[], models: LayerModelRegistry
     )
       throw Error("Invalid layer settings.");
     ids.add(l.id);
+    // A layer key this build does not know would be dropped on the next save, so it is a newer build's (CORE-111);
+    // an older form never holds one. Every key any build has written is known (the legacy `field` included).
+    for (const key of Object.keys(l)) if (!LAYER_KEYS.has(key)) {
+      if (!holds) throw new NewerDataError(`This look uses a layer setting from a newer version of XF Studio (${key.slice(0, 40)}).`);
+      throw Error("Invalid layer settings.");
+    }
     // Each optical block is validated by its own model; an older form holds only the models its gate allows.
     models.check(l, holds);
     if (
@@ -434,7 +448,8 @@ function mottledSampler(raster:ReturnType<typeof prepareRasterCoverage>,mottle:P
   if(mottle.streaks==="none")return (u:number,v:number)=>mottle.apply(raster.sample(u,v),u,v,0,0,false);
   return (u:number,v:number)=>{raster.sided(u,v,side);return mottle.apply(side.c,u,v,side.ex,side.ey,side.flipped);};
 }
-/** A layer's prepared mottle for a raster with texel `spacing`, or undefined without one. Mottle needs the region's skin scale. */
+/** A layer's prepared mottle for a raster with texel `spacing`, or undefined without one. Mottle needs the region's
+ * skin scale, which every raster entry point requires (CORE-110); the check stays for untyped callers. */
 function layerMottle(l:Layer,mirror:Mirror,skin:SkinScale|undefined,spacing:{u:number;v:number}){
   const mottle=l.enabled?l.effects?.mottle:undefined;
   if(!mottle)return undefined;
@@ -450,9 +465,10 @@ function mirroredBounds(b:{minU:number;maxU:number;minV:number;maxV:number},mirr
 }
 /**
  * Alpha-only design: white RGB provides colour-independent masks and clean edges. `skin` is the region's skin scale,
- * which a mottled layer needs (its mottle is sampled at this raster's texel spacing, 1/size).
+ * required so that no caller draws unmottled layers and throws on mottled ones (a mottled layer's mottle is sampled
+ * at this raster's texel spacing, 1/size).
  */
-export function createRasterJob(l: Layer, size: number, mirror: Mirror, skin?: SkinScale) {
+export function createRasterJob(l: Layer, size: number, mirror: Mirror, skin: SkinScale) {
   if (!Number.isInteger(size) || size < 1 || size > 4096) throw Error("Invalid raster size.");
   l = structuredClone(l);
   const data = new Uint8ClampedArray(size * size * 4);
@@ -510,19 +526,23 @@ export function createRasterJob(l: Layer, size: number, mirror: Mirror, skin?: S
   };
 }
 
-/** One layer's coverage at authored (u, v), with the raster's own per-sample arithmetic, prepared once for
- * point queries (the package filter's plate-reach test). 0 for a disabled layer. It is the layer's unmottled
- * coverage: mottle never extends a layer beyond it (its weight is zero where coverage is), so reach is judged on
- * the shape itself. */
-export function layerCoverageSampler(l: Layer, mirror: Mirror): (u: number, v: number) => number {
+/**
+ * One layer's coverage at authored (u, v), with the raster's own per-sample arithmetic, prepared once for point
+ * queries (the package filter's plate-reach test). 0 for a disabled layer. Without `mottle` it is the layer's
+ * unmottled coverage. With it (the region's skin scale and a raster's texel spacing), a mottled layer's mottle is
+ * applied as that raster applies it, so at the raster's texel centres it gives the raster's own values.
+ */
+export function layerCoverageSampler(l: Layer, mirror: Mirror, mottle?: { skin: SkinScale; spacing: { u: number; v: number } }): (u: number, v: number) => number {
   if (!l.enabled) return () => 0;
   l = structuredClone(l);
   const polygon = curve(l.points);
-  return prepareRasterCoverage(l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon)).sample;
+  const prepared = prepareRasterCoverage(l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon));
+  const effect = mottle ? layerMottle(l, mirror, mottle.skin, mottle.spacing) : undefined;
+  return effect ? mottledSampler(prepared, effect) : prepared.sample;
 }
 
 // Synchronous compiler/export callers retain the same exact pixel arithmetic.
-export function raster(l: Layer, size: number, mirror: Mirror, skin?: SkinScale): Uint8ClampedArray<ArrayBuffer> {
+export function raster(l: Layer, size: number, mirror: Mirror, skin: SkinScale): Uint8ClampedArray<ArrayBuffer> {
   const job = createRasterJob(l, size, mirror, skin);
   job.advance(Infinity);
   return job.data;
@@ -536,7 +556,7 @@ export function raster(l: Layer, size: number, mirror: Mirror, skin?: SkinScale)
  * sampled at the window's texel spacing (it needs the region's `skin` scale).
  */
 export function rasterWindow(l: Layer, width: number, height: number,
-  area: { u0: number; u1: number; v0: number; v1: number }, mirror: Mirror, skin?: SkinScale): Uint8ClampedArray<ArrayBuffer> {
+  area: { u0: number; u1: number; v0: number; v1: number }, mirror: Mirror, skin: SkinScale): Uint8ClampedArray<ArrayBuffer> {
   if (![width, height].every(n => Number.isInteger(n) && n >= 1 && n <= 8192)) throw Error("Invalid raster size.");
   if (!(area.u1 > area.u0 && area.v1 > area.v0)) throw Error("Invalid raster window.");
   l = structuredClone(l);

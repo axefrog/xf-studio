@@ -35,7 +35,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 | Category | Components |
 |---|---|
 | General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
-| Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView` |
+| Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView`, `Splitter` |
 | Feature-specific | none yet |
 
 Components added on request:
@@ -45,16 +45,17 @@ Components added on request:
 - For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
 - For the expression drawer's rebuild (`claude/expressions-drawer`, UI-108): `openConfirmPopover` (ask before an action that can't be undone, in place of the browser's `confirm`) and TreeView's `onMenu` (an item's context menu by right-click, Shift+F10 or the Menu key).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
+- For the dock (UI-121): Splitter, the focusable bar between two resizable sides, which the dock's splitters and the Split view's gutter compose.
 - For saved layouts (`claude/saved-layouts`): option switches in the value popover (`ValueOption`: Save layout's name with Remember shown modules and automatic switching, each with a default).
 
 ## The ratchet
 
 `tests/ui-component-ratchet.test.ts` scans every composition file: `src/studio-ui/**` outside the library and the style guide, and `src/features/*/view/**`. It counts the ad hoc controls each one builds:
-- raw interactive elements (`h("button"|"input"|"select"|"textarea"|"dialog"|"details")`, or the same through `createElement`);
-- interactive roles (tab, listbox, option, switch, progressbar, slider, combobox, tree, dialog, menu and the rest);
-- library classes written by hand (`btn`, `icon-btn`, `link-button`, `chip-button`).
+- raw interactive elements (`h("button"|"input"|"select"|"textarea"|"dialog"|"details")` in any quotes, through an alias of `h`, with the tag held in a variable, through any document's `createElement`, or as markup in a string);
+- interactive roles (button, tab, listbox, option, switch, progressbar, slider, combobox, tree, grid, searchbox, dialog, menu, menu items and the rest), as a key, a quoted key or a `setAttribute`/`setAttr` call, and a separator when it is focusable (a splitter);
+- library classes written by hand (`btn`, `icon-btn`, `link-button`, `chip-button`) anywhere in a class list, by `classList.add`/`toggle` or `className =`, never a longer class such as `btn-row`.
 
-Comments and strings don't count. The test enforces three rules:
+Comments and prose don't count (markup counts only inside a string). UI-121 closed the first version's gaps; the test lists every way of writing a control it must see and the look-alikes it must ignore. The test enforces three rules:
 - A file may not exceed its allowance, and a file missing from the allowlist is allowed none. A new one-off control fails with a pointer to the library.
 - An allowance must equal its file's count. When a control moves into the library, its file's allowance must be lowered in the same change, so the debt only shrinks.
 - The scan itself is tested on prose and code.

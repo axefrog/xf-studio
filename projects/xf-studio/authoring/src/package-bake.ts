@@ -18,6 +18,7 @@ import { compileGlitterPreset } from "./glitter-route";
 import type { UvWindow } from "./engines/layered-makeup/plate-uv-window";
 import { compilePreset, presetCoverage, type TextureSpace } from "./engines/layered-makeup/preset-compiler";
 import { planCollection } from "./preset-collection";
+import { COVERAGE_REFERENCE_GRID } from "./plate-reach";
 
 export type CollectionPlan = ReturnType<typeof planCollection>;
 /** The flat route's channels, kept for callers that predate the other routes. */
@@ -49,9 +50,10 @@ export const packageMapSize = (region: Pick<LayeredMakeupRegion, "textures">) =>
 /**
  * Head-atlas grid of the coverage reference written beside each window preset: 4096, so its texels
  * (about 0.14 × 0.10 mm on the lids) are at least as fine as the window's and sharp edges compare fairly.
- * Only the window's rectangle plus two texels is written.
+ * Only the window's rectangle plus two texels is written. Plate reach judges mottled layers on this same
+ * raster (PIPE-113), so the two share the constant.
  */
-export const REFERENCE_GRID = 4096;
+export const REFERENCE_GRID = COVERAGE_REFERENCE_GRID;
 export function referenceCrop(window: UvWindow, grid = REFERENCE_GRID) {
   const x0 = Math.max(0, Math.floor(window.u0 * grid) - 2), y0 = Math.max(0, Math.floor(window.v0 * grid) - 2);
   const x1 = Math.min(grid, Math.ceil(window.u1 * grid) + 2), y1 = Math.min(grid, Math.ceil(window.v1 * grid) + 2);

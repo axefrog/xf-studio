@@ -1,7 +1,8 @@
 // The creator swatches (cc-swatch.ts): which choices need one and which option's chain answers each, which resolved chunk carries the
 // colour, and the colour itself, derived the way the preview draws it. Asset-free: the fixture creator and synthetic inputs.
 import { describe, expect, test } from "bun:test";
-import { encodeSwatch, gradientAt, irisColour, pickSwatchChunk, readSwatch, swatchColours, swatchNeeds, swatchPlan, type SwatchReads } from "../src/cc-swatch";
+import { DECAL_TEXTURE_SIDE, encodeSwatch, gradientAt, irisColour, pickSwatchChunk, readSwatch, SWATCH_TEXTURE_SIDE, swatchColours, swatchNeeds, swatchPlan,
+  type SwatchReads } from "../src/cc-swatch";
 import { gradientColourAt, irisBaseColour } from "../src/eye-material";
 import { bakeHairProfileBytes } from "../src/hair-colour-model";
 import type { Provenance } from "../src/resource-graph";
@@ -71,6 +72,18 @@ describe("the swatch chunk and colour", () => {
     expect(swatchColours("double-diffuse-decal", brow, { ...none, texture: r => (r.ref.path === "g.xbm" ? gradient : texture) })).toEqual(["#5a3c1e"]);
     // Without the textures, the colour parameter alone.
     expect(swatchColours("mesh-decal", chunk({ colours: { DiffuseColor: [1, 2, 3, 255] } }), none)).toEqual(["#010203"]);
+  });
+
+  test("a brow's tone is weighted by coverage squared, as the program squares the primary alpha, and read at the creator close-up's mip", () => {
+    // A full-coverage strand texel (linear 1) beside a faint edge texel that a mod's own mip darkened (sRGB 40, alpha 0.3).
+    const texture = { width: 2, height: 1, data: [255, 255, 255, 255, 40, 40, 40, 77], isGamma: true };
+    const reads: SwatchReads = { ...none, texture: () => texture };
+    const tone = (adapter: "double-diffuse-decal" | "mesh-decal") => parseInt(swatchColours(adapter, chunk({ textures: { DiffuseTexture: ref("d.xbm") } }), reads)![0]!.slice(1, 3), 16);
+    // Squared weighting lets the faint texel darken the tone less than plain coverage weighting does.
+    expect(tone("double-diffuse-decal")).toBeGreaterThan(tone("mesh-decal"));
+    const needs = swatchNeeds("double-diffuse-decal", chunk({ textures: { DiffuseTexture: ref("d.xbm"), GradientMap: ref("g.xbm") } }));
+    expect(needs.sides).toEqual([DECAL_TEXTURE_SIDE, SWATCH_TEXTURE_SIDE]);
+    expect(swatchNeeds("eye", chunk({ textures: { Albedo: ref("a.xbm") } })).sides).toEqual([SWATCH_TEXTURE_SIDE]);
   });
 
   test("a gradient eye without its textures reads the gradient at the iris's median mask value; the twins match the renderer's", () => {

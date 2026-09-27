@@ -23,7 +23,7 @@ if (!layer || !layer.enabled || layer.finish !== "shimmer" || layer.opacity <= 0
   throw Error("Select an enabled Shimmer layer with positive opacity.");
 const flakes = layer.flakes ?? defaultFlakes();
 if ("model" in flakes) throw Error("This stock-material study covers legacy Shimmer cells only.");
-const shape = raster(layer, size, EYE_MAKEUP_REGION.mirror);
+const shape = raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);
 const optics = bakeFlakes(size, "shimmer", flakes);
 mkdirSync(out, { recursive: true });
 for (const [name, data] of [["shape", shape], ["normal", optics.normal], ["surface", optics.surface]] as const)

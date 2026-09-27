@@ -1,6 +1,7 @@
 import { h, setAttr, setUnavailable, uid } from "../dom";
 import { NoteLine } from "../controls";
 import { helpTip, type HelpText } from "../help-tip";
+import { contrastMark, setContrastMark, SwatchCard, type SwatchSample } from "./swatch-card";
 
 /**
  * Choice list (style guide "Choice list"): one choice among several, all shown at once (show the options, don't hide them), in the look
@@ -17,6 +18,10 @@ import { helpTip, type HelpText } from "../help-tip";
  *   also carries a passing state ("Loading that idle…") without ever moving the layout.
  * - **Data-driven.** `setOptions` replaces the choices (a no-op when unchanged; focus stays on the same choice), `update` sets the chosen
  *   one and the availability.
+ * - **Swatches** (`swatchCard` option, `attachSwatchCard`): resting on a choice that carries a swatch, or focusing it, shows the swatch
+ *   card (swatch-card.ts) with its true colour, name and source, so a swatch item takes no tooltip of its own. A list whose swatches are
+ *   shown contrast-enhanced says so with the contrast marker beside its label (`update(…, { enhanced })`). Any other list of `choiceItem`s
+ *   (the Character panel's creator choices) uses `attachSwatchCard` directly.
  */
 export type ChoiceOption<T extends string> = { value: T; label: string; title?: string; group?: string;
   /** The accessible name when the visible label is short (a tile's "3" is "Eye shape 3"). */
@@ -32,13 +37,39 @@ export type ChoiceListOptions<T extends string> = {
   /** The list's unavailable reason is a wait or information (muted), not a problem (warning). */
   quietReason?: boolean;
   options?: readonly ChoiceOption<T>[];
+  /**
+   * Show the swatch card on choices with a swatch: `true` shows the choice's own swatch and label; a function supplies the sample (the
+   * true colour when the list shows an enhanced one), or null for none.
+   */
+  swatchCard?: boolean | ((value: T) => SwatchSample | null);
 };
+
+// ---------------------------------------------------------------------------------------------------------------
+// The swatch card hook: generic over any list of `choiceItem`s.
+
+let sharedCard: SwatchCard | null = null;
+/** The page's one swatch card (it follows one swatch at a time, whichever list it is in). */
+export const swatchCard = () => (sharedCard ??= new SwatchCard());
+/**
+ * Show the swatch card on the swatch choices inside `list` (items made by `choiceItem` that hold a `.swatch`): `sampleOf` gives an item's
+ * sample, or null for none. Returns a function that detaches.
+ */
+export function attachSwatchCard(list: HTMLElement, sampleOf: (item: HTMLElement) => SwatchSample | null): () => void {
+  return swatchCard().attach(list, target => {
+    const item = target.closest<HTMLElement>(".choice");
+    if (!item || !list.contains(item) || item.classList.contains("off") || !item.querySelector(".swatch")) return null;
+    const sample = sampleOf(item);
+    return sample ? { anchor: item, sample } : null;
+  });
+}
 
 /** One choice's element, as every choice list draws it (shared with the Character panel's creator choices). */
 export function choiceItem(options: { label: string; selected?: boolean; title?: string; description?: string; off?: boolean; swatch?: boolean;
   className?: string; content?: Node | null }): HTMLButtonElement {
+  // A swatch item's name and source are in the swatch card, so it takes no tooltip of its own.
+  const swatchOnly = options.swatch && !options.off;
   return h("button", { class: `choice${options.swatch ? " swatch-choice" : ""}${options.off ? " off" : ""}${options.className ? ` ${options.className}` : ""}`,
-    type: "button", role: "option", "aria-selected": String(!!options.selected), tabindex: "-1", title: options.title,
+    type: "button", role: "option", "aria-selected": String(!!options.selected), tabindex: "-1", title: swatchOnly ? undefined : options.title,
     "aria-label": options.label, "aria-description": options.description },
     options.content === undefined ? h("span", { class: "choice-label", text: options.label }) : options.content);
 }
@@ -48,6 +79,9 @@ export class ChoiceList<T extends string> {
   readonly list: HTMLElement;
   private readonly note: NoteLine;
   private items: { value: T; element: HTMLButtonElement }[] = [];
+  private choices: readonly ChoiceOption<T>[] = [];
+  /** The contrast marker beside the label (lists with a swatch card only). */
+  private readonly mark: HTMLElement | null;
   private signature = "";
   private selected: T | undefined;
   constructor(private readonly options: ChoiceListOptions<T>) {
@@ -55,11 +89,19 @@ export class ChoiceList<T extends string> {
     this.list = h("div", { class: `choices ${options.layout ?? "chips"}`, role: "listbox",
       "aria-label": options.showLabel === false ? options.label : undefined, "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
+    this.mark = options.swatchCard && options.showLabel !== false ? contrastMark() : null;
     this.element = h("div", { class: "control choice-list" },
       options.showLabel === false ? null : h("div", { class: "control-line" }, h("span", { class: "control-label", id: labelId, text: options.label }),
-        options.help !== undefined ? helpTip(options.label, options.help) : null),
+        options.help !== undefined ? helpTip(options.label, options.help) : null, this.mark),
       this.list, this.note.element);
     this.list.addEventListener("keydown", event => this.key(event));
+    if (options.swatchCard) attachSwatchCard(this.list, item => {
+      const entry = this.items.find(candidate => candidate.element === item);
+      const choice = entry && this.choices.find(option => option.value === entry.value);
+      if (!choice) return null;
+      if (typeof options.swatchCard === "function") return options.swatchCard(choice.value);
+      return choice.swatch ? { colours: [choice.swatch], label: choice.name ?? choice.label, source: choice.title ?? null } : null;
+    });
     this.setOptions(options.options ?? []);
   }
   /** Replace the choices (a no-op when they are the same); focus stays on the same choice when it is still offered. */
@@ -67,9 +109,10 @@ export class ChoiceList<T extends string> {
     const signature = JSON.stringify(choices);
     if (signature === this.signature) return;
     this.signature = signature;
+    this.choices = choices;
     const focused = this.items.find(item => item.element === document.activeElement)?.value;
     this.items = choices.map(choice => {
-      const element = choiceItem({ label: choice.name ?? choice.label, title: choice.title ?? choice.name, swatch: false, selected: choice.value === this.selected,
+      const element = choiceItem({ label: choice.name ?? choice.label, title: this.options.swatchCard && choice.swatch ? undefined : choice.title ?? choice.name, swatch: false, selected: choice.value === this.selected,
         content: h("span", { class: "choice-content" }, choice.swatch ? h("span", { class: "swatch", "aria-hidden": "true", style: `--swatch:${choice.swatch}` }) : null,
           h("span", { class: "choice-label", text: choice.label })) });
       element.addEventListener("click", () => { if (element.getAttribute("aria-disabled") === "true") return; this.rove(element); this.options.onSelect(choice.value); });
@@ -92,8 +135,9 @@ export class ChoiceList<T extends string> {
   }
   /** The chosen value, each choice's capability, and the whole list's state (unavailable with its reason, or a passing note). */
   update(selected: T | undefined, capability: (value: T) => { available: boolean; reason?: string } = () => ({ available: true }),
-    state: { disabled?: boolean; reason?: string; note?: string } = {}) {
+    state: { disabled?: boolean; reason?: string; note?: string; enhanced?: boolean } = {}) {
     this.selected = selected;
+    if (this.mark) setContrastMark(this.mark, !!state.enhanced);
     for (const { value, element } of this.items) {
       setAttr(element, "aria-selected", String(value === selected));
       const allowed = state.disabled ? { available: false, reason: state.reason } : capability(value);
