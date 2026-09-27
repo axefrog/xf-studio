@@ -288,7 +288,9 @@ ${SCATTER_INPUT_OUTPUTS}
 vec3 xfsScatterE = vec3( 0.0 );
 vec3 xfsScatterEUnder = vec3( 0.0 );
 #endif
-// Curvature (1/m) of the interpolated surface normal, from screen-space derivatives in view space; 0 when flat-shaded.
+// Curvature (1/m) of the interpolated surface normal, from screen-space derivatives in view space; 0 when flat-shaded. The wrap it scales
+// is the fallback now (the screen-space scatter replaces it wherever a half-float target renders). Known limit (PREV-137): the derivative of
+// a linearly interpolated normal is nearly constant per triangle, so the curvature, and with it the wrap, can step at triangle edges.
 float xfsSurfaceCurvature() {
 #ifndef FLAT_SHADED
 	vec3 n = normalize( vNormal );
@@ -307,7 +309,8 @@ void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geomet
 	float xfsNoL = dot( geometryNormal, directLight.direction );
 	vec3 irradiance = saturate( xfsNoL ) * directLight.color;
 #ifdef XFS_SKIN_DIFFUSE_NORMAL
-	float xfsDiffuseNoL = dot( xfsDiffuseNormal, directLight.direction );
+	// The macro normal stands in for the blur only with the wrap; the screen-space scatter blurs the full normal's light, as the game does.
+	float xfsDiffuseNoL = dot( xfsWrapGate > 0.5 ? xfsDiffuseNormal : geometryNormal, directLight.direction );
 #else
 	float xfsDiffuseNoL = xfsNoL;
 #endif

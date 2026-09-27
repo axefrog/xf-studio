@@ -113,6 +113,11 @@ void main() {
 
 /** The viewing preference's default: the game's High (25 samples) until its own default is known (§11.5). */
 export const DEFAULT_SCATTER_QUALITY: ScatterQuality = "high";
+/**
+ * Millimetres per kernel unit per unit of `blurSize`: the product `w · cb0[3].x` of §6.3.3 in the preview's terms. 1 is the plan's
+ * working reading (research/materials/shader-skin.md §11.6) until a parity capture fits it.
+ */
+export const SCATTER_SCREEN_SCALE = 1;
 /** Margin (m) around each skin mesh's bind-pose bounds for the scissor: the idle moves the head a few centimetres. */
 const BOUNDS_MARGIN = 0.15;
 
@@ -127,7 +132,7 @@ export type SkinScatterEvidence = {
 export function createSkinScatter(renderer: THREE.WebGLRenderer) {
   const variants = createPassVariants(SCATTER_INPUT_PASS);
   let input: THREE.WebGLRenderTarget | null = null, p0: THREE.WebGLRenderTarget | null = null, p1: THREE.WebGLRenderTarget | null = null;
-  let enabled = true, active = false, quality: ScatterQuality = DEFAULT_SCATTER_QUALITY;
+  let enabled = true, active = false, bare = false, quality: ScatterQuality = DEFAULT_SCATTER_QUALITY, scale = SCATTER_SCREEN_SCALE;
   let tableKey = "", overflow = 0, distinct: ScatterProfile[] = [], lastScissor: SkinScatterEvidence["scissor"] = null;
   const table = new Float32Array(SCATTER_SLOTS * SCATTER_ROW * 4);
   const blur = new THREE.ShaderMaterial({
@@ -235,7 +240,7 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
      * the scene's background as it found them.
      */
     render(scene: THREE.Scene, camera: THREE.Camera): THREE.Texture | null {
-      if (!active) return null;
+      if (!active || bare) return null;
       ensureTargets();
       const targets = [input!, p0!, p1!], width = input!.width, height = input!.height;
       const rect = scissorRect(camera, width, height);
@@ -253,7 +258,7 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
         renderer.setRenderTarget(input);
         variants.draw(renderer, scene, camera);
         const projection = (camera as THREE.PerspectiveCamera).projectionMatrix.elements;
-        (blur.uniforms.uFocal!.value as THREE.Vector2).set(projection[0]! * width / 2 * 1e-3, projection[5]! * height / 2 * 1e-3);
+        (blur.uniforms.uFocal!.value as THREE.Vector2).set(projection[0]! * width / 2 * 1e-3 * scale, projection[5]! * height / 2 * 1e-3 * scale);
         blur.uniforms.tS0!.value = input!.textures[0];
         blur.uniforms.tS1!.value = input!.textures[1];
         blur.uniforms.tS2!.value = input!.textures[2];
@@ -269,6 +274,14 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     },
     /** Switch the scatter on or off (off: the wrap stand-in lights the skin again on the next frame). */
     setEnabled(next: boolean) { enabled = next; },
+    /**
+     * Developer evidence: keep the wrap off but add no Δ (the bare direct light), so a capture against the full scatter isolates Δ
+     * exactly. Not a viewing mode.
+     */
+    setBare(next: boolean) { bare = next; },
+    /** Developer evidence: a trial screen scale (millimetres per kernel unit per unit of blur size), for fitting §11.6's unknown; null resets. */
+    setScale(next: number | null) { scale = next ?? SCATTER_SCREEN_SCALE; },
+    get scale() { return scale; },
     get enabled() { return enabled; },
     /** The kernel's sample count: the game's Low, Medium or High (11, 17, 25 samples). */
     setQuality(next: ScatterQuality) { quality = next; },
@@ -279,6 +292,8 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     evidence: (): SkinScatterEvidence => ({ enabled, active, quality, width: input?.width ?? 0, height: input?.height ?? 0, scissor: lastScissor,
       slots: distinct.map(profile => ({ blurSize: profile.blurSize, diffuse: [...profile.diffuse], falloff: [...profile.falloff] })), overflow,
       variants: variants.counts(), bytes: (input?.width ?? 0) * (input?.height ?? 0) * 36 }),
+    /** Developer evidence: drop the input variants, so the next frame measures their compile (a V's first scatter frame). */
+    resetVariants() { variants.clear(); },
     dispose() { disposeTargets(); variants.dispose(); blur.dispose(); quad.geometry.dispose(); },
   };
 }

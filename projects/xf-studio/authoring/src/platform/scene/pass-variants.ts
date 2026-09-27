@@ -135,10 +135,12 @@ export function createPassVariants(spec: PassSpec) {
     },
     /** Developer evidence: how many variants exist, by role. */
     counts: () => [...variants.values()].reduce<Record<string, number>>((out, entry) => { out[entry.role] = (out[entry.role] ?? 0) + 1; return out; }, {}),
-    dispose() {
+    /** Release every variant (their programs are freed); the next draw builds them again. */
+    clear() {
       for (const [material, entry] of variants) { material.removeEventListener("dispose", forget); entry.variant.dispose(); }
-      variants.clear(); hidden.dispose();
+      variants.clear();
     },
+    dispose() { this.clear(); hidden.dispose(); },
   };
 }
 export type PassVariants = ReturnType<typeof createPassVariants>;

@@ -167,8 +167,13 @@ export function createLightingPresetStage(options: {
       gl.finish();
       return (performance.now() - start) / frames;
     },
-    /** Developer evidence (verification only): switch the skin scatter off (the wrap stand-in) or on again, for A/B captures. */
-    setScatter(enabled: boolean) { scatter.setEnabled(enabled); },
+    /**
+     * Developer evidence (verification only): switch the skin scatter off (the wrap stand-in) or on again, or to `bare` (the wrap off and
+     * no Δ: the direct light alone), for A/B captures.
+     */
+    setScatter(mode: boolean | "bare") { scatter.setEnabled(mode !== false); scatter.setBare(mode === "bare"); },
+    /** Developer evidence (verification only): a trial scatter screen scale (null: the default), for fitting it from captures. */
+    setScatterScale(scale: number | null) { scatter.setScale(scale); },
     /** Test and evidence access. */
     rig,
     display,
