@@ -58,6 +58,8 @@ export function createLightingPresetStage(options: {
   installShadowFilter();
   if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false; }
   let shadowKey = "";
+  // Verification-only trials (a rig yaw, a set of casting lights), kept across each other; never stored.
+  let trial: { yawOffset?: number; casters?: readonly string[] } = {};
   let preset: LightingPreset = "studio", sex: BodySex = "female";
   let creator: CreatorLightingOptions = { ...DEFAULT_CREATOR_LIGHTING };
   let lutStatus: LightingPresetStatus["lut"] = { phase: "idle", source: null };
@@ -153,7 +155,9 @@ export function createLightingPresetStage(options: {
     status: (): LightingPresetStatus => structuredClone({ preset, sex, defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
     /** Developer evidence (verification only): rebuild the rig turned by a trial yaw (null: the calibration's), for a refit. */
-    trialYaw(degrees: number | null) { rig.apply(sex, degrees === null ? creator : { ...creator, yawOffset: degrees }); },
+    trialYaw(degrees: number | null) { trial = { ...trial, yawOffset: degrees ?? undefined }; rig.apply(sex, { ...creator, ...trial }); },
+    /** Developer evidence (verification only): a trial set of shadow-casting rig lights by name (null: the budgeted flagged ones). */
+    trialCasters(names: readonly string[] | null) { trial = { ...trial, casters: names ?? undefined }; rig.apply(sex, { ...creator, ...trial }); },
     /** Developer evidence (verification only): show one rig light alone by name, or all of them again with null. */
     solo(name: string | null) {
       for (const child of rig.group.children) if ((child as THREE.SpotLight).isSpotLight) child.visible = name === null || child.name === `xfs-creator-${name}`;

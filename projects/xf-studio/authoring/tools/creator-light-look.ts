@@ -30,6 +30,8 @@ const choicesAt = argv.indexOf("--choices"), choicesFile = choicesAt >= 0 ? argv
 const yawsAt = argv.indexOf("--yaws"), yaws = yawsAt >= 0 ? argv.splice(yawsAt, 2)[1]!.split(",").map(Number) : [];
 const windowAt = argv.indexOf("--window"), [windowWidth, windowHeight] = windowAt >= 0 ? argv.splice(windowAt, 2)[1]!.split("x").map(Number) : [1000, 760];
 const dprAt = argv.indexOf("--dpr"), dpr = dprAt >= 0 ? Number(argv.splice(dprAt, 2)[1]) : 1;
+// `--casters a,b;c,d`: also render with each trial set of shadow-casting rig lights, `<prefix>-casters<i>.png` (knowledge §12.4).
+const castersAt = argv.indexOf("--casters"), casterSets = castersAt >= 0 ? argv.splice(castersAt, 2)[1]!.split(";").map(set => set.split(",")) : [];
 // `--scatter-scales 1,2,3`: also render the skin scatter at each trial screen scale, `<prefix>-scale<s>.png`, for fitting §11.6's unknown.
 const scalesAt = argv.indexOf("--scatter-scales"), scatterScales = scalesAt >= 0 ? argv.splice(scalesAt, 2)[1]!.split(",").map(Number) : [];
 const flags = new Set(argv.filter(a => a.startsWith("--")));
@@ -89,6 +91,13 @@ try {
     await capture(`creator-yaw${yaw}`);
   }
   if (yaws.length) await page.evaluate(`window.xfStudioCreatorRig.trialYaw(null)`);
+  const casterRuns: { set: string[]; drawn: string[] }[] = [];
+  for (const [i, set] of casterSets.entries()) {
+    await page.evaluate(`window.xfStudioCreatorRig.trialCasters(${JSON.stringify(set)})`);
+    await capture(`${prefix}-casters${i}`);
+    casterRuns.push({ set, drawn: await page.evaluate(`window.xfStudioCreatorRig.casters()`) });
+  }
+  if (casterSets.length) await page.evaluate(`window.xfStudioCreatorRig.trialCasters(null)`);
   let scatter: unknown = null;
   if (flags.has("--scatter-ab")) {
     scatter = await page.evaluate(`window.xfStudioCreatorRig.scatterEvidence()`);
@@ -134,7 +143,7 @@ try {
   const gpu = await page.evaluate(`(() => { const gl = document.createElement("canvas").getContext("webgl2");
     const info = gl?.getExtension("WEBGL_debug_renderer_info"); return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown"; })()`);
   writeFileSync(resolve(out, "run.json"), JSON.stringify({ date: new Date().toISOString(), save: save ? "(private save copy)" : null, framing, rect, gpu,
-    lights, shadowMapSize: await page.evaluate(`window.xfStudioCreatorRig.shadowMapSize()`), timing, shots, scatter, window: { width: windowWidth, height: windowHeight, dpr },
+    lights, shadowMapSize: await page.evaluate(`window.xfStudioCreatorRig.shadowMapSize()`), timing, shots, scatter, casterRuns, window: { width: windowWidth, height: windowHeight, dpr },
     console: page.console.filter(m => m.type === "error" || m.type === "exception").slice(0, 20) }, null, 2));
   console.log(`Wrote ${shots.length} captures to ${out}`, JSON.stringify(timing));
 } finally { await page.close(); server.kill(); }

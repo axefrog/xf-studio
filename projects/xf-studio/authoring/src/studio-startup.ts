@@ -274,6 +274,8 @@ async function start(host: StudioHost, root: HTMLElement) {
       lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
       solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
       trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
+      trialCasters: (names: string[] | null) => { scene?.lighting.trialCasters(names); scene?.requestRender(); },
+      casters: () => scene?.lighting.rig.specs.filter(spec => spec.castShadow).map(spec => spec.name) ?? [],
       frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
       shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
       // The skin scatter (platform/scene/skin-scatter.ts): switch it off for the wrap stand-in and on again (A/B evidence), and its state.
