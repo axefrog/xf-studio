@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expressionPart } from "../src/features/expressions";
 import { controlGroup, isDirectionPair, mirrorName, pairKey } from "../src/engines/facial-rig/vocabulary";
+import { EXPRESSION_SAMPLES, SAMPLE_FILES } from "../src/expression-samples";
 
 const folder = resolve(import.meta.dir, "..", "data", "expression-samples");
 const files = readdirSync(folder).filter(name => name.endsWith(".json")).sort();
@@ -39,4 +40,17 @@ test.each(files)("%s is a valid expression preset", file => {
   // Every control is explained by an action unit in the documentation block.
   const explained = new Set((sample.facs.actionUnits as { controls: string[] }[]).flatMap(step => step.controls));
   expect(names.filter(name => !explained.has(name))).toEqual([]);
+});
+
+test("the host hands out every sample file as a built-in starting point, with its controls and links", () => {
+  expect(Object.keys(SAMPLE_FILES).map(name => `${name}.json`).sort()).toEqual(files);
+  expect(EXPRESSION_SAMPLES.map(sample => sample.id)).toEqual(Object.keys(SAMPLE_FILES).map(name => `xf-sample:${name}`));
+  for (const sample of EXPRESSION_SAMPLES) {
+    const file = JSON.parse(readFileSync(resolve(folder, `${sample.id.slice(10)}.json`), "utf8"));
+    const part = expressionPart.parse(file.part);
+    expect(sample.controls).toEqual(file.part.body.controls);
+    expect(sample.links).toEqual(part.links);
+    expect(sample.name).not.toContain("(natural)");
+    expect(sample.summary).toMatch(/^AU/);
+  }
 });

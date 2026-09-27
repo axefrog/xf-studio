@@ -220,6 +220,25 @@ test("tree view: groups toggle, rows activate on one click, disabled rows don't,
   expect(activated.at(-1)).toBe("b1");
 });
 
+test("tree view: a right-click, Shift+F10 or the Menu key on an item asks the owner for its context menu; focus by any route moves the tab stop", async () => {
+  const { TreeView } = await lib();
+  const menus: string[] = [];
+  const tree = new TreeView({ label: "Expressions", onActivate: () => {}, onToggle: () => {},
+    onMenu: (item, anchor) => menus.push(`${item.kind}:${item.id}:${"x" in anchor ? "pointer" : "item"}`) });
+  document.body.append(tree.element);
+  tree.update({ groups: [{ id: "saved", label: "Saved", rows: [{ id: "s1", label: "Smirk" }, { id: "s2", label: "Pout" }] }], expanded: new Set(["saved"]) });
+  const item = (id: string) => tree.element.querySelector<HTMLElement>(`[data-id="${id}"]`)! as unknown as LightElement;
+  const menu = lightEvent("contextmenu", { clientX: 5, clientY: 6 } as never);
+  item("s2").dispatchEvent(menu);
+  expect([menus, menu.defaultPrevented, document.activeElement?.getAttribute("data-id")]).toEqual([["row:s2:pointer"], true, "s2"]);
+  // Focus that arrives without the tree's keys (a pointer, a script) moves the roving tab stop, so the next key acts on that item.
+  item("s1").dispatchEvent(lightEvent("focusin"));
+  expect([item("s1").tabIndex, item("s2").tabIndex]).toEqual([0, -1]);
+  (tree.element as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "F10", shiftKey: true } as never));
+  (tree.element as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "ContextMenu" }));
+  expect(menus.slice(1)).toEqual(["row:s1:item", "row:s1:item"]);
+});
+
 test("tree view: only the items in view are in the page, and an update keeps the focused item", async () => {
   const { TreeView } = await lib();
   const groups = Array.from({ length: 90 }, (_, g) => ({ id: `g${g}`, label: `Pack ${g}`, rows: Array.from({ length: 18 }, (_, r) => ({ id: `g${g}r${r}`, label: `Pose ${r}` })) }));

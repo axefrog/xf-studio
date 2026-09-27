@@ -17,7 +17,7 @@ export type ControlGroupId = "brows" | "lids" | "gaze" | "nose" | "cheeks" | "mo
 export const CONTROL_GROUPS: readonly { readonly id: ControlGroupId; readonly label: string }[] = Object.freeze([
   { id: "brows", label: "Brows" }, { id: "lids", label: "Eyes and lids" }, { id: "gaze", label: "Gaze" },
   { id: "nose", label: "Nose" }, { id: "cheeks", label: "Cheeks" }, { id: "mouth", label: "Mouth and lips" },
-  { id: "jaw", label: "Jaw" }, { id: "neck", label: "Neck and head" }, { id: "ears", label: "Ears" },
+  { id: "jaw", label: "Jaw" }, { id: "neck", label: "Neck and throat" }, { id: "ears", label: "Ears" },
   { id: "advanced", label: "Advanced" }, { id: "other", label: "Other" },
 ]);
 
@@ -84,9 +84,15 @@ export function isDirectionPair(name: string): boolean {
   return tokens.at(-1) === "l" || tokens.at(-1) === "r" || /_dir_|_turn$|_tilt$/.test(name);
 }
 
-/** The drawer group of a control, by its name's words. */
+/**
+ * Neck and head turn and tilt controls: they deform neck and jaw-line skin for a head motion the body skeleton drives, and never turn
+ * or tilt the head themselves (research/animation/natural-expressions.md §3.2), so a still expression has no use for them.
+ */
+export const isHeadMotionCorrective = (name: string) => /^(?:head_)?neck_(?:[lr]_)?(?:up_|dn_)?(?:turn|tilt)$|^head_neck_/.test(name);
+
+/** The drawer group of a control, by its name's words. The tongue, cutscene, sculpt and head-motion correctives sit in Advanced. */
 export function controlGroup(name: string): ControlGroupId {
-  if (/^tongue_|_sticky|^face_gravity_|^sculp_/.test(name)) return "advanced";
+  if (/^tongue_|_sticky|^face_gravity_|^sculp_/.test(name) || isHeadMotionCorrective(name)) return "advanced";
   if (/^eye_[lr]_brows_/.test(name)) return "brows";
   if (/^eye_[lr]_dir_/.test(name)) return "gaze";
   if (/^eye_/.test(name)) return "lids";
@@ -103,25 +109,26 @@ export function controlGroup(name: string): ControlGroupId {
 const LABELS: Readonly<Record<string, string>> = {
   eye_brows_raise_in: "Inner brow raise", eye_brows_raise_out: "Outer brow raise", eye_brows_lower: "Brow lower",
   eye_brows_lateral: "Brows draw together", eye_blink: "Close lid", eye_widen: "Widen eye", eye_oculi_squint_inner: "Squint, inner",
-  eye_oculi_squint_outer_lower: "Squint, lower outer", eye_oculi_squint_outer_upper: "Squint, upper outer",
+  eye_oculi_squint_outer_lower: "Cheek raise (squint, lower outer)", eye_oculi_squint_outer_upper: "Outer brow and lid down (squint, upper outer)",
   eye_pupil_narrow: "Pupil narrow", eye_pupil_wide: "Pupil wide",
   eye_dir_up: "Look up", eye_dir_dn: "Look down", eye_dir_in: "Look in (toward the nose)", eye_dir_out: "Look out (away from the nose)",
-  nose_compress: "Nostril compress", nose_breathe_in: "Nostril narrow (breathe in)", nose_breathe_out: "Nostril flare (breathe out)",
+  nose_compress: "Nostril compress", nose_breathe_in: "Nostril flare (breathe in)", nose_breathe_out: "Nostril narrow (breathe out)",
   nose_snear: "Nose sneer", lips_nasolabialDeepener: "Smile line deepen", cheek_suck: "Cheek suck in", cheek_puff: "Cheek puff",
-  lips_upper_raise: "Upper lip raise", lips_pull: "Lip corner pull", lips_corner_up: "Mouth corner up (smile)",
-  lips_corner_wide: "Mouth corner wide", lips_corner_stretch: "Mouth corner stretch", lips_stretch: "Lip stretch",
+  lips_upper_raise: "Upper lip raise", lips_pull: "Upper lip raise, inner", lips_corner_up: "Mouth corner up (smile)",
+  lips_corner_wide: "Mouth corner back (dimple)", lips_corner_stretch: "Mouth corner stretch", lips_stretch: "Lip stretch",
   lips_corner_sharp_up: "Mouth corner sharp up", lips_suck_up: "Upper lip suck in", lips_suck_dn: "Lower lip suck in",
   lips_puff_up: "Upper lip puff", lips_puff_dn: "Lower lip puff", lips_apart_up: "Upper lip part", lips_apart_dn: "Lower lip part",
-  lips_lower_raise: "Lower lip raise", lips_corner_dn: "Mouth corner down (frown)", lips_chin_raise: "Chin raise",
-  lips_together_up: "Upper lip press", lips_together_dn: "Lower lip press", lips_purse: "Lip purse", lips_funnel: "Lip funnel",
+  lips_lower_raise: "Lower lip down", lips_corner_dn: "Mouth corner down (frown)", lips_chin_raise: "Chin raise",
+  lips_together_up: "Upper lip seal", lips_together_dn: "Lower lip seal", lips_purse: "Lip purse", lips_funnel: "Lip funnel",
   lips_tighten_up: "Upper lip tighten", lips_tighten_dn: "Lower lip tighten", lips_mid_shift: "Mouth shift",
   lips_mid_shift_up: "Mouth shift up", lips_mid_shift_dn: "Mouth shift down",
-  jaw_mid_open: "Jaw open", jaw_mid_close: "Jaw close", jaw_mid_shift: "Jaw shift", jaw_mid_shift_fwd: "Jaw forward",
+  jaw_mid_open: "Jaw open", jaw_mid_close: "Jaw close (undoes Jaw open)", jaw_mid_shift: "Jaw shift", jaw_mid_shift_fwd: "Jaw forward",
   jaw_mid_shift_back: "Jaw back", jaw_mid_clench: "Jaw clench",
   neck_stretch: "Neck stretch", neck_tighten: "Neck tighten", neck_sternocleidomastoid_flex: "Neck side muscle flex",
   neck_platysma_flex: "Neck front muscle flex", neck_throat_adamsApple_up: "Adam's apple up", neck_throat_adamsApple_dn: "Adam's apple down",
   neck_throat_compress: "Throat compress", neck_throat_open: "Throat open", neck_turn: "Neck turn", neck_up_turn: "Neck turn up",
-  neck_dn_turn: "Neck turn down", neck_tilt: "Neck tilt", head_neck_up_turn: "Head up", head_neck_dn_turn: "Head down", head_neck_tilt: "Head tilt",
+  neck_dn_turn: "Neck turn down", neck_tilt: "Neck tilt", head_neck_up_turn: "Head up (neck skin)", head_neck_dn_turn: "Head down (neck skin)",
+  head_neck_tilt: "Head tilt (neck skin)",
   ear_shift_up: "Ear raise", sculp_mid_slide: "Sculpt slide", face_gravity: "Face gravity", face_gravity_fwd: "Face gravity forward",
   face_gravity_back: "Face gravity back", lips_corner_sticky: "Sticky lips",
 };
@@ -140,10 +147,16 @@ export function controlLabel(name: string): string {
   const text = DIRECTION_SUFFIX.test(name) ? `${words} ${controlSide(name)}` : words;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
-/** What the preview can't show for a control, in plain words. */
+/** A plain note where a control does something other than its name suggests, or the preview can't show it. */
 function controlNote(name: string): string | undefined {
   if (/_pupil_/.test(name)) return "The preview doesn't show pupil size.";
   if (/^tongue_/.test(name)) return "The preview doesn't show the tongue well.";
+  if (/^lips_together_/.test(name)) return "Brings the lips together while the jaw is open; closed lips don't change.";
+  // Modifiers: alone they move nothing; with their partner control they change its shape (research/animation/natural-expressions.md §3.2).
+  if (/^lips_tighten_(up|dn)$/.test(name)) return `Changes only the ${name.endsWith("up") ? "upper" : "lower"} lip seal or puff; alone it does nothing.`;
+  if (name === "jaw_mid_clench") return "Changes only Jaw close; alone it does nothing.";
+  if (name === "neck_throat_adamsApple_up") return "Works only against Adam's apple down; alone it does nothing.";
+  if (isHeadMotionCorrective(name)) return "Shapes the neck skin for a head turn or tilt; the head itself doesn't move.";
   return undefined;
 }
 

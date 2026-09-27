@@ -53,6 +53,11 @@ test("mirror, reset (all, a group, one control) and start from replace what they
   expect(apply({ kind: "expression.reset", scope: "all" }, face).part.controls).toEqual({});
   const started = apply({ kind: "expression.startFrom", origin: { kind: "installed", clip: "facial_happy", set: "s", row: 7 }, controls: { lips_apart_up: 0.86 } }, face);
   expect(started.part).toEqual({ controls: { lips_apart_up: f32(0.86) }, links: {}, origin: { kind: "installed", clip: "facial_happy", set: "s", row: 7 } });
+  // A saved expression or sample brings its links (sorted), so its asymmetry survives the next edit; without them the links are kept.
+  const linked = { part: { controls: {}, links: { lips_corner_up: true } } as ExpressionPart, editor: {} };
+  expect(apply({ kind: "expression.startFrom", origin: { kind: "preset", id: "xf-sample:x", name: "X" }, controls: { lips_l_corner_up: 0.6, lips_r_corner_up: 0.5 },
+    links: { lips_corner_up: false, eye_brows_lower: false } }, linked).part.links).toEqual({ eye_brows_lower: false, lips_corner_up: false });
+  expect(apply({ kind: "expression.startFrom", origin: { kind: "rest" }, controls: {} }, linked).part.links).toEqual({ lips_corner_up: true });
   expect(apply({ kind: "expression.setLabel", label: "  Grin  " }).part.label).toBe("Grin");
   expect(apply({ kind: "expression.setLabel", label: "" }, { part: { controls: {}, links: {}, label: "x" } as ExpressionPart, editor: {} }).part).toEqual({ controls: {}, links: {} });
 });
@@ -64,6 +69,7 @@ test("capability refuses with structured codes and plain reasons", () => {
   expect(expressionCapability(s, { kind: "expression.reset", scope: "group", target: "elbows" })).toMatchObject({ available: false });
   expect(expressionCapability(s, { kind: "expression.startFrom", origin: { kind: "rest" }, controls: { jaw_mid_open: -1 } })).toMatchObject({ available: false });
   expect(expressionCapability(s, { kind: "expression.startFrom", origin: { kind: "preset", id: "p", name: "Mine" }, controls: {} })).toEqual({ available: true });
+  expect(expressionCapability(s, { kind: "expression.startFrom", origin: { kind: "rest" }, controls: {}, links: { lips_corner_up: "yes" } as never })).toMatchObject({ available: false });
   expect(() => apply({ kind: "expression.setControl", name: "jaw_mid_open", value: 2 })).toThrow();
 });
 

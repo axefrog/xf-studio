@@ -2948,6 +2948,11 @@
      "type": "object",
      "required": true,
      "from": "input"
+    },
+    "links": {
+     "type": "object",
+     "required": false,
+     "from": "input"
     }
    }
   },

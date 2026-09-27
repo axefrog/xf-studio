@@ -14,7 +14,7 @@
  *   stop it (design §5.3); the held expression comes back when it stops.
  */
 import { posedLocals, type RigRest, type SolvedPose } from "./engines/facial-rig/pose";
-import type { FacialBlink, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
+import type { FacialBlink, FacialControl, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
 
 /** A solve's answer with its buffers decoded (the device does the transport). */
 export type FacialSolved = { ok: true; frames: number; rate?: number; pose: SolvedPose; ms: number; skipped: readonly string[] } |
@@ -160,12 +160,12 @@ export class FacialPreview {
   private desiredKey() { const request = this.desired(); return request ? JSON.stringify(request) : "none"; }
 
   snapshot(): FacialPreviewSnapshot {
-    const host = this.host, controls = host?.rig.controls, groups = host?.rig.groups, startPoints = this.startPoints;
+    const host = this.host, controls = this.controls(), groups = host?.rig.groups, startPoints = this.startPoints;
     const latency = this.latencies.length ? (() => {
       const totals = this.latencies.map(entry => entry.total).sort((a, b) => a - b), solver = this.latencies.map(entry => entry.solver).sort((a, b) => a - b);
       return { median: round(totals[Math.floor(totals.length / 2)]!), max: round(totals.at(-1)!), solver: round(solver[Math.floor(solver.length / 2)]!), count: totals.length };
     })() : undefined;
-    const base = { ...(controls ? { controls } : {}), ...(groups ? { groups } : {}), startPoints, ...(latency ? { latency } : {}) };
+    const base = { ...(controls ? { controls } : {}), ...(groups ? { groups } : {}), startPoints, samples: host?.samples ?? [], ...(latency ? { latency } : {}) };
     if (this.hostError) return { ...base, phase: "failed", reason: this.hostError, next: "retry" };
     if (!host || host.rig.phase === "preparing") return { ...base, phase: "preparing", reason: "Reading your V's face from your game files…" };
     if (host.rig.phase !== "ready") return { ...base, phase: "unavailable", reason: host.rig.reason, next: host.rig.phase === "unconfigured" ? "game-setup" : "retry" };
@@ -179,6 +179,17 @@ export class FacialPreview {
     if (!this.sink) return { ...base, phase: "unavailable", reason: "Your expression shows on the 3D head once it's ready." };
     return { ...base, phase: "ready" };
   }
+  /** The rig's controls, each marked `inert` when the host found it moves nothing (kept until the host's list changes). */
+  private controls(): readonly FacialControl[] | undefined {
+    const rig = this.host?.rig, controls = rig?.controls;
+    if (!controls || !rig.inert?.length) return controls;
+    if (this.marked?.source !== controls || this.marked.inert !== rig.inert) {
+      const inert = new Set(rig.inert);
+      this.marked = { source: controls, inert: rig.inert, controls: controls.map(control => inert.has(control.name) ? { ...control, inert: true } : control) };
+    }
+    return this.marked.controls;
+  }
+  private marked: { source: readonly FacialControl[]; inert: readonly string[]; controls: readonly FacialControl[] } | undefined;
   /** Solve again after a failure (the drawer's Try again). */
   retry() {
     // The host's state is asked for again: a solver that stopped or was stuck is started again there (CORE-101), and the solve follows.

@@ -6,14 +6,14 @@
 import { refusal, type ActionDescriptor, type Capability, type FeatureResult, type FeatureState, type HistoryLabel } from "../../platform/api";
 import { controlGroup, isDirectionPair, mirrorName, pairKey, type ControlGroupId, CONTROL_GROUPS, controlSide } from "../../engines/facial-rig/vocabulary";
 import { CONTROL_NAME, normaliseVector, sameVector, storedWeight, vectorIssue, withControl, type ControlVector } from "../../engines/facial-rig/vector";
-import { MAX_LABEL, originIssue, type ExpressionEditor, type ExpressionOrigin, type ExpressionPart } from "./part";
+import { linksIssue, MAX_LABEL, originIssue, type ExpressionEditor, type ExpressionOrigin, type ExpressionPart } from "./part";
 
 export type ExpressionAction =
   | { kind: "expression.setControl"; name: string; value: number }
   | { kind: "expression.linkPair"; pair: string; linked: boolean }
   | { kind: "expression.mirror"; from: "left" | "right" }
   | { kind: "expression.reset"; scope: "all" | "group" | "control"; target?: string }
-  | { kind: "expression.startFrom"; origin: ExpressionOrigin; controls: ControlVector }
+  | { kind: "expression.startFrom"; origin: ExpressionOrigin; controls: ControlVector; links?: Readonly<Record<string, boolean>> }
   | { kind: "expression.setLabel"; label: string };
 export type ExpressionScope = "workspace";
 export type ExpressionEffect = { kind: "content" } | { kind: "none" };
@@ -32,7 +32,8 @@ export const EXPRESSION_DESCRIPTORS: { readonly [K in ExpressionAction["kind"]]:
     payload: { scope: input({ type: "enum", required: true, values: ["all", "group", "control"] }),
       target: input({ type: "string", required: false, maxLength: 96 }) } },
   "expression.startFrom": { scope: ["workspace"], effect: "content", undo: "part",
-    payload: { origin: input({ type: "object", required: true }), controls: input({ type: "object", required: true }) } },
+    payload: { origin: input({ type: "object", required: true }), controls: input({ type: "object", required: true }),
+      links: input({ type: "object", required: false }) } },
   "expression.setLabel": { scope: ["workspace"], effect: "content", undo: "part",
     payload: { label: input({ type: "string", required: true, maxLength: MAX_LABEL }) } },
 });
@@ -66,7 +67,7 @@ export function expressionCapability(state: ExpressionState, action: ExpressionA
         ? { available: true } : refusal("invalid_value", "That isn't a face control.");
       return refusal("invalid_value", "Reset everything, a group or one control.");
     case "expression.startFrom": {
-      const bad = originIssue(action.origin) ?? vectorIssue(action.controls);
+      const bad = originIssue(action.origin) ?? vectorIssue(action.controls) ?? (action.links === undefined ? undefined : linksIssue(action.links));
       return bad ? refusal("invalid_value", bad) : { available: true };
     }
     case "expression.setLabel":
@@ -114,7 +115,9 @@ export function applyExpression(state: ExpressionState, action: ExpressionAction
       return changedTo(state, { ...part, controls });
     }
     case "expression.startFrom":
-      return changedTo(state, { ...part, controls: normaliseVector(action.controls), origin: structuredClone(action.origin) });
+      // A saved expression or sample brings its own links (its authored asymmetry survives the next edit); rest and installed ones keep them.
+      return changedTo(state, { ...part, controls: normaliseVector(action.controls), origin: structuredClone(action.origin),
+        ...(action.links ? { links: Object.fromEntries(Object.keys(action.links).sort().map(key => [key, action.links![key]!])) } : {}) });
     case "expression.setLabel": {
       const label = action.label.trim();
       const { label: _previous, ...rest } = part;

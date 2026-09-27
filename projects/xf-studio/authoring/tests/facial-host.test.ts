@@ -16,13 +16,15 @@ import type { Installation } from "../src/resolver-host";
 import { cn, cr2w, fixtureInstallation, handle, rh } from "./resolver-fixtures";
 
 const SET = "base\\animations\\ui\\photomode\\test_faces.anims";
-const MAIN = ["eye_l_blink", "eye_r_blink", "lips_l_corner_up", "lips_r_corner_up", "jaw_mid_open"];
+const MAIN = ["eye_l_blink", "eye_r_blink", "lips_l_corner_up", "lips_r_corner_up", "jaw_mid_open", "lips_tighten_up"];
 const TRACKS = ["faceEnvelope", ...MAIN, "x_AnimOverrideWeight"];
 const skeleton = cr2w({ $type: "animRig", boneNames: [cn("root"), cn("jaw")], boneParentIndexes: [-1, 0],
   boneTransforms: [{ Rotation: { i: 0, j: 0, k: 0, r: 1 }, Translation: { X: 0, Y: 0, Z: 1.6, W: 1 }, Scale: { X: 1, Y: 1, Z: 1, W: 1 } },
     { Rotation: { i: 0, j: 0, k: 0, r: 1 }, Translation: { X: 0, Y: -0.02, Z: -0.05, W: 0 }, Scale: { X: 1, Y: 1, Z: 1, W: 1 } }],
   trackNames: TRACKS.map(cn), referenceTracks: TRACKS.map((_, i) => i === 0 || i === TRACKS.length - 1 ? 1 : 0) });
-const setup = cr2w({ $type: "animFacialSetup", info: { tracksMapping: { numEnvelopes: 1, numMainPoses: MAIN.length, numLipsyncOverrides: 1, numWrinkles: 0 } } });
+// Its one wrinkle output reads lips_l_corner_up (track 3).
+const setup = cr2w({ $type: "animFacialSetup", info: { tracksMapping: { numEnvelopes: 1, numMainPoses: MAIN.length, numLipsyncOverrides: 1, numWrinkles: 1 } },
+  bakedData: { Data: { Face: { Wrinkles: [3] }, Eyes: { Wrinkles: [3] }, Tongue: { Wrinkles: [3] } } } });
 /** An animation set whose clips hold float keys only: [name, type, duration, keyed [time, track, value][], constant [track, value][]]. */
 function animSet(clips: [string, string, number, [number, number, number][], [number, number][]][]) {
   const chunks: number[] = [], entries: object[] = [];
@@ -67,8 +69,13 @@ function world(root: string, options: WorldOptions = {}) {
     for (const resource of resources) { const document = documents.get(resource.hash); if (document) take(resource.hash, JSON.stringify(document)); }
   };
   const solves: { frames: number; resolve(value: { q: string; t: string; ms: number }): void }[] = [];
+  let probed = false;
   const process: FacialSolverProcess = { ready: Promise.resolve({ ok: true, compileMs: 12 }), exited: false, dispose: () => {},
-    solve: frames => new Promise(resolve => solves.push({ frames: frames.length, resolve })) };
+    solve: frames => {
+      // The first solve is the host's check for controls that move nothing (`findInert`): a toy face answers it at once.
+      if (!probed) { probed = true; return Promise.resolve(toyFace(frames)); }
+      return new Promise(resolve => solves.push({ frames: frames.length, resolve }));
+    } };
   const cli = join(root, "wk.exe"); writeFileSync(cli, "fake");
   const host = new FacialHost({ cacheRoot: root, resolverCache: join(root, "resolver"),
     settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
@@ -78,6 +85,19 @@ function world(root: string, options: WorldOptions = {}) {
   return { host, solves, extractions: () => extractions };
 }
 const zeros = (n: number) => btoa(String.fromCharCode(...new Uint8Array(n * 4)));
+/**
+ * A toy face for the inert check: the jaw joint moves sideways with either blink, down with the jaw, and forward with the right mouth
+ * corner only while the jaw is open (a control that acts only with another). The left corner and lips_tighten_up move no joint; the left
+ * corner feeds the setup's wrinkle output, so only lips_tighten_up is inert.
+ */
+function toyFace(frames: readonly Float32Array[]) {
+  const t = new Float32Array(frames.length * 6);
+  frames.forEach((f, i) => { t[i * 6 + 3] = f[1]! + f[2]!; t[i * 6 + 4] = f[5]!; t[i * 6 + 5] = f[4]! * f[5]!; });
+  const q = new Float32Array(frames.length * 8);
+  for (let i = 0; i < frames.length * 2; i++) q[i * 4 + 3] = 1;
+  const b64 = (a: Float32Array) => Buffer.from(a.buffer).toString("base64");
+  return { q: b64(q), t: b64(t), ms: 1 };
+}
 
 test("the face rig, blink and installed expressions come from the winning files; the table's winner is followed", async () => {
   const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
@@ -91,6 +111,8 @@ test("the face rig, blink and installed expressions come from the winning files;
     expect(state.rig.joints![0]).toMatchObject({ name: "root", t: [0, 1.6, -0] });
     expect(state.blink).toEqual({ available: true, closedTime: expect.closeTo(0.1, 3), duration: 0.5, rate: 60 });
     expect(state.solver).toEqual({ phase: "ready", compileMs: 12 });
+    // Checked by the solver before it is ready: a control that acts only with another, or feeds a wrinkle output, is not inert.
+    expect(state.rig.inert).toEqual(["lips_tighten_up"]);
     const points = host.expressions();
     expect(points.table).toEqual({ provider: "Some expression pack", rows: 3 });
     expect(points.items.map(item => [item.row, item.label, item.provider, item.controls])).toEqual([
@@ -157,7 +179,8 @@ function fakeProcess(options: { ready?: boolean; hang?: boolean } = {}) {
     ready: Promise.resolve(options.ready === false ? { ok: false as const, error: "no" } : { ok: true as const, compileMs: 1 }),
     get exited() { return exited; },
     dispose: () => { disposed = true; exited = true; for (const solve of solves.splice(0)) solve.reject(Error("The solver stopped.")); },
-    solve: () => exited ? Promise.reject(Error("The solver stopped.")) : new Promise((resolve, reject) => {
+    // The inert check (many frames at once) is answered by the toy face; `hang` applies to the solves after it.
+    solve: frames => exited ? Promise.reject(Error("The solver stopped.")) : frames.length > 1 ? Promise.resolve(toyFace(frames)) : new Promise((resolve, reject) => {
       if (options.hang) { solves.push({ resolve, reject }); return; }
       resolve({ q: zeros(8), t: zeros(6), ms: 1 });
     }),

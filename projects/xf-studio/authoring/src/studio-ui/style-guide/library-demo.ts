@@ -1,7 +1,7 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, type TabItem } from "../components";
+  Toggle, ColorField, applyCapability, openMenu, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, type TabItem } from "../components";
 import { h } from "../dom";
 
 type Mount = () => HTMLElement;
@@ -71,9 +71,11 @@ const MOUNTS: Record<string, Mount> = {
     return stack({ gap: "normal" }, g.element, folded.element); },
   "lib-help-tip": () => h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Finish" }), helpTip("Finish", "How the makeup catches the light.")),
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
-  "lib-menu": () => button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
+  "lib-menu": () => h("div", { class: "row wrap gap-s" }, button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
     { kind: "action", label: "Duplicate", icon: "duplicate", shortcut: "Ctrl+D", run: () => {} }, { kind: "action", label: "Merge down", icon: "layers", capability: { available: false, reason: "The bottom layer has nothing below it." }, run: () => {} },
     { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
+    button({ label: "Delete a saved expression", icon: "trash", onClick: event => openConfirmPopover(event.currentTarget as Element,
+      { title: "Delete saved expression", message: "Delete “Smirk” from your library? This can't be undone.", confirm: "Delete", danger: true, onConfirm: () => {} }) })),
   "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy" }]; let selected = "a";
     const list: ItemList<{ id: string; name: string; meta: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,
       onSelect: id => { selected = id; list.update(items, selected); }, onMove: (id, index) => { const item = items.find(i => i.id === id)!; items = items.filter(i => i.id !== id); items.splice(index, 0, item); list.update(items, selected); },
@@ -102,7 +104,8 @@ const MOUNTS: Record<string, Mount> = {
     const tree: TreeView = new TreeView({ label: "Sample poses", onActivate: id => { current = id; paint(); },
       onToggle: (id, open) => { if (open) expanded.add(id); else expanded.delete(id); paint(); },
       onKey: (event, item) => { if (item.kind === "row" && event.key.toLowerCase() === "f" && !event.ctrlKey) { toggle(item.id); return true; } },
-      trailing: row => favouriteToggle({ on: favourites.has(row.id), what: row.label, onToggle: () => toggle(row.id) }) });
+      trailing: row => favouriteToggle({ on: favourites.has(row.id), what: row.label, onToggle: () => toggle(row.id) }),
+      onMenu: (item, anchor) => { if (item.kind === "row") openMenu([{ kind: "action", label: favourites.has(item.id) ? "Remove from favourites" : "Add to favourites", icon: "star", run: () => toggle(item.id) }], anchor, { label: "Pose actions" }); } });
     const paint = () => tree.update({ groups: groups(), expanded, current });
     paint();
     tree.element.style.height = "220px";

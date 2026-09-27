@@ -296,7 +296,7 @@ The Expressions feature (module #2, [expression editor design](../animation/expr
 | `expression.linkPair` `{pair,linked}` | Link or separate a left/right pair (`pair` is the name without its side words, `lips_corner_up`). |
 | `expression.mirror` `{from:"left"|"right"}` | Copy every mirror pair's named side onto the other; centre controls and direction pairs are left alone. |
 | `expression.reset` `{scope:"all"|"group"|"control",target?}` | Clear every control, a drawer group (`brows`, `lids`, `gaze`, `nose`, `cheeks`, `mouth`, `jaw`, `neck`, `ears`, `advanced`, `other`) or one control (with its linked partner). |
-| `expression.startFrom` `{origin,controls}` | Replace the vector with a start point's; `origin` is `{kind:"rest"}`, `{kind:"installed",clip,set,row?,provider?}` (an installed photo-mode expression, from the facial preview's start points) or `{kind:"preset",id,name}` (a saved expression). The label and links are kept. |
+| `expression.startFrom` `{origin,controls,links?}` | Replace the vector with a start point's; `origin` is `{kind:"rest"}`, `{kind:"installed",clip,set,row?,provider?}` (an installed photo-mode expression, from the facial preview's start points) or `{kind:"preset",id,name}` (a saved expression, or a built-in sample with id `xf-sample:<file>`). `links` (pair key to boolean), when given, replaces the part's links: a saved expression or sample brings its own, so its asymmetry survives the next edit; otherwise the links are kept. The label is kept. |
 | `expression.setLabel` `{label}` | The photo-mode menu text (up to 64 characters; empty uses the preset's name). Export comes in phase 3. |
 
 Part presets are the async `presets` family (never Undo; [editor invariants](editor-invariants.md#part-presets)):

@@ -14,7 +14,9 @@ export type FacialControlGroup = "brows" | "lids" | "gaze" | "nose" | "cheeks" |
 /** One main-pose control of the rig, as the drawer lists it (engines/facial-rig/vocabulary.ts `ControlInfo`). */
 export type FacialControl = { readonly name: string; readonly track: number; readonly group: FacialControlGroup; readonly label: string;
   readonly text: string; readonly side: "left" | "right" | null; readonly partner: string | null; readonly pair: string | null;
-  readonly direction: boolean; readonly note?: string };
+  readonly direction: boolean; readonly note?: string;
+  /** It moves nothing on this face (the host's solver found no joint motion and no wrinkle output): the drawer doesn't offer it. */
+  readonly inert?: boolean };
 export type FacialRigJoint = { readonly name: string; readonly parent: number; readonly t: readonly number[]; readonly r: readonly number[];
   readonly s: readonly number[] };
 
@@ -26,13 +28,28 @@ export type FacialHostState = {
   readonly rig: { readonly phase: FacialPhase; readonly reason?: string; readonly skeleton?: string; readonly setup?: string;
     readonly tracks?: readonly string[]; readonly reference?: readonly number[]; readonly main?: { readonly start: number; readonly count: number };
     readonly controls?: readonly FacialControl[]; readonly groups?: readonly { readonly id: FacialControlGroup; readonly label: string }[];
-    readonly joints?: readonly FacialRigJoint[] };
+    readonly joints?: readonly FacialRigJoint[];
+    /** Controls that move nothing on this face, once the solver has checked (absent: not known, so every control is offered). */
+    readonly inert?: readonly string[] };
   /** The external solver kept warm (the pinned, unmodified IO Suite modules run as their own program). */
   readonly solver: { readonly phase: "missing" | "starting" | "ready" | "failed"; readonly reason?: string; readonly compileMs?: number };
   /** The game's normal blink, which composes with a held expression before the solve (the game adds blink tracks first). */
   readonly blink: { readonly available: boolean; readonly closedTime?: number; readonly duration?: number; readonly rate?: number };
   /** The installed photo-mode expressions (start points). */
   readonly expressions: { readonly phase: FacialPhase; readonly reason?: string; readonly count?: number };
+  /** The built-in starting points (the natural samples), available whether or not the game files are read. */
+  readonly samples: readonly FacialSample[];
+};
+
+/** A built-in starting point: an expression XF Studio ships (src/expression-samples.ts), started from with its own links. */
+export type FacialSample = {
+  /** `xf-sample:<file>`: the preset id its origin records. */
+  readonly id: string;
+  readonly name: string;
+  /** Its action units in a few words ("AU6 cheek raiser, AU12 lip corner puller"). */
+  readonly summary: string;
+  readonly controls: Readonly<Record<string, number>>;
+  readonly links: Readonly<Record<string, boolean>>;
 };
 
 /** An installed photo-mode expression, found the way the game finds it (the winning expression table, clips by name). */
@@ -81,6 +98,8 @@ export type FacialPreviewSnapshot = {
   /** The drawer's groups, in order, with their labels. */
   readonly groups?: readonly { readonly id: FacialControlGroup; readonly label: string }[];
   readonly startPoints: FacialStartPoints;
+  /** The built-in starting points (empty until the host answers). */
+  readonly samples: readonly FacialSample[];
   /** Round-trip time of recent solves (median and slowest of the last 20), for the drawer's footnote and evidence. */
   readonly latency?: { readonly median: number; readonly max: number; readonly solver: number; readonly count: number };
 };

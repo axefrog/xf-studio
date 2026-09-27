@@ -10,7 +10,7 @@ import { FACIAL_STATE_SCHEMA, type FacialHostState, type FacialSolveRequest } fr
 const JOINTS = [{ name: "root", parent: -1, t: [0, 0, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }, { name: "jaw", parent: 0, t: [0, 1, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }];
 const readyState = (patch: Partial<FacialHostState> = {}): FacialHostState => ({ schema: FACIAL_STATE_SCHEMA,
   rig: { phase: "ready", controls: [], joints: JOINTS }, solver: { phase: "ready" }, blink: { available: true, closedTime: 0.1, duration: 0.5, rate: 60 },
-  expressions: { phase: "ready", count: 0 }, ...patch });
+  expressions: { phase: "ready", count: 0 }, samples: [], ...patch });
 /** A solved pose moving the jaw joint by `amount` (REDengine +X). */
 const solved = (amount: number, frames = 1): FacialSolved => ({ ok: true, frames, ...(frames > 1 ? { rate: 60 } : {}), ms: 0.7, skipped: [],
   pose: { q: Float32Array.from({ length: frames * 8 }, (_, i) => i % 4 === 3 ? 1 : 0), t: Float32Array.from({ length: frames * 6 }, (_, i) => i % 6 === 3 ? amount : 0) } });
@@ -123,4 +123,20 @@ test("several posers combine by summing and clamping", () => {
   const one = { a: 0.2 };
   expect(combineFacePoses([one, undefined])).toBe(one);
   expect(combineFacePoses([{ a: 0.7, b: 0.1 }, { a: 0.5 }])).toEqual({ a: 1, b: 0.1 });
+});
+
+test("controls the host found move nothing are marked inert in the snapshot, and the built-in samples pass through", async () => {
+  const control = (name: string) => ({ name, track: 1, group: "mouth" as const, label: name, text: name, side: null, partner: null, pair: null, direction: false });
+  const sample = { id: "xf-sample:test", name: "Test", summary: "AU12 lip corner puller", controls: { jaw_mid_open: 0.1 }, links: {} };
+  const preview = new FacialPreview({ state: async () => readyState({ rig: { phase: "ready", controls: [control("jaw_mid_open"), control("lips_corner_sticky")],
+    joints: JOINTS, inert: ["lips_corner_sticky"] }, samples: [sample] }), expressions: async () => ({ phase: "ready", items: [] }),
+    solve: async () => solved(0) });
+  preview.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const snapshot = preview.snapshot();
+  expect(snapshot.controls!.map(item => [item.name, !!item.inert])).toEqual([["jaw_mid_open", false], ["lips_corner_sticky", true]]);
+  expect(snapshot.samples).toEqual([sample]);
+  // The marked list is reused while the host's lists are unchanged.
+  expect(preview.snapshot().controls).toBe(snapshot.controls);
+  preview.dispose();
 });

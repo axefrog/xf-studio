@@ -36,6 +36,22 @@ export function readFaceRig(skeleton: unknown, setup: unknown): { vocabulary: Fa
   return { vocabulary, rest: rigRestFromRed(rig) };
 }
 
+/**
+ * The tracks the facial setup's wrinkle outputs read (`bakedData.Data.<part>.Wrinkles`: absolute track indices, one per wrinkle output,
+ * shared by the face, eye and tongue parts). The skin shader turns those outputs into wrinkle normals, so a control that feeds one has a
+ * visible effect in the game even where it moves no joint.
+ */
+export function wrinkleSourceTracks(setup: unknown): number[] {
+  const root = cr2wRoot(setup).root, baked = isObject(root.bakedData) ? root.bakedData.Data : null;
+  if (!isObject(baked)) return [];
+  const found = new Set<number>();
+  for (const part of ["Face", "Eyes", "Tongue"]) {
+    const block = baked[part];
+    if (isObject(block)) for (const track of asArray(block.Wrinkles)) if (Number.isInteger(track)) found.add(track as number);
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
 /** One clip of an animation set, with its float tracks decoded (joint keys are not read). */
 export type SetClip = { name: string; type: string; duration: number; frames: number; tracks: ClipTracks; jointKeys: number };
 

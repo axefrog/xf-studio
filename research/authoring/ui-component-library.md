@@ -34,7 +34,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 
 | Category | Components |
 |---|---|
-| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `Segmented`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
+| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `Segmented`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView` |
 | Feature-specific | none yet |
 
@@ -42,6 +42,7 @@ Components added on request:
 - For the expressions panel (`claude/expressions-p1`): SliderWithValue, PairControl, GroupSection (the expander with a count and reset), SearchField and Combobox.
 - For the Poses panel (`claude/pose-panel`): TreeView, favouriteToggle, and SearchField's Down into the list.
 - For settings discoverability and Game & tools: FolderSetting.
+- For the expression drawer's rebuild (`claude/expressions-drawer`, UI-108): `openConfirmPopover` (ask before an action that can't be undone, in place of the browser's `confirm`) and TreeView's `onMenu` (an item's context menu by right-click, Shift+F10 or the Menu key).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
 
 ## The ratchet
@@ -56,14 +57,13 @@ Comments and strings don't count. The test enforces three rules:
 - An allowance must equal its file's count. When a control moves into the library, its file's allowance must be lowered in the same change, so the debt only shrinks.
 - The scan itself is tested on prose and code.
 
-Debt at introduction (27 September 2026, after the first consolidation round and the merge of `main` that brought the expressions drawer and the Settings links in Help): 88 ad hoc controls in 18 files.
+Debt at introduction (27 September 2026, after the first consolidation round and the merge of `main` that brought the expressions drawer and the Settings links in Help): 88 ad hoc controls in 18 files. The table lists what is left; the expressions drawer was cleared by UI-108 (81 in 17 files).
 
 | File | Count | What is left |
 |---|---|---|
 | `features/save-explorer/view/panel.ts` | 20 | tree rows (role tree), link buttons, filter inputs, `details` disclosures |
 | `studio-ui/diagnostics/report-dialog.ts` | 9 | the sheet shell, raw checkboxes, `details` ×5, textarea |
 | `studio-ui/guidance/help-panel.ts` | 12 | search input, link buttons, topic `details`, buttons |
-| `features/expressions/view/drawer.ts` | 7 | search and number inputs, a select, a `details` group, a hand-built button (moving to SearchField, Combobox, SliderWithValue and GroupSection) |
 | `studio-ui/panels/game-setup.ts` | 7 | hand-copied select markup ×3, text fields ×3, `details` section |
 | `studio-ui/commands.ts` | 6 | the palette (dialog, combobox, listbox, options), the reference sheet |
 | `studio-ui/panels/character.ts` | 5 | heading switch, search field, off chip, row buttons |

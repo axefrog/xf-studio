@@ -23,8 +23,9 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
+import { EXPRESSION_SAMPLES } from "./expression-samples";
 import { BLINK_CLIP, EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readAnimSet, readBlink,
-  readFaceRig, readFaceRigSets, readTable, startPoints, type SetClip } from "./facial-catalogue";
+  readFaceRig, readFaceRigSets, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "./facial-catalogue";
 import { clipValuesAt, type ClipTracks } from "./engines/facial-rig/anim-tracks";
 import { denseTracks, vectorIssue } from "./engines/facial-rig/vector";
 import { CONTROL_GROUPS, type FacialVocabulary } from "./engines/facial-rig/vocabulary";
@@ -214,9 +215,17 @@ export type FacialHostOptions = {
   now?: () => number;
 };
 
-type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTracks; closedTime: number } | null; rigJson: string; setupJson: string };
+type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTracks; closedTime: number } | null; rigJson: string; setupJson: string;
+  /** Tracks the setup's wrinkle outputs read (they show in game even without joint motion). */
+  wrinkleSources: readonly number[];
+  /** Controls that move nothing on this face, found by the solver once it is ready (`findInert`); undefined until then or if it failed. */
+  inert?: readonly string[];
+  /** The check ran (once per face; a restarted solver doesn't repeat it). */
+  probed?: boolean };
 type Preparation = { key: string; controller: AbortController; promise: Promise<void>;
   rig: FacialHostState["rig"]; rigData?: Rig; expressions: FacialStartPoints; solver: FacialHostState["solver"]; process?: FacialSolverProcess;
+  /** The started solver's readiness, the inert check included: a solve waiting for a restarted solver waits for this. */
+  starting?: Promise<void>;
   /** The process must be replaced before the next solve (a solve timed out: it may have lost an answer). */
   stale?: boolean;
   /** When the solver was started again after it stopped, within the last `RESTART_WINDOW_MS` (CORE-101). */
@@ -275,10 +284,12 @@ export class FacialHost {
     this.checkSolver(entry);
     return { schema: FACIAL_STATE_SCHEMA,
       rig: rig ? { ...entry.rig, skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup, tracks: rig.vocabulary.tracks, reference: rig.vocabulary.reference,
-        main: rig.vocabulary.main, controls: rig.vocabulary.controls, groups: CONTROL_GROUPS, joints: rig.rest.joints } : entry.rig,
+        main: rig.vocabulary.main, controls: rig.vocabulary.controls, groups: CONTROL_GROUPS, joints: rig.rest.joints,
+        ...(rig.inert ? { inert: rig.inert } : {}) } : entry.rig,
       solver: { ...entry.solver },
       blink: rig?.blink ? { available: true, closedTime: rig.blink.closedTime, duration: rig.blink.clip.duration, rate: BLINK_RATE } : { available: false },
-      expressions: { phase: entry.expressions.phase, ...(entry.expressions.reason ? { reason: entry.expressions.reason } : {}), count: entry.expressions.items.length } };
+      expressions: { phase: entry.expressions.phase, ...(entry.expressions.reason ? { reason: entry.expressions.reason } : {}), count: entry.expressions.items.length },
+      samples: EXPRESSION_SAMPLES };
   }
   expressions(): FacialStartPoints { return structuredClone(this.ensure().expressions); }
   async settled(): Promise<void> { await this.current?.promise; }
@@ -345,11 +356,13 @@ export class FacialHost {
     superseded();
     const skeleton = files.get(skeletonRef.hash), setup = files.get(setupRef.hash);
     if (!skeleton || !setup) throw Error("The face skeleton or facial setup is missing from the game files.");
-    const { vocabulary, rest } = readFaceRig(readDocument(skeleton.file), readDocument(setup.file));
+    const setupDocument = readDocument(setup.file);
+    const { vocabulary, rest } = readFaceRig(readDocument(skeleton.file), setupDocument);
+    const wrinkleSources = wrinkleSourceTracks(setupDocument);
     let blink: Rig["blink"] = null;
     try { const additives = files.get(additivesRef.hash); if (additives) blink = readBlink(readAnimSet(readDocument(additives.file)).clips, vocabulary); }
     catch (error) { hostFailure("facial", "blink_unreadable", `The game's blink (${BLINK_CLIP}) couldn't be read; expressions show without it.`, error, "warn"); }
-    entry.rigData = { vocabulary, rest, blink, rigJson: skeleton.file, setupJson: setup.file };
+    entry.rigData = { vocabulary, rest, blink, rigJson: skeleton.file, setupJson: setup.file, wrinkleSources };
     entry.rig = { phase: "ready" };
     this.startSolver(entry);
     // The installed expressions, after the face (the editor works without them).
@@ -371,6 +384,7 @@ export class FacialHost {
     if ("missing" in location) { entry.solver = { phase: "missing", reason: location.missing }; return; }
     entry.solver = { phase: "starting" };
     entry.stale = false;
+    entry.starting = undefined;
     let process: FacialSolverProcess;
     try { process = (this.options.spawn ?? spawnFacialSolver)(location, entry.rigData!.rigJson, entry.rigData!.setupJson, { log: this.options.log }); }
     catch (error) {
@@ -382,7 +396,15 @@ export class FacialHost {
     entry.process = process;
     void process.ready.then(result => {
       if (this.current !== entry || entry.process !== process) return;
-      if (result.ok) { entry.solver = { phase: "ready", compileMs: result.compileMs }; this.options.log?.(`Facial solver ready (setup compiled in ${Math.round(result.compileMs)} ms).`); }
+      if (result.ok) {
+        // The controls that move nothing are found before the solver is ready, so the drawer never offers them (the preview polls while
+        // the solver starts). A failed probe hides nothing.
+        entry.starting = this.findInert(entry, process).then(() => {
+          if (this.current !== entry || entry.process !== process) return;
+          entry.solver = { phase: "ready", compileMs: result.compileMs };
+          this.options.log?.(`Facial solver ready (setup compiled in ${Math.round(result.compileMs)} ms).`);
+        });
+      }
       else {
         hostFailure("facial", "solver_failed", "The facial solver couldn't start.", Error(result.error), "warn");
         entry.solver = { phase: "failed", reason: /Expected reviewed solver|local changes/.test(result.error)
@@ -390,6 +412,31 @@ export class FacialHost {
           : "The facial solver couldn't start, so the live face preview is off. Your expression is still saved with the look." };
       }
     });
+  }
+  /**
+   * The controls that move nothing on this face (research/animation/natural-expressions.md §3.2): each main-pose control is solved at
+   * full weight alone and on top of every control at `INERT_CONTEXT`, which catches controls that act only with others (a lip seal that
+   * needs an open jaw, a control that only undoes another); one that changes no joint in either, and feeds no wrinkle output, is inert.
+   * Read from the setup the host solves with, so another setup or a mod's setup gets its own answer; nothing is named.
+   */
+  private async findInert(entry: Preparation, process: FacialSolverProcess): Promise<void> {
+    const rig = entry.rigData;
+    if (!rig || rig.probed) return;
+    rig.probed = true;
+    const controls = rig.vocabulary.controls, context = Object.fromEntries(controls.map(control => [control.name, INERT_CONTEXT]));
+    const frames = [denseTracks(rig.vocabulary, {}).tracks, denseTracks(rig.vocabulary, context).tracks,
+      ...controls.map(control => denseTracks(rig.vocabulary, { [control.name]: 1 }).tracks),
+      ...controls.map(control => denseTracks(rig.vocabulary, { ...context, [control.name]: 1 }).tracks)];
+    try {
+      const answer = await withTimeout(process.solve(frames), this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS);
+      const q = floats(answer.q), t = floats(answer.t), joints = rig.rest.joints.length;
+      if (q.length !== frames.length * joints * 4 || t.length !== frames.length * joints * 3) throw Error("The solver's answer has the wrong size.");
+      const moved = (frame: number, base: number) => differs(q, frame, base, joints * 4) || differs(t, frame, base, joints * 3);
+      const wrinkles = new Set(rig.wrinkleSources);
+      rig.inert = controls.filter((control, index) => !wrinkles.has(control.track) && !moved(2 + index, 0) && !moved(2 + controls.length + index, 1))
+        .map(control => control.name);
+      hostTrace().event("facial", "inert", { count: rig.inert.length });
+    } catch (error) { hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); }
   }
   /**
    * A ready solver that stopped (a crash) or is stuck is started again while the restart budget allows; past it the state says so
@@ -564,7 +611,10 @@ export class FacialHost {
     if (issue) return { ok: false, code: "invalid", message: issue };
     if (!rig) return { ok: false, code: "unavailable", message: entry.rig.reason ?? "Your V's face is still being prepared." };
     // A solver that stopped (a crash) or is stuck is started again within the restart budget; this solve waits for it to be ready.
-    if (this.checkSolver(entry) && entry.process) await withTimeout(entry.process.ready, this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS).catch(() => {});
+    if (this.checkSolver(entry) && entry.process) {
+      await withTimeout(entry.process.ready, this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS).catch(() => {});
+      await entry.starting;
+    }
     const process = entry.process;
     if (!process || entry.solver.phase !== "ready") return { ok: false, code: "unavailable", message: entry.solver.reason ?? "The facial solver is starting." };
     const { tracks: _probe, skipped } = denseTracks(rig.vocabulary, request.controls);
@@ -589,6 +639,19 @@ export class FacialHost {
     }
     return { ok: true, frames: frames.length, ...(rate ? { rate } : {}), q: answer.q, t: answer.t, ms: answer.ms, skipped };
   }
+}
+
+/** The weight every other control holds while `findInert` looks for controls that act only in combination. */
+export const INERT_CONTEXT = 0.25;
+/** Base64 float32 (the solver's answer) as numbers. */
+function floats(text: string): Float32Array {
+  const bytes = Buffer.from(text, "base64");
+  return new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+}
+/** Whether frame `frame` of a packed buffer (`size` numbers a frame) differs from frame `base` by more than rounding. */
+function differs(values: Float32Array, frame: number, base: number, size: number): boolean {
+  for (let i = 0; i < size; i++) if (Math.abs(values[frame * size + i]! - values[base * size + i]!) > 1e-6) return true;
+  return false;
 }
 
 class SolveTimeout extends Error {}

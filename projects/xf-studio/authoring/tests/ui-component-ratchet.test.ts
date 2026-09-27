@@ -25,8 +25,6 @@ const AD_HOC = [
  */
 const ALLOWANCE: Readonly<Record<string, number>> = {
   "features/eye-makeup/view/inspector.ts": 4,
-  // The expressions drawer landed in main just before the ratchet (its branch is moving to the library's SearchField, Combobox and rows).
-  "features/expressions/view/drawer.ts": 7,
   "features/save-explorer/view/panel.ts": 20,
   "studio-ui/app.ts": 2,
   "studio-ui/commands.ts": 6,

@@ -223,3 +223,34 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   setTimeout(() => document.addEventListener("pointerdown", outside, { capture: true }));
   return { close };
 }
+
+/**
+ * Confirm popover (style guide "Menu, value and confirm popovers"): one question anchored to what it acts on, for an action that can't
+ * be undone (removing a saved preset from the library). Title, one plain sentence of what happens, Cancel and the action's own verb
+ * (danger styled when `danger`). Focus starts on Cancel, so a stray Enter never destroys anything; Escape, Cancel or a click outside
+ * closes it and returns focus to the invoker; the action closes it and then runs.
+ */
+export function openConfirmPopover(anchor: MenuAnchor, options: { title: string; message: string; confirm: string; danger?: boolean; onConfirm(): void }) {
+  closeMenus(false);
+  const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const messageId = uid("confirm");
+  const cancel = h("button", { class: "btn", type: "button", text: "Cancel" });
+  const confirm = h("button", { class: `btn${options.danger ? " danger" : " primary"}`, type: "submit", text: options.confirm });
+  const form = h("form", { class: "popover confirm-popover", role: "alertdialog", "aria-label": options.title, "aria-describedby": messageId },
+    h("div", { class: "popover-title", text: options.title }), h("p", { class: "popover-message", id: messageId, text: options.message }),
+    h("div", { class: "popover-actions" }, cancel, confirm));
+  cancel.addEventListener("click", () => close(true));
+  form.addEventListener("submit", event => { event.preventDefault(); close(true); options.onConfirm(); });
+  form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
+  const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
+  function close(restore: boolean) {
+    document.removeEventListener("pointerdown", outside, { capture: true });
+    form.remove();
+    if (restore && invoker?.isConnected) invoker.focus();
+  }
+  menuLayer().append(form);
+  place(form, anchor);
+  requestAnimationFrame(() => cancel.focus());
+  setTimeout(() => document.addEventListener("pointerdown", outside, { capture: true }));
+  return { close };
+}
