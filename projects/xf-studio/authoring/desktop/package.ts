@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { desktopEyePlate, desktopPackageAdapter, type WolvenKitProbe } from "./build";
+import { desktopEyePlate, desktopExpressionsGame, desktopPackageAdapter, type WolvenKitProbe } from "./build";
+import { EXPRESSIONS_GAME_PREREQUISITE } from "../src/features/expressions/export/game";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { defaultLocalSettings } from "../src/local-settings";
 import { DesktopWorkActivity } from "./work-activity";
@@ -54,7 +55,8 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
     // host (Check only) there is no plate cache, so Check plans on none.
     const adapter = desktopPackageAdapter({ exporters: STUDIO_EXPORTERS, settings, dataRoot, toolsRoot: buildHost?.toolsRoot ?? "",
       checkWorker: workerPath, wolvenKitProbe: buildHost?.wolvenKitProbe, log: buildHost?.log,
-      prerequisites: (current): Record<string, HostPrerequisite> => buildHost ? { [EYE_PLATE_PREREQUISITE]: desktopEyePlate(current, dataRoot) } : {} });
+      prerequisites: (current): Record<string, HostPrerequisite> => buildHost ? { [EYE_PLATE_PREREQUISITE]: desktopEyePlate(current, dataRoot),
+        [EXPRESSIONS_GAME_PREREQUISITE]: desktopExpressionsGame(current, dataRoot) } : {} });
     const signal = buildHost?.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
     const outcome = await service.run(adapter, action, input.collection, signal, action === "check" ? timeoutMs : buildHost?.deadlineMs);
     return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);

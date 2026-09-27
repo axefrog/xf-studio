@@ -178,7 +178,7 @@ test("a set exports as a package-only collection named for the mod, members in o
   const collection = setCollection(set, presets);
   expect(collection.presets.map(look => look.id)).toEqual([b, a]);
   expect(collection.packagePlan).toEqual({ schema: "xfs/package-plan-1", products: [{ id: set.id, name: "XF Expressions - Moody", features: ["expressions"] }] });
-  expect(collection.exportOptions).toBeUndefined();
-  expect(setCollection({ ...set, table: "sharing", modName: "Mine" }, presets)).toMatchObject({ exportOptions: { table: "sharing" },
+  expect(collection.presetSet).toEqual({ table: "installed" });
+  expect(setCollection({ ...set, table: "sharing", modName: "Mine" }, presets)).toMatchObject({ presetSet: { table: "sharing" },
     packagePlan: { products: [{ name: "Mine" }] } });
 });

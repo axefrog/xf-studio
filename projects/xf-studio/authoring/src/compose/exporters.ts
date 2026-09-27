@@ -7,7 +7,11 @@
 import type { FeatureExporterEntry } from "../platform/api";
 import { EYE_MAKEUP_EXPORTER } from "../features/eye-makeup/export";
 import { EYE_MAKEUP_VERIFIER } from "../features/eye-makeup/verify";
+import { EXPRESSIONS_EXPORTER } from "../features/expressions/export";
+import { EXPRESSIONS_VERIFIER } from "../features/expressions/verify";
 
 export const STUDIO_EXPORTERS: readonly FeatureExporterEntry[] = Object.freeze([
   { exporter: EYE_MAKEUP_EXPORTER as FeatureExporterEntry["exporter"], verifier: EYE_MAKEUP_VERIFIER },
+  // Expressions package only expression sets (a set's package collection); a look collection's expression parts never join its mods.
+  { exporter: EXPRESSIONS_EXPORTER as FeatureExporterEntry["exporter"], verifier: EXPRESSIONS_VERIFIER },
 ]);

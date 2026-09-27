@@ -38,17 +38,20 @@ export function setMembers(set: Pick<PartPresetSet, "members">, presets: readonl
   return set.members.map(id => ({ id, ...(byId.has(id) ? { preset: byId.get(id)! } : {}) }));
 }
 
+/** What marks a package collection as a preset set's (`presetSet`), with the set's export choices. */
+export type PresetSetMark = { readonly table: PartPresetSetTable };
 /**
  * The package-only collection a set exports: its ID and name, one look per member still in the library (in the set's order, each
- * carrying that saved preset as its only part) and a package plan naming the mod. Members gone from the library are left out here and
- * reported by the set's view; the platform reports everything else. The set's table choice rides on the collection for the exporter.
+ * carrying that saved preset as its only part), a package plan naming the mod, and `presetSet` with the set's table choice. Members gone
+ * from the library are left out here and reported by the set's view; the platform reports everything else. The mark is what a
+ * set-only exporter (expressions) looks for, so a look collection's expression parts never change its own mods.
  */
-export function setCollection(set: PartPresetSet, presets: readonly SetMemberPreset[]): LookCollection & { exportOptions?: { table: PartPresetSetTable } } {
+export function setCollection(set: PartPresetSet, presets: readonly SetMemberPreset[]): LookCollection & { presetSet: PresetSetMark } {
   const looks = setMembers(set, presets).flatMap(member => member.preset
     ? [{ id: member.preset.id, name: member.preset.name, revision: member.preset.revision, parts: { [set.feature]: member.preset.part } }] : []);
   return { schema: COLLECTION_2, id: set.id, name: set.name, presets: looks,
     packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: set.id, name: setModName(set), features: [set.feature] }] },
-    ...(set.table === "sharing" ? { exportOptions: { table: "sharing" as const } } : {}) };
+    presetSet: { table: set.table ?? "installed" } };
 }
 
 /** The latest Check or Build of one set, or the reason it failed, with the set's revision it was made from. */
