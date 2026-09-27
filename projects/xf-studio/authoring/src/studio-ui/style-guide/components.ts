@@ -30,6 +30,12 @@ const finishGroups: [string, string, [string, string][]][] = [
   ["Experimental", "warn", [["shimmer", "Shimmer"], ["glossy", "Glossy"], ["iridescent", "Colour-shift"]]],
   ["Preview only", "warn", [["glitter", "Glitter"]]]];
 
+/** A wrapping segmented specimen (the control's `wrap` layout, with a reserved note line when `note` is given). */
+const wrapped = (label: string, options: string[], selected: number, note?: string) => {
+  const longest = Math.max(...options.map(option => option.length));
+  return `<div class="control"><span class="control-label"><span>${label}</span></span><div class="segmented wrap" role="group" aria-label="${label}" style="--segment-min:calc(${longest}ch + 2 * var(--sp-4) + 2px)">${options.map((option, index) =>
+    `<button type="button" class="segment" aria-pressed="${index === selected}"><span>${option}</span></button>`).join("")}</div>${note ? `<small class="control-note info">${note}</small>` : ""}</div>`;
+};
 export function components() {
   return section("components", "04", "Components",
     `Components are presentation only. Each one names the application action or read-only state behind it, and shows the application's reason
@@ -111,9 +117,19 @@ export function components() {
       a11y: "Native checkbox with role=switch; the disabled reason is visible text, not only a tooltip." }),
     pattern({ id: "c-segmented", title: "Segmented control", status: "implemented",
       specimen: `<div class="stack-s">${segmented("Selected point handles", ["Smooth", "Symmetric", "Corner"], 0)}${segmented("Generated texture resolution", ["512", "1K", "2K", "4K"], 1, [3])}</div>`,
-      what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette.",
-      when: "Two to five short options that benefit from comparison. Longer or data-driven lists use a select or a menu.",
-      drives: `${code("choicesFor(target, kind, field)")} or per-value ${code("capability")}.` }),
+      what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette. A data-driven list (the Motion panel's Body source: Still and the game idles prepared on this computer) changes its choices with `setOptions`, which rebuilds the buttons only when the list differs and keeps focus on the same choice; `wrap` flows the buttons onto more rows when their labels don't fit; the whole group can be disabled with one visible reason, and a reserved note line under it carries a transient state (\"Loading that idle\") without moving anything.",
+      when: "Two to eight short options that benefit from comparison, fixed or data-driven (wrap them when they may not fit one row). Long lists that need search use a select or a menu.",
+      a11y: "A labelled group of toggle buttons with aria-pressed; a disabled group states its reason in the note line and as the group's description.",
+      drives: `${code("choicesFor(target, kind, field)")} or per-value ${code("capability")}; ${code("setOptions")} for a list that changes.` }),
+    pattern({ id: "c-segmented-wrap", title: "Segmented control, wrapping", status: "implemented", wide: true,
+      specimen: `<div style="display:grid;gap:var(--sp-5);max-width:320px">${wrapped("Body", ["Still", "Creator close-up", "Creator full body", "Inventory", "Creator nails", "Gender selection"], 3,
+        "Loading that idle; the previous one plays until it's ready.")}${wrapped("Eye shape", Array.from({ length: 22 }, (_, k) => String(k + 1)), 6)}${wrapped("Head used for the eye plate",
+        ["The head your mods install", "The unmodified game head"], 0)}</div>`,
+      what: "The same control with `wrap`: even tiles as wide as the longest label, as many a row as fit the panel. A numbered set (eye shapes 1–22) fills each row with equal tiles; two long labels that can't share a row stack one per row; a data-driven list (the Motion panel's Body source) changes with `setOptions`. The reserved note line under it carries a transient state (\"Loading that idle\") in its own place, and the pressed tile moves the moment it is chosen.",
+      when: "Exclusive choices whose count or labels vary, or that may not fit one row. Fixed short sets keep the one-row strip.",
+      combine: "Label above, tiles, then the reserved note line; a switch or slider that depends on the choice goes below the note, never beside the tiles.",
+      adapt: "Tiles never overflow: the row count grows as the panel narrows, and a label wider than the whole row wraps inside its tile. The pressed tile keeps its cyan underline in every row.",
+      drives: `${code("setOptions(choices)")}, then ${code("update(selected, capability, { disabled, reason, note })")}.` }),
     pattern({ id: "c-color", title: "Colour field", status: "implemented",
       specimen: `<div class="control" style="max-width:200px"><span class="control-label"><span>Colour</span></span><div class="color-field"><span class="swatch-frame"><input type="color" class="swatch-input" value="#b0587a" aria-label="Colour"></span><input class="field mono hex" value="#b0587a" aria-label="Colour hex value"></div></div>`,
       what: "Native picker plus a hex field. Picker changes are one transaction; hex entry commits on Enter/blur and flags invalid input without applying it.",
@@ -194,15 +210,15 @@ export function components() {
       drives: `${code("modInstall.dispatch({kind:'modInstall.review'|'modInstall.apply'|'modInstall.reveal', product})")}; the plan is ${code("modInstall.snapshot().plans[product]")}.`,
       adapt: "The sheet is at most 640 px wide with a 16 px gutter; long folder paths wrap anywhere rather than widening it.",
       a11y: "A modal sheet: focus starts inside it and returns to Add to my mod manager on close; Esc cancels. An unavailable Add keeps its focus and says why." }),
-    pattern({ id: "c-gamesetup", title: "Game & tools (one form, saved as chosen)", status: "implemented", wide: true,
-      specimen: `<details class="section setup-section" open style="max-width:420px"><summary>Game &amp; tools</summary>
+    pattern({ id: "c-gamesetup", title: "Settings: game, saves and tools (one form, saved as chosen)", status: "implemented", wide: true,
+      specimen: `<details class="section setup-section" open style="max-width:420px"><summary>Settings › Game</summary>
         <div class="control-line"><p class="setup-status ready">Ready: XF Studio can build your mods and add them to Mod Organizer 2.</p>${helpTip("Game & tools", "Saved on this computer as you choose. XF Studio finds your game and mod manager and sets up WolvenKit for you; change a choice only if it picked the wrong one.")}</div>${segmented("How you install mods", ["Mod Organizer 2", "Vortex or by hand"], 0)}
         <div class="control"><div class="control-line"><label class="control-label">Cyberpunk 2077 folder</label>${helpTip("Cyberpunk 2077 folder", "The folder the game is installed in. XF Studio reads your game here; it never changes it.")}</div><div class="select-wrap"><select class="field" aria-label="Cyberpunk 2077 folder"><option>…\\Steam\\Cyberpunk 2077 (Steam)</option><option>Another folder…</option></select>${i("chevronDown")}</div><div class="row gap-s setup-typed" hidden></div></div>
         <div class="control"><label class="control-label">Profile</label><div class="select-wrap"><select class="field" aria-label="Profile"><option>Main (last used)</option><option>Testing</option></select>${i("chevronDown")}</div></div>
         <div class="row wrap gap-s">${btn("Browse…", { icon: "folder", small: true })}${btn("Find my game and mod manager again", { icon: "search", small: true, variant: "quiet" })}</div></details>`,
       what: "The one settings form for the game folder, the mod manager and WolvenKit (UI-03, UI-83). Folders and MO2 instances XF Studio found, and each instance's profiles, are choices; Another folder… opens a text box, and the desktop app adds its own folder picker (Browse…). Each choice is saved at once, so no second copy can go stale, and one plain line says what is ready or the one next step.",
-      when: "Mod package › Game & tools; the desktop's welcome and About open it too. It finds folders the first time it opens.",
-      combine: "The preview setup card's next step (Use this game folder, Choose it in Game & tools) and Build's refusals name the same fields in the same words.",
+      when: "The Settings panel (UI-109): its Game, Saves and Tools groups, beside Appearance and Privacy & diagnostics, which compose Segmented and Toggle. Opened from the header's gear button, the command palette (Settings, Game & tools, Where are my saves?), Help and every Open Settings next step; floating when it was closed. The desktop's welcome and About open it too. It finds folders the first time it opens. The saves folder reads Detected: Saved Games\\CD Projekt Red\\Cyberpunk 2077 by default (described, never a path with the profile in it), with Choose another folder… (the desktop's picker, else a text box whose refusals say what to do beside it) and Use the detected folder.",
+      combine: "The preview setup card's next step (Use this game folder, Choose it in Settings) and Build's refusals name the same fields in the same words.",
       adapt: "Fields stack in one column; a typed folder takes the row beside Browse…, and nothing found hides the choice list so the text box is the whole field.",
       drives: `${code("localSetup.dispatch({kind:'setup.update'|'setup.pickFolder'|'setup.restorePrevious'})")}, ${code("installDetection.dispatch({kind:'detect.gameInstalls'|'detect.mo2Instances'})")}; the readiness reasons come from the host in plain words.` }),
     pattern({ id: "c-facts", title: "Fact list", status: "implemented",

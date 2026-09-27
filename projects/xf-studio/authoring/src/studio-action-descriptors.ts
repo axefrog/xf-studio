@@ -97,6 +97,7 @@ export const ACTION_DESCRIPTORS = {
   "motion.setContributions": inView("viewport", "workspace", "none", { body: input("boolean"), face: input("boolean") }),
   "motion.setBlink": inView("viewport", "workspace", "none", { value: input("number", 0, 1) }),
   "motion.playBlink": inView("viewport", "workspace", "none", { playing: input("boolean") }),
+  "motion.setPhysics": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "quality.set": desc("viewport", "workspace", "none", { size: enumerated([512, 1024, 2048, 4096]) }),
   "quality.rebuild": desc("viewport", "workspace", "none"),
   "savedV.load": desc("file", "file", "none", { bytes: input("bytes", 0, 128 * 1024 * 1024) }),

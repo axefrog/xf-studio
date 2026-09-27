@@ -15,6 +15,11 @@ export const IDLE_CATALOGUE_ASSET = "/assets/cc-idle-catalogue.json";
 export const DEFAULT_IDLE = "closeup";
 
 export type IdleScreen = "creator" | "inventory" | "gender";
+/**
+ * The creator's close-up with its eyes section open (eyes, eyebrows, lash colour and eye makeup rows, camera slot `UI_Eyes`): the face
+ * plays the section's showcase (`ui_closeup_shot_eyes`) once, then the close-up loop (knowledge/facial-expressions.md §5).
+ */
+export const EYES_SECTION_IDLE = "closeup-eyes";
 export type IdleEntry = {
   /** Stable key (workspace, actions): lower case, digits, `-`. */
   id: string;
@@ -25,8 +30,12 @@ export type IdleEntry = {
   screen: IdleScreen;
   /** The body graph state (and the `AnimFeature_Paperdoll` flags its transitions test) it loops in. */
   state: string; flags: string[];
-  /** The face clip looped with it and its baked asset, or null when none was baked (the face then keeps the close-up's). */
-  face: { clip: string; file: string } | null;
+  /**
+   * The face clip looped with it and its baked asset, or null when none was baked (the face then keeps the close-up's). `loopFrom`
+   * (seconds): the clip plays once up to here and loops from here, as a creator section's one-shot showcase before the close-up loop
+   * (`bake_idle_face.py --intro-clip`).
+   */
+  face: { clip: string; file: string; loopFrom?: number } | null;
   /** The puppet whose bare feet the clip is authored for: `creator` (lifted), or null (the footwear decides). */
   puppet: "creator" | null;
   /** Evidence grades and a short basis for the entry (knowledge/README.md grades). */
@@ -61,7 +70,9 @@ export function parseIdleCatalogue(value: unknown): IdleCatalogue {
     screen: (["creator", "inventory", "gender"] as const).includes(entry.screen) ? entry.screen : fail("a screen"),
     state: text(entry.state, 60), flags: Array.isArray(entry.flags) && entry.flags.length <= 16 ? entry.flags.map(flag => text(flag, 60)) : fail("flags"),
     face: entry.face === null ? null : { clip: CLIP.test(entry.face?.clip) ? entry.face.clip : fail("a face clip"),
-      file: FILE.test(entry.face?.file) ? entry.face.file : fail("a face file") },
+      file: FILE.test(entry.face?.file) ? entry.face.file : fail("a face file"),
+      ...(entry.face?.loopFrom === undefined ? {} : { loopFrom: typeof entry.face.loopFrom === "number" && entry.face.loopFrom > 0 && entry.face.loopFrom < 600
+        ? entry.face.loopFrom : fail("a face loop start") }) },
     puppet: entry.puppet === "creator" || entry.puppet === null ? entry.puppet : fail("a puppet"),
     evidence: text(entry.evidence, 400) }));
   if (new Set(idles.map(entry => entry.id)).size !== idles.length) fail("a repeated id");

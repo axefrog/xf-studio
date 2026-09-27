@@ -6,33 +6,35 @@ import { SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type 
 import { explorerPanel } from "../src/features/save-explorer/view/panel";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
-import { syntheticSave } from "./fixtures/synthetic-explorer-save";
+import { nestedSave, syntheticSave } from "./fixtures/synthetic-explorer-save";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 5) => new Promise(resolve => setTimeout(resolve, ms));
 
-function harness() {
+function harness(overrides: Partial<SaveExplorerDevice> = {}, options: ConstructorParameters<typeof SaveExplorerActions>[2] = {}) {
+  const settingsOpened: (string | undefined)[] = [];
   const device: SaveExplorerDevice = {
     list: async () => ({ available: true, saves: [{ folder: "ManualSave-7", kind: "manual", savedAt: "2026-09-20T10:00:00.000Z", location: "Watson", level: 3,
       lifePath: "Nomad", gameVersion: "2.31", saveVersion: 269, bytes: 100, screenshot: false, modded: false }] }),
     read: async () => syntheticSave(), pick: async () => undefined, thumbnail: () => null,
     names: async () => ({ engine: { enums: ["gameStatIDType"], bitfields: [], classes: [], properties: [] },
       scripts: { available: true, names: ["DoorControllerPS", "m_isOpen", "SomeMod.OutfitState", "App.DynamicEntitySystemPS"] } }),
+    ...overrides,
   };
-  const facade = saveExplorerFacade(new SaveExplorerActions(device, () => Promise.resolve()));
+  const facade = saveExplorerFacade(new SaveExplorerActions(device, () => Promise.resolve(), options));
   const toasts: string[] = [];
   let panel!: ReturnType<typeof explorerPanel>;
   const ctx: ModuleViewContext<SaveExplorerFacade> = {
     facade,
     dispatch: async (action, _options) => { const outcome = await facade.dispatch(action as never); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: (_tone, _source, message) => { toasts.push(message); return undefined as never; }, announce: () => {}, record: () => undefined as never },
-    anchors: { register: () => () => {} }, reveal: () => {}, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
+    anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { settingsOpened.push(section); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
   };
   panel = explorerPanel(ctx);
   facade.subscribe(() => panel.update(undefined as never));
   const root = panel.spec.element as unknown as LightElement;
-  return { panel, facade, root, toasts };
+  return { panel, facade, root, toasts, settingsOpened };
 }
 const texts = (elements: LightElement[]) => elements.map(element => element.textContent);
 
@@ -115,5 +117,56 @@ describe("Save Explorer panel", () => {
     await settle();
     expect(texts(root.querySelectorAll("details.save-mod").map(group => group.querySelector("strong")!))).toEqual(["App", "SomeMod"]);
     expect(lightDocument.body).toBeDefined();
+  });
+
+  test("no saves in the folder, or no folder: says where it looked and opens Settings › Saves (UI-109)", async () => {
+    const display = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";
+    const empty = harness({ list: async () => ({ available: true, saves: [], folder: { source: "detected", display } }) });
+    empty.panel.spec.visibility?.(true);
+    await settle();
+    const title = empty.root.querySelector("div.save-explorer-empty")!.querySelector("p.empty-title")!;
+    expect(title.textContent).toBe(`No saves found in ${display}`);
+    const open = empty.root.querySelector("div.save-explorer-empty")!.querySelectorAll("button").find(button => button.textContent === "Open Settings › Saves")!;
+    open.dispatchEvent(lightEvent("click"));
+    expect(empty.settingsOpened).toEqual(["saves"]);
+    const missing = harness({ list: async () => ({ available: false, saves: [], folder: { source: "chosen", display: "E:\\Gone" },
+      reason: "The saves folder you chose isn't there any more. Choose it again in Settings › Saves, or use the detected folder." }) });
+    missing.panel.spec.visibility?.(true);
+    await settle();
+    expect(missing.root.querySelector("div.save-explorer-empty")!.querySelector("p.empty-title")!.textContent).toBe("Saves folder not found");
+    expect(missing.root.querySelector("div.save-explorer-empty")!.textContent).toContain("isn't there any more");
+  });
+
+  test("a failed listing says Reconnecting… while it tries again, never to check whether XF Studio is running", async () => {
+    let calls = 0, resume!: () => void;
+    const { panel, root } = harness({ list: async () => { if (++calls < 2) throw Error("restarting"); return { available: true, saves: [] }; } },
+      { wait: () => new Promise<void>(resolve => { resume = resolve; }) });
+    panel.spec.visibility?.(true);
+    await settle();
+    expect(root.querySelector("span.count")!.textContent).toBe("Reconnecting…");
+    expect(root.textContent).not.toMatch(/still running/);
+    resume();
+    await settle();
+    expect(root.querySelector("span.count")!.textContent).toBe("0 saves");
+  });
+
+  test("an inspected field's children are built when it is first opened (SAVE-03)", async () => {
+    const { panel, root, facade } = harness({ read: async () => nestedSave(200) });
+    panel.spec.visibility?.(true);
+    await settle();
+    root.querySelector("button.save-row")!.dispatchEvent(lightEvent("click"));
+    await settle(20);
+    const node = facade.tree().find(row => row.encoding === "package")!.id;
+    await facade.dispatch({ kind: "saves.selectNode", node });
+    await facade.dispatch({ kind: "saves.inspect", ref: { node, kind: "chunk", index: 0 } });
+    await settle();
+    const rows = root.querySelector("div.save-object")!.querySelector("details.save-field")!;
+    const list = rows.querySelector("ul")!;
+    expect(list.childElementCount).toBe(0);
+    rows.open = true;
+    rows.dispatchEvent(lightEvent("toggle"));
+    expect(list.childElementCount).toBe(200);
+    // Each row is closed and empty in turn until opened.
+    expect(list.querySelector("details.save-field")!.querySelector("ul")!.childElementCount).toBe(0);
   });
 });

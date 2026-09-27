@@ -63,8 +63,8 @@
         "flags": ""
       },
       {
-        "about": "A file or game resource name after one label, such as the ArchiveXL material reference ash_brown@long.mi or icon@2x.png. Only extensions that are not real top-level domains (so not .app, .mt or .md)",
-        "source": "^[A-Za-z0-9-]+\\.(?:mi|remt|mesh|ent|xbm|hp|xl|mlsetup|mlmask|mltemplate|morphtarget|inkcharcustomization|inkcc|anims|rig|archive|glb|dds|tga|png|jpe?g|gif|svg|webp|avif|ico|bmp|json|ya?ml|js|mjs|cjs|ts|css|html?|map|wasm)$",
+        "about": "A file or game resource name after one label, such as the ArchiveXL material reference ash_brown@long.mi, icon@2x.png or a Windows API import CreateFileW@kernel32.dll. Only extensions that are not real top-level domains (so not .app, .mt or .md)",
+        "source": "^[A-Za-z0-9-]+\\.(?:mi|remt|mesh|ent|xbm|hp|xl|mlsetup|mlmask|mltemplate|morphtarget|inkcharcustomization|inkcc|anims|rig|archive|glb|dds|tga|png|jpe?g|gif|svg|webp|avif|ico|bmp|json|ya?ml|js|mjs|cjs|ts|css|html?|map|wasm|dll)$",
         "flags": "i"
       }
     ]
@@ -159,7 +159,8 @@
       "w = a@b.T[0]",
       "noreply at example dot com",
       "C:\\Users\\Default User\\x",
-      "OneDrive - Employer is a work folder"
+      "OneDrive - Employer is a work folder",
+      "external 'CreateFileW@kernel32.dll stdcall';"
     ]
   }
 }

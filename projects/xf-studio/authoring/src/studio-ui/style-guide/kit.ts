@@ -54,13 +54,21 @@ export const toggle = (label: string, checked: boolean, options: { disabled?: bo
 export const segmented = (label: string, options: string[], selected: number, disabled: number[] = []) =>
   `<div class="control compact"><span class="control-label"><span>${label}</span></span><div class="segmented" role="group" aria-label="${esc(label)}">${options.map((option, index) =>
     `<button type="button" class="segment" aria-pressed="${index === selected}"${disabled.includes(index) ? " disabled" : ""}><span>${option}</span></button>`).join("")}</div></div>`;
-export const tab = (label: string, icon: IconName, active = false) =>
-  `<button type="button" class="dock-tab" role="tab" aria-selected="${active}">${i(icon)}<span class="dock-tab-label">${label}</span><span class="dock-tab-close" aria-hidden="true">${i("close")}</span></button>`;
-export function group(tabs: [string, IconName][], active: number, body: string, options: { condensed?: boolean; floating?: boolean; focus?: boolean; style?: string } = {}) {
-  return `<section class="dock-group${options.floating ? " floating" : ""}${options.focus ? " focus-within" : ""}"${options.style ? ` style="${options.style}"` : ""}>
-    <div class="dock-tabbar"><div class="dock-tabs${options.condensed ? " condensed" : ""}" role="tablist">${tabs.map(([label, icon], index) => tab(label, icon, index === active)).join("")}</div>
-    <div class="dock-tabbar-fill"></div><button type="button" class="icon-btn dock-menu-btn" aria-label="Layout options">${i("more")}</button></div>
-    <div class="dock-body">${body}</div></section>`;
+export const tab = (label: string, icon: IconName, active = false, hidden = false) =>
+  `<button type="button" class="dock-tab" role="tab" aria-selected="${active}" aria-label="${esc(label)}" title="${esc(label)}"${hidden ? " hidden" : ""}>${i(icon)}<span class="dock-tab-label">${label}</span><span class="dock-tab-close" aria-hidden="true">${i("close")}</span></button>`;
+/**
+ * A tab group as the dock renders it: its panel header (tab strip at a condensing stage, drag area, actions) over its body. A collapsed
+ * group folds along a column (a header row) unless `fold: "row"` makes it a full-height vertical strip.
+ */
+export function group(tabs: [string, IconName][], active: number, body: string,
+  options: { stage?: "full" | "truncated" | "icons" | "overflow"; activeIcon?: boolean; shown?: number; floating?: boolean; focus?: boolean; collapsed?: boolean; fold?: "column" | "row"; style?: string } = {}) {
+  const stage = options.stage ?? "full", shown = options.shown ?? tabs.length, hidden = tabs.length - shown;
+  const vertical = options.collapsed && options.fold === "row", orientation = vertical ? "vertical" : "horizontal";
+  const names = tabs.map(([label]) => label).join(", ");
+  return `<section class="dock-group${options.floating ? " floating" : ""}${options.focus ? " focus-within" : ""}${options.collapsed ? " collapsed" : ""}"${options.collapsed ? ` data-fold="${vertical ? "row" : "column"}"` : ""}${options.style ? ` style="${options.style}"` : ""}>
+    <div class="dock-tabbar panel-header" data-orientation="${orientation}"><div class="tab-strip${options.activeIcon ? " active-icon" : ""}" data-stage="${stage}" data-orientation="${orientation}"><div class="dock-tabs" role="tablist"${vertical ? ' aria-orientation="vertical"' : ""}>${tabs.map(([label, icon], index) => tab(label, icon, index === active, index >= shown && index !== active)).join("")}</div>${hidden > 0 ? `<button type="button" class="icon-btn tab-strip-more" aria-haspopup="menu" aria-label="${hidden} more tabs" title="${hidden} more tabs">${i(vertical ? "chevronDown" : "chevronRight")}</button>` : ""}</div>
+    <div class="dock-tabbar-fill"></div><div class="panel-header-actions"><button type="button" class="icon-btn dock-collapse-btn" aria-expanded="${!options.collapsed}" aria-label="${options.collapsed ? "Expand" : "Collapse"} ${esc(names)}" title="${options.collapsed ? "Expand" : "Collapse (the tab bar stays)"}">${i(options.collapsed ? "chevronRight" : "chevronDown")}</button><button type="button" class="icon-btn dock-menu-btn" aria-haspopup="menu" aria-label="Layout options for ${esc(names)}" title="Layout options">${i("more")}</button></div></div>
+    <div class="dock-body"${options.collapsed ? " hidden" : ""}>${body}</div></section>`;
 }
 export function row(name: string, meta: string, options: { selected?: boolean; hidden?: boolean; swatch?: string; finish?: string; eye?: boolean; warn?: boolean; preset?: boolean } = {}) {
   const lead = options.preset ? `<span class="item-lead"><span class="preset-mark"></span></span>` : options.swatch ? `<span class="item-lead"><button type="button" class="icon-btn small visibility" aria-pressed="${!options.hidden}">${i(options.hidden ? "eyeOff" : "eye")}</button><span class="swatch" style="--swatch:${options.swatch}" data-finish="${options.finish ?? "matte"}"></span></span>` : "";

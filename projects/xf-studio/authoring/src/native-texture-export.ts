@@ -21,16 +21,19 @@ import { join } from "node:path";
 import { fileSha256 } from "./derived-cache";
 import { depotHash } from "./depot-path";
 import { hostFailure } from "./diagnostics/host-log";
-import { type ExportAnswer, type ExportedTexture, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
+import { type ExportAnswer, type ExportBase, type ExportedTexture, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
   type ExportSource, type GameAssetExporter, type GameAssetExportSession } from "./game-asset-export";
 import type { NativeDecoder } from "./native/native-decode";
 import type { NativeFailureKind } from "./native/native-errors";
-import { openNativeDecoderAsync, type OpenedDecoder } from "./native/native-fetch-port";
+import { NATIVE_READER_DATA, openNativeDecoderAsync, type OpenedDecoder } from "./native/native-fetch-port";
 import { NATIVE_TEXTURE_VERSION, type NativeTextureOutcome, type NativeTextureRequest } from "./native/texture-decode";
 import { nativeRouteStamp } from "./resolver-host";
 
-/** The texture reader's identity in cache keys: its output rules (texture-decode.ts `NATIVE_TEXTURE_VERSION`). */
-export const NATIVE_TEXTURE_IDENTITY = `xfs-native-texture:${NATIVE_TEXTURE_VERSION}`;
+/**
+ * The texture reader's identity in cache keys: its output rules (texture-decode.ts `NATIVE_TEXTURE_VERSION`) and the resource reader's
+ * version and data hash, which decide how the texture resource reads (NATIVE-61).
+ */
+export const NATIVE_TEXTURE_IDENTITY = `xfs-native-texture:${NATIVE_TEXTURE_VERSION}:${NATIVE_READER_DATA}`;
 /** Time budget per texture in the worker: a 4096² BC7 mip decodes and compresses in about a second; far above that on a loaded machine. */
 export const NATIVE_TEXTURE_TIMEOUT_MS = 60_000;
 
@@ -155,9 +158,9 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
   return {
     tool: inner.tool,
     nativeTextures: stats,
-    has(kind: ExportKind, depotPath: string, source: ExportSource) {
+    has(kind: ExportKind, depotPath: string, source: ExportSource, base?: ExportBase) {
       if (kind === "textures" && singleArchive(source) && cache.present(depotPath, source, ["texture.png", "texture.json"])) return true;
-      return inner.has?.(kind, depotPath, source) ?? false;
+      return inner.has?.(kind, depotPath, source, base) ?? false;
     },
     async exportAll(requests, signal, exportOptions) {
       // Cached native answers first; what is left of each single-archive source is decoded natively beside the wrapped exporter's run

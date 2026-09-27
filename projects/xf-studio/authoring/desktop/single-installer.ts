@@ -13,9 +13,10 @@ export { INNO_SETUP };
 // Electrobun 2.0.1's setup program reads its payload from a hidden `.installer` folder beside it
 // and fails without it, so the release used to be a ZIP that users had to extract first. The
 // wrapper (installer/xf-studio-setup.iss) carries the same unmodified setup program and payload,
-// unpacks them to a private temporary folder and runs Electrobun's setup, so installation,
-// shortcuts, the uninstaller and data locations are exactly Electrobun's. verify-canary.ts then
-// proves the executable carries those verified files byte for byte.
+// unpacks them to a private temporary folder and runs Electrobun's setup (hidden, behind the
+// wizard's own progress), so installation, shortcuts, the uninstaller and data locations are
+// exactly Electrobun's. It then checks what was installed (installer/install-outcome.iss).
+// verify-canary.ts proves the executable carries those verified files byte for byte.
 //
 // Inno Setup is pinned to one official release, downloaded from its GitHub release and accepted
 // only with the pinned SHA-256, then unpacked in Inno Setup's own portable mode (no registry,
@@ -90,11 +91,11 @@ export const INNO_DATA_MARKER = "Inno Setup Setup Data (6.7.0)";
 export const INNO_DATA_FORMAT = "6.7.0";
 /**
  * Bytes the single setup may carry besides the verified payload: Inno Setup's loader, its setup runtime, the wizard's images and
- * the compiled script, stored uncompressed (`WRAPPER_MEASURED`: a local build with 6.7.3 and this script, 26 September 2026; about
- * 2.05 MB while Setup's data was compressed). The budget leaves about 58 KB for the script's text and version to grow, not room for
- * another file (REL-04).
+ * the compiled script, stored uncompressed (`WRAPPER_MEASURED`: a local build with 6.7.3 and this script, 27 September 2026, after the
+ * install-result checks were added (26 September: 5,241,942); about 2.05 MB while Setup's data was compressed). The budget leaves
+ * about 44 KB for the script's text and version to grow, not room for another file (REL-04).
  */
-export const WRAPPER_MEASURED = 5_241_942;
+export const WRAPPER_MEASURED = 5_255_742;
 export const WRAPPER_BUDGET = 5_300_000;
 /**
  * Strings of the compiled script that must read as plain text in the wrapper, proving Setup's own data is stored uncompressed
@@ -140,6 +141,23 @@ export function singleInstallerWrapper(exe: Buffer, members: readonly PayloadMem
 export const wrapperTexts = (wrapper: Buffer) =>
   [wrapper.toString("latin1"), wrapper.toString("utf16le"), wrapper.subarray(1).toString("utf16le")];
 
+export type InstallIdentity = Readonly<{ identifier: string; channel: string; hash: string }>;
+/**
+ * The identity, channel and build hash in Electrobun's install metadata, which the wrapper compiles in to check the installed
+ * result (`%LOCALAPPDATA%\<identifier>\<channel>\app\Resources\version.json` naming this hash, and the uninstall entry
+ * `<identifier>.<channel>`). Each must be a plain file-name part, since it lands in a path, a registry key and a Pascal string.
+ */
+export function installIdentity(metadataJson: string): InstallIdentity {
+  const metadata = JSON.parse(metadataJson) as Record<string, unknown>;
+  const pick = (key: "identifier" | "channel" | "hash", pattern: RegExp) => {
+    const value = metadata[key];
+    if (typeof value !== "string" || !pattern.test(value)) throw Error(`Electrobun's install metadata has no usable ${key}.`);
+    return value;
+  };
+  return { identifier: pick("identifier", /^[a-z0-9][a-z0-9.-]{0,99}$/), channel: pick("channel", /^[a-z0-9-]{1,32}$/),
+    hash: pick("hash", /^[a-z0-9]{8,64}$/) };
+}
+
 /** Windows' bundled bsdtar reads ZIP; a GNU tar earlier on PATH cannot. */
 const tarCommand = () => {
   const system = process.env.SystemRoot ? resolve(process.env.SystemRoot, "System32", "tar.exe") : "";
@@ -160,11 +178,14 @@ export async function buildSingleInstaller(options: { setupZip?: string; output?
   for (const member of payloadMembers)
     if (!existsSync(resolve(payload, member))) throw Error(`The Electrobun setup ZIP has no ${member}.`);
   const version = appVersion().version;
+  // The wrapper decides success by what is installed: this build's version.json under this identity and channel (REL-05).
+  const identity = installIdentity(readFileSync(resolve(payload, payloadMembers[1]), "utf8"));
   const outDir = resolve(workRoot, "out");
   const name = "setup";
   // Paths relative to the script keep build-machine folders out of the compiled installer.
   const rel = (path: string) => relative(resolve(script, ".."), path);
-  const args = [`/DAppVersion=${version}`, `/DAppVersionQuad=${quadVersion(version)}`, `/DPayload=${rel(payload)}`,
+  const args = [`/DAppVersion=${version}`, `/DAppVersionQuad=${quadVersion(version)}`, `/DAppIdentifier=${identity.identifier}`,
+    `/DAppChannel=${identity.channel}`, `/DBuildHash=${identity.hash}`, `/DPayload=${rel(payload)}`,
     `/DSetupProgram=${setupProgramName}`, `/DOutputDir=${rel(outDir)}`, `/DOutputName=${name}`, "/Q", script];
   const compile = spawnSync(iscc, args, { encoding: "utf8", cwd: resolve(script, ".."), timeout: 600_000, windowsHide: true });
   if (compile.error || compile.status !== 0)

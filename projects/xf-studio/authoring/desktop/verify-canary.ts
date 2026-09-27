@@ -132,12 +132,15 @@ const singleName = `${prefix}${compactName}-Setup-${channel}.exe`;
 const wrapperIssues = wrapperTexts(wrapper).flatMap(text => contentIssues(singleName, text));
 if (wrapperIssues.length)
   throw Error(["The single setup's wrapper contains personal paths or addresses:", ...describeContentIssues(wrapperIssues)].join("\n"));
+// The wrapper decides success by the installed result for this build (installer/install-outcome.iss), so its script must name it.
+if (!wrapperTexts(wrapper).some(text => text.includes(update.hash)))
+  throw Error(`The single setup's script doesn't name build ${update.hash}, so it can't tell this build's install from an older one.`);
 
 const digest = createHash("sha256").update(single).digest("hex");
 console.log(`Verified unsigned Windows setup: artifacts\\${singleName}, built from artifacts\\${basename(installer)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; single setup SHA-256 ${digest}; ` +
   `carries the three verified payload files byte for byte, once each, plus ${wrapper.length} bytes of Inno Setup's own wrapper ` +
   `(budget ${WRAPPER_BUDGET}). The wrapper's setup data is stored uncompressed; its Latin-1 and UTF-16 strings hold no user paths or ` +
-  `email addresses (its program code is not text, and is not scanned).`);
+  `email addresses (its program code is not text, and is not scanned), and its script checks the install for build ${update.hash}.`);
 console.log("Eleven allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
 console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);

@@ -3,10 +3,11 @@ import type { GameBlink } from "./game-blink";
 import type { IdleAnimation } from "./idle-animation";
 import type { FaceDriver } from "./platform/scene/face-driver";
 import type { DeformationProgram } from "./deformation-rig";
+import type { DangleInput } from "./dangle-motion";
 
 /** The parts of the idle and the blink the scene composes (IdleAnimation and GameBlink; test doubles may stand in). */
 export type ComposedIdle = Pick<IdleAnimation, "enabled" | "paused" | "onChange" | "update" | "setEnabled" | "attach" | "detach"> &
-  Partial<Pick<IdleAnimation, "setDeformations">>;
+  Partial<Pick<IdleAnimation, "setDeformations" | "setDangles">>;
 export type ComposedBlink = Pick<GameBlink, "animating" | "onChange" | "update" | "reset" | "attach" | "detach" | "dispose"> &
   Partial<Pick<GameBlink, "setMuted">>;
 /** The held expression's face driver (platform/scene/face-driver.ts). */
@@ -57,6 +58,8 @@ export function composePreviewMotion(idle: ComposedIdle | undefined, blink: Comp
     attach(bones: readonly THREE.Object3D[]) { face?.attach(bones); blink?.attach(bones); idle?.attach(bones); },
     /** The puppet's deformation rigs for the helper joints the details bring (the idle poses them; the blink never moves them). */
     setDeformations(programs: readonly DeformationProgram[]) { idle?.setDeformations?.(programs); },
+    /** The drawn parts' dangle components (hair with physics): the idle poses their chains; the blink never moves them. */
+    setDangles(parts: readonly DangleInput[]) { idle?.setDangles?.(parts); },
     detach(bones: readonly THREE.Object3D[]) { face?.detach(bones); blink?.detach(bones); idle?.detach(bones); },
     /** Ask for a frame whenever any of them changes the pose outside playback; returns the disconnect. */
     connect(invalidate: () => void) {

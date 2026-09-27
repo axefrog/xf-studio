@@ -12,6 +12,7 @@ export const CONTROL_ANCHORS = {
   "header.package": { label: "Package button" },
   "header.history": { label: "History button" },
   "header.help": { label: "Help button" },
+  "header.settings": { label: "Settings button" },
   "header.palette": { label: "Commands button" },
   "layers.add": { panel: "layers", label: "Add layer" },
   "layers.list": { panel: "layers", label: "Layer list" },

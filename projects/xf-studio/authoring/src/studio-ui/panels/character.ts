@@ -142,12 +142,12 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const keep = button({ label: "Keep my changes", icon: "check", small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.keepChanges" }) });
   // Offered when the V's details or the creator's labels wait for WolvenKit (NATIVE-46, NATIVE-47).
   const setupWolvenKit = wolvenKitStepButton(rt);
-  const detailsToggle = h("button", { class: "btn small quiet cc-details-toggle", type: "button", "aria-expanded": "false", "aria-controls": "cc-messages" },
-    h("span", { text: "Details" }));
+  const detailsToggle = button({ label: "Details", small: true, variant: "quiet", className: "cc-details-toggle",
+    onClick: () => { showMessages = !showMessages; rt.changed(); } });
+  detailsToggle.setAttribute("aria-expanded", "false"); detailsToggle.setAttribute("aria-controls", "cc-messages");
   const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
-  detailsToggle.addEventListener("click", () => { showMessages = !showMessages; rt.changed(); });
   const search = h("input", { class: "field cc-search", type: "search", placeholder: "Find an option or choice", "aria-label": "Find a creator option or choice",
     autocomplete: "off", spellcheck: "false" });
   // One line explains the marks on choices not prepared yet (fixed height: it never moves the rows).
@@ -351,7 +351,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
             if (aheadRow !== rowKey(controls.view)) { aheadRow = rowKey(controls.view); rt.changed(); return; }
             if (controls.prefetching && controls.positions.length) port.authoring.characterPrefetch(controls.prefetching, controls.positions, choice.position);
           }),
-          more: h("button", { class: "btn small quiet cc-more", type: "button", hidden: true }), open: openRows.has(rowKey(view)), query: "",
+          more: Object.assign(button({ label: "Show more", small: true, variant: "quiet", className: "cc-more", onClick: () => {} }), { hidden: true }), open: openRows.has(rowKey(view)), query: "",
           prefetching: null, positions: [], loaded: -1 };
         main.addEventListener("click", () => toggle(controls));
         controls.off.addEventListener("click", () => {

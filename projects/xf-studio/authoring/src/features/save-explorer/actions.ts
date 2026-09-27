@@ -4,13 +4,16 @@
  * with capabilities; no DOM, file or network code: the host device (`SaveExplorerDevice`) lists, reads and picks, and the pure read model
  * (explorer.ts) decodes. Nothing here writes a save, and nothing is persisted: an open save lives only in memory.
  *
- * Long work yields between steps (`yieldToHost`): the container opens in one step, then each package and the world-object stream are
- * checked one at a time so the tree's decode status fills in without holding the page.
+ * Long work yields between steps (`yieldToHost`): the container opens in one step, then each package is checked in one step and the
+ * world-object stream in bounded steps (SAVE-06), so the tree's decode status fills in without holding the page.
+ *
+ * A listing that fails is tried again after a short wait (`retryDelays`), saying "Reconnecting…" meanwhile: the host may be restarting.
+ * Only when every try fails is the failure shown, in plain words (UI-109). Refresh during the waits tries again at once.
  */
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import { openExplorer, type EntryPage, type ModDataView, type NodeInspection, type ObjectInspection, type ObjectRef, type SaveExplorer, type SaveSummary,
   type TreeRow } from "./explorer";
-import { parseSaveListing, parseSaveTypeNames, type SaveListing, type SaveTypeNames } from "./listing";
+import { parseSaveListing, parseSaveTypeNames, type SaveListing, type SavesFolder, type SaveTypeNames } from "./listing";
 
 /**
  * The host device: the saves listing, a save's bytes, the file picker, name sources and screenshots. The listing and names arrive
@@ -19,13 +22,19 @@ import { parseSaveListing, parseSaveTypeNames, type SaveListing, type SaveTypeNa
 export type SaveExplorerDevice = {
   list(): Promise<unknown>;
   read(folder: string): Promise<Uint8Array>;
-  /** A save file chosen by the person (for saves outside the saves folder); undefined when they cancel. */
-  pick(): Promise<{ name: string; bytes: Uint8Array } | undefined>;
+  /**
+   * A save file chosen by the person (for saves outside the saves folder), undefined when they cancel: its name and size, and its bytes
+   * read only when asked (the service checks the size first; SAVE-08).
+   */
+  pick(): Promise<PickedSave | undefined>;
   names(): Promise<unknown>;
   /** Where the view can load a listed save's screenshot from, or null. */
   thumbnail(folder: string): string | null;
+  /** Calls the listener when the saves folder chosen in Settings changes (the list is read again); returns how to stop. */
+  locationChanged?(listener: () => void): () => void;
 };
 
+export type PickedSave = { readonly name: string; readonly size: number; bytes(): Promise<Uint8Array> };
 export type SaveExplorerView = "nodes" | "mods";
 export type SaveExplorerAction =
   | { kind: "saves.refresh" }
@@ -39,7 +48,11 @@ export type SaveExplorerOutcome = { ok: true; message?: string } | { ok: false; 
 
 type Phase = "idle" | "loading" | "ready" | "failed";
 export type SaveExplorerState = {
-  readonly listing: { readonly phase: Phase; readonly available: boolean; readonly saves: readonly SaveListing[]; readonly message?: string };
+  readonly listing: { readonly phase: Phase; readonly available: boolean; readonly saves: readonly SaveListing[]; readonly message?: string;
+    /** The folder the last listing read, as a person would name it. */
+    readonly folder?: SavesFolder;
+    /** A try failed and another follows shortly (the host may be restarting). */
+    readonly reconnecting?: boolean };
   readonly names: { readonly phase: Phase; readonly scripts: boolean; readonly message?: string };
   readonly open: { readonly phase: "none" | "loading" | "ready" | "failed"; readonly source?: { readonly kind: "listed"; readonly folder: string } |
     { readonly kind: "file"; readonly name: string }; readonly message?: string; readonly summary?: SaveSummary; readonly checking: boolean };
@@ -61,6 +74,8 @@ export const SAVE_EXPLORER_DESCRIPTORS = Object.freeze({
 
 /** Largest save the explorer opens (saves are 1–10 MB). */
 export const MAX_SAVE_BYTES = 128 * 1024 * 1024;
+/** The waits before each further try of a failed listing: six tries over about fifteen seconds, enough for the host to restart and rebuild. */
+export const LISTING_RETRY_DELAYS: readonly number[] = [500, 1000, 2000, 4000, 8000];
 const initial = (): SaveExplorerState => ({ listing: { phase: "idle", available: false, saves: [] }, names: { phase: "idle", scripts: false },
   open: { phase: "none", checking: false }, selection: { node: null, object: null, view: "nodes" }, revision: 0 });
 
@@ -72,9 +87,19 @@ export class SaveExplorerActions {
   private namesRequest: Promise<SaveTypeNames | null> | null = null;
   /** Bumped by every open and close, so a slower earlier open never publishes over a later one. */
   private generation = 0;
+  /** Bumped by every listing, so a try still waiting to repeat stops once a newer one starts. */
+  private listGeneration = 0;
+  private readonly retryDelays: readonly number[];
+  private readonly wait: (ms: number) => Promise<void>;
 
   constructor(private readonly device: SaveExplorerDevice | null,
-    private readonly yieldToHost: () => Promise<void> = () => new Promise(done => setTimeout(done, 0))) {}
+    private readonly yieldToHost: () => Promise<void> = () => new Promise(done => setTimeout(done, 0)),
+    options: { retryDelays?: readonly number[]; wait?: (ms: number) => Promise<void> } = {}) {
+    this.retryDelays = options.retryDelays ?? LISTING_RETRY_DELAYS;
+    this.wait = options.wait ?? (ms => new Promise(done => setTimeout(done, ms)));
+    // A saves folder chosen in Settings: a list already read is read again from the new folder.
+    device?.locationChanged?.(() => { if (this.state.listing.phase !== "idle") void this.refresh(); });
+  }
 
   descriptors() { return structuredClone(SAVE_EXPLORER_DESCRIPTORS); }
   snapshot(): SaveExplorerState { return structuredClone(this.state); }
@@ -90,7 +115,8 @@ export class SaveExplorerActions {
     switch (action.kind) {
       case "saves.refresh":
         if (!this.device) return refusal("unavailable", "Listing saves isn't available here.");
-        return this.state.listing.phase === "loading" ? refusal("busy", "Your saves are being listed.") : { available: true };
+        // While a failed try waits to repeat, Refresh tries again at once.
+        return this.state.listing.phase === "loading" && !this.state.listing.reconnecting ? refusal("busy", "Your saves are being listed.") : { available: true };
       case "saves.open":
         if (!this.device) return refusal("unavailable", "Opening saves isn't available here.");
         if (typeof action.folder !== "string" || !this.state.listing.saves.some(save => save.folder === action.folder))
@@ -118,10 +144,15 @@ export class SaveExplorerActions {
       case "saves.refresh": return this.refresh();
       case "saves.open": return this.openListed(action.folder);
       case "saves.openFile": {
-        let picked: { name: string; bytes: Uint8Array } | undefined;
+        let picked: PickedSave | undefined;
         try { picked = await this.device!.pick(); } catch { return { ok: false, code: "unavailable", message: "The file couldn't be read. Try again." }; }
         if (!picked) return { ok: true, message: "No file chosen." };
-        return this.openBytes(picked.bytes, { kind: "file", name: picked.name });
+        const source = { kind: "file" as const, name: picked.name };
+        // Refused by its size before anything is read (SAVE-08).
+        if (!(picked.size <= MAX_SAVE_BYTES)) { this.generation++; return this.tooLarge(source); }
+        let bytes: Uint8Array;
+        try { bytes = await picked.bytes(); } catch { return { ok: false, code: "unavailable", message: "The file couldn't be read. Try again." }; }
+        return this.openBytes(bytes, source);
       }
       case "saves.close":
         this.generation++; this.explorer = null;
@@ -162,16 +193,28 @@ export class SaveExplorerActions {
   }
 
   private async refresh(): Promise<SaveExplorerOutcome> {
-    this.publish({ listing: { ...this.state.listing, phase: "loading" } });
-    try {
-      const result = parseSaveListing(await this.device!.list());
-      this.publish({ listing: { phase: "ready", available: result.available, saves: result.saves, ...(result.reason ? { message: result.reason } : {}) } });
-      return { ok: true };
-    } catch {
-      const message = "Your saves couldn't be listed. Check that XF Studio is still running, then choose Refresh.";
-      this.publish({ listing: { ...this.state.listing, phase: "failed", message } });
-      return { ok: false, code: "unavailable", message };
+    const generation = ++this.listGeneration;
+    this.publish({ listing: { ...this.state.listing, phase: "loading", reconnecting: false } });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const result = parseSaveListing(await this.device!.list());
+        if (generation !== this.listGeneration) return { ok: true };
+        this.publish({ listing: { phase: "ready", available: result.available, saves: result.saves, ...(result.reason ? { message: result.reason } : {}),
+          ...(result.folder ? { folder: result.folder } : {}) } });
+        return { ok: true };
+      } catch {
+        if (generation !== this.listGeneration) return { ok: true };
+        const delay = this.retryDelays[attempt];
+        if (delay === undefined) break;
+        // Most often the host is restarting: say so, and try again shortly.
+        this.publish({ listing: { ...this.state.listing, phase: "loading", reconnecting: true } });
+        await this.wait(delay);
+        if (generation !== this.listGeneration) return { ok: true };
+      }
     }
+    const message = "XF Studio couldn't list your saves just now. Choose Refresh to try again.";
+    this.publish({ listing: { ...this.state.listing, phase: "failed", reconnecting: false, message } });
+    return { ok: false, code: "unavailable", message };
   }
 
   /** The name sources, fetched once; without them the save still opens, with hashes where names would be. */
@@ -205,14 +248,16 @@ export class SaveExplorerActions {
     return this.openBytes(bytes, { kind: "listed", folder }, generation);
   }
 
+  private tooLarge(source: NonNullable<SaveExplorerState["open"]["source"]>): SaveExplorerOutcome {
+    const message = "That file is larger than any Cyberpunk 2077 save, so it wasn't opened.";
+    this.publish({ open: { phase: "failed", source, message, checking: false } });
+    return { ok: false, code: "limit", message };
+  }
+
   private async openBytes(bytes: Uint8Array, source: NonNullable<SaveExplorerState["open"]["source"]>, generation = ++this.generation): Promise<SaveExplorerOutcome> {
     // A later open or a close superseded this one while its bytes were read.
     if (generation !== this.generation) return { ok: true };
-    if (bytes.byteLength > MAX_SAVE_BYTES) {
-      const message = "That file is larger than any Cyberpunk 2077 save, so it wasn't opened.";
-      this.publish({ open: { phase: "failed", source, message, checking: false } });
-      return { ok: false, code: "limit", message };
-    }
+    if (bytes.byteLength > MAX_SAVE_BYTES) return this.tooLarge(source);
     this.publish({ open: { phase: "loading", source, checking: false } });
     const names = await this.ensureNames();
     await this.yieldToHost();
@@ -229,12 +274,15 @@ export class SaveExplorerActions {
     const first = explorer.save.roots[0] ?? null;
     this.publish({ open: { phase: "ready", source, summary: explorer.summary(), checking: true },
       selection: { node: first, object: null, view: this.state.selection.view }, revision: this.state.revision + 1 });
-    // Fill in the tree's decode status one node at a time.
+    // Fill in the tree's decode status one node at a time, each in bounded steps (the world objects take several).
     for (const id of explorer.pending()) {
-      await this.yieldToHost();
-      if (generation !== this.generation) return { ok: true };
-      explorer.check(id);
-      this.publish({ revision: this.state.revision + 1 });
+      let done = false;
+      while (!done) {
+        await this.yieldToHost();
+        if (generation !== this.generation) return { ok: true };
+        done = explorer.checkStep(id);
+        this.publish({ revision: this.state.revision + 1 });
+      }
     }
     if (generation === this.generation) this.publish({ open: { ...this.state.open, checking: false }, revision: this.state.revision + 1 });
     return { ok: true };

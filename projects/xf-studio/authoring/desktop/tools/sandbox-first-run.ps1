@@ -132,9 +132,10 @@ $setup = Copy-Item $download.FullName $downloads -PassThru
 Save
 
 # The single setup (Inno Setup) shows one Ready page; Install is its default button. It then
-# hides itself and runs Electrobun 2.0.1's own setup, which has no install-time quiet flag (its
-# --quiet applies to uninstall), so dismiss that setup's final "Installation complete" window once
-# the launcher exists. The report records each step and both exit codes.
+# runs Electrobun 2.0.1's own setup hidden (its dialog closes itself), shows its own progress,
+# checks what was installed and closes when XF Studio is installed; anything short of that stays
+# on screen as an explanation, which this run records rather than dismisses. The report records
+# each step, the setup's exit code, its log and Windows' uninstall entry.
 $t = Get-Date
 $proc = Start-Process $setup.FullName -PassThru
 $shell = New-Object -ComObject WScript.Shell
@@ -155,30 +156,24 @@ while (-not $proc.HasExited -and (Get-Date) -lt $end) {
   }
 }
 Save
-$report.installerDismissed = $false
-$inner = $null
+$report.progressShot = $false
 while (-not $proc.HasExited -and ((Get-Date) - $t).TotalSeconds -lt 600) {
-  Start-Sleep -Seconds 5
-  $installed = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue |
-    ForEach-Object { Get-ChildItem $_.FullName -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue } | Select-Object -First 1
-  if (-not $inner) { $inner = Get-Process -Name "XF Studio-Setup-*" -ErrorAction SilentlyContinue | Select-Object -First 1 }
-  if ($inner) {
-    $report.electrobunSetupSeenIn = $inner.Path
-    $inner.Refresh()
-    if ($installed -and -not $inner.HasExited -and $inner.MainWindowHandle -ne 0) {
-      Start-Sleep -Seconds 5
-      if ($inner.HasExited) { continue }
-      ShotWindow $inner.MainWindowHandle "installer-final"
-      [void]$shell.AppActivate($inner.Id); Start-Sleep -Milliseconds 500; $shell.SendKeys("{ENTER}")
-      Start-Sleep -Seconds 3
-      if (-not $inner.HasExited) { [void]$inner.CloseMainWindow() }
-      $report.installerDismissed = $true
-      [void]$inner.WaitForExit(30000)
-      if ($inner.HasExited) { $report.electrobunSetup = "exit $($inner.ExitCode)" }
-      [void]$proc.WaitForExit(30000)
-    }
+  Start-Sleep -Seconds 3
+  $wizard = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "Setup - XF Studio*" } | Select-Object -First 1
+  if ($wizard -and -not $report.progressShot) { ShotWindow $wizard.MainWindowHandle "installer-progress"; $report.progressShot = $true }
+  $inner = Get-Process -Name "XF Studio-Setup-*" -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($inner) { $report.electrobunSetupSeenIn = $inner.Path; $report.electrobunSetupWindowShown = $inner.MainWindowHandle -ne 0 }
+  # The wizard still up with Electrobun's setup gone: an explanation is showing.
+  if ($report.electrobunSetupSeenIn -and -not $inner -and $wizard -and -not $report.explanationShot) {
+    Start-Sleep -Seconds 3
+    if (-not $proc.HasExited) { ShotWindow $wizard.MainWindowHandle "installer-explanation"; $report.explanationShot = $true }
   }
 }
+$setupLog = Join-Path $env:TEMP "XF Studio setup.log"
+$report.setupLog = if (Test-Path $setupLog) { @(Get-Content $setupLog | Where-Object { $_ -notmatch '^DEBUG: ' } | Select-Object -Last 12 | ForEach-Object { [string]$_ }) } else { $null }
+$entry = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.axefrog.xf-studio.canary" -ErrorAction SilentlyContinue
+$report.uninstallEntry = if ($entry) { [ordered]@{ displayName = $entry.DisplayName; version = $entry.DisplayVersion } } else { $null }
+$report.startMenuShortcut = [bool](Get-ChildItem ([Environment]::GetFolderPath("Programs")) -Filter "XF Studio*.lnk" -ErrorAction SilentlyContinue)
 if (-not $proc.HasExited) { $report.installer = "still running after 10 minutes" } else { $report.installer = "exit $($proc.ExitCode)" }
 # Inno Setup removes its temporary folder (and Electrobun's setup inside it) when it exits.
 $report.tempSetupLeft = @(Get-ChildItem $env:TEMP -Directory -Filter "is-*.tmp" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })

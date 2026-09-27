@@ -15,8 +15,11 @@ import { LIGHTING_PRESETS, readCreatorLighting, type CreatorLightingOptions, typ
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
 
-/** A character scene's state: the head's eye shape and the V's material studies and body mode (design §3.1). */
-export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean };
+/**
+ * A character scene's state: the head's eye shape, the V's material studies and body mode (design §3.1), and whether its dangles simulate
+ * (`physics`: one setting per scene, so every view of the scene shows the same hair; hair-physics-plan.md §3.6).
+ */
+export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean; physics?: boolean };
 /** An orbit camera's pose in the scene's neutral subject space (absent until one is saved). Aspect belongs to each view. */
 export type CameraNodeState = { pose?: CameraState };
 /** A light rig's settings. The node's kind is the rig shown (the lighting preset); both rigs keep their settings. */
@@ -67,9 +70,9 @@ export function validCameraPose(value: unknown): value is CameraState {
 const scene: NodeCodec = { kinds: ["character"], parse: state => {
   const s = state as Partial<SceneState>;
   if (!inRange(s.eyeShape, EYE_SHAPE_RANGE.min, EYE_SHAPE_RANGE.max) || !bool(s.normals) || !optional(s.eyeOwnRoughness, bool) ||
-    !optional(s.uncensored, bool)) return;
+    !optional(s.uncensored, bool) || !optional(s.physics, bool)) return;
   return { eyeShape: Math.round(s.eyeShape), normals: s.normals, ...(s.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: s.eyeOwnRoughness }),
-    ...(s.uncensored === undefined ? {} : { uncensored: s.uncensored }) };
+    ...(s.uncensored === undefined ? {} : { uncensored: s.uncensored }), ...(s.physics === undefined ? {} : { physics: s.physics }) };
 } };
 const camera: NodeCodec = { kinds: ["orbit"], parse: state => {
   if (state.pose !== undefined && !validCameraPose(state.pose)) return;
@@ -106,7 +109,8 @@ export const STUDIO_VIEW_GRAPH_RULES: ViewGraphRules = Object.freeze({
 function mainNodes(preview: PreviewState) {
   return {
     scene: { eyeShape: preview.eyeShape, normals: preview.normals, ...(preview.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: preview.eyeOwnRoughness }),
-      ...(preview.uncensored === undefined ? {} : { uncensored: preview.uncensored }) } satisfies SceneState,
+      ...(preview.uncensored === undefined ? {} : { uncensored: preview.uncensored }),
+      ...(preview.physics === undefined ? {} : { physics: preview.physics }) } satisfies SceneState,
     camera: (preview.camera ? { pose: structuredClone(preview.camera) } : {}) satisfies CameraNodeState,
     lights: { exposure: preview.exposure, lightAngle: preview.lightAngle, studioLights: { ...preview.studioLights },
       creatorLighting: { ...preview.creatorLighting } } satisfies LightsState,
@@ -193,6 +197,7 @@ export function previewMirror(graph: ViewGraph, view = MAIN_VIEW) {
     normals: f.scene.normals, ...(f.scene.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: f.scene.eyeOwnRoughness }),
     eyeShape: f.scene.eyeShape, piercings: f.display.piercings, ...(f.display.body === undefined ? {} : { body: f.display.body }),
     ...(f.scene.uncensored === undefined ? {} : { uncensored: f.scene.uncensored }),
+    ...(f.scene.physics === undefined ? {} : { physics: f.scene.physics }),
     exposure: f.lights.exposure, lightAngle: f.lights.lightAngle, lightingPreset: f.rig, creatorLighting: f.lights.creatorLighting,
     studioLights: f.lights.studioLights, ...(f.camera ? { camera: f.camera } : {}) };
 }

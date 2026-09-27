@@ -10,6 +10,11 @@ import { DEFAULT_IDLE, type IdleEntry } from "./idle-catalogue";
  * problem report can show it; a person never sees it.
  */
 export const IDLE_UNAVAILABLE = "The character creator's idle couldn't be prepared from your game files, so your V holds still. Everything else works.";
+/** Why hair physics can't be turned on, in plain words (hair-physics-plan.md §3.6). */
+export const PHYSICS_NO_DANGLES = "Your V's hair doesn't move on its own: this hairstyle has no physics in the game.";
+export const PHYSICS_UNSUPPORTED = "Your V's hair has physics XF Studio can't run yet, so it hangs still.";
+export const PHYSICS_NO_RIG = "Hair physics needs your V's idle, which couldn't be prepared from your game files.";
+export const PHYSICS_WAITING = "Hair physics can be turned on once your V's hair has loaded.";
 export { IDLE_MASCULINE };
 
 /** One of the game's preview idles as the Motion controls offer it. */
@@ -23,7 +28,12 @@ export type MotionState = Pick<PreviewState,
      */
     idleClip: string; idles: readonly IdleChoice[]; idleLoading: boolean;
     /** How often Play blink repeats (a Studio choice: the idle's average blink spacing). */
-    blinkRepeatSeconds: number };
+    blinkRepeatSeconds: number;
+    /**
+     * Hair physics (the scene's dangle simulation): on or off, whether it can be turned on and why not, and how many drawn parts it moves.
+     * Off by default until the in-game calibration (hair-physics-plan.md §3.6).
+     */
+    physics: boolean; physicsAvailable: boolean; physicsReason?: string; physicsParts: number };
 /** A motion action may name the view whose scene it moves (view-graph-design.md §3.8); without one, the focused view's. */
 export type MotionAction = MotionActionBody & { view?: ViewId };
 type MotionActionBody =
@@ -33,7 +43,9 @@ type MotionActionBody =
   | { kind: "motion.setPaused"; paused: boolean }
   | { kind: "motion.setContributions"; body: boolean; face: boolean }
   | { kind: "motion.setBlink"; value: number }
-  | { kind: "motion.playBlink"; playing: boolean };
+  | { kind: "motion.playBlink"; playing: boolean }
+  /** Simulate the scene's dangles (hair and worn items with physics): a scene-node setting (hair-physics-plan.md §3.6). */
+  | { kind: "motion.setPhysics"; enabled: boolean };
 export type MotionPort = {
   available: boolean; error?: string;
   /** The game's blink (game-blink.ts): whether it was prepared on this computer, the plain reason when not, and its repeat. */
@@ -44,7 +56,11 @@ export type MotionPort = {
   setIdle(enabled: boolean): void; setIdlePaused(paused: boolean): void;
   setIdleContributions(body: boolean, face: boolean): void;
   setBlink(value: number): void; animateBlink(playing: boolean): void;
+  /** The drawn parts' dangle components (idle-animation.ts): how many, and whether any of them simulates. Absent: no idle rig. */
+  dangles?(): { parts: number; simulated: boolean; loaded?: boolean };
 };
+/** Where the motion service reads and edits the scene's motion settings (the view graph's scene node, through the preview service). */
+export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view?: ViewId): void };
 
 /** Preview motion commands and persistence state without markup or Three objects. */
 export class MotionActions {
@@ -54,7 +70,7 @@ export class MotionActions {
   /** The idle shown (optimistic while its clip loads) and the load in flight, if any. */
   private clip: string;
   private loading: Promise<void> | null = null;
-  constructor(private initial: PreviewState, private port: MotionPort) {
+  constructor(private initial: PreviewState, private port: MotionPort, private scene?: MotionScene) {
     this.blink = initial.blink; this.blinkPlaying = initial.blinkPlaying;
     this.clip = this.known(initial.idleClip) ? initial.idleClip! : this.defaultClip();
     if (!port.available && port.error && port.error !== IDLE_MASCULINE)
@@ -91,7 +107,17 @@ export class MotionActions {
       blinkAvailable: this.port.blink.available, blinkError: this.blinkError(),
       idleClip: this.clip, idleLoading: !!this.loading,
       idles: this.idleEntries().map(({ id, label, screen, puppet, clip }) => ({ id, label, screen, puppet, clip })),
-      blinkRepeatSeconds: this.port.blink.repeatSeconds ?? BLINK_REPEAT_SECONDS };
+      blinkRepeatSeconds: this.port.blink.repeatSeconds ?? BLINK_REPEAT_SECONDS,
+      physics: this.scene?.physics() ?? this.initial.physics === true, ...this.physicsStatus() };
+  }
+  /** Whether hair physics can be turned on, and the plain reason when not. */
+  private physicsStatus(): { physicsAvailable: boolean; physicsReason?: string; physicsParts: number } {
+    const dangles = this.port.dangles?.();
+    if (!dangles || !this.port.available) return { physicsAvailable: false, physicsReason: PHYSICS_NO_RIG, physicsParts: 0 };
+    if (dangles.loaded === false) return { physicsAvailable: false, physicsReason: PHYSICS_WAITING, physicsParts: 0 };
+    if (!dangles.parts) return { physicsAvailable: false, physicsReason: PHYSICS_NO_DANGLES, physicsParts: 0 };
+    if (!dangles.simulated) return { physicsAvailable: false, physicsReason: PHYSICS_UNSUPPORTED, physicsParts: dangles.parts };
+    return { physicsAvailable: true, physicsParts: dangles.parts };
   }
   private blinkError() {
     return this.port.blink.available ? undefined : this.port.blink.error || GAME_BLINK_MISSING;
@@ -103,6 +129,14 @@ export class MotionActions {
       action.kind === "motion.setContributions") && !this.port.available)
       return refusal("asset_unavailable", this.idleError()!);
     if (action.kind === "motion.setIdleClip" && !this.port.available) return refusal("asset_unavailable", this.idleError()!);
+    if (action.kind === "motion.setPhysics") {
+      if (typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+      if (!this.scene) return refusal("unavailable", PHYSICS_NO_RIG);
+      // Turning it off always works; on needs a drawn part whose physics the solver runs.
+      const status = this.physicsStatus();
+      if (action.enabled && !status.physicsAvailable) return refusal("asset_unavailable", status.physicsReason!);
+      return { available: true };
+    }
     if (action.kind === "motion.setIdleClip" && !this.known(action.clip))
       return refusal("invalid_value", "That idle isn't one of the game's idles prepared on this computer.");
     if (action.kind === "motion.setPaused" && !this.snapshot().idle)
@@ -142,6 +176,7 @@ export class MotionActions {
       case "motion.setContributions": this.port.setIdleContributions(action.body, action.face); break;
       case "motion.setBlink": this.port.setBlink(action.value); this.blink = action.value; this.blinkPlaying = false; break;
       case "motion.playBlink": this.port.animateBlink(action.playing); this.blinkPlaying = action.playing; break;
+      case "motion.setPhysics": this.scene!.setPhysics(action.enabled, action.view); break;
     }
     this.notify();
   }

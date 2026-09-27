@@ -14,7 +14,7 @@ import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO
   STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioExposure, validStudioLightValue, type StudioLightKey, type StudioLights, type StudioSetupId } from "./studio-lighting";
 
 export type PreviewConfig = Pick<PreviewState,
-  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" |
+  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" | "physics" |
   "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
 /** Every camera and preview action may name the view it acts on; without one it acts on the focused view (design §3.8). */
 export type PreviewAction = PreviewActionBody & { view?: ViewId };
@@ -67,6 +67,8 @@ export type PreviewPort = {
   setSurfaceControls(enabled: boolean): void; setWire(enabled: boolean): void; setNormals(enabled: boolean): void;
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
+  /** The scene's dangle simulation (hair-physics-plan.md §3.6). Absent on a preview without the idle's rig. */
+  setPhysics?(enabled: boolean): void;
   /** The V's body (visibility preference) and the whole-body view (true when the lens is too narrow to fit it). Absent on a head-only preview. */
   setBody?(enabled: boolean): void; frameBody?(): boolean;
   eyeShapeOptions?(): EyeShapeOptions;
@@ -144,6 +146,7 @@ export class PreviewActions {
     if (next.scene.eyeShape !== was.scene.eyeShape) port.setEyeShape(next.scene.eyeShape);
     if (next.scene.normals !== was.scene.normals) port.setNormals(next.scene.normals);
     if (next.scene.eyeOwnRoughness !== was.scene.eyeOwnRoughness) port.setEyeOptics(next.scene.eyeOwnRoughness ?? true);
+    if ((next.scene.physics ?? false) !== (was.scene.physics ?? false)) port.setPhysics?.(next.scene.physics ?? false);
     for (const detail of ["brows", "lashes"] as const) if (next.display[detail] !== was.display[detail]) port.setDetail(detail, next.display[detail]);
     if (next.display.hair !== was.display.hair) port.setHair(next.display.hair);
     if (next.display.piercings !== was.display.piercings) port.setPiercings(next.display.piercings);
@@ -345,6 +348,18 @@ export class PreviewActions {
   }
   private applyStudioStage(view: ViewId, stage: { lights: Readonly<StudioLights>; exposure: number; angle: number }, label: string) {
     this.graph.edit(view, "lights", { state: { studioLights: { ...stage.lights }, exposure: stage.exposure, lightAngle: stage.angle } }, { label });
+  }
+  /** Whether a view's scene simulates its dangles (the scene node's `physics`; off until the viewer turns it on). */
+  scenePhysics(view?: ViewId): boolean { return this.fields(view).scene.physics === true; }
+  /**
+   * Turn a view's scene's dangle simulation on or off (`motion.setPhysics`, dispatched by the motion service): a scene-node edit, so every
+   * view of the scene follows it, and Undo in View and lighting reverses it.
+   */
+  setScenePhysics(enabled: boolean, view?: ViewId) {
+    this.dispatching = true;
+    try { this.graph.edit(this.target(view), "scene", { state: { physics: enabled } }, { label: enabled ? "Hair physics on" : "Hair physics off" }); }
+    finally { this.dispatching = false; }
+    this.notify();
   }
   /** Saved facial morph application already changed the renderer; only update the persisted selector. */
   rememberEyeShape(index: number) {

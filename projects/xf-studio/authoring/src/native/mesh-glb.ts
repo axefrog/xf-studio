@@ -28,7 +28,7 @@
  */
 import { GlbWriter, type GltfJson } from "../glb";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "./native-errors";
-import { arrayOf, decodeChunk, DEFAULT_MESH_LIMITS, fieldOf, meshBlob, type DecodedChunk, type MeshBlob, type MeshLimits, nameText, objectAt, vector4 } from "./mesh-blob";
+import { arrayOf, decodeChunk, DEFAULT_MESH_LIMITS, fieldOf, meshBlob, type DecodedChunk, type MeshBlob, type MeshChunk, type MeshLimits, nameText, objectAt, vector4 } from "./mesh-blob";
 import { chunkDeltas, morphTargetLayout } from "./morph-blob";
 import { RedBuffer, type RedDocument, type RedObject } from "./red-model";
 
@@ -102,7 +102,7 @@ function quaternionOf(m: readonly number[]): [number, number, number, number] {
  * joints than positions and the names cover them: `needed`), each at the inverse of its rig matrix, else at its stored position
  * unrotated. Null when the mesh lists no bone positions. The note says when the count came from the names.
  */
-export function meshRig(mesh: RedObject, blob: MeshBlob, needed = 0): { rig: MeshRig | null; note: string | null } {
+export function meshRig(mesh: RedObject, blob: MeshBlob, needed = 0, limits: MeshLimits = DEFAULT_MESH_LIMITS): { rig: MeshRig | null; note: string | null } {
   const names = arrayOf(fieldOf(mesh, "boneNames")).map(nameText);
   const matrices = arrayOf(fieldOf(mesh, "boneRigMatrices"));
   let count = blob.bonePositions.length, note: string | null = null;
@@ -111,6 +111,8 @@ export function meshRig(mesh: RedObject, blob: MeshBlob, needed = 0): { rig: Mes
     count = names.length;
   }
   if (!count) return { rig: null, note: null };
+  // The count taken from the names is capped like the stored positions (NATIVE-62).
+  if (count > limits.maxBones) throw new NativeBudgetError(`The mesh's skin needs ${count} joints (at most ${limits.maxBones}).`);
   if (names.length < count) throw new NativeMalformedError(`The mesh lists ${count} bone positions but names ${names.length} bones.`);
   const translations = new Float32Array(count * 3), rotations = new Float32Array(count * 4);
   for (let i = 0; i < count; i++) {
@@ -264,9 +266,34 @@ function removeDoubleFaces(decoded: DecodedChunk, positions: Float32Array, norma
   return Object.assign(Uint16Array.from(kept), { doubled: true });
 }
 
+/**
+ * LOD 1 chunks without vertices or triangles are refused (NATIVE-63): glTF accessors hold at least one element, so such a chunk can't be
+ * written as a valid mesh; the resource goes to WolvenKit.
+ */
+const MAX_SHARED_READS = 4;
+function checkWritable(chunks: readonly MeshChunk[], blob: MeshBlob): void {
+  const empty = chunks.find(chunk => !chunk.numVertices || !chunk.numIndices);
+  if (empty) throw new NativeUnsupportedError(`LOD 1 chunk ${empty.index} has ${empty.numVertices} vertices and ${empty.numIndices} indices.`);
+  // What the decoded chunks read stays in proportion to the vertex buffer, so a small file can't point many chunks at one range and have
+  // it decoded many times (NATIVE-58). Chunks may share a stream (the vanilla earrings' instanced copies share their colours and second
+  // UVs; other LODs share LOD 1's range), so the distinct ranges must fit the buffer and all of them together `MAX_SHARED_READS` times
+  // it: over 718 reference meshes and morph targets, at most 1.14 times.
+  const distinct = new Map<string, number>();
+  let spanned = 0;
+  for (const chunk of chunks) for (const [start, bytes] of chunk.vertexSpans) {
+    spanned += bytes;
+    const key = `${start}|${bytes}`;
+    if (!distinct.has(key)) distinct.set(key, bytes);
+  }
+  const own = [...distinct.values()].reduce((sum, bytes) => sum + bytes, 0);
+  if (own > blob.vertexBufferSize || spanned > blob.vertexBufferSize * MAX_SHARED_READS)
+    throw new NativeMalformedError(`The LOD 1 chunks read ${spanned} vertex bytes (${own} distinct) of a ${blob.vertexBufferSize}-byte vertex buffer.`);
+}
+
 /** The chunk's indices checked against its vertex count (an index past it would make an invalid GLB). */
 function checkIndices(chunk: GltfChunk): void {
   const n = chunk.positions.length / 3;
+  if (!chunk.indices.length) throw new NativeUnsupportedError(`Chunk ${chunk.chunk} keeps no triangles.`);
   for (const index of chunk.indices) if (index >= n) throw new NativeMalformedError(`Chunk ${chunk.chunk} has an index (${index}) past its ${n} vertices.`);
 }
 
@@ -289,8 +316,14 @@ function materialNames(mesh: RedObject, chunkCount: number): string[][] {
   return lists;
 }
 
-function estimateBytes(chunks: readonly { numVertices: number; numIndices: number }[], perVertex: number): number {
-  return chunks.reduce((sum, chunk) => sum + chunk.numVertices * perVertex + chunk.numIndices * 2, 0);
+/**
+ * What a decode holds at its peak (NATIVE-58), estimated before anything is allocated: per vertex its decoded streams, their glTF form,
+ * the writer's copies and the GLB (540–640 bytes measured for the character layout); per index its decoded, swapped, copied and written
+ * forms; per morph delta row its decoded and written forms; per target on a chunk its sparse accessors' bytes and JSON.
+ */
+const PEAK_PER_VERTEX = 640, PEAK_PER_INDEX = 8, PEAK_PER_DELTA = 128, PEAK_PER_TARGET_CHUNK = 1024;
+function estimateBytes(chunks: readonly { numVertices: number; numIndices: number }[]): number {
+  return chunks.reduce((sum, chunk) => sum + chunk.numVertices * PEAK_PER_VERTEX + chunk.numIndices * PEAK_PER_INDEX, 0);
 }
 
 /** Write `chunks` as glTF meshes and nodes into `json` (after the rig's nodes). Returns the vertices written. */
@@ -377,7 +410,8 @@ export function meshGeometry(document: RedDocument, limits: MeshLimits = DEFAULT
   const garmentParameter = parameters.find(parameter => parameter.type === "garmentMeshParamGarment") ?? null;
   const garmentSupport = parameters.some(parameter => parameter.type === "meshMeshParamGarmentSupport") || !!garmentParameter;
   const lod1 = blob.chunks.filter(chunk => chunk.lodMask === 1);
-  if (estimateBytes(lod1, 150) > limits.maxOutputBytes) throw new NativeBudgetError("The mesh's geometry is larger than the reader writes.");
+  checkWritable(lod1, blob);
+  if (estimateBytes(lod1) > limits.maxOutputBytes) throw new NativeBudgetError("The mesh's geometry is larger than the reader writes.");
   const buffer = lod1.length ? blob.buffer() : new Uint8Array(0);
   const chunks = lod1.map(chunk => toGltf(decodeChunk(blob, chunk, buffer), garmentSupport));
   // Garment flags: support weight and cap bytes per vertex (four bytes a vertex; a chunk whose buffer is shorter is left without).
@@ -400,7 +434,7 @@ export function meshGeometry(document: RedDocument, limits: MeshLimits = DEFAULT
     }
     if (short.length) notes.push(`its garment support data is shorter than its vertices in chunk${short.length === 1 ? "" : "s"} ${short.join(", ")}, so that data is left out (the preview doesn't read it)`);
   }
-  const { rig, note } = meshRig(mesh, blob, jointsNeeded(chunks));
+  const { rig, note } = meshRig(mesh, blob, jointsNeeded(chunks), limits);
   if (note) notes.push(note);
   checkJoints(chunks, rig);
   const writer = new GlbWriter();
@@ -419,7 +453,10 @@ export function meshGeometry(document: RedDocument, limits: MeshLimits = DEFAULT
 export function morphGeometry(document: RedDocument, baseMesh: RedDocument | null, limits: MeshLimits = DEFAULT_MESH_LIMITS): NativeGeometry {
   const layout = morphTargetLayout(document.root, limits);
   const lod1 = layout.base.chunks.filter(chunk => chunk.lodMask === 1);
-  if (estimateBytes(lod1, 150) > limits.maxOutputBytes) throw new NativeBudgetError("The morph target's geometry is larger than the reader writes.");
+  checkWritable(lod1, layout.base);
+  // Every target writes its accessors on every LOD 1 chunk, moved or not (NATIVE-59).
+  let spent = estimateBytes(lod1) + layout.targets.length * lod1.length * PEAK_PER_TARGET_CHUNK;
+  if (spent > limits.maxOutputBytes) throw new NativeBudgetError("The morph target's geometry is larger than the reader writes.");
   const buffer = lod1.length ? layout.base.buffer() : new Uint8Array(0);
   const chunks = lod1.map(chunk => toGltf(decodeChunk(layout.base, chunk, buffer), false));
   let rig: MeshRig | null = null;
@@ -427,7 +464,7 @@ export function morphGeometry(document: RedDocument, baseMesh: RedDocument | nul
   const base = baseMesh?.root;
   if (base?.type === "CMesh" && objectAt(fieldOf(base, "renderResourceBlob"))?.type === "rendRenderMeshBlob") {
     const baseBlob = meshBlob(fieldOf(base, "renderResourceBlob"), limits);
-    const made = meshRig(base, baseBlob, jointsNeeded(chunks));
+    const made = meshRig(base, baseBlob, jointsNeeded(chunks), limits);
     rig = made.rig;
     if (made.note) notes.push(`its base mesh ${made.note}`);
   }
@@ -435,13 +472,12 @@ export function morphGeometry(document: RedDocument, baseMesh: RedDocument | nul
   const writer = new GlbWriter();
   const json = startDocument(writer, rig, null);
   const targetNames = layout.targets.map(target => `${target.name}_${target.region}`);
-  let deltaBytes = 0;
   const vertices = writeChunks(writer, json, chunks.map(chunk => (chunk.indices as { doubled?: boolean }).doubled ? { ...chunk, name: `${chunk.name}_doubled` } : chunk), !!rig,
     () => ({ targetNames }),
     chunk => layout.targets.map((_, t) => {
       const deltas = chunkDeltas(layout, t, chunk.chunk);
-      deltaBytes += deltas.vertices.length * 40;
-      if (deltaBytes > limits.maxOutputBytes) throw new NativeBudgetError("The morph target's deltas are larger than the reader writes.");
+      spent += deltas.vertices.length * PEAK_PER_DELTA;
+      if (spent > limits.maxOutputBytes) throw new NativeBudgetError("The morph target's deltas are larger than the reader writes.");
       const count = chunk.positions.length / 3;
       const order = Array.from(deltas.vertices.keys()).sort((a, b) => deltas.vertices[a]! - deltas.vertices[b]!);
       const rows = Uint32Array.from(order, row => deltas.vertices[row]!);

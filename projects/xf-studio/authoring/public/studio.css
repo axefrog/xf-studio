@@ -178,7 +178,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .expand-all[data-expand="true"] .icon:last-child, .expand-all[data-expand="false"] .icon:first-child { display: none; }
 @media (prefers-reduced-motion: reduce) { .expander-chevron { transition: none; } }
 .icon-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--text-muted); border-radius: var(--radius); padding: 0; }
-.icon-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); color: var(--text); }
+.icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.icon-btn[aria-pressed="true"] { color: var(--signal); }
 .icon-btn.small { width: 22px; height: 22px; }
 .chip { display: inline-flex; align-items: center; gap: var(--sp-2); height: 20px; padding: 0 var(--sp-4); border: 1px solid var(--line); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm);
   font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
@@ -206,7 +208,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .control-note.info { color: var(--text-muted); }
 /* A control's note line keeps its place once it has one (UI-90): an empty note keeps its height. */
 .control-note:not([hidden]) { display: block; min-height: 1.35em; }
-.control-note.empty { visibility: hidden; }
+/* Hidden but in place; the empty-state box (`.empty`) shares the class name, so its padding and border are taken off (UI-115). */
+.control-note.empty { visibility: hidden; padding: 0; border: 0; }
 /* A note whose text changes length as it counts keeps room for its longer form. */
 .note.steady-note { min-height: 4.2em; }
 .field { height: var(--control-h); padding: 0 var(--sp-4); background: var(--bg-sunken); border: 1px solid var(--line-strong); border-radius: 0 var(--bevel-sm) 0 0; min-width: 0; width: 100%; }
@@ -243,12 +246,89 @@ span.category { border-color: transparent; background: transparent; padding-left
 .segment:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
 .segment[aria-pressed="true"] { background: var(--bg-panel); color: var(--text); box-shadow: inset 0 -2px 0 var(--signal); font-weight: 600; }
 .segment:disabled { opacity: .45; cursor: not-allowed; }
+/* Wrapping choices: even tiles at least as wide as the longest label (--segment-min, set by the control), as many a row as fit; a label
+   wider than the row takes the row and wraps inside its tile. */
+.segmented.wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--segment-min, 6ch)), 1fr)); width: 100%; font-size: var(--fs-sm); }
+.segmented.wrap .segment { justify-content: center; text-align: center; white-space: normal; height: auto; min-height: calc(var(--control-h) - 4px); padding-block: 2px; }
 .color-field { display: flex; gap: var(--sp-3); align-items: center; }
 .swatch-frame { display: inline-grid; width: 34px; height: var(--control-h); border: 1px solid var(--line-strong); padding: 2px; background: var(--bg-sunken); border-radius: 0 var(--bevel-sm) 0 0; flex: none; }
 .swatch-input { appearance: none; width: 100%; height: 100%; border: 0; padding: 0; background: none; cursor: pointer; }
 .swatch-input::-webkit-color-swatch-wrapper { padding: 0; }
 .swatch-input::-webkit-color-swatch { border: 0; }
 .hex { width: 88px; flex: none; text-transform: lowercase; }
+/* Slider with value (components/slider-with-value.ts): slider, exact number and reset on one line; "set" emphasises the label. */
+.slider-value-row { display: flex; align-items: center; gap: var(--sp-4); min-width: 0; }
+.slider-value-row .slider { flex: 1 1 auto; min-width: 60px; }
+.slider-number-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); flex: none; }
+.slider-number { width: 7ch; height: var(--control-h-sm); padding: 0 var(--sp-3); text-align: right; font-variant-numeric: tabular-nums; }
+.slider-unit { font-size: var(--fs-xs); color: var(--text-muted); }
+.slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
+.slider-with-value.set .control-label-text { color: var(--text); font-weight: 600; }
+.slider-with-value.set .control-label-text::after { content: ""; width: 5px; height: 5px; margin-left: var(--sp-2); background: var(--signal); }
+/* Pair control (components/pair-control.ts). */
+.pair-control { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.pair-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.pair-label { font-size: var(--fs-sm); color: var(--text-muted); }
+.pair-link[aria-pressed="false"] { color: var(--text-muted); background: transparent; }
+.pair-sides { display: flex; flex-direction: column; gap: var(--sp-3); }
+/* Group section (components/group-section.ts). */
+.group-section { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.group-section-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.group-section-title { margin: 0; min-width: 0; flex: 1 1 auto; display: flex; font: inherit; }
+.group-section-title .expander { flex: 1 1 auto; }
+.group-count { margin-left: var(--sp-3); height: 17px; letter-spacing: .04em; }
+.group-section-body { display: flex; flex-direction: column; gap: var(--sp-4); padding-left: calc(10px + var(--sp-3)); }
+/* Search field (components/search-field.ts): the clear button keeps its place, so the field never changes width. */
+.search-field { position: relative; display: flex; align-items: center; min-width: 0; }
+.search-icon { position: absolute; left: var(--sp-4); display: inline-grid; color: var(--text-muted); pointer-events: none; }
+.search-icon .icon { width: 13px; height: 13px; }
+.search-input { padding-left: calc(var(--sp-4) + 13px + var(--sp-3)); padding-right: calc(22px + var(--sp-3)); }
+.search-input::-webkit-search-cancel-button { display: none; }
+.search-clear { position: absolute; right: var(--sp-2); }
+.search-clear.empty { visibility: hidden; }
+/* Combobox (components/combobox.ts): the list floats over what follows. */
+.combobox-wrap { position: relative; display: flex; }
+.combobox-input { padding-right: 26px; }
+.combobox-chevron { position: absolute; right: 7px; top: 50%; translate: 0 -50%; pointer-events: none; color: var(--text-muted); display: inline-grid; }
+.combobox-list { position: absolute; z-index: 60; top: calc(100% + 2px); left: 0; right: 0; max-height: min(320px, 50vh); overflow: auto; padding: var(--sp-2) 0;
+  background: var(--bg-overlay); border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+.combobox-heading { padding: var(--sp-3) var(--sp-4) var(--sp-2); font: 600 var(--fs-2xs)/1.2 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.combobox-option { display: flex; flex-direction: column; gap: 1px; padding: var(--sp-2) var(--sp-4); cursor: pointer; font-size: var(--fs-sm); }
+.combobox-option small { color: var(--text-muted); font-size: var(--fs-xs); }
+.combobox-option.active { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--signal); }
+.combobox-option[aria-selected="true"] .combobox-option-label { font-weight: 600; }
+.combobox-option[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.combobox-empty { padding: var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); }
+/* Folder setting (components/folder-setting.ts): the folder in use, its actions, the typed box and the reserved refusal line. */
+.folder-using { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.folder-typed { display: flex; flex-direction: column; gap: var(--sp-3); }
+.folder-typed .field { flex: 1 1 auto; }
+/* Tree view (components/tree-view.ts): fixed-height items positioned in a spacer, so only the rows in view are in the page. */
+.tree-view { position: relative; overflow: auto; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); }
+.tree-spacer { position: relative; min-height: 100%; }
+.tree-item { position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); cursor: pointer;
+  font-size: var(--fs-sm); white-space: nowrap; }
+.tree-item:hover { background: var(--bg-hover); }
+.tree-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.tree-group { font-weight: 600; }
+.tree-row { padding-left: calc(var(--sp-4) + 10px + var(--sp-3)); }
+.tree-row.current { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
+.tree-row.disabled { color: var(--text-faint); cursor: not-allowed; }
+.tree-chevron { flex: none; display: inline-grid; width: 10px; color: var(--text-muted); transition: rotate var(--dur) var(--ease); }
+.tree-chevron .icon { width: 10px; height: 10px; stroke-width: 1.8; }
+.tree-group[aria-expanded="true"] .tree-chevron { rotate: 90deg; }
+.tree-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tree-label mark { background: var(--accent-bg, color-mix(in oklab, var(--accent) 35%, transparent)); color: inherit; }
+.tree-secondary { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-weight: 400; font-size: var(--fs-xs); }
+.tree-count { margin-left: auto; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); }
+.tree-trailing { margin-left: auto; display: inline-flex; flex: none; }
+.tree-status { position: absolute; top: var(--sp-2); right: var(--sp-3); z-index: 2; padding: 2px var(--sp-3); background: var(--bg-overlay); border: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-muted); }
+.tree-empty { margin: 0; padding: var(--sp-5); color: var(--text-muted); font-size: var(--fs-sm); }
+/* Favourite toggle: shown on the row's hover or focus, and always while on. */
+.tree-row .favourite-toggle[aria-pressed="false"] { opacity: 0; }
+.tree-row:hover .favourite-toggle, .tree-row:focus .favourite-toggle, .tree-row:focus-within .favourite-toggle { opacity: 1; }
+.favourite-toggle[aria-pressed="true"] { color: var(--accent-text); }
+@media (prefers-reduced-motion: reduce) { .tree-chevron { transition: none; } }
 
 /* ---------- Workspace & dock ---------- */
 .workspace { position: relative; min-height: 0; min-width: 0; padding: var(--sp-2); }
@@ -267,29 +347,39 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-splitter:focus-visible { outline: none; }
 .dock-group { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); overflow: hidden; }
 .dock-group.focus-within { border-color: var(--signal-line); }
-.dock-tabbar { display: flex; align-items: stretch; height: var(--tab-h); flex: none; background: var(--bg-sunken); border-bottom: 1px solid var(--line); padding-right: var(--sp-2); }
-.dock-tabs { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.dock-tabs::-webkit-scrollbar { display: none; }
-.dock-tab { position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5); border: 0; border-right: 1px solid var(--line-soft); background: transparent;
+/* Panel header (components/panel-header.ts): the tab strip, a drag area, then the actions. The actions never shrink or scroll, so
+   collapse, expand and the layout menu stay whole and in reach however narrow the group; the tab strip gives up space first. */
+.dock-tabbar { display: flex; align-items: stretch; height: var(--tab-h); flex: none; min-inline-size: 0; background: var(--bg-sunken); border-bottom: 1px solid var(--line); padding-inline-end: var(--sp-2); }
+.panel-header-actions { flex: none; display: flex; align-items: center; }
+.panel-header-actions > * { flex: none; }
+/* Tab strip (components/tab-strip.ts): it condenses in stages rather than overflowing: full labels, then the inactive labels cut
+   short, then the inactive tabs icon-only, then the tabs that still don't fit in its "more tabs" menu. */
+.tab-strip { display: flex; align-items: stretch; flex: 0 1 auto; min-inline-size: 0; overflow: hidden; }
+.dock-tabs { display: flex; min-inline-size: 0; overflow: hidden; }
+.tab-strip-more { align-self: center; }
+.dock-tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3); padding-block: 0; padding-inline: var(--tab-pad, var(--sp-5)); border: 0; border-inline-end: 1px solid var(--line-soft); background: transparent;
   color: var(--text-muted); white-space: nowrap; font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .09em; text-transform: uppercase; touch-action: none; flex: none; }
-.dock-tab[aria-selected="true"] { padding-right: var(--sp-3); }
-/* Condensed strips keep the active tab's full label; the others keep a short visible label (never icon-only, UI-96), and the
-   strip scrolls when even that doesn't fit. */
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
+.dock-tab[aria-selected="true"] { padding-inline-end: var(--sp-3); }
+.tab-strip:not([data-stage="full"]) .dock-tab:not([aria-selected="true"]) { padding-inline: var(--sp-3); gap: var(--sp-2); }
+.tab-strip[data-stage="truncated"] .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; letter-spacing: .04em; }
+.tab-strip:is([data-stage="icons"], [data-stage="overflow"]) .dock-tab:not([aria-selected="true"]) .dock-tab-label { display: none; }
+.tab-strip:is([data-stage="icons"], [data-stage="overflow"]) .dock-tab[aria-selected="true"] .dock-tab-label { max-inline-size: 9em; }
+/* The tightest headers: the active tab keeps its icon and indicator only (its name stays its tooltip and accessible name). */
+.tab-strip.active-icon .dock-tab[aria-selected="true"] { padding-inline: var(--sp-3); }
+.tab-strip.active-icon .dock-tab[aria-selected="true"] :is(.dock-tab-label, .dock-tab-close) { display: none; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
-.dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
-.dock-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; top: 0; width: 8px; height: 4px; background: var(--accent); }
+.dock-tab[aria-selected="true"]::before { content: ""; position: absolute; inset-inline: 0; inset-block-start: 0; block-size: 2px; background: var(--indicator); }
+.dock-tab[aria-selected="true"]::after { content: ""; position: absolute; inset-inline-start: 0; inset-block-start: 0; inline-size: 8px; block-size: 4px; background: var(--accent); }
 .dock-tab[aria-selected="true"] .icon { color: var(--accent-text); }
 .dock-tab .icon { width: 14px; height: 14px; }
-.dock-tab-label { overflow: hidden; text-overflow: ellipsis; }
+.dock-tab-label { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .dock-tab-close { display: none; place-items: center; width: 18px; height: 18px; color: var(--text-faint); border-radius: var(--radius); }
 .dock-tab-close .icon { width: 11px; height: 11px; }
 .dock-tab[aria-selected="true"] .dock-tab-close { display: inline-grid; }
 .dock-tab-close:hover { background: var(--bg-active); color: var(--text); }
 .dock-tab:focus-visible { outline-offset: -2px; }
-.dock-tabbar-fill { flex: 1; min-width: 24px; cursor: grab; touch-action: none; }
+.dock-tabbar-fill { flex: 1; min-inline-size: 24px; cursor: grab; touch-action: none; }
 .dock-tabbar .icon-btn { align-self: center; }
 .dock-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
 .dock-group.maximized { position: absolute; inset: 0; z-index: 5; }
@@ -303,11 +393,13 @@ span.category { border-color: transparent; background: transparent; padding-left
    column it is a header row spanning its column; along a row (a single group, or a column whose groups all collapsed) a
    full-height vertical strip. A folded cell takes no share of its split, so the neighbours fill the space. */
 .dock-group.collapsed[data-fold="row"] { flex: none; }
-.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
-/* A strip shorter than its tabs condenses them like a crowded bar and scrolls the rest; its buttons stay in reach. */
-.dock-group.collapsed[data-fold="row"] .dock-tabs { min-height: 0; overflow: hidden auto; }
-.dock-group.collapsed[data-fold="row"] .dock-tab-label { max-width: none; }
-.dock-group.collapsed[data-fold="row"] .dock-tabbar-fill { min-width: 0; min-height: 24px; }
+/* The strip is the same tab bar turned on its side: every tab rule above is written in logical properties, so the padding, gaps,
+   separators, close mark and indicator follow the text down the strip. Tabs read top to bottom with upright icons centred in a strip a
+   little wider than a bar is tall; the indicator runs down the strip's outer edge. Nothing changes size on hover or selection. */
+.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: calc(var(--tab-h) + var(--sp-2));
+  border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+.dock-tabbar[data-orientation="vertical"] { --tab-pad: var(--sp-4); }
+/* A strip shorter than its tabs condenses them in the same stages as a crowded bar; its buttons stay in reach. */
 .dock-cell[data-collapsed] > .dock-split { flex: none; }
 .dock-split > .dock-splitter.inert { cursor: default; }
 .dock-split > .dock-splitter.inert:hover::after { background: transparent; }
@@ -364,6 +456,34 @@ span.category { border-color: transparent; background: transparent; padding-left
 .note.info { color: var(--signal); }
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-bottom: calc(var(--sp-4) * -1); }
 .panel-foot { margin-top: calc(var(--sp-3) * -1); }
+/* ---------- Layout primitives (components/layout.ts, split-view.ts): one vertical rhythm from the spacing tokens ---------- */
+.stack.gap-tight { gap: var(--sp-3); } .stack.gap-normal { gap: var(--sp-4); } .stack.gap-loose { gap: var(--sp-6); }
+.stack { min-width: 0; }
+.block-section { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.block-head { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.block-title { margin: 0; min-width: 0; font: 600 var(--fs-md)/1.25 var(--font-display); overflow-wrap: anywhere; }
+.block-actions { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex: none; }
+/* A view's header: the back action on its own row, the title with its actions, then the meta line, each with room of its own. */
+.page-header { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; padding-bottom: var(--sp-2); }
+.page-header-back { display: flex; }
+.page-header-main { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; min-width: 0; }
+.page-header-title { margin: 0; flex: 1 1 12ch; min-width: 0; font: 600 var(--fs-lg)/1.25 var(--font-display); overflow-wrap: anywhere; }
+.page-header-actions { display: flex; align-items: center; gap: var(--sp-3); flex: none; margin-left: auto; }
+.page-header-meta { margin: 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--text-muted); max-width: 90ch; }
+.property-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--sp-2) var(--sp-5); margin: 0; font-size: var(--fs-sm); }
+.property-list dt { color: var(--text-muted); }
+.property-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.property-list dd.mono { font-family: var(--font-mono); }
+.code-block { margin: 0; padding: var(--sp-4); max-height: 40vh; overflow: auto; font: var(--fs-2xs)/1.5 var(--font-mono); background: var(--bg-sunken); border: 1px solid var(--line-soft); white-space: pre; }
+.code-block:focus-visible { outline-offset: -2px; }
+.split-view { container-type: inline-size; min-width: 0; min-height: 0; }
+.split-grid { display: grid; grid-template-columns: minmax(0, calc(var(--split, .45) * 100% - var(--sp-6) / 2)) var(--sp-6) minmax(0, 1fr); min-height: 0; }
+.split-pane { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; min-height: 0; }
+.split-gutter { position: relative; cursor: col-resize; touch-action: none; }
+.split-gutter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--line-soft); transition: background var(--dur) var(--ease), width var(--dur) var(--ease); }
+.split-gutter:hover::after, .split-gutter.active::after, .split-gutter:focus-visible::after { width: 2px; background: var(--signal-line); }
+.split-gutter:focus-visible { outline: none; }
+@container (max-width: 560px) { .split-grid { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-6); } .split-gutter { display: none; } }
 .state-line { margin: 0; font-size: var(--fs-sm); padding: var(--sp-3) var(--sp-4); border-left: 2px solid var(--line-strong); background: var(--bg-raised); }
 .state-line.warning { border-color: var(--warning); } .state-line.info { border-color: var(--signal); }
 .empty { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-5); border: 1px dashed var(--line-strong); color: var(--text-muted); border-radius: 0 var(--bevel) 0 0; }
@@ -502,6 +622,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .setup-status.warning { border-color: var(--warning); } .setup-status.ready { border-color: var(--success); }
 .setup-typed { margin-top: var(--sp-2); } .setup-typed .field { flex: 1; min-width: 0; }
 .setup-typed[hidden], .setup-section .select-wrap[hidden] { display: none; }
+/* Settings (UI-109): plain groups, each a section; the setup form's parts sit inside them. A long chosen path wraps. */
+.settings-panel .section + .section { margin-top: var(--sp-5); }
+.settings-panel .setup-status { overflow-wrap: anywhere; }
+.settings-panel .section > .control, .settings-panel .section > .row { margin-top: var(--sp-4); }
+.setup-saves > .note, .setup-typed-block { margin-top: var(--sp-3); }
+.setup-typed-block > .note { margin: var(--sp-2) 0 0; }
 .result-card { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-strong); background: var(--bg-raised); border-radius: 0 var(--bevel) 0 0; }
 .result-card.ok { border-left: 3px solid var(--success); }
 .result-card.stale { border-left: 3px solid var(--warning); }
@@ -1006,10 +1132,6 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .save-row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-row-meta, .save-row-folder { font-size: var(--fs-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-row-folder { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text-faint); }
-.save-title { margin: 0; font: 600 var(--fs-lg) var(--font-display); overflow-wrap: anywhere; }
-.save-explorer-body { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 1fr); gap: var(--sp-5); min-height: 0; }
-@container (max-width: 640px) { .save-explorer-body { grid-template-columns: 1fr; } }
-.save-tree-pane, .save-inspect-pane { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
 .save-tree { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; background: var(--bg-panel); border: 1px solid var(--line); }
 .save-tree-row { display: flex; align-items: center; gap: var(--sp-3); min-height: 26px; padding: 0 var(--sp-4); cursor: default; }
 .save-tree-row:hover { background: var(--bg-hover); }
@@ -1019,18 +1141,12 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .save-tree-twisty { flex: none; width: 12px; color: var(--text-muted); }
 .save-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-tree-size { flex: none; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); }
-.save-node-title { margin: 0; font: 600 var(--fs-md) var(--font-display); overflow-wrap: anywhere; }
-.save-facts-table { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-1) var(--sp-4); margin: 0; font-size: var(--fs-sm); }
-.save-facts-table dt { color: var(--text-muted); }
-.save-facts-table dd { margin: 0; overflow-wrap: anywhere; }
 .save-objects, .save-links, .save-reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; max-height: 40vh; overflow: auto; }
 .save-objects .link-button, .save-links .link-button { display: flex; align-items: center; gap: var(--sp-3); width: 100%; text-align: left; }
 .save-objects .link-button[aria-current="true"] { background: var(--signal-bg); }
 .save-pager { flex-wrap: wrap; align-items: center; }
-.save-hex { margin: 0; padding: var(--sp-4); max-height: 40vh; overflow: auto; font: var(--fs-2xs)/1.5 var(--font-mono); background: var(--bg-sunken); border: 1px solid var(--line-soft); white-space: pre; }
 .save-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .save-table th, .save-table td { padding: var(--sp-1) var(--sp-3); text-align: left; border-bottom: 1px solid var(--line-soft); overflow-wrap: anywhere; }
-.save-object { display: flex; flex-direction: column; gap: var(--sp-3); }
 .save-object:empty { display: none; }
 .save-fields { display: flex; flex-direction: column; gap: 1px; font-size: var(--fs-sm); }
 .save-fields ul { list-style: none; margin: 0 0 0 var(--sp-5); padding: 0; border-left: 1px solid var(--line-soft); }

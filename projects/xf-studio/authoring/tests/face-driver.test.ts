@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { FACE_OTHER_HEAD, FaceDriver } from "../src/platform/scene/face-driver";
+import { FACE_MASCULINE, FACE_OTHER_HEAD, FaceDriver } from "../src/platform/scene/face-driver";
 import { composePreviewMotion, type ComposedBlink, type ComposedIdle } from "../src/preview-motion";
 
 const JOINTS = [{ name: "face_root", parent: -1, t: [0, 1.6, 0], r: [0, 0, 0, 1], s: [1, 1, 1] },
@@ -49,6 +49,12 @@ test("a held pose moves the bones by name, children follow, and releasing restor
 test("a rig whose joints sit elsewhere than this head's bones is refused and changes nothing", () => {
   const { bones } = head(), driver = new FaceDriver(bones);
   expect(() => driver.setRig(JOINTS.map(joint => joint.name === "jaw" ? { ...joint, t: [0, -0.06, 0.02] } : joint))).toThrow(FACE_OTHER_HEAD);
+  expect(driver.ready).toBe(false);
+});
+
+test("a masculine V's head says his live expressions come later, not that the face data is another head's (CORE-107)", () => {
+  const { bones } = head(), driver = new FaceDriver(bones, "male");
+  expect(() => driver.setRig(JOINTS)).toThrow(FACE_MASCULINE);
   expect(driver.ready).toBe(false);
 });
 

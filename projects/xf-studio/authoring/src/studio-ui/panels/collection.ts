@@ -8,6 +8,7 @@ import type { Command } from "../commands";
 import type { PanelSpec } from "../dock/dock-view";
 import { icon } from "../icons";
 import { ItemList } from "../item-list";
+import { progressBar } from "../components/progress";
 import { openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "../menu";
 import type { PackageProductSummary as ProductSummary } from "../../collection-actions";
 type PackageProductSummary = ReadonlyDeep<ProductSummary>;
@@ -15,7 +16,7 @@ import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
-import { gameSetupSection } from "./game-setup";
+import { setupStatus } from "./game-setup";
 import { openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
@@ -23,8 +24,8 @@ import { PANEL_META } from "../panel-meta";
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
   commands?(): Command[];
-  /** Mod package only: open Game & tools, find the game and mod manager, and put focus on the first thing to choose. */
-  showSetup?(): void };
+  /** Bring one part of the panel into view and focus it (Settings: a group, `settings-sections.ts`). */
+  show?(section?: string): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Library facts derived only from the draft summary and saved list; nothing is guessed. */
@@ -65,7 +66,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   nameInput.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); commitName(); nameInput.blur(); }
     if (event.key === "Escape") { nameInput.value = port.library.summary().draft?.name ?? ""; nameInput.blur(); } });
   const libraryChip = h("span", { class: "chip" });
-  const collectionMore = button({ label: "Collection actions", icon: "more", iconOnly: true, variant: "ghost",
+  const collectionMore = button({ label: "Collection actions", icon: "more", iconOnly: true, variant: "ghost", menu: true,
     onClick: event => collectionMenu(rt, event.currentTarget as Element, event.currentTarget as Element) });
   const addButton = button({ label: "Add preset", icon: "plus", small: true,
     onClick: () => { if (rt.dispatch({ kind: "preset.edit", command: { kind: "add" } })) rt.feedback.announce("Preset added and selected"); } });
@@ -82,7 +83,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       if (!row.trailing.childElementCount) row.trailing.append(
         button({ label: `Duplicate ${item.name}`, icon: "duplicate", iconOnly: true, variant: "ghost", small: true,
           onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "copy", id: item.id } }) }),
-        button({ label: `More actions for ${item.name}`, icon: "more", iconOnly: true, variant: "ghost", small: true,
+        button({ label: `More actions for ${item.name}`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
           onClick: event => presetMenu(rt, item.id, event.currentTarget as Element, event.currentTarget as Element) }));
       for (const control of row.trailing.querySelectorAll("button")) {
         control.tabIndex = selected ? 0 : -1;
@@ -190,7 +191,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const saveCopy = button({ label: "Save as new collection", icon: "duplicate", title: "Stores a copy with a new identity; you continue editing the copy.",
     onClick: () => void rt.request({ kind: "saveCopy" }) });
   const stateLine = h("p", { class: "state-line" });
-  const progress = h("div", { class: "progress indeterminate", hidden: true, role: "progressbar", "aria-label": "Library request in progress" });
+  const progress = progressBar({ label: "Library request in progress" }).element;
+  progress.hidden = true;
   const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => void rt.request({ kind: "refresh" }, { quietSuccess: true }) });
   const recover = button({ label: "Recover previous draft", icon: "undo", small: true,
     onClick: () => void rt.file({ kind: "collection.recover" }) });
@@ -261,15 +263,16 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // Game & tools: the one setup form, saved as each choice is made (UI-83, UI-03).
-  const setup = gameSetupSection(rt);
-  const showSetup = () => { rt.dock.reveal("package", false); setup.show(); };
+  // The game and mod manager are chosen in Settings (UI-109); here, one line says whether Build and Add are ready, with the way there.
+  const showSetup = () => rt.settings.open("game");
+  const setupLine = h("p", { class: "setup-status", role: "status" });
+  const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },
+    setupLine, h("div", { class: "row wrap gap-s" }, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check mod export", icon: "check", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
   const progressText = h("p", { class: "progress-text" });
-  const progressBar = h("div", { class: "progress indeterminate", role: "progressbar", "aria-label": "Package request in progress" });
-  const progress = h("div", { class: "package-progress idle" }, progressBar, progressText);
+  const progress = h("div", { class: "package-progress idle" }, progressBar({ label: "Package request in progress" }).element, progressText);
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   let resultSignature = "";
   // Which XF mods the draft builds: one by default, named after its feature; the person may rename a mod and, once the
@@ -304,7 +307,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     if (planIssue) mods.replaceChildren(h("li", {}, icon("warning"), h("span", { text: planIssue })));
     else mods.replaceChildren(...products.map(product => h("li", {}, icon("package"),
       h("span", {}, h("strong", { text: product.modName }), h("span", { class: "muted", text: ` · ${product.features.map(feature => feature.label).join(", ")}` })),
-      button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true,
+      button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
         onClick: event => modMenu(product, products, event.currentTarget as Element) }))));
     mods.hidden = !products.length && !planIssue;
   };
@@ -348,20 +351,20 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       "Your collection and library are never changed."] },
       mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
-    setup.element,
+    setup,
     section({ title: "What can be packaged", help: ["Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole.",
       "Experimental finishes are built from the game's own decal materials, but they may look different in game: nobody has checked them there yet.",
       "Check decides; this list is a guide."] }, finishList));
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
-    showSetup: () => setup.show(),
     update(frame) {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
-      setup.update(frame);
+      const line = setupStatus(frame);
+      setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? `${library.progress!.message} A started build can't be cancelled, and closing XF Studio doesn't stop it.` : "");

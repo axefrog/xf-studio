@@ -16,6 +16,7 @@ import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plate
 import { checkMapping, MAPPING_LIMITS } from "../src/features/eye-makeup/verify/verify-build";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { initialRecipe } from "./fixtures/eye-region";
+import { mottlePreset, type Mottle } from "../src/engines/layered-makeup/mottle";
 import { bakeCollection, preparePackageCollection, preflightPackageCollection, presetReachesPlate } from "./fixtures/eye-exporter";
 
 /** A synthetic plate with UVs over the built-in plate's lid area (stored U .3–.7, V .7–.8; authored v .2–.3). */
@@ -29,7 +30,7 @@ const moved = (du: number, dv: number): Layer => {
   const layer = lid();
   return { ...layer, id: "moved", symmetry: false, points: layer.points.map(p => ({ ...p, u: p.u + du, v: p.v + dv })) };
 };
-const recipe = (...layers: Layer[]) => ({ schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers });
+const recipe = (...layers: Layer[]) => ({ schema: layers.some(layer => layer.effects) ? "xfs/recipe-12" : "xfs/recipe-11", uv: "gltf-uv0-top-left", layers });
 const id = (n: number) => `33333333-4444-4555-8666-00000000000${n}`;
 const collection = (...recipes: ReturnType<typeof recipe>[]) => ({ schema: "xfas/collection-1", id: "33333333-4444-4555-8666-000000000000",
   name: "Reach", presets: recipes.map((r, i) => ({ id: id(i + 1), name: `Preset ${i + 1}`, revision: 1, recipe: r })) });
@@ -132,6 +133,17 @@ test("PIPE-32: the coverage reference comes from the head-atlas raster, so a mir
   expect(() => gate(mirrored)).toThrow(VerificationError);
   expect(() => gate(mirrored)).toThrow("does not match its authored head-UV content");
 }, 60_000);
+
+test("mottle: strongly mottled looks still pass the mapping gate (the window map and its head reference sample the tile alike)", async () => {
+  const looks: Mottle[] = [mottlePreset("mascara", 5), { ...mottlePreset("sponge", 6), amount: 1 },
+    { ...mottlePreset("powder", 7), amount: 1, where: "everywhere" }, { ...mottlePreset("cream", 8), amount: 1, streaks: { mode: "angle", angle: 45, length: 8 } }];
+  for (const mottle of looks) {
+    const baked = await bakeLid(false, { ...lid(), effects: { mottle } });
+    const stats = gate(baked);
+    expect(stats.mean).toBeLessThan(MAPPING_LIMITS.mean / 2);
+    expect(stats.farShare).toBeLessThan(MAPPING_LIMITS.farShare / 2);
+  }
+}, 120_000);
 
 test("PIPE-35: a signed offset estimate catches shifts of 2 and 4 texels that the mean-error gate lets through", async () => {
   const baked = await bakeLid(false), { width, height } = baked.record;

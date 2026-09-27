@@ -352,3 +352,14 @@ test("a record keeps well-formed deformation rigs with a drawn body, and leaves 
   expect(parseCharacterDetail(bodyless).rigs).toBeUndefined();
   expect(parseCharacterDetail(character()).rigs).toBeUndefined();
 });
+
+test("a part skinned to a dangle component keeps a well-formed dangle entry; a malformed one is left out and the part stays", () => {
+  const dangle = { component: "hair_dangle", rig: "base\hair_dangle.rig", graph: "base\hair_dangle.animgraph", file: `${sha("9")}.json`, sha256: sha("9") };
+  const withDangle = (entry: unknown) => { const record = character(); (record.components[2] as unknown as Record<string, unknown>).dangle = entry; return record; };
+  expect(parseCharacterDetail(withDangle(dangle)).components[2]!.dangle).toEqual(dangle);
+  for (const broken of [{ ...dangle, file: "../x.json" }, { ...dangle, sha256: sha("8") }, { ...dangle, component: "" }, "hair_dangle"]) {
+    const parsed = parseCharacterDetail(withDangle(broken));
+    expect(parsed.components[2]!.slot).toBe("hair");
+    expect(parsed.components[2]!.dangle).toBeUndefined();
+  }
+});

@@ -18,7 +18,7 @@ export const EYE_MAKEUP_VIEW = {
     { id: "shape", title: "Shape", icon: "shape", order: 90, slot: "inspect",
       description: "Contour points, Bézier handles and mirroring for the selected layer." },
     { id: "edge", title: "Pigment & edge", icon: "edge", order: 100, slot: "inspect",
-      description: "Point pigment strength and edge softness, independent of each other." },
+      description: "Point pigment strength, edge softness and mottle, independent of each other." },
     { id: "warp", title: "Warp", icon: "warp", order: 110, slot: "inspect",
       description: "Smooth displacement fields that bend the selected layer's mask." },
   ],
@@ -27,7 +27,7 @@ export const EYE_MAKEUP_VIEW = {
     { pattern: /^layer\.(edit|setEnabled|select)$/, label: "Layers" },
     // Each source is named as its panel is (UI-92).
     { pattern: /^(point|path|shape)\./, label: "Shape" },
-    { pattern: /^(pigment|softness)\./, label: "Pigment & edge" },
+    { pattern: /^(pigment|softness|effect)\./, label: "Pigment & edge" },
     { pattern: /^field\./, label: "Warp" },
     { pattern: /^(layer\.set|layer\.useGameOptics|glitter\.)/, label: "Colour & finish" },
   ],

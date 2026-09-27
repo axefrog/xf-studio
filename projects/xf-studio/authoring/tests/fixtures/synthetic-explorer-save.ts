@@ -44,3 +44,20 @@ export function syntheticSave() {
 export const EXPLORER_NAMES = { engine: { enums: ["gameStatIDType"], bitfields: [], classes: ["gameStatsStateMapStructure"], properties: ["kind"] },
   scripts: ["DoorControllerPS", "m_isOpen", "OutfitSystem", "SomeMod.OutfitState", "App.DynamicEntitySystemPS"] };
 
+/** A save whose world-object stream holds `count` entries of a 100-element array each, so the walk takes several steps. */
+export function manyEntriesSave(count: number) {
+  const list = cat(u32(100), ...Array.from({ length: 100 }, (_, i) => i32(i)));
+  return buildSave([
+    { name: "TypeDatabase_v2", body: typeDatabaseBody([...EXPLORER_TYPES, { name: "array:Int32", kind: "array", inner: "Int32" }], [["values", "array:Int32"]]) },
+    { name: "PersistencySystem2", body: persistencyBody(Array.from({ length: count }, (_, i) => ({ id: BigInt(i + 1), type: "DoorControllerPS",
+      data: props([prop("values", "array:Int32", list)]) }))) },
+  ], { chunkSize: 256 * 1024 });
+}
+/** A save with one script-systems package whose object holds a `size` × `size` array of arrays (nested values for the inspector's budget). */
+export function nestedSave(size = 200) {
+  const b = new PackageBuilder();
+  const row = () => b.array("Int32", Array.from({ length: size }, (_, i) => b.int(i)));
+  b.chunk(b.object("Grid", [["rows", b.array("array:Int32", Array.from({ length: size }, row))]]));
+  return buildSave([{ name: "TypeDatabase_v2", body: typeDatabaseBody(EXPLORER_TYPES, []) },
+    { name: "ScriptableSystemsContainer", body: packageNodeBody(b.build("save")) }], { chunkSize: 256 * 1024 });
+}

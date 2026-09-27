@@ -8,19 +8,29 @@
  * - `GET /api/saves/types`: candidate names for the hashes a save stores: the engine's type list the Studio ships and the names the
  *   installed `final.redscripts` defines (read-only labels; the bundle is read, never written).
  *
+ * The saves folder is the host's (`SavesHostSources.root`): the folder chosen in Settings › Saves, else the detected Saved Games folder, which
+ * a listing names only as described (`folder`), never by its path. A verification workspace's copy is mounted at `/api/verification/saves`.
+ *
  * Nothing here writes. Paths never leave the host: a save is named by its folder name, which must be a plain child folder of the saves
- * folder (no links, no separators), and files are read by bounded, link-refusing reads. Logs name saves by folder only.
+ * folder (no links, no separators), and files are read by bounded, link-refusing reads. Logs name saves by folder only. The saves folder
+ * itself is the host's own finding, so it is resolved once per request, a link or junction at it followed (Saved Games moved to another
+ * drive; SAVE-07); links below it are still refused.
  */
-import { closeSync, fstatSync, lstatSync, openSync, readdirSync, readSync } from "node:fs";
+import { closeSync, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readScriptBundleNames } from "../../../engines/red-object/script-bundle";
 import type { EngineTypes } from "../../../engines/red-object/type-oracle";
-import { SAVE_KINDS, type SaveKind, type SaveListing, type SaveListingResult, type SaveTypeNames } from "../listing";
+import { SAVE_KINDS, type SaveKind, type SaveListing, type SaveListingResult, type SavesFolderSource, type SaveTypeNames } from "../listing";
 
+/**
+ * The saves folder in effect and how a person would name it: the folder they chose in Settings, the detected Saved Games folder
+ * (described, never its path), or a developer's override. Only `display` and `source` reach the page.
+ */
+export type SavesRoot = { path: string | null; source: SavesFolderSource; display: string };
 /** Where the saves are, and the script bundles to read names from (the first readable one wins), resolved by the host per request. */
 export type SavesHostSources = {
-  /** The Saved Games folder for Cyberpunk 2077, or null when it can't be found. */
-  root(): Promise<string | null> | string | null;
+  /** The saves folder: a `SavesRoot`, or a bare path (null when it can't be found). */
+  root(): Promise<SavesRoot | string | null> | SavesRoot | string | null;
   /** Candidate `final.redscripts` paths, most effective first (an MO2 overwrite before the game folder). */
   scriptBundles(): readonly string[];
   /** The shipped engine type list. */
@@ -50,6 +60,11 @@ function readFile(path: string, max: number): Uint8Array<ArrayBuffer> | null {
   finally { if (fd !== undefined) closeSync(fd); }
 }
 const isDirectory = (path: string) => { try { const s = lstatSync(path); return s.isDirectory() && !s.isSymbolicLink(); } catch { return false; } };
+/** The saves folder the host found, with a link or junction at it followed, or null when it isn't a folder. */
+export function resolveSavesRoot(root: string | null): string | null {
+  if (!root) return null;
+  try { const real = realpathSync.native(root); return statSync(real).isDirectory() ? real : null; } catch { return null; }
+}
 const fileInfo = (path: string) => { try { const s = lstatSync(path); return s.isFile() && !s.isSymbolicLink() ? s : null; } catch { return null; } };
 
 /** The game's fields a listing shows, from a save's metadata; anything else (the user name above all) is dropped here. */
@@ -92,8 +107,19 @@ export function listSaves(root: string): SaveListing[] {
   return out.sort((a, b) => b.savedAt.localeCompare(a.savedAt) || a.folder.localeCompare(b.folder));
 }
 
-/** `log` takes one plain line (the host's area logger); lines name saves by folder only, never a path. */
-export function createSavesHandler(sources: SavesHostSources, log?: (message: string) => void) {
+/** Why no saves could be listed, in the person's words, with the one next step (Settings › Saves, or a single file). */
+function unavailableReason(root: SavesRoot): string {
+  if (root.source === "chosen") return "The saves folder you chose isn't there any more. Choose it again in Settings › Saves, or use the detected folder.";
+  if (root.source === "developer") return "The folder XFS_SAVES_DIR names isn't there. Fix it, or unset it to use your own saves.";
+  if (root.path) return `XF Studio couldn't find your Cyberpunk 2077 saves in ${root.display}. If you keep them somewhere else, choose that folder in Settings › Saves.`;
+  return "XF Studio couldn't find your Cyberpunk 2077 saves folder. Choose it in Settings › Saves, or open a save with Open a save file…";
+}
+
+/**
+ * `log` takes one plain line (the host's area logger); lines name saves by folder only, never a path. `prefix` is where the handler is
+ * mounted: `/api/saves`, or a verification workspace's `/api/verification/saves`, whose sources read its own settings (UI-98).
+ */
+export function createSavesHandler(sources: SavesHostSources, log?: (message: string) => void, prefix = "/api/saves") {
   let names: { key: string; value: SaveTypeNames["scripts"] } | null = null;
   const scriptNames = (): SaveTypeNames["scripts"] => {
     for (const path of sources.scriptBundles()) {
@@ -111,31 +137,37 @@ export function createSavesHandler(sources: SavesHostSources, log?: (message: st
         log?.(`A compiled script bundle couldn't be read: ${error instanceof Error ? error.message : "unknown layout"}`);
       }
     }
-    return { available: false, names: [], reason: "XF Studio couldn't find your game's compiled scripts, so some names show as numbers. Choose your game folder in Mod package › Game & tools." };
+    return { available: false, names: [], reason: "XF Studio couldn't find your game's compiled scripts, so some names show as numbers. Choose your game folder in Settings › Game." };
   };
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.hostname !== "127.0.0.1" || (request.headers.get("Origin") && request.headers.get("Origin") !== url.origin))
       return json({ code: "forbidden", error: "Use the local studio to read saves." }, 403);
     if (request.method !== "GET") return json({ code: "method", error: "Method not allowed." }, 405);
-    if (url.pathname === "/api/saves/types") {
+    const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : null;
+    if (path === "/types") {
       const engine = sources.engine();
       const value: SaveTypeNames = { engine: { enums: [...engine.enums], bitfields: [...engine.bitfields], classes: [...engine.classes],
         properties: [...engine.properties] }, scripts: scriptNames() };
       return json(value);
     }
-    let root: string | null;
-    try { root = await sources.root(); } catch { root = null; }
-    if (url.pathname === "/api/saves") {
-      if (!root || !isDirectory(root)) {
-        const result: SaveListingResult = { available: false, saves: [],
-          reason: "XF Studio couldn't find your Cyberpunk 2077 saves folder. You can still open a save with Open a save file…" };
+    let found: SavesRoot;
+    try {
+      const value = await sources.root();
+      found = value && typeof value === "object" ? value : { path: value ?? null, source: "detected", display: "your saves folder" };
+    } catch { found = { path: null, source: "detected", display: "your saves folder" }; }
+    // The folder found (or chosen) is resolved once, a link or junction at it followed (SAVE-07); links below it are still refused.
+    const root = resolveSavesRoot(found.path);
+    if (path === "") {
+      const folder = { source: found.source, display: found.display };
+      if (!root) {
+        const result: SaveListingResult = { available: false, saves: [], reason: unavailableReason(found), folder };
         return json(result);
       }
-      const result: SaveListingResult = { available: true, saves: listSaves(root) };
+      const result: SaveListingResult = { available: true, saves: listSaves(root), folder };
       return json(result);
     }
-    if (url.pathname === "/api/saves/file") {
+    if (path === "/file") {
       const folder = url.searchParams.get("save") ?? "", part = url.searchParams.get("part");
       if (!FOLDER.test(folder) || folder === "." || folder === ".." || (part !== "data" && part !== "screenshot") || [...url.searchParams.keys()].length !== 2)
         return json({ code: "invalid_value", error: "Choose a save from the list." }, 400);

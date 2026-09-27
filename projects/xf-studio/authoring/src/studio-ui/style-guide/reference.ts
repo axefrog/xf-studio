@@ -33,7 +33,7 @@ export function reference(panels: readonly PanelInfo[]) {
     ["Preview only", "A browser look that Build cannot turn into mod files yet."],
     ["Preview context", "The V's creator options (skin, hair, eyes, brows, piercings, makeup…) and the 3D view's toggles: which V the makeup is shown on, never authoring, a save or a package."],
   ];
-  return section("reference", "08", "Reference",
+  return section("reference", "09", "Reference",
     `Mappings from patterns to the public presentation port, the keyboard model, terminology and the rules that keep future UI work inside the architecture contract.`, [
     pattern({ id: "r-panels", title: "Panel registry", status: "implemented", wide: true,
       specimen: `<table class="ref-table"><thead><tr><th>ID</th><th>Title</th><th>Purpose</th></tr></thead><tbody>${panels.map(panel => `<tr><td><code>${panel.id}</code></td><td>${esc(panel.title)}</td><td>${esc(panel.description)}</td></tr>`).join("")}</tbody></table>`,

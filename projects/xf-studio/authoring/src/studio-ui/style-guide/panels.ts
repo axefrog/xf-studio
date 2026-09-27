@@ -1,3 +1,4 @@
+import type { IconName } from "../icons";
 import { code, group, i, menu, menuHeading, menuItem, menuSep, note, pattern, section } from "./kit";
 
 const lorem = (title: string) => `<div class="panel-content"><h3 class="section-title">${title}</h3><p class="note">Panel content scrolls inside its group.</p></div>`;
@@ -22,13 +23,23 @@ export function panelSystem() {
      The live sandbox and live dock at the end of this section run the production engine.`, [
     pattern({ id: "d-group", title: "Docked tab group", status: "implemented", wide: true,
       specimen: `<div class="demo-dock-row">${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, lorem("Presets"), { style: "width:300px;height:170px" })}
-        ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, lorem("Colour & finish"), { condensed: true, focus: true, style: "width:300px;height:170px" })}</div>`,
+        ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, lorem("Colour & finish"), { stage: "icons", focus: true, style: "width:300px;height:170px" })}</div>`,
       what: "A group shows one panel at a time behind a tab strip. The active tab carries the ink/yellow indicator and a close control; the empty strip to the right is the group's drag handle; ⋯ opens layout options.",
       when: "Put panels in one group when they are used alternately (Presets / Library / Package) and side by side when they are used together (Head and UV map).",
-      combine: "Groups sit in splits. When a strip overflows, inactive tabs condense to icons (right) while the active label stays readable; names remain available to screen readers and tooltips.",
+      combine: "Groups sit in splits. When a strip runs short its tabs condense in stages (the tab strip component, lib-tab-strip): inactive labels cut short, then inactive tabs icon-only (right) while the active label stays readable, then the active one too, then an overflow menu. Every tab keeps its name as its tooltip and accessible name, and the header's collapse and layout buttons never shrink.",
       adapt: "Wide and compact workspaces keep separate arrangements. In compact layouts, most panels share two groups.",
       drives: "Pure layout state (DockTree) saved through the workspace preference action layout.set; no application data.",
       a11y: "role=tablist/tab/tabpanel; ←/→/Home/End switch tabs, Alt+Shift+←/→ reorders, Delete closes, Enter or ↓ moves into the panel, Shift+F10 opens layout options. Focus inside a group outlines it in cyan." }),
+    pattern({ id: "d-summon", title: "Summoning a panel", status: "implemented", wide: true,
+      specimen: `<div class="demo-dock-row"><div style="width:300px;display:flex;flex-direction:column;gap:4px">${group([["UV map", "uv"]], 0, lorem("UV map"), { style: "height:120px" })}
+        ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"]], 0, "", { stage: "icons", collapsed: true })}</div>
+        <div class="demo-float-area" style="width:260px"><div class="dock-window" style="left:10px;top:10px;width:230px;height:150px">${group([["Help", "help"]], 0, lorem("Help"), { floating: true })}</div></div></div>`,
+      what: "Every way of asking for a panel (the command palette, the Panels menu, the Help button, a tour step, a link from another panel) summons it the same way, so it is always shown and focused. Already in an expanded group: its tab becomes active. In a collapsed group: the group expands with its tab active. Not in the layout: it goes back to an obvious home, which is where it was when it was closed (its group at its tab position, beside its old neighbour, or its floating window) or the group it belongs to in the factory layout; with no obvious home it opens in a floating window over the middle of the workspace. It is never dropped into an arbitrary group, least of all a collapsed one (left: Help summoned while the right column's lower group is folded opens floating, right).",
+      when: "Always; features never place panels themselves. A panel closed by default (Help, Activity) has no home, so it floats until the person docks it; after that, closing and summoning it again returns it to where they put it.",
+      combine: "Focus moves to the panel's tab, or into the panel when its opener focuses something there (Help focuses its search). The result is announced: “Help opened in a floating window”, “Colour & finish expanded, showing Shape”.",
+      adapt: "Where it was closed from is remembered per size class with the layout (lastPlace); a panel opened by any other route forgets it. A floating panel is clamped on screen like any window.",
+      drives: `${code("summonPanel(tree, panel, factory, floatRect)")} in studio-ui/dock/layout.ts, through ${code("DockView.reveal")}. Tests: tests/dock-summon.test.ts.`,
+      a11y: "The summoned tab (or the control its opener chose) receives focus; the announcement says where the panel went." }),
     pattern({ id: "d-split", title: "Splits and splitters", status: "implemented",
       specimen: `<div class="demo-split"><div class="dock-split" data-axis="row" style="height:120px">
         <div class="dock-cell" style="flex:1 1 0">${group([["Layers", "layers"]], 0, "")}</div>
@@ -37,6 +48,22 @@ export function panelSystem() {
       what: "Rows and columns of groups with 4 px splitters. Hover or focus shows the cyan track; dragging resizes the two neighbours only.",
       when: "Any docked arrangement. Minimum group size is 150 × 96 px.",
       a11y: "Splitters are focusable separators: arrow keys move 4 %, Enter or double-click equalises the pair." }),
+    pattern({ id: "d-collapse", title: "Collapsed group: header row or vertical strip", status: "implemented", wide: true,
+      specimen: (() => {
+        const tabs: [string, IconName][] = [["Pigment & edge", "edge"], ["Warp", "warp"], ["Colour & finish", "finish"], ["Shape", "shape"], ["Layers", "layers"]];
+        return `<div class="demo-dock-row" style="align-items:flex-start">
+        ${group(tabs, 0, "", { collapsed: true, fold: "row", style: "height:600px" })}
+        ${group(tabs, 2, "", { collapsed: true, fold: "row", style: "height:600px" })}
+        ${group(tabs, 2, "", { collapsed: true, fold: "row", stage: "icons", style: "height:360px" })}
+        ${group(tabs, 2, "", { collapsed: true, fold: "row", stage: "icons", activeIcon: true, focus: true, style: "height:250px" })}
+        <div style="width:400px">${group(tabs, 2, "", { collapsed: true, stage: "icons" })}</div></div>`;
+      })(),
+      what: "A collapsed group keeps only its tab bar. Folded along a column it is a header row spanning the column (right). Folded along a row (a group alone in its row, or a column whose groups all collapsed) it is a full-height vertical strip: the same tab bar turned on its side (left to right: the first tab active, a middle tab active, a shorter strip with the inactive tabs icon-only, and the shortest with every tab icon-only). Each tab has padding at both ends, an upright icon centred across the strip, a gap between icon, label and close mark, and a hairline between tabs; the active tab is raised to the panel surface with the yellow indicator down the strip's outer edge and its close mark as its own 18 px target at its end.",
+      when: "Collapse a group to keep its panels one click away while giving its space to the rest of the workspace. Choosing any tab expands the group showing that tab.",
+      combine: "The strip condenses in the same stages as a crowded bar (the tab strip component, lib-tab-strip): full labels, inactive labels cut short, inactive tabs icon-only, the active tab icon-only, then an overflow menu at the strip's end. An icon-only tab keeps its name as its tooltip and accessible name, and a label is never cut mid-glyph. The expand and layout buttons sit at the strip's foot and never shrink.",
+      adapt: "The strip is 36 px wide (the 32 px bar height plus 4 px), whichever tab is active or hovered, so nothing shifts. Its tabs refit whenever its height changes.",
+      drives: `${code("foldAxes")} in studio-ui/dock/layout.ts picks the axis; the dock marks the group ${code("data-fold")} and builds its header with ${code("orientation: \"vertical\"")}. The tab CSS is written in logical properties, so ${code("writing-mode: vertical-rl")} on the strip turns padding, separators and the indicator with it. Tests: tests/dock-collapse-dom.test.ts (folding), tests/dock-strip-geometry.test.ts (laid-out geometry in Chrome: no overlaps, padding, centred icons, one width, icon-only fallback).`,
+      a11y: "The tablist is marked aria-orientation=vertical and keeps the bar's keys (←/→/Home/End switch tabs). The focus ring is drawn inside each tab (outline offset −2 px), so the strip's clipping never cuts it." }),
     pattern({ id: "d-float", title: "Floating panel", status: "implemented",
       specimen: `<div class="demo-float-area"><div class="dock-window" style="left:20px;top:14px;width:250px;height:150px">${group([["Camera & light", "lighting"]], 0, lorem("Camera"), { floating: true })}</div></div>`,
       what: "A panel in its own window above the dock, with resize handles on every edge and corner. Its tab strip is the window's title bar.",

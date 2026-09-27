@@ -9,12 +9,15 @@ import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./engines/layered-makeup/fini
 import type { GestureEdit } from "./engines/layered-makeup/recipe-actions";
 import type { ActionDescriptor, PayloadSchema, UndoPolicy } from "./platform/api";
 import { describe, enumerated, input, inputText, target } from "./action-descriptor-kit";
+import { MOTTLE_LIMITS, MOTTLE_PRESET_IDS } from "./engines/layered-makeup/mottle";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 
 /** The targets eye makeup's actions apply to (a subset of the Studio's action scopes). */
 export type EyeMakeupScope = "layer" | "point" | "field" | "collection";
 const desc = (scope: EyeMakeupScope | readonly EyeMakeupScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
-  payload: PayloadSchema = {}, variants?: Record<string, PayloadSchema>) => describe<EyeMakeupScope>(scope, effect, undo, payload, variants);
+  payload: PayloadSchema = {}, variants?: Record<string, PayloadSchema>, variantUndo?: Record<string, UndoPolicy>) =>
+  describe<EyeMakeupScope>(scope, effect, undo, payload, variants, variantUndo);
+const range = (key: keyof typeof MOTTLE_LIMITS, type: "number" | "integer" = "number") => input(type, MOTTLE_LIMITS[key].min, MOTTLE_LIMITS[key].max);
 
 export const EYE_MAKEUP_DESCRIPTORS = {
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
@@ -68,6 +71,16 @@ export const EYE_MAKEUP_DESCRIPTORS = {
     reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
     move: { id: target("string"), to: input("integer", 0) } }),
   "layer.setEnabled": desc("layer", "content", "part", { id: target("string"), enabled: input("boolean") }),
+  // Mottle (vector engine extensions §7): sliders are continuous edits; turning it on or off, where, streaks and a new seed are one step each.
+  "effect.mottle.enable": desc("layer", "content", "part", { layerId: target("string"), enabled: input("boolean") }),
+  "effect.mottle.set": desc("layer", "content", "transaction", { layerId: target("string"),
+    key: enumerated(["amount", "grain", "clumping", "where", "streaks", "angle", "length", "seed"]), value: input("number|string") }, {
+    amount: { value: range("amount") }, grain: { value: range("grain") },
+    clumping: { value: range("clumping") }, where: { value: enumerated(["edges", "everywhere"]) },
+    streaks: { value: enumerated(["off", "angle", "edge"]) }, angle: { value: range("angle") }, length: { value: range("length") },
+    seed: { value: range("seed", "integer") } }, { where: "part", streaks: "part", seed: "part" }),
+  "effect.mottle.shuffle": desc("layer", "content", "part", { layerId: target("string") }),
+  "effect.mottle.preset": desc("layer", "content", "part", { layerId: target("string"), preset: enumerated(MOTTLE_PRESET_IDS) }),
 } satisfies Record<EyeMakeupAction["kind"], ActionDescriptor<EyeMakeupScope>>;
 
 /** Gesture payloads are proposals inside one opaque session, not standalone commands. */

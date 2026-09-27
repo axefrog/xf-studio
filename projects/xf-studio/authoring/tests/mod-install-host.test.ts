@@ -233,9 +233,9 @@ test("part of the mod already installed elsewhere blocks the install; missing se
     expect((await refusal(() => f.host.plan("../first"))).code).toBe("candidate_missing");
     expect((await refusal(() => f.host.plan("gone"))).message).toBe("This build's files are no longer there, or were changed. Build your mod again.");
     f.settings.mo2ProfileId = null;
-    expect(await f.host.plan("first")).toMatchObject({ blocked: "Choose your Mod Organizer 2 instance and profile in Game & tools first.", next: "setup" });
+    expect(await f.host.plan("first")).toMatchObject({ blocked: "Choose your Mod Organizer 2 instance and profile in Settings › Game first.", next: "setup" });
     f.settings.gameRoot = null;
-    expect(await f.host.plan("first")).toMatchObject({ blocked: "Choose your Cyberpunk 2077 folder in Game & tools first.", next: "setup" });
+    expect(await f.host.plan("first")).toMatchObject({ blocked: "Choose your Cyberpunk 2077 folder in Settings › Game first.", next: "setup" });
   } finally { f.cleanup(); }
 });
 

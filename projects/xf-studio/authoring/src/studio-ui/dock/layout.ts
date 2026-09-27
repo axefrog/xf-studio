@@ -26,6 +26,11 @@ export type DockTree = {
   maximized?: string;
   /** Panels withdrawn with a hidden module, and where each was: per size class, like the rest of the tree. */
   parked?: Record<PanelId, ParkedPlace>;
+  /**
+   * Where each closed panel was when it was closed (its group, tab position, neighbour or floating window), so summoning it again puts
+   * it back there (`summonPanel`). Only closed panels have one; opening a panel by any route forgets it.
+   */
+  lastPlace?: Record<PanelId, Exclude<ParkedPlace, { closed: true }>>;
 };
 export type SizeClass = "wide" | "compact";
 export type DockState = { wide: DockTree; compact: DockTree };
@@ -155,8 +160,15 @@ function detachPanelOnly(tree: DockTree, panel: PanelId): DockTree {
     return { ...item, panels, active: item.active === panel ? panels[Math.min(index, panels.length - 1)] : item.active };
   });
   next.closed = next.closed.filter(id => id !== panel);
+  forget(next, panel);
   if (next.maximized && !findGroup(next, next.maximized)) delete next.maximized;
   return next;
+}
+/** Drop a panel's remembered closed place (it is open again, or placed by a drop). Mutates `tree`, a fresh clone. */
+function forget(tree: DockTree, panel: PanelId) {
+  if (!tree.lastPlace?.[panel]) return;
+  const { [panel]: _gone, ...rest } = tree.lastPlace;
+  if (Object.keys(rest).length) tree.lastPlace = rest; else delete tree.lastPlace;
 }
 function detachNode(tree: DockTree, id: string): { tree: DockTree; node?: DockNode } {
   const next = clone(tree);
@@ -301,11 +313,37 @@ export function applyDrop(tree: DockTree, source: DragSource, target: DropTarget
 export function activate(tree: DockTree, panel: PanelId): DockTree {
   return mapGroups(clone(tree), item => item.panels.includes(panel) ? { ...item, active: panel } : item);
 }
+/** Close a panel, remembering where it was (`lastPlace`) so summoning it again puts it back there. */
 export function closePanel(tree: DockTree, panel: PanelId): DockTree {
   if (!locate(tree, panel)) return tree;
+  const place = placeOf(tree, panel, new Set([panel]));
   const next = detachPanel(tree, panel);
   next.closed = [...next.closed, panel];
+  if (place && !("closed" in place)) next.lastPlace = { ...next.lastPlace, [panel]: place };
   return next;
+}
+/**
+ * Summon a panel (the palette, a menu, Help, a reveal or a tour), so that it is shown wherever it ends up:
+ *
+ * - **in an expanded group:** its tab becomes the active one;
+ * - **in a collapsed group:** the group expands with its tab active (never left folded where nobody can see it);
+ * - **not in the layout:** it goes back to an obvious home: where it was when it was closed (its group, beside its neighbour, or
+ *   its floating window), or the group it belongs to in the factory layout (`fallback`) when one of that group's panels is open.
+ *   Without an obvious home it opens in a floating window (`floatRect`), never dropped into an arbitrary group.
+ *
+ * A maximized group is restored when the panel lands docked elsewhere. `floatRect` is where a homeless panel floats.
+ */
+export function summonPanel(tree: DockTree, panel: PanelId, fallback: DockTree, floatRect: Rect): DockTree {
+  if (!locate(tree, panel)) {
+    const remembered = tree.lastPlace?.[panel];
+    const base = detachPanel(tree, panel);
+    const home = locate(fallback, panel);
+    const sibling = home?.group.panels.filter(id => id !== panel).map(id => locate(base, id)).find(Boolean);
+    tree = (remembered && restorePlace(base, panel, remembered))
+      ?? (sibling ? insertNode(base, group([panel]), { kind: "tab", groupId: sibling.group.id, index: sibling.group.panels.length }) : undefined)
+      ?? insertNode(base, group([panel]), { kind: "float", ...floatRect });
+  }
+  return showPanelDocked(revealPanel(tree, panel), panel);
 }
 /** Reopen a closed panel as a tab beside a preferred sibling, else floating. */
 export function openPanel(tree: DockTree, panel: PanelId, preferredSiblings: PanelId[], area: Rect): DockTree {
@@ -454,6 +492,8 @@ export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree
   for (const panel of panels) { const place = placeOf(tree, panel, leaving); if (place && !parked[panel]) parked[panel] = place; }
   let next = clone(tree);
   for (const panel of panels) next = detachPanel(next, panel);
+  // A closed panel parked with its module keeps where it was before it was closed.
+  for (const panel of panels) { const place = tree.lastPlace?.[panel]; if (place) next.lastPlace = { ...next.lastPlace, [panel]: place }; }
   next.parked = parked;
   if (!Object.keys(parked).length) delete next.parked;
   return next;
@@ -471,42 +511,46 @@ export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallbac
     delete parked[panel];
     if (locate(next, panel) || next.closed.includes(panel)) continue;
     if (place && "closed" in place) { next = { ...next, closed: [...next.closed, panel] }; continue; }
-    const actives = new Map(allGroups(next).map(entry => [entry.group.id, entry.group.active]));
-    const keepActive = (groupId: string | undefined) => {
-      const keep = groupId && actives.get(groupId);
-      if (keep && !place?.active) next = activate(next, keep);
-    };
-    const member = place?.group.filter(id => id !== panel).map(id => locate(next, id)).find(Boolean);
-    if (place && member) {
-      // After the nearest earlier member that is back, else before the nearest later one: the tab order it had.
-      const at = place.group.indexOf(panel), members = member.group.panels;
-      const before = place.group.slice(0, at).reverse().find(id => members.includes(id));
-      const after = place.group.slice(at + 1).find(id => members.includes(id));
-      const index = before !== undefined ? members.indexOf(before) + 1 : after !== undefined ? members.indexOf(after) : members.length;
-      next = insertNode(next, group([panel]), { kind: "tab", groupId: member.group.id, index });
-      keepActive(member.group.id);
-      continue;
-    }
-    const anchor = place?.anchor && locate(next, place.anchor.panel);
-    if (place?.anchor && anchor && !anchor.windowId) {
-      const created = group([panel], panel);
-      next = insertNode(next, place.collapsed ? { ...created, collapsed: true } : created, { kind: "split", groupId: anchor.group.id, side: place.anchor.side },
-        undefined, place.anchor.share, true);
-      continue;
-    }
-    if (place?.window) {
-      const created = group([panel]);
-      next = insertNode(next, place.collapsed ? { ...created, collapsed: true } : created, { kind: "float", ...place.window });
-      continue;
-    }
+    const restored = place && restorePlace(next, panel, place);
+    if (restored) { next = restored; continue; }
     if (fallback.closed.includes(panel)) { next = { ...next, closed: [...next.closed, panel] }; continue; }
+    const actives = new Map(allGroups(next).map(entry => [entry.group.id, entry.group.active]));
     const home = locate(fallback, panel);
     next = openPanel(next, panel, home ? home.group.panels.filter(id => id !== panel) : [], area);
-    keepActive(locate(next, panel)?.group.id);
+    const host = locate(next, panel)?.group.id, keep = host && actives.get(host);
+    if (keep && !place?.active) next = activate(next, keep);
   }
   next.parked = parked;
   if (!Object.keys(parked).length) delete next.parked;
   return next;
+}
+/**
+ * Put a panel back at a remembered place: into the group it shared with a member that is open, at its tab position; as a new group
+ * beside the remembered neighbour when its whole group left; or alone in its floating window. Undefined when none of that is open
+ * any more. The group it joins keeps showing its tab unless the panel was the shown one.
+ */
+function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace, { closed: true }>): DockTree | undefined {
+  const member = place.group.filter(id => id !== panel).map(id => locate(tree, id)).find(Boolean);
+  if (member) {
+    // After the nearest earlier member that is back, else before the nearest later one: the tab order it had.
+    const at = place.group.indexOf(panel), members = member.group.panels;
+    const before = place.group.slice(0, at).reverse().find(id => members.includes(id));
+    const after = place.group.slice(at + 1).find(id => members.includes(id));
+    const index = before !== undefined ? members.indexOf(before) + 1 : after !== undefined ? members.indexOf(after) : members.length;
+    const next = insertNode(tree, group([panel]), { kind: "tab", groupId: member.group.id, index });
+    return place.active ? next : activate(next, member.group.active);
+  }
+  const anchor = place.anchor && locate(tree, place.anchor.panel);
+  if (place.anchor && anchor && !anchor.windowId) {
+    const created = group([panel], panel);
+    return insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created, { kind: "split", groupId: anchor.group.id, side: place.anchor.side },
+      undefined, place.anchor.share, true);
+  }
+  if (place.window) {
+    const created = group([panel]);
+    return insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created, { kind: "float", ...place.window });
+  }
+  return undefined;
 }
 
 export function setSizes(tree: DockTree, splitId: string, sizes: number[]): DockTree {
@@ -630,6 +674,12 @@ export function parseTree(value: unknown, known: readonly PanelId[], fallback: D
   const places: Record<PanelId, ParkedPlace> = {};
   for (const id of parked) { const place = parsePlace(saved[id], validId, finite); if (place) places[id] = place; }
   if (Object.keys(places).length) tree.parked = places;
+  // Where each closed (or parked) panel was when it was closed.
+  const last = input.lastPlace && typeof input.lastPlace === "object" && !Array.isArray(input.lastPlace) ? input.lastPlace as Record<string, unknown> : {};
+  for (const id of [...closed, ...parked.filter(id => !seen.has(id))]) {
+    const place = parsePlace(last[id], validId, finite);
+    if (place && !("closed" in place)) tree.lastPlace = { ...tree.lastPlace, [id]: place };
+  }
   const held = parked.filter(id => seen.has(id));
   if (held.length) tree = parkPanels(tree, held);
   if (typeof input.maximized === "string" && findGroup(tree, input.maximized)) tree.maximized = input.maximized;

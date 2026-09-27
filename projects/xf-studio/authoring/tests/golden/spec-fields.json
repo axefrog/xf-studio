@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle)",
  "states": {
   "starter": {
    "modes": {
@@ -275,6 +275,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "layer/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "layer/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "layer/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "layer/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "layer/effect.mottle.preset": {
+     "preset": {}
     },
     "layer/preset.edit/rename": {
      "name": {
@@ -766,6 +827,67 @@
       "max": 3
      }
     },
+    "point/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "point/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "point/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "point/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "point/effect.mottle.preset": {
+     "preset": {}
+    },
     "point/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -1252,6 +1374,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "viewport/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "viewport/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "viewport/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "viewport/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "viewport/effect.mottle.preset": {
+     "preset": {}
     },
     "viewport/preset.edit/rename": {
      "name": {
@@ -1740,6 +1923,67 @@
       "max": 3
      }
     },
+    "collection/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "collection/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "collection/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "collection/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "collection/effect.mottle.preset": {
+     "preset": {}
+    },
     "collection/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -2226,6 +2470,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "preset/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "preset/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "preset/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "preset/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "preset/effect.mottle.preset": {
+     "preset": {}
     },
     "preset/preset.edit/rename": {
      "name": {
@@ -2922,6 +3227,67 @@
       "max": 3
      }
     },
+    "layer/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "layer/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "layer/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "layer/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "layer/effect.mottle.preset": {
+     "preset": {}
+    },
     "layer/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -3419,6 +3785,67 @@
       "max": 3
      }
     },
+    "point/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "point/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "point/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "point/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "point/effect.mottle.preset": {
+     "preset": {}
+    },
     "point/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -3905,6 +4332,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "viewport/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "viewport/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "viewport/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "viewport/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "viewport/effect.mottle.preset": {
+     "preset": {}
     },
     "viewport/preset.edit/rename": {
      "name": {
@@ -4393,6 +4881,67 @@
       "max": 3
      }
     },
+    "collection/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "collection/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "collection/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "collection/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "collection/effect.mottle.preset": {
+     "preset": {}
+    },
     "collection/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -4879,6 +5428,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "preset/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "preset/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "preset/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "preset/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "preset/effect.mottle.preset": {
+     "preset": {}
     },
     "preset/preset.edit/rename": {
      "name": {
@@ -5576,6 +6186,67 @@
       "max": 3
      }
     },
+    "layer/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "layer/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "layer/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "layer/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "layer/effect.mottle.preset": {
+     "preset": {}
+    },
     "layer/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -6074,6 +6745,67 @@
       "max": 3
      }
     },
+    "point/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "point/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "point/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "point/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "point/effect.mottle.preset": {
+     "preset": {}
+    },
     "point/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -6560,6 +7292,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "viewport/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "viewport/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "viewport/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "viewport/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "viewport/effect.mottle.preset": {
+     "preset": {}
     },
     "viewport/preset.edit/rename": {
      "name": {
@@ -7048,6 +7841,67 @@
       "max": 3
      }
     },
+    "collection/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "collection/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "collection/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "collection/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "collection/effect.mottle.preset": {
+     "preset": {}
+    },
     "collection/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -7534,6 +8388,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "preset/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "preset/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "preset/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "preset/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "preset/effect.mottle.preset": {
+     "preset": {}
     },
     "preset/preset.edit/rename": {
      "name": {
@@ -8230,6 +9145,67 @@
       "max": 3
      }
     },
+    "layer/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "layer/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "layer/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "layer/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "layer/effect.mottle.preset": {
+     "preset": {}
+    },
     "layer/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -8727,6 +9703,67 @@
       "max": 3
      }
     },
+    "point/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "point/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "point/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "point/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "point/effect.mottle.preset": {
+     "preset": {}
+    },
     "point/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -9213,6 +10250,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "viewport/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "viewport/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "viewport/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "viewport/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "viewport/effect.mottle.preset": {
+     "preset": {}
     },
     "viewport/preset.edit/rename": {
      "name": {
@@ -9701,6 +10799,67 @@
       "max": 3
      }
     },
+    "collection/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "collection/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "collection/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "collection/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "collection/effect.mottle.preset": {
+     "preset": {}
+    },
     "collection/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -10187,6 +11346,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "preset/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "preset/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "preset/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "preset/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "preset/effect.mottle.preset": {
+     "preset": {}
     },
     "preset/preset.edit/rename": {
      "name": {
@@ -10883,6 +12103,67 @@
       "max": 3
      }
     },
+    "layer/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "layer/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "layer/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "layer/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "layer/effect.mottle.preset": {
+     "preset": {}
+    },
     "layer/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -11380,6 +12661,67 @@
       "max": 3
      }
     },
+    "point/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "point/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "point/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "point/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "point/effect.mottle.preset": {
+     "preset": {}
+    },
     "point/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -11866,6 +13208,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "viewport/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "viewport/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "viewport/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "viewport/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "viewport/effect.mottle.preset": {
+     "preset": {}
     },
     "viewport/preset.edit/rename": {
      "name": {
@@ -12354,6 +13757,67 @@
       "max": 3
      }
     },
+    "collection/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "collection/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "collection/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "collection/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "collection/effect.mottle.preset": {
+     "preset": {}
+    },
     "collection/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -12840,6 +14304,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "preset/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "preset/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "preset/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "preset/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "preset/effect.mottle.preset": {
+     "preset": {}
     },
     "preset/preset.edit/rename": {
      "name": {
@@ -13539,6 +15064,67 @@
       "max": 3
      }
     },
+    "layer/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "layer/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "layer/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "layer/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "layer/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "layer/effect.mottle.preset": {
+     "preset": {}
+    },
     "layer/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -14039,6 +15625,67 @@
       "max": 3
      }
     },
+    "point/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "point/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "point/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "point/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "point/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "point/effect.mottle.preset": {
+     "preset": {}
+    },
     "point/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -14525,6 +16172,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "viewport/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "viewport/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "viewport/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "viewport/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "viewport/effect.mottle.preset": {
+     "preset": {}
     },
     "viewport/preset.edit/rename": {
      "name": {
@@ -15013,6 +16721,67 @@
       "max": 3
      }
     },
+    "collection/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "collection/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "collection/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "collection/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "collection/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "collection/effect.mottle.preset": {
+     "preset": {}
+    },
     "collection/preset.edit/rename": {
      "name": {
       "minLength": 1,
@@ -15499,6 +17268,67 @@
       "unit": "index",
       "max": 3
      }
+    },
+    "preset/effect.mottle.set": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/amount": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/grain": {
+     "key": {},
+     "value": {
+      "min": 0.25,
+      "max": 3,
+      "unit": "mm"
+     }
+    },
+    "preset/effect.mottle.set/clumping": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/effect.mottle.set/where": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/streaks": {
+     "key": {},
+     "value": {}
+    },
+    "preset/effect.mottle.set/angle": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 180,
+      "unit": "degrees"
+     }
+    },
+    "preset/effect.mottle.set/length": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 8
+     }
+    },
+    "preset/effect.mottle.set/seed": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 2147483647
+     }
+    },
+    "preset/effect.mottle.preset": {
+     "preset": {}
     },
     "preset/preset.edit/rename": {
      "name": {
