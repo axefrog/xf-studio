@@ -24,12 +24,22 @@ export type PersistencyEntry = {
   /** Where the entry's properties start in the node body, or -1 for an empty slot. */
   readonly start: number;
 };
+/**
+ * The index, kept as where each entry starts in the body, 4 bytes an entry (SAVE-15: an object an entry cost about 270 bytes, so a
+ * 19 MB body of a million entries kept 272 MB): how many entries, and each one made on demand from the body.
+ */
 export type PersistencyIndex = {
   readonly ids: number;
   readonly unknown: number;
-  readonly entries: readonly PersistencyEntry[];
+  /** Entries, empty slots included. */
+  readonly count: number;
   /** Entries with data (not empty slots). */
   readonly filled: number;
+  /** One entry, or undefined past the index. */
+  entry(index: number): PersistencyEntry | undefined;
+  /** An entry's class hash (0 for an empty slot), and whether it has data, without making the entry. */
+  classHash(index: number): bigint;
+  isFilled(index: number): boolean;
 };
 export type PersistValue = number | string | boolean | PersistHash | PersistObject | PersistOpaque | PersistValue[];
 /** A u64 that names something (a CName, a NodeRef) or a value whose meaning isn't known: its hash, and the name when a source has one. */
@@ -58,22 +68,32 @@ export function readPersistencyIndex(body: Uint8Array): PersistencyIndex {
   r.take(ids * 4);
   const unknown = r.u32();
   const count = r.count(MAX_ENTRIES);
-  const entries: PersistencyEntry[] = [];
+  // Where each entry starts in the body (its ID); the rest is read back from the body when asked for.
+  const idAt = new Uint32Array(count);
   let filled = 0;
   for (let index = 0; index < count; index++) {
     const p = r.pos;
+    idAt[index] = p;
     r.take(8);
-    const id = r.view.getBigUint64(p, true);
-    if (id === 0n) { entries.push({ index, id, classHash: 0n, size: 0, start: -1 }); continue; }
-    const q = r.pos;
+    if (r.view.getBigUint64(p, true) === 0n) continue;
     r.take(8);
-    const classHash = r.view.getBigUint64(q, true), size = r.u32(), start = r.pos;
-    r.take(size);
-    entries.push({ index, id, classHash, size, start });
+    r.take(r.u32());
     filled++;
   }
   if (r.pos !== body.length) throw new PersistencyError(`The persistency node has ${body.length - r.pos} bytes after its last entry.`);
-  return { ids, unknown, entries, filled };
+  const view = r.view;
+  const inIndex = (index: number) => Number.isInteger(index) && index >= 0 && index < count;
+  const isFilled = (index: number) => inIndex(index) && view.getBigUint64(idAt[index]!, true) !== 0n;
+  return {
+    ids, unknown, count, filled, isFilled,
+    classHash: index => isFilled(index) ? view.getBigUint64(idAt[index]! + 8, true) : 0n,
+    entry(index) {
+      if (!inIndex(index)) return undefined;
+      const at = idAt[index]!, id = view.getBigUint64(at, true);
+      if (id === 0n) return { index, id, classHash: 0n, size: 0, start: -1 };
+      return { index, id, classHash: view.getBigUint64(at + 8, true), size: view.getUint32(at + 16, true), start: at + 20 };
+    },
+  };
 }
 
 class Stop extends Error {}

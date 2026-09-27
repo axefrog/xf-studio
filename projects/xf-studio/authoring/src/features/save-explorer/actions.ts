@@ -5,7 +5,9 @@
  * (explorer.ts) decodes. Nothing here writes a save, and nothing is persisted: an open save lives only in memory.
  *
  * Long work yields between steps (`yieldToHost`): the container opens in one step, then each package is checked in one step and the
- * world-object stream in bounded steps (SAVE-06), so the tree's decode status fills in without holding the page.
+ * world-object stream in bounded steps (SAVE-06), so the tree's decode status fills in without holding the page. Steps run in slices of
+ * about `CHECK_SLICE_MS` between yields, and what they found is published at most every `CHECK_PUBLISH_MS` (SAVE-13: a save of 20,000
+ * tiny packages published, and so rebuilt the panel's tree, 20,000 times).
  *
  * A listing that fails is tried again after a short wait (`retryDelays`), saying "Reconnecting…" meanwhile: the host may be restarting.
  * Only when every try fails is the failure shown, in plain words (UI-109). Refresh during the waits tries again at once.
@@ -74,6 +76,8 @@ export const SAVE_EXPLORER_DESCRIPTORS = Object.freeze({
 
 /** Largest save the explorer opens (saves are 1–10 MB). */
 export const MAX_SAVE_BYTES = 128 * 1024 * 1024;
+/** How long the tree's check runs before it yields to the page, and how often at most it publishes what it found (SAVE-13). */
+export const CHECK_SLICE_MS = 12, CHECK_PUBLISH_MS = 250;
 /** The waits before each further try of a failed listing: six tries over about fifteen seconds, enough for the host to restart and rebuild. */
 export const LISTING_RETRY_DELAYS: readonly number[] = [500, 1000, 2000, 4000, 8000];
 const initial = (): SaveExplorerState => ({ listing: { phase: "idle", available: false, saves: [] }, names: { phase: "idle", scripts: false },
@@ -91,12 +95,14 @@ export class SaveExplorerActions {
   private listGeneration = 0;
   private readonly retryDelays: readonly number[];
   private readonly wait: (ms: number) => Promise<void>;
+  private readonly now: () => number;
 
   constructor(private readonly device: SaveExplorerDevice | null,
     private readonly yieldToHost: () => Promise<void> = () => new Promise(done => setTimeout(done, 0)),
-    options: { retryDelays?: readonly number[]; wait?: (ms: number) => Promise<void> } = {}) {
+    options: { retryDelays?: readonly number[]; wait?: (ms: number) => Promise<void>; now?: () => number } = {}) {
     this.retryDelays = options.retryDelays ?? LISTING_RETRY_DELAYS;
     this.wait = options.wait ?? (ms => new Promise(done => setTimeout(done, ms)));
+    this.now = options.now ?? (() => performance.now());
     // A saves folder chosen in Settings: a list already read is read again from the new folder.
     device?.locationChanged?.(() => { if (this.state.listing.phase !== "idle") void this.refresh(); });
   }
@@ -274,14 +280,26 @@ export class SaveExplorerActions {
     const first = explorer.save.roots[0] ?? null;
     this.publish({ open: { phase: "ready", source, summary: explorer.summary(), checking: true },
       selection: { node: first, object: null, view: this.state.selection.view }, revision: this.state.revision + 1 });
-    // Fill in the tree's decode status one node at a time, each in bounded steps (the world objects take several).
+    // Fill in the tree's decode status one node at a time, each in bounded steps (the world objects take several): steps run for about
+    // CHECK_SLICE_MS between yields, and what they found is published at most every CHECK_PUBLISH_MS, or four times as long as the last
+    // publish took (the panel reads the tree on each), so a save of thousands of tiny packages costs a few rebuilds, not one each (SAVE-13).
+    const now = this.now;
+    let slice = -Infinity, shown = now(), every = CHECK_PUBLISH_MS;
     for (const id of explorer.pending()) {
       let done = false;
       while (!done) {
-        await this.yieldToHost();
-        if (generation !== this.generation) return { ok: true };
+        if (now() - slice >= CHECK_SLICE_MS) {
+          if (now() - shown >= every) {
+            const began = now();
+            this.publish({ revision: this.state.revision + 1 });
+            shown = now();
+            every = Math.max(CHECK_PUBLISH_MS, 4 * (shown - began));
+          }
+          await this.yieldToHost();
+          if (generation !== this.generation) return { ok: true };
+          slice = now();
+        }
         done = explorer.checkStep(id);
-        this.publish({ revision: this.state.revision + 1 });
       }
     }
     if (generation === this.generation) this.publish({ open: { ...this.state.open, checking: false }, revision: this.state.revision + 1 });

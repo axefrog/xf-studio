@@ -41,7 +41,30 @@ export const MAX_PACKAGE_NAME_BYTES = 1024 * 1024, MAX_OPEN_NAME_BYTES = 8 * 102
 /** Decoded name bytes left for every package one reading opens; each decoded name takes its length. */
 export type NameBudget = { remaining: number };
 export const nameBudget = (bytes = MAX_OPEN_NAME_BYTES): NameBudget => ({ remaining: bytes });
-const MAX_DEPTH = 32, MAX_VALUES = 1_000_000;
+/**
+ * Chunks every package one reading of a save opens may hold in all (`ChunkBudget`; SAVE-12): each is kept and checked, so a save of many
+ * packages of 65,536 one-byte chunks must not multiply them. A 2.31 save's packages hold 2,530 chunks in all.
+ */
+export const MAX_OPEN_CHUNKS = 131_072;
+export type ChunkBudget = { remaining: number };
+export const chunkBudget = (chunks = MAX_OPEN_CHUNKS): ChunkBudget => ({ remaining: chunks });
+/**
+ * Values one chunk may decode to: 15 times a 2.31 save's largest object that decodes (33,114 values); the native `StatsSystem` object
+ * (24 MB, more than a million values) passes it and is kept as bytes, as it was under the earlier cap of a million (SAVE-11).
+ */
+export const MAX_VALUES = 500_000;
+const MAX_DEPTH = 32;
+/**
+ * Values the chunks one reading decodes may hold in all (`ValueBudget`, shared like `NameBudget`): a decoded value costs about a hundred
+ * bytes however few bytes stored it, so what a crafted save's packages expand to is capped by count, not by their size (SAVE-11). A 2.31
+ * save's packages decode to 144,051 values in all, its largest object to 33,114.
+ */
+export const MAX_READING_VALUES = 1_000_000;
+/** Decoded values left for every chunk one reading decodes; each value takes one. */
+export type ValueBudget = { remaining: number };
+export const valueBudget = (values = MAX_READING_VALUES): ValueBudget => ({ remaining: values });
+/** The fields of every object that has none. */
+const NO_FIELDS: Readonly<Record<string, PackageValue>> = Object.freeze({});
 
 export type PackageReference = { readonly offset: number; readonly length: number; readonly sync: boolean };
 export type PackageFrame = {
@@ -68,9 +91,18 @@ export type PackageFrame = {
   /** A name's stored length (without the NUL), for a caller's accounting. */
   nameLength(index: number): number;
   reference(index: number): PackageReference & { readonly data: Uint8Array };
-  /** The chunks: type name, and where the object starts and ends (absolute in `bytes`). */
-  readonly chunks: readonly { readonly type: string; readonly start: number; readonly end: number }[];
+  /**
+   * The chunks, kept as two numbers each (SAVE-12: a table of 65,536 one-byte chunks must not cost an object per chunk): how many, and
+   * each one's type name and where its object starts and ends (absolute in `bytes`).
+   */
+  readonly chunkCount: number;
+  chunkType(index: number): string;
+  chunkStart(index: number): number;
+  chunkEnd(index: number): number;
+  /** One chunk as an object, or undefined past the table. */
+  chunk(index: number): PackageChunk | undefined;
 };
+export type PackageChunk = { readonly type: string; readonly start: number; readonly end: number };
 
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 const malformed = (message: string) => new PackageFrameError(message, "malformed");
@@ -115,6 +147,9 @@ export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant, opt
   const saveNames = variant !== "resource", budget = options.names;
   let decodedNames = 0;
   const names = new Map<number, string>();
+  // Each name is charged to the budgets once (SAVE-14): the type oracle's pass reads every name without keeping it (`peekName`), and a
+  // decode then keeps the ones its values use.
+  const charged = saveNames ? new Uint8Array(nameCount) : null;
   const nameSpan = (index: number) => {
     if (!Number.isInteger(index) || index < 0 || index >= nameCount) throw malformed(`Package name ${index} doesn't exist.`);
     const d = view.getUint32(base + nameDesc + index * 4, true), offset = d & 0xffffff, length = Math.max(0, (d >>> 24) - 1);
@@ -124,11 +159,12 @@ export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant, opt
   };
   const decodeName = (index: number) => {
     const span = nameSpan(index);
-    if (saveNames) {
+    if (charged && !charged[index]) {
       if (decodedNames + span.length > MAX_PACKAGE_NAME_BYTES) throw new PackageFrameError("The package spells out more names than a save's does.", "limit");
       if (budget && budget.remaining < span.length) throw new PackageFrameError("The save's packages spell out more names than a save does.", "limit");
       decodedNames += span.length;
       if (budget) budget.remaining -= span.length;
+      charged[index] = 1;
     }
     return utf8.decode(bytes.subarray(base + span.offset, base + span.offset + span.length));
   };
@@ -145,41 +181,55 @@ export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant, opt
     if (offset + length > size) throw malformed("A package reference lies outside the package.");
     return { offset, length, sync, data: bytes.subarray(base + offset, base + offset + length) };
   };
-  const chunks: { type: string; start: number; end: number }[] = [];
+  // Each chunk's type name is used (so decoded and checked) now, as before; only its index and start are kept.
+  const chunkTypes = new Uint32Array(chunkCount), chunkStarts = new Uint32Array(chunkCount);
   for (let i = 0; i < chunkCount; i++) {
-    const at = base + chunkDesc + i * 8;
-    chunks.push({ type: name(view.getUint32(at, true)), start: base + view.getUint32(at + 4, true), end: bytes.length });
+    const at = base + chunkDesc + i * 8, type = view.getUint32(at, true);
+    name(type);
+    chunkTypes[i] = type;
+    chunkStarts[i] = Math.min(base + view.getUint32(at + 4, true), 0xffffffff);
   }
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]!, next = chunks[i + 1];
-    if (chunk.start < base + chunkData || chunk.start >= bytes.length) throw malformed(`Package chunk ${i} starts outside the chunk data.`);
-    if (next) { if (next.start <= chunk.start) throw malformed(`Package chunk ${i + 1} does not follow chunk ${i}.`); chunk.end = next.start; }
+  for (let i = 0; i < chunkCount; i++) {
+    const start = chunkStarts[i]!;
+    if (start < base + chunkData || start >= bytes.length) throw malformed(`Package chunk ${i} starts outside the chunk data.`);
+    if (i + 1 < chunkCount && chunkStarts[i + 1]! <= start) throw malformed(`Package chunk ${i + 1} does not follow chunk ${i}.`);
   }
+  const inTable = (index: number) => Number.isInteger(index) && index >= 0 && index < chunkCount;
+  const chunkType = (index: number) => { if (!inTable(index)) throw malformed(`Package chunk ${index} doesn't exist.`); return name(chunkTypes[index]!); };
+  const chunkStart = (index: number) => { if (!inTable(index)) throw malformed(`Package chunk ${index} doesn't exist.`); return chunkStarts[index]!; };
+  const chunkEnd = (index: number) => { if (!inTable(index)) throw malformed(`Package chunk ${index} doesn't exist.`); return index + 1 < chunkCount ? chunkStarts[index + 1]! : bytes.length; };
   return { variant, version, layout, sections, rootCount, rootIndex, cruids, bytes, view, base, size,
     offsets: { refDesc, refData, nameDesc, nameData, chunkDesc, chunkData }, nameCount, referenceCount, name,
-    peekName: index => names.get(index) ?? decodeName(index), nameLength: index => nameSpan(index).length, reference, chunks };
+    peekName: index => names.get(index) ?? decodeName(index), nameLength: index => nameSpan(index).length, reference,
+    chunkCount, chunkType, chunkStart, chunkEnd, chunk: index => inTable(index) ? { type: chunkType(index), start: chunkStart(index), end: chunkEnd(index) } : undefined };
 }
 
 /**
  * A save node's package, if its bytes are one (a u32 package size, the package, optional trailing bytes): the `save` variant (with a
  * CRUID list) first, then `save-plain`. Decided by the structure alone, and strictly: the first chunk must start exactly at the chunk
- * data. Returns null when neither fits.
+ * data. Returns null when neither fits. A package whose chunks pass what is left of the reading's `chunks` budget is refused with a
+ * `PackageFrameError` of kind "limit" (SAVE-12); one that fits takes its chunks from it.
  */
-export function detectSavePackage(body: Uint8Array, options: { readonly names?: NameBudget } = {}): { frame: PackageFrame; trailing: number } | null {
+export function detectSavePackage(body: Uint8Array, options: { readonly names?: NameBudget; readonly chunks?: ChunkBudget } = {}): { frame: PackageFrame; trailing: number } | null {
   if (body.length < 28) return null;
   const view = new DataView(body.buffer, body.byteOffset, body.byteLength), size = view.getUint32(0, true);
   if (size < 24 || size > body.length - 4 || body[4] !== 4) return null;
   const bytes = body.subarray(4, 4 + size);
+  let found: { frame: PackageFrame; trailing: number } | null = null;
   for (const variant of ["save", "save-plain"] as const) {
     try {
       const frame = readPackageFrame(bytes, variant, options);
-      const first = frame.chunks[0];
-      if (first && first.start !== frame.base + frame.offsets.chunkData) continue;
+      if (frame.chunkCount && frame.chunkStart(0) !== frame.base + frame.offsets.chunkData) continue;
       if (frame.offsets[frame.sections === 7 ? "refDesc" : "nameDesc"] !== 0) continue;
-      return { frame, trailing: body.length - 4 - size };
+      found = { frame, trailing: body.length - 4 - size };
+      break;
     } catch { /* not this variant */ }
   }
-  return null;
+  if (found && options.chunks) {
+    if (found.frame.chunkCount > options.chunks.remaining) throw new PackageFrameError("The save's packages hold more objects than a save's do.", "limit");
+    options.chunks.remaining -= found.frame.chunkCount;
+  }
+  return found;
 }
 
 // ---- The generic decoder for save packages ----
@@ -197,6 +247,8 @@ export type DecodeOptions = {
   readonly opaque?: boolean;
   /** Record each object's field types (`PackageObject.types`). */
   readonly fieldTypes?: boolean;
+  /** The reading's shared budget of decoded values (`valueBudget`); without one, only the chunk's own cap applies. */
+  readonly values?: ValueBudget;
 };
 
 const FIXED: Readonly<Record<string, [size: number, read: (view: DataView, at: number) => number | string | boolean]>> = {
@@ -219,40 +271,47 @@ const OPAQUE = /^(static:|\[|r(?:a)?Ref:|curveData:|multiChannelCurve:)|^(NodeRe
  */
 export function decodeChunk(frame: PackageFrame, index: number, types: PackageTypes, options: DecodeOptions = {}): { object: PackageObject; skipped: string[] } {
   const { bytes, view } = frame, name = frame.name;
-  const chunk = frame.chunks[index];
+  const chunk = frame.chunk(index);
   if (!chunk) throw malformed(`Package chunk ${index} doesn't exist.`);
   const isEnum = "has" in types ? (type: string) => types.has(type) : (type: string) => types.isEnum(type);
   const isBitfield = "has" in types ? () => false : (type: string) => types.isBitfield?.(type) ?? false;
-  const skipped: string[] = [];
-  let values = 0;
+  const skipped: string[] = [], budget = options.values;
+  // `cursor` is where the value just read ends: returned beside each value instead of in a pair, so a value costs only itself (SAVE-11).
+  let values = 0, cursor = 0;
   const past = (owner: string) => malformed(`${owner} passes the end of its object.`);
-  /** One value of `type` at `at`, within `end`; returns the value and where it ends, or null when the type isn't read. */
-  const value = (type: string, at: number, end: number, exact: boolean, depth: number, owner: string): [PackageValue, number] | null => {
+  /** One value of `type` at `at`, within `end` (it ends at `cursor`), or undefined when the type isn't read. */
+  const value = (type: string, at: number, end: number, exact: boolean, depth: number, owner: string): PackageValue | undefined => {
     if (++values > MAX_VALUES) throw malformed("The package holds more values than a save's script data can.");
+    if (budget && --budget.remaining < 0) throw new PackageFrameError("The save's packages hold more values than a save's do.", "limit");
     const fixed = FIXED[type];
     if (fixed) {
       if (at + fixed[0] > end) throw past(owner);
-      return [fixed[1](view, at), at + fixed[0]];
+      cursor = at + fixed[0];
+      return fixed[1](view, at);
     }
     if (type === "CName" || isEnum(type)) {
       if (at + 2 > end) throw past(owner);
-      return [name(view.getUint16(at, true)), at + 2];
+      cursor = at + 2;
+      return name(view.getUint16(at, true));
     }
     if (isBitfield(type)) {
       if (at + 1 > end) throw past(owner);
       const count = view.getUint8(at);
       if (at + 1 + count * 2 > end) throw past(owner);
-      return [Array.from({ length: count }, (_, i) => name(view.getUint16(at + 1 + i * 2, true))), at + 1 + count * 2];
+      cursor = at + 1 + count * 2;
+      return Array.from({ length: count }, (_, i) => name(view.getUint16(at + 1 + i * 2, true)));
     }
     if (type === "String") {
       if (at + 2 > end) throw past(owner);
       const length = view.getUint16(at, true);
       if (at + 2 + length > end) throw past(owner);
-      return [utf8.decode(bytes.subarray(at + 2, at + 2 + length)), at + 2 + length];
+      cursor = at + 2 + length;
+      return utf8.decode(bytes.subarray(at + 2, at + 2 + length));
     }
     if (/^w?handle:/.test(type)) {
       if (at + 4 > end) throw past(owner);
-      return [{ $handle: view.getInt32(at, true) }, at + 4];
+      cursor = at + 4;
+      return { $handle: view.getInt32(at, true) };
     }
     if (type.startsWith("array:")) {
       if (at + 4 > end) throw past(owner);
@@ -262,21 +321,24 @@ export function decodeChunk(frame: PackageFrame, index: number, types: PackageTy
       let next = at + 4;
       for (let i = 0; i < count; i++) {
         const element = value(inner, next, end, false, depth + 1, `${owner}[${i}]`);
-        if (!element) return null;
-        out.push(element[0]);
-        next = element[1];
+        if (element === undefined) return undefined;
+        out.push(element);
+        next = cursor;
       }
-      return [out, next];
+      cursor = next;
+      return out;
     }
-    if (OPAQUE.test(type)) return null;
+    if (OPAQUE.test(type)) return undefined;
     return object(type, at, end, exact, depth + 1, owner);
   };
-  const object = (type: string, at: number, end: number, exact: boolean, depth: number, owner: string): [PackageObject, number] | null => {
+  const object = (type: string, at: number, end: number, exact: boolean, depth: number, owner: string): PackageObject | undefined => {
     if (depth > MAX_DEPTH) throw malformed("The package nests objects deeper than a save's script data does.");
     if (at + 2 > end) throw malformed(`${owner} passes the end of its chunk.`);
     const count = view.getUint16(at, true);
     if (at + 2 + count * 8 > end) throw malformed(`${owner}: ${count} fields cannot fit.`);
-    const fields: Record<string, PackageValue> = {}, fieldTypes: Record<string, string> = {};
+    // Field types are recorded only when asked for (the inspector's); an object without fields shares one empty record (SAVE-11).
+    const fields = (count ? {} : NO_FIELDS) as Record<string, PackageValue>;
+    const fieldTypes = options.fieldTypes ? (count ? {} : NO_FIELDS) as Record<string, string> : null;
     let expected = 2 + count * 8, finish = at + expected;
     for (let i = 0; i < count; i++) {
       const entry = at + 2 + i * 8;
@@ -286,17 +348,17 @@ export function decodeChunk(frame: PackageFrame, index: number, types: PackageTy
       if (nextOffset !== null && nextOffset <= offset) throw malformed(`${owner}: field offsets don't increase.`);
       const valueEnd = nextOffset !== null ? at + nextOffset : end;
       if (valueEnd > end) throw malformed(`${owner}.${field} passes the end of its object.`);
-      if (options.fieldTypes) fieldTypes[field] = fieldType;
+      if (fieldTypes) fieldTypes[field] = fieldType;
       const read = value(fieldType, at + offset, valueEnd, nextOffset !== null || exact, depth, `${owner}.${field}`);
-      if (read) {
-        if (nextOffset !== null && read[1] !== valueEnd) throw malformed(`${owner}.${field} (${fieldType}) used ${read[1] - at - offset} of ${valueEnd - at - offset} bytes.`);
-        fields[field] = read[0];
-        finish = read[1];
-        expected = read[1] - at;
+      if (read !== undefined) {
+        if (nextOffset !== null && cursor !== valueEnd) throw malformed(`${owner}.${field} (${fieldType}) used ${cursor - at - offset} of ${valueEnd - at - offset} bytes.`);
+        fields[field] = read;
+        finish = cursor;
+        expected = cursor - at;
       } else {
         // Skipped by the next field's offset; the last field only when the object's own end is known.
         skipped.push(`${owner}.${field}: ${fieldType}`);
-        if (nextOffset === null && !exact) return null;
+        if (nextOffset === null && !exact) return undefined;
         const stop = nextOffset === null ? end : valueEnd;
         fields[field] = options.opaque ? { $opaque: fieldType, bytes: stop - at - offset, at: at + offset } : null;
         if (nextOffset === null) { finish = end; break; }
@@ -304,11 +366,12 @@ export function decodeChunk(frame: PackageFrame, index: number, types: PackageTy
         expected = nextOffset;
       }
     }
-    return [options.fieldTypes ? { $type: type, fields, types: fieldTypes } : { $type: type, fields }, finish];
+    cursor = finish;
+    return fieldTypes ? { $type: type, fields, types: fieldTypes } : { $type: type, fields };
   };
   const found = object(chunk.type, chunk.start, chunk.end, true, 1, chunk.type);
   if (!found) throw malformed(`${chunk.type} could not be read.`);
-  return { object: found[0], skipped };
+  return { object: found, skipped };
 }
 
 /** A field of a decoded object, when it has the expected shape. */
