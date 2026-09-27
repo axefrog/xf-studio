@@ -522,6 +522,22 @@ describe("resolver selection for the body", () => {
     expect([...requiredCovers(cco, undefined, "nudity")]).toEqual([]);
   });
 
+  test("PREV-128: a body choice whose chunk masks hide every chunk is said plainly, not dropped silently", async () => {
+    const { resolved } = await plan(BODY_REQUEST);
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    const feet = resolved.appearances.find(entry => entry.option === "flat_feet")!;
+    expect(feet).toBeDefined();
+    // As a mod's parts override can leave it: every component there, with render chunks, all of them masked out.
+    const masked = { ...resolved, appearances: resolved.appearances.map(entry => entry !== feet ? entry : { ...entry, components: entry.components.map(component =>
+      component.geometry ? { ...component, chunkMask: "0", geometry: { ...component.geometry, visibleChunks: [], drawsNothing: true } } : component) }) };
+    const result = planCharacterDetails(masked, cco);
+    const slot = bodySlot(result);
+    expect(slot.state).toBe("shown");
+    expect(slot.message).toBe("Feet not shown: your installed game files hide this part for this choice, as the game would.");
+    expect(bodyOf(result).some(c => c.option === "flat_feet")).toBe(false);
+  });
+
   test("a masculine V's body plans by the same rules as a feminine one (no gender gate); a body turned off is neither planned nor dressed", async () => {
     const { resolved, plan: female } = await plan(BODY_REQUEST);
     const { graph } = detailFixture().installation();

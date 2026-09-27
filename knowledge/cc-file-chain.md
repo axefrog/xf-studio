@@ -205,7 +205,7 @@ The TweakDB blob is read with WolvenKit's layout (flats by type, `(TweakDBID, in
 Every vanilla CC `.app` holds **both** body genders' appearances, distinguished by name (`…pwa…`/`…pma…`, `female__…`/`male__…`, `w__`/`m__`) and `visualTags` (`Female`/`Male`). The CC definition name equals the appearance name. Typical definition:
 
 - `partsValues[]`: one or more component `.ent` files, e.g. `…\appearances\entity\face_decals\hx_000_pwa__basehead_makeup_eyes_01.ent`.
-- `partsOverrides[].componentsOverrides[]`: `{componentName, meshAppearance, chunkMask}` applied to that `.ent`'s components.
+- `partsOverrides[].componentsOverrides[]`: `{componentName, meshAppearance, chunkMask}` applied to that `.ent`'s components. The chunk mask only hides: it is ANDed with the component's own, so an override can't show a chunk the component hides [source: ArchiveXL `ComponentState::AddHidingChunkMaskOverride`] [wiki: the `.app` page, "You can't un-hide something via partsOverrides"]. A mod's copy of an `.app` can therefore mask a creator part out entirely ([body animation §4](body-animation.md#4-feet-states-and-the-idles)).
 - `components[]`: inline components. In vanilla CC `.app`s they mirror the `partsValues` components with the overrides applied, but inline components can also be the only source of geometry (PRC and the legacy generator rely on this; see section 6). The [wiki chain map](../research/character-customization/file-chain-map.md) covers `partsValues`/`partsOverrides` screenshots and ArchiveXL's empty-`partResource` handling.
 
 Three variant mechanisms appear, often combined:
