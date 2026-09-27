@@ -4,6 +4,11 @@ import { refusal, type Capability } from "./platform/api";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
 import { pageFailure } from "./diagnostics/page-sink";
 import { DEFAULT_IDLE, type IdleEntry } from "./idle-catalogue";
+import type { PoseSample } from "./pose-catalogue";
+import type { PosePlacement } from "./pose-clip";
+
+/** A photo-mode pose as the body source (pose-library-design.md §5.2): its record, label and whether it moves. */
+export type MotionPose = { readonly id: string; readonly label: string; readonly moves: boolean };
 
 /**
  * Why the idle is off, in plain words (UI-88). The rig's own error (an exception's text) goes to the diagnostics log once, where a
@@ -22,6 +27,11 @@ export type MotionState = Pick<PreviewState,
      * chosen one is still loading (the previous one keeps playing meanwhile).
      */
     idleClip: string; idles: readonly IdleChoice[]; idleLoading: boolean;
+    /**
+     * The photo-mode pose V holds (the body source while set; the idle's rig plays it), and whether it is still loading (the previous body
+     * source shows meanwhile). Set by the Poses module (`holdPose`); Still or an idle replaces it.
+     */
+    pose: MotionPose | null; poseLoading: boolean;
     /** How often Play blink repeats (a Studio choice: the idle's average blink spacing). */
     blinkRepeatSeconds: number };
 /** A motion action may name the view whose scene it moves (view-graph-design.md §3.8); without one, the focused view's. */
@@ -44,7 +54,11 @@ export type MotionPort = {
   setIdle(enabled: boolean): void; setIdlePaused(paused: boolean): void;
   setIdleContributions(body: boolean, face: boolean): void;
   setBlink(value: number): void; animateBlink(playing: boolean): void;
+  /** Hold a pose on the idle's rig, or stop holding one (scene-host.ts `setPose`); absent: poses can't play on this host. */
+  setPose?(pose: { sample: PoseSample; placement?: PosePlacement } | null): Promise<void>;
 };
+/** Why a pose can't be held, in plain words. */
+export const POSE_UNAVAILABLE = "Poses play on V once her motion is prepared from your game files.";
 
 /** Preview motion commands and persistence state without markup or Three objects. */
 export class MotionActions {
@@ -54,8 +68,16 @@ export class MotionActions {
   /** The idle shown (optimistic while its clip loads) and the load in flight, if any. */
   private clip: string;
   private loading: Promise<void> | null = null;
+  /** The pose held (shown at once while its sample loads), the stored one waiting for the Poses module, and a counter that supersedes. */
+  private pose: MotionPose | null = null;
+  private pending: { id: string; label: string } | null;
+  private poseBusy = false;
+  private poseGeneration = 0;
+  /** Whether the scene plays a pose now (so leaving it must give the idle's own clips back). */
+  private posePlaying = false;
   constructor(private initial: PreviewState, private port: MotionPort) {
     this.blink = initial.blink; this.blinkPlaying = initial.blinkPlaying;
+    this.pending = initial.pose ? { ...initial.pose } : null;
     this.clip = this.known(initial.idleClip) ? initial.idleClip! : this.defaultClip();
     if (!port.available && port.error && port.error !== IDLE_MASCULINE)
       pageFailure("preview", "idle_unavailable", IDLE_UNAVAILABLE, Error(port.error), { level: "warn" });
@@ -90,6 +112,7 @@ export class MotionActions {
       blink: this.blink, blinkPlaying: this.blinkPlaying,
       blinkAvailable: this.port.blink.available, blinkError: this.blinkError(),
       idleClip: this.clip, idleLoading: !!this.loading,
+      pose: this.pose ?? (this.pending ? { ...this.pending, moves: false } : null), poseLoading: this.poseBusy || !!this.pending,
       idles: this.idleEntries().map(({ id, label, screen, puppet, clip }) => ({ id, label, screen, puppet, clip })),
       blinkRepeatSeconds: this.port.blink.repeatSeconds ?? BLINK_REPEAT_SECONDS };
   }
@@ -111,6 +134,7 @@ export class MotionActions {
     if (blinking && !this.port.blink.available)
       return refusal("asset_unavailable", this.blinkError()!);
     // Kept as the code the facade gave this refusal before codes were structured (see the code-health ledger).
+    if (blinking && this.pose) return refusal("asset_unavailable", "Blink is off while V holds a pose: her face follows the pose's idle or your expression.");
     if (blinking && this.snapshot().idle)
       return refusal("asset_unavailable", "Blink is off while the game idle plays: the idle blinks on its own.");
     return { available: true };
@@ -131,13 +155,59 @@ export class MotionActions {
     } else { this.blink = 0; this.blinkPlaying = false; }
     this.notify();
   }
+  /** Whether a pose can be held now (V's motion rig is prepared on this host), with the plain reason when not. */
+  poseCapability(): Capability {
+    if (!this.port.setPose || !this.port.available) return refusal("asset_unavailable", this.port.error === IDLE_MASCULINE ? IDLE_MASCULINE : POSE_UNAVAILABLE);
+    return { available: true };
+  }
+  /** The pose the workspace stored, waiting for the Poses module to supply its sample (null once held, dropped or replaced). */
+  pendingPose(): { id: string; label: string } | null { return this.pending ? { ...this.pending } : null; }
+  /** Forget a stored pose that can't be held (not installed now, or poses can't be read): the body source stays as restored. */
+  dropPendingPose() { if (!this.pending) return; this.pending = null; this.notify(); }
+  /**
+   * Hold a photo-mode pose (the Poses module's `pose.select`, with the sample it reads from the pose library): shown at once, played when
+   * the sample arrives. A newer choice (another pose, Still, an idle) supersedes one still loading; a failure puts the previous body source
+   * back and rejects with the error. Resolves false when superseded.
+   */
+  async holdPose(pose: MotionPose, sample: Promise<PoseSample>, placement?: PosePlacement): Promise<boolean> {
+    const allowed = this.poseCapability();
+    if (!allowed.available) throw Error(allowed.reason);
+    const generation = ++this.poseGeneration, previous = this.posePlaying ? this.pose : null;
+    this.pose = { ...pose }; this.pending = null; this.poseBusy = true; this.notify();
+    try {
+      const value = await sample;
+      if (generation !== this.poseGeneration) return false;
+      await this.port.setPose!({ sample: value, ...(placement ? { placement } : {}) });
+      if (generation !== this.poseGeneration) return false;
+      this.posePlaying = true; this.blink = 0; this.blinkPlaying = false;
+      return true;
+    } catch (error) {
+      if (generation === this.poseGeneration) this.pose = previous;
+      throw error;
+    } finally {
+      if (generation === this.poseGeneration) { this.poseBusy = false; this.notify(); }
+    }
+  }
+  /** Stop holding a pose (Still or an idle was chosen): a pose still loading is superseded, a playing one gives the idle its clips back. */
+  private leavePose() {
+    if (!this.pose && !this.pending) return;
+    this.poseGeneration++; this.pose = null; this.pending = null; this.poseBusy = false;
+    if (this.posePlaying) { this.posePlaying = false; void this.port.setPose?.(null).catch(error => pageFailure("preview", "pose_release_failed", "V couldn't return from her pose.", error, { level: "warn" })); }
+  }
   dispatch(action: MotionAction) {
     const capability = this.capability(action);
     if (!capability.available) throw Error(capability.reason);
     switch (action.kind) {
       case "motion.setIdle":
-        this.port.setIdle(action.enabled); this.blink = 0; this.blinkPlaying = false; break;
-      case "motion.setIdleClip": if (action.clip !== this.clip) this.select(action.clip, this.clip); break;
+        // Still turns the idle off first, so the pose's clip never shows unposed; an idle takes its own clips back.
+        this.port.setIdle(action.enabled); this.leavePose(); this.blink = 0; this.blinkPlaying = false; break;
+      case "motion.setIdleClip": {
+        const posing = !!this.pose;
+        this.leavePose();
+        if (action.clip !== this.clip) this.select(action.clip, this.clip);
+        else if (posing) this.notify();
+        break;
+      }
       case "motion.setPaused": this.port.setIdlePaused(action.paused); break;
       case "motion.setContributions": this.port.setIdleContributions(action.body, action.face); break;
       case "motion.setBlink": this.port.setBlink(action.value); this.blink = action.value; this.blinkPlaying = false; break;

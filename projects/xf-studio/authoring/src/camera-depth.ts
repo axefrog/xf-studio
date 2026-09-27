@@ -6,11 +6,11 @@ export const BODY_ENVELOPE = Object.freeze({ centreHeight: .93, radius: 1.15 });
 
 /**
  * The clip planes with the whole body in the depth range as well as the head (only while the body shows, so the head views keep
- * exactly the planes `previewClipPlanes` gives).
+ * exactly the planes `previewClipPlanes` gives). `radius`: the body's enclosing sphere (a posed V's when she holds a pose).
  */
-export function bodyClipPlanes(head: { near: number; far: number }, orbitDistance: number, cameraToBodyCentre: number) {
-  const near = Math.max(previewNearPlane(orbitDistance), Math.min(head.near, cameraToBodyCentre - BODY_ENVELOPE.radius));
-  return { near, far: Math.max(head.far, cameraToBodyCentre + BODY_ENVELOPE.radius + .2) };
+export function bodyClipPlanes(head: { near: number; far: number }, orbitDistance: number, cameraToBodyCentre: number, radius: number = BODY_ENVELOPE.radius) {
+  const near = Math.max(previewNearPlane(orbitDistance), Math.min(head.near, cameraToBodyCentre - radius));
+  return { near, far: Math.max(head.far, cameraToBodyCentre + radius + .2) };
 }
 
 /** A conservative one-metre sphere encloses the preview head and optional hair. */

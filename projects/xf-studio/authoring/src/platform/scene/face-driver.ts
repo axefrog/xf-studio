@@ -36,6 +36,9 @@ export class FaceDriver {
   private pose: FacePose | null = null;
   private elapsed = 0;
   private applied = false;
+  /** Lent to another owner (the idle playing a photo-mode pose): it composes `deltas()` over its body and this driver writes nothing. */
+  private lent = false;
+  private readonly lentDeltas = new Map<string, THREE.Matrix4>();
   private readonly delta = new THREE.Matrix4();
   private readonly local = new THREE.Matrix4();
   /** Called after a change that needs a frame drawn outside playback. */
@@ -104,19 +107,44 @@ export class FaceDriver {
     if (applied) this.apply(); else this.restore();
   }
   get isApplied() { return this.applied; }
+  /**
+   * Lend (true) or take back (false) the held pose: while lent, `update` still advances a held clip and `deltas()` answers its current
+   * frame, but nothing is written to the bones (their owner writes them). Lending never applies; call `setApplied` to write again.
+   */
+  setLent(lent: boolean) {
+    if (lent === this.lent) return;
+    if (lent && this.applied) { this.applied = false; this.restore(); }
+    this.lent = lent;
+  }
+  get isLent() { return this.lent; }
+  /**
+   * The held pose's current frame as each face joint's world delta from the rig's rest (glTF axes, by joint name): what an owner composes
+   * over its own body delta, as the idle composes its face clip. Null while nothing is held or the rig isn't known.
+   */
+  deltas(): ReadonlyMap<string, THREE.Matrix4> | null {
+    const frame = this.frame();
+    if (!this.root || !frame) return null;
+    this.poseNodes(frame);
+    for (const [name, driver] of this.byName) {
+      const delta = this.lentDeltas.get(name) ?? new THREE.Matrix4();
+      delta.multiplyMatrices(driver.node.matrixWorld, driver.inverseBind);
+      this.lentDeltas.set(name, delta);
+    }
+    return this.lentDeltas;
+  }
   /** Advance a held clip. */
   update(seconds: number) {
     const pose = this.pose;
-    if (!pose || !this.applied || pose.frames.length < 2 || !pose.rate) return;
+    if (!pose || !(this.applied || this.lent) || pose.frames.length < 2 || !pose.rate) return;
     const repeat = Math.max(pose.repeat ?? 0, (pose.frames.length - 1) / pose.rate);
     if (Number.isFinite(seconds)) this.elapsed = (this.elapsed + Math.max(0, Math.min(seconds, .1))) % (repeat || 1);
-    this.apply();
+    if (this.applied) this.apply();
     if (!this.animating) this.scheduleWake(repeat - this.elapsed);
   }
   private wake: ReturnType<typeof setTimeout> | null = null;
   private scheduleWake(seconds: number) {
     if (this.wake) return;
-    this.wake = setTimeout(() => { this.wake = null; if (this.pose && this.applied) { this.elapsed = 0; this.onChange?.(); } }, Math.max(0, seconds) * 1000);
+    this.wake = setTimeout(() => { this.wake = null; if (this.pose && (this.applied || this.lent)) { this.elapsed = 0; this.onChange?.(); } }, Math.max(0, seconds) * 1000);
   }
   /** Bind bones loaded later (a detail's skeleton copy) in their neutral pose; a held, applied pose applies at once. */
   attach(targets: readonly THREE.Object3D[]) {
@@ -155,16 +183,20 @@ export class FaceDriver {
     if (pose.frames.length < 2 || !pose.rate) return pose.frames[0];
     return pose.frames[Math.min(pose.frames.length - 1, Math.round(this.elapsed * pose.rate))];
   }
-  private apply() {
-    const frame = this.frame();
-    if (!this.root || !frame) { this.restore(); return; }
+  /** Pose the rig's nodes at a frame. */
+  private poseNodes(frame: FaceFrame) {
     this.nodes.forEach((node, index) => {
       const moved = frame.get(index), rest = this.rest[index]!;
       if (moved) { node.position.fromArray(moved.t as number[]); node.quaternion.fromArray(moved.r as number[]).normalize(); }
       else { node.position.copy(rest.position); node.quaternion.copy(rest.quaternion); }
       node.scale.copy(rest.scale);
     });
-    this.root.updateMatrixWorld(true);
+    this.root!.updateMatrixWorld(true);
+  }
+  private apply() {
+    const frame = this.frame();
+    if (!this.root || !frame) { this.restore(); return; }
+    this.poseNodes(frame);
     for (const binding of this.bindings) {
       const driver = binding.driver;
       if (!driver) continue;

@@ -11,7 +11,8 @@
  * - **Blink** composes before the solve, as the game adds blink tracks before its facial solve: a held closure is one solve, Play blink
  *   is the game's clip solved at 60 Hz and played by the face driver every `blinkRepeatSeconds`.
  * - **Idle.** The idle's facial solve isn't additive, so while it plays the head shows the idle and the drawer says so, with one click to
- *   stop it (design §5.3); the held expression comes back when it stops.
+ *   stop it (design §5.3); the held expression comes back when it stops. A photo-mode pose is not the idle: the expression composes over
+ *   the posed body (pose-library-design.md decision Q5; preview-motion.ts).
  */
 import { posedLocals, type RigRest, type SolvedPose } from "./engines/facial-rig/pose";
 import type { FacialBlink, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
@@ -31,7 +32,9 @@ export type FacePoseSink = {
   release(): void;
 };
 /** The motion the preview composes with (motion-actions.ts `MotionState`). */
-export type FacialMotion = { idle: boolean; blink: number; blinkPlaying: boolean; blinkRepeatSeconds: number };
+export type FacialMotion = { idle: boolean; blink: number; blinkPlaying: boolean; blinkRepeatSeconds: number;
+  /** A photo-mode pose is the body source: the expression composes over it (pose-library-design.md decision Q5), so the idle doesn't win. */
+  pose?: unknown };
 export type FacialTimer = { set(callback: () => void, ms: number): unknown; clear(handle: unknown): void; now(): number };
 const TIMER: FacialTimer = { set: (callback, ms) => setTimeout(callback, ms), clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
   now: () => performance.now() };
@@ -128,7 +131,7 @@ export class FacialPreview {
   private desired(): FacialSolveRequest | undefined {
     const controls = this.pose();
     if (!controls || !Object.keys(controls).length) return undefined;
-    const motion = this.motion(), blink: FacialBlink | undefined = !motion || motion.idle || !this.host?.blink.available ? undefined
+    const motion = this.motion(), blink: FacialBlink | undefined = !motion || (motion.idle && !motion.pose) || !this.host?.blink.available ? undefined
       : motion.blinkPlaying ? { play: true } : motion.blink > 0 ? { closure: motion.blink } : undefined;
     return { controls: { ...controls }, ...(blink ? { blink } : {}) };
   }
@@ -174,7 +177,7 @@ export class FacialPreview {
     if (host.solver.phase !== "ready") return { ...base, phase: "unavailable", reason: host.solver.reason, next: GUIDE_SOLVER };
     if (this.failure) return { ...base, phase: "failed", reason: this.failure, next: "retry" };
     if (!this.desired()) return { ...base, phase: "idle" };
-    if (this.motion()?.idle) return { ...base, phase: "ready", reason: "The creator idle is playing, so your V shows it instead of your expression.", next: "stop-idle" };
+    if (this.motion()?.idle && !this.motion()?.pose) return { ...base, phase: "ready", reason: "The creator idle is playing, so your V shows it instead of your expression.", next: "stop-idle" };
     if (this.slow) return { ...base, phase: "updating" };
     if (!this.sink) return { ...base, phase: "unavailable", reason: "Your expression shows on the 3D head once it's ready." };
     return { ...base, phase: "ready" };

@@ -229,9 +229,11 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 
 export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
-  const STILL = "still";
+  // The body source: Still (the bind pose), one of the game's own preview idles (the creator's close-up and full body, the inventory…), or
+  // the photo-mode pose chosen in Poses (listed only while one is held; choosing another source leaves it).
+  const STILL = "still", POSE = "pose";
   const source = new SelectField<string>({ label: "Body", onChange: value => {
+    if (value === POSE) return;
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
@@ -265,13 +267,16 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
-      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
-        motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
+      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label })),
+        ...(motion?.pose ? [{ value: POSE, label: `Pose: ${motion.pose.label}` }] : [])],
+        motion?.pose ? POSE : motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
       setText(idleNote, !motion?.available ? unavailable.reason : motion.idleLoading ? "Loading that idle; the previous one plays until it's ready."
+        : motion.pose ? (motion.poseLoading ? `Loading ${motion.pose.label}; V keeps her current pose until it's ready.`
+          : `V holds ${motion.pose.label} from Poses${motion.pose.moves ? ", which moves" : ""}. ${motion.idleFace ? "Her face keeps the idle's movement" : "Her face holds still"} unless an expression is shown. Choose Still or an idle to leave it.`)
         : motion.idle
         ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
         : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");

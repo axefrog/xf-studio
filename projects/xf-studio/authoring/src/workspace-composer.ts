@@ -53,6 +53,10 @@ export class WorkspaceComposer {
     const idleClip = motion ? motion.idleClip : original.idleClip;
     delete preview.idleClip;
     if (idleClip && idleClip !== "closeup") preview.idleClip = idleClip;
+    // The held pose is view state: stored only while one is the body source.
+    const pose = motion ? motion.pose : original.pose;
+    delete preview.pose;
+    if (pose) preview.pose = { id: pose.id, label: pose.label };
     // The context owns every creator choice (CORE-58) and is stored only when something was set. The retired tried piercing style is
     // written back as read until the context stores choices (it migrates the style into them once its catalogue is ready, CORE-74);
     // then it is written empty.
