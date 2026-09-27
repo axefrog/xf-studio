@@ -112,10 +112,19 @@ public:
     // Never throws: an unexpected failure is logged and answered with code "failed".
     DispatchResult Handle(const std::string& aLine, uint32_t aClientPid) noexcept;
 
-    // Kill switch: every later request is refused with "killed" until the game restarts.
+    // Kill switch: every later request is refused with "killed" until the bridge is re-armed from the
+    // game (Bridge::Rearm) or the game restarts.
     void Kill(const std::string& aReason);
     bool IsKilled() const;
     std::string KillReason() const;
+    // Re-arm: accept requests again. Only Bridge::Rearm calls it, after the listener has stopped.
+    void Revive();
+
+    // The in-game panel's pause: while paused, every write is refused with writes_paused. It can only
+    // take access away: with allow_writes = false in config.ini nothing changes, and resuming gives back
+    // exactly what config.ini allows (research/runtime/runtime-bridge-design.md §4).
+    void SetWritesPaused(bool aPaused);
+    bool WritesPaused() const;
 
     nlohmann::json Describe() const;
     uint64_t RequestCount() const;
@@ -133,6 +142,7 @@ private:
     mutable std::mutex m_mutex;
     std::string m_killReason;
     std::atomic<bool> m_killed{false};
+    std::atomic<bool> m_writesPaused{false};
     std::atomic<uint64_t> m_requests{0};
     std::atomic<uint64_t> m_cidCounter{0};
 

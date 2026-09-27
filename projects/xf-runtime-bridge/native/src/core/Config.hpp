@@ -23,7 +23,8 @@ struct Config
     bool bridgeEnabled = false;      // no pipe, no session file unless true
     bool allowWrites = false;        // write-class methods refused unless true
     uint32_t writeClasses = kWritePhoto | kWriteWorld | kWriteCharacter; // allow_write_classes, after allow_writes
-    bool allowCreatorLeave = false;  // cc.confirm / cc.back refused unless true (only the -writes package sets it)
+    bool allowCreatorLeave = false;  // cc.open / cc.confirm / cc.back refused unless true (only the -writes package sets it)
+    bool allowLivePose = false;      // pose.live.apply refused unless true (only the -writes package sets it)
     uint32_t requestTimeoutMs = 2000; // wait for the game thread
     uint32_t maxRequestsPerSecond = 20;
     uint32_t idleDisconnectSeconds = 120;

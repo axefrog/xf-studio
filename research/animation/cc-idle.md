@@ -29,6 +29,24 @@ The second adapter executes the external Cyberpunk IO Suite numerical modules at
 
 Local output: `authoring/public/assets/cc-idle-body.glb` (~1.5 MB), `cc-idle-face.glb` (~4.94 MB), and `cc-idle-binding.json`. The facial bake contains 663 frames affecting 253 bones. Input/output hashes and solver provenance are in [body intake](../../projects/xf-studio/authoring/evidence/idle-intake.json) and [face bake](../../projects/xf-studio/authoring/evidence/idle-face-bake.json). These game-derived binaries are excluded from Git and releases.
 
+## The game's other preview idles
+
+The close-up clip was the only one prepared until 27 September. `tools/prepare_body_idles.py` prepares the rest of the preview screens' loops the same way, from the same intake root ([V's body in motion §2](../../knowledge/body-animation.md#2-the-preview-idles)):
+
+1. It extracts `player_paperdoll.animgraph`, `ui_female.anims`, `ui_female_face.anims`, `woman_base.rig` and the face skeleton rig with WolvenKit when they're missing, and serializes the graph.
+2. It lists every looping body clip in a state machine state, plus the looping clips the preview screens' switch plays directly. That gives the creator's close-up, full body and nails loops, gender selection, and the inventory's `UI_full_shot`; it leaves out the 53 held-weapon idles.
+3. It exports each body clip with `tools/anim-export` into `raw/body-<clip>.glb` and serves it as `public/assets/cc-idle-body-<clip>.glb` (the close-up keeps `cc-idle-body.glb`).
+4. It bakes the face clip the face graph loops with each where the face set has one: `bake_idle_face.py --clip ui_fullbody_shot` writes `cc-idle-face-ui_fullbody_shot.glb`. The inventory loops the close-up face after a one-shot pickup.
+5. It writes `public/assets/cc-idle-catalogue.json` (`idle-catalogue.ts`), and hashes and the catalogue to [the catalogue evidence](../../projects/xf-studio/authoring/evidence/idle-catalogue.json).
+
+Run from HQ (after the close-up's two steps above):
+
+```powershell
+python projects/xf-studio/authoring/tools/prepare_body_idles.py --wolvenkit <WolvenKit.CLI.exe> --game <game folder> --anim-export projects/xf-studio/tools/anim-export/bin/Debug/net9.0/AnimExport.exe --addon D:/Dev/Cyberpunk-Blender-add-on
+```
+
+**In the Studio**, the Motion panel's **Body** field is Still or one of these idles (`motion.setIdleClip`). The clips share the body and face rigs' joint names, so switching only swaps the clips on the same rigs (`IdleAnimation.setClips`), with the phase carried over. An older preparation without a catalogue shows the close-up alone. The creator's idles stand V on the creator puppet's lifted feet (`puppet: "creator"` in the character request); the inventory's on her own ([§4](../../knowledge/body-animation.md#4-feet-states-and-the-idles)).
+
 ## Browser composition and verification
 
 The preview head's bones have world-oriented bindings rather than the decoded clips' hierarchy. For each target, apply its facial world delta first, then the nearest body-ancestor world delta, to its saved world bind transform. Convert the result into its actual target-parent space. This avoids replacing attachment transforms or applying parent movement twice. The two clips retain separate loop clocks.
@@ -41,7 +59,7 @@ Browser verification in the isolated `?verify=1` page: actual moving head/facial
 
 ## Remaining fidelity questions
 
-- The creator's face graph and its selection rules are now traced offline ([facial expressions §5](../../knowledge/facial-expressions.md#5-the-character-creator-idle)): `ui_closeup_shot` is the looping close-up face clip, and section one-shots play when a creator section opens. Runtime confirmation and the body graph's selection remain open. The vanilla `face_rig` components reference the male player facial setup rather than the female basehead setup this bake uses; which one the engine solves with is untested.
+- The creator's face graph and its selection rules are now traced offline ([facial expressions §5](../../knowledge/facial-expressions.md#5-the-character-creator-idle)): `ui_closeup_shot` is the looping close-up face clip, and section one-shots play when a creator section opens. The body graph's selection is traced too ([V's body in motion §2](../../knowledge/body-animation.md#2-the-preview-idles)); runtime confirmation remains open. The vanilla `face_rig` components reference the male player facial setup rather than the female basehead setup this bake uses; which one the engine solves with is untested.
 - The external solver currently supplies rotation/translation; scale arrays and wrinkle shading are not reproduced. Teeth/tongue rendering and final skin/eye materials remain incomplete.
 - The two clips are looped independently in the studio. A boundary inspection found small nonzero endpoint differences (largest face rotation boundary about 0.0078 rad at the eyes); exact game blending may hide these. No artificial boundary correction has been introduced.
 - Check all supported face shapes and modded rigs. Preserving customization morphs does not prove every closed-eyelid contact or posed surface intersection. Eye-shape morph targets carry their own joint binds; the blink re-seats the rig on them, the idle does not yet ([facial animation §4](../../knowledge/facial-animation.md#4-eye-shapes-move-the-joints-too)).

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <functional>
@@ -21,6 +22,7 @@
 #include "core/Config.hpp"
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
+#include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
@@ -929,7 +931,10 @@ void CreatorAndOptionsTests()
             return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "menu_event"}};
         };
         ops.phase = [&] { return ++polls >= 3 ? std::string("character_menu") : std::string("gameplay"); };
-        ops.cancel = [&] { cancelled = true; };
+        ops.cancel = [&] {
+            cancelled = true;
+            return json{{"withdrawn", true}, {"taken", false}};
+        };
         ops.sleep = [](std::chrono::milliseconds) {};
         const auto out = w::CreatorOpen(p::ParseCreatorOpen(json::object()), ops);
         Check("cc.open prepares, settles, then asks, and waits for the appearance screen",
@@ -990,20 +995,25 @@ void CreatorAndOptionsTests()
         const auto pending = json::parse(exchange.Pending());
         Check("a request is pending with its seq and names", pending["seq"] == seq && pending["names"].size() == 2, pending.dump());
         std::string why;
-        Check("an answer for another seq is refused",
-              !exchange.Report(json{{"seq", seq + 1}, {"values", json::object()}}.dump(), &why) && !why.empty(), why);
-        Check("an answer naming an option that wasn't asked for is refused",
-              !exchange.Report(json{{"seq", seq}, {"values", {{"X/Y", "1"}}}}.dump()));
-        Check("an answer with a long or non-text value is refused",
-              !exchange.Report(json{{"seq", seq}, {"values", {{"A/B", std::string(300, 'x')}}}}.dump()) &&
-                  !exchange.Report(json{{"seq", seq}, {"values", {{"A/B", 1}}}}.dump()));
-        Check("an answer that isn't JSON or is too large is refused",
-              !exchange.Report("{") && !exchange.Report(std::string(xfb::OptionsExchange::kMaxReportBytes + 1, ' ')));
+        Check("an answer for another seq is refused and leaves the request pending",
+              !exchange.Report(json{{"seq", seq + 1}, {"values", json::object()}}.dump(), &why) && !why.empty() &&
+                  !exchange.Pending().empty(),
+              why);
+        Check("an answer naming an option that wasn't asked for is refused (and ends the request)",
+              !exchange.Report(json{{"seq", seq}, {"values", {{"X/Y", "1"}}}}.dump()) && exchange.Pending().empty());
+        const auto nonText = exchange.Request({"A/B", "C/D"});
+        Check("an answer with a non-text value is refused",
+              !exchange.Report(json{{"seq", nonText}, {"values", {{"A/B", 1}}}}.dump()));
+        exchange.Request({"A/B", "C/D"});
+        Check("an answer that isn't JSON is refused", !exchange.Report("{"));
+        exchange.Request({"A/B", "C/D"});
+        Check("an answer that is too large is refused", !exchange.Report(std::string(xfb::OptionsExchange::kMaxReportBytes + 1, ' ')));
+        const auto answered = exchange.Request({"A/B", "C/D"});
         std::thread cet([&] {
             std::this_thread::sleep_for(20ms);
-            exchange.Report(json{{"seq", seq}, {"values", {{"A/B", "0.300000"}}}}.dump());
+            exchange.Report(json{{"seq", answered}, {"values", {{"A/B", "0.300000"}}}}.dump());
         });
-        const auto answer = exchange.WaitFor(seq, 2000ms);
+        const auto answer = exchange.WaitFor(answered, 2000ms);
         cet.join();
         Check("the waiter gets the CET layer's answer, and nothing is pending after it",
               answer && (*answer)["A/B"] == "0.300000" && !answer->contains("C/D") && exchange.Pending().empty());
@@ -1032,6 +1042,406 @@ void CreatorAndOptionsTests()
                   (exchange.Request({"A/B"}), exchange.Pending().empty()));
     }
 }
+// Batch 4: cc.open's fixes (RB-42, RB-43, RB-46), the options answer (RB-47), the write pause and re-arm
+// pieces, photo.pose.set's sequence, and the live-pose layout checks, encoding and plan.
+void Batch4Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    namespace lp = xfb::livepose;
+
+    // cc.open.
+    {
+        std::vector<std::string> calls;
+        json cancelAnswer{{"withdrawn", true}};
+        bool cancelThrows = false;
+        int cancels = 0;
+        std::function<std::string()> phase = [] { return std::string("gameplay"); };
+        w::CreatorOpenOps ops;
+        ops.prepare = [&] {
+            calls.push_back("prepare");
+            return json{{"save_lock_requested", true}};
+        };
+        ops.settle = [&] { calls.push_back("settle"); };
+        ops.open = [&] {
+            calls.push_back("open");
+            return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "menu_event"}};
+        };
+        ops.phase = [&] { return phase(); };
+        ops.cancel = [&]() -> json {
+            ++cancels;
+            if (cancelThrows)
+            {
+                throw xfb::MethodError("timeout", "the game thread didn't answer");
+            }
+            return cancelAnswer;
+        };
+        ops.sleep = [](std::chrono::milliseconds) {};
+        const auto run = [&](const char* aParams, std::string* aMessage = nullptr) {
+            try
+            {
+                const auto out = w::CreatorOpen(p::ParseCreatorOpen(json::parse(aParams)), ops);
+                return std::string(out.value("note", std::string()).empty() ? "opened" : "opened_late");
+            }
+            catch (const xfb::MethodError& e)
+            {
+                if (aMessage)
+                {
+                    *aMessage = e.what();
+                }
+                return e.code;
+            }
+        };
+
+        // RB-42: the menu had taken the request, and the screen opens during the extra wait.
+        int polls = 0;
+        cancelAnswer = {{"withdrawn", false}, {"taken", true}};
+        phase = [&] { return ++polls > 8 ? std::string("character_menu") : std::string("gameplay"); };
+        Check("RB-42: a timed-out cc.open whose request the menu took waits a little longer and reports the late screen as opened",
+              run(R"({"timeout_ms":500})") == "opened_late" && cancels == 1);
+
+        // RB-42: taken, but the screen never shows: not "nothing opened".
+        cancels = 0;
+        std::string message;
+        phase = [] { return std::string("gameplay"); };
+        const auto uncertain = run(R"({"timeout_ms":500})", &message);
+        Check("RB-42: taken but never seen answers creator_open_uncertain, pointing at game.status and cc.back",
+              uncertain == "creator_open_uncertain" && message.find("cc.back") != std::string::npos &&
+                  message.find("saving stays locked") != std::string::npos,
+              uncertain + ": " + message);
+
+        // A withdrawal the game can't confirm is uncertain too.
+        cancelThrows = true;
+        const auto unconfirmed = run(R"({"timeout_ms":500})", &message);
+        Check("RB-42: a withdrawal that fails is reported as uncertain, never as nothing opened",
+              unconfirmed == "creator_open_uncertain" && message.find("couldn't confirm") != std::string::npos, message);
+        cancelThrows = false;
+
+        // Still waiting: withdrawn, nothing opened.
+        cancelAnswer = {{"withdrawn", true}, {"taken", false}};
+        const auto timedOut = run(R"({"timeout_ms":500})", &message);
+        Check("a request still waiting is withdrawn: creator_open_timeout, nothing opened, saving stays locked",
+              timedOut == "creator_open_timeout" && message.find("nothing opened") != std::string::npos &&
+                  message.find("saving stays locked") != std::string::npos,
+              message);
+
+        // RB-43: a phase poll that throws still withdraws the request.
+        cancels = 0;
+        phase = []() -> std::string { throw xfb::MethodError("timeout", "the game thread didn't answer"); };
+        const auto pollThrew = run("{}", &message);
+        Check("RB-43: a failing poll withdraws the request before the error goes back",
+              pollThrew == "timeout" && cancels == 1 && message.find("withdrawn") != std::string::npos, message);
+
+        // RB-43, RB-46: stage 2 refuses (or fails): withdrawn, and the answer says saving stays locked.
+        cancels = 0;
+        phase = [] { return std::string("gameplay"); };
+        ops.open = [&]() -> json { throw xfb::MethodError("save_lock_not_held", "the game hasn't registered the bridge's save lock yet"); };
+        const auto stage2 = run("{}", &message);
+        Check("RB-46: a stage-2 refusal keeps its code and says that saving stays locked until a save is loaded",
+              stage2 == "save_lock_not_held" && cancels == 1 && message.find("saving stays locked until a save is loaded") != std::string::npos,
+              message);
+        ops.open = [&]() -> json { throw xfb::MethodError("timeout_after_start", "the game started the request but didn't finish"); };
+        cancelAnswer = {{"withdrawn", false}, {"taken", true}};
+        const auto openFailed = run("{}", &message);
+        Check("RB-43: an open call that fails part-way is withdrawn, and a request the menu took is reported as possibly opening",
+              openFailed == "timeout_after_start" && message.find("may still open") != std::string::npos, message);
+
+        // RB-45's refusal comes from the first step, before anything settles or is asked.
+        calls.clear();
+        ops.prepare = [&]() -> json { throw xfb::MethodError("not_v", "the player is Johnny right now, not V"); };
+        Check("RB-45: not V (a Johnny section) stops cc.open in its first step", run("{}") == "not_v" && calls.empty());
+    }
+
+    // photo.pose.set's sequence.
+    {
+        std::vector<std::string> calls;
+        w::PoseSetOps ops;
+        json category{{"before_known", true}, {"before_category", 0}, {"before_pose", 3}, {"changed", true},
+                      {"category_value", 900}, {"category_text", "XF Live"}};
+        ops.category = [&] {
+            calls.push_back("category");
+            return category;
+        };
+        ops.settle = [&] { calls.push_back("settle"); };
+        ops.pose = [&] {
+            calls.push_back("pose");
+            return json{{"changed", true}, {"pose_value", 7}, {"pose_text", "XF Live Carrier"}};
+        };
+        int restored = -1;
+        ops.restoreCategory = [&](int32_t aValue) { restored = aValue; };
+        const auto out = w::PoseSet(ops);
+        Check("photo.pose.set selects the category, waits for the new list, then the pose",
+              calls == std::vector<std::string>{"category", "settle", "pose"} && out["pose"] == "XF Live Carrier" && out["changed"] == true,
+              out.dump());
+        Check("its undo selects the earlier category and pose by option data",
+              out["undo"]["method"] == "photo.pose.set" && out["undo"]["params"]["category_value"] == 0 &&
+                  out["undo"]["params"]["pose_value"] == 3,
+              out.dump());
+
+        calls.clear();
+        ops.pose = [&]() -> json { throw xfb::MethodError("bad_params", "no pose labelled 'X' in the current category"); };
+        std::string message;
+        try
+        {
+            w::PoseSet(ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = e.what();
+        }
+        Check("a pose that isn't there puts the category back and says so",
+              restored == 0 && message.find("the pose category was put back") != std::string::npos, message);
+
+        calls.clear();
+        category["changed"] = false;
+        ops.pose = [&] {
+            calls.push_back("pose");
+            return json{{"changed", false}, {"pose_value", 3}, {"pose_text", "Stand 01"}};
+        };
+        const auto same = w::PoseSet(ops);
+        Check("the pose already selected changes nothing, needs no wait and has no undo",
+              calls == std::vector<std::string>{"category", "pose"} && same["undo"].is_null(), same.dump());
+
+        Check("photo.pose.set takes one of record, pose (with category) or the option data",
+              p::ParsePoseSet(json::parse(R"({"record":"xfs_live_carrier"})")).record == "PhotoModePoses.xfs_live_carrier" &&
+                  p::ParsePoseSet(json::parse(R"({"pose":"Stand 01","category":"Idle"})")).category == "Idle" &&
+                  p::ParsePoseSet(json::parse(R"({"category_value":0,"pose_value":3})")).poseValue == 3 &&
+                  ParamsCode([] { p::ParsePoseSet(json::parse(R"({"record":"a","pose":"b"})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseSet(json::parse(R"({"category":"Idle"})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseSet(json::parse(R"({"pose_value":3})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseSet(json::parse(R"({"record":"a;b"})")); }) == "bad_params");
+    }
+
+    // RB-47: the options answer.
+    {
+        xfb::OptionsExchange exchange;
+        const auto seq = exchange.Request({"A/B", "C/D", "E/F"});
+        std::thread cet([&] {
+            std::this_thread::sleep_for(10ms);
+            exchange.Report(json{{"seq", seq}, {"values", {{"A/B", std::string(300, 'x')}, {"C/D", "1"}}}, {"skipped", {"E/F"}}}.dump());
+        });
+        xfb::OptionsOutcome outcome;
+        const auto values = exchange.WaitFor(seq, 2000ms, &outcome);
+        cet.join();
+        Check("RB-47: an overlong value is kept as null and named, and the rest of the answer arrives",
+              values && (*values)["A/B"].is_null() && (*values)["C/D"] == "1" && outcome.tooLong == std::vector<std::string>{"A/B"} &&
+                  outcome.skipped == std::vector<std::string>{"E/F"},
+              values ? values->dump() : "no answer");
+        const auto result = xfb::RenderOptionsResult({"A/B", "C/D", "E/F"}, values, outcome, 3000);
+        Check("RB-47: the result lists too_long and skipped, and counts them as missing",
+              result["available"] == true && result["too_long"] == json::array({"A/B"}) && result["skipped"] == json::array({"E/F"}) &&
+                  result["missing"].size() == 2,
+              result.dump());
+
+        const auto big = exchange.Request({"A/B"});
+        const auto start = std::chrono::steady_clock::now();
+        std::thread flood([&] {
+            std::this_thread::sleep_for(10ms);
+            exchange.Report(std::string(xfb::OptionsExchange::kMaxReportBytes + 10, ' '));
+        });
+        const auto none = exchange.WaitFor(big, 3000ms, &outcome);
+        flood.join();
+        const auto refused = xfb::RenderOptionsResult({"A/B"}, none, outcome, 3000);
+        Check("RB-47: an answer too large to read ends the request at once with the real reason, not a 3 s timeout",
+              !none && MsSince(start) < 1000 && outcome.refusal.find("too large") != std::string::npos &&
+                  refused["reason"].get<std::string>().find("too large") != std::string::npos,
+              refused.dump());
+
+        const auto wrong = exchange.Request({"A/B"});
+        std::string why;
+        exchange.Report(json{{"seq", wrong}, {"values", {{"A/B", 1}}}}.dump(), &why);
+        const auto afterWrong = exchange.WaitFor(wrong, 10ms, &outcome);
+        Check("RB-47: a value that isn't text ends the request with that reason",
+              !afterWrong && outcome.refusal.find("wasn't text") != std::string::npos, outcome.refusal);
+
+        exchange.Cancel();
+        Check("after the kill switch nothing is requested", (exchange.Request({"A/B"}), exchange.Pending().empty()));
+        exchange.Reset();
+        Check("re-arming accepts requests again", (exchange.Request({"A/B"}), !exchange.Pending().empty()));
+    }
+
+    // The write pause and re-arm pieces.
+    {
+        xfb::Config config;
+        config.allowWrites = true;
+        config.maxRequestsPerSecond = 200;
+        xfb::Session session;
+        std::string error;
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-pause-not-created");
+        xfb::GameThreadQueue queue;
+        xfb::Dispatcher dispatcher(config, session, queue);
+        dispatcher.Register({"t.write", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "unit",
+                             [](const xfb::MethodContext&) { return json{{"ok", true}}; }});
+        dispatcher.Register({"t.read", xfb::Access::Read, xfb::RunOn::BridgeThread, "unit",
+                             [](const xfb::MethodContext&) { return json{{"ok", true}}; }});
+        const auto call = [&](const char* aMethod) {
+            const auto line = json{{"v", 1}, {"id", 1}, {"token", session.token}, {"method", aMethod}}.dump();
+            const auto reply = json::parse(dispatcher.Handle(line, 0).line);
+            return reply.value("ok", false) ? std::string("ok") : reply["error"].value("code", std::string());
+        };
+        dispatcher.SetWritesPaused(true);
+        Check("paused writes are refused with writes_paused; reads still work",
+              call("t.write") == "writes_paused" && call("t.read") == "ok" && dispatcher.Describe()["writes_paused"] == true);
+        dispatcher.SetWritesPaused(false);
+        Check("resuming gives back what config.ini allows", call("t.write") == "ok");
+        config.allowWrites = false;
+        dispatcher.SetWritesPaused(false);
+        Check("resuming can't allow writes that config.ini doesn't", call("t.write") == "writes_disabled");
+        config.allowWrites = true;
+
+        dispatcher.Kill("unit");
+        Check("killed: everything is refused", call("t.read") == "killed");
+        dispatcher.Revive();
+        Check("revived: requests are accepted again", call("t.read") == "ok" && !dispatcher.IsKilled());
+
+        queue.SetPumping(true);
+        queue.Close();
+        json result;
+        std::string qerror;
+        Check("a closed queue refuses tasks", queue.Run([] { return json(1); }, 10ms, result, qerror) == xfb::QueueResult::NotPumping);
+        queue.Reopen(true);
+        std::atomic<bool> ran{false};
+        std::thread game([&] {
+            for (int i = 0; i < 50 && !ran.load(); ++i)
+            {
+                queue.Drain(4);
+                std::this_thread::sleep_for(2ms);
+            }
+        });
+        const auto reopened = queue.Run(
+            [&] {
+                ran = true;
+                return json(2);
+            },
+            1000ms, result, qerror);
+        game.join();
+        Check("a reopened queue runs tasks again", reopened == xfb::QueueResult::Done && result == 2 && queue.IsPumping());
+
+        xfb::writes::RestoreOnce restore;
+        restore.MarkWrite();
+        Check("the restore can't be reset while it is owed", restore.Pending() && !restore.Reset());
+        restore.Tick(true, [] {});
+        Check("after the restore ran, a reset forgets the last generation's writes",
+              !restore.Pending() && restore.Reset() && !restore.WritesUsed() && !restore.Done());
+
+        xfb::Bridge bridge(config, session, queue);
+        Check("a bridge that wasn't killed refuses to re-arm", !bridge.RearmRefusal().empty());
+    }
+
+    // The live-pose layout checks, encoding and plan.
+    {
+        // Rotation round trip, including a negative w.
+        const std::array<float, 4> q{0.2f, -0.3f, 0.1f, -0.927f};
+        float x = 0, y = 0, z = 0;
+        bool wSign = false;
+        lp::EncodeRotation(q, x, y, z, wSign);
+        const auto back = lp::DecodeRotation(x, y, z, wSign);
+        const double length = std::sqrt(0.2 * 0.2 + 0.3 * 0.3 + 0.1 * 0.1 + 0.927 * 0.927);
+        bool close = true;
+        for (int i = 0; i < 4; ++i)
+        {
+            close = close && std::fabs(back[i] - q[i] / length) < 1e-5;
+        }
+        Check("the rotation encoding round-trips a unit quaternion (w's sign in bit 15)", close && wSign);
+        Check("the header packs joint, channel and w sign like WolvenKit's reader",
+              lp::Header(40, lp::Rotation, true) == (40 | 0x2000 | 0x8000) && lp::JointOf(0xA028) == 40 && lp::ChannelOf(0xA028) == 1 &&
+                  lp::WSignOf(0xA028));
+
+        // A carrier: 3 joints, one rotation and one translation each, then 2 constant track keys.
+        std::vector<lp::RawConstKey> keys;
+        for (uint16_t joint = 0; joint < 3; ++joint)
+        {
+            lp::RawConstKey rotation{};
+            lp::EncodeRotation({0, 0, 0, 1}, rotation.x, rotation.y, rotation.z, wSign);
+            rotation.header = lp::Header(joint, lp::Rotation, wSign);
+            keys.push_back(rotation);
+            keys.push_back({lp::Header(joint, lp::Translation, false), 0, 0.0f, 0.1f, 0.0f});
+        }
+        lp::BufferCounts counts;
+        counts.numFrames = 2;
+        counts.numJoints = 3;
+        counts.numConstAnimKeys = 6;
+        counts.numConstTrackKeys = 2;
+        counts.dataBytes = 6 * 16 + 2 * 8;
+        std::vector<uint8_t> block(counts.dataBytes);
+        const auto base = reinterpret_cast<uintptr_t>(block.data());
+        lp::BufferSpans spans;
+        spans.constKeys = {base, base + 96};
+        spans.constTracks = {base + 96, base + 112};
+        Check("a key block that matches its counts passes", lp::CheckSpans(counts, spans).empty() &&
+                                                                lp::CheckConstKeys(counts, keys).empty() &&
+                                                                lp::CheckCarrier(counts, keys).empty());
+        auto gap = spans;
+        gap.constTracks = {base + 100, base + 116};
+        auto shortSpan = spans;
+        shortSpan.constKeys = {base, base + 80};
+        auto wrongTotal = counts;
+        wrongTotal.dataBytes = 200;
+        auto missingSpan = spans;
+        missingSpan.constKeys = {};
+        Check("a gap between runs, a span of the wrong size, a total that disagrees or a missing span is refused",
+              !lp::CheckSpans(counts, gap).empty() && !lp::CheckSpans(counts, shortSpan).empty() &&
+                  !lp::CheckSpans(wrongTotal, spans).empty() && !lp::CheckSpans(counts, missingSpan).empty());
+        auto badKeys = keys;
+        badKeys[2].header = lp::Header(7, lp::Rotation, false); // joint 7 of 3
+        auto twice = keys;
+        twice[2].header = keys[0].header;
+        auto outside = keys;
+        outside[0].x = 2.0f;
+        Check("keys naming a joint past the rig, a joint twice or a rotation outside the unit ball are refused",
+              !lp::CheckConstKeys(counts, badKeys).empty() && !lp::CheckConstKeys(counts, twice).empty() &&
+                  !lp::CheckConstKeys(counts, outside).empty());
+        auto noRotation = keys;
+        noRotation.erase(noRotation.begin() + 2); // joint 1's rotation
+        auto animated = counts;
+        animated.numAnimKeysRaw = 4;
+        Check("the carrier contract wants one constant rotation key per joint and no animated keys",
+              !lp::CheckCarrier(counts, noRotation).empty() && !lp::CheckCarrier(animated, keys).empty());
+
+        // The same keys hashed by the carrier build (tools/live-pose/carrier.ts keysHash): the offline and live
+        // hashes must agree byte for byte (tools/test/carrier.test.ts checks the same literal).
+        Check("the keys hash matches the carrier build's for the same keys", lp::KeysHash(keys) == "b1a8348859a0a5c3", lp::KeysHash(keys));
+        auto retimed = keys;
+        retimed[0].time = 12345;
+        Check("the keys hash ignores the time field and changes with a value",
+              lp::KeysHash(keys) == lp::KeysHash(retimed) && lp::KeysHash(keys) != lp::KeysHash(outside) && lp::KeysHash(keys).size() == 16);
+        const auto described = lp::DescribeKeys(keys, {"Root", "Trajectory", "Hips"});
+        Check("decoded keys name the joint and give rotations as [x, y, z, w]",
+              described[0]["name"] == "Root" && described[0]["rotation"].size() == 4 && described[1]["translation"].size() == 3,
+              described[0].dump());
+
+        const auto writes = lp::PlanApply(keys, {{1, {0.0f, 0.0f, 0.7071068f, 0.7071068f}}}, std::array<float, 3>{0.0f, 0.0f, 1.0f}, 2);
+        const auto decoded = writes.empty() ? std::array<float, 4>{} : lp::DecodeRotation(writes[0].value.x, writes[0].value.y, writes[0].value.z,
+                                                                                            lp::WSignOf(writes[0].value.header));
+        Check("the plan writes the joint's rotation key and the Hips translation key, nothing else",
+              writes.size() == 2 && writes[0].keyIndex == 2 && std::fabs(decoded[2] - 0.7071068f) < 1e-5 && writes[1].keyIndex == 5 &&
+                  writes[1].value.z == 1.0f && lp::JointOf(writes[1].value.header) == 2);
+        Check("a joint given twice or without a constant rotation key is refused",
+              ParamsCode([&] { lp::PlanApply(keys, {{1, {0, 0, 0, 1}}, {1, {0, 0, 0, 1}}}, std::nullopt, 2); }) == "bad_params" &&
+                  ParamsCode([&] { lp::PlanApply(noRotation, {{1, {0, 0, 0, 1}}}, std::nullopt, 2); }) == "bad_params");
+
+        const auto apply = p::ParsePoseLiveApply(json::parse(R"({"joints":{"RightForeArm":[0,0,0.7071068,0.7071068]},"hips":[0,0,1]})"));
+        Check("pose.live.apply takes joint rotations and the Hips translation", apply.joints.size() == 1 && apply.hips.has_value());
+        Check("pose.live.apply refuses a rotation that isn't a unit quaternion, odd joint names, nothing, or restore with values",
+              ParamsCode([] { p::ParsePoseLiveApply(json::parse(R"({"joints":{"A":[0,0,0,2]}})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseLiveApply(json::parse(R"({"joints":{"A;B":[0,0,0,1]}})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseLiveApply(json::object()); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseLiveApply(json::parse(R"({"restore":true,"hips":[0,0,0]})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseLiveApply(json::parse(R"({"hips":[0,0,9]})")); }) == "bad_params");
+        Check("pose.live.apply is off unless allow_live_pose", ParamsCode([] { p::LivePoseAllowed(false); }) == "live_pose_disabled" &&
+                                                                    ParamsCode([] { p::LivePoseAllowed(true); }) == "ok");
+        const auto read = p::ParsePoseLiveRead(json::object());
+        Check("pose.live.read defaults to the XF carrier and checks paths",
+              read.set == lp::kCarrierSet && read.clip == lp::kCarrierClip &&
+                  ParamsCode([] { p::ParsePoseLiveRead(json::parse(R"({"set":"a\\..\\b.anims"})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseLiveRead(json::parse(R"({"set":"a\\b.mesh"})")); }) == "bad_params" &&
+                  ParamsCode([] { p::ParsePoseLiveRead(json::parse(R"({"expect_hash":"XYZ"})")); }) == "bad_params");
+        Check("allow_live_pose is read from config.ini and off by default",
+              !xfb::ParseConfig("").allowLivePose && xfb::ParseConfig("[bridge]\nallow_live_pose = true\n").allowLivePose);
+    }
+}
 } // namespace
 
 int RunUnitTests()
@@ -1050,6 +1460,7 @@ int RunUnitTests()
     ScriptFrameTests();
     FaceTests();
     CreatorAndOptionsTests();
+    Batch4Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

@@ -349,6 +349,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     },
     endFovGesture: () => { fovGestureAnchor = undefined; },
     setIdle: (enabled: boolean) => { if (rigMotion.setIdle(enabled)) frameIdle(); },
+    /** The game's preview idles prepared on this computer (idle-catalogue.ts). */
+    idles: motion.idles,
+    /** Play another of them; the framing follows the new clip's head, as enabling the idle does. */
+    selectIdle: async (id: string) => {
+      if (!motion.selectIdle) throw Error("The game's other idles aren't prepared on this computer.");
+      await motion.selectIdle(id);
+      frameIdle();
+    },
     setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;

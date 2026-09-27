@@ -543,6 +543,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 - Camera Back/Forward after a long navigation (only jumps leave trail entries until the camera input writes the node, P3), and `head.front`-style bindings resolving against the focused view (one view until P4).
 - A guidance tour step on a hidden module's panel offers "Show Eye makeup" through the dock's withdrawn-panel notice, not yet as the tour step's own action.
 - The Panels flyout's New view and Duplicate view (shared camera) entries (P4; the list of views is derived from the graph already).
+- The subject's motion as scene-node state: the idle's on/off, phase and contributions, and since 27 September which of the game's preview idles plays (`motion.setIdleClip`, [body animation §2](../../knowledge/body-animation.md#2-the-preview-idles)), are still `MotionActions` state stored in the workspace's `preview` block. They move into the scene node together in P3, when the rig becomes the scene runtime's. An idle per view doesn't fit the model: views of one scene share its one rig, so the choice belongs to the scene, not to the view.
 
 ## 7. Open questions, with proposed defaults
 

@@ -181,3 +181,19 @@ test("a head follows only its own body's V: another body's details and facial sh
   expect(faces.length).toBe(1);
   release();
 });
+
+test("a masculine head holds still with its own plain reason: no idle and no idle choice until his clips are prepared", async () => {
+  const { MotionActions, IDLE_MASCULINE, IDLE_UNAVAILABLE } = await import("../src/motion-actions");
+  const { BUILT_IN_CATALOGUE } = await import("../src/idle-catalogue");
+  const { freshWorkspace } = await import("./fixtures/eye-region");
+  const noop = () => {};
+  const port = (error: string) => ({ available: false, error, blink: { available: false }, idles: BUILT_IN_CATALOGUE.idles, setIdle: noop, setIdlePaused: noop,
+    setIdleContributions: noop, setBlink: noop, animateBlink: noop, selectIdle: async () => {} });
+  const masculine = new MotionActions(freshWorkspace().preview, port(IDLE_MASCULINE));
+  expect(masculine.snapshot().error).toBe(IDLE_MASCULINE);
+  expect(masculine.capability({ kind: "motion.setIdle", enabled: true })).toMatchObject({ available: false, reason: IDLE_MASCULINE });
+  expect(masculine.capability({ kind: "motion.setIdleClip", clip: BUILT_IN_CATALOGUE.idles[0]!.id })).toMatchObject({ available: false, reason: IDLE_MASCULINE });
+  // Any other failure keeps the general wording.
+  expect(new MotionActions(freshWorkspace().preview, port("decode failed")).snapshot().error).toBe(IDLE_UNAVAILABLE);
+  expect(USER_FACING_JARGON.test(IDLE_MASCULINE)).toBe(false);
+});

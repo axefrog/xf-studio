@@ -14,7 +14,7 @@ import type { CommandApi, CommandOutcome } from "../api/command-api.ts";
 import { lockPath, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
 
 export const SERVER_NAME = "xf-runtime-bridge";
-export const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "0.3.0";
 
 export type McpServerOptions = {
   /** Permission classes to expose; a future consent screen fills this in. Default: all. */

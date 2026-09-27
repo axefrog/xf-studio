@@ -90,6 +90,7 @@ export const ACTION_DESCRIPTORS = {
   "preview.setHair": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setDetail": inView("viewport", "workspace", "none", { detail: enumerated(["brows", "lashes"]), enabled: input("boolean") }),
   "motion.setIdle": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "motion.setIdleClip": inView("viewport", "workspace", "none", { clip: inputText(1, 40) }),
   "motion.setPaused": inView("viewport", "workspace", "none", { paused: input("boolean") }),
   "motion.setContributions": inView("viewport", "workspace", "none", { body: input("boolean"), face: input("boolean") }),
   "motion.setBlink": inView("viewport", "workspace", "none", { value: input("number", 0, 1) }),

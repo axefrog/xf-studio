@@ -59,13 +59,19 @@ def rotate(q, v):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--addon', type=Path, default=Path('D:/Dev/Cyberpunk-Blender-add-on'))
+    # Another face clip of the creator's face set (prepare_body_idles.py bakes the full-body view's this way); the defaults are the
+    # close-up idle's, as before.
+    parser.add_argument('--clip', default='ui_closeup_shot')
+    parser.add_argument('--face-glb', type=Path, default=ROOT / 'raw/idle-face.glb')
+    parser.add_argument('--output', type=Path, default=APP / 'public/assets/cc-idle-face.glb')
+    parser.add_argument('--report', type=Path, default=APP / 'evidence/idle-face-bake.json')
     args = parser.parse_args()
     loader, runtime, model, solver = external_solver(args.addon)
     rig_path = ROOT / 'json/h0_000_pwa_c__basehead_skeleton.rig.json'
     setup_path = ROOT / 'json/h0_000_pwa_c__basehead_rigsetup.facialsetup.json'
     rig = json.loads(rig_path.read_text())['Data']['RootChunk']
     setup = loader.parse_facial_setup(json.loads(setup_path.read_text()))
-    face = read_glb(ROOT / 'raw/idle-face.glb')
+    face = read_glb(args.face_glb)
     skin = face['skins'][0]
     names = [x['$value'] for x in rig['boneNames']]
     assert names == [face['nodes'][i]['name'] for i in skin['joints']]
@@ -104,7 +110,7 @@ def main():
     out = {'asset': {'version': '2.0', 'generator': 'XFAS local facial bake; Cyberpunk IO Suite solver'},
            'scene': 0, 'scenes': face['scenes'], 'nodes': face['nodes'],
            'buffers': [], 'bufferViews': [], 'accessors': [],
-           'animations': [{'name': 'ui_closeup_shot_face', 'channels': [], 'samplers': []}]}
+           'animations': [{'name': f'{args.clip}_face', 'channels': [], 'samplers': []}]}
     data = bytearray()
 
     def accessor(values, kind):
@@ -137,11 +143,12 @@ def main():
     payload = (struct.pack('<4sII', b'glTF', 2, 28+len(encoded)+len(data)) +
                struct.pack('<II', len(encoded), 0x4e4f534a) + encoded +
                struct.pack('<II', len(data), 0x004e4942) + data)
-    output = APP / 'public/assets/cc-idle-face.glb'
+    output = args.output
     output.write_bytes(payload)
     report = {'solver': {'repository': 'https://github.com/WolvenKit/Cyberpunk-Blender-add-on', 'commit': PIN,
                          'license': 'GPL-3.0-or-later', 'use': 'External unmodified numerical solver executed offline'},
-              'sourceHashes': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [rig_path, setup_path, ROOT / 'raw/idle-face.glb']},
+              'clip': args.clip,
+              'sourceHashes': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [rig_path, setup_path, args.face_glb]},
               'duration': float(duration), 'frames': len(times), 'sampleRate': 30,
               'activeBones': [names[int(i)] for i in active], 'outputBytes': len(payload),
               'outputSha256': hashlib.sha256(payload).hexdigest(),
@@ -149,7 +156,7 @@ def main():
               'limitations': ['Game animation graph layering/synchronization not established.',
                              'External solver applies rotations/translations, not pose scale arrays.',
                              'Wrinkle outputs are not rendered; in-game visual parity not established.']}
-    (APP / 'evidence/idle-face-bake.json').write_text(json.dumps(report, indent=2)+'\n')
+    args.report.write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k: v for k, v in report.items() if k not in ['activeBones', 'sourceHashes']}, indent=2))
     print('Active bones:', len(active))
 
