@@ -20,11 +20,13 @@ const EDGE = 100, VIEW = 300;
  */
 function scroller() {
   const container = document.createElement("div") as unknown as LightElement & { scrollTop: number; clientHeight: number };
-  let scroll = 0;
+  let scroll = 0, view = VIEW, width = 200;
+  // Text reflows with the width: a row's height scales inversely with it (200 px wide: its own height).
   const height = (element: LightElement): number => element.hasAttribute("hidden") ? 0
     // A choice (a picture tile) is 40 px.
     : element.getAttribute("role") === "option" ? 40
-    : element.children.length ? element.children.reduce((sum, child) => sum + height(child), 0) : Number(element.getAttribute("data-height") ?? 0);
+    : element.children.length ? element.children.reduce((sum, child) => sum + height(child), 0)
+    : Math.round(Number(element.getAttribute("data-height") ?? 0) * 200 / width);
   const content = () => container.children.reduce((sum, child) => sum + height(child), 0);
   /** The element's top within the content. */
   const offsetOf = (target: LightElement): number => {
@@ -40,9 +42,12 @@ function scroller() {
     walk(container);
     return y;
   };
-  Object.defineProperty(container, "scrollTop", { get: () => scroll, set: (value: number) => { scroll = Math.max(0, Math.min(Math.max(0, content() - VIEW), value)); } });
-  Object.defineProperty(container, "clientHeight", { get: () => VIEW });
-  container.getBoundingClientRect = () => ({ x: 0, y: EDGE, left: 0, top: EDGE, right: 200, bottom: EDGE + VIEW, width: 200, height: VIEW });
+  Object.defineProperty(container, "scrollTop", { get: () => scroll, set: (value: number) => { scroll = Math.max(0, Math.min(Math.max(0, content() - view), value)); } });
+  Object.defineProperty(container, "clientHeight", { get: () => view });
+  Object.defineProperty(container, "clientWidth", { get: () => width });
+  container.getBoundingClientRect = () => ({ x: 0, y: EDGE, left: 0, top: EDGE, right: width, bottom: EDGE + view, width, height: view });
+  /** Resize the container as a browser would: the content reflows and the scroll position clamps; nothing else moves it. */
+  const resize = (w: number, h: number) => { width = w; view = h; scroll = Math.max(0, Math.min(Math.max(0, content() - view), scroll)); };
   const item = (key: string, rowHeight: number, ...children: LightElement[]) => {
     const element = document.createElement("div") as unknown as LightElement;
     element.setAttribute("data-view-key", key);
@@ -57,7 +62,7 @@ function scroller() {
   /** Where an element's top is, relative to the container's top edge (any element in it, keyed or not). */
   const top = (element: LightElement) => offsetOf(element) - scroll;
   document.body.append(container as never);
-  return { container: container as unknown as HTMLElement & LightElement, item, top };
+  return { container: container as unknown as HTMLElement & LightElement, item, top, resize };
 }
 const rows = (make: ReturnType<typeof scroller>["item"], names: string, rowHeight = 40) => names.split("").map(name => make(name, rowHeight));
 
@@ -228,6 +233,65 @@ describe("a choice never moves the view", () => {
     s.container.dispatchEvent(lightEvent("scroll"));
     expect(s.top(tile)).toBe(-7);
     memory.dispose();
+  });
+});
+
+describe("resizing keeps the place", () => {
+  async function setup() {
+    const { ScrollMemory } = await anchors();
+    const { MemoryViewState } = await viewState();
+    const s = scroller();
+    const made = rows(s.item, "abcdefghijklmnopqrst");
+    s.container.append(...made as never[]);
+    const memory = new ScrollMemory(s.container, "panel:test", { store: () => new MemoryViewState(), observe: false });
+    memory.resized();
+    // Row f (at 200) 14 px past the top edge, as the person scrolled it.
+    s.container.scrollTop = 214;
+    s.container.dispatchEvent(lightEvent("scroll"));
+    return { s, memory, f: made[5]! };
+  }
+
+  test("a height-only change keeps the scroll position", async () => {
+    const { s, memory } = await setup();
+    s.resize(200, 180);
+    memory.resized();
+    expect(s.container.scrollTop).toBe(214);
+    s.resize(200, 420);
+    memory.resized();
+    expect(s.container.scrollTop).toBe(214);
+    memory.dispose();
+  });
+
+  test("a width change (reflow) puts the anchor back at minus its clip offset, and a drag back returns exactly", async () => {
+    const { s, memory, f } = await setup();
+    // Narrower: every row twice as tall, f now starts at 400.
+    s.resize(100, VIEW);
+    expect(s.top(f)).toBe(186);
+    memory.resized();
+    expect(s.top(f)).toBe(-14);
+    // Its own correction's scroll event keeps the anchor from before; a splitter drag through several widths ends where it began.
+    s.container.dispatchEvent(lightEvent("scroll"));
+    s.resize(150, VIEW); memory.resized(); s.container.dispatchEvent(lightEvent("scroll"));
+    expect(s.top(f)).toBe(-14);
+    s.resize(200, VIEW); memory.resized();
+    expect(s.container.scrollTop).toBe(214);
+    memory.dispose();
+  });
+
+  test("no correction while the person is scrolling", async () => {
+    const { s, memory, f } = await setup();
+    s.container.dispatchEvent(lightEvent("wheel"));
+    s.resize(100, VIEW);
+    memory.resized();
+    expect(s.container.scrollTop).toBe(214);
+    expect(s.top(f)).toBe(186);
+    // A pointer held in the container (dragging its scrollbar) too, until it is released.
+    const { s: t, memory: other, f: g } = await setup();
+    t.container.dispatchEvent(lightEvent("pointerdown"));
+    await new Promise(resolve => setTimeout(resolve, 5));
+    t.resize(100, VIEW); other.resized();
+    expect(t.top(g)).toBe(186);
+    memory.dispose(); other.dispose();
   });
 });
 
