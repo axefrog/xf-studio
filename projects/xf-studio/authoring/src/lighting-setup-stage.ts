@@ -6,6 +6,8 @@ import { createLinearDisplay } from "./linear-display";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
 import { installShadowFilter } from "./shadow-filter";
 import { createSkinScatter } from "./platform/scene/skin-scatter";
+import { createContactShadows, setContactShadows } from "./platform/scene/contact-shadow";
+import { contactShadowUniforms } from "./skin-material";
 import type { ScatterQuality } from "./platform/scene/skin-scatter-kernel";
 import { createStudioEnvironment, type StudioEnvironment } from "./studio-environment";
 import { DEFAULT_STUDIO_STAGE } from "./studio-lighting";
@@ -64,6 +66,8 @@ export function createLightListRig() {
     if (isSpot(light)) { light.distance = spec.distance; light.angle = spec.angle; light.penumbra = spec.penumbra; light.decay = spec.decay; }
     const was = light.castShadow;
     light.castShadow = spec.shadows;
+    // The game's character contact shadows (platform/scene/contact-shadow.ts), on a light that shadows at all: the shadow switch turns both off.
+    setContactShadows(light, spec.shadows && !!spec.game && spec.game.contactShadows !== "none");
     if (!spec.shadows) return;
     if (!isSpot(light)) {
       const d = Math.hypot(spec.position[0] - spec.target[0], spec.position[1] - spec.target[1], spec.position[2] - spec.target[2]);
@@ -152,6 +156,8 @@ export function createLightingSetupStage(options: {
   // The prefiltered room (null with the light probe instead); a setup with room light shows it, one without has no environment.
   const room = scene.environment;
   const rig = createLightListRig(), display = createLinearDisplay(renderer), scatter = createSkinScatter(renderer);
+  const contact = createContactShadows(renderer, contactShadowUniforms);
+  let contactOn = true;
   scene.add(rig.group);
   // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or
   // lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
@@ -254,6 +260,8 @@ export function createLightingSetupStage(options: {
         const key = shadowState(scene);
         if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
       }
+      // Contact shadows' caster depth first: the forward skin, its scatter input and the plate all read it (PREV-148).
+      if (contactOn) contact.prepare(scene, camera); else contact.off();
       // The scatter decides first, so the forward skin lights with the same irradiance it blurs (the wrap off while it runs).
       const scattering = scatter.prepare(scene, display.scatterPossible);
       display.render(scene, camera, game() ? "creator" : "studio", scattering ? () => scatter.render(scene, camera) : undefined);
@@ -272,6 +280,8 @@ export function createLightingSetupStage(options: {
      * may also ask for `bare` (the wrap off and no Δ: the direct light alone), for A/B captures.
      */
     setScatter(mode: boolean | "bare") { scatter.setEnabled(mode !== false); scatter.setBare(mode === "bare"); },
+    /** Developer evidence (verification only): switch the character contact shadows off or on again, for A/B captures (PREV-148). */
+    setContactShadows(on: boolean) { contactOn = on; },
     /** Developer evidence (verification only): a trial scatter screen scale (null: the default), for fitting it from captures. */
     setScatterScale(scale: number | null) { scatter.setScale(scale); },
     /** Developer evidence (verification only): show one light alone by its setup ID, or all of them again with null. */
@@ -295,8 +305,9 @@ export function createLightingSetupStage(options: {
     display,
     environment,
     scatter,
+    contact,
     dispose() {
-      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose();
+      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose(); contact.dispose();
     },
   };
 }
