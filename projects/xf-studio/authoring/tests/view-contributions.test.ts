@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { group, locate, parseTree, split, type DockTree } from "../src/studio-ui/dock/layout";
-import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
+import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { PANEL_IDS, PANEL_META, STUDIO_CATALOGUE, STUDIO_VIEWS } from "../src/compose/views";
 import { activitySource as sourceIn, viewCatalogue, type ViewContribution } from "../src/studio-ui/views/contribution";
@@ -16,6 +16,14 @@ const activitySource = (kind: string) => sourceIn(kind, STUDIO_CATALOGUE);
 import { EYE_MAKEUP_GRANDFATHERED_PANELS, EYE_MAKEUP_VIEW } from "../src/features/eye-makeup/view/contribution";
 import { PANEL_FACTORIES } from "../src/compose/view-panels";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
+import { STUDIO_MODULES } from "../src/compose/modules";
+
+/**
+ * The composition before any module without a document part existed: the shell's view and eye makeup's. Panels of modules hidden by
+ * default (the Save Explorer) are parked at startup, so the factory layouts a person gets are still exactly these.
+ */
+const HISTORICAL = viewCatalogue([SHELL_VIEW, EYE_MAKEUP_VIEW]);
+const HIDDEN_BY_DEFAULT = STUDIO_CATALOGUE.panels.filter(panel => STUDIO_MODULES.some(module => !module.shownByDefault && module.id === panel.owner)).map(panel => panel.id);
 
 /** The factory layouts exactly as the hand-kept `layout-defaults.ts` built them before step 5 (481c3ad). */
 const BEFORE = {
@@ -38,16 +46,22 @@ const GRANDFATHERED = ["presets", "layers", "history", "library", "package", "he
 const area = { x: 0, y: 0, w: 1600, h: 900 };
 
 test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts and homes exactly", () => {
-  expect([...PANEL_IDS] as string[]).toEqual(GRANDFATHERED);
-  expect(defaultWide(STUDIO_CATALOGUE)).toEqual(BEFORE.wide());
-  expect(defaultCompact(STUDIO_CATALOGUE)).toEqual(BEFORE.compact());
+  expect([...HISTORICAL.ids] as string[]).toEqual(GRANDFATHERED);
+  expect(defaultWide(HISTORICAL)).toEqual(BEFORE.wide());
+  expect(defaultCompact(HISTORICAL)).toEqual(BEFORE.compact());
+  // The Studio's catalogue adds only panels of modules hidden by default, and parks them: the defaults a person gets are unchanged.
+  expect(([...PANEL_IDS] as string[]).filter(id => !GRANDFATHERED.includes(id))).toEqual(HIDDEN_BY_DEFAULT);
+  expect(HIDDEN_BY_DEFAULT).toEqual(["save-explorer.explorer"]);
+  const parked = defaultDockStateFor(STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
+  expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, BEFORE.wide().closed]);
+  expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, BEFORE.compact().closed]);
   expect(STUDIO_CATALOGUE.homes).toEqual({ help: ["finish", "layers"] });
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");
   // Eye makeup's view contributes its six panels; the shell the rest.
   expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["layers", "uv", "finish", "shape", "edge", "warp"]);
-  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup"]);
+  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer"]);
 });
 
 test("a dock layout saved before step 5 restores unchanged", () => {
@@ -57,9 +71,12 @@ test("a dock layout saved before step 5 restores unchanged", () => {
   const layers = locate(wide, "layers")!.group; layers.panels = ["layers"];
   wide = { ...wide, floating: [{ id: "w-history", x: 900, y: 120, w: 320, h: 400, node: group(["history"], "history", "g-history") }] };
   const saved = JSON.parse(JSON.stringify(serializeDockState({ wide, compact: BEFORE.compact() })));
-  const restored = restoreDockPreference(saved, area, STUDIO_CATALOGUE);
+  const restored = restoreDockPreference(saved, area, STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
   expect(restored.recovered).toBe(true);
-  expect(restored.state).toEqual(saved.state);
+  // Unchanged, apart from the hidden module's panel, parked beside the UV map for when that module is shown.
+  const withoutParked = (tree: DockTree) => { const { parked, ...rest } = tree as DockTree & { parked?: unknown }; void parked; return rest; };
+  expect({ wide: withoutParked(restored.state.wide), compact: withoutParked(restored.state.compact) }).toEqual(saved.state);
+  expect(Object.keys((restored.state.wide as DockTree & { parked?: object }).parked ?? {})).toEqual(HIDDEN_BY_DEFAULT);
 });
 
 test("every contributed panel has a factory, and every action kind an activity source from a contribution", () => {
@@ -81,7 +98,7 @@ test("new features use <feature>.<panel> IDs; only the shell's and eye makeup's 
 test("a second feature's view slots into the shell's layouts, and a saved layout gains its panel", () => {
   const HAIR_VIEW: ViewContribution = { owner: "hair", activity: [{ pattern: /^hair\./, label: "Hair" }],
     panels: [{ id: "hair.strands", title: "Strands", icon: "shape", description: "Hair strands.", order: 115, slot: "inspect" }] };
-  const catalogue = viewCatalogue([...STUDIO_VIEWS, HAIR_VIEW]);
+  const catalogue = viewCatalogue([SHELL_VIEW, EYE_MAKEUP_VIEW, HAIR_VIEW]);
   expect(catalogue.ids.slice(10, 13)).toEqual(["warp", "hair.strands", "character"]);
   expect(locate(defaultWide(catalogue), "hair.strands")!.group.panels).toEqual(
     ["finish", "shape", "edge", "warp", "hair.strands", "character", "lighting", "motion", "quality"]);
