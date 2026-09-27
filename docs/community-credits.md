@@ -282,6 +282,10 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 [Responsive NPCs](https://www.nexusmods.com/cyberpunk2077/mods/14800) and [Responsive V](https://www.nexusmods.com/cyberpunk2077/mods/22694), per the creator link on both Nexus pages. Responsive NPCs showed how far the game's reaction manager can be bent from script: reactions to V's clothing, a naked or broke V, gang vehicles and the current district, read through NPC archetype visual tags and affiliations. Responsive V showed that a voiceset scene can be patched as it loads, the route we plan for voiced reactions. Studied only.
 
+### Nail mods
+
+[Unique Nails For V - A Framework](https://www.nexusmods.com/cyberpunk2077/mods/10420), [North Oak Nail Spa - Pedicures and Nails](https://www.nexusmods.com/cyberpunk2077/mods/24993), [NC Nails - Pedicure for V](https://www.nexusmods.com/cyberpunk2077/mods/7084) and [Cute Nails - Base Game Nails Morph](https://www.nexusmods.com/cyberpunk2077/mods/21113). Together they showed the ways mods change V's nails: replacing the nail meshes with per-hand materials, patching new appearances into every nail mesh with ArchiveXL, adding wearable nails that hide V's own, and reshaping the nails with a morph. That shaped the proposed Nail Salon export. Studied only; their individual authors are still being confirmed.
+
 ### Nola Dreamer
 
 Nola Dreamer's hair Sofie, per its title, one of the creator's "Physics enabled" CCXL hair packs ([Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21844)). Its five parts, each with its own dangle rig and simulation driven by V's helper-joint rig, showed the second way CCXL hair declares physics, and its tuned and transplanted parts side by side showed how far creators adjust the game's physics values. Studied only; private local reference.
@@ -411,6 +415,10 @@ Michael Toksvig, "Mipmapping Normal Maps" (Journal of Graphics Tools), and Marc 
 ### Jewellery form and fit references
 
 The Association of Professional Piercers' [jewellery](https://safepiercing.org/wp-content/uploads/2020/05/APP_Initial_Print.pdf) and [procedure](https://safepiercing.org/wp-content/uploads/2020/10/APP_Procedures_2013_A_Web.pdf) brochures, including measurement material by Elayne Angel and photographs credited to Paul King, Neometal and Industrial Strength Body Jewelry, together with product pages from [Anatometal](https://anatometal.com/), [Maria Tash](https://www.mariatash.com/), [Stone and Strand](https://www.stoneandstrand.com/) and [BVLA](https://www.bvla.com/). They taught us gauges, ring sizes, closures and connection patterns for the jewellery design. Viewed as references only; no image or design was copied, and the APP jewellery brochure is licensed CC BY-NC-ND 4.0.
+
+### Nail polish finish references
+
+Product and guide pages from [OPI](https://www.opi.com/collections/shimmer-nail-polish), [ILNP](https://www.ilnp.com/mega-l-100-pure-linear-holographic-nail-polish/), [Holo Taco](https://www.holotaco.com/pages/magnetics), [Ready Ready](https://www.thereadyready.com/blogs/nail-trends/cat-eye-nails-explained), [Beetles](https://www.beetlesgel.com/blogs/guides/chrome-nail-powder) and [Cirque Colors](https://www.cirquecolors.com/blogs/blog/jelly-is-our-jam). They taught us the vocabulary and intended looks of nail finishes (crème, shimmer, glitter, linear and scattered holographic, magnetic cat-eye, chrome powder and jelly) behind the proposed nail finish families. Viewed as references only.
 
 ## Community members we are still identifying
 
