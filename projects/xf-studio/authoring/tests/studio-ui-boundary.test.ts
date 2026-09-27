@@ -42,7 +42,7 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/controls", ["*"]], ["studio-ui/dom", ["*"]], ["studio-ui/icons", ["*"]], ["studio-ui/item-list", ["*"]],
   ["studio-ui/panels/viewports", ["contextMenuGate", "keyDescription"]],
   ["studio-ui/views/contribution", ["panelMeta"]],
-  ["studio-ui/views/feature-view", ["featureView"]],
+  ["studio-ui/views/feature-view", ["featureView", "moduleView"]],
 ]);
 /** Where a presentation module lives: the shell (all of studio-ui is its own) or a feature's view (only its folder). */
 type Scope = { own: readonly string[]; allow: ReadonlyMap<string, readonly string[]> };

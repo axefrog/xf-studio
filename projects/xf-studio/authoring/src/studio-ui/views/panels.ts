@@ -15,7 +15,7 @@ import { headPanel } from "../panels/viewports";
 import { helpPanel, type HelpGuidance } from "../guidance/help-panel";
 import type { StudioRuntime } from "../runtime";
 import type { ViewCatalogue } from "./contribution";
-import type { FeatureViewBinding, ViewBadge, ViewSummary } from "./feature-view";
+import type { FeatureViewBinding, ModuleViewBinding, ViewBadge, ViewSummary } from "./feature-view";
 import type { SHELL_VIEW } from "./shell";
 
 /**
@@ -36,11 +36,14 @@ export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
 };
 
 /**
- * What a composition root hands `mountStudio`: the catalogue of every contributed panel (the shell's and
- * each feature's), the shell's own factories and each feature's bound view (its factories and commands).
+ * What a composition root hands `mountStudio`: the catalogue of every contributed panel (the shell's,
+ * each feature's and each module's), the shell's own factories, each feature's bound view (its factories and
+ * commands) and each part-less module's bound view.
  */
 export type ViewComposition = {
   readonly catalogue: ViewCatalogue;
   readonly shell: Readonly<Record<string, PanelFactory>>;
   readonly features: readonly FeatureViewBinding[];
+  /** Each part-less module's bound view (its factories receive a `ModuleViewContext` over its service). */
+  readonly modules?: readonly ModuleViewBinding[];
 };

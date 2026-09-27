@@ -22,8 +22,8 @@ import { previewSetupCard } from "./preview-setup-card";
 import { panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
 import type { ViewComposition, ViewContext } from "./views/panels";
-import { featureCommands, featureViewContext } from "./views/feature-context";
-import type { FeatureViewContext } from "./views/feature-view";
+import { featureCommands, featureViewContext, moduleViewContext } from "./views/feature-context";
+import type { FeatureViewContext, ModuleViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
@@ -47,6 +47,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let guidance!: GuidanceController;
   // Each feature's view gets one context over its own facade, never the runtime or the port (UI-73).
   const featureViews = views.features.map(binding => ({ binding, ctx: featureViewContext(rt, binding.owner) as FeatureViewContext }));
+  // Each part-less module's view gets one context over its own service (view-graph-design.md §5).
+  const moduleViews = (views.modules ?? []).map(binding => ({ binding, ctx: moduleViewContext(rt, binding.owner) }));
   // Studio modules (view-graph-design.md §4): a panel belongs to the module presenting its view's feature; the shell's belong to none.
   const modules = port.views.modules();
   const moduleOfOwner = (owner: string) => modules.find(module => (module.feature ?? module.id) === owner);
@@ -81,6 +83,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (!factory) throw Error(`Panel ${id} has no factory.`);
       return factory(rt, context);
     }
+    const moduleView = moduleViews.find(entry => entry.binding.owner === owner), moduleFactory = moduleView?.binding.panels[id];
+    if (moduleView && moduleFactory) return (moduleFactory as (ctx: ModuleViewContext) => PanelController)(moduleView.ctx);
     const view = featureViews.find(entry => entry.binding.owner === owner), factory = view?.binding.panels[id];
     if (!view || !factory) throw Error(`Panel ${id} has no factory.`);
     return (factory as (ctx: FeatureViewContext) => PanelController)(view.ctx);

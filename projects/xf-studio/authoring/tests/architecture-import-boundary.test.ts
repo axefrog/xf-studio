@@ -292,8 +292,8 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   "detail-limits", "head-load-error", "scene-evidence",
   // The rig's motion and facial shapes.
   "idle-animation", "game-blink", "preview-motion", "face-morphs",
-  // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the save's V.
-  "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "save-reader",
+  // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the saved V record.
+  "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "saved-v",
 ]);
 /**
  * What the device modules build on in turn, reached only through them (types included): the materials, lights and grading they
@@ -302,7 +302,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material",
   "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
-  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "save-loadout", "save-package",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
 const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;
@@ -349,6 +349,8 @@ const isView = (name: string) => /^features\/[\w-]+\/view\//.test(name);
 /** A feature's host-only folders: its exporter and its independent verifier (feature-module platform §6, §7 rules 2, 3). */
 const isExporter = (name: string) => /^features\/[\w-]+\/export\//.test(name);
 const isVerifier = (name: string) => /^features\/[\w-]+\/verify\//.test(name);
+/** A feature's host endpoints (`features/<id>/host/`: read-only routes both hosts mount, e.g. the Save Explorer's saves listing). */
+const isHostFolder = (name: string) => /^features\/[\w-]+\/host\//.test(name);
 /**
  * Legacy src modules a feature's exporter may still import: the eye-makeup package pipeline it wraps, each with the
  * condition that removes it (the list only shrinks; a test fails when an entry is no longer imported). They move into
@@ -405,7 +407,7 @@ const FEATURE_CORE_LEGACY = new Map([
     "read descriptors only from the registry (step 9)"],
 ]);
 /** What a feature's core must never reach, directly or through other modules: devices, presentation, composition, Node, Three. */
-const CORE_UNREACHABLE = /^(?:three(?:\/|$)|node:|bun:|studio-(?:main|startup)$|browser-|scene$|studio-ui\/|compose\/|features\/[\w-]+\/(?:view|render|export|verify)\/)/;
+const CORE_UNREACHABLE = /^(?:three(?:\/|$)|node:|bun:|studio-(?:main|startup)$|browser-|scene$|studio-ui\/|compose\/|features\/[\w-]+\/(?:view|render|export|verify|host)\/)/;
 
 /**
  * The feature rules (§7 rules 1, 2 and 4, CORE-77): a feature imports no other feature, no platform internals, no
@@ -418,7 +420,7 @@ function featureViolations(tree: Tree): string[] {
   const entryOrDevice = (path: string) => /^(?:studio-(?:main|startup)$|browser-|scene$)/.test(path);
   return tree.names.filter(name => name.startsWith("features/")).flatMap(name => {
     const own = name.split("/").slice(0, 2).join("/"), view = isView(name), render = isRenderer(name);
-    if (isExporter(name) || isVerifier(name)) return hostFeatureViolations(tree, name, own);
+    if (isExporter(name) || isVerifier(name) || isHostFolder(name)) return hostFeatureViolations(tree, name, own);
     const direct = resolvedIn(tree, name).filter(path =>
       path.startsWith("platform/") && !path.startsWith("platform/api") ||
       path.startsWith("features/") && !path.startsWith(`${own}/`) && path !== own ||
@@ -441,7 +443,7 @@ function featureViolations(tree: Tree): string[] {
 
 /** A feature's own core module (not its view, renderer, exporter or verifier). */
 const ownCoreModule = (own: string, path: string) => (path === own || path.startsWith(`${own}/`)) &&
-  !isView(path) && !isRenderer(path) && !isExporter(path) && !isVerifier(path);
+  !isView(path) && !isRenderer(path) && !isExporter(path) && !isVerifier(path) && !isHostFolder(path);
 /**
  * The host folders' rules (§7 rules 2 and 3): a feature's exporter imports only `platform/api`, engines (not their
  * renderers), its own core and exporter, Node and its legacy list; its verifier imports only `platform/api`, Node, its
@@ -449,16 +451,18 @@ const ownCoreModule = (own: string, path: string) => (path === own || path.start
  * through other modules. Neither reaches platform internals, devices, the UI or the composition.
  */
 function hostFeatureViolations(tree: Tree, name: string, own: string): string[] {
-  const exporter = isExporter(name);
+  const exporter = isExporter(name), host = isHostFolder(name);
   const direct = resolvedIn(tree, name).filter(path => !(path.startsWith("platform/api") || /^node:(?:crypto|fs|path|os)$/.test(path) ||
-    (exporter ? path.startsWith(`${own}/export/`) || ownCoreModule(own, path) || path.startsWith("engines/") && !isRenderer(path) ||
-      EXPORTER_LEGACY.has(path) || PURE_HELPERS.has(path)
-      : path.startsWith(`${own}/verify/`) || path === `${own}/export-info`))).map(path => `${name} -> ${path}`);
+    (host ? path.startsWith(`${own}/host/`) || ownCoreModule(own, path) || path.startsWith("engines/") && !isRenderer(path) || PURE_HELPERS.has(path)
+      : exporter ? path.startsWith(`${own}/export/`) || ownCoreModule(own, path) || path.startsWith("engines/") && !isRenderer(path) ||
+        EXPORTER_LEGACY.has(path) || PURE_HELPERS.has(path)
+        : path.startsWith(`${own}/verify/`) || path === `${own}/export-info`))).map(path => `${name} -> ${path}`);
   const reached = [...reachIn(tree, name)].filter(path => PLATFORM_INTERNALS.test(path) ||
     /^(?:three(?:\/|$)|studio-(?:main|startup)$|browser-|studio-ui\/|compose\/)/.test(path) ||
     path.startsWith("features/") && !path.startsWith(`${own}/`) ||
-    (exporter ? isVerifier(path) || isView(path) || isRenderer(path)
-      : isExporter(path) || path.startsWith("engines/") || EXPORTER_LEGACY.has(path))).map(path => `${name} ->* ${path}`);
+    (host ? isView(path) || isRenderer(path) || isExporter(path) || isVerifier(path)
+      : exporter ? isVerifier(path) || isView(path) || isRenderer(path) || isHostFolder(path)
+        : isExporter(path) || path.startsWith("engines/") || EXPORTER_LEGACY.has(path))).map(path => `${name} ->* ${path}`);
   return [...direct, ...reached];
 }
 
@@ -488,9 +492,24 @@ test("a feature's exporter and verifier keep to their folders' rules, and the ex
   expect(ui).toContain("features/eye-makeup/export/index -> studio-ui/dom");
 });
 
+test("a feature's host endpoints import only the platform API, engines, their own core and Node, and reach no view or legacy module", () => {
+  expect(walk("features")).toContain("features/save-explorer/host/saves-server");
+  const host = "features/save-explorer/host/saves-server", own = "features/save-explorer";
+  expect(hostFeatureViolations(DISK, host, own)).toEqual([]);
+  // The rule fails on what it names: a host module importing the UI, a legacy host adapter, its own view or a child process.
+  const probe = (code: string) => hostFeatureViolations(probed({ [host]: code }), host, own);
+  expect(probe(`import { h as __probe } from "../../../studio-ui/dom";`)).toContain(`${host} -> studio-ui/dom`);
+  expect(probe(`import { createWindowsDetectionHost as __probe } from "../../../install-detection-host";`)).toContain(`${host} -> install-detection-host`);
+  expect(probe(`import { explorerPanel as __probe } from "../view/panel";`)).toContain(`${host} ->* features/save-explorer/view/panel`);
+  expect(probe(`import { execFile as __probe } from "node:child_process";`)).toContain(`${host} -> node:child_process`);
+  // A feature's core never reaches its host folder.
+  expect(featureViolations(probed({ "features/save-explorer/actions": `import { listSaves as __probe } from "./host/saves-server";` })))
+    .toContain("features/save-explorer/actions ->* features/save-explorer/host/saves-server");
+});
+
 test("the browser bundle reaches no exporter, verifier or export host (§7 rule 6)", () => {
   const browser = [...reach("studio-startup"), ...reach("studio-main")];
-  expect(browser.filter(path => isExporter(path) || isVerifier(path) || path.startsWith("platform/export/") || path === "compose/exporters")).toEqual([]);
+  expect(browser.filter(path => isExporter(path) || isVerifier(path) || isHostFolder(path) || path.startsWith("platform/export/") || path === "compose/exporters")).toEqual([]);
   // Only the host composition lists exporters; the browser composition lists none.
   expect(reach("compose/exporters")).toContain("features/eye-makeup/export/index");
 });

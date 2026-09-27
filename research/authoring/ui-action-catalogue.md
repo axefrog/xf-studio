@@ -227,6 +227,22 @@ The snapshot holds the latest `xfs/game-install-detection-1`, `xfs/mo2-instance-
 
 These results are private host metadata. Detection changes no setting: Game & tools offers the candidates, the MO2 instances (the configured one too, so a portable copy chosen by hand keeps its profiles) and their profiles as choices, and saving a choice goes through `setup.update`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2|frameworks`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
 
+### Save Explorer (a module without a document part)
+
+The Save Explorer's service ([`src/features/save-explorer/actions.ts`](../../projects/xf-studio/authoring/src/features/save-explorer/actions.ts); [design phase 1](../save/save-editor-design.md#9-phased-plan)) is reached through its facade, `port.module("save-explorer")`, which only the module's view receives (a `ModuleViewContext`; [boundary exception 14](ui-architecture-boundary.md)). It has `snapshot()`, `capability(action)`, `dispatch(action)` (async), `descriptors()` (`SAVE_EXPLORER_DESCRIPTORS`) and detached reads: `tree()`, `node(id)`, `entries(offset, limit, filter)`, `object(ref)`, `modData()` and `thumbnail(folder)`. Every action is read-only and records no Undo; nothing is persisted, and an open save lives only in memory.
+
+| Action | Payload | Effect |
+|---|---|---|
+| `saves.refresh` | none | Lists the player's saves (`GET /api/saves`): folder, kind, time, location, level, life path, patch, size, screenshot. Refused without a host device or while listing |
+| `saves.open` | `{folder}` (a listed folder) | Reads that save's `sav.dat` (`GET /api/saves/file?save=&part=data`), then the name sources once (`GET /api/saves/types`), and opens it; the tree's decode status fills in one node at a time. Refused for a folder not in the list or while a save opens |
+| `saves.openFile` | none | The file picker for a save stored elsewhere; a cancelled pick changes nothing |
+| `saves.close` | none | Back to the list |
+| `saves.selectNode` | `{node}` | Shows a node (its facts and contents) |
+| `saves.inspect` | `{ref: {node, kind: "chunk" \| "entry", index} \| null}` | Shows one object (a package chunk or a world object) in the inspector |
+| `saves.setView` | `{view: "nodes" \| "mods"}` | Nodes or Mod data |
+
+A later or cancelled open never publishes over a newer one (a generation check), a host answer is validated before use (`parseSaveListing`, `parseSaveTypeNames`), and without name sources a save still opens with hashes where names would be. Tests: `tests/save-explorer.test.ts`, `tests/save-explorer-panel-dom.test.ts`, `tests/save-host.test.ts`.
+
 ### Diagnostics and problem reports
 
 `port.diagnostics` ([`src/diagnostics/actions.ts`](../../projects/xf-studio/authoring/src/diagnostics/actions.ts); [how it works](../../docs/diagnostics.md)) has `snapshot()`, `capability(action)`, `dispatch(action)` and `descriptors()` (`DIAGNOSTICS_DESCRIPTORS`: scope `host`, no Undo; none touches a recipe, Undo or the library, and none sends anything by itself), plus `notice({source, message, code?})` and `fullText(item)`, a read of one part's whole text for the review's full view (the page's own parts, or the host's through `POST /api/diagnostics/item`; null when the report expired). The shell's `Feedback` calls `notice` for an error notice about to be shown: it returns null for an expected refusal (`isExpectedFailure`: the platform reason codes plus `cancelled`, `conflict`, `stale_result`, `invalid_json`, `invalid_collection`, `no_exportable_content`), and otherwise logs the failure and returns its reference (the host's, when a failed host request answered with `X-XFS-Error-Ref` moments before). The notice shows the reference and **Report this problem**. `snapshot().notice` is the newest failure an app service asked to show (`pageFailure(…, {notify: true})`); the shell shows each once, with its reference.

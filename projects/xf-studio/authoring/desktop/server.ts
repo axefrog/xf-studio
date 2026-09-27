@@ -1,10 +1,12 @@
-import { mkdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
+import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
+import { savesHostSources } from "../src/saves-host-sources";
 import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
   windowsRunningApps } from "../src/mod-install-host";
 import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
@@ -136,6 +138,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationLocalSettings = createLocalSettingsHandler(verificationSettings, {}, settingsFeatures, () => wolvenKit.managedExecutable());
   const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
+  // The Save Explorer's read-only endpoints (the player's saves, installed scripts' names); a packaged app takes no folder override.
+  const savesRequest = createSavesHandler(savesHostSources({ allowOverride: false, exists: existsSync, settings: () => settingsStore.load().settings }),
+    diagnostics.log.logger("saves"));
   const token = randomBytes(32).toString("hex");
   // The core preview has one source: the derivation from the player's own game files.
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
@@ -311,6 +316,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         catch { return Response.json({ code: "picker_failed", error: "The folder picker couldn't open. Type the folder instead." }, { status: 500 }); }
       }
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
+      if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

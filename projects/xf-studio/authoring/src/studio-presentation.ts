@@ -6,7 +6,7 @@ import type { Layer, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
 import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
-import type { StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
+import type { ModuleService, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "./platform/api";
@@ -147,6 +147,11 @@ export type StudioPresentationPort<Slot> = {
   features(): readonly FeatureInfo[];
   /** One feature's facade: typed for the features in `PresentationFeatures`, undefined for an unregistered ID. */
   readonly feature: FeatureLookup;
+  /**
+   * A module's service (a module without a document part, view-graph-design.md §5), for that module's view: undefined for a module
+   * the composition registered no service for. The module's view knows its own facade type.
+   */
+  module(id: string): ModuleService | undefined;
   /** Browser draft autosave and optional preview-asset diagnostics from trusted adapters. */
   readonly status: { snapshot(): ReadonlyDeep<PresentationStatus> };
   readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
@@ -221,6 +226,8 @@ export function createStudioPresentation<Slot>(sources: {
   about?: () => void;
   /** Optional for fixtures; without it reporting says it isn't available here and notices carry no reference. */
   diagnostics?: DiagnosticsActions;
+  /** The modules' services (`compose/module-services.ts`), already facades: the port hands each to its module's view. */
+  modules?: readonly ModuleService[];
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -373,6 +380,8 @@ export function createStudioPresentation<Slot>(sources: {
     return { "3D head": head?.phase ?? "unknown", "preview quality": String(preview?.quality?.size ?? "unknown"),
       "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
   });
+  const moduleServices = new Map((sources.modules ?? []).map(service => [service.module, service] as const));
+  if (moduleServices.size !== (sources.modules ?? []).length) throw Error("A module's service is registered twice.");
   const openAbout = sources.about;
   const about: AboutPort = Object.freeze({
     capability: () => openAbout ? { available: true } : { available: false, reason: "About is part of the XF Studio desktop app." },
@@ -382,7 +391,7 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, views, features: () => infos, feature, localSetup: Object.freeze(localSetup),
+    previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id), localSetup: Object.freeze(localSetup),
     installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
@@ -395,7 +404,8 @@ export function createStudioPresentation<Slot>(sources: {
         ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
         ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
         ...(sources.modInstall ? [sources.modInstall.subscribe(listener)] : []),
-        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : [])];
+        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []),
+        ...[...moduleServices.values()].map(service => service.subscribe(listener))];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });
