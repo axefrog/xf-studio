@@ -13,7 +13,7 @@ import { EYE_MAKEUP_EXPORTER } from "../../src/features/eye-makeup/export";
 import { EYE_PLATE_PREREQUISITE } from "../../src/features/eye-makeup";
 
 export const presetReachesPlate = (value: Pick<recipe.Recipe, "layers">, footprint: Parameters<typeof reach.presetReachesPlate>[1]) =>
-  reach.presetReachesPlate(value, footprint, EYE_MIRROR);
+  reach.presetReachesPlate(value, footprint, EYE_REGION);
 export const preparePackageCollection = (value: unknown, plate?: Parameters<typeof filter.preparePackageCollection>[2]) =>
   filter.preparePackageCollection(value, EYE_REGION, plate);
 export const compileGlitterPreset = (value: unknown, knob: Parameters<typeof glitter.compileGlitterPreset>[1],

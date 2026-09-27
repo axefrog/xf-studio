@@ -20,7 +20,7 @@ if(input)fixtures.splice(0,fixtures.length,...parseRecipe(JSON.parse(readFileSyn
   .filter(layer=>layer.enabled).map(layer=>[layer.name,layer] as [string,Layer]));
 const records=[];
 for(const [name,layer] of fixtures) for(const size of input?[1024,2048]:[512,1024]) {
-  const start=performance.now();const bytes=raster(layer, size, EYE_MAKEUP_REGION.mirror);
+  const start=performance.now();const bytes=raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);
   records.push({name,size,segments:curve(layer.points,6).length,ms:performance.now()-start,
     sha256:createHash("sha256").update(bytes).digest("hex"),layer});
 }

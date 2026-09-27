@@ -20,7 +20,7 @@ const recipe = readRecipeFile(JSON.parse(bytes.toString("utf8")));
 const layer = recipe.layers.find(item => item.id === layerId);
 if (!layer || !layer.enabled || layer.finish !== "glossy" || layer.opacity <= 0)
   throw Error("Select an enabled Glossy layer with positive opacity.");
-const shape = raster(layer, size, EYE_MAKEUP_REGION.mirror);
+const shape = raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);
 let coveredTexels = 0, partialTexels = 0;
 for (let i = 3; i < shape.length; i += 4) {
   if (shape[i] > 0) coveredTexels++;
