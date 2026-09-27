@@ -42,11 +42,22 @@ export class PanelHeader {
   }
   /** The length the tab strip may take: the header's inner length less its actions and the drag area's minimum. */
   available(): number {
-    const box = this.element.getBoundingClientRect(), actions = this.actions.getBoundingClientRect();
+    const box = this.element.getBoundingClientRect();
+    return Math.max(0, (this.vertical ? box.height : box.width) - this.fixedLength());
+  }
+  /**
+   * The header's length with every tab label whole: its padding, actions and drag minimum plus the tab strip's full length (as the
+   * last `fit` measured it). A stack of vertical strips sizes each strip by this, so the room each gets never depends on how far it
+   * has condensed (UI-120).
+   */
+  naturalLength(): number { return this.fixedLength() + this.strip.fullLength; }
+  /** Padding, actions and the drag area's minimum: the part of the header's length the tab strip never gets. */
+  private fixedLength(): number {
+    const actions = this.actions.getBoundingClientRect();
     const style = typeof getComputedStyle === "function" ? getComputedStyle(this.element) : undefined;
     const pad = (a?: string, b?: string) => (parseFloat(a ?? "") || 0) + (parseFloat(b ?? "") || 0);
-    const inner = this.vertical ? box.height - pad(style?.paddingTop, style?.paddingBottom) : box.width - pad(style?.paddingLeft, style?.paddingRight);
-    return Math.max(0, inner - (this.vertical ? actions.height : actions.width) - DRAG_MIN);
+    const padding = this.vertical ? pad(style?.paddingTop, style?.paddingBottom) : pad(style?.paddingLeft, style?.paddingRight);
+    return padding + (this.vertical ? actions.height : actions.width) + DRAG_MIN;
   }
   /** Condense the tab strip to what fits now. */
   fit() { if (this.element.isConnected) this.strip.fit(this.available()); }
@@ -59,13 +70,16 @@ export class PanelHeader {
 export class HeaderFitter {
   private headers = new Map<Element, PanelHeader>();
   private readonly observer = typeof ResizeObserver === "function"
-    ? new ResizeObserver(entries => { for (const entry of entries) this.headers.get(entry.target)?.fit(); }) : undefined;
+    ? new ResizeObserver(entries => { for (const entry of entries) { const header = this.headers.get(entry.target); if (header) this.fit(header); } }) : undefined;
+  /** `fitted` hears each header after it fits (the dock sizes a stack of vertical strips by their natural lengths). */
+  constructor(private readonly fitted?: (header: PanelHeader) => void) {}
   track(headers: readonly PanelHeader[]) {
     this.observer?.disconnect();
     this.headers = new Map(headers.map(header => [header.element, header]));
-    for (const header of headers) { header.fit(); this.observer?.observe(header.element); }
+    for (const header of headers) { this.fit(header); this.observer?.observe(header.element); }
   }
   /** Fit every tracked header now (a window resize the observer may report late). */
-  fitAll() { for (const header of this.headers.values()) header.fit(); }
+  fitAll() { for (const header of this.headers.values()) this.fit(header); }
+  private fit(header: PanelHeader) { header.fit(); this.fitted?.(header); }
   disconnect() { this.observer?.disconnect(); this.headers.clear(); }
 }

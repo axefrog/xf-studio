@@ -3,6 +3,9 @@
  * preview/export parity through the one evaluator, byte-identical unmottled layers and the raster budget.
  */
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { curve, type Layer } from "../src/engines/layered-makeup/recipe";
 import * as recipe from "../src/engines/layered-makeup/recipe";
 import { matchingMottlePreset, mottlePreset, mottleSeed, mottleTile, nextMottleSeed, validMottle, MOTTLE_PRESET_IDS,
@@ -72,15 +75,38 @@ test("unmottled layers keep their frozen mask bytes and their cache keys", () =>
   const layer = initialRecipe().layers[0];
   expect(sha(raster(layer, 1024)).slice(0, 16)).toBe("e652b1addb13a44f");
   expect(sha(raster(layer, 2048)).slice(0, 16)).toBe("87661b9adbf2219e");
-  // Engine calls without a skin scale are unchanged for unmottled layers.
-  expect(recipe.raster(layer, 256, EYE_MIRROR)).toEqual(raster(layer, 256));
+  // An unmottled layer never reads the skin scale.
+  expect(recipe.raster(layer, 256, EYE_MIRROR, { mmPerUv: { u: 1, v: 1 }, texelMm: 1 })).toEqual(raster(layer, 256));
   expect(maskAlphaKey(layer, 512)).not.toContain("mottle");
   expect(maskAlphaKey(mottled(powder()), 512)).not.toBe(maskAlphaKey(layer, 512));
   expect(maskAlphaKey(mottled(powder(1)), 512)).not.toBe(maskAlphaKey(mottled(powder(2)), 512));
-  // A mottled layer needs its region's skin scale; a disabled one does not.
-  expect(() => recipe.raster(mottled(powder()), 64, EYE_MIRROR)).toThrow("skin scale");
-  expect(() => recipe.raster(mottled(powder(), l => { l.enabled = false; }), 64, EYE_MIRROR)).not.toThrow();
 });
+
+test("CORE-110: every raster entry point requires the region's skin scale, and the raster tools draw mottled layers", () => {
+  const layer = mottled(powder()), area = { u0: 0, u1: 1, v0: 0, v1: 1 };
+  // Typed callers cannot leave it out (`bun run check` fails if these compile)…
+  // @ts-expect-error the skin scale is required
+  expect(() => recipe.raster(layer, 64, EYE_MIRROR)).toThrow("skin scale");
+  // @ts-expect-error the skin scale is required
+  expect(() => recipe.createRasterJob(layer, 64, EYE_MIRROR)).toThrow("skin scale");
+  // @ts-expect-error the skin scale is required
+  expect(() => recipe.rasterWindow(layer, 64, 64, area, EYE_MIRROR)).toThrow("skin scale");
+  // …and an untyped caller is still told plainly; a disabled layer needs none.
+  // @ts-expect-error the skin scale is required
+  expect(() => recipe.raster(mottled(powder(), l => { l.enabled = false; }), 64, EYE_MIRROR)).not.toThrow();
+  // The benchmark tool over a recipe with a mottled layer (it threw before, passing only the mirror).
+  const dir = mkdtempSync(join(tmpdir(), "xfs-mottle-tool-")), file = join(dir, "recipe.json");
+  try {
+    const small = mottled(mottlePreset("mascara", 3), l => { l.symmetry = false; l.feather = .002; });
+    writeFileSync(file, JSON.stringify(recipeFile({ uv: "gltf-uv0-top-left", layers: [small] })));
+    const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "tools", "raster-performance.ts"), "", file], { stdout: "pipe", stderr: "pipe" });
+    expect(run.stderr.toString()).not.toContain("skin scale");
+    expect(run.exitCode).toBe(0);
+    const records = JSON.parse(run.stdout.toString()) as { size: number; sha256: string }[];
+    expect(records.map(r => r.size)).toEqual([1024, 2048]);
+    expect(records[0].sha256).toBe(sha(raster(small, 1024)));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}, 60_000);
 
 test("the tile is deterministic, seeded and zero-mean at every mip level", () => {
   const a = mottleTile(11, .4), b = mottleTile(11, .4);
@@ -102,6 +128,19 @@ test("the tile is deterministic, seeded and zero-mean at every mip level", () =>
   for (const seed of [0, 1, 2147483647]) expect(validMottle({ ...powder(), seed: nextMottleSeed(seed) })).toBe(true);
   expect(matchingMottlePreset(mottlePreset("mascara", 99))).toBe("mascara");
   expect(matchingMottlePreset({ ...powder(), amount: .1 })).toBeUndefined();
+});
+
+test("CORE-109: a look's mottled layers keep their tiles however many it has, and dragging one clumping evicts no other layer's", () => {
+  // Every layer a look can hold, each with its own seed, sampled in turn twice: the second pass reuses every mixture
+  // (the old caches kept eight, so a ninth layer rebuilt a 64 ms tile on every raster).
+  const seeds = Array.from({ length: recipe.MAX_LAYERS }, (_, i) => 9000 + i);
+  const first = seeds.map(seed => mottleTile(seed, .3));
+  seeds.forEach((seed, i) => expect(mottleTile(seed, .3)).toBe(first[i]));
+  // Dragging one layer's clumping through forty values keeps every other layer's mixture.
+  for (let step = 0; step <= 40; step++) mottleTile(seeds[0], step / 40);
+  seeds.slice(1).forEach((seed, i) => expect(mottleTile(seed, .3)).toBe(first[i + 1]));
+  // A rebuilt mixture is the same tile, byte for byte.
+  expect(sha(new Uint8Array(mottleTile(seeds[0], .3)[0].buffer))).toBe(sha(new Uint8Array(first[0][0].buffer)));
 });
 
 test("a mottled raster is deterministic by seed and frozen (version the model whenever appearance changes)", () => {

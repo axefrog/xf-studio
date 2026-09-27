@@ -25,10 +25,12 @@ export { SearchField, type SearchFieldOptions } from "./search-field";
 export { Combobox, type ComboboxOptions, type ComboGroup, type ComboOption } from "./combobox";
 export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, type Property } from "./layout";
 export { SplitView, type SplitViewOptions } from "./split-view";
+export { Splitter, type SplitterOptions } from "./splitter";
 export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
-export { ChoiceList, choiceItem, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
+export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";
 // Feature-specific: lighting setups.
 export { LightList, type LightListItem, type LightListOptions } from "./light-list";
 export { azimuthWords, DirectionDial, dialDirection, dialPoint, type DialMark, type Direction, type DirectionDialOptions } from "./direction-dial";

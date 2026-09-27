@@ -1,8 +1,9 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
-  PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, openValuePopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, LightList, DirectionDial,
-  type LightListItem, type TabItem } from "../components";
+  PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
+  Toggle, ColorField, applyCapability, openMenu, openValuePopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
+  sampleBackground, LightList, DirectionDial, type LightListItem, type TabItem } from "../components";
+import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 
 type Mount = () => HTMLElement;
@@ -173,10 +174,60 @@ const MOUNTS: Record<string, Mount> = {
       onSelect: async path => { game = path; games.update({ chosen: game, found }); return { ok: true }; } });
     games.update({ chosen: game, found });
     return h("div", { style: "max-width:520px" }, stack({ gap: "loose" }, folder.element, games.element)); },
+  "lib-swatch-card": () => swatchCardSpecimen(),
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },
+  // The dock's splitter between two sample groups: the arrows step the share, Enter or a double-click evens it.
+  "lib-splitter": () => { let share = .5;
+    const side = (text: string) => h("div", { class: "dock-cell" }, h("section", { class: "dock-group", style: "flex:1;display:grid;place-items:center" }, h("span", { class: "muted", text })));
+    const start = side("Start"), end = side("End");
+    const apply = () => { start.style.flex = `${share} 1 0`; end.style.flex = `${1 - share} 1 0`; splitter.setValue(share); };
+    const splitter: Splitter = new Splitter({ axis: "row", className: "dock-splitter", label: "Resize the sample columns", title: "Arrow keys adjust · Double-click to equalize",
+      onStep: (direction, big) => { share = Math.min(.9, Math.max(.1, share + direction * (big ? .1 : .04))); apply(); }, onEqualize: () => { share = .5; apply(); } });
+    apply();
+    return h("div", { class: "dock-split", "data-axis": "row", style: "height:96px;max-width:520px" }, start, splitter.element, end); },
 };
+
+/**
+ * The swatch card and contrast enhancement: a tightly clustered set (a brow pack's colours as they derive over another mod's natural hair
+ * tones) shown as derived and as enhanced, an already varied set (hair colours, root to tip) that enhancement leaves alone, the gain curve
+ * with each set's spread marked, and the card on every swatch.
+ */
+function swatchCardSpecimen() {
+  const clustered = [["#030303"], ["#534f46"], ["#210402"], ["#2d1208"], ["#090402"], ["#494339"], ["#3f3628"], ["#2c2420"], ["#2b1c09"], ["#4d4038"],
+    ["#2a2725"], ["#540000"], ["#2b211a"], ["#460e18"], ["#3d3735"], ["#3e2117"], ["#13100e"], ["#6c6664"], ["#231610"]];
+  const varied = [["#996600", "#e4deae", "#886b49", "#5f330f", "#653300"], ["#e4cca6", "#d8ccbc", "#e8d9c3", "#e9dac4", "#e9dbc5"],
+    ["#aa7480", "#6a4d43", "#493828", "#372b1f", "#261f16"], ["#ffffcc", "#810202", "#fc9664", "#9f3900", "#ca6400"], ["#bababa", "#b0b0b0", "#a7a7a7", "#989797", "#706969"],
+    ["#000000", "#000000", "#000000", "#000000", "#000000"], ["#623d1f", "#a56c78", "#897aba", "#64afc7", "#72c2ca"], ["#72777a", "#7c8084", "#adadb2", "#7a757c", "#857c86"]];
+  const grid = (label: string, shown: readonly (readonly string[])[], truth: readonly (readonly string[])[], enhanced: boolean) => {
+    const items = shown.map((colours, n) => { const item = choiceItem({ label: `${label} ${n + 1}`, description: "From a sample pack", swatch: true,
+      content: h("span", { class: "swatch", "aria-hidden": "true", style: `background:${sampleBackground(colours)}` }) }); item.dataset.position = String(n); return item; });
+    const list = h("div", { class: "choices grid", role: "listbox", "aria-label": label, style: "max-width:340px" }, ...items);
+    attachSwatchCard(list, item => ({ colours: truth[Number(item.dataset.position)]!, label: item.getAttribute("aria-label")!, source: "From a sample pack", enhanced }));
+    const mark = contrastMark(); setContrastMark(mark, enhanced);
+    return stack({ gap: "tight" }, h("div", { class: "row gap-s" }, mark, h("span", { class: "small", text: label })), list);
+  };
+  const tight = enhanceSwatchSet(clustered), loose = enhanceSwatchSet(varied);
+  // The curve: gain against spread for lightness (the axis that moves most), with the separation weight of each set applied.
+  const W = 300, H = 120, maxSpread = 0.3, maxGain = CONTRAST.maxGain, x = (v: number) => 30 + v / maxSpread * (W - 40), y = (g: number) => H - 20 - (g - 1) / (maxGain - 1) * (H - 30);
+  const points = Array.from({ length: 61 }, (_, i) => { const v = 0.002 + i * (maxSpread / 60); return `${x(v).toFixed(1)},${y(contrastGain(v, CONTRAST.lightnessTarget)).toFixed(1)}`; }).join(" ");
+  const dot = (spread: number, gain: number, label: string, end = false) => `<circle cx="${x(spread).toFixed(1)}" cy="${y(gain).toFixed(1)}" r="3.5" fill="var(--signal)"/><text x="${(x(spread) + (end ? 4 : 6)).toFixed(1)}" y="${(y(gain) - (end ? 10 : 6)).toFixed(1)}" font-size="10" fill="currentColor"${end ? ' text-anchor="end"' : ""}>${label}</text>`;
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto" role="img" aria-label="Lightness gain against the set's lightness spread: ${maxGain} times at most, falling to 1 at a spread of ${CONTRAST.lightnessTarget}">
+    <line x1="30" y1="${H - 20}" x2="${W - 10}" y2="${H - 20}" stroke="currentColor" stroke-width="1"/><line x1="30" y1="10" x2="30" y2="${H - 20}" stroke="currentColor" stroke-width="1"/>
+    <text x="${W - 10}" y="${H - 6}" font-size="10" text-anchor="end" fill="currentColor">spread of the set (OKLab L, σ)</text><text x="36" y="10" font-size="10" fill="currentColor">gain</text>
+    <text x="26" y="${y(maxGain) + 4}" font-size="9" text-anchor="end" fill="currentColor">${maxGain}×</text><text x="26" y="${H - 17}" font-size="9" text-anchor="end" fill="currentColor">1×</text>
+    <line x1="${x(CONTRAST.lightnessTarget)}" y1="10" x2="${x(CONTRAST.lightnessTarget)}" y2="${H - 20}" stroke="currentColor" stroke-dasharray="3 3" stroke-width="1"/>
+    <polyline points="${points}" fill="none" stroke="var(--text)" stroke-width="1.5"/>
+    ${dot(tight.lightness.spread, contrastGain(tight.lightness.spread, CONTRAST.lightnessTarget), `clustered set, σ ${tight.lightness.spread.toFixed(2)}`)}
+    ${dot(loose.lightness.spread, 1, `varied set, σ ${loose.lightness.spread.toFixed(2)}`, true)}</svg>`;
+  const chart = h("div", { style: "color:var(--text-muted);max-width:100%" });
+  chart.innerHTML = svg;
+  const caption = h("p", { class: "note", text: `Gain = (${CONTRAST.lightnessTarget} ÷ σ)^${1 - CONTRAST.exponent}, capped at ${maxGain}×, 1 from σ ${CONTRAST.lightnessTarget}; saturation (target ${CONTRAST.saturationTarget}) and chroma-weighted hue (target ${CONTRAST.hueTarget}°, at most ${CONTRAST.maxHueShift}° per colour) follow the same curve, all scaled by the set's overall OKLab separation (fully applied below ${(CONTRAST.separated * 0.6).toFixed(2)}, not at all from ${CONTRAST.separated}: ${separationWeight(CONTRAST.separated * 0.8).toFixed(2)} at ${(CONTRAST.separated * 0.8).toFixed(2)}). Applied here: lightness ${tight.lightness.gain.toFixed(2)}×, hue ${tight.hue.gain.toFixed(2)}× for the clustered set; nothing for the varied one.` });
+  return h("div", { style: "max-width:720px" }, stack({ gap: "normal" },
+    h("div", { class: "row wrap gap-m", style: "align-items:flex-start" }, grid("Clustered set, as derived", clustered, clustered, false), grid("Clustered set, spread apart", tight.colours, clustered, true)),
+    h("div", { class: "row wrap gap-m", style: "align-items:flex-start" }, grid("Varied set: left alone", loose.colours, varied, loose.enhanced), chart), caption));
+}
 
 /** Build every live specimen on the page (again after the side-by-side comparison rebuilds the specimens). */
 export function mountLibrary() {

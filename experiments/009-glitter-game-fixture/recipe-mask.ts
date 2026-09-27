@@ -22,7 +22,7 @@ const layer = recipe.layers.find(candidate => candidate.id === layerId);
 if (!layer || !layer.enabled || layer.finish !== "glitter" || !layer.flakes ||
     !("model" in layer.flakes) || !layer.flakes.model.startsWith("uv-cell-direct-"))
   throw Error("Select an enabled direct-glint Glitter layer; raster/legacy optical models need separate analysis.");
-const rgba = raster(layer, size, EYE_MAKEUP_REGION.mirror);
+const rgba = raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);
 const alpha = Buffer.alloc(size * size);
 for (let i = 0; i < alpha.length; i++) alpha[i] = rgba[i * 4 + 3];
 await mkdir(output, { recursive: true });

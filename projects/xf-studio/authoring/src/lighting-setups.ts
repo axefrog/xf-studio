@@ -199,11 +199,11 @@ export function studioStageSetup(stage: Readonly<StudioStage>): LightingSetup {
 /**
  * The game's creator rig for a body under the calibration (creator-lighting.ts: the rig table, the intensity and cone readings, the
  * calibration's gains and yaw, the flagged shadow casters), on black with no room, through the game's grade at the calibration's `k`.
- * `yawOffset` replaces the calibration's turn (research refits only).
+ * `yawOffset` replaces the calibration's turn and `casters` the budgeted shadow casters (research refits only).
  */
-export function creatorSetup(sex: BodySex, calibration: CreatorLightingOptions, yawOffset?: number): LightingSetup {
+export function creatorSetup(sex: BodySex, calibration: CreatorLightingOptions, yawOffset?: number, casters?: readonly string[]): LightingSetup {
   const specs = creatorRigSpecs(sex, { intensity: calibration.intensity, cone: calibration.cone, shadows: calibration.shadows,
-    ...(yawOffset === undefined ? {} : { yawOffset }) });
+    ...(yawOffset === undefined ? {} : { yawOffset }), ...(casters === undefined ? {} : { casters }) });
   // The specs follow the rig table's rows in order; turning the rig moves a light but changes none of its native values.
   const rows = CREATOR_RIGS[sex];
   return {
@@ -251,9 +251,9 @@ export function lightingSource(library: SetupLibrary, calibration: CreatorLighti
   const user = isBuiltInSetup(id) ? undefined : findUserSetup(library, id);
   return { kind: "setup", setup: user ? user.setup : studioStageSetup(STUDIO_SETUPS[isBuiltInSetup(id) ? id as Exclude<BuiltInSetupId, "creator"> : "soft"]) };
 }
-/** The definition a source draws, for a body (and, for research refits, a trial turn of the game rig). */
-export function resolveLightingSource(source: LightingSource, sex: BodySex, yawOffset?: number): LightingSetup {
-  return source.kind === "game" ? creatorSetup(sex, source.calibration, yawOffset) : source.setup;
+/** The definition a source draws, for a body (and, for research refits, a trial turn of the game rig or trial shadow casters). */
+export function resolveLightingSource(source: LightingSource, sex: BodySex, trial: { yawOffset?: number; casters?: readonly string[] } = {}): LightingSetup {
+  return source.kind === "game" ? creatorSetup(sex, source.calibration, trial.yawOffset, trial.casters) : source.setup;
 }
 
 const nextUserId = (library: SetupLibrary) => `u${Math.max(0, ...library.setups.map(setup => Number(setup.id.slice(1)))) + 1}`;

@@ -5,6 +5,8 @@ import { aimShadowAtHead } from "./creator-lighting-rig";
 import { createLinearDisplay } from "./linear-display";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
 import { installShadowFilter } from "./shadow-filter";
+import { createSkinScatter } from "./platform/scene/skin-scatter";
+import type { ScatterQuality } from "./platform/scene/skin-scatter-kernel";
 import { createStudioEnvironment, type StudioEnvironment } from "./studio-environment";
 import { DEFAULT_STUDIO_STAGE } from "./studio-lighting";
 import { resolveLightingSource, studioStageSetup, type LightingSetup, type LightingSource, type SetupLight } from "./lighting-setups";
@@ -130,6 +132,10 @@ export type LightListRig = ReturnType<typeof createLightListRig>;
  * `LUT_RECHECK_MS`. The host keys its answer by the installation fingerprint the character details use, so a changed route, profile or
  * LUT mod, or WolvenKit becoming ready, is picked up without a restart. Until the first answer arrives the neutral grade shows; later
  * answers replace the grade only when the host's cube changed, and an answer that never reached the host keeps the current grade.
+ *
+ * Every setup lights the V's skin with the game's screen-space scatter (platform/scene/skin-scatter.ts) whenever the display's target is
+ * half float; the skin light's wrap stands in for it otherwise, and while it is switched off (a verification switch for A/B evidence).
+ * Its kernel's sample count follows the preview quality (`scatterQualityFor`).
  */
 export function createLightingSetupStage(options: {
   scene: THREE.Scene;
@@ -145,7 +151,7 @@ export function createLightingSetupStage(options: {
   const environment = (options.createEnvironment ?? createStudioEnvironment)(renderer, scene);
   // The prefiltered room (null with the light probe instead); a setup with room light shows it, one without has no environment.
   const room = scene.environment;
-  const rig = createLightListRig(), display = createLinearDisplay(renderer);
+  const rig = createLightListRig(), display = createLinearDisplay(renderer), scatter = createSkinScatter(renderer);
   scene.add(rig.group);
   // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or
   // lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
@@ -153,7 +159,9 @@ export function createLightingSetupStage(options: {
   if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false; }
   let shadowKey = "";
   let source: LightingSource = { kind: "setup", setup: studioStageSetup(DEFAULT_STUDIO_STAGE) };
-  let sex: BodySex = "female", trialYaw: number | undefined;
+  let sex: BodySex = "female";
+  // Verification-only trials of the game rig (a yaw, a set of casting lights), kept across each other; never stored.
+  let trial: { yawOffset?: number; casters?: readonly string[] } = {};
   let shown: LightingSetup = source.kind === "setup" ? source.setup : studioStageSetup(DEFAULT_STUDIO_STAGE);
   let lutStatus: LightingStageStatus["lut"] = { phase: "idle", source: null };
   const black = new THREE.Color(0, 0, 0);
@@ -189,7 +197,7 @@ export function createLightingSetupStage(options: {
   /** Resolve the source for the body and show it; `announce` when the status (display or body) may have changed. */
   function apply(announce: boolean) {
     const wasGame = game();
-    shown = resolveLightingSource(source, sex, trialYaw);
+    shown = resolveLightingSource(source, sex, trial);
     rig.apply(shown.lights, shown.focus);
     const lit = shown.environment > 0;
     scene.environment = lit ? room : null;
@@ -222,7 +230,7 @@ export function createLightingSetupStage(options: {
      * old studio rig disposed them on every quality notification and never drew them again); a new size is a new fingerprint, so the next
      * frame draws them at it.
      */
-    setShadowQuality(textureSize: number) { rig.setShadowMapSize(creatorShadowMapSize(textureSize)); },
+    setShadowQuality(textureSize: number) { rig.setShadowMapSize(creatorShadowMapSize(textureSize)); scatter.setQuality(scatterQualityFor(textureSize)); },
     /** Camera state for a creator page, for the preview's camera port. */
     camera: (page: CreatorCameraPage) => creatorCamera(sex, page),
     /** Draw one frame through the shown setup's display transform. */
@@ -234,7 +242,9 @@ export function createLightingSetupStage(options: {
         const key = shadowState(scene);
         if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
       }
-      display.render(scene, camera, game() ? "creator" : "studio");
+      // The scatter decides first, so the forward skin lights with the same irradiance it blurs (the wrap off while it runs).
+      const scattering = scatter.prepare(scene, display.scatterPossible);
+      display.render(scene, camera, game() ? "creator" : "studio", scattering ? () => scatter.render(scene, camera) : undefined);
     },
     status: (): LightingStageStatus => structuredClone({ preset: game() ? "creator" : "studio", sex,
       defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
@@ -242,7 +252,16 @@ export function createLightingSetupStage(options: {
     /** The definition drawn now (evidence and tests). */
     shown: (): LightingSetup => structuredClone(shown),
     /** Developer evidence (verification only): the game rig turned by a trial yaw (null: the calibration's), for a refit. */
-    trialYaw(degrees: number | null) { trialYaw = degrees ?? undefined; apply(false); },
+    trialYaw(degrees: number | null) { trial = { ...trial, yawOffset: degrees ?? undefined }; apply(false); },
+    /** Developer evidence (verification only): a trial set of the game rig's shadow-casting lights by name (null: the budgeted flagged ones). */
+    trialCasters(names: readonly string[] | null) { trial = { ...trial, casters: names ?? undefined }; apply(false); },
+    /**
+     * Developer evidence (verification only): switch the skin scatter off (the wrap stand-in) or on again, or to `bare` (the wrap off and
+     * no Δ: the direct light alone), for A/B captures.
+     */
+    setScatter(mode: boolean | "bare") { scatter.setEnabled(mode !== false); scatter.setBare(mode === "bare"); },
+    /** Developer evidence (verification only): a trial scatter screen scale (null: the default), for fitting it from captures. */
+    setScatterScale(scale: number | null) { scatter.setScale(scale); },
     /** Developer evidence (verification only): show one light alone by its setup ID, or all of them again with null. */
     solo(id: string | null) { rig.solo(id); },
     /** Developer evidence: mean milliseconds per frame over `frames` frames drawn back to back, the GPU finished at both ends. */
@@ -263,12 +282,19 @@ export function createLightingSetupStage(options: {
     rig,
     display,
     environment,
+    scatter,
     dispose() {
-      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose();
+      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose();
     },
   };
 }
 export type LightingSetupStage = ReturnType<typeof createLightingSetupStage>;
+
+/**
+ * The scatter's sample count for a preview quality (the generated-texture size): the game's High (25 samples) at every size. The
+ * cost follows the canvas, not the texture size, and was measured small enough at both (research/materials/shader-skin.md §11.5).
+ */
+export const scatterQualityFor = (_textureSize: number): ScatterQuality => "high";
 
 /**
  * A fingerprint of everything a shadow map depends on, so the maps are redrawn only when it changes: each visible shadow-casting

@@ -260,7 +260,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   releases.push(() => scheduler.dispose());
   releases.push(bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting }));
   // A new setup or a trial turn doesn't always notify the lighting device's listeners (only a changed display or body does).
-  Object.assign(lighting, invalidating(lighting, ["setSource", "trialYaw", "solo"], invalidate));
+  Object.assign(lighting, invalidating(lighting, ["setSource", "trialYaw", "trialCasters", "solo", "setScatter", "setScatterScale"], invalidate));
   releases.push(rigMotion.connect(invalidate));
   const observer = new ResizeObserver(() => { resize(); invalidate(); });
   observer.observe(host);

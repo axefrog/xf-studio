@@ -17,7 +17,7 @@ function run(count:number,radius:number){
   const maskCentres=catalogue.flakes.filter(f=>coverage(f.u, f.v, layer, EYE_MAKEUP_REGION.mirror)>0).length;
   const diameters=catalogue.flakes.map(f=>f.radius*2).sort((a,b)=>a-b);
   const sizes=[1024,2048].map(size=>{
-    const mask=raster(layer, size, EYE_MAKEUP_REGION.mirror),job=createFlakeBakeJob(catalogue,size,4,"covered-average");
+    const mask=raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin),job=createFlakeBakeJob(catalogue,size,4,"covered-average");
     while(!job.done)job.advance(512);
     let painted=0,resolved=0,strong=0,veryStrong=0,coveredSum=0;
     for(let i=0;i<size*size;i++)if(mask[i*4+3]){

@@ -275,7 +275,8 @@ export class ChoiceList {
     if (mark) setAttr(entry.element, "data-fetch", mark); else entry.element.removeAttribute("data-fetch");
     const description = shown ? `${entry.from}; ${shown.words}` : entry.from;
     setAttr(entry.element, "aria-description", description);
-    entry.element.title = `${entry.choice.off ? "Off" : entry.choice.label} · ${description}`;
+    // A swatch's name, source and state are in the swatch card (components/choice-list.ts `attachSwatchCard`), not a tooltip.
+    if (!entry.swatch) entry.element.title = `${entry.choice.off ? "Off" : entry.choice.label} · ${description}`;
   }
 
   /**
@@ -291,7 +292,7 @@ export class ChoiceList {
 
   private add(choice: CcPanelChoice, input: ChoiceListInput) {
     const from = choice.mod >= 0 ? `From ${input.mods[choice.mod] ?? "a mod"}` : "From the game";
-    // In a colour grid every choice but Off is a narrow swatch; its label is the accessible name and tooltip.
+    // In a colour grid every choice but Off is a narrow swatch; its label is the accessible name, and the swatch card shows it.
     const swatch = input.grid && !choice.off ? h("span", { class: "swatch", "aria-hidden": "true" }) : null;
     // One look with every choice list (the library's `choiceItem`); the creator's own marks (prepared ahead) ride on `cc-choice`.
     const label = choice.off ? "Off" : choice.label;

@@ -20,6 +20,7 @@ import type { Capability } from "../menu";
  * - **Refusals** (a folder that isn't the game, a picker that failed) appear on the note line under the field, never as a toast. The
  *   line is reserved while the text box is open, so a refusal of what was typed never moves anything; otherwise it takes no room (the
  *   settings keep their normal rhythm) and appears only in answer to the person's own action. A cancelled picker says nothing.
+ *   An owner's action that fails outright (its promise rejects) is a refusal too, in plain words, and the controls come back.
  */
 export type FolderOutcome = { ok: true } | { ok: false; message: string; cancelled?: boolean };
 /** A folder the app found, with where it found it in plain words ("Steam", "GOG, Mod Organizer 2"). */
@@ -99,6 +100,10 @@ export class FolderSetting {
       const outcome = await action();
       if (!outcome.ok && !outcome.cancelled) this.refuse(outcome.message);
       return outcome.ok;
+    } catch {
+      // Never an unhandled rejection or a silent failure (UI-124): say so on the note line, and keep the typed folder to try again.
+      this.refuse("Couldn't change the folder. Try again.");
+      return false;
     } finally { this.busy = false; this.paint(); }
   }
   private async chooseAnother() {
