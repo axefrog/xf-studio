@@ -18,9 +18,10 @@ const HOST_ADAPTERS = ["archive-reader", "native-decode", "native-decode-serve",
  * Modules outside src/native allowed to import it: the resolver host, which reads resources natively first (`ResolverFetcher`, and
  * `openNativeRoute`, which the installation registry calls without importing the reader itself), and the clothing host, which decodes
  * the one resource WolvenKit 9.0.1 doesn't serialize, the game's cooked visual-tag preset (clothing-host.ts), and the native-first texture
- * exporter, which decodes the character details' textures in a worker of its own (native-texture-export.ts).
+ * exporter, which decodes the character details' textures in a worker of its own (native-texture-export.ts), and the Save Explorer's host
+ * sources, which hand the shipped engine type list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "native-texture-export", "resolver-host"];
+const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "native-texture-export", "resolver-host", "saves-host-sources"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).
