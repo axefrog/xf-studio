@@ -13,7 +13,7 @@ import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
 import type { CameraState, PreviewState } from "./workspace-state";
 import { LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
-import { MAX_CAMERA_DISTANCE, MIN_CAMERA_DISTANCE } from "./camera-framing";
+import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
 
 /** A character scene's state: the head's eye shape and the V's material studies and body mode (design §3.1). */
 export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean };
@@ -49,7 +49,11 @@ export const EYE_SHAPE_RANGE = Object.freeze({ min: 0, max: 21 });
 export const CAMERA_FOV_RANGE = Object.freeze({ min: 10, max: 90 });
 /** How far a stored camera's position and target may lie from the subject's origin, in metres. */
 export const CAMERA_COORDINATE_LIMIT = 100;
-/** A camera pose a workspace may hold: finite vectors within bounds, a lens in range, and an orbit distance the controls allow. */
+/**
+ * A camera pose a workspace may hold: finite vectors within bounds, a lens in range, and an orbit distance within the range any view's
+ * scene-derived limits lie in (camera-framing.ts), so a pose saved at the farthest reach of a narrow lens, a tall pane or the whole
+ * body stays valid.
+ */
 export function validCameraPose(value: unknown): value is CameraState {
   const c = value as Partial<CameraState> | undefined;
   const vector = (x: unknown): x is number[] => Array.isArray(x) && x.length === 3 &&
@@ -57,7 +61,7 @@ export function validCameraPose(value: unknown): value is CameraState {
   if (!c || typeof c !== "object" || !vector(c.position) || !vector(c.target) || !inRange(c.fov, CAMERA_FOV_RANGE.min, CAMERA_FOV_RANGE.max)) return false;
   const target = c.target;
   const distance = Math.hypot(...c.position.map((n, i) => n - target[i]!));
-  return distance >= MIN_CAMERA_DISTANCE - .001 && distance <= MAX_CAMERA_DISTANCE + .001;
+  return distance >= CAMERA_DISTANCE_RANGE.min - .001 && distance <= CAMERA_DISTANCE_RANGE.max + .001;
 }
 
 const scene: NodeCodec = { kinds: ["character"], parse: state => {

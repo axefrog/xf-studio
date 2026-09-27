@@ -273,14 +273,17 @@ test("node codecs enforce the ranges parseWorkspace does (CORE-96)", () => {
   expect(views.state(MAIN_VIEW, "scene")).toMatchObject({ eyeShape: 3 });
   expect(() => views.edit(MAIN_VIEW, "lights", { state: { exposure: 100 } })).toThrow("isn't valid");
   expect(() => views.edit(MAIN_VIEW, "lights", { state: { lightAngle: 400 } })).toThrow("isn't valid");
-  for (const pose of [{ position: [0, 1.6, -50], target: [0, 1.6, 0], fov: 30 }, { position: [0, 1.6, -0.6], target: [0, 1.6, 0], fov: 5 },
+  for (const pose of [{ position: [0, 1.6, -60], target: [0, 1.6, 60], fov: 30 }, { position: [0, 1.6, -0.6], target: [0, 1.6, 0], fov: 5 },
     { position: [0, 1.6, -200], target: [0, 1.6, -199], fov: 30 }])
     expect(() => views.cameraMoved(MAIN_VIEW, { pose })).toThrow("isn't valid");
+  // A far orbit a narrow lens, a tall pane or the whole body needs (the scene's limits, camera-framing.ts) is a valid pose.
+  views.cameraMoved(MAIN_VIEW, { pose: { position: [0, .93, -40], target: [0, .93, 0], fov: 10 } });
+  expect(views.state(MAIN_VIEW, "camera")).toEqual({ pose: { position: [0, .93, -40], target: [0, .93, 0], fov: 10 } });
   // The same values are refused on read, from the graph and from the legacy fields alike.
   const data = defaultViewGraph(freshWorkspace().preview);
   expect(parseViewGraph({ ...data, scenes: [{ ...data.scenes[0], eyeShape: 999.5 }] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
   const bytes = serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS) as { preview: Record<string, unknown> };
-  const read = parseWorkspace({ ...bytes, preview: { ...bytes.preview, eyeShape: 999.5, exposure: 100, camera: { position: [0, 1.6, -50], target: [0, 1.6, 0], fov: 30 } } }, STUDIO_DOCUMENTS);
+  const read = parseWorkspace({ ...bytes, preview: { ...bytes.preview, eyeShape: 999.5, exposure: 100, camera: { position: [0, 1.6, -60], target: [0, 1.6, 60], fov: 30 } } }, STUDIO_DOCUMENTS);
   expect([read.preview.eyeShape, read.preview.exposure, read.preview.camera]).toEqual([9, 1.2, undefined]);
 });
 
