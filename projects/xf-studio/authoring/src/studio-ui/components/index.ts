@@ -24,4 +24,6 @@ export { SearchField, type SearchFieldOptions } from "./search-field";
 export { Combobox, type ComboboxOptions, type ComboGroup, type ComboOption } from "./combobox";
 export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, type Property } from "./layout";
 export { SplitView, type SplitViewOptions } from "./split-view";
+export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
+export { FolderSetting, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";

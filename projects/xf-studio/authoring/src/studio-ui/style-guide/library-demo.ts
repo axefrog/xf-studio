@@ -1,7 +1,7 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, type TabItem } from "../components";
+  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, type TabItem } from "../components";
 import { h } from "../dom";
 
 type Mount = () => HTMLElement;
@@ -89,6 +89,35 @@ const MOUNTS: Record<string, Mount> = {
       actions: [new Segmented({ label: "Show", options: [{ value: "n", label: "Nodes" }, { value: "m", label: "Mod data" }], onSelect: () => {}, compact: true, showLabel: false }).element] });
     return stack({ gap: "loose" }, head.element, blockSection({ title: "game::SessionConfig" }, propertyList([["Kind", "A layout of its own"], ["Size", "54 B"], ["Where", "offset 6,181, chunk 1"]]),
       note("This node has a layout of its own that the explorer doesn't read yet."), codeBlock("000000  cf 59 d8 a3 2b 68 19 6b 9c 5e 2a bb b4 01 11 61 8d 30 33 5f 6e 69 67 68 74 5f 63 69 74 79 42 c0", { label: "Bytes, in hexadecimal" }))); },
+  "lib-tree-view": () => {
+    const favourites = new Set<string>(["p-2"]), expanded = new Set<string>(["pack-a"]);
+    let current = "p-1";
+    const groups = () => [
+      { id: "pack-a", label: "Idle poses", secondary: "Base game", rows: Array.from({ length: 40 }, (_, i) => ({ id: `p-${i}`, label: `Standing ${i + 1}`, secondary: i % 3 ? undefined : "arms folded",
+        badges: favourites.has(`p-${i}`) ? [{ text: "Favourite", tone: "accent" as const }] : [], trailingState: favourites.has(`p-${i}`),
+        disabled: i === 5, reason: i === 5 ? "Needs its animation pack installed." : undefined })) },
+      { id: "pack-b", label: "Photo poses", secondary: "Photo Mode Unlocker", rows: Array.from({ length: 12 }, (_, i) => ({ id: `q-${i}`, label: `Portrait ${i + 1}` })) },
+      { id: "pack-c", label: "Empty pack", rows: [] }];
+    const toggle = (id: string) => { if (favourites.has(id)) favourites.delete(id); else favourites.add(id); paint(); };
+    const tree: TreeView = new TreeView({ label: "Sample poses", onActivate: id => { current = id; paint(); },
+      onToggle: (id, open) => { if (open) expanded.add(id); else expanded.delete(id); paint(); },
+      onKey: (event, item) => { if (item.kind === "row" && event.key.toLowerCase() === "f" && !event.ctrlKey) { toggle(item.id); return true; } },
+      trailing: row => favouriteToggle({ on: favourites.has(row.id), what: row.label, onToggle: () => toggle(row.id) }) });
+    const paint = () => tree.update({ groups: groups(), expanded, current });
+    paint();
+    tree.element.style.height = "220px";
+    const search = new SearchField({ label: "Search sample poses", placeholder: "Search poses (Down moves into the list)", onFilter: () => {}, onArrowDown: () => tree.focus() });
+    return h("div", { style: "max-width:420px" }, stack({ gap: "normal" }, search.element, tree.element)); },
+  "lib-folder-setting": () => {
+    let chosen: string | null = null;
+    const folder: FolderSetting = new FolderSetting({ label: "Saves folder", help: "Where the game keeps your saves.", placeholder: "e.g. %USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",
+      guidance: "Give the folder that holds your save folders (ManualSave-0, QuickSave-0 …).",
+      onChoose: async path => { if (!/saved games/i.test(path)) return { ok: false, message: "That folder has no saves in it. Give the folder that holds ManualSave-0 and the others." };
+        chosen = path; folder.update({ chosen, detected }); return { ok: true }; },
+      onUseDetected: async () => { chosen = null; folder.update({ chosen, detected }); return { ok: true }; } });
+    const detected = "%USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077";
+    folder.update({ chosen, detected });
+    return h("div", { style: "max-width:520px" }, folder.element); },
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },

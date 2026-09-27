@@ -178,3 +178,84 @@ test("icon button: named and titled by its label, says when it opens a menu, and
   more.click();
   expect(runs).toBe(1);
 });
+
+test("tree view: groups toggle, rows activate on one click, disabled rows don't, the WAI keys move and open, and F reaches the owner", async () => {
+  const { TreeView, favouriteToggle } = await lib();
+  const expanded = new Set(["a"]), activated: string[] = [], toggled: string[] = [], favs = new Set<string>();
+  const groups = () => [
+    { id: "a", label: "Idle", secondary: "Base game", rows: [{ id: "a1", label: "Stand" }, { id: "a2", label: "Sit", disabled: true, reason: "Needs its pack." },
+      { id: "a3", label: "Lean", badges: [{ text: "New" }], trailingState: favs.has("a3") }] },
+    { id: "b", label: "Photo", rows: [{ id: "b1", label: "Portrait" }] }, { id: "c", label: "Empty", rows: [] }];
+  const tree = new TreeView({ label: "Poses", onActivate: id => activated.push(id), onToggle: (id, open) => { toggled.push(`${id}:${open}`); if (open) expanded.add(id); else expanded.delete(id); paint(); },
+    onKey: (event, item) => { if (event.key === "f" && item.kind === "row") { favs.add(item.id); paint(); return true; } },
+    trailing: row => favouriteToggle({ on: favs.has(row.id), what: row.label, onToggle: () => {} }) });
+  const paint = () => tree.update({ groups: groups(), expanded, current: "a1" });
+  document.body.append(tree.element);
+  paint();
+  const item = (id: string) => tree.element.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+  // The empty group isn't shown; the structure is a flat tree with levels, sizes and positions.
+  expect(Array.from(tree.element.querySelectorAll<HTMLElement>(".tree-item")).map(e => [e.dataset.id, e.getAttribute("aria-level"), e.getAttribute("aria-posinset"), e.getAttribute("aria-setsize")]))
+    .toEqual([["a", "1", "1", "2"], ["a1", "2", "1", "3"], ["a2", "2", "2", "3"], ["a3", "2", "3", "3"], ["b", "1", "2", "2"]]);
+  expect([item("a").getAttribute("aria-expanded"), item("a1").getAttribute("aria-current"), item("a1").tabIndex, item("a").tabIndex]).toEqual(["true", "true", 0, -1]);
+  expect([item("a3").getAttribute("aria-label"), item("a2").getAttribute("aria-disabled"), item("a2").title]).toEqual(["Lean, New", "true", "Needs its pack."]);
+  item("a2").click(); item("a1").click();
+  expect(activated).toEqual(["a1"]);
+  const star = item("a3").querySelector<HTMLElement>(".favourite-toggle")!;
+  expect([star.getAttribute("aria-label"), star.getAttribute("aria-pressed"), star.tabIndex]).toEqual(["Add Lean to favourites", "false", -1]);
+  // Keys, from the focused current row: Down, Down to Lean, F toggles through the owner, Left to the group, Left closes it.
+  const press = (name: string) => (tree.element as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: name }));
+  press("ArrowDown"); press("ArrowDown");
+  expect(document.activeElement?.getAttribute("data-id")).toBe("a3");
+  press("f");
+  expect(item("a3").querySelector(".favourite-toggle")!.getAttribute("aria-pressed")).toBe("true");
+  press("ArrowLeft");
+  expect(document.activeElement?.getAttribute("data-id")).toBe("a");
+  press("ArrowLeft");
+  expect([toggled, tree.element.querySelectorAll(".tree-row").length]).toEqual([["a:false"], 0]);
+  press("p");
+  expect(document.activeElement?.getAttribute("data-id")).toBe("b");
+  press("ArrowRight");
+  expect(toggled.at(-1)).toBe("b:true");
+  press("ArrowRight"); press("Enter");
+  expect(activated.at(-1)).toBe("b1");
+});
+
+test("tree view: only the items in view are in the page, and an update keeps the focused item", async () => {
+  const { TreeView } = await lib();
+  const groups = Array.from({ length: 90 }, (_, g) => ({ id: `g${g}`, label: `Pack ${g}`, rows: Array.from({ length: 18 }, (_, r) => ({ id: `g${g}r${r}`, label: `Pose ${r}` })) }));
+  const expanded = new Set(groups.map(group => group.id));
+  const tree = new TreeView({ label: "Many poses", onActivate: () => {}, onToggle: () => {} });
+  document.body.append(tree.element);
+  tree.update({ groups, expanded });
+  const count = tree.element.querySelectorAll(".tree-item").length;
+  expect(count).toBeLessThan(60);
+  tree.focusItem("g40r3");
+  tree.update({ groups, expanded, loading: true });
+  expect([document.activeElement?.getAttribute("data-id"), tree.element.querySelector(".tree-status")!.textContent]).toEqual(["g40r3", "Loading…"]);
+});
+
+test("folder setting: says what it uses, a refusal shows inline on the reserved line, the typed box commits on Enter, the picker is used where there is one", async () => {
+  const { FolderSetting } = await lib();
+  const chosenPaths: string[] = []; let picks = 0;
+  const folder = new FolderSetting({ label: "Saves folder", onChoose: async path => path.includes("Saves") ? (chosenPaths.push(path), { ok: true as const }) : { ok: false as const, message: "That folder has no saves in it." },
+    onPick: async () => { picks++; return { ok: false as const, message: "", cancelled: true }; }, onUseDetected: async () => ({ ok: true as const }) });
+  folder.update({ chosen: null, detected: "%USERPROFILE%\Saves" });
+  const el = folder.element as unknown as LightElement;
+  const using = el.querySelector(".folder-using")!, note = el.querySelector(".folder-note")!, typed = el.querySelector(".folder-typed")!;
+  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", false, true]);
+  const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose another folder…")!;
+  choose.click(); await Promise.resolve();
+  expect(typed.hidden).toBe(false);
+  folder.input.value = "D:\Elsewhere"; key(folder.input, "Enter");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect([note.textContent, note.classList.contains("empty"), typed.hidden]).toEqual(["That folder has no saves in it.", false, false]);
+  folder.input.value = "D:\Saves"; key(folder.input, "Enter");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect([chosenPaths, typed.hidden, note.classList.contains("empty")]).toEqual([["D:\Saves"], true, true]);
+  folder.update({ chosen: "D:\Saves", detected: "%USERPROFILE%\Saves", canPick: true });
+  const useDetected = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Use the detected folder")!;
+  expect([using.textContent, useDetected.hidden]).toEqual(["Using: D:\Saves", false]);
+  choose.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  // A cancelled picker says nothing.
+  expect([picks, typed.hidden, note.textContent]).toEqual([1, true, ""]);
+});

@@ -12,6 +12,7 @@ import { iconButton } from "./icon-button";
  * - **Clearing:** the clear button (shown only while there is a query; it keeps its place, so the field never changes width) and
  *   Escape clear the query and filter at once; Escape on an empty field is left to the page (it closes a menu or a sheet).
  * - **No matches:** `noMatches` gives the list's empty state for a query with no results: what was searched and a Clear search action.
+ * - **Into the list:** with `onArrowDown`, Down moves focus into the filtered list (after filtering at once).
  * - **Access:** `type="search"` in a `role="search"` landmark named by `label`; the input's name is `label` too.
  */
 export type SearchFieldOptions = {
@@ -22,6 +23,8 @@ export type SearchFieldOptions = {
   debounce?: number;
   value?: string;
   className?: string;
+  /** Down in the field: the owner moves focus into the list it filters (e.g. `tree.focus()`). */
+  onArrowDown?(): void;
 };
 export class SearchField {
   readonly element: HTMLElement;
@@ -39,6 +42,7 @@ export class SearchField {
     this.input.addEventListener("input", () => { this.paint(); this.schedule(); });
     this.input.addEventListener("keydown", event => {
       if (event.key === "Enter") { event.preventDefault(); this.flush(); }
+      else if (event.key === "ArrowDown" && options.onArrowDown) { event.preventDefault(); this.flush(); options.onArrowDown(); }
       else if (event.key === "Escape" && this.input.value) { event.preventDefault(); event.stopPropagation(); this.clear(); }
     });
     this.paint();

@@ -294,6 +294,36 @@ span.category { border-color: transparent; background: transparent; padding-left
 .combobox-option[aria-selected="true"] .combobox-option-label { font-weight: 600; }
 .combobox-option[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .combobox-empty { padding: var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); }
+/* Folder setting (components/folder-setting.ts): the folder in use, its actions, the typed box and the reserved refusal line. */
+.folder-using { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.folder-typed { display: flex; flex-direction: column; gap: var(--sp-3); }
+.folder-typed .field { flex: 1 1 auto; }
+/* Tree view (components/tree-view.ts): fixed-height items positioned in a spacer, so only the rows in view are in the page. */
+.tree-view { position: relative; overflow: auto; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); }
+.tree-spacer { position: relative; min-height: 100%; }
+.tree-item { position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); cursor: pointer;
+  font-size: var(--fs-sm); white-space: nowrap; }
+.tree-item:hover { background: var(--bg-hover); }
+.tree-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.tree-group { font-weight: 600; }
+.tree-row { padding-left: calc(var(--sp-4) + 10px + var(--sp-3)); }
+.tree-row.current { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
+.tree-row.disabled { color: var(--text-faint); cursor: not-allowed; }
+.tree-chevron { flex: none; display: inline-grid; width: 10px; color: var(--text-muted); transition: rotate var(--dur) var(--ease); }
+.tree-chevron .icon { width: 10px; height: 10px; stroke-width: 1.8; }
+.tree-group[aria-expanded="true"] .tree-chevron { rotate: 90deg; }
+.tree-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tree-label mark { background: var(--accent-bg, color-mix(in oklab, var(--accent) 35%, transparent)); color: inherit; }
+.tree-secondary { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-weight: 400; font-size: var(--fs-xs); }
+.tree-count { margin-left: auto; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); }
+.tree-trailing { margin-left: auto; display: inline-flex; flex: none; }
+.tree-status { position: absolute; top: var(--sp-2); right: var(--sp-3); z-index: 2; padding: 2px var(--sp-3); background: var(--bg-overlay); border: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-muted); }
+.tree-empty { margin: 0; padding: var(--sp-5); color: var(--text-muted); font-size: var(--fs-sm); }
+/* Favourite toggle: shown on the row's hover or focus, and always while on. */
+.tree-row .favourite-toggle[aria-pressed="false"] { opacity: 0; }
+.tree-row:hover .favourite-toggle, .tree-row:focus .favourite-toggle, .tree-row:focus-within .favourite-toggle { opacity: 1; }
+.favourite-toggle[aria-pressed="true"] { color: var(--accent-text); }
+@media (prefers-reduced-motion: reduce) { .tree-chevron { transition: none; } }
 
 /* ---------- Workspace & dock ---------- */
 .workspace { position: relative; min-height: 0; min-width: 0; padding: var(--sp-2); }
