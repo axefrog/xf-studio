@@ -9,7 +9,11 @@ import { icon, type IconName } from "./icons";
 export type Capability = { available: boolean; reason?: string };
 export type MenuItem =
   | { kind: "action"; label: string; icon?: IconName; shortcut?: string; hint?: string;
-      capability?: Capability; checked?: boolean; danger?: boolean; run(): void }
+      capability?: Capability; checked?: boolean; danger?: boolean; run(): void;
+      /** A small neutral tag after the label ("Soon" on a planned entry). */
+      tag?: string;
+      /** The unavailable reason is information, not a problem (a planned feature's "Coming soon: …"): shown in the muted colour. */
+      quietReason?: boolean }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[] }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
@@ -115,8 +119,8 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       "aria-haspopup": item.kind === "submenu" ? "menu" : undefined,
       "aria-describedby": reason || item.hint ? descId : undefined },
       h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
-      h("span", { class: "menu-text" }, h("span", { class: "menu-label", text: item.label }),
-        reason || item.hint ? h("small", { id: descId, class: reason ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
+      h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null),
+        reason || item.hint ? h("small", { id: descId, class: reason && !(item.kind === "action" && item.quietReason) ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
           : null),
       item.kind === "action" && item.shortcut ? h("kbd", { text: item.shortcut }) : null,
       item.kind === "submenu" ? h("span", { class: "menu-sub" }, icon("chevronRight")) : null);

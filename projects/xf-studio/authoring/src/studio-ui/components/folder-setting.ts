@@ -17,8 +17,9 @@ import type { Capability } from "../menu";
  *   options, don't hide them), with where it was found in plain words ("Steam, Mod Organizer 2"); the one in use is pressed, and pressing
  *   another saves it (`onSelect`). A chosen folder that isn't among them is listed first. "Choose another folder…" stays below them.
  *   Defaults first: the owner saves the first found folder while none is chosen, so nothing needs a click; the component only shows.
- * - **Refusals** (a folder that isn't the game, a picker that failed) appear on the note line under the field, never as a toast; the
- *   line keeps its height, so a refusal appearing or clearing never moves anything. A cancelled picker says nothing.
+ * - **Refusals** (a folder that isn't the game, a picker that failed) appear on the note line under the field, never as a toast. The
+ *   line is reserved while the text box is open, so a refusal of what was typed never moves anything; otherwise it takes no room (the
+ *   settings keep their normal rhythm) and appears only in answer to the person's own action. A cancelled picker says nothing.
  */
 export type FolderOutcome = { ok: true } | { ok: false; message: string; cancelled?: boolean };
 /** A folder the app found, with where it found it in plain words ("Steam", "GOG, Mod Organizer 2"). */
@@ -88,7 +89,9 @@ export class FolderSetting {
       else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); this.closeTyped(); }
     });
   }
-  private refuse(message: string) { setText(this.note, message); this.note.classList.toggle("empty", !message); }
+  private refuse(message: string) { setText(this.note, message); this.note.classList.toggle("empty", !message); this.placeNote(); }
+  /** The note line: reserved while the text box is open, else shown only while it says something. */
+  private placeNote() { this.note.hidden = this.typed.hidden && !this.note.textContent; }
   private async run(action?: () => Promise<FolderOutcome>) {
     if (!action || this.busy) return false;
     this.busy = true; this.refuse(""); this.paint();
@@ -101,6 +104,7 @@ export class FolderSetting {
   private async chooseAnother() {
     if (this.state.canPick && this.options.onPick) { await this.run(this.options.onPick); return; }
     this.typed.hidden = false;
+    this.placeNote();
     this.input.value = "";
     this.input.focus();
   }
@@ -149,6 +153,7 @@ export class FolderSetting {
     applyCapability(this.save, blocked ?? { available: true });
     for (const item of this.choiceButtons) applyCapability(item.button, blocked ?? { available: true });
     this.input.disabled = !!disabled;
+    this.placeNote();
   }
 }
 /** The same folder, whatever the case or a trailing slash. */

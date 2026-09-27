@@ -478,7 +478,7 @@ function moduleMenuItems(rt: StudioRuntime): MenuItem[] {
       run: () => rt.modules.set(module.id, !shown.includes(module.id)) });
     // Planned modules (ui-copy-and-layout-review.md §6): listed, never shown; each says what it will let the person do.
     for (const module of planned) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
-      hint: "Planned", capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
+      tag: "Soon", quietReason: true, capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
   }
   return items;
 }
@@ -522,7 +522,7 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
   const graph = rt.port.views.snapshot();
   const live = liveFeatures(rt.port);
   const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live);
-    return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
+    return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", quietReason: true, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
   if (graph) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;
       return { kind: "action" as const, label: entry.title ?? rt.views.meta[panel]?.title ?? entry.id, icon: "head" as const,

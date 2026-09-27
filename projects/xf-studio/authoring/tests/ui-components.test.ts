@@ -242,10 +242,11 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   folder.update({ chosen: null, detected: "%USERPROFILE%\Saves" });
   const el = folder.element as unknown as LightElement;
   const using = el.querySelector(".folder-using")!, note = el.querySelector(".folder-note")!, typed = el.querySelector(".folder-typed")!;
-  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", false, true]);
+  // The note line takes no room until the text box opens (then it is reserved, so a refusal of what was typed moves nothing).
+  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", true, true]);
   const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose another folder…")!;
   choose.click(); await Promise.resolve();
-  expect(typed.hidden).toBe(false);
+  expect([typed.hidden, note.hidden]).toEqual([false, false]);
   folder.input.value = "D:\Elsewhere"; key(folder.input, "Enter");
   await new Promise(resolve => setTimeout(resolve, 0));
   expect([note.textContent, note.classList.contains("empty"), typed.hidden]).toEqual(["That folder has no saves in it.", false, false]);

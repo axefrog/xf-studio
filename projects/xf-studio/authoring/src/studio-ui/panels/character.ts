@@ -79,7 +79,6 @@ function scrollView(from: HTMLElement): { top: number; bottom: number } | null {
   }
   return bottom > top ? { top, bottom } : null;
 }
-const PAGE = 240;
 
 type RowView = { row: CcPanelRow; section: string; options: CcPanelOption[] };
 /** The option a row shows: the one the view marks active, else its first while the view is on its way (cc-panel.ts `rowOption`). */
@@ -195,9 +194,13 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const detailsExpander = expander("subsection", { expanded: false, controls: detailsBodyId }, expanderLabel("In the 3D view"), detailsCount);
   const detailsBody = h("div", { class: "cc-details-body", id: detailsBodyId, hidden: true });
   const detailsMessage = note("");
-  detailsExpander.addEventListener("click", () => { const open = !isExpanded(detailsExpander); setExpanded(detailsExpander, open); detailsBody.hidden = !open; });
-  const detailsBlock = h("div", { class: "cc-details", hidden: true }, h("div", { class: "control-line" }, h("h4", { class: "cc-details-title" }, detailsExpander),
-    helpTip("what the 3D view shows", "Your V's details as the 3D view draws them. Shading and lighting are approximate.")), detailsBody);
+  detailsExpander.addEventListener("click", () => { const open = !isExpanded(detailsExpander); setExpanded(detailsExpander, open); detailsBody.hidden = !open; detailsBlock.hidden = !open; });
+  // Its heading leads the panel's one status line (the line's fixed height, so an empty status leaves no band of its own; showing or
+  // hiding the heading moves only the status text sideways, never anything below), and its list opens under the line.
+  const detailsHead = h("div", { class: "control-line cc-details-head", hidden: true }, h("h4", { class: "cc-details-title" }, detailsExpander),
+    helpTip("what the 3D view shows", "Your V's details as the 3D view draws them. Shading and lighting are approximate."));
+  const detailsBlock = h("div", { class: "cc-details", hidden: true }, detailsBody);
+  status.insertBefore(detailsHead, statusText);
   // The game files prepared for the 3D view on this computer, and clearing them.
   const preparedText = h("span", { class: "cc-prepared-text" });
   const clearPrepared = button({ label: "Clear prepared game files", icon: "trash", small: true, variant: "quiet",
@@ -236,7 +239,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   type RowControls = { view: RowView; element: HTMLElement; main: HTMLButtonElement; label: HTMLElement; value: HTMLElement; swatch: HTMLElement;
     notShown: HTMLElement; off: HTMLButtonElement; reset: HTMLButtonElement;
     /** What the row is (it follows a switcher, the 3D view can't draw it), in a help tip; only on rows where an option has something to say. */
-    help: HTMLButtonElement | null; list: CreatorChoiceList; more: HTMLButtonElement;
+    help: HTMLButtonElement | null; list: CreatorChoiceList;
     open: boolean; query: string;
     /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
     prefetching: string | null; positions: number[]; loaded: number };
@@ -372,7 +375,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
             if (aheadRow !== rowKey(controls.view)) { aheadRow = rowKey(controls.view); rt.changed(); return; }
             if (controls.prefetching && controls.positions.length) port.authoring.characterPrefetch(controls.prefetching, controls.positions, choice.position);
           }),
-          more: Object.assign(button({ label: "Show more", small: true, variant: "quiet", className: "cc-more", onClick: () => {} }), { hidden: true }), open: openRows.has(rowKey(view)), query: "",
+          open: openRows.has(rowKey(view)), query: "",
           prefetching: null, positions: [], loaded: -1 };
         main.addEventListener("click", () => toggle(controls));
         controls.off.addEventListener("click", () => {
@@ -383,13 +386,9 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
           const option = current(controls);
           if (option) dispatch({ kind: "character.reset", part: option.part, option: option.name });
         });
-        controls.more.addEventListener("click", () => {
-          const option = current(controls);
-          if (option) port.authoring.characterChoices(option.id, (port.authoring.characterChoices(option.id, undefined, controls.query)?.choices.length ?? 0) + PAGE, controls.query);
-        });
         controls.list.element.hidden = true;
         controls.element.append(h("div", { class: "cc-row-head" }, main, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
-          controls.list.element, controls.more);
+          controls.list.element);
         return controls;
   }
   const current = (controls: RowControls): CcPanelOption | null => {
@@ -487,11 +486,15 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         setAttr(controls.help, "aria-label", `About ${option.label}`);
       }
       controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
+      const opening = controls.open && controls.list.element.hidden;
       controls.list.element.hidden = !controls.open;
-      if (!controls.open) { controls.more.hidden = true; continue; }
+      // A row that opens shows the V's choice: its group opens and it is scrolled into view once it has loaded.
+      if (opening) controls.list.revealChosenNext();
+      if (!controls.open) continue;
       // An open row lists every choice, or with a search that only its choices match, the matching ones.
       controls.query = rowMatches ? "" : query;
-      const loaded = port.authoring.characterChoices(option.id, undefined, controls.query);
+      // Every choice (show the options): the row's pages load one after another, each appended as it arrives; nothing waits behind a button.
+      const loaded = port.authoring.characterChoices(option.id, Number.MAX_SAFE_INTEGER, controls.query);
       // Its choices are prepared ahead while it shows them all, when the 3D view draws the option.
       const ahead = !controls.query && option.coverage[0] !== "not-rendered" && aheadRow === rowKey(controls.view);
       if (!ahead) stopPrefetch(controls);
@@ -506,9 +509,6 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
         prefetchRow(controls, option);
       }
-      const remaining = (loaded?.total ?? 0) - (loaded?.choices.length ?? 0);
-      controls.more.hidden = remaining <= 0;
-      setText(controls.more, `Show ${Math.min(PAGE, remaining)} more of ${remaining}`);
     }
     // A section shows while it has a row to show, or controls of its own (not while a search finds nothing in it); a group while a section does.
     for (const group of built!.groups) {
@@ -720,7 +720,9 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       setText(detailNote, detailsNeed && detailLine.text === detailsNeed ? "" : detailLine.text);
       detailNote.hidden = !detailNote.textContent;
       const detailRows = characterDetailRows(details);
-      detailsBlock.hidden = !detailRows;
+      detailsHead.hidden = !detailRows;
+      detailsBody.hidden = !detailRows || !isExpanded(detailsExpander);
+      detailsBlock.hidden = detailsBody.hidden;
       const detailsKey = JSON.stringify(detailRows);
       if (detailRows && detailsBody.dataset.key !== detailsKey) {
         detailsBody.dataset.key = detailsKey;

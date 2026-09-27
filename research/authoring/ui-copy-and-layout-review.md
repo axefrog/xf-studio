@@ -531,4 +531,10 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 
 **Follow-ups done in the same pass:** the library's TreeView gives a row's label priority over its secondary text (the secondary text takes only the room left, hides in a tree narrower than about 320 px, and the full text is the tooltip), and the Character panel's search is the library's SearchField (icon, clear button, Escape clears, the same pause as Poses). The reserved empty note line under a choice list or switch was kept at its height: collapsing it to the section gap would move the next control when a note appears.
 
+**Review round (coordinator):**
+- The Character panel's empty band is gone: the "In the 3D view" heading leads the panel's fixed-height status line, so an empty status no longer leaves a band of its own, and the folded list's wrapper takes no room.
+- FolderSetting reserves its refusal line only while its text box is open, so Settings › Game keeps the normal rhythm between folders.
+- Planned entries in menus carry a neutral **Soon** tag and their "Coming soon: …" in the muted colour (menu `tag`, `quietReason`), never the warning colour.
+- Creator choice rows show every choice: "Show N more" is gone, the row loads its pages one after another, and when a row opens the V's choice is scrolled into view and the maker group holding it opens. Measured on the reference setup (the Hairstyle row, 283 choices): every page loaded in about 0.3–0.4 s, and reopening the row (every choice rendered from the cached pages) took 26 ms to the next painted frame, so no virtualisation is needed.
+
 **Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and Expression › Start from (§6a).

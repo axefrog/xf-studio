@@ -662,6 +662,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-status.busy::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--signal); animation: pulse 1s steps(2) infinite; }
 .cc-status.warning .cc-status-text { color: var(--warning); }
 .cc-status .btn { flex: none; }
+.cc-details-head { flex: none; margin-right: var(--sp-4); }
+.cc-details-head[hidden] { display: none; }
+.cc-details-title { margin: 0; }
+.cc-details-body:not([hidden]) { padding: var(--sp-2) 0 var(--sp-3); }
 .cc-unoffered { visibility: hidden; }
 .cc-messages { display: flex; flex-direction: column; gap: var(--sp-2); }
 .cc-quick { padding: var(--sp-4); border: 1px solid var(--line); background: var(--bg-raised); border-radius: 0 var(--bevel) 0 0; }
@@ -750,7 +754,6 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-maker-head[data-chosen][aria-expanded="false"] .cc-maker-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--sp-2);
   border-radius: 50%; background: var(--signal); vertical-align: middle; }
 .cc-choices-status { margin: 0 var(--sp-3) var(--sp-3) var(--cc-indent); }
-.cc-more { margin: 0 0 var(--sp-3) var(--cc-indent); align-self: flex-start; }
 .cc-row-swatch { width: 12px; height: 12px; }
 /* Choices prepared ahead: a corner mark on one not prepared yet, a turning one while it is prepared, a warning one when it couldn't be.
    Absolutely placed on the item's corner (over its border, clear of its label), so a mark never moves the layout; the ring's own fill
@@ -980,6 +983,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .menu-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .menu-reason, .menu-hint { font-size: var(--fs-xs); color: var(--text-muted); white-space: normal; line-height: 1.3; }
 .menu-reason { color: var(--warning); }
+.menu-tag { margin-left: var(--sp-3); padding: 0 var(--sp-2); border: 1px solid var(--line-strong); font: 600 var(--fs-2xs)/1.5 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); vertical-align: 1px; }
 .menu-sub { color: var(--text-faint); display: grid; }
 .menu-sep { height: 1px; background: var(--line); margin: var(--sp-2) var(--sp-3); }
 .menu-heading { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-3) var(--sp-4) var(--sp-2); font: 600 var(--fs-2xs)/1.3 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
