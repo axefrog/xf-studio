@@ -1,6 +1,6 @@
 # View graph and Studio modules: design
 
-**Status:** design ready, 27 September 2026; nothing built beyond the ratchet test in `tests/view-graph-audit.test.ts`. It answers three directions for the Studio's shell:
+**Status:** P1 and P2 built on `claude/view-graph-p1`, 27 September 2026 (see [phase status](#65-phase-status)); P3–P5 not started. It answers three directions for the Studio's shell:
 
 1. Show at least one or two modules beyond eye makeup, to demonstrate how switching between modules works, or whether it needs to be exclusive at all. Some modules are not V-centric (the game map, game assets, world locations).
 2. Allow more than one 3D view, configured as a graph. Views reference shared or separate nodes: content, camera, lights, render settings, overlays and editing tools. The example to support: two views of V sharing one camera, each with its own light rig.
@@ -258,10 +258,19 @@ The view header shows a small link badge per shared slot, lettered per node ("Ca
 
 ### 3.6 Undo scope
 
-- **Camera, light and display changes** record no Undo. They remain workspace view state, as the Camera & light panel already states (`preview.ts:153`), and they never enter look history, recipes or exports.
-- **Graph edits** record no look history either: a view is not part of a look. Close view is recoverable through Reopen closed view. Close view and Unlink offer a toast **Undo**, backed by a session-only graph step list (20 steps) that is never persisted.
-- **Tool toggles** are view state, not Undo.
-- **Gestures** stay exactly as today: one application-wide open gesture, from whichever view started it, recorded in the look history.
+Revised 27 September 2026 after the maintainer asked why the graph shouldn't be undoable. The answer: it should, but in **its own history**, never mixed into look history.
+
+- **Look history stays pure.** Ctrl+Z while editing makeup never undoes a camera orbit or a light change, and looks, recipes and exports never carry view state.
+- **A second history, "View and lighting"**, per workspace. It records deliberate edits:
+  - light rig changes (presets, a light's colour, strength or position, rig swaps);
+  - display settings;
+  - graph edits (add, close, link, unlink or duplicate a view; module visibility);
+  - discrete camera jumps (Front view, Whole body, Frame V, a saved camera, applying a pose's framing).
+
+  Each continuous drag coalesces into one step, as look edits already do.
+- **Camera navigation is not recorded** (orbit, zoom, pan), the way Blender and most 3D tools treat view navigation. A camera Back/Forward instead returns to where the camera was before the last jump or long navigation, per camera node, so a shared camera shares its trail.
+- **Which history Undo acts on** follows the existing focus rule (the Character panel's Undo already works by focus): Ctrl+Z in a viewport, the Camera & light panel or the view graph acts on View and lighting; everywhere else on the look. The History panel shows both histories as separate categories. The header Undo acts on the focused scope and says which ("Undo light change").
+- **Persistence:** View and lighting history is session-only; the graph state itself is saved with the workspace.
 
 ### 3.7 Rendering and performance
 
@@ -498,6 +507,20 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 | Placeholders read as promises | Stage "Preview", hidden by default, one true line each, nothing faked |
 | Scope creep into world rendering | World's placeholder draws a grid only; streaming stays behind the native mesh phase |
 
+### 6.5 Phase status
+
+**P1 (built).** `platform/api/view-graph.ts` and `platform/core/view-graph.ts` hold the graph: views referencing scene, camera, lights, display and tools nodes, link, unlink, add and close view, collection in the same commit, validation against each slot's codec and each scene kind's camera and rig kinds, and `xfs/view-graph-1`. `preview-view-graph.ts` gives the Studio's codecs, derives the default one-view graph from `preview` and mirrors the main view back. `PreviewActions` stores nothing: each action edits its view's node (optional `view`, default the focused view) and the device follows the graph for the view it draws, applying only what changed. The View and lighting history (§3.6) is the graph's own: light, display and scene settings and camera jumps record coalesced, session-only steps; navigation and tool toggles record nothing; each camera node keeps a Back/Forward trail (`camera.back`, `camera.forward`). `StudioTarget {kind:"viewport", view}`, `GestureSource {view}` (a bare view ID, and `surface` for the main view, still accepted), the viewport attachment and editor adapter keyed by host and slot IDs (`head` stays the main view's alias), `SceneHostPort.lighting()` removed. Gates met: the registry golden changed only by the optional `view` fields; a workspace that never adds a view keeps its bytes (`tests/view-graph.test.ts`); the existing tests pass unchanged except the scene port's key list. Ratchet: the fixed viewport-kind list went from 8 modules to 2 in P1 and to 1 (`input-bindings`) in P2.
+
+**P2 (built).** `platform/api/module.ts` (`StudioModule`, `ViewToolContribution`, `ViewSummaryContribution`, derivation and completeness), `platform/core/view-tools.ts` (Front view, Whole body view, Idle), `compose/modules.ts`, eye makeup's `features/eye-makeup/module.ts` (Surface controls on the toolbar, Plate wireframe as a research tool everywhere, its summary), the `views` family (`view.setTool`, `view.undo`, `view.redo`) and `port.views`. The toolbar, the head menu's view section, the palette's View entries and Camera & light › Display render one derived list; the crumb and the readiness badge are eye makeup's view contributions. `UIPreferences.modules`, the header's Modules menu (replacing the category label) and the Panels flyout, now grouped by module with each module's toggle on its heading, each panel's state (open, collapsed, closed, parked) and the views. Hiding a module withdraws its panels, parks their places per size class and restores them exactly (`tests/view-modules.test.ts`, and the `?verify=1` run of 27 September); `parseTree` never re-adds a parked panel. Groups collapse to their tab bar (saved with the layout, keyboard reachable, in the palette). Ctrl+Z in Camera & light acts on View and lighting. The ratchet's shell-tool list is empty and boundary rules 3, 4, 5, 6 and 7 hold (`tests/view-graph-audit.test.ts`, `tests/view-modules.test.ts`, `tests/golden/module-registry.json`).
+
+**Deferred from P1–P2, and why.**
+
+- A shell-only composition that mounts with no features registered: the runtime still asks for eye makeup's facade at construction (the UI-75 rows in the [presentation boundary](ui-architecture-boundary.md#open-work)). Hiding eye makeup already runs the shell without its panels, tools and crumb.
+- Undo by focus beyond Camera & light: Ctrl+Z in a viewport would step View and lighting rather than the makeup being edited on the head, which changes the head's editing flow; this needs the maintainer's call. The header Undo button and the History panel still show look history only (the History panel's View and lighting category is not built).
+- Camera Back/Forward after a long navigation (only jumps leave trail entries until the camera input writes the node, P3), and `head.front`-style bindings resolving against the focused view (one view until P4).
+- A guidance tour step on a hidden module's panel offers "Show Eye makeup" through the dock's withdrawn-panel notice, not yet as the tour step's own action.
+- The Panels flyout's New view and Duplicate view (shared camera) entries (P4; the list of views is derived from the graph already).
+
 ## 7. Open questions, with proposed defaults
 
 | # | Question | Proposed default |
@@ -505,7 +528,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 | Q1 | Are modules exclusive or combinable? | Combinable, from a Modules menu; named workspaces later, as saved sets |
 | Q2 | Does a hidden module's content still draw on V? | Yes, the look is unchanged; each view can hide a module's content |
 | Q3 | What does a new view share? | Scene, lights and display; camera copied; tools fresh. Compare lighting as its own command. |
-| Q4 | Do camera, light or graph edits enter Undo? | No; they are workspace view state. Close view is reopenable, and Close and Unlink offer a toast Undo. |
+| Q4 | Do camera, light or graph edits enter Undo? | Yes, in their own **View and lighting** history, separate from look history; camera navigation itself isn't recorded, discrete camera jumps are, with a camera Back/Forward (§3.6; revised 27 September). |
 | Q5 | How many views may show at once, and at what cost? | 4 visible; focused view at full rate, others at half while animating; hidden views paused |
 | Q6 | Are the placeholders shown by default? | Listed under Modules as Preview and hidden until switched on; the `?verify=1` tests switch them on |
 | Q7 | Should a view be able to show a look other than the selected one (compare presets A and B)? | Later (P6): it needs raster jobs for a non-live look |

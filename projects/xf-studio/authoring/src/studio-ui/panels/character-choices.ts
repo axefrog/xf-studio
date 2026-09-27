@@ -4,6 +4,8 @@
  * - **Updated in place.** The selection and the roving focus stop change attributes (`aria-selected`, `tabindex`) on the existing items;
  *   a newly loaded page is appended (Off choices go first, as the creator lists them); only another option or another search rebuilds
  *   the items, and then keyboard focus returns to the same choice (by its position) when it is still listed.
+ * - **At once.** A chosen item is marked chosen as it is clicked, and marked as being prepared while the V is prepared with it; the
+ *   character context shows the choice before the host's view of it arrives (character-context-actions.ts `view`).
  * - **Keyboard: the listbox pattern.** Arrow keys (and Home, End) move focus between choices without choosing, because every choice
  *   prepares the V anew; Enter or Space (or a click) chooses. The chosen choice is marked by identity (its position among the option's
  *   choices), so two same-named choices are never both marked (CORE-70).
@@ -36,6 +38,8 @@ export type ChoiceListInput = {
   fetch?: ReadonlyMap<number, ChoiceFetch> | null;
   /** A colour row's swatches and icons by position (grid rows; null until they arrive). */
   swatches?: CharacterSwatchState | null;
+  /** The V is being prepared with the current choices: the chosen item shows it is on its way, in place. */
+  preparing?: boolean;
 };
 
 /** How one grid choice's swatch is drawn: CSS custom properties on its swatch element, and whether it is still waiting. */
@@ -94,14 +98,13 @@ export class ChoiceList {
     // Newly loaded choices are appended; an Off choice joins the Off ones at the front.
     for (const choice of input.choices.slice(this.items.length)) this.add(choice, input);
     if (input.selected !== this.selected) {
-      const previous = this.selected === null ? undefined : this.byPosition.get(this.selected);
-      if (previous) setAttr(previous, "aria-selected", "false");
-      this.selected = input.selected;
-      const item = input.selected === null ? undefined : this.byPosition.get(input.selected);
-      if (item) setAttr(item, "aria-selected", "true");
+      const item = this.select(input.selected);
       if (!this.focused()) this.rove(item ?? this.active);
     } else if (!this.active && this.items.length) this.rove(this.selected !== null ? this.byPosition.get(this.selected) : undefined);
-    for (const entry of this.items) { this.showFetch(entry, input.fetch?.get(entry.choice.position)); this.paintSwatch(entry, input.swatches); }
+    for (const entry of this.items) {
+      this.showFetch(entry, input.preparing && entry.choice.position === input.selected ? "f" : input.fetch?.get(entry.choice.position));
+      this.paintSwatch(entry, input.swatches);
+    }
     const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
     setText(this.status, line);
     this.status.hidden = !line;
@@ -138,6 +141,16 @@ export class ChoiceList {
     if (look.kind === "none") setAttr(entry.swatch, "data-empty", look.waiting ? "waiting" : "true"); else entry.swatch.removeAttribute("data-empty");
   }
 
+  /** Mark the item at `position` as the chosen one (and no other); returns it. */
+  private select(position: number | null): HTMLButtonElement | undefined {
+    const previous = this.selected === null ? undefined : this.byPosition.get(this.selected);
+    if (previous) setAttr(previous, "aria-selected", "false");
+    this.selected = position;
+    const item = position === null ? undefined : this.byPosition.get(position);
+    if (item) setAttr(item, "aria-selected", "true");
+    return item;
+  }
+
   /** Mark an item with its prepared-ahead state (only when it changes). */
   private showFetch(entry: ChoiceList["items"][number], state: ChoiceFetch | undefined) {
     const shown = state ? FETCH_SHOWN[state] : undefined, mark = shown?.mark ?? "";
@@ -168,7 +181,8 @@ export class ChoiceList {
       "aria-selected": String(choice.position === input.selected), tabindex: "-1", title: `${choice.off ? "Off" : choice.label} · ${from}`,
       "aria-label": choice.off ? "Off" : choice.label, "aria-description": from, "data-position": String(choice.position) },
       swatch, swatch ? null : h("span", { class: "cc-choice-label", text: choice.off ? "Off" : choice.label }));
-    item.addEventListener("click", () => { this.rove(item); this.onChoose(choice); });
+    // The choice shows as chosen at once, before anything is prepared; the next update puts back the V's own if the change was refused.
+    item.addEventListener("click", () => { this.rove(item); this.select(choice.position); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
     item.addEventListener("pointerenter", () => this.onHint(choice));
     const firstPlain = choice.off ? this.items.find(entry => !entry.choice.off)?.element : undefined;

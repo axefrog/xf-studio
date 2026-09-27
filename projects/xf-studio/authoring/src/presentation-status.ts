@@ -1,5 +1,6 @@
 import type { CharacterDetailStatus } from "./character-detail-actions";
 import type { WorkspaceSaveStatus } from "./workspace-persistence";
+import type { EditorSlot } from "./viewport-adapter";
 
 /**
  * Read-only device facts a presentation needs to be truthful about the preview:
@@ -20,8 +21,11 @@ export type GlitterPreviewMeasurement = {
   /** False when the layer or preview tier changed after this measurement. */
   current: boolean;
 };
-/** Latest human-readable message from an editor or preview adapter (limits, rejected insertions, timings). */
-export type AdapterMessage = { id: number; source: "uv" | "surface" | "preview"; text: string };
+/**
+ * Latest human-readable message from an editor or preview adapter (limits, rejected insertions, timings): `source` is the editor's
+ * slot (`uv`, the flat editor; `surface`, the main view's on-head editor) or `preview`.
+ */
+export type AdapterMessage = { id: number; source: EditorSlot | "preview"; text: string };
 export type PresentationStatus = {
   verification: boolean;
   workspace: WorkspaceSaveStatus;

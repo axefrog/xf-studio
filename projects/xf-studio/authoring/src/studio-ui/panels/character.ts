@@ -394,7 +394,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       if (fetch?.stopped) stopped = fetch.stopped;
       controls.list.update({ option: option.id, query: controls.query, label: option.label, grid: option.grid, choices: loaded?.choices ?? [],
         selected: value?.position ?? null, mods: creator.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null,
-        swatches: option.grid ? rowSwatches : null });
+        swatches: option.grid ? rowSwatches : null, preparing: !!details?.updating });
       if (ahead && (loaded?.choices.length ?? 0) !== controls.loaded) {
         controls.loaded = loaded?.choices.length ?? 0;
         controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));

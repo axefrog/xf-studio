@@ -1,0 +1,779 @@
+{
+ "AtmosphereAreaSettings": {
+  "enable": 1
+ },
+ "BloomAreaSettings": {
+  "bloomColorScale": 0.200000003,
+  "blurSizeX": 1,
+  "blurSizeY": 1,
+  "enable": 1,
+  "luminanceThresholdMax": 2,
+  "numDownsamplePasses": 6,
+  "sceneColorScale": 0.800000012
+ },
+ "BlurAreaSettings": {
+  "enable": 1
+ },
+ "CBitmapTexture": {
+  "depth": 1
+ },
+ "CFoliageProfile": {
+  "aoScale": 0.5,
+  "billboardCutoffAlpha": 0.600000024,
+  "billboardDepthScale": 1,
+  "billboardRoughnessBias": 0.100000001,
+  "cutoffAlphaMaxMip": 0.119999997,
+  "cutoffAlphaMinMip": 0.449999988,
+  "terrainBlendScale": 0.200000003
+ },
+ "CHairProfile": {
+  "sampleCount": 64
+ },
+ "CMaterialTemplate": {
+  "canBeMasked": 1
+ },
+ "CSkinProfile": {
+  "blurSize": 1.20000005,
+  "lobeMix": 0.800000012,
+  "roughness0": 0.75,
+  "roughness1": 1.25
+ },
+ "CameraAreaSettings": {
+  "ISO": 100,
+  "cameraFarPlane": 8000,
+  "cameraNearPlane": 0.400000006,
+  "enable": 1,
+  "fStop": 8,
+  "shutterTime": 125
+ },
+ "ChromaticAberrationAreaSettings": {
+  "chromaticAberrationExp": 0.800000012,
+  "enable": 1
+ },
+ "CloudAreaSettings": {
+  "cloudsBottom": 400,
+  "cloudsTop": 1000,
+  "enable": 1,
+  "inScatter": 0.200000003,
+  "inVsOutScatter": 0.5,
+  "outScatter": 0.100000001,
+  "rayStartFalloff": 50,
+  "rayStartOffset": 25,
+  "silverLining": 0.800000012,
+  "volCoverageWindInfluence": 0.75,
+  "volDetailWindInfluence": 1.25,
+  "volDistantFogOpacity": 1,
+  "volHorizonCoverage": 1,
+  "volNoiseWindInfluence": 1
+ },
+ "ColorGradingAreaSettings": {
+  "brightness": 1,
+  "contrast": 1,
+  "contrastPivot": 0.435000002,
+  "enable": 1,
+  "highRange": 0.449999988,
+  "lowRange": 0.100000001,
+  "saturation": 1
+ },
+ "ColorGradingLutParams": {
+  "inputMapping": "CMF_sRGB",
+  "outputMapping": "CMF_sRGB"
+ },
+ "ContactShadowsConfig": {
+  "distanceFadeLimit": 3,
+  "distanceFadeRange": 1,
+  "range": 0.0500000007,
+  "rangeLimit": 0.075000003,
+  "screenEdgeFadeRange": 0.150000006
+ },
+ "ContactShadowsSettings": {
+  "enable": 1
+ },
+ "CustomLightAreaSettings": {
+  "enable": 1
+ },
+ "DistantFogAreaSettings": {
+  "enable": 1
+ },
+ "DistantIrradianceeSettings": {
+  "enable": 1
+ },
+ "DistantLightsAreaSettings": {
+  "distantLightFadeDistance": 15,
+  "distantLightStartDistance": 50,
+  "enable": 1
+ },
+ "DistantProxiesSettings": {
+  "distantProxiesEmissiveHeight": 500,
+  "distantProxiesEmissivePower": 5,
+  "enable": 1
+ },
+ "EmissiveColorSettings": {
+  "curveRampIBL": 2,
+  "enable": 1
+ },
+ "EmitterGroupAreaSettings": {
+  "enable": 1
+ },
+ "EmitterGroupParams": {
+  "emissionScale": 1,
+  "opacityScale": 1
+ },
+ "EnvironmentColorGroupsSettings": {
+  "enable": 1
+ },
+ "ExposureAreaSettings": {
+  "enable": 1
+ },
+ "FilmGrainAreaSettings": {
+  "enable": 1
+ },
+ "FocusClueDefinition": {
+  "isProgressing": 1
+ },
+ "FocusForcedHighlightData": {
+  "inTransitionTime": 0.5,
+  "outTransitionTime": 2,
+  "outlineType": "INVALID"
+ },
+ "FoliageShadowConfig": {
+  "foliageShadowCascadeFilterScale": 0.100000001,
+  "foliageShadowCascadeGradient": 0.100000001,
+  "foliageShadowCascadeGradientDistanceRange": 50
+ },
+ "GlobalIlluminationSettings": {
+  "enable": 1
+ },
+ "GlobalLightOverrideAreaSettings": {
+  "lightAzimuth": 45,
+  "lightElevation": 45
+ },
+ "GlobalLightingTrajectoryOverride": {
+  "timeOfYearSeason": "ETOYS_Summer"
+ },
+ "GpuWrapApiVertexLayoutDesc": {
+  "hash": 4294967295
+ },
+ "HACK_AREA_Settings": {
+  "albedoMetalness": 1,
+  "emissiveScale": 1,
+  "enable": 1,
+  "missingEnergyScale": 1,
+  "overrideOnPureView": 1,
+  "skyScale": 1,
+  "surfelScale": 1
+ },
+ "HeatHazeAreaSettings": {
+  "enable": 1
+ },
+ "HighlightEditableData": {
+  "inTransitionTime": 0.5,
+  "outTransitionTime": 0.5,
+  "outlineType": "INVALID"
+ },
+ "ImageBasedFlareAreaSettings": {
+  "curve": 1,
+  "dispersal": 0.300000012,
+  "distortion": 1,
+  "enable": 1,
+  "haloWidth": 0.550000012,
+  "treshold": 2
+ },
+ "LightAreaSettings": {
+  "enable": 1
+ },
+ "LightColorSettings": {
+  "enable": 1
+ },
+ "LightDirectionSettings": {
+  "enable": 1
+ },
+ "LightGroupsAreaSettings": {
+  "enable": 1
+ },
+ "MorphTargetMeshEntry": {
+  "faceRegion": "FACE_REGION_NONE"
+ },
+ "MotionBlurAreaSettings": {
+  "enable": 1,
+  "strength": 0.200000003
+ },
+ "Multilayer_Layer": {
+  "matTile": 1,
+  "mbTile": 1,
+  "microblendContrast": 0.5,
+  "microblendNormalStrength": 1,
+  "opacity": 1
+ },
+ "Multilayer_LayerTemplate": {
+  "tilingMultiplier": 1
+ },
+ "Multilayer_Setup": {
+  "ratio": 1,
+  "useNormal": 1
+ },
+ "NavGenNavigationSetting": {
+  "navmeshImpact": "Blocking"
+ },
+ "PSODescBlendModeDesc": {
+  "numTargets": 1
+ },
+ "PSODescRenderTarget": {
+  "destAlphaFactor": "FAC_One",
+  "destFactor": "FAC_One",
+  "writeMask": "MASK_RGBA"
+ },
+ "PathTracingSettings": {
+  "GIOnlyLightScale": 0.349999994,
+  "bounceNumber": 2,
+  "bounceNumberScreenshot": 3,
+  "diffuseEmissiveScale": 1,
+  "diffuseGlobalScale": 1,
+  "diffuseLocalLightsScale": 1,
+  "diffuseSkyScale": 1,
+  "diffuseSunScale": 1,
+  "enable": 1,
+  "maxIntensity": 10,
+  "rayNumber": 2,
+  "rayNumberScreenshot": 24,
+  "specularEmissiveScale": 1,
+  "specularGlobalScale": 1,
+  "specularLocalLightsScale": 1,
+  "specularSkyScale": 1,
+  "specularSunScale": 1
+ },
+ "Quaternion": {
+  "r": 1
+ },
+ "RTAOAreaSettings": {
+  "enable": 1
+ },
+ "RTXDIAreaSettings": {
+  "diffuseSkyScale": 1,
+  "enable": 1,
+  "specularSkyScale": 1
+ },
+ "RainAreaSettings": {
+  "baseColorFactor": 0.5,
+  "enable": 1,
+  "globalLightResponse": 1,
+  "glossinessFactor": 0.5,
+  "heightRange": 40,
+  "moistureAccumulationSpeed": 5,
+  "moistureEvaporationSpeed": 2.5,
+  "porosityThresholdEnd": 0.899999976,
+  "porosityThresholdStart": 0.400000006,
+  "puddlesAccumulationSpeed": 1.5,
+  "puddlesEvaporationSpeed": 0.25,
+  "radius": 45
+ },
+ "RenderFeaturesAreaSettings": {
+  "allowGlobalIllumination": 1,
+  "allowScreenSpaceReflections": 1,
+  "allowVolumetricFog": 1,
+  "enable": 1
+ },
+ "SSAOAreaSettings": {
+  "combineResolutionsBeforeBlur": 1,
+  "combineResolutionsWithMul": 1,
+  "enable": 1,
+  "hierarchyDepth": 3,
+  "normalsEnable": 1,
+  "qualityLevel": "SSAOQUALITY_VeryHigh"
+ },
+ "SSSRAreaSettings": {
+  "depthFadeEnd": 5000,
+  "depthFadeStart": 4000,
+  "enable": 1
+ },
+ "STextureGroupSetup": {
+  "allowTextureDowngrade": 1,
+  "group": "TEXG_Generic_Color",
+  "hasMipchain": 1,
+  "isStreamable": 1,
+  "rawFormat": "TRF_TrueColor"
+ },
+ "STonemappingACESParams": {
+  "adjustWhitePoint": 1,
+  "dimSurround": 1,
+  "maxStops": 9,
+  "midGrayScale": 1,
+  "minStops": -7,
+  "surroundGamma": 1,
+  "toneCurveSaturation": 1
+ },
+ "ShaftsAreaSettings": {
+  "shaftsIntensity": 1,
+  "shaftsLevelIndex": 1,
+  "shaftsThresholdsScale": 1
+ },
+ "SharpeningAreaSettings": {
+  "enable": 1
+ },
+ "StimBroadcasterComponent": {
+  "fallbackInterval": 1
+ },
+ "TonemappingAreaSettings": {
+  "enable": 1
+ },
+ "VignetteAreaSettings": {
+  "enable": 1,
+  "vignetteExp": 2,
+  "vignetteRadius": 0.5
+ },
+ "VolumetricFogAreaSettings": {
+  "enable": 1
+ },
+ "WaterAreaSettings": {
+  "blurExponent": 1,
+  "blurMax": 10,
+  "density": 10,
+  "depth": 50,
+  "enable": 1
+ },
+ "WindAreaSettings": {
+  "enable": 1
+ },
+ "WorkspotEntryData": {
+  "isAvailable": 1
+ },
+ "WorldLightingConfig": {
+  "lightAttenuationClamp": 96
+ },
+ "WorldShadowConfig": {
+  "distantShadowsBaseLevelRadius": 250,
+  "distantShadowsNumLevels": 3
+ },
+ "animAdditionalFloatTrackContainer": {
+  "overwriteExistingValues": 1
+ },
+ "animAnimGraph": {
+  "timeDeltaMultiplier": 1
+ },
+ "animAnimNode_Root": {
+  "id": 4294967295
+ },
+ "animAnimSetupEntry": {
+  "priority": 128
+ },
+ "animAnimVariableFloat": {
+  "max": 16,
+  "min": -16
+ },
+ "animAnimVariableInt": {
+  "max": 16,
+  "min": -16
+ },
+ "animAnimVariableVector": {
+  "w": 1
+ },
+ "animAnimation": {
+  "frameClampingEndFrame": -1,
+  "frameClampingStartFrame": -1
+ },
+ "animRig": {
+  "turnOffLOD": -1
+ },
+ "animRigPartBone": {
+  "weight": 1
+ },
+ "animRigPartBoneTree": {
+  "weight": 1
+ },
+ "animTransformMask": {
+  "index": -1
+ },
+ "appearanceAppearanceResource": {
+  "proxyPolyCount": 1400
+ },
+ "appearancePartComponentOverrides": {
+  "acceptDismemberment": 1,
+  "chunkMask": "9223372036854775807",
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  }
+ },
+ "entAnimatedComponent": {
+  "clientForcedLod": -1,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "serverForcedLod": -1
+ },
+ "entAnimationControlBinding": {
+  "enabled": 1
+ },
+ "entAnimationSetupExtensionComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "entEffectDesc": {
+  "autoSpawnTag": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "_autospawn"
+  },
+  "randomWeight": 1
+ },
+ "entEffectSpawnerComponent": {
+  "forceLODLevel": -1,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "renderSceneLayerMask": "Default"
+ },
+ "entEntity": {
+  "renderSceneLayerMask": "Default"
+ },
+ "entEntityTemplate": {
+  "defaultAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  }
+ },
+ "entExternalComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "entHardTransformBinding": {
+  "enabled": 1
+ },
+ "entLightBlockingComponent": {
+  "forceLODLevel": -1,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "radius": 0.100000001,
+  "renderSceneLayerMask": "Default"
+ },
+ "entLightComponent": {
+  "allowDistantLight": 1,
+  "areaRectSideA": 1,
+  "areaRectSideB": 1,
+  "areaShape": "ALS_Capsule",
+  "areaTwoSided": 1,
+  "autoHideDistance": 15,
+  "capsuleLength": 1,
+  "colorGroupSaturation": 100,
+  "forceLODLevel": -1,
+  "innerAngle": 30,
+  "intensity": 100,
+  "isEnabled": 1,
+  "lightChannel": "LC_Channel1, LC_Channel2, LC_Channel3, LC_Channel4, LC_Channel5, LC_Channel6, LC_Channel7, LC_Channel8, LC_ChannelWorld",
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "outerAngle": 45,
+  "pathTracingOverrideScaleGI": 1,
+  "radius": 5,
+  "rayTracingContactShadowRange": -1,
+  "rayTracingIntensityScale": 1,
+  "rayTracingLightSourceRadius": -1,
+  "renderSceneLayerMask": "Default",
+  "rtxdiShadowStartingDistance": -1,
+  "scaleEnvProbes": 100,
+  "scaleGI": 100,
+  "sceneDiffuse": 1,
+  "sceneSpecularScale": 100,
+  "shadowAngle": -1,
+  "shadowFadeDistance": 10,
+  "shadowFadeRange": 5,
+  "shadowRadius": -1,
+  "shadowSoftnessMode": "LSSM_Default",
+  "softness": 2,
+  "sourceRadius": 0.0500000007,
+  "temperature": -1,
+  "useInParticles": 1,
+  "useInTransparents": 1
+ },
+ "entMeshComponent": {
+  "chunkMask": "9223372036854775807",
+  "forceLODLevel": -1,
+  "isEnabled": 1,
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "motionBlurScale": 1,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "overrideMeshNavigationImpact": 1,
+  "renderSceneLayerMask": "Default"
+ },
+ "entMorphTargetSkinnedMeshComponent": {
+  "acceptDismemberment": 1,
+  "chunkMask": "9223372036854775807",
+  "forceLODLevel": -1,
+  "isEnabled": 1,
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "renderSceneLayerMask": "Default"
+ },
+ "entPhysicalMeshComponent": {
+  "simulationType": "Kinematic"
+ },
+ "entSkinnedClothComponent": {
+  "chunkMask": "9223372036854775807",
+  "forceLODLevel": -1,
+  "isEnabled": 1,
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "renderSceneLayerMask": "Default"
+ },
+ "entSkinnedMeshComponent": {
+  "acceptDismemberment": 1,
+  "chunkMask": "9223372036854775807",
+  "forceLODLevel": -1,
+  "isEnabled": 1,
+  "meshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "overrideMeshNavigationImpact": 1,
+  "renderSceneLayerMask": "Default"
+ },
+ "entSkinningBinding": {
+  "enabled": 1
+ },
+ "entSlotComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "entTransformComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "entdismembermentCullObject": {
+  "CapsuleRadius": 0.100000001,
+  "NearestAnimIndex": -1,
+  "RagdollBodyIndex": 65535
+ },
+ "entdismembermentDangleInfo": {
+  "DangleBendStiffness": 0.600000024,
+  "DangleCollisionSphereRadius": 0.25,
+  "DangleSegmentLenght": 0.100000001,
+  "DangleVelocityDamping": 0.400000006
+ },
+ "entdismembermentEffectResource": {
+  "Placement": "MAIN_MESH",
+  "ResourceSets": "BARE, BARE1, BARE2, BARE3, GARMENT, GARMENT1, GARMENT2, GARMENT3",
+  "WoundType": "COARSE"
+ },
+ "entdismembermentFillMeshInfo": {
+  "Placement": "MAIN_MESH"
+ },
+ "entdismembermentMeshInfo": {
+  "CullMesh": "CLEAN",
+  "MeshAppearance": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  },
+  "ShouldReceiveDecal": 1,
+  "WoundType": "CLEAN, COARSE"
+ },
+ "entdismembermentPhysicsInfo": {
+  "DensityScale": 1
+ },
+ "entdismembermentWoundDecal": {
+  "FadeOrigin": 0.699999988,
+  "FadePower": 1,
+  "Scale": 1
+ },
+ "entdismembermentWoundResource": {
+  "GarmentMorphStrength": 1,
+  "WoundType": "CLEAN, COARSE"
+ },
+ "gameComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "gameEffectDebugSettings": {
+  "duration": 1
+ },
+ "gameItemObject": {
+  "updateBucket": "AttachedObject"
+ },
+ "gameObject": {
+  "visibilityCheckDistance": 16000
+ },
+ "gameScanningComponent": {
+  "autoGenerateBoundingSphere": 1,
+  "cpoEnableMultiplePlayersScanningModifier": 1,
+  "isEntityVisible": 1,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "scanning"
+  }
+ },
+ "gameSourceShootComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "gameSquadMemberComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "SquadMember"
+  }
+ },
+ "gameStatusEffectComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "StatusEffect"
+  }
+ },
+ "gameTargetShootComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "gameVisionModeComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "vision"
+  }
+ },
+ "gameWeaponAudioComponent": {
+  "maxPlayDistance": 40,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "obstructionChangeTime": 0.200000003
+ },
+ "gameaudioSoundComponent": {
+  "maxPlayDistance": 40,
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  },
+  "obstructionChangeTime": 0.200000003
+ },
+ "gameprojectileSpawnComponent": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "Component"
+  }
+ },
+ "gameuiAppearanceInfo": {
+  "enabled": 1
+ },
+ "gameuiCharacterRandomizationInfo": {
+  "maxRating": 10,
+  "minRating": 1
+ },
+ "gameuiMorphInfo": {
+  "enabled": 1
+ },
+ "gameuiSwitcherInfo": {
+  "enabled": 1
+ },
+ "gameweaponObject": {
+  "maxChargeThreshold": 100
+ },
+ "meshMeshAppearance": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "default"
+  }
+ },
+ "physicsRagdollBodyInfo": {
+  "ChildAnimIndex": -1,
+  "HalfHeight": 0.0500000007,
+  "ParentAnimIndex": -1,
+  "ParentBodyIndex": -1,
+  "ShapeRadius": 0.0500000007
+ },
+ "rendIndexBufferChunk": {
+  "pe": "IBCT_Max"
+ },
+ "rendRenderTextureBlobSizeInfo": {
+  "depth": 1
+ },
+ "rendSLightFlickering": {
+  "flickerPeriod": 0.200000003
+ },
+ "senseStimuliEvent": {
+  "stimPropagation": "Invalid",
+  "stimType": "Invalid"
+ },
+ "worldCompiledEffectEventInfo": {
+  "flags": 1
+ },
+ "worldCompiledEffectPlacementInfo": {
+  "placementTagIndex": 255,
+  "relativePositionIndex": 255,
+  "relativeRotationIndex": 255
+ },
+ "worldEffect": {
+  "length": 1
+ },
+ "worldWorldGlobalLightParameters": {
+  "unit": "LU_Lux"
+ }
+}

@@ -5,16 +5,27 @@
  */
 export type PanelId = string;
 export type Side = "left" | "right" | "top" | "bottom";
-export type GroupNode = { kind: "group"; id: string; panels: PanelId[]; active: PanelId };
+/** A tab group. `collapsed`: only its tab bar shows and its neighbours take the space (saved with the layout). */
+export type GroupNode = { kind: "group"; id: string; panels: PanelId[]; active: PanelId; collapsed?: boolean };
 export type SplitNode = { kind: "split"; id: string; axis: "row" | "column"; children: DockNode[]; sizes: number[] };
 export type DockNode = GroupNode | SplitNode;
 export type FloatingWindow = { id: string; x: number; y: number; w: number; h: number; node: DockNode };
+/**
+ * Where a withdrawn panel was (view-graph-design.md §4.3): a hidden module's panels leave the dock and come back to the same place.
+ * `group` is its tab group's panels in order (it returns into the group once a member is back), `index` its tab position and
+ * `active` whether it was the shown tab; `anchor` a surviving neighbour to come back beside (side and share) when its whole group
+ * left; `window` the floating window it filled alone; `closed` that it was closed.
+ */
+export type ParkedPlace = { group: PanelId[]; index: number; active: boolean; collapsed?: boolean; window?: Rect;
+  anchor?: { panel: PanelId; side: Side; share: number } } | { closed: true };
 export type DockTree = {
   root: DockNode | null;
   /** Painted in array order; the last window is frontmost. */
   floating: FloatingWindow[];
   closed: PanelId[];
   maximized?: string;
+  /** Panels withdrawn with a hidden module, and where each was: per size class, like the rest of the tree. */
+  parked?: Record<PanelId, ParkedPlace>;
 };
 export type SizeClass = "wide" | "compact";
 export type DockState = { wide: DockTree; compact: DockTree };
@@ -171,8 +182,10 @@ function activeOf(node: DockNode): PanelId | undefined {
   return first?.active;
 }
 
+/** The other share of a two-way split, without binary noise (1 - .42 is .58, not .5800000000000001), so a restored layout is exact. */
+const rest = (share: number) => Number((1 - share).toPrecision(12));
 /** Insert an arbitrary node at a drop target. Tab targets merge its panels. */
-function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultRect?: Rect): DockTree {
+function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultRect?: Rect, share = .5): DockTree {
   const next = clone(tree);
   if (target.kind === "tab") {
     const found = findGroup(next, target.groupId);
@@ -212,7 +225,7 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
       if (inserted) return visited;
       const targetNode = [...groups(subtree)].find(item => item.id === target.groupId)!;
       return replaceNode(subtree, target.groupId, split(axis, before ? [node, targetNode] : [targetNode, node],
-        before ? [share, 1 - share] : [1 - share, share]));
+        before ? [share, rest(share)] : [rest(share), share]));
     };
     if (found.windowId) {
       // A magnetic composite grows by the incoming panel instead of squeezing its current content.
@@ -226,7 +239,7 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
           ? { ...window, node, w: window.w + extra, x: before ? window.x - extra : window.x }
           : { ...window, node, h: window.h + extra, y: before ? window.y - extra : window.y };
       });
-    } else next.root = place(next.root!, .5);
+    } else next.root = place(next.root!, share);
     return next;
   }
   if (target.kind === "edge") {
@@ -302,6 +315,118 @@ export function openPanel(tree: DockTree, panel: PanelId, preferredSiblings: Pan
   if (first) return insertNode(base, group([panel]), { kind: "tab", groupId: first.id, index: first.panels.length });
   return insertNode(base, group([panel]), { kind: "float", x: area.x + area.w / 2 - 170, y: area.y + 60 });
 }
+/** Collapse or expand a tab group: its tab bar stays, its neighbours take the space. */
+export function setCollapsed(tree: DockTree, groupId: string, collapsed: boolean): DockTree {
+  return mapGroups(clone(tree), item => {
+    if (item.id !== groupId) return item;
+    const { collapsed: _was, ...rest } = item;
+    return collapsed ? { ...rest, collapsed: true } : rest;
+  });
+}
+
+/** Where a panel is now, as a parked place (undefined when the tree doesn't hold it). `leaving` are the panels parked with it. */
+function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>): ParkedPlace | undefined {
+  if (tree.closed.includes(panel)) return { closed: true };
+  const at = locate(tree, panel);
+  if (!at) return undefined;
+  const window = at.windowId ? tree.floating.find(item => item.id === at.windowId) : undefined;
+  // A docked group that leaves whole remembers a neighbour to come back beside, on the same side and at the same share.
+  const anchor = !at.windowId && at.group.panels.every(id => leaving.has(id)) ? anchorFor(tree.root, at.group.id, leaving) : undefined;
+  return { group: [...at.group.panels], index: at.index, active: at.group.active === panel, ...(at.group.collapsed ? { collapsed: true } : {}),
+    ...(window && window.node.kind === "group" ? { window: { x: window.x, y: window.y, w: window.w, h: window.h } } : {}),
+    ...(anchor ? { anchor } : {}) };
+}
+/** The nearest surviving neighbour of a node that leaves: a panel beside it in the closest split that keeps something, and its side. */
+function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<PanelId>): { panel: PanelId; side: Side; share: number } | undefined {
+  const survivor = (node: DockNode, last: boolean) => {
+    const found = [...groups(node)].map(item => item.panels.find(panel => !leaving.has(panel))).filter((panel): panel is string => !!panel);
+    return last ? found.at(-1) : found[0];
+  };
+  const path: SplitNode[] = [];
+  const find = (node: DockNode | null): boolean => {
+    if (!node) return false;
+    if (node.id === id) return true;
+    if (node.kind === "split") for (const child of node.children) { if (find(child)) { path.unshift(node); return true; } }
+    return false;
+  };
+  if (!find(root)) return undefined;
+  let target = id;
+  for (const parent of [...path].reverse()) {
+    const index = parent.children.findIndex(child => child.id === target);
+    for (let distance = 1; distance < parent.children.length; distance++) {
+      for (const j of [index - distance, index + distance]) {
+        const neighbour = parent.children[j];
+        const panel = neighbour && survivor(neighbour, j < index);
+        if (!panel) continue;
+        const side: Side = parent.axis === "row" ? (j < index ? "right" : "left") : (j < index ? "bottom" : "top");
+        return { panel, side, share: parent.sizes[index] };
+      }
+    }
+    target = parent.id;
+  }
+  return undefined;
+}
+/**
+ * Withdraw panels (a module was hidden, view-graph-design.md §4.3): each leaves the tree and its place is remembered, so showing
+ * the module again puts it back. A group emptied by it collapses away. Panels already parked keep their first place.
+ */
+export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree {
+  const leaving = new Set(panels), parked = { ...tree.parked };
+  // Every place is read from the tree as it is, before any panel leaves, so a group that leaves whole keeps its members' order.
+  for (const panel of panels) { const place = placeOf(tree, panel, leaving); if (place && !parked[panel]) parked[panel] = place; }
+  let next = clone(tree);
+  for (const panel of panels) next = detachPanel(next, panel);
+  next.parked = parked;
+  if (!Object.keys(parked).length) delete next.parked;
+  return next;
+}
+/**
+ * Bring parked panels back where they were (a module was shown again): into the group they shared with a member already back, at
+ * their tab position; as a new group beside the remembered neighbour when their whole group left; alone in their floating window;
+ * or closed. A panel with no remembered place opens at its home in `fallback` (the factory layout), as a newly added panel does.
+ */
+export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallback: DockTree, area: Rect): DockTree {
+  let next = clone(tree);
+  const parked = { ...next.parked };
+  for (const panel of panels) {
+    const place = parked[panel];
+    delete parked[panel];
+    if (locate(next, panel) || next.closed.includes(panel)) continue;
+    if (place && "closed" in place) { next = { ...next, closed: [...next.closed, panel] }; continue; }
+    const actives = new Map(allGroups(next).map(entry => [entry.group.id, entry.group.active]));
+    const keepActive = (groupId: string | undefined) => {
+      const keep = groupId && actives.get(groupId);
+      if (keep && !place?.active) next = activate(next, keep);
+    };
+    const member = place?.group.filter(id => id !== panel).map(id => locate(next, id)).find(Boolean);
+    if (place && member) {
+      // After the nearest earlier member that is back, else before the nearest later one: the tab order it had.
+      const at = place.group.indexOf(panel), members = member.group.panels;
+      const before = place.group.slice(0, at).reverse().find(id => members.includes(id));
+      const after = place.group.slice(at + 1).find(id => members.includes(id));
+      const index = before !== undefined ? members.indexOf(before) + 1 : after !== undefined ? members.indexOf(after) : members.length;
+      next = insertNode(next, group([panel]), { kind: "tab", groupId: member.group.id, index });
+      keepActive(member.group.id);
+      continue;
+    }
+    const anchor = place?.anchor && locate(next, place.anchor.panel);
+    if (place?.anchor && anchor && !anchor.windowId) {
+      const created = group([panel], panel);
+      next = insertNode(next, place.collapsed ? { ...created, collapsed: true } : created, { kind: "split", groupId: anchor.group.id, side: place.anchor.side },
+        undefined, place.anchor.share);
+      continue;
+    }
+    if (place?.window) { next = insertNode(next, group([panel]), { kind: "float", ...place.window }); continue; }
+    if (fallback.closed.includes(panel)) { next = { ...next, closed: [...next.closed, panel] }; continue; }
+    const home = locate(fallback, panel);
+    next = openPanel(next, panel, home ? home.group.panels.filter(id => id !== panel) : [], area);
+    keepActive(locate(next, panel)?.group.id);
+  }
+  next.parked = parked;
+  if (!Object.keys(parked).length) delete next.parked;
+  return next;
+}
+
 export function setSizes(tree: DockTree, splitId: string, sizes: number[]): DockTree {
   const next = clone(tree);
   const visit = (node: DockNode | null): DockNode | null => {
@@ -350,10 +475,11 @@ export function recoverWindows(tree: DockTree, area: Rect): DockTree {
 }
 
 /**
- * Strict parser: rejects malformed structure, removes unknown/duplicate panels,
- * and appends missing known panels next to their default siblings.
+ * Strict parser: rejects malformed structure, removes unknown/duplicate panels, and appends missing known panels next to their
+ * default siblings. `parked` are the panels of hidden modules (view-graph-design.md §4.3): known but withdrawn, so they are never
+ * re-added; their remembered places are kept, and one still found in the tree is withdrawn with its place remembered.
  */
-export function parseTree(value: unknown, known: readonly PanelId[], fallback: DockTree): DockTree | undefined {
+export function parseTree(value: unknown, known: readonly PanelId[], fallback: DockTree, parked: readonly PanelId[] = []): DockTree | undefined {
   const seen = new Set<string>(), ids = new Set<string>();
   // Panel IDs of feature views are `<feature>.<panel>`, so a dot is allowed (feature-module platform §4).
   const validId = (id: unknown): id is string => typeof id === "string" && id.length > 0 && id.length <= 80 && /^[a-z0-9.-]+$/i.test(id);
@@ -365,11 +491,12 @@ export function parseTree(value: unknown, known: readonly PanelId[], fallback: D
     ids.add(item.id);
     if (item.kind === "group") {
       if (!Array.isArray(item.panels) || item.panels.length > 64) return undefined;
-      const panels = item.panels.filter((id): id is string => validId(id) && known.includes(id) && !seen.has(id));
+      // A hidden module's panel still in a group is read too, then withdrawn below with its place remembered.
+      const panels = item.panels.filter((id): id is string => validId(id) && (known.includes(id) || parked.includes(id)) && !seen.has(id));
       panels.forEach(id => seen.add(id));
       if (!panels.length) return null;
       const active = typeof item.active === "string" && panels.includes(item.active) ? item.active : panels[0];
-      return { kind: "group", id: item.id, panels, active };
+      return { kind: "group", id: item.id, panels, active, ...(item.collapsed === true ? { collapsed: true } : {}) };
     }
     if (item.kind === "split") {
       if ((item.axis !== "row" && item.axis !== "column") || !Array.isArray(item.children) ||
@@ -403,9 +530,16 @@ export function parseTree(value: unknown, known: readonly PanelId[], fallback: D
     if (child) floating.push({ id: window.id, x: window.x as number, y: window.y as number,
       w: window.w as number, h: window.h as number, node: child });
   }
-  const closed = input.closed.filter((id): id is string => validId(id) && known.includes(id) && !seen.has(id));
+  const closed = input.closed.filter((id): id is string => validId(id) && (known.includes(id) || parked.includes(id)) && !seen.has(id));
   closed.forEach(id => seen.add(id));
   let tree: DockTree = { root, floating, closed };
+  // Remembered places of the parked panels: the saved ones, then where the saved tree still held them (withdrawn here).
+  const saved = input.parked && typeof input.parked === "object" && !Array.isArray(input.parked) ? input.parked as Record<string, unknown> : {};
+  const places: Record<PanelId, ParkedPlace> = {};
+  for (const id of parked) { const place = parsePlace(saved[id], validId, finite); if (place) places[id] = place; }
+  if (Object.keys(places).length) tree.parked = places;
+  const held = parked.filter(id => seen.has(id));
+  if (held.length) tree = parkPanels(tree, held);
   if (typeof input.maximized === "string" && findGroup(tree, input.maximized)) tree.maximized = input.maximized;
   for (const missing of known.filter(id => !seen.has(id))) {
     // A newly added panel that is closed by default (Help) stays closed until someone opens it.
@@ -419,4 +553,21 @@ export function parseTree(value: unknown, known: readonly PanelId[], fallback: D
     if (keep) tree = activate(tree, keep);
   }
   return tree;
+}
+
+/** A saved parked place, validated; undefined for anything malformed. */
+function parsePlace(value: unknown, validId: (id: unknown) => id is string, finite: (n: unknown) => n is number): ParkedPlace | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const place = value as Record<string, unknown>;
+  if (place.closed === true) return { closed: true };
+  if (!Array.isArray(place.group) || place.group.length > 64 || !place.group.every(validId) || !Number.isInteger(place.index) ||
+    (place.index as number) < 0 || typeof place.active !== "boolean") return undefined;
+  const window = place.window as Record<string, unknown> | undefined;
+  const rect = window && [window.x, window.y, window.w, window.h].every(finite)
+    ? { x: window.x as number, y: window.y as number, w: window.w as number, h: window.h as number } : undefined;
+  const anchor = place.anchor as Record<string, unknown> | undefined;
+  const beside = anchor && validId(anchor.panel) && ["left", "right", "top", "bottom"].includes(anchor.side as string) && finite(anchor.share) &&
+    (anchor.share as number) > 0 && (anchor.share as number) < 1 ? { panel: anchor.panel, side: anchor.side as Side, share: anchor.share as number } : undefined;
+  return { group: [...place.group] as string[], index: place.index as number, active: place.active,
+    ...(place.collapsed === true ? { collapsed: true } : {}), ...(rect ? { window: rect } : {}), ...(beside ? { anchor: beside } : {}) };
 }

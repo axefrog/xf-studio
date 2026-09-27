@@ -2,8 +2,8 @@ import { keyBinding, panelModifiersHeld } from "../../input-bindings";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
-import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPanel, raiseWindow, recoverWindows,
-  setMaximized, setSizes, setWindowRect, showPanelDocked, MIN_WINDOW, type DockNode, type DockState, type DockTree,
+import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPanel, parkPanels, raiseWindow, recoverWindows,
+  setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
 
@@ -24,6 +24,8 @@ export type DockViewOptions = {
   afterLayout?(): void;
   /** Panels closed by default open beside the first of these that is open. */
   homes?: Readonly<Record<PanelId, readonly PanelId[]>>;
+  /** Someone asked to open a panel this dock doesn't hold now (its module is hidden): the shell offers to show it. */
+  withdrawn?(id: PanelId): void;
 };
 const MIN_GROUP = { w: 150, h: 96 };
 const sideNames: Record<Side, string> = { left: "left", right: "right", top: "above", bottom: "below" };
@@ -59,6 +61,59 @@ export class DockView {
   panelList(): PanelSpec[] { return [...this.panels.values()]; }
   isVisible(id: PanelId) { return this.visible.has(id); }
   isOpen(id: PanelId) { return !!locate(this.tree, id); }
+  /** Whether a panel's tab group is collapsed (only its tab bar shows). */
+  isCollapsed(id: PanelId) { return !!locate(this.tree, id)?.group.collapsed; }
+  /**
+   * A panel's state in this size class, for the Panels menu: `open` (docked or floating, shown or a background tab), `collapsed`,
+   * `closed`, or `parked` (withdrawn with a hidden module, view-graph-design.md §4.3).
+   */
+  panelState(id: PanelId): "open" | "collapsed" | "closed" | "parked" {
+    if (!this.panels.has(id)) return "parked";
+    const at = locate(this.tree, id);
+    return !at ? "closed" : at.group.collapsed ? "collapsed" : "open";
+  }
+
+  /**
+   * Add panels at run time (a module was shown): each returns to where it was parked in every size class, or to its factory home.
+   */
+  addPanels(specs: readonly PanelSpec[]) {
+    const fresh = specs.filter(spec => !this.panels.has(spec.id));
+    if (!fresh.length) return;
+    for (const spec of fresh) { this.panels.set(spec.id, spec); this.parking.append(spec.element); }
+    const ids = fresh.map(spec => spec.id), area = this.area();
+    this.state = { wide: unparkPanels(this.state.wide, ids, this.options.defaults("wide"), area),
+      compact: unparkPanels(this.state.compact, ids, this.options.defaults("compact"), area) };
+    this.render();
+    this.options.save(this.dockState);
+  }
+  /**
+   * Withdraw panels at run time (a module was hidden): each leaves the dock in every size class with its place remembered
+   * (parked), and its element leaves the page until it is added again.
+   */
+  removePanels(ids: readonly PanelId[]) {
+    const known = ids.filter(id => this.panels.has(id));
+    if (!known.length) return;
+    this.state = { wide: parkPanels(this.state.wide, known), compact: parkPanels(this.state.compact, known) };
+    this.render();
+    for (const id of known) { this.panels.get(id)!.element.remove(); this.panels.delete(id); }
+    this.options.save(this.dockState);
+  }
+  /** Collapse or expand a panel's tab group (its tab bar stays; its neighbours take the space). Saved with the layout. */
+  toggleCollapse(id: PanelId) {
+    const at = locate(this.tree, id);
+    if (!at) return;
+    const collapsed = !at.group.collapsed;
+    this.update(setCollapsed(this.tree, at.group.id, collapsed), `${this.describeGroup(at.group)} ${collapsed ? "collapsed" : "expanded"}`);
+    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[data-group="${at.group.id}"] .dock-collapse-btn`)?.focus());
+  }
+  /** Why a panel's group can't collapse (it fills the workspace alone or is maximized), else undefined. */
+  collapseBlocked(id: PanelId): string | undefined {
+    const at = locate(this.tree, id);
+    if (!at) return "Open the panel first.";
+    if (this.tree.maximized === at.group.id) return "Restore the group's size first.";
+    if (!at.windowId && this.tree.root?.kind === "group" && !at.group.collapsed) return "Nothing else is docked to take its space.";
+    return undefined;
+  }
 
   /** Replace the active size class's tree, render, persist and announce. */
   update(tree: DockTree, message?: string, persist = true) {
@@ -123,7 +178,10 @@ export class DockView {
     node.children.forEach((child, index) => {
       if (index > 0) element.append(this.splitter(node.id, node.axis, index));
       const cell = h("div", { class: "dock-cell" });
-      cell.style.flex = `${node.sizes[index]} 1 0`;
+      // A collapsed group keeps only its tab bar: its cell takes no share, so its neighbours fill the space (never shifting inside).
+      const collapsed = child.kind === "group" && !!child.collapsed;
+      cell.style.flex = collapsed ? "0 0 auto" : `${node.sizes[index]} 1 0`;
+      if (collapsed) cell.dataset.collapsed = node.axis;
       cell.append(this.renderNode(child, floating, shown));
       element.append(cell);
     });
@@ -161,12 +219,20 @@ export class DockView {
     menuButton.addEventListener("click", () => this.openPanelMenu(group.active, menuButton, menuButton));
     const restore = maximized ? h("button", { class: "icon-btn", type: "button", "aria-label": "Restore layout", title: "Restore layout",
       onclick: () => this.toggleMaximize(group.id) }, icon("restore")) : null;
+    // Collapse and expand: a button on every group's tab bar (keyboard reachable), never while it fills the workspace alone.
+    const blocked = this.collapseBlocked(group.active);
+    const collapse = maximized || (blocked && !group.collapsed) ? null : h("button", { class: "icon-btn dock-collapse-btn", type: "button",
+      "aria-label": `${group.collapsed ? "Expand" : "Collapse"} ${titles.join(", ")}`, "aria-expanded": String(!group.collapsed),
+      title: group.collapsed ? "Expand" : "Collapse (the tab bar stays)",
+      onclick: () => this.toggleCollapse(group.active) }, icon(group.collapsed ? "chevronRight" : "chevronDown"));
     const body = h("div", { class: "dock-body", role: "tabpanel", id: bodyId, "aria-labelledby": `dock-tab-${group.active}` });
     const active = this.panels.get(group.active);
-    if (active) { body.append(active.element); shown.add(active.id); }
-    const element = h("section", { class: `dock-group${floating ? " floating" : ""}${maximized ? " maximized" : ""}`,
+    // A collapsed group's panel is not shown (it keeps its state and repaints when expanded).
+    if (active && !group.collapsed) { body.append(active.element); shown.add(active.id); }
+    body.hidden = !!group.collapsed;
+    const element = h("section", { class: `dock-group${floating ? " floating" : ""}${maximized ? " maximized" : ""}${group.collapsed ? " collapsed" : ""}`,
       "data-group": group.id, "aria-label": `${titles.join(", ")} group` },
-      h("div", { class: "dock-tabbar" }, tablist, fill, restore, menuButton), body);
+      h("div", { class: "dock-tabbar" }, tablist, fill, restore, collapse, menuButton), body);
     element.addEventListener("focusin", () => element.classList.add("focus-within"));
     element.addEventListener("focusout", () => element.classList.remove("focus-within"));
     return element;
@@ -178,6 +244,8 @@ export class DockView {
       .map(id => this.panels.get(id)?.title ?? id);
     const element = h("div", { class: `dock-window${composite ? " composite" : ""}`, "data-window": window.id,
       role: "group", "aria-label": `Floating ${composite ? "composite" : "panel"}: ${titles.join(", ")}` });
+    // A floating panel that is collapsed shows only its bar; its saved height comes back when it expands.
+    if (window.node.kind === "group" && window.node.collapsed) element.classList.add("collapsed");
     Object.assign(element.style, { left: `${window.x}px`, top: `${window.y}px`, width: `${window.w}px`, height: `${window.h}px`,
       zIndex: String(10 + index) });
     element.addEventListener("pointerdown", () => {
@@ -319,11 +387,13 @@ export class DockView {
 
   // ----- Commands usable from menus, shortcuts and the command palette -----
   reveal(id: PanelId, focus = true) {
+    if (!this.panels.has(id)) { this.options.withdrawn?.(id); return; }
     const tree = showPanelDocked(this.isOpen(id) ? activate(this.tree, id) : openPanel(this.tree, id, this.siblingsInDefault(id), this.area()), id);
     this.update(tree, this.isOpen(id) ? undefined : `${this.title(id)} opened`);
     if (focus) requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
   }
   close(id: PanelId) {
+    if (!this.panels.has(id)) return;
     const at = locate(this.tree, id);
     if (!at) return;
     this.update(closePanel(this.tree, id), `${this.title(id)} closed. Reopen it from the Panels menu or command palette.`);
@@ -386,6 +456,9 @@ export class DockView {
             `${this.title(id)} ${entry.windowId ? "attached" : "placed"} ${sideNames[side]} ${this.describeGroup(entry.group)}${entry.windowId ? " as a magnetic composite" : ""}`) })) })) },
       { kind: "submenu", label: "Dock to workspace edge", icon: "layout", items: () => (["left", "right", "top", "bottom"] as Side[]).map(side => ({
         kind: "action", label: edgeNames[side], run: () => this.moveTo(id, { kind: "edge", side }, `${this.title(id)} docked to the ${edgeNames[side].toLowerCase()}`) })) },
+      { kind: "action", label: at.group.collapsed ? "Expand group" : "Collapse group", icon: at.group.collapsed ? "chevronRight" : "chevronDown",
+        capability: at.group.collapsed ? undefined : this.collapseBlocked(id) ? { available: false, reason: this.collapseBlocked(id) } : undefined,
+        run: () => this.toggleCollapse(id) },
       { kind: "action", label: tree.maximized === at.group.id ? "Restore group size" : "Maximize group", icon: tree.maximized === at.group.id ? "restore" : "maximize",
         capability: at.windowId ? { available: false, reason: "Floating panels are already above the dock; resize the window instead." } : undefined,
         run: () => this.toggleMaximize(at.group.id) },

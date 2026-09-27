@@ -1,11 +1,11 @@
-import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel } from "../../input-bindings";
-import { readinessText } from "../readiness-text";
+import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, type ViewportScope } from "../../input-bindings";
 import { ViewportInputHints } from "../input-hints";
-import type { ViewportHostKind } from "../../viewport-attachment";
 import { button, applyCapability } from "../controls";
 import { h, setAttr, setText, isTextInput } from "../dom";
-import { icon } from "../icons";
+import { icon, isIconName, type IconName } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
+import type { ViewToolEntry } from "../../studio-application";
+import type { ViewContext } from "../views/panels";
 import { viewportMenu } from "../target-menus";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
@@ -13,7 +13,7 @@ import { DETAIL_NOTICE_TEXT } from "./preview";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
-export function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (event: MouseEvent) => void) {
+export function contextMenuGate(kind: ViewportScope, target: HTMLElement, open: (event: MouseEvent) => void) {
   let down: { x: number; y: number } | undefined;
   target.addEventListener("pointerdown", event => { if (event.button === 2) down = { x: event.clientX, y: event.clientY }; }, true);
   target.addEventListener("contextmenu", event => {
@@ -26,22 +26,62 @@ export function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, ope
   });
 }
 /** Accessible viewport description generated from its key bindings. */
-export const keyDescription = (scope: "head" | "uv") => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
+export const keyDescription = (scope: ViewportScope) => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
   .map(binding => `${chordsLabel(binding)} ${binding.label.toLowerCase()}`).join(", ")}. ${shortcutLabel("shell.shortcuts")} lists every mouse and keyboard binding.`;
 
-function readinessBadge() {
+/** A view's readiness badge: what the shown modules contribute (eye makeup: its layer textures), absent when none does. */
+function readinessBadge(view: ViewContext["view"]) {
   // Not a live region: it changes on every raster and would flood assistive technology (audit B-25).
   const element = h("span", { class: "ready-badge" });
-  return { element, update(frame: Frame) {
+  return { element, update() {
     // The same wording as the status bar and Preview quality (UI-92).
-    const readiness = readinessText(frame);
+    const readiness = view.badge();
+    element.hidden = !readiness;
+    if (!readiness) return;
     element.dataset.phase = readiness.phase;
     setText(element, readiness.label);
     element.title = readiness.detail;
   } };
 }
 
-export function headPanel(rt: StudioRuntime): PanelController {
+/** An icon name the shell knows; a module's unknown one falls back to a generic mark. */
+const toolIcon = (name: string): IconName => isIconName(name) ? name : "dot";
+
+/**
+ * A view's toolbar, derived from its tools (view-graph-design.md §3.9): the platform's and the shown modules' tools placed on the
+ * toolbar (research tools only with research tools on), in order. Buttons are kept per tool, so a repaint never recreates them.
+ */
+function viewToolbar(rt: StudioRuntime) {
+  const element = h("div", { class: "viewport-tools" });
+  const buttons = new Map<string, HTMLButtonElement>();
+  const make = (tool: ViewToolEntry): HTMLButtonElement => {
+    const title = tool.title ?? tool.label;
+    const control = tool.kind === "action"
+      ? button({ label: tool.label, icon: toolIcon(tool.icon), iconOnly: true, small: true, variant: "ghost", onClick: () => {} })
+      : h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": tool.label, title, "data-title": title }, icon(toolIcon(tool.icon)));
+    if (tool.state === "tools") control.setAttribute("aria-pressed", "false");
+    // The tool's current action, read at click time (a toggle's next state, Play or Pause).
+    control.addEventListener("click", () => { const entry = rt.port.views.tools(undefined, rt.toolFilter()).find(item => item.id === tool.id); if (entry) rt.dispatch(entry.action); });
+    control.dataset.tool = tool.id;
+    return control;
+  };
+  return { element, update(frame: Frame) {
+    const tools = frame.viewTools.filter(tool => tool.placement !== "menu");
+    const wanted = tools.map(tool => buttons.get(tool.id) ?? buttons.set(tool.id, make(tool)).get(tool.id)!);
+    if (wanted.length !== element.children.length || wanted.some((control, index) => element.children[index] !== control)) element.replaceChildren(...wanted);
+    for (const tool of tools) {
+      const control = buttons.get(tool.id)!;
+      control.hidden = !tool.shown;
+      if (tool.state === "tools") setAttr(control, "aria-pressed", String(!!tool.on));
+      if (control.dataset.icon !== tool.icon) { control.dataset.icon = tool.icon; control.querySelector("svg")?.replaceWith(icon(toolIcon(tool.icon))); }
+      if (tool.kind !== "action") setAttr(control, "aria-label", tool.label);
+      // Each control shows its own application reason (for example, no 3D preview yet).
+      applyCapability(control, tool.capability);
+    }
+  } };
+}
+
+export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController {
   const port = rt.port;
   const slot = h("div", { class: "viewport-slot" });
   // What the head pane shows until the head is interactive: progress, a neutral "still needed" note or a
@@ -60,20 +100,9 @@ export function headPanel(rt: StudioRuntime): PanelController {
   } });
   next.hidden = true;
   const loading = h("div", { class: "viewport-state", role: "status", "data-phase": "loading" }, stateIcon, stateBar, stateText, stateNote, next);
-  const badge = readinessBadge();
+  const badge = readinessBadge(view.view);
   const context = h("span", { class: "viewport-context" });
-  const front = button({ label: "Front view", icon: "front", iconOnly: true, small: true, variant: "ghost", onClick: () => rt.dispatch({ kind: "camera.front" }) });
-  const bodyView = button({ label: "Whole body view", icon: "body", iconOnly: true, small: true, variant: "ghost", onClick: () => rt.dispatch({ kind: "camera.body" }) });
-  const surface = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Surface controls", "aria-pressed": "false", title: "Show editable controls on the head", "data-title": "Show editable controls on the head" }, icon("handles"));
-  surface.addEventListener("click", () => { const p = port.authoring.previewState().preview; rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !p?.surface }); });
-  const wire = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Plate wireframe", "aria-pressed": "false", title: "Plate wireframe", "data-title": "Plate wireframe" }, icon("wire"));
-  wire.addEventListener("click", () => { const p = port.authoring.previewState().preview; rt.dispatch({ kind: "preview.setWire", enabled: !p?.wire }); });
-  const idle = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Play idle", title: "Character-creator idle", "data-title": "Character-creator idle" }, icon("play"));
-  idle.addEventListener("click", () => {
-    const motion = port.authoring.previewState().motion;
-    if (!motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
-    else rt.dispatch({ kind: "motion.setPaused", paused: !motion.idlePaused });
-  });
+  const toolbar = viewToolbar(rt);
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(port.viewport, "head", slot, element);
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
@@ -83,7 +112,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
   const detailStep = wolvenKitStepButton(rt);
   const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element);
   element.append(slot, loading, detailStatus,
-    h("div", { class: "viewport-top" }, context, h("div", { class: "viewport-tools" }, front, bodyView, surface, wire, idle)),
+    h("div", { class: "viewport-top" }, context, toolbar.element),
     h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
   port.viewport.attach("head", slot);
   rt.anchors.register("head.view", element);
@@ -129,20 +158,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
       loading.hidden = state.phase === "ready";
       if (state.phase !== "ready") paintState(state, frame.previewSetup.head.next);
       // Hints hide themselves while the head isn't interactive (their own state), so they never cover this.
-      badge.update(frame); hints.update(frame);
-      const preview = frame.preview.preview, motion = frame.preview.motion;
-      setAttr(surface, "aria-pressed", String(!!preview?.surface)); setAttr(wire, "aria-pressed", String(!!preview?.wire));
-      const playing = !!motion?.idle && !motion.idlePaused;
-      if (idle.dataset.playing !== String(playing)) { idle.dataset.playing = String(playing); idle.replaceChildren(icon(playing ? "pause" : "play")); }
-      setAttr(idle, "aria-label", !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle");
-      idle.hidden = !motion?.available;
-      // Each control shows its own application reason (for example, no 3D preview yet).
-      applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
-      applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
-      applyCapability(surface, port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }));
-      applyCapability(wire, port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }));
-      applyCapability(idle, port.authoring.capability(!motion?.idle ? { kind: "motion.setIdle", enabled: true } :
-        { kind: "motion.setPaused", paused: !motion.idlePaused }));
+      badge.update(); hints.update(frame); toolbar.update(frame);
       const details = frame.status.assets.characterDetails;
       const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
       const line = state.phase !== "ready" || !details ? ""
@@ -154,8 +170,10 @@ export function headPanel(rt: StudioRuntime): PanelController {
       detailStatus.dataset.tone = details?.phase === "preparing" ? "progress" : "notice";
       setText(detailText, line);
       detailStep.update(frame, !!line && details?.need === "wolvenkit");
+      // The crumb: the preset, then what each shown module contributes for this scene (eye makeup: the selected layer).
       const draft = frame.library.draft, presetName = draft?.presets.find(preset => preset.id === draft.selected)?.name;
-      setText(context, [presetName, frame.layer?.name].filter(Boolean).join(" › ") || "No layer selected");
+      const summaries = view.view.summaries();
+      setText(context, [presetName, ...summaries.map(summary => summary.text)].filter(Boolean).join(" › ") || summaries[0]?.empty || "");
     },
   };
 }

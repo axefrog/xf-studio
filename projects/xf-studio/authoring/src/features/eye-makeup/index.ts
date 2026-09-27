@@ -52,3 +52,4 @@ export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, EyeMakeupScope, typeof E
     EYE_MAKEUP_DESCRIPTORS, KINDS, { capability: eyeMakeupCapability, apply: applyEyeMakeup, assignIds: assignEyeMakeupIds,
       label: historyLabel, units: EYE_MAKEUP_UNITS, limits: EYE_MAKEUP_LIMITS, consequence: eyeMakeupConsequence }),
 });
+export { EYE_MAKEUP_MODULE, EYE_MAKEUP_SUMMARY, EYE_MAKEUP_VIEW_TOOLS } from "./module";

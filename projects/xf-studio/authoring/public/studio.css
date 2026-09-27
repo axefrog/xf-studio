@@ -263,6 +263,13 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-window { position: absolute; display: flex; flex-direction: column; pointer-events: auto; box-shadow: var(--shadow); background: var(--bg-panel); border: 1px solid var(--line-strong);
   border-radius: 0 var(--bevel) 0 0; min-width: 0; }
 .dock-window .dock-group { border: 0; }
+/* A collapsed group keeps only its tab bar; its cell takes no share of the split, so the neighbours fill the space. */
+.dock-group.collapsed { flex: none; }
+.dock-cell[data-collapsed] > .dock-group.collapsed { flex: none; }
+.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tabbar { writing-mode: vertical-rl; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tab-label { max-width: none; }
+.dock-window.collapsed { height: auto !important; }
+.dock-collapse-btn[aria-expanded="false"] { color: var(--signal); }
 .dock-window .dock-tabbar-fill { cursor: move; }
 .dock-window.moving { outline: 2px dashed var(--focus); outline-offset: 3px; }
 .dock-window-bar { display: flex; align-items: center; gap: var(--sp-3); height: 22px; padding: 0 var(--sp-2) 0 var(--sp-4); background: var(--bg-active); color: var(--text-muted);

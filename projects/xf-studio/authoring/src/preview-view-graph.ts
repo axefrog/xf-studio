@@ -1,0 +1,159 @@
+/**
+ * The Studio's view graph over the workspace's preview (research/authoring/view-graph-design.md §3.1, §3.5): the node state the
+ * composition gives the platform's graph service (`platform/core/view-graph.ts`), the default one-view graph derived from the
+ * workspace's `preview` block, and the mirror back into it.
+ *
+ * Persistence rule: the main view's nodes are always mirrored into the legacy `preview` fields (camera, lighting, toggles), so a
+ * build before the graph reads the main view exactly as before; the graph itself (`WorkspaceState.views`) is written only when it
+ * differs from the default one-view graph, so a workspace that never adds a view keeps its bytes. On read, the legacy fields win
+ * for the main view's nodes: the main view looks exactly as the `preview` block says (no appearance change).
+ */
+import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules } from "./platform/api/view-graph";
+import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
+import type { CameraState, PreviewState } from "./workspace-state";
+import { LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
+import { validStudioLights, type StudioLights } from "./studio-lighting";
+
+/** A character scene's state: the head's eye shape and the V's material studies and body mode (design §3.1). */
+export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean };
+/** An orbit camera's pose in the scene's neutral subject space (absent until one is saved). Aspect belongs to each view. */
+export type CameraNodeState = { pose?: CameraState };
+/** A light rig's settings. The node's kind is the rig shown (the lighting preset); both rigs keep their settings. */
+export type LightsState = { exposure: number; lightAngle: number; studioLights: StudioLights; creatorLighting: CreatorLightingOptions };
+/** The content filter: which character slots show (design §3.1). */
+export type DisplayState = { brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; body?: boolean };
+/** Each view tool's on/off state, by tool ID (`eye-makeup.surface`). */
+export type ToolsState = { on: Record<string, boolean> };
+
+/**
+ * The legacy `preview` fields that hold view tools: eye makeup's Surface controls and Plate wireframe (migration debt: the
+ * workspace mirror names them until the `preview` block is retired; the tools themselves are eye makeup's contributions).
+ */
+export const LEGACY_TOOL_FIELDS = { surface: "eye-makeup.surface", wire: "eye-makeup.wire" } as const;
+/** The default graph's node IDs (design §3.2's example). */
+export const DEFAULT_NODES = { scene: "s1", camera: "c1", lights: "l1", display: "d1", tools: "t1" } as const;
+
+const bool = (value: unknown): value is boolean => typeof value === "boolean";
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const optional = <T>(value: unknown, check: (x: unknown) => x is T) => value === undefined || check(value);
+const vector = (value: unknown): value is number[] => Array.isArray(value) && value.length === 3 && value.every(finite);
+const pose = (value: unknown): value is CameraState => {
+  const c = value as Partial<CameraState> | undefined;
+  return !!c && typeof c === "object" && vector(c.position) && vector(c.target) && finite(c.fov);
+};
+
+const scene: NodeCodec = { kinds: ["character"], parse: state => {
+  const s = state as Partial<SceneState>;
+  if (!finite(s.eyeShape) || !bool(s.normals) || !optional(s.eyeOwnRoughness, bool) || !optional(s.uncensored, bool)) return;
+  return { eyeShape: s.eyeShape, normals: s.normals, ...(s.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: s.eyeOwnRoughness }),
+    ...(s.uncensored === undefined ? {} : { uncensored: s.uncensored }) };
+} };
+const camera: NodeCodec = { kinds: ["orbit"], parse: state => {
+  if (state.pose !== undefined && !pose(state.pose)) return;
+  return state.pose === undefined ? {} : { pose: { position: [...(state.pose as CameraState).position], target: [...(state.pose as CameraState).target],
+    fov: (state.pose as CameraState).fov } };
+} };
+const lights: NodeCodec = { kinds: [...LIGHTING_PRESETS], parse: state => {
+  const s = state as Partial<LightsState>;
+  if (!finite(s.exposure) || !finite(s.lightAngle) || !validStudioLights(s.studioLights) || !validCreatorLighting(s.creatorLighting)) return;
+  return { exposure: s.exposure, lightAngle: s.lightAngle, studioLights: { ...s.studioLights }, creatorLighting: { ...s.creatorLighting } };
+} };
+const display: NodeCodec = { parse: state => {
+  const s = state as Partial<DisplayState>;
+  if (!bool(s.brows) || !bool(s.lashes) || !bool(s.hair) || !bool(s.piercings) || !optional(s.body, bool)) return;
+  return { brows: s.brows, lashes: s.lashes, hair: s.hair, piercings: s.piercings, ...(s.body === undefined ? {} : { body: s.body }) };
+} };
+const tools: NodeCodec = { parse: state => {
+  const on = state.on as Record<string, unknown> | undefined;
+  if (!on || typeof on !== "object" || Array.isArray(on) || Object.keys(on).length > 64) return;
+  const entries = Object.entries(on);
+  if (!entries.every(([id, value]) => /^[a-z0-9][a-z0-9.-]{0,63}$/.test(id) && bool(value))) return;
+  return { on: Object.fromEntries(entries) };
+} };
+
+/** The platform's rules for the Studio's graph: the codecs above, and a character scene seen by an orbit camera under either rig. */
+export const STUDIO_VIEW_GRAPH_RULES: ViewGraphRules = Object.freeze({
+  codecs: { scene, camera, lights, display, tools },
+  scenes: [{ kind: "character", cameras: ["orbit"], rigs: [...LIGHTING_PRESETS] }],
+});
+
+/** The main view's node states as the legacy `preview` block holds them. */
+function mainNodes(preview: PreviewState) {
+  return {
+    scene: { eyeShape: preview.eyeShape, normals: preview.normals, ...(preview.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: preview.eyeOwnRoughness }),
+      ...(preview.uncensored === undefined ? {} : { uncensored: preview.uncensored }) } satisfies SceneState,
+    camera: (preview.camera ? { pose: structuredClone(preview.camera) } : {}) satisfies CameraNodeState,
+    lights: { exposure: preview.exposure, lightAngle: preview.lightAngle, studioLights: { ...preview.studioLights },
+      creatorLighting: { ...preview.creatorLighting } } satisfies LightsState,
+    display: { brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
+      ...(preview.body === undefined ? {} : { body: preview.body }) } satisfies DisplayState,
+    tools: { on: { [LEGACY_TOOL_FIELDS.surface]: preview.surface, [LEGACY_TOOL_FIELDS.wire]: preview.wire } } satisfies ToolsState,
+    rig: preview.lightingPreset,
+  };
+}
+
+/** The default graph: one view (`main`) over the workspace's preview (design §3.5). */
+export function defaultViewGraph(preview: PreviewState): ViewGraphData {
+  const nodes = mainNodes(preview);
+  return { schema: VIEW_GRAPH_1, views: [{ id: MAIN_VIEW, kind: "3d", ...DEFAULT_NODES }],
+    scenes: [{ id: DEFAULT_NODES.scene, kind: "character", ...nodes.scene }], cameras: [{ id: DEFAULT_NODES.camera, kind: "orbit", ...nodes.camera }],
+    lights: [{ id: DEFAULT_NODES.lights, kind: nodes.rig, ...nodes.lights }], display: [{ id: DEFAULT_NODES.display, ...nodes.display }],
+    tools: [{ id: DEFAULT_NODES.tools, ...nodes.tools }], focused: MAIN_VIEW };
+}
+
+/**
+ * The graph a workspace holds: its stored `views` when valid (with the main view's nodes taken from the legacy `preview` fields,
+ * which always mirror them), else the default one-view graph.
+ */
+export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData | undefined): ViewGraphData {
+  const parsed = stored && parseViewGraph(stored, STUDIO_VIEW_GRAPH_RULES);
+  if (!parsed) return defaultViewGraph(preview);
+  const main = parsed.views.find(view => view.id === MAIN_VIEW)!, nodes = mainNodes(preview);
+  const overlay = <T extends { id: string; kind?: string }>(list: readonly T[], id: string, state: object, kind?: string) =>
+    list.map(node => node.id === id ? { id, ...(node.kind === undefined ? {} : { kind: kind ?? node.kind }), ...state } : node);
+  return parseViewGraph({ ...parsed, scenes: overlay(parsed.scenes, main.scene, nodes.scene),
+    cameras: overlay(parsed.cameras, main.camera, nodes.camera), lights: overlay(parsed.lights, main.lights, nodes.lights, nodes.rig),
+    display: overlay(parsed.display, main.display, nodes.display), tools: overlay(parsed.tools, main.tools, nodes.tools) },
+  STUDIO_VIEW_GRAPH_RULES) ?? defaultViewGraph(preview);
+}
+
+/** A graph service for a workspace's preview (and its stored views, if any). */
+export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, options?: { now?: () => number }) {
+  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, options);
+}
+
+/** Whether a graph is the default one-view graph (structure only: its state is mirrored into `preview`). */
+export function isDefaultViewGraph(data: ViewGraphData): boolean {
+  const [view, ...rest] = data.views;
+  return !rest.length && !!view && view.id === MAIN_VIEW && view.title === undefined && data.focused === MAIN_VIEW &&
+    view.scene === DEFAULT_NODES.scene && view.camera === DEFAULT_NODES.camera && view.lights === DEFAULT_NODES.lights &&
+    view.display === DEFAULT_NODES.display && view.tools === DEFAULT_NODES.tools;
+}
+
+/** What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph. */
+export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
+  const data = graph.data();
+  return isDefaultViewGraph(data) ? undefined : data;
+}
+
+/** A view's node states as the legacy `preview` fields (for the workspace mirror and `PreviewActions.snapshot`). */
+export function previewFields(graph: ViewGraph, view = MAIN_VIEW) {
+  const scene = graph.state<SceneState>(view, "scene"), display = graph.state<DisplayState>(view, "display");
+  const lights = graph.state<LightsState>(view, "lights"), tools = graph.state<ToolsState>(view, "tools").on;
+  return { scene, display, lights, rig: graph.kind(view, "lights") as LightingPreset, camera: graph.state<CameraNodeState>(view, "camera").pose,
+    surface: tools[LEGACY_TOOL_FIELDS.surface] === true, wire: tools[LEGACY_TOOL_FIELDS.wire] === true, tools };
+}
+
+/**
+ * A view's node states in the workspace's `preview` shape, in the field order the workspace has always written (the legacy mirror):
+ * what `PreviewActions.snapshot` publishes and what a head restores from. `camera` is the camera node's pose, when it has one.
+ */
+export function previewMirror(graph: ViewGraph, view = MAIN_VIEW) {
+  const f = previewFields(graph, view);
+  return { surface: f.surface, wire: f.wire, brows: f.display.brows, lashes: f.display.lashes, hair: f.display.hair,
+    normals: f.scene.normals, ...(f.scene.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: f.scene.eyeOwnRoughness }),
+    eyeShape: f.scene.eyeShape, piercings: f.display.piercings, ...(f.display.body === undefined ? {} : { body: f.display.body }),
+    ...(f.scene.uncensored === undefined ? {} : { uncensored: f.scene.uncensored }),
+    exposure: f.lights.exposure, lightAngle: f.lights.lightAngle, lightingPreset: f.rig, creatorLighting: f.lights.creatorLighting,
+    studioLights: f.lights.studioLights, ...(f.camera ? { camera: f.camera } : {}) };
+}

@@ -15,18 +15,22 @@ import { headPanel } from "../panels/viewports";
 import { helpPanel, type HelpGuidance } from "../guidance/help-panel";
 import type { StudioRuntime } from "../runtime";
 import type { ViewCatalogue } from "./contribution";
-import type { FeatureViewBinding } from "./feature-view";
+import type { FeatureViewBinding, ViewBadge, ViewSummary } from "./feature-view";
 import type { SHELL_VIEW } from "./shell";
 
-/** What the shell hands its own panel factories besides the runtime: the guidance the Help view lists and starts. */
-export type ViewContext = { readonly guidance: HelpGuidance };
+/**
+ * What the shell hands its own panel factories besides the runtime: the guidance the Help view lists and starts, and what the shown
+ * modules contribute to a view (view-graph-design.md §3.9): their crumbs after the preset, and a readiness badge.
+ */
+export type ViewContext = { readonly guidance: HelpGuidance;
+  readonly view: { summaries(): ViewSummary[]; badge(): ViewBadge | undefined } };
 /** One of the shell's own panel factories. A feature's panels get a `FeatureViewContext` instead (`feature-view.ts`). */
 export type PanelFactory = (rt: StudioRuntime, context: ViewContext) => PanelController;
 /** A view's factories, keyed by exactly its panel IDs. */
 export type PanelFactories<V extends { panels: readonly { id: string }[] }> = { readonly [K in V["panels"][number]["id"]]: PanelFactory };
 
 export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
-  presets: presetsPanel, history: historyPanel, library: libraryPanel, package: packagePanel, head: headPanel,
+  presets: presetsPanel, history: historyPanel, library: libraryPanel, package: packagePanel, head: (rt, context) => headPanel(rt, context),
   character: characterPanel, lighting: lightingPanel, motion: motionPanel, quality: qualityPanel, activity: activityPanel,
   help: (rt, context) => helpPanel(rt, context.guidance),
 };

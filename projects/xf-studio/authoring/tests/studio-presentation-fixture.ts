@@ -10,6 +10,8 @@ import type { PresetCollection } from "../src/preset-collection";
 import { StudioApplication } from "../src/studio-application";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createStudioPresentation, type StudioPresentationPort } from "../src/studio-presentation";
+import { createViewServices } from "../src/view-actions";
+import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
 import { recipeFile } from "../src/recipe-schema";
@@ -36,7 +38,8 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const gestures = new AuthoringGestures(document, editing.gestures, undo);
   const controls = new AuthoringControlEdits(document, editing.controls, undo);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, undo, quality }, STUDIO_REGISTRY);
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, undo, quality,
+    ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION) }, STUDIO_REGISTRY);
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: recipeFile(structuredClone(document.recipe))! }] };

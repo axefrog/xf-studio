@@ -448,18 +448,20 @@ test("the desktop serves Add to my mod manager and its folder picker behind its 
 test("?verify on the desktop edits its own copy of the settings and never adds a mod (INSTALL-01, UI-98)", async () => {
   const verifyRoot = mkdtempSync(resolve(tmpdir(), "xfs-desktop-verify-"));
   const data = resolve(verifyRoot, "data");
+  // Absolute on this OS: a drive path is absolute only on Windows.
+  const game = resolve(verifyRoot, "Cyberpunk 2077"), testGame = resolve(verifyRoot, "Test game");
   const host = createDesktopServer(staticRoot, data, { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" });
   try {
-    new LocalSettingsStore(data).save({ ...defaultLocalSettings(), gameRoot: "E:\\Games\\Cyberpunk 2077" }, 0);
+    new LocalSettingsStore(data).save({ ...defaultLocalSettings(), gameRoot: game }, 0);
     const base = `http://127.0.0.1:${host.port}`;
     const cookie = (await fetch(host.url)).headers.get("set-cookie")!.split(";")[0]!;
     const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
     const view = await (await fetch(base + "/api/verification/local-settings", { headers })).json();
-    expect(view).toMatchObject({ revision: 1, source: "new", fields: { gameRoot: "E:\\Games\\Cyberpunk 2077" } });
+    expect(view).toMatchObject({ revision: 1, source: "new", fields: { gameRoot: game } });
     const saved = await fetch(base + "/api/verification/local-settings", { method: "PATCH", headers,
-      body: JSON.stringify({ revision: 1, fields: { gameRoot: "F:\\Test game", launchRoute: "mo2" } }) });
+      body: JSON.stringify({ revision: 1, fields: { gameRoot: testGame, launchRoute: "mo2" } }) });
     expect(saved.status).toBe(200);
-    expect(new LocalSettingsStore(data).load().settings).toMatchObject({ gameRoot: "E:\\Games\\Cyberpunk 2077", launchRoute: "direct", revision: 1 });
+    expect(new LocalSettingsStore(data).load().settings).toMatchObject({ gameRoot: game, launchRoute: "direct", revision: 1 });
     const install = await fetch(base + "/api/verification/mod-install", { method: "POST", headers,
       body: JSON.stringify({ action: "install", candidateId: "a1b2", token: "t" }) });
     expect(install.status).toBe(503);

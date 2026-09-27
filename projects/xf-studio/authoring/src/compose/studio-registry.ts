@@ -11,7 +11,8 @@ import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
 import { EYE_MAKEUP, EYE_MAKEUP_ID, EYE_MAKEUP_REGION } from "../features/eye-makeup";
 import { CHARACTER_CONTEXT_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY,
-  SAVED_V_FAMILY } from "./system-families";
+  SAVED_V_FAMILY, VIEWS_FAMILY } from "./system-families";
+import { STUDIO_MODULE_REGISTRATION } from "./modules";
 import type { DocumentModel } from "../collection-workspace";
 import type { StudioOwnerActions, StudioOwnerId, StudioRequestOwnerId } from "../studio-application";
 import type { StudioComposition } from "../trusted-authoring-core";
@@ -23,7 +24,7 @@ export type { StudioOwnerActions, StudioOwnerId };
  * families (library requests, file workflows) route by owner too, outside the synchronous table.
  */
 export const STUDIO_OWNERS = [HISTORY_FAMILY, EYE_MAKEUP, COLLECTION_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY,
-  QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, LIBRARY_FAMILY, FILES_FAMILY] as const;
+  QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, VIEWS_FAMILY, LIBRARY_FAMILY, FILES_FAMILY] as const;
 
 // Compile-time: the list's IDs are exactly the owners StudioApplication binds handlers for.
 type ListedIds = (typeof STUDIO_OWNERS)[number]["id"];
@@ -47,6 +48,6 @@ export const STUDIO_DOCUMENTS: DocumentModel = Object.freeze({ parts: STUDIO_PAR
 export const LIVE_REGION = EYE_MAKEUP_REGION;
 /** Everything the trusted core needs from the composition. */
 export const STUDIO_COMPOSITION: StudioComposition = Object.freeze({ registry: STUDIO_REGISTRY, documents: STUDIO_DOCUMENTS,
-  region: LIVE_REGION });
+  region: LIVE_REGION, modules: STUDIO_MODULE_REGISTRATION });
 export type { EyeMakeupAction, EyeMakeupEditor, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupMemory, EyeMakeupResult,
   EyeMakeupState } from "../features/eye-makeup";

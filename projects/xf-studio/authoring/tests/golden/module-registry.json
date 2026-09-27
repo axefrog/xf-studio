@@ -1,0 +1,79 @@
+{
+ "modules": [
+  {
+   "id": "eye-makeup",
+   "group": "character",
+   "stage": "stable",
+   "feature": "eye-makeup",
+   "shownByDefault": true
+  }
+ ],
+ "tools": [
+  {
+   "id": "camera.front",
+   "module": "platform",
+   "order": 10,
+   "scenes": [
+    "character"
+   ],
+   "placement": "toolbar",
+   "kind": "action",
+   "state": "camera"
+  },
+  {
+   "id": "camera.body",
+   "module": "platform",
+   "order": 20,
+   "scenes": [
+    "character"
+   ],
+   "placement": "toolbar",
+   "kind": "action",
+   "state": "camera"
+  },
+  {
+   "id": "motion.idle",
+   "module": "platform",
+   "order": 50,
+   "scenes": [
+    "character"
+   ],
+   "placement": "toolbar",
+   "kind": "toggle",
+   "state": "scene"
+  },
+  {
+   "id": "eye-makeup.surface",
+   "module": "eye-makeup",
+   "order": 30,
+   "scenes": [
+    "character"
+   ],
+   "placement": "toolbar",
+   "kind": "toggle",
+   "state": "tools"
+  },
+  {
+   "id": "eye-makeup.wire",
+   "module": "eye-makeup",
+   "order": 40,
+   "scenes": [
+    "character"
+   ],
+   "placement": "research",
+   "kind": "toggle",
+   "state": "tools"
+  }
+ ],
+ "summaries": [
+  {
+   "module": "eye-makeup",
+   "scenes": [
+    "character"
+   ]
+  }
+ ],
+ "scenes": [
+  "character"
+ ]
+}

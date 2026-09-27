@@ -140,7 +140,7 @@ Generated per collection, under the Studio's depot root (`axefrog\appearance_stu
 
 **Names.** `xfs_h` + the colour's UUID without hyphens (37 characters). It starts with `xfs_`, never matches the `NN_` shape, contains no `__` (which would make ArchiveXL split it) and cannot collide with another pack's mesh appearance. It is the definition name, the mesh appearance, the tag and the file stem at once, as the proven template requires. Display names can change freely; the identity cannot. Two definitions in one list with the same name would replace each other, so the generator derives every name from the UUID.
 
-**Which slots.** Default: the four vanilla slots (`hair_color`, `eyebrows_color`, `eyelash_color`, `beard_color` in `pma`) as exact names, like every proven pack. Four of the six packs also overlay `mch_hair_part_01…03`, an untraced multi-colour hair convention. Rather than copy one framework's slot names (a per-mod branch), Build can **discover** slots from the user's merged catalogue: every appearance-option slot whose options carry the vanilla hair-colour definitions. Build lists what it found in Check. Discovery is generic, and an extra slot with no options is a no-op [source].
+**Which slots.** Default: the four vanilla slots (`hair_color`, `eyebrows_color`, `eyelash_color`, `beard_color` in `pma`) as exact names, like every proven pack. Four of the six packs also overlay `mch_hair_part_01…03`, the part rows of the Multicolored Hair framework (§10). Rather than copy one framework's slot names (a per-mod branch), Build can **discover** slots from the user's merged catalogue: every appearance-option slot whose options carry the vanilla hair-colour definitions. Build lists what it found in Check. Discovery is generic, and an extra slot with no options is a no-op [source].
 
 **Additive audit** (the [piercing study's rules](../jewellery/ccxl-piercing-feasibility.md#4-additive-audit-what-would-replace-or-shadow-existing-choices), applied here): no named options, no vanilla or third-party depot path shipped, no patch of vanilla `.app`/`.mesh` *content* beyond adding new-named empty appearances (exactly what ArchiveXL's own `h1_base_color_patch.mesh` and every pack do), and no definition name that exists in the merged catalogue. Build refuses any collision against the effective merged catalogue the resolver already computes.
 
@@ -218,7 +218,7 @@ One prepared session, female V, with a scripted three-colour probe export ("XF H
 | 3 | Hover or select a probe colour | Its plain-text name shows | Labels |
 | 4 | Brow and lash rows: pick the dipped-tips colour | Brows the derived brow colour; lashes the derived lash colour, not pink | Per-row files behind one name |
 | 5 | The dense brown against the 5-stop brown, same hairstyle and camera | Identical, or a smoother ramp; no missing or garbled hair | Stop-count tolerance, dense encoding |
-| 6 | Bald hairstyle, and brows Off: do these rows show a colour grid? | Unknown; the installed packs already overlay these slots | Side effect of exact-slot overlays |
+| 6 | Bald hairstyle, brows Off, and MultiColor Hair Off (§10): do these rows show a colour grid? | Unknown; the installed packs already overlay these slots | Side effect of exact-slot overlays |
 | 7 | Put on a beanie or a cap over probe brown | The hair under the hat is probe brown | Tag → `{hair_color}` |
 | 8 | Save, reload, mirror | Colour kept; the mirror shows it selected | Persistence |
 | 9 | Build 2 of the probe with the dipped-tips definition removed but its resources kept; load the item-8 save using it | Still dipped tips; the grid no longer lists it | Retirement without breaking saves |
@@ -254,6 +254,8 @@ Estimates assume one agent, with the platform, resolver and Build pipeline as th
 
 ## 9. Questions for the maintainer
 
+**Decided 27 September 2026:** all nine proposed defaults accepted. On question 4, another mod's colour profile is a reference only (shown and compared), never copied into an exported colour; revisit if needed. The mod at Nexus 21613 is studied in §10, which adds question 10.
+
 | # | Question | Proposed default |
 |---|---|---|
 | 1 | Should each authored colour also appear in the brow, lash and beard rows? | Yes: hair, brows and lashes, plus beard for masculine V, with Studio-derived brow and lash colours (brows match roots, lashes darkened roots) |
@@ -266,12 +268,97 @@ Estimates assume one agent, with the platform, resolver and Build pipeline as th
 | 8 | Body genders? | Emit both creator resources from the start (colours need no geometry); the preview stays feminine until the masculine V lands |
 | 9 | Build the three-colour probe for a coming session once discussed? | Yes, alongside the next planned session |
 
+## 10. Multicolored Hair (Nexus 21613)
+
+Studied 27 September 2026 from the installed package, read-only. The Core and the redacted-c01 hair profiles compatibility patch are enabled in the diagnostic MO2 profile (the reference profile lists both disabled). The Modder's Resources were read from the downloaded zip only. Nothing has been seen in game.
+
+**Verdict.** Multicoloured hair here is **geometry, not shading.** A hairstyle is cut into up to three meshes, each an ordinary CCXL dynamic hair with its own colour row. The framework adds one creator switcher that turns the parts on. There are no masks, no new templates, no extra `.hp` data and no second profile per strand. Every colour pack that overlays the part rows reaches every part. XF colours will too, through slot discovery (§3.1), without a per-mod branch. The Studio resolves an MCH hairstyle correctly today, but the preview doesn't draw it (PREV-109, below).
+
+### 10.1 What the packages hold
+
+| Package (1.1.0.0) | Content | SHA-256 (first 16) |
+|---|---|---|
+| Core | Two creator resources (`eagull\multicolored_hair\multicoloredhair_main.inkcharcustomization` female, `…_main_mv` male; 8 KB archive), an `.xl` with `customizations` only, and a redscript file | zip `ef012f5c4266607c`, archive `13275fe508a0ee17`, script `2888b89a5fed32f4` |
+| The redacted-c01 hair profiles compatibility patch | One creator resource, registered for both body genders; an `.xl` with `customizations` only | zip `2da1e3df05ac1cd8`, archive `9efde719c8f1fa21` |
+| Modder's Resources | A written guide; two WolvenKit project templates (vanilla texture paths, and custom-pathed textures); loose `.mi` templates; placeholder rigs and animgraphs; the same redscript file | zip `70d944efc5cad4e6` |
+
+No `.hp`, texture, mesh, `.mi`, TweakXL record or `resource` block ships in the Core or the patch [resource].
+
+### 10.2 The mechanism
+
+| Step | What happens | Grade |
+|---|---|---|
+| 1. Framework switcher | The Core adds a named switcher `mch_hair_switcher` ("MultiColor Hair", index 161, `link` `mch_hairstyle` feminine and `mch_hairstyle_pma` masculine, link controller). Its `uiSlots` are `mch_hair_part_01`, `_02`, `_03` and `mch_hair_fpp`. Its one choice, "Off", names four placeholder options (`hair_none_part_01…03`, `hair_none_fpp`) with no resource and only a `None` definition. They sit in `hairs`, `character_customization` and `FPP_hairs`. | [resource] |
+| 2. Why a new switcher | The vanilla `hairstyle` switcher's `uiSlots` are `hair_color` and `hair_color_fpp`. ArchiveXL never changes an existing option's top-level fields in a merge ([file chain §5](../../knowledge/cc-file-chain.md#5-how-archivexlccxl-extends-the-lists)), so no mod can give it more colour rows. Each colour row must be its own slot, and one switcher must own them all. The three-part limit is the Core's fixed `uiSlots` list. The guide calls it an arbitrary choice made because a fourth option "just breaks stuff". | [source] ArchiveXL `MergeCustomOptions`; [resource] |
+| 3. A hairstyle joins | An MCH hairstyle ships an **anonymous** switcher with only `link: mch_hairstyle`. ArchiveXL's overlay pass matches it to the Core's switcher by link, and appends its choice (for example "SOPHIE MCH"). The choice names one **named** appearance option per part (`sophiemch_hair_part_01` on slot `mch_hair_part_01`, and so on) plus an FPP shadow option. Each part option is a link controller of its own key, `hairstyle_color_1…3`, so a part's colour index carries over between MCH hairstyles. Each option lists the 35 vanilla colours and has its own label ("HAIR BASE", "FACE FRAME"). A two-part style simply names no part-3 option. | [source + resource]: the template, and two installed MCH hairstyles (MELUMINARY Sophie Midlength MCH, Easy Access Pony #003 MCH) |
+| 4. Parts render as CCXL hair | Each part has its own `.app` with a single template appearance (`01_blonde_platinum`) and one mesh component. The hairstyle's `.xl` puts the part `.app`s in the `player_wa_hair.app` scope, so they are in `player_customization.app` transitively and ArchiveXL clones the requested colour there (§2.2 step 4). It also puts the part meshes in the `player_wa_hair.mesh` scope. Each part mesh carries `@context` (`LongBaseMaterial`, `CapBaseMaterial`), `@long` and `@cap` entries. Only the first part carries the cap chunk. | [resource]; [source] `FixCustomizationAppearance` |
+| 5. Colours reach every part | Vanilla colours come from ArchiveXL's own patch mesh, and pack colours from each pack's `patch.mesh`. Both are patched into `player_{wa,ma}_hair.mesh`, whose scope now includes the part meshes. Creator reach is separate: a colour appears in a part's row only if its pack overlays `mch_hair_part_01…03`. The four third-party packs of §1 do. On the diagnostic profile each part option lists 164 colours (35 + 21 + 35 + 20 + 8 + the patch's 45). | [source + resource]; merged catalogue computed by the Studio |
+| 6. Save | The active part options are ordinary appearance descriptors in `hairs` and `character_customization`, so one V can store two or three hair entries beside the vanilla hairstyle's. The Core's description says to set the vanilla hairstyle to 51 (no hair) while MCH is used; the two switchers don't know about each other. | [resource: groups]; storage [source-supported expectation] |
+| 7. Creator camera | The redscript wraps `characterCreationBodyMorphMenu.GetSlotName` and maps the four `mch_*` slots to `UI_Hairs`, so the creator zooms to the hair for those rows. | [source: the script] |
+
+### 10.3 What the compatibility patch changes, and why a patch is needed
+
+The redacted-c01 pack's overlays name only the four vanilla slots (§1), so its 45 colours never appear in the part rows. The patch is one creator resource with three anonymous overlays on `mch_hair_part_01…03`. Each lists the pack's 45 definitions again with the same names, tags, icons and localisation keys. It ships nothing else, because the pack's `patch.mesh`, profiles, cap gradients, icons and localisation already reach the part meshes and the creator (step 5). It is registered under both `female` and `male`, which works because the slots have the same names in both resources [resource]. A pack that doesn't overlay the part slots therefore needs such a patch per framework. That is exactly the dependency slot discovery avoids for XF colours.
+
+### 10.4 What the Modder's Resources offer
+
+- **Template project.** Three part meshes, three part `.app`s (each a single template appearance), an FPP `.app` with the shadow mesh, a feminine creator resource wired as in step 3, and CCXL `.mi` templates (long, short, curls, dread, beard, cap). The cap and strand `.mi`s set the hairstyle's own textures over the vanilla `_master__*` materials. Colour stays in the dynamic `HairProfile` and `GradientMap` paths [resource].
+- **Guide.** Split the hairstyle into three parts in Blender, import each part over a template mesh, rename the namespace folders, apply WolvenKit's "Convert hair to CCXL material", then search and replace `template` in the creator JSON. Known issues: rigs misbehave when several animgraphs drive one rig, so parts 2 and 3 point at placeholder rigs; two `.xl` files pointing at one creator resource double the rows; hot reload can reset the choice; an `@cap`-only mesh breaks vanilla colours [resource: guide text; the issues are the author's observations].
+- **Gaps.** The guide tells creators to rename a `template.xl`, but neither template contains one. The installed MCH hairstyles show what it holds: the part `.app` and mesh scopes of step 4. The guide also says a hairstyle's `localizedName` need not be unique. ArchiveXL merges switcher choices by `localizedName`, so two MCH hairstyles with the same name **replace** each other [source: `MergeCustomOptions`]. The template covers feminine V only. A masculine MCH hairstyle must overlay link `mch_hairstyle_pma` [resource].
+
+### 10.5 What XF Studio does with it today
+
+| Stage | Result on the diagnostic profile | Grade |
+|---|---|---|
+| Merged catalogue | Faithful: the Core switcher with three choices (Off and the two MCH hairstyles), seven part options and the 129 added colours per part. The masculine switcher has only Off. Link-only anonymous overlays merge as in ArchiveXL (`cco-model.ts`). | [offline: `loadMergedCco`] |
+| Character state (R5) | Choosing "SOPHIE MCH" activates both part options through the switcher and emits one descriptor per part. | [offline: `descriptorsFromUiState`] |
+| Resolver (R6–R7) | Part 1 resolves to `sophie_hair_pt1.mesh` in `brown_liquorice` (dynamic appearance from `01_blonde_platinum`, 6 chunks, `hair.mt`). Part 2 resolves in `ash_brown`: its `@long` template comes from the redacted-c01 pack's `patch.mesh`, its `@context` base material from the hairstyle. That is exactly steps 4 and 5. | [offline: `resolveCharacter`, 35 s cold] |
+| Preview plan | **Not drawn.** `planCharacterDetails` assigns hair by the vanilla slot name `hair_color` (`DETAIL_UI_SLOTS`) or by a switcher on such a slot. The part options have neither, and they are in `hairs`, not a face group, so they're dropped. The hair slot reads "None" with no message, although the V wears hair. The Character panel's coverage applies the same rule and marks the part rows as not drawn (`cc-render-coverage.ts`). | [offline: the Studio's planner on the resolved V]; ledger **PREV-109** |
+
+**The generic rule the Studio lacks** is the game's consumer rule. Everything active in the `hairs` group is drawn by the hairstyle controller ([file chain: groups](../../knowledge/cc-file-chain.md#groups-who-consumes-a-choice-resource)). On the diagnostic profile, the feminine `hairs` group holds 523 `hair_color` options, 7 `mch_hair_part_*` options and 5 names with no option; nothing else is in it [offline]. Treating "consumed by `hairs`" as the hair slot would draw MCH parts, and any future multi-part framework, with no name list. The hair material adapter already works per chunk template. This is data-driven work, not an adapter.
+
+Smaller gaps, all generic:
+
+- The preview's hair label and "Apply to my V" (§4.4) assume a single hair option. With MCH they need one entry per active part.
+- Hair colour tags go to TweakDB only from `hair_color` targets, in ArchiveXL and in the Studio alike. What hair under a hat shows while the vanilla hairstyle is off and MCH is on is unknown. The hat-hair meshes know nothing of the parts [hypothesis; checklist item 15].
+
+### 10.6 Implications for the XF hair colour design
+
+1. **XF colours reach MCH parts with no extra work.** Question 6's slot discovery ("every slot whose options carry the vanilla hair colours") finds `mch_hair_part_01…03` on any installation with the Core and an MCH hairstyle. XF's `patch.mesh` already targets the `player_{wa,ma}_hair.mesh` scope that MCH part meshes join. This was the "untraced convention" of §3.1; it is now traced, and it needs no framework-specific name.
+2. **Discovery happens at Build.** If the player installs MCH after building, XF colours are missing from the part rows until the next Build. The Studio can notice generically that the merged catalogue has gained a hair-colour slot since the last Build, and say "rebuild to add your colours to the new hair rows". Emitting a fixed list of framework slot names would work at runtime (an overlay on a missing slot matches nothing), but it is per-framework knowledge, so it is not proposed.
+3. **Off rows gain grids.** Exact-slot overlays also reach `hair_none_part_01…03` (each lists 130 definitions on the diagnostic profile). That is the same side effect as the bald row (§2.8), and checklist item 6 now covers both. A wildcard overlay skips options with no resource or no definitions [source: `MergeCustomOptions`], which would avoid it. But a wildcard matches by prefix, so `hair_color*` would also reach the hidden `hair_color_fpp` options, which have a resource and one definition. The exact-slot default stays.
+4. **Multicolour has three levels, and only the first is a colour feature:**
+   - **Within one colour** (ombre, dipped tips, streaks): the root-to-tip ramp and the strand-variation (ID) ramp (§4.2). A two-band ID ramp gives streaks spread across strands by the hairstyle's own `Strand_ID` texture. There is no spatial control, and the same profile scatters differently on each hairstyle. `hair.mt` has no region mask ([hair shading §1](../../knowledge/hair-shading.md#1-inputs)). **In scope for P1** as editor presets: ombre, dipped tips, streaks and highlights, salt and pepper.
+   - **Across parts of a split hairstyle** (MCH): each part is an independent creator row with the full colour grid. A "multicolour look" is therefore a **combination**: one XF colour per discovered hair part. It can be saved as a Studio preset and applied to the shown V part by part. It cannot be exported as one in-game choice, because the creator picks each row separately and a switcher choice activates options, not colours [source]. **In scope** as a preview and apply feature once PREV-109 is fixed.
+   - **Region colour on a hairstyle that isn't split**: needs new geometry parts. A data-only route may exist: two or three part `.app`s that reference the **same** hair mesh with complementary component `chunkMask`s, each with its own colour row. It needs no mesh export or redistribution, but it splits only along the mesh's existing submeshes. Whether vanilla hair submeshes follow useful regions is unmeasured [hypothesis]. A true region split (bangs, one side, a "money piece") needs a mesh cut, which is hairstyle design. **Out of scope for colours.** It belongs to later feature 4 (hair design) and needs a decision: target MCH's slots (a runtime dependency on the Core, whose rows the colour packs already reach) or an XF switcher of its own (XF and vanilla colours only). Question 10.
+5. **Generic authoring model.** Keep `xfs/hair-colour-1` as one colour. Add a Studio-only `hair look`: an ordered list of `(hair part, colour)`, where a part is any active option consumed by `hairs`, identified by option name and labelled with its `localizedName` ("HAIR BASE"). The export stays colour-per-choice. The look drives the preview, "Apply to my V" and a printed checklist ("in game, choose Midnight Teal for HAIR BASE and Rose Tips for FACE FRAME"). Nothing in it names a mod.
+
+**Updated effort.** Region colour stays out of scope, so the phases change only a little:
+
+| Phase | Change | New size |
+|---|---|---|
+| Prerequisite | PREV-109: plan every option consumed by `hairs` as hair, per part (a code-health fix, not part of the feature) | +0.5 day |
+| P1 | Part-aware preview and apply; the `hair look` combination; ombre, streak and dipped-tip presets | 3.5–6 days (was 3–5) |
+| P2 | Verifier resolves colours on every discovered part slot; Check lists hairstyles and frameworks reached; "rebuild for new hair rows" note | 3.5–4.5 days (was 3–4) |
+| P4 | Two more checklist items (14, 15) | about 40–55 minutes |
+| Later (decision) | Region multicolour hairstyles through chunk-mask parts or mesh cuts on part slots | 4–6 days plus a session, not estimated in detail |
+
+**Checklist additions** (§6 table, same session):
+
+| # | Check | Expected | Settles |
+|---|---|---|---|
+| 14 | With the MCH Core and "SOPHIE MCH": set the vanilla hairstyle to 51, then look for the probe colours in HAIR BASE and FACE FRAME; choose two different ones | Both parts coloured independently; the cap follows HAIR BASE | Discovery reaches framework slots; material reach through mesh scope |
+| 15 | Same V: put on a beanie, then take it off | Record what hair shows under the hat | Hair colour tag and hat hair with MCH |
+
+**Question 10 for the maintainer.** Should region multicolour (splitting a hairstyle into colourable parts) be a hair design feature? If so, should it target the Multicolored Hair Core's part slots (dependency on the Core; its rows already take every colour pack) or an XF selector of its own? Proposed default: out of the first hair colour version; revisit with hair design, preferring the Core's slots with a framework check, like the other frameworks.
+
 ## Provenance
 
 - Packs and versions: §1. The first-party XF Dipped Tips package is a local test input, not a credit.
 - ArchiveXL 1.27.3, commit `5474e34d56112f5d8843ae863e1e72ff510957c0`: `src/App/Extensions/Customization/Extension.cpp` (`MergeCustomEntries`, `MergeCustomOptions`, `FixCustomizationAppearance`), `src/App/Extensions/Garment/Dynamic.cpp` (`hair_color`), `bundle/source/resources/PlayerCustomizationHair{Fix,Scope,Patch}.xl`, `PlayerCustomizationLashes*.xl`, `PlayerCustomizationBeardFix.xl`.
 - Modding Docs at `be2f44ee`: [CCXL: Hair Profiles (Colors)](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/core-mods-explained/archivexl/archivexl-character-creator-additions/ccxl-hair-profiles-colors.md) (nutboy; images `CCXL_hp_image12.png`, `CCXL_hp_image13.png`, `ccxl_hairprofiles_edit_mi.png` inspected: an editor walkthrough, not runtime proof); [Hair Profiles: .hp](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/files-and-what-they-do/file-formats/materials/hair-profiles-.hp.md) and [Custom Hair Colours](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/modding-guides/npcs/guides-all-about-hair/custom-hair-colours/README.md) (manavortex), which point to the Blender add-on's gradient editing as the community's current authoring route.
 - Offline statistics come from throwaway scripts over the private extractions: stop counts, spans, chroma, root/tip ratio, a Python port of the decoded bake with a uniform-sample mean albedo, cap texels against the baked root, name, tag and file consistency, and the float32 sample-position check. The numbers are recorded above; the scripts and extractions were not kept.
+- Multicolored Hair (§10): the installed Core and the redacted-c01 hair profiles compatibility patch, 1.1.0.0 (hashes in §10.1), and the Modder's Resources zip, unpacked into a private scratch folder. The creator resources, the template project, and the part `.app`s and meshes of the installed MELUMINARY Sophie Midlength MCH hairstyle were read with the Studio's native reader. The merged catalogue, the R5 state, the resolved V and the preview plan came from the Studio's own `loadMergedCco`, `descriptorsFromUiState`, `resolveCharacter` and `planCharacterDetails` on the diagnostic MO2 profile, in throwaway scripts under a 3 GB guard (peak 2.0 GB). ArchiveXL source as above (`MergeCustomOptions` for link overlays and switcher-choice identity). Nothing extracted is committed.
 - The 46 cached hair meshes are those the Studio's resolver had read on the reference installation by 27 September; they are a sample, not an inventory.
 
 Related: [hair shading](../../knowledge/hair-shading.md) · [hair reference](../materials/shader-hair.md) · [CC file chain](../../knowledge/cc-file-chain.md) · [eyebrows](../../knowledge/brows.md) · [mod loading](../../knowledge/mod-loading.md) · [saved hair resolution](../eye-artistry/saved-hair-profile-resolution.md) · [piercing feasibility](../jewellery/ccxl-piercing-feasibility.md)

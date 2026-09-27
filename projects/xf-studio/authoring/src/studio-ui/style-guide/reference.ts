@@ -11,7 +11,7 @@ export function reference(panels: readonly PanelInfo[]) {
     ["Shape", "point.select, point.remove, path.edit, layer.setSymmetry, layer.edit reset", "editor.selected(), contextCapability()"],
     ["Pigment & edge", "pigment.edit, softness.edit (control transactions)", "editor.layer()"],
     ["Warp", "field.add/select/remove/clear, field.setReach", "editor.selectedField()"],
-    ["Head / UV map", "viewport.attach/rehost/resize/uvCommand, camera.front, preview.setSurfaceControls/setWire, motion.*", "viewport.snapshot(), previewReadiness, contextAt()"],
+    ["Head / UV map", "viewport.attach/rehost/resize/uvCommand, views.tools/setTool (derived view tools), camera.*, motion.*", "viewport.snapshot(), previewReadiness, contextAt()"],
     ["Character", "character.setOption/setOptions/hideOwnMakeup/reset/resetAll/useDefault/loadSave/loadPreset/keepChanges/retry/undo/redo, preview.setEyeShape/setDetail/setHair/setPiercings/setBody/setUncensored, character.setClothing, files savedV.import/export, characterPreset.import/export", "previewState().character/savedV/preview/eyeShapeOptions, characterPanel(), characterView(), characterChoices(), characterSwatches(), characterSearch(), status.assets"],
     ["Camera & light", "camera.setFov/endFovGesture/front, preview.setExposure/setKeyAngle/setStudioLight/setStudioNeutral/applyStudioSetup/resetStudioLighting/setNormals/setEyeOptics", "previewState().preview, previewState().studioSetups, status.assets.eyeOptics"],
     ["Motion", "motion.setIdle/setPaused/setContributions/setBlink/playBlink", "previewState().motion"],

@@ -13,6 +13,7 @@ import type { MotionAction } from "../motion-actions";
 import type { PreviewAction } from "../preview-actions";
 import type { QualityAction } from "../preview-quality-actions";
 import type { SavedAppearanceAction } from "../saved-appearance-actions";
+import type { ViewAction } from "../view-actions";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../studio-action-descriptors";
 
@@ -24,6 +25,7 @@ const PREVIEW_ID = familyId("preview");
 const MOTION_ID = familyId("motion");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
+const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
 
@@ -47,7 +49,7 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
   owner: "system", id: PREVIEW_ID, label: "Preview", needsScene: true, thrown: "unavailable",
   actions: actionTable<PreviewAction, ActionScope>(ACTION_DESCRIPTORS, {
     "camera.front": true, "camera.body": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
-    "camera.navigate": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
+    "camera.navigate": true, "camera.back": true, "camera.forward": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
     "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
     "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
     "preview.setEyeShape": true, "preview.setPiercings": true, "preview.setBody": true, "preview.setUncensored": true,
@@ -55,6 +57,15 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
     "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true },
     { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" },
       "preview.setStudioLight": { "elevation.value": "degrees" } }),
+});
+
+/**
+ * The views family (view-actions.ts): view tools and the View and lighting history. It needs the scene like the preview family, so
+ * its controls say why they wait while the 3D head isn't ready.
+ */
+export const VIEWS_FAMILY: SystemFamily<ViewAction, ActionScope, typeof VIEWS_ID> = Object.freeze({
+  owner: "system", id: VIEWS_ID, label: "Views", needsScene: true, thrown: "unavailable",
+  actions: actionTable<ViewAction, ActionScope>(ACTION_DESCRIPTORS, { "view.setTool": true, "view.undo": true, "view.redo": true }),
 });
 
 export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTION_ID> = Object.freeze({

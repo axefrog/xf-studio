@@ -128,14 +128,25 @@ export const lightDocument = {
   createElement: (tag: string) => tag === "input" ? new LightInput(tag) : new LightElement(tag),
   createElementNS: (_ns: string, tag: string) => new LightElement(tag),
   createTextNode: (text: string) => new LightText(text),
+  // The document is an event target too (panels listen for scrolls there); its listeners are cleared on each install.
+  listeners: new Map<string, Set<Listener>>(),
+  addEventListener(type: string, listener: Listener) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type)!.add(listener); },
+  removeEventListener(type: string, listener: Listener) { this.listeners.get(type)?.delete(listener); },
+  dispatchEvent(event: LightEvent) { for (const listener of this.listeners.get(event.type) ?? []) listener(event); return !event.defaultPrevented; },
 };
+
+/** Animation frames run on a timer; every install provides them, so a test never depends on another file's globals (test order). */
+const requestFrame = (run: (time: number) => void) => setTimeout(() => run(performance.now()), 0) as unknown as number;
+const cancelFrame = (handle: number) => clearTimeout(handle as unknown as ReturnType<typeof setTimeout>);
 
 const saved: Record<string, unknown> = {};
 const GLOBALS = { document: lightDocument, HTMLElement: LightElement, HTMLInputElement: LightInput, HTMLButtonElement: LightElement, Node: LightNode,
-  Element: LightElement, HTMLSelectElement: LightElement, HTMLDialogElement: LightElement } as const;
+  Element: LightElement, HTMLSelectElement: LightElement, HTMLDialogElement: LightElement, requestAnimationFrame: requestFrame,
+  cancelAnimationFrame: cancelFrame } as const;
 export function installLightDom() {
   lightDocument.body = new LightElement("body");
   lightDocument.activeElement = null;
+  lightDocument.listeners.clear();
   for (const [key, value] of Object.entries(GLOBALS)) { saved[key] = (globalThis as Record<string, unknown>)[key]; (globalThis as Record<string, unknown>)[key] = value; }
 }
 export function uninstallLightDom() {
