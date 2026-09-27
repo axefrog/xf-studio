@@ -164,6 +164,14 @@ One session, current stable ArchiveXL/TweakXL/CET, the usual MO2 profile. Steps 
    The numbers cover the full strand. They replace earlier ones whose sampling this note did not record. Add one frame with the lashes on `05_brown_liquorice`. Alliekat's profile gives dark red-brown, (59, 28, 0), and the base profile gives golden tan, (172, 130, 15), which settles that winner visually.
 4. The session's `red4ext/logs/*.log` and `ArchiveXL-*.log`, and the game and framework versions from those logs.
 
+### Results (session 3, 28 September)
+
+Session 3 ran steps 1 and 3 in the mirror rather than in photo mode, which fixes the light. The option dump came through the runtime bridge instead of the CET console. The lash frame was not taken: the mirror's page had no eyelash row.
+
+- **Step 1** [runtime]. Under the Character Rendering Editor's Vanilla preset every hair option equals the executable's default. Under Arkhe Balanced, AlbedoMultiplier is 0.8091, RoughnessFactor 1.1968, Wrap 0.4364, EXP_BIAS 2.5795, AdditionalAreaRoughness 0.4 and ContactShadowClamp 0.4717, and several eye, skin and rim options change too ([hair shading §5](../../knowledge/hair-shading.md#5-deferred-hair-light)). Arkhe Balanced renders ash-brown hair at 0.72 of the Vanilla level.
+- **Step 3** [runtime, one session]. The ladder in scene-linear light, hair pixels only, reads 4.7, 7.2 and 9.8 against the decoded bake's 3.1, 4.2 and 6.6. The Studio renders 2.8, 4.0 and 6.6 at the same framing. The bake is reproduced; the game's spread is larger and cooler, which points to lighting, not to the bake. The full table, the method and the candidates are in [hair shading §8](../../knowledge/hair-shading.md#creator-ladder-session-3).
+- **Still to take:** the lash frame on `05_brown_liquorice` (the lashes page), and the same ladder with ray-traced lighting off.
+
 ## Reproduction
 
 In `projects/xf-studio/authoring`:

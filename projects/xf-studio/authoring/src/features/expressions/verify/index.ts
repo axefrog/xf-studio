@@ -56,6 +56,39 @@ function constantTracks(bytes: Uint8Array, buffer: Json): Map<number, number> {
   return out;
 }
 
+/** YAML's single-character escapes in a double-quoted scalar. */
+const YAML_ESCAPES: Readonly<Record<string, string>> = { "0": "\0", a: "\x07", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v", f: "\f", r: "\r",
+  e: "\x1b", " ": " ", "\"": "\"", "/": "/", "\\": "\\", N: "\u0085", _: " ", L: " ", P: " " };
+/**
+ * A YAML double-quoted scalar on one line, decoded escape by escape (PIPE-121): `\\x41` is a backslash then `x41`, never `A`. Throws on
+ * an unknown or cut-off escape, or an unescaped quote inside.
+ */
+export function yamlQuoted(text: string): string {
+  ensure(text.length >= 2 && text.startsWith("\"") && text.endsWith("\""), "a TweakXL name isn't quoted");
+  const end = text.length - 1;
+  let out = "";
+  for (let i = 1; i < end; i++) {
+    const char = text[i]!;
+    ensure(char !== "\"", "a TweakXL name has an unescaped quote");
+    if (char !== "\\") { out += char; continue; }
+    ensure(i + 1 < end, "a TweakXL name ends inside an escape");
+    const next = text[++i]!;
+    const width = next === "x" ? 2 : next === "u" ? 4 : next === "U" ? 8 : 0;
+    if (width) {
+      const hex = text.slice(i + 1, i + 1 + width);
+      ensure(i + width < end && /^[0-9a-fA-F]+$/.test(hex) && hex.length === width, "a TweakXL name has a damaged escape");
+      const code = parseInt(hex, 16);
+      ensure(code <= 0x10ffff, "a TweakXL name has a damaged escape");
+      out += String.fromCodePoint(code);
+      i += width;
+      continue;
+    }
+    ensure(Object.hasOwn(YAML_ESCAPES, next), "a TweakXL name has an unknown escape");
+    out += YAML_ESCAPES[next];
+  }
+  return out;
+}
+
 /** Parse the TweakXL file this exporter writes: the appended list and each record's base, name and face index. */
 function readTweaks(source: string) {
   const appended: string[] = [], records = new Map<string, { base?: string; label?: string; faceId?: number }>();
@@ -68,7 +101,7 @@ function readTweaks(source: string) {
       if (current) { ensure(current.startsWith("PhotoModeFaces.") && !records.has(current), `unexpected TweakXL record ${current}`); records.set(current, {}); }
     } else if (list && (match = /^ {2}- !append-once PhotoModeFaces\.([A-Za-z0-9_]+)$/.exec(line))) appended.push(match[1]!);
     else if (current && (match = /^ {2}\$base: (\S+)$/.exec(line))) records.get(current)!.base = match[1];
-    else if (current && (match = /^ {2}displayName: (".*")$/.exec(line))) records.get(current)!.label = JSON.parse(match[1]!.replace(/\\x([0-9a-f]{2})/g, "\\u00$1"));
+    else if (current && (match = /^ {2}displayName: (".*")$/.exec(line))) records.get(current)!.label = yamlQuoted(match[1]!);
     else if (current && (match = /^ {2}faceId: (\d+)$/.exec(line))) records.get(current)!.faceId = Number(match[1]);
     else ensure(false, `unexpected TweakXL line ${JSON.stringify(line)}`);
   }

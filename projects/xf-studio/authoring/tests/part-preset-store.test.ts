@@ -152,10 +152,10 @@ test("expression sets: created, renamed, filled, named for export and deleted, r
     // Deleting a saved expression takes it out of its sets in the same step; restoring puts both back, at its old place.
     const removed = presets.delete(smile.id, 1);
     expect(presets.listSets("expressions")[0]).toMatchObject({ members: [frown.id], revision: 5 });
-    expect(removed.restore.memberships).toEqual([{ set: set.id, index: 1 }]);
-    expect(presets.restore(removed.restore)).toMatchObject({ id: smile.id, name: "Smile", revision: 1 });
+    expect(removed.restore!.memberships).toEqual([{ set: set.id, index: 1 }]);
+    expect(presets.restore(removed.restore!)).toMatchObject({ id: smile.id, name: "Smile", revision: 1 });
     expect(presets.listSets("expressions")[0]).toMatchObject({ members: [frown.id, smile.id], revision: 6 });
-    expect(() => presets.restore(removed.restore)).toThrow("already back");
+    expect(() => presets.restore(removed.restore!)).toThrow("already back");
     // Renaming with a part replaces the part too (an expression's photo-mode name lives there).
     expect(presets.rename(smile.id, { name: "Smirk", revision: 1, part: expression({ lips_l_corner_up: 0.3 }) })).toMatchObject({ name: "Smirk", revision: 2 });
     // The request route: list and change through <prefix>/sets.
@@ -170,6 +170,28 @@ test("expression sets: created, renamed, filled, named for export and deleted, r
     expect(foreign.status).toBe(403);
     expect(presets.deleteSet(set.id, 7)).toEqual({ id: set.id });
     expect(presets.listSets("expressions")).toEqual([]);
+  } finally { presets.close(); temp.cleanup(); }
+});
+
+test("a damaged set row never stops a preset's delete or restore: it is skipped and kept as it is (CORE-116)", () => {
+  const temp = library();
+  let n = 0;
+  const presets = new PartPresetLibrary(temp.path, STUDIO_PARTS, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
+  try {
+    const smile = presets.save({ feature: "expressions", name: "Smile", part: expression({ lips_l_corner_up: 0.3 }) });
+    const good = presets.createSet({ feature: "expressions", name: "Good", members: [smile.id] });
+    const broken = presets.createSet({ feature: "expressions", name: "Broken", members: [smile.id] });
+    const db = new Database(temp.path);
+    db.query("UPDATE part_preset_sets SET body=? WHERE id=?").run("{damaged", broken.id);
+    db.close();
+    const removed = presets.delete(smile.id, 1);
+    expect(removed.restore!.memberships).toEqual([{ set: good.id, index: 0 }]);
+    const raw = new Database(temp.path);
+    expect((raw.query("SELECT body FROM part_preset_sets WHERE id=?").get(broken.id) as { body: string }).body).toBe("{damaged");
+    raw.close();
+    // Restore goes back into the good set; one naming the damaged set skips it too.
+    expect(presets.restore({ ...removed.restore!, memberships: [...removed.restore!.memberships, { set: broken.id, index: 0 }] })).toMatchObject({ id: smile.id });
+    expect(presets.listSets("expressions").find(set => set.id === good.id)).toMatchObject({ members: [smile.id] });
   } finally { presets.close(); temp.cleanup(); }
 });
 
@@ -227,7 +249,8 @@ test("a set's provisional Check runs again by itself, and Build says why while a
   const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [presetId], updatedAt: "now" }];
   let answers = 0, refuse = false;
   const service = new PartPresetService({
-    list: async () => [preset], save: async () => { throw Error("unused"); }, rename: async () => { throw Error("unused"); }, delete: async id => ({ id }),
+    list: async () => [preset], save: async () => { throw Error("unused"); }, delete: async id => ({ id }),
+    rename: async (id, input) => ({ id, name: input.name, revision: input.revision + 1, ...(input.part ? { part: input.part } : {}) }),
     listSets: async () => structuredClone(sets), createSet: async () => { throw Error("unused"); }, deleteSet: async id => ({ id }),
     updateSet: async () => { throw Error("unused"); },
   }, {
@@ -253,4 +276,8 @@ test("a set's provisional Check runs again by itself, and Build says why while a
   expect(service.capability({ kind: "partPresetSet.build", feature: "expressions", id: setId }))
     .toMatchObject({ available: false, code: "needs_input", reason: "Nothing in this set can become mod files yet. Fix what Check listed, then check again." });
   expect(service.capability({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toEqual({ available: true });
+  // Fixing the listed expression (a new revision of a member, the set itself unchanged) makes that result stale: Build may run (PIPE-120).
+  expect(await service.execute({ kind: "partPreset.rename", feature: "expressions", id: presetId, name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.3 }) }))
+    .toMatchObject({ ok: true });
+  expect(service.capability({ kind: "partPresetSet.build", feature: "expressions", id: setId })).toEqual({ available: true });
 });

@@ -120,22 +120,22 @@ export const CREATOR_EXPOSURE_RANGE = Object.freeze({ min: 0.01, max: 20 });
 
 /**
  * The creator preset's calibration: every factor that comes from matching a capture rather than from the game's data, in one place.
- * Grade [runtime, one matched pair]: fitted on 27 September 2026 to one matched Studio/game pair of the face page (same V, makeup,
- * hair and framing), region by region in scene-linear light after inverting the installed grade, with the shadow casters on
- * (knowledge/creator-lighting.md §12). One capture cannot separate a light's lumens conversion from its cone, colour or occlusion, so
- * these are provisional: refit them from the next matched captures and change nothing else.
+ * Grade [runtime, two matched pairs]: fitted on 28 September 2026 jointly to the 27 September face-page pair and session 3's hair-page
+ * frame (same V, hair and framing), region by region in scene-linear light after inverting the installed grade, from per-light solo
+ * renders with the shadow casters on and one exposure shared by both captures (knowledge/creator-lighting.md §12). Luminance only:
+ * the key lights' colour is still open, so hue took no part. Provisional: refit from the next matched captures and change nothing else.
  *
  * - `gains`: a multiplier per rig light on top of its data-derived intensity (a light not named keeps 1). A gain far from 1 says the
  *   data-to-intensity conversion for that light is unknown, not that the light is misplaced.
  * - `exposure`: the scalar k before the grade, fitted on the forehead.
  */
 export const CREATOR_CALIBRATION: Readonly<{ fitted: string; gains: Readonly<Record<string, number>>; exposure: number; yawOffset: number }> = Object.freeze({
-  fitted: "2026-09-27, one matched face-page pair",
-  // The pair's shading is carried mostly by Main_Face, the designers' key with character contact shadows (its nose shadow runs up
-  // toward V's right inner eye). A luminance-only fit also wants the cyan floor fills far weaker, but that turns the skin redder, away
-  // from the game, so the fills keep their data strength until the skin's scatter is ported (knowledge §12).
-  gains: Object.freeze({ Main_Face: 3 }),
-  exposure: 0.53,
+  fitted: "2026-09-28, two matched pairs (27 September face page, session 3 hair page)",
+  // Both captures want the four cyan floor fills at about a third of their data strength (the first pair's own fit said ×0.3) and
+  // Main_Face close to its data strength, with the whole rig brighter: rms of the log region ratios 0.22 → 0.14 on the face page and
+  // 0.17 → 0.08 on the hair page, against Main_Face ×3 at k 0.53 with one shared exposure (knowledge §12.6).
+  gains: Object.freeze({ Main_Face: 1.25, Fill_Upper: 0.35, Fill_Base: 0.35, Fill_Left: 0.35, Fill_Lower: 0.35 }),
+  exposure: 1,
   // V's world yaw: the table assumes the controller's yawDefault (−125°); the spawner nodes use −135°. Turning the rig by +10° (front
   // lights toward V's left) fits the matched pair better than 0° or −10° (rms of the ten region ratios 0.31 against 0.37 and 0.47).
   yawOffset: 10,

@@ -5,7 +5,7 @@
 // (XFS_RESOLVER_GAME_ROOT).
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { authenticodeSignature, authenticodeSignatureSync, GAME_OODLE_LIBRARY, holdFile, isPublisherSignature, KNOWN_OODLE_SHA256, loadGameOodle, openGameOodle, OodleUnavailableError, subjectField } from "../src/native/oodle";
@@ -95,7 +95,8 @@ onWindows("NATIVE-21: the library is hashed through the held handle and loaded b
   const first = junctionGame();
   const held = holdFile(import.meta.require("bun:ffi"), join(first.root, ...GAME_OODLE_LIBRARY));
   try {
-    expect(held.finalPath.toLowerCase()).toBe(first.real.toLowerCase());
+    // The final path is the long form; the temporary folder may be named by its 8.3 short form (runner~1 on CI).
+    expect(held.finalPath.toLowerCase()).toBe(realpathSync.native(first.real).toLowerCase());
     first.repoint();
     expect(readFileSync(join(first.root, ...GAME_OODLE_LIBRARY), "utf8")).toBe("MZ swapped");
     expect(new TextDecoder().decode(held.read(1024))).toBe("MZ checked");

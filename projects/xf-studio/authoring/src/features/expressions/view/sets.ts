@@ -22,7 +22,7 @@ import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
 import type { GenericFeatureFacade } from "../../../studio-presentation";
 import type { PartPreset, PartPresetSet, PartPresetSetTable, SetExportResult } from "../../../part-presets";
-import { defaultSetModName, setMembers, setModName } from "../../../part-preset-sets";
+import { defaultSetModName, setExportKey, setMembers, setModName } from "../../../part-preset-sets";
 import type { ExportOmission, PackageBuildResult, PackageCheckResult } from "../../../platform/api";
 import type { ExpressionAction } from "../core";
 import type { ExpressionPart } from "../part";
@@ -282,9 +282,10 @@ export function expressionSets(ctx: Ctx): PanelController {
     return group.element;
   }
   /** The latest Check or Build of the set shown, in the mod-package result pattern. */
-  function renderResult(set: PartPresetSet, last: SetExportResult | undefined): HTMLElement[] {
+  function renderResult(set: PartPresetSet, last: SetExportResult | undefined, presets: readonly PartPreset[]): HTMLElement[] {
     if (!last) return [];
-    const stale = last.revision !== set.revision;
+    // Stale when the set or any of its expressions changed since (PIPE-120).
+    const stale = last.key !== setExportKey(set, presets);
     // A Check made before the game files were read is provisional (Check runs again by itself once they are): no Current badge.
     const provisional = last.kind === "check" && !!last.result.products.some(product => product.features.some(feature =>
       (feature.details as { provisional?: unknown }).provisional === true));
@@ -371,7 +372,7 @@ export function expressionSets(ctx: Ctx): PanelController {
       progress.classList.toggle("idle", !running || running === "reveal");
       setText(progressText, running === "build" ? "Building…" : running === "check" ? "Checking…" : "");
       const next = JSON.stringify([set.id, set.revision, exports.results[set.id], presets.items.map(item => [item.id, item.name, item.revision])]);
-      if (next !== signature) { signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id])); }
+      if (next !== signature) { signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id], presets.items)); }
     },
   };
 }
