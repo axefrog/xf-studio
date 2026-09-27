@@ -12,6 +12,7 @@ import { loadWorkspace, type WorkspaceState } from "../../src/workspace-state";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { historyRecipes } from "./looks";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights } from "../../src/studio-lighting";
+import { storedCreatorLighting } from "../../src/creator-lighting";
 
 /** Canonical JSON (object keys sorted): key order is not observable, so it is not compared. */
 export const canonical = (value: unknown) => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" &&
@@ -28,7 +29,10 @@ export function observe(state: WorkspaceState) {
   // Undo histories are compared as the whole recipes each step restores (the look history keeps them as chunks).
   // The studio rig came after these goldens: at its default it is the only rig the earlier code had, so it is not a difference.
   const { studioLights, ...plainPreview } = state.preview;
-  const preview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? plainPreview : state.preview;
+  // The creator calibration and its shadow switch came after these goldens too: compared in their stored form, which at the defaults
+  // is the earlier code's default (creator-lighting.ts `storedCreatorLighting`).
+  const preview = { ...(sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? plainPreview : state.preview),
+    creatorLighting: storedCreatorLighting(state.preview.creatorLighting) };
   const top = { recipe: state.recipe, active: state.active, selected: state.selected, history: historyRecipes(state.history),
     historyTrimmed: state.historyTrimmed ?? false, fieldSelection: state.fieldSelection, glitterChoices: state.glitterChoices,
     uvView: state.uvView, preview, library: state.library, uiPreferences: state.uiPreferences,

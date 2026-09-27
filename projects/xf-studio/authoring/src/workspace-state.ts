@@ -16,7 +16,7 @@ import {parseGlitterChoices, type GlitterChoices} from "./engines/layered-makeup
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { isCreatorName } from "./creator-names";
 import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";
-import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, type CreatorLightingOptions,
+import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import type { ViewGraphData } from "./platform/api/view-graph";
@@ -321,8 +321,9 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
     parts: registry.minimalLook({ id: "", name: "", revision: 1, parts: loose.parts }, false).parts,
     memory: registry.writeMemory(loose.memory, options) };
   // The studio rig is stored only when adjusted: workspaces that never touch it keep their bytes (studio-lighting.ts).
-  const { studioLights, ...preview } = view.preview;
-  const storedPreview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? preview : view.preview;
+  // The creator calibration is stored as the untouched token at its defaults, and its shadow switch only when off (creator-lighting.ts).
+  const { studioLights, ...preview } = { ...view.preview, creatorLighting: storedCreatorLighting(view.preview.creatorLighting) as CreatorLightingOptions };
+  const storedPreview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? preview : { ...preview, studioLights };
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view, preview: storedPreview,
     ...(collections ? { collections: writeCollectionWorkspace(collections, model, options) } : {}) };
 }

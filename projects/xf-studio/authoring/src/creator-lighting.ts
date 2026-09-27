@@ -151,12 +151,30 @@ export function validCreatorLighting(value: unknown): value is CreatorLightingOp
     typeof v.exposure === "number" && Number.isFinite(v.exposure) &&
     v.exposure >= CREATOR_EXPOSURE_RANGE.min && v.exposure <= CREATOR_EXPOSURE_RANGE.max && typeof v.shadows === "boolean";
 }
-/** Stored options, or null: options saved before the shadow switch existed read with shadows on. */
+/**
+ * The stored token for "the calibration untouched": the defaults as builds before the calibration wrote them. A workspace that never
+ * touched the calibration keeps its bytes, and follows the calibration when it is refitted.
+ */
+const UNTOUCHED_CREATOR_LIGHTING = Object.freeze({ intensity: "isotropic", cone: "full", exposure: 0.46 });
+const untouched = (v: Partial<CreatorLightingOptions>) => v.intensity === UNTOUCHED_CREATOR_LIGHTING.intensity &&
+  v.cone === UNTOUCHED_CREATOR_LIGHTING.cone && v.exposure === UNTOUCHED_CREATOR_LIGHTING.exposure && v.shadows !== false;
+/**
+ * Stored options, or null. Options saved before the shadow switch existed read with shadows on, and the untouched defaults (as every
+ * build stores them) read as the current calibration's.
+ */
 export function readCreatorLighting(value: unknown): CreatorLightingOptions | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Partial<CreatorLightingOptions>;
+  if (untouched(v)) return { ...DEFAULT_CREATOR_LIGHTING };
   const options = { intensity: v.intensity, cone: v.cone, exposure: v.exposure, shadows: v.shadows === undefined ? true : v.shadows };
   return validCreatorLighting(options) ? options : null;
+}
+/** The stored form: the untouched token for the defaults; `shadows` only when off. `readCreatorLighting` reads it back exactly. */
+export function storedCreatorLighting(options: CreatorLightingOptions): Record<string, unknown> {
+  const d = DEFAULT_CREATOR_LIGHTING;
+  if (options.intensity === d.intensity && options.cone === d.cone && options.exposure === d.exposure && options.shadows) return { ...UNTOUCHED_CREATOR_LIGHTING };
+  const { shadows, ...rest } = options;
+  return shadows ? rest : options;
 }
 
 const RAD = Math.PI / 180;

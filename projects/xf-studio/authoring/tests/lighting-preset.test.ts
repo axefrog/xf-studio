@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { creatorShadowCasters, DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
+import { creatorShadowCasters, DEFAULT_CREATOR_LIGHTING, readCreatorLighting, storedCreatorLighting } from "../src/creator-lighting";
 import { createLightingPresetStage } from "../src/lighting-preset-stage";
 import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview-actions";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
@@ -327,4 +327,16 @@ test("a changed cube with the same source description still notifies, so the vie
   expect(applied).toHaveLength(2);
   expect(notices).toBe(0);
   stage.dispose();
+});
+
+test("the calibration is stored as the untouched token at its defaults, so an untouched workspace follows a refit", () => {
+  expect(storedCreatorLighting(DEFAULT_CREATOR_LIGHTING)).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46 });
+  expect(readCreatorLighting(storedCreatorLighting(DEFAULT_CREATOR_LIGHTING))).toEqual(DEFAULT_CREATOR_LIGHTING);
+  const off = { ...DEFAULT_CREATOR_LIGHTING, shadows: false };
+  expect(readCreatorLighting(storedCreatorLighting(off))).toEqual(off);
+  const tuned = { ...DEFAULT_CREATOR_LIGHTING, exposure: 1.5 };
+  expect(storedCreatorLighting(tuned)).toEqual({ intensity: "isotropic", cone: "full", exposure: 1.5 });
+  expect(readCreatorLighting(storedCreatorLighting(tuned))).toEqual(tuned);
+  const workspace = freshWorkspace();
+  expect(parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS).preview.creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);
 });
