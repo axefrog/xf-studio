@@ -298,6 +298,14 @@ span.category { border-color: transparent; background: transparent; padding-left
 .folder-using { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .folder-typed { display: flex; flex-direction: column; gap: var(--sp-3); }
 .folder-typed .field { flex: 1 1 auto; }
+.folder-choices { display: flex; flex-direction: column; gap: var(--sp-2); }
+.folder-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; padding: var(--sp-3) var(--sp-4); text-align: left;
+  border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-muted); font-size: var(--fs-sm); cursor: pointer; }
+.folder-choice:hover { background: var(--bg-hover); color: var(--text); }
+.folder-choice[aria-pressed="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
+.folder-choice[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.folder-choice-path { overflow-wrap: anywhere; }
+.folder-choice-source { font-size: var(--fs-xs); color: var(--text-muted); }
 /* Tree view (components/tree-view.ts): fixed-height items positioned in a spacer, so only the rows in view are in the page. */
 .tree-view { position: relative; overflow: auto; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); }
 .tree-spacer { position: relative; min-height: 100%; }

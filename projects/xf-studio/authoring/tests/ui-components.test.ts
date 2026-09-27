@@ -259,3 +259,31 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   // A cancelled picker says nothing.
   expect([picks, typed.hidden, note.textContent]).toEqual([1, true, ""]);
 });
+
+test("folder setting: several found folders are all shown as choices with where they were found; pressing one saves it; an optional folder can be cleared", async () => {
+  const { FolderSetting } = await lib();
+  const selected: string[] = []; let cleared = 0;
+  const folder = new FolderSetting({ label: "Cyberpunk 2077 folder", onChoose: async () => ({ ok: true as const }),
+    onSelect: async path => { selected.push(path); return { ok: true as const }; }, onClear: async () => { cleared++; return { ok: true as const }; } });
+  const found = [{ path: "D:\Steam\Cyberpunk 2077", source: "Steam" }, { path: "E:\GOG\Cyberpunk 2077", source: "GOG, Mod Organizer 2" }];
+  folder.update({ chosen: "E:\GOG\Cyberpunk 2077", found });
+  const el = folder.element as unknown as LightElement;
+  const choices = () => Array.from(el.querySelectorAll(".folder-choice"));
+  expect(choices().map(choice => [choice.querySelector(".folder-choice-path")!.textContent, choice.querySelector(".folder-choice-source")!.textContent,
+    choice.getAttribute("aria-pressed")])).toEqual([["D:\Steam\Cyberpunk 2077", "Steam", "false"], ["E:\GOG\Cyberpunk 2077", "GOG, Mod Organizer 2", "true"]]);
+  // The pressed choice says what is in use, so the "Using" line is quiet.
+  expect(el.querySelector(".folder-using")!.hidden).toBe(true);
+  choices()[1]!.click(); await Promise.resolve();
+  expect(selected).toEqual([]);
+  choices()[0]!.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(selected).toEqual(["D:\Steam\Cyberpunk 2077"]);
+  // A chosen folder that isn't among those found is listed first.
+  folder.update({ chosen: "F:\Elsewhere", found });
+  expect(choices().map(choice => choice.querySelector(".folder-choice-path")!.textContent)).toEqual(["F:\Elsewhere", "D:\Steam\Cyberpunk 2077", "E:\GOG\Cyberpunk 2077"]);
+  const clear = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Don't use a folder")!;
+  expect(clear.hidden).toBe(false);
+  clear.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(cleared).toBe(1);
+  folder.update({ chosen: null, found: [] });
+  expect([clear.hidden, el.querySelector(".folder-using")!.textContent]).toEqual([true, "Not chosen yet"]);
+});

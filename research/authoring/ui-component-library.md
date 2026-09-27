@@ -41,7 +41,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 Components added on request:
 - For the expressions panel (`claude/expressions-p1`): SliderWithValue, PairControl, GroupSection (the expander with a count and reset), SearchField and Combobox.
 - For the Poses panel (`claude/pose-panel`): TreeView, favouriteToggle, and SearchField's Down into the list.
-- For settings discoverability and Game & tools: FolderSetting.
+- For settings discoverability and Game & tools: FolderSetting. For the copy and layout review (`claude/ui-copy-polish`): FolderSetting's found folders shown as choices (`found`, `onSelect`) and an optional folder's **Don't use a folder** (`onClear`), used by Settings › Game.
 - For the Save Explorer: the layout primitives. It is now their reference composition.
 
 ## The ratchet

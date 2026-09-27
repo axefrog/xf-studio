@@ -244,41 +244,54 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
 });
 
 describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-03, UI-109)", () => {
-  test("detected folders and profiles are choices, and choosing one saves it", async () => {
+  test("detected folders are all shown as choices, the first one found is used without a click, and choosing one saves it", async () => {
     const h = await settingsHarness();
     const game = h.root.querySelector("[data-settings-section=game]")!;
     h.panel.spec.visibility?.(true);
     await settle(); h.paint();
-    const selects = game.querySelectorAll("select");
-    const folder = selects.find(select => select.options.some(option => option.getAttribute("value") === "D:\\Steam\\Cyberpunk 2077"))!;
-    expect(folder.options.map(option => text(option))).toEqual(["D:\\Steam\\Cyberpunk 2077 (Steam)", "Another folder…", "Not chosen yet"]);
-    folder.value = "D:\\Steam\\Cyberpunk 2077";
-    folder.dispatchEvent(lightEvent("change"));
+    // Show the options: each folder XF Studio found is a choice, with where it was found (the library's FolderSetting).
+    const folders = game.querySelectorAll(".folder-setting");
+    const choices = (index: number) => folders[index]!.querySelectorAll(".folder-choice");
+    expect(choices(0).map(choice => text(choice.querySelector(".folder-choice-path")!))).toEqual(["D:\\Steam\\Cyberpunk 2077"]);
+    expect(text(choices(0)[0]!.querySelector(".folder-choice-source")!)).toBe("Steam");
+    // Defaults first: nothing was chosen, so the folders found are saved without a click, and show as the ones in use.
     await settle(); h.paint();
-    expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Steam\\Cyberpunk 2077" });
-    const mo2 = selects.find(select => select.options.some(option => option.getAttribute("value") === "D:\\MO2"))!;
-    mo2.value = "D:\\MO2";
-    mo2.dispatchEvent(lightEvent("change"));
     await settle(); h.paint();
-    expect(h.saved.at(-1)).toMatchObject({ mo2Root: "D:\\MO2" });
+    const fields = h.saved as { gameRoot?: string; mo2Root?: string }[];
+    expect(fields.some(saved => saved.gameRoot === "D:\\Steam\\Cyberpunk 2077")).toBe(true);
+    expect(fields.some(saved => saved.mo2Root === "D:\\MO2")).toBe(true);
+    expect(choices(0)[0]!.getAttribute("aria-pressed")).toBe("true");
+    expect(text(choices(1)[0]!.querySelector(".folder-choice-source")!)).toBe("Cyberpunk MO2");
     const profile = game.querySelectorAll("select").find(select => select.options.some(option => text(option) === "Main (last used)"))!;
     expect(profile.options.map(option => text(option))).toEqual(["Choose a profile", "Main (last used)", "Testing"]);
-    // No native picker on this host: no Browse… to press.
-    expect(buttons(game).filter(button => text(button) === "Browse…").every(button => button.hidden)).toBe(true);
-    // One plain line says what is missing.
-    expect(text(game.querySelector(".setup-status")!)).toBe("To build your mod files: Choose your Cyberpunk 2077 folder.");
+    // No native picker on this host: Choose another folder… opens the text box, which saves what is typed.
+    buttonNamed(folders[0]!, "Choose another folder…")!.click();
+    await settle(); h.paint();
+    const typed = folders[0]!.querySelector(".folder-typed")!;
+    expect(typed.hidden).toBe(false);
+    const input = typed.querySelector("input")!;
+    input.value = "D:\\Games\\Cyberpunk 2077";
+    input.dispatchEvent(Object.assign(lightEvent("keydown"), { key: "Enter" }));
+    await settle(); h.paint();
+    expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Games\\Cyberpunk 2077" });
+    // The chosen folder is listed first, pressed; the one found can be chosen again with one press.
+    expect(choices(0).map(choice => [text(choice.querySelector(".folder-choice-path")!), choice.getAttribute("aria-pressed")]))
+      .toEqual([["D:\\Games\\Cyberpunk 2077", "true"], ["D:\\Steam\\Cyberpunk 2077", "false"]]);
+    (choices(0)[1] as unknown as HTMLElement).click();
+    await settle(); h.paint();
+    expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Steam\\Cyberpunk 2077" });
     // The groups are plain, in order.
     expect(h.root.querySelectorAll("[data-settings-section]").map(section => section.getAttribute("data-settings-section")))
       .toEqual(["game", "saves", "tools", "appearance", "privacy"]);
     h.panel.spec.element.remove();
   });
 
-  test("with the desktop's folder picker, Browse… chooses and saves a folder", async () => {
+  test("with the desktop's folder picker, Choose another folder… picks and saves a folder", async () => {
     const h = await settingsHarness({ picker: true });
     const game = h.root.querySelector("[data-settings-section=game]")!;
-    const browse = buttons(game).find(button => text(button) === "Browse…" && !button.hidden)!;
-    expect(browse).toBeTruthy();
-    browse.click();
+    const choose = buttonNamed(game.querySelector(".folder-setting")!, "Choose another folder…")!;
+    expect(choose).toBeTruthy();
+    choose.click();
     await settle();
     expect(h.saved.at(-1)).toMatchObject({ gameRoot: "E:\\Games\\Cyberpunk 2077" });
     h.panel.spec.element.remove();

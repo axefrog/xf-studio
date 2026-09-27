@@ -117,7 +117,14 @@ const MOUNTS: Record<string, Mount> = {
       onUseDetected: async () => { chosen = null; folder.update({ chosen, detected }); return { ok: true }; } });
     const detected = "%USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077";
     folder.update({ chosen, detected });
-    return h("div", { style: "max-width:520px" }, folder.element); },
+    // Several folders found (the game through Steam and GOG): all shown as choices, the one in use pressed.
+    const found = [{ path: "D:\Steam\steamapps\common\Cyberpunk 2077", source: "Steam" }, { path: "E:\GOG Games\Cyberpunk 2077", source: "GOG, Mod Organizer 2" }];
+    let game: string | null = found[0]!.path;
+    const games: FolderSetting = new FolderSetting({ label: "Cyberpunk 2077 folder", help: "The folder the game is installed in.",
+      onChoose: async path => { game = path; games.update({ chosen: game, found }); return { ok: true }; },
+      onSelect: async path => { game = path; games.update({ chosen: game, found }); return { ok: true }; } });
+    games.update({ chosen: game, found });
+    return h("div", { style: "max-width:520px" }, stack({ gap: "loose" }, folder.element, games.element)); },
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },

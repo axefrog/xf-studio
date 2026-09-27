@@ -26,4 +26,4 @@ export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, typ
 export { SplitView, type SplitViewOptions } from "./split-view";
 export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
-export { FolderSetting, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
