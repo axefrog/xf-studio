@@ -1,6 +1,7 @@
 import type * as THREE from "three";
 import { createSceneHost, type SceneHost } from "./platform/scene/scene-host";
 import type { FeatureRendererFactory } from "./platform/api/scene";
+import type { CoreBody } from "./render-detail";
 import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
@@ -87,9 +88,10 @@ export function createBrowserViewportDevice(options: {
       attachment.setReady("uv");
       return uvEditor;
     },
-    async loadHead() {
+    /** Load the head with a body's core (the feminine V's by default); the previous head is released first. */
+    async loadHead(body: CoreBody = "female") {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { renderers: options.renderers, onContext: options.onContext });
+      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { body, renderers: options.renderers, onContext: options.onContext });
       return viewer;
     },
     /**

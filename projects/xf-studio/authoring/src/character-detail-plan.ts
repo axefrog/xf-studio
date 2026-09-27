@@ -469,10 +469,10 @@ export function previewInput(input: CharacterInput, body: BodyState = DEFAULT_BO
   return appearances.length === input.appearances.length && morphs.length === input.morphs.length ? input : { ...input, appearances, morphs };
 }
 /**
- * Whether a request's body is drawn: `drawn`; `hidden` (the viewer turned the body off, so neither it nor its clothes are prepared); or
- * `male` (the preview has no male body yet: no male fixtures or evidence, so the host refuses it in plain words).
+ * Whether a request's body is drawn: `drawn` (either body gender: the masculine body plans through the same consumer groups and
+ * censorship rules), or `hidden` (the viewer turned the body off, so neither it nor its clothes are prepared).
  */
-export type BodyScope = "drawn" | "hidden" | "male";
+export type BodyScope = "drawn" | "hidden";
 
 type BodyEntry = ResolvedAppearance & { part: "body" | "arms" };
 const isBodyEntry = (entry: ResolvedAppearance): entry is BodyEntry => entry.part === "body" || entry.part === "arms";
@@ -488,9 +488,6 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   scope: BodyScope = "drawn", censorship: BodyCensorship = "censored"): { components: PlannedComponent[]; censored: PlannedComponent[]; state: DetailSlotState } {
   const { noun, not, pronoun } = SLOT_WORDS.body;
   if (scope === "hidden") return { components: [], censored: [], state: { slot: "body", state: "none", label: "Hidden" } };
-  // No male body is drawn until male fixtures and evidence exist (PIPE-98).
-  if (scope === "male" || resolved.bodyGender === "male") return { components: [], censored: [], state: { slot: "body", state: "unavailable", label: noun,
-    message: `XF Studio doesn't draw a male V's ${noun} yet, so ${pronoun} ${not} shown.` } };
   const index = new Map((["body", "arms"] as const).flatMap((part, p) =>
     cco.parts[part].options.map((option, i) => [`${part}|${option.name}`, p * 100_000 + i] as const)));
   const entries = resolved.appearances.filter(isBodyEntry).filter(entry => entry.groups.some(group => bodyGroups(entry.part, body).includes(group)));

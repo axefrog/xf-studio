@@ -12,12 +12,12 @@ export type SavedAppearanceResult = { applied: string[]; appearanceReferences: n
 export type SavedAppearanceState = { savedV?: SavedV; result?: SavedAppearanceResult; suggestedEyeShape?: number };
 export type SavedAppearancePort = {
   apply(savedV: SavedV): SavedAppearanceResult;
-  /** Put the head back to its base facial shape (no save shown). */
+  /** Put the head back to its base facial shape and the creator rig to that head's body (no save shown). */
   clear?(): void;
   /** The creator light rig follows V's body, as the game's preview controller does. Absent without the rig. */
   setBodySex?(sex: BodySex): void;
 };
-/** The body the shown V has: the save's, else the creator's default female V. */
+/** The body a save's V has (a default V's body is the character context's). */
 export const bodySexOf = (savedV: SavedV | undefined): BodySex => savedV?.isMale ? "male" : "female";
 export type SavedAppearanceAction = { kind: "savedV.load"; bytes: Uint8Array } |
   { kind: "savedV.restore"; value: SavedV } |
@@ -42,9 +42,9 @@ export class SavedAppearanceActions {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
     if (action.kind === "savedV.clear") {
-      // The head's facial shape follows the character context's view of the default V (character-context-actions.ts).
+      // The head's facial shape follows the character context's view of the default V (character-context-actions.ts), and the
+      // creator rig the body of the head shown (the port's `clear`).
       this.port.clear?.();
-      this.port.setBodySex?.("female");
       this.state = {};
       for (const listener of this.listeners) listener();
       return this.snapshot();

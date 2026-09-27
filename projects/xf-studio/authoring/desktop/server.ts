@@ -25,7 +25,7 @@ import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
-import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
+import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character-detail-host";
 import { installations } from "../src/installation-registry";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
@@ -206,7 +206,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     } }), installLog);
   const verificationModInstallRequest = createModInstallHandler(() => new ModInstallHost({ ...installPorts,
     receiptsRoot: verificationInstallReceipts(dataRoot), settings: () => verificationSettings.load().settings, readOnly: READ_ONLY_VERIFICATION }), installLog);
-  const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
+  const coreFiles = new Set<string>(PREVIEW_CORE_ASSET_NAMES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,

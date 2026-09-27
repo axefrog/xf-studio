@@ -111,9 +111,11 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const loadSave = button({ label: "Load a save…", icon: "import", small: true, onClick: () => void rt.file({ kind: "savedV.import" }) });
   const loadPreset = button({ label: "Load preset…", icon: "import", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "characterPreset.import" }) });
   const savePreset = button({ label: "Save preset…", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "characterPreset.export" }) });
-  const useDefault = button({ label: "Default V", icon: "character", small: true, variant: "quiet",
-    title: "Show the character creator's default V (Undo shows your V again)",
-    onClick: () => dispatch({ kind: "character.useDefault", bodyGender: "female" }) });
+  // The creator's two default Vs, one per body (the voice is not a body choice and changes nothing drawn).
+  const defaultButton = (bodyGender: "female" | "male", word: string) => button({ label: `Default V (${word})`, icon: "character", small: true,
+    variant: "quiet", title: `Show the character creator's default ${word} V (Undo shows your V again)`,
+    onClick: () => dispatch({ kind: "character.useDefault", bodyGender }) });
+  const useDefault = defaultButton("female", "feminine"), useDefaultMale = defaultButton("male", "masculine");
   // The panel's one Undo and Redo (UI-81): creator choices and Clothing, in the order they were made.
   const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
   const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
@@ -173,7 +175,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   };
   const groupsHost = h("div", { class: "cc-groups" });
   const element = h("div", { class: "panel-content cc-panel" },
-    section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
+    section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault, useDefaultMale,
       h("span", { class: "cc-history" }, undo, redo)), status, messages, detailNote),
     h("section", { class: "section cc-quick" }, ownMakeup.element, hideNote, h("div", { class: "row wrap gap-s" }, resetAll)),
     h("div", { class: "cc-find" }, search, legend, noMatch),
@@ -456,11 +458,13 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       // The V and its source.
       const origin = context?.origin;
       setText(source, !context ? "Your V appears once the 3D preview is ready." : origin?.kind === "save" ? "Your V from your save" + (saved.gameVersion ? ` (game ${(saved.gameVersion / 1000).toFixed(2)})` : "") + "."
-        : origin?.kind === "preset" ? `The V from the preset “${origin.name ?? "Untitled"}”.` : "The character creator's default V.");
+        : origin?.kind === "preset" ? `The V from the preset “${origin.name ?? "Untitled"}”.`
+        : `The character creator's default ${context.bodyGender === "male" ? "masculine" : "feminine"} V.`);
       applyCapability(loadSave, port.files.capability({ kind: "savedV.import" }));
       applyCapability(loadPreset, port.files.capability({ kind: "characterPreset.import" }));
       applyCapability(savePreset, port.files.capability({ kind: "characterPreset.export" }));
       applyCapability(useDefault, port.authoring.capability({ kind: "character.useDefault", bodyGender: "female" }));
+      applyCapability(useDefaultMale, port.authoring.capability({ kind: "character.useDefault", bodyGender: "male" }));
       const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo") };
       applyCapability(undo, port.authoring.capability({ kind: "character.undo" }));
       applyCapability(redo, port.authoring.capability({ kind: "character.redo" }));

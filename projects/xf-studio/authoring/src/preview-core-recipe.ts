@@ -1,5 +1,7 @@
-import { canonicalJson, EYE_PLATE_RECIPE, eyePlateRecipeSha256, sha256Hex, type EyePlateRecipe } from "./eye-plate-recipe";
-import type { CoreTextureSlot } from "./render-detail";
+import { canonicalJson, EYE_PLATE_RECIPE, eyePlateRecipeSha256, parseEyePlateRecipe, sha256Hex, type EyePlateRecipe } from "./eye-plate-recipe";
+import masculinePlateJson from "./eye-plate-recipe-pma.json" with { type: "json" };
+import { CORE_ASSET_PREFIX, CORE_BODIES, coreAssetName, type CoreBody, type CoreTextureSlot } from "./render-detail";
+export { CORE_ASSET_PREFIX, CORE_BODIES, coreAssetName, type CoreBody };
 
 /**
  * The 3D preview core (head, expanded eye plate, eyes and their maps) ships as an asset-free
@@ -29,6 +31,7 @@ export type PreviewCoreRecipe = {
   schema: typeof PREVIEW_CORE_RECIPE_SCHEMA;
   id: string;
   revision: number;
+  body: CoreBody;
   /**
    * The eye plate recipe whose depot paths name the head and plate the preview shows. The preview reads them
    * from the base game's content archives only; Build cuts the plate from the head the selected launch route
@@ -50,6 +53,7 @@ export const PREVIEW_CORE_RECIPE: PreviewCoreRecipe = Object.freeze({
   schema: PREVIEW_CORE_RECIPE_SCHEMA,
   id: "xfs-preview-core-female-average",
   revision: 2,
+  body: "female",
   plateRecipeId: EYE_PLATE_RECIPE.id,
   // The female eye mesh that sits beside the head mesh; its surface chunk is the eyeball. The eye
   // entity binds `he_000_pwa__morphs` (baseMesh = this mesh), separate from the head's morph resource.
@@ -66,12 +70,60 @@ export const PREVIEW_CORE_RECIPE: PreviewCoreRecipe = Object.freeze({
   ],
 }) as PreviewCoreRecipe;
 
+/**
+ * The masculine head's plate selection (male V plan §4.1: the male head's triangles over the feminine plate's UVs,
+ * `tools/derive-plate-selection.ts`). **Preview only**: it has not passed the eye plate's skin-byte, lift and clearance
+ * gates, so nothing in Build or the package verifier reads it (plan phase 5 audits it).
+ */
+export const PREVIEW_MASCULINE_PLATE_RECIPE: EyePlateRecipe = parseEyePlateRecipe(masculinePlateJson);
+
+/**
+ * The masculine V's core: his own head and plate, and his eye mesh, whose chunk roles are swapped against the feminine
+ * one (chunk 1 the wetness shell, chunk 2 the eyeball; eye-rendering knowledge page). His head mesh has no `default`
+ * appearance, so the core shows its first, the pale tone, until the V's resolved skin arrives.
+ */
+export const PREVIEW_CORE_MALE_RECIPE: PreviewCoreRecipe = Object.freeze({
+  ...PREVIEW_CORE_RECIPE,
+  id: "xfs-preview-core-male-average",
+  revision: 1,
+  body: "male",
+  plateRecipeId: PREVIEW_MASCULINE_PLATE_RECIPE.id,
+  eye: { meshDepotPath: "base\\characters\\head\\player_base_heads\\player_man_average\\h0_000_pma_c__basehead\\he_000_pma_c__basehead.mesh",
+    morphDepotPath: "base\\characters\\head\\player_base_heads\\player_man_average\\he_000_pma__morphs.morphtarget",
+    surfaceMesh: "submesh_02_LOD_1", appearance: "gradient_brown", chunk: 2 },
+  head: { appearance: "01_ca_pale", chunk: 0 },
+}) as PreviewCoreRecipe;
+
+/** Each body's core recipe and the plate recipe that names its head. */
+export const PREVIEW_CORE_RECIPES: Readonly<Record<CoreBody, { recipe: PreviewCoreRecipe; plate: EyePlateRecipe }>> = Object.freeze({
+  female: { recipe: PREVIEW_CORE_RECIPE, plate: EYE_PLATE_RECIPE },
+  male: { recipe: PREVIEW_CORE_MALE_RECIPE, plate: PREVIEW_MASCULINE_PLATE_RECIPE },
+});
+
 /** The render detail record the renderer loads first; it names and hashes the other files. */
 export const PREVIEW_CORE_RECORD_FILE = "preview-core.json";
 export const PREVIEW_CORE_FILES = ["head.glb", ...PREVIEW_CORE_RECIPE.maps.map(map => map.file), PREVIEW_CORE_RECORD_FILE] as const;
+/** Every served core asset name, both bodies (render-detail.ts `coreAssetName`). */
+export const PREVIEW_CORE_ASSET_NAMES: readonly string[] = CORE_BODIES.flatMap(body => PREVIEW_CORE_FILES.map(file => coreAssetName(body, file)));
+/** The body and file an served core asset name addresses, or null for any other name. */
+export function parseCoreAssetName(name: string): { body: CoreBody; file: string } | null {
+  for (const body of CORE_BODIES) {
+    const prefix = CORE_ASSET_PREFIX[body];
+    if (!name.startsWith(prefix)) continue;
+    const file = name.slice(prefix.length);
+    if ((PREVIEW_CORE_FILES as readonly string[]).includes(file) && coreAssetName(body, file) === name) return { body, file };
+  }
+  return null;
+}
 
-export const previewCoreRecipeSha256 = (recipe: PreviewCoreRecipe, plate: EyePlateRecipe) =>
-  sha256Hex(canonicalJson({ preview: recipe, plate: eyePlateRecipeSha256(plate) }));
+/**
+ * Recipe identity. `body` is left out: the depot paths already say whose head it is, and leaving it out keeps the feminine
+ * core's identity (and every cached feminine preview) unchanged from before the masculine core existed.
+ */
+export const previewCoreRecipeSha256 = (recipe: PreviewCoreRecipe, plate: EyePlateRecipe) => {
+  const { body: _body, ...identity } = recipe;
+  return sha256Hex(canonicalJson({ preview: identity, plate: eyePlateRecipeSha256(plate) }));
+};
 
 export type PreviewCoreSourceHashes = {
   headMeshSha256: string; headMorphSha256: string; eyeMeshSha256: string; eyeMorphSha256: string;

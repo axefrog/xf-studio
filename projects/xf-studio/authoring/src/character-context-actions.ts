@@ -49,7 +49,7 @@ import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, 
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
 import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
   type SavedDescriptors, savedDescriptorsOf, summariseMissing } from "./character-context";
-import { characterRequestOf, DEFAULT_CHARACTER, type CharacterRequest } from "./character-detail-request";
+import { characterRequestOf, type CharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
 import { refusal, type Capability } from "./platform/api";
 import type { SavedV } from "./save-reader";
@@ -110,6 +110,14 @@ type State = {
   /** A loaded preset's entries the page couldn't carry to the host (PIPE-79): reported, never sent. */
   readonly notCarried: readonly MissingChoice[];
 };
+/**
+ * The panel's Undo history, carried from one head to the next when the V changes body (each body has its own head, so the head
+ * attachment is made again; browser-head-attachment.ts). Opaque to everyone but this service.
+ */
+export type ContextHistory = { readonly kind: "xfs/character-history"; readonly history: unknown };
+type HistoryParts = { past: { label: string; state: State }[]; future: { label: string; state: State }[]; order: StepKind[];
+  undone: StepKind[]; clothingPast: { label: string; setting: ClothingSetting }[]; clothingFuture: { label: string; setting: ClothingSetting }[];
+  makeupPast: { label: string; shown: boolean }[]; makeupFuture: { label: string; shown: boolean }[] };
 /** The workspace's form (preview state `character`): what was set and where the V came from, and the Clothing setting when not the default. */
 export type StoredCharacter = { origin: "default" | "save" | "preset"; name?: string; bodyGender?: BodyGender; choices: CharacterChoice[];
   kept?: Record<string, unknown>; clothing?: ClothingSetting; ownMakeup?: "hidden" };
@@ -206,6 +214,20 @@ export function storedCharacterOf(value: unknown): StoredCharacter | null {
     ...(clothing && !sameClothing(clothing, DEFAULT_CLOTHING) ? { clothing } : {}), ...(v.ownMakeup === "hidden" ? { ownMakeup: "hidden" as const } : {}) };
 }
 
+/** Where a context starts: the stored origin, else the shown save, else the default V. */
+function originOf(stored: StoredCharacter | null, hasSave: boolean): ContextOrigin {
+  return stored?.origin === "preset" ? { kind: "preset", name: stored.name ?? null }
+    : stored?.origin === "default" || !hasSave ? { kind: "default" } : { kind: "save" };
+}
+/**
+ * The body a context starts with, from the stored context and the shown save (as the constructor decides it): the head
+ * attachment loads that body's core head before the context exists (browser-head-attachment.ts).
+ */
+export function initialBodyGender(stored: unknown, save: SavedV | undefined): BodyGender {
+  const context = storedCharacterOf(stored);
+  return originOf(context, !!save).kind === "save" ? save!.isMale ? "male" : "female" : context?.bodyGender ?? "female";
+}
+
 export class CharacterContextActions {
   private state: State;
   private past: { label: string; state: State }[] = [];
@@ -258,24 +280,37 @@ export class CharacterContextActions {
   private order: StepKind[] = [];
   private undone: StepKind[] = [];
 
-  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
+  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string };
+    history?: ContextHistory } = {}) {
     const stored = storedCharacterOf(initial.stored);
     const save = initial.save ? this.saveOf(initial.save) : null;
-    const origin: ContextOrigin = stored?.origin === "preset" ? { kind: "preset", name: stored.name ?? null }
-      : stored?.origin === "default" || !save ? { kind: "default" } : { kind: "save" };
+    const origin = originOf(stored, !!save);
     let kept: CcPreset | null = null;
     if (stored?.kept) { try { kept = parseCcPreset(stored.kept); } catch { kept = null; } }
-    this.state = { origin, bodyGender: origin.kind === "save" ? save!.value.isMale ? "male" : "female" : stored?.bodyGender ?? "female",
+    this.state = { origin, bodyGender: initialBodyGender(initial.stored, initial.save),
       save: origin.kind === "save" ? save : null, choices: stored?.choices ?? [], kept, notCarried: [] };
     this.knownSave = saveKey(initial.save);
     this.legacy = !stored && initial.legacy?.style && initial.legacy.definition ? { ...initial.legacy } : null;
     this.clothing = stored?.clothing ?? DEFAULT_CLOTHING;
     this.ownMakeup = stored?.ownMakeup !== "hidden";
+    if (initial.history?.kind === "xfs/character-history") {
+      const carried = structuredClone(initial.history.history) as HistoryParts;
+      ({ past: this.past, future: this.future, order: this.order, undone: this.undone, clothingPast: this.clothingPast,
+        clothingFuture: this.clothingFuture, makeupPast: this.makeupPast, makeupFuture: this.makeupFuture } = carried);
+    }
+  }
+  /** The panel's Undo history, for the head made next when the V changes body (`initial.history`). */
+  history(): ContextHistory {
+    const parts: HistoryParts = { past: this.past, future: this.future, order: this.order, undone: this.undone,
+      clothingPast: this.clothingPast, clothingFuture: this.clothingFuture, makeupPast: this.makeupPast, makeupFuture: this.makeupFuture };
+    return { kind: "xfs/character-history", history: structuredClone(parts) };
   }
   /** The save the saved-V service shows now (its content key), as this service last saw it: a change it didn't make is a new V. */
   private knownSave: string;
 
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /** The shown V's body (a cheap read of what `snapshot().bodyGender` says): the head shows that body's core. */
+  shownBody(): BodyGender { return this.state.bodyGender; }
   private publish() { this.revision++; for (const listener of this.listeners) listener(); }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -427,10 +462,10 @@ export class CharacterContextActions {
   /**
    * A row's choices prepared ahead: asks the host to prepare `positions` (visible ones first) in the background and returns their
    * states so far (frozen; a new object when they change). `focus` (a hovered or focused choice) goes to the front. Null when the host
-   * can't prepare ahead, the catalogue isn't ready, or the shown V is one the preview doesn't draw (a masculine V shows the default V).
+   * can't prepare ahead or the catalogue isn't ready.
    */
   prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null {
-    if (!this.ports.creator.prefetch || !this.ready() || this.state.bodyGender !== "female" || !positions.length) return null;
+    if (!this.ports.creator.prefetch || !this.ready() || !positions.length) return null;
     // Keyed by the V without the row's own choice, so choosing in the row keeps the states it has.
     const request = this.detailRequest();
     const key = JSON.stringify([{ ...request, choices: (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option) }, option]);
@@ -496,11 +531,10 @@ export class CharacterContextActions {
   }
 
   /**
-   * The request the preview prepares: the shown V (head, body and arms) with the choices set on it (a masculine V shows the default V).
-   * The host keeps the body parts its third-person consumers read (character-detail-plan.ts `previewInput`).
+   * The request the preview prepares: the shown V (head, body and arms, either body) with the choices set on it. The host keeps the
+   * body parts its third-person consumers read (character-detail-plan.ts `previewInput`).
    */
   detailRequest(): CharacterRequest {
-    if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing(),
       this.bodyShown, this.uncensored, this.creatorPuppet);
   }
@@ -542,11 +576,15 @@ export class CharacterContextActions {
   request(): CharacterRequest {
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices);
   }
-  /** The workspace's form; undefined when nothing needs storing (the V as loaded, nothing set). */
+  /**
+   * The workspace's form; undefined when nothing needs storing (the V as loaded, nothing set). The masculine default V is always
+   * stored: without it a reload would show the feminine one.
+   */
   stored(): StoredCharacter | undefined {
     const { origin, choices, kept } = this.state;
     const clothing = sameClothing(this.clothing, DEFAULT_CLOTHING) ? null : this.clothing;
-    if (!choices.length && !clothing && this.ownMakeup && origin.kind !== "preset" && !(origin.kind === "default" && this.knownSave)) return undefined;
+    if (!choices.length && !clothing && this.ownMakeup && origin.kind !== "preset" &&
+      !(origin.kind === "default" && (this.knownSave || this.state.bodyGender !== "female"))) return undefined;
     return { origin: origin.kind, ...(origin.kind === "preset" && origin.name ? { name: origin.name } : {}),
       ...(origin.kind !== "save" ? { bodyGender: this.state.bodyGender } : {}), choices: choices.map(choice => ({ ...choice })),
       ...(kept ? { kept: serializeCcPreset(kept) } : {}), ...(clothing ? { clothing: { state: clothing.state, custom: [...clothing.custom] } } : {}),

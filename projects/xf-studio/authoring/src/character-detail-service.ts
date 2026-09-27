@@ -918,8 +918,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   }
   time("creator resource");
   cancelled();
-  // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off (or a male one, which the
-  // preview doesn't draw yet) is neither dressed nor resolved (PREV-108, PIPE-98).
+  // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off is neither dressed nor
+  // resolved (PREV-108).
   const scope = bodyScopeOf(request);
   const dressed = scope === "drawn" ? await dress(graph, request, options, log) : null;
   const clothing = dressed && !("failed" in dressed) ? dressed : null;
@@ -1291,8 +1291,8 @@ async function dress(graph: ResourceGraph, request: CharacterRequest, options: {
   }
 }
 
-/** Whether a request's body is drawn: off by the viewer's Body switch, or a male V's (not drawn yet), else drawn. */
-export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : request.bodyGender === "male" ? "male" : "drawn";
+/** Whether a request's body is drawn: off by the viewer's Body switch, else drawn (either body gender). */
+export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : "drawn";
 /** How a request's body is drawn: as the game with nudity allowed only when the viewer chose it (request v7 `nudity`), else censored. */
 export const censorshipOf = (request: CharacterRequest): BodyCensorship => request.nudity === true ? "nudity" : "censored";
 /** A body whose covered skin was replaced by the game's censored skin because its underwear couldn't be served (PIPE-97). */

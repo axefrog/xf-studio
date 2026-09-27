@@ -3,7 +3,7 @@ import { descriptorsFromUiState } from "../src/cco-model";
 import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
 import { bodyOptionDraws, bodyRole, type BodyCensorship, censorRole, choiceLabel, planCharacterDetails, requiredCovers, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
-import { templateIdentity } from "../src/character-detail-service";
+import { bodyScopeOf, templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
 import { depotHash, refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
@@ -172,7 +172,7 @@ describe("character requests", () => {
     expect(() => parseCharacterRequest({ ...REQUEST_A, appearances: [{ group: "TPP", option: "a\\b", app: "12", definition: "y" }] })).toThrow();
   });
 
-  test("the shown V is the loaded save, else the default female V (a reload restores the last save)", () => {
+  test("the shown V is the loaded save, else the default female V; a masculine save is its own V (a reload restores the last save)", () => {
     const v = { schema: "eye-artistry/saved-v-1", saveVersion: 1, gameVersion: 2310, presetVersion: 12, isMale: false, brainIsMale: false,
       groups: { head: [{ name: "TPP", appearances: [{ resourceHash: "123", definition: "brown", name: "eyebrows_color1", censorFlag: 0, censorAction: 0 }],
         morphs: [{ region: "eyes", target: "h091", censorFlag: 0, censorAction: 0 }] }], arms: [], body: [] },
@@ -181,7 +181,7 @@ describe("character requests", () => {
     expect(characterRequestFor(v)).toEqual(characterRequestFromSave(v));
     expect(characterRequestFromSave(v)).toMatchObject({ source: "save", appearances: [{ group: "TPP", option: "eyebrows_color1", app: "123", definition: "brown" }],
       morphs: [{ group: "TPP", region: "eyes", target: "h091" }] });
-    expect(characterRequestFor({ ...v, isMale: true })).toEqual(DEFAULT_CHARACTER);
+    expect(characterRequestFor({ ...v, isMale: true })).toMatchObject({ source: "save", bodyGender: "male" });
   });
 });
 
@@ -474,14 +474,14 @@ describe("resolver selection for the body", () => {
     expect([...requiredCovers(cco, undefined, "nudity")]).toEqual([]);
   });
 
-  test("PIPE-98: a male V's body is refused in plain words; a body turned off is neither planned nor dressed", async () => {
+  test("a masculine V's body plans by the same rules as a feminine one (no gender gate); a body turned off is neither planned nor dressed", async () => {
     const { resolved, plan: female } = await plan(BODY_REQUEST);
     const { graph } = detailFixture().installation();
     const cco = (await loadMergedCco(graph, "female")).merged.cco;
     const male = planCharacterDetails({ ...resolved, bodyGender: "male" }, cco);
-    expect(male.components.some(c => c.slot === "body")).toBe(false);
-    expect(male.slots.find(slot => slot.slot === "body")).toEqual({ slot: "body", state: "unavailable", label: "body",
-      message: "XF Studio doesn't draw a male V's body yet, so it isn't shown." });
+    expect(bodyOf(male).map(c => c.component)).toEqual(bodyOf(female).map(c => c.component));
+    expect(male.slots.find(slot => slot.slot === "body")?.state).toBe("shown");
+    expect(bodyScopeOf({ ...BODY_REQUEST, bodyGender: "male" })).toBe("drawn");
     const hidden = planCharacterDetails(resolved, cco, new Map(), new Map(), undefined, null, "hidden");
     expect(hidden.components.some(c => c.slot === "body" || c.slot === "clothing")).toBe(false);
     expect(hidden.slots.filter(slot => slot.slot === "body" || slot.slot === "clothing").map(slot => slot.label)).toEqual(["Hidden", "Hidden"]);

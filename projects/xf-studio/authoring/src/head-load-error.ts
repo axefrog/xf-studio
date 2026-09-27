@@ -7,9 +7,11 @@
  * - `preview_damaged`: the prepared files are there but don't load (wrong hash, unreadable model,
  *   missing parts); preparing them again from the game files fixes it.
  * - `preview_unreachable`: the files couldn't be fetched (the host went away or is changing them).
+ * - `body_unavailable`: the shown V's body has no prepared core head (the masculine V's could not be prepared); the caller
+ *   shows the feminine head instead, so this code never reaches the setup service.
  * - `head_load_failed`: anything else.
  */
-export type HeadLoadFailureCode = "webgl_unavailable" | "preview_damaged" | "preview_unreachable" | "head_load_failed";
+export type HeadLoadFailureCode = "webgl_unavailable" | "preview_damaged" | "preview_unreachable" | "body_unavailable" | "head_load_failed";
 
 export class HeadLoadError extends Error {
   constructor(readonly code: HeadLoadFailureCode, message: string, options?: { cause?: unknown }) {
