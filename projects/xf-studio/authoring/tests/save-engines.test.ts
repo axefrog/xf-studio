@@ -147,7 +147,7 @@ describe("the one package reader", () => {
 
   test("decodes any class by its own field tables; the oracle settles enums and bitfields; unread values are skipped by offset", () => {
     const frame = readPackageFrame(modPackage(), "save");
-    expect(frame.chunks.map(chunk => chunk.type)).toEqual(["SomeMod.System", "SomeMod.State"]);
+    expect(Array.from({ length: frame.chunkCount }, (_, i) => frame.chunkType(i))).toEqual(["SomeMod.System", "SomeMod.State"]);
     expect(decodeChunk(frame, 0, types).object.fields.state).toEqual({ $handle: 1 });
     const { object, skipped } = decodeChunk(frame, 1, types, { opaque: true, fieldTypes: true });
     expect(object.fields).toMatchObject({ mode: "Wide", flags: ["A", "C"], name: "Outfit one", tag: "tag_a", count: 3,
@@ -169,7 +169,7 @@ describe("the one package reader", () => {
     expect(detectSavePackage(cat(u32(40), new Uint8Array(40)))).toBeNull();
     const resource = readPackageFrame(modPackage("resource"), "resource");
     expect(resource.rootIndex).toBe(0);
-    expect(resource.chunks).toHaveLength(2);
+    expect(resource.chunkCount).toBe(2);
     expect(() => readPackageFrame(cat(u8(3), new Uint8Array(40)), "save")).toThrow(/version 3/);
   });
 });
@@ -196,14 +196,14 @@ describe("persistency stream", () => {
   test("indexes every entry by ID, class and extent, empty slots included", () => {
     const index = readPersistencyIndex(body);
     expect(index.ids).toBe(2);
-    expect(index.entries.map(entry => [entry.id, entry.start >= 0])).toEqual([[11n, true], [0n, false], [12n, true], [13n, true], [14n, true]]);
+    expect(Array.from({ length: index.count }, (_, i) => index.entry(i)!).map(entry => [entry.id, entry.start >= 0])).toEqual([[11n, true], [0n, false], [12n, true], [13n, true], [14n, true]]);
     expect(index.filled).toBe(4);
     expect(() => readPersistencyIndex(cat(body, u8(0)))).toThrow(/after its last entry/);
   });
 
   test("walks an entry from the save's own types; names come from the oracle; an unwalkable entry stays raw with its reason", () => {
     const index = readPersistencyIndex(body);
-    const first = decodePersistencyEntry(body, index.entries[0]!, oracle);
+    const first = decodePersistencyEntry(body, index.entry(0)!, oracle);
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     const values = Object.fromEntries(first.object.props.map(item => [oracle.name(item.nameHash)?.name, item.value]));
@@ -212,11 +212,11 @@ describe("persistency stream", () => {
     expect(values.sub).toMatchObject({ $class: fnv1a64("SubPS"), props: [{ value: 1 }] });
     expect(values.extra).toEqual({ $hash: hashText(fnv1a64("tag_open")) });
     // An entry that ends with a zero name hash reads completely.
-    expect(decodePersistencyEntry(body, index.entries[2]!, oracle).ok).toBe(true);
-    const fixed = decodePersistencyEntry(body, index.entries[3]!, oracle);
+    expect(decodePersistencyEntry(body, index.entry(2)!, oracle).ok).toBe(true);
+    const fixed = decodePersistencyEntry(body, index.entry(3)!, oracle);
     expect(fixed).toMatchObject({ ok: false, reason: expect.stringMatching(/fixed arrays/) });
-    if (!fixed.ok) { expect(fixed.partial.props).toHaveLength(1); expect(fixed.raw.length).toBe(index.entries[3]!.size); }
-    expect(decodePersistencyEntry(body, index.entries[4]!, oracle)).toMatchObject({ ok: false, reason: expect.stringMatching(/type database/) });
+    if (!fixed.ok) { expect(fixed.partial.props).toHaveLength(1); expect(fixed.raw.length).toBe(index.entry(3)!.size); }
+    expect(decodePersistencyEntry(body, index.entry(4)!, oracle)).toMatchObject({ ok: false, reason: expect.stringMatching(/type database/) });
   });
 });
 

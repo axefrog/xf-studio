@@ -18,7 +18,7 @@
  *   area's visual item overrides its equipped item (`GetVisualItemInSlot`), except in the underwear areas.
  * Fields at their default are not written (an absent `isHidden` is false, an absent `activeIndex` 0).
  */
-import { field, type PackageTypes, type PackageValue } from "./engines/red-object/package";
+import { field, valueBudget, type PackageTypes, type PackageValue } from "./engines/red-object/package";
 import { readSavePackage } from "./save-package";
 import { isClothingArea, WARDROBE_SETS, type SavedItem, type SavedLoadout } from "./saved-v";
 
@@ -48,11 +48,24 @@ export function readSavedLoadout(systems: Uint8Array, wardrobeSets: Uint8Array |
   const size = view.getUint32(0, true);
   if (size > systems.length - 4) throw Error("The save's script data is truncated.");
   const pkg = readSavePackage(systems.subarray(4, 4 + size));
-  const owners = pkg.chunks.filter(chunk => chunk.type === "EquipmentSystemPlayerData").map(chunk => pkg.decode(chunk.index, types));
-  if (!owners.length) throw Error("The save has no equipment data.");
-  const ownerId = (entry: typeof owners[number]) => text(field(field(entry.object, "ownerID"), "hash"));
-  const hasLoadout = (entry: typeof owners[number]) => isList(field(field(entry.object, "equipment"), "equipAreas"));
-  const player = owners.find(entry => ownerId(entry) === PLAYER_ENTITY) ?? owners.find(hasLoadout) ?? owners[0]!;
+  // One owner's data at a time, within one budget of decoded values for the reading; only the candidates are kept (SAVE-11): the first
+  // owner that is the player ends the search, else the first with a loadout, else the first.
+  const values = valueBudget();
+  type Owner = ReturnType<typeof pkg.decode>;
+  const ownerId = (entry: Owner) => text(field(field(entry.object, "ownerID"), "hash"));
+  const hasLoadout = (entry: Owner) => isList(field(field(entry.object, "equipment"), "equipAreas"));
+  let owners = 0, first: Owner | undefined, withLoadout: Owner | undefined, found: Owner | undefined;
+  for (const chunk of pkg.chunks) {
+    if (chunk.type !== "EquipmentSystemPlayerData") continue;
+    owners++;
+    if (found) continue;
+    const entry = pkg.decode(chunk.index, types, values);
+    first ??= entry;
+    if (ownerId(entry) === PLAYER_ENTITY) found = entry;
+    else if (!withLoadout && hasLoadout(entry)) withLoadout = entry;
+  }
+  if (!owners) throw Error("The save has no equipment data.");
+  const player = found ?? withLoadout ?? first!;
   const equipped: SavedItem[] = [];
   const areas = field(field(player.object, "equipment"), "equipAreas");
   for (const area of isList(areas) ? areas : []) {
@@ -77,5 +90,5 @@ export function readSavedLoadout(systems: Uint8Array, wardrobeSets: Uint8Array |
     wardrobeSet = index < WARDROBE_SETS ? index : null;
   }
   return { schema: "xfs/saved-loadout-1", equipped, visuals, wardrobeSet,
-    evidence: { owner: ownerId(player), owners: owners.length, skipped: [...new Set(player.skipped.map(entry => entry.replace(/\[[0-9]+\]/g, "[]")))].slice(0, 32) } };
+    evidence: { owner: ownerId(player), owners, skipped: [...new Set(player.skipped.map(entry => entry.replace(/\[[0-9]+\]/g, "[]")))].slice(0, 32) } };
 }

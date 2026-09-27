@@ -63,6 +63,14 @@ export const MIN_MICROBLEND_CONTRAST = 1e-3;
  */
 export const microblendContrastFactor = (contrast: number) => 1 / Math.max(MIN_MICROBLEND_CONTRAST, finite(contrast, 1));
 /**
+ * What a layer with no readable microblend samples (PREV-138): the game's `base\surfaces\microblends\default.xbm`, a flat
+ * RGB (126, 127, 255) with alpha 104/255 [resource; multilayered-shader-evidence.md]. With alpha 1 (the old stand-in, `k = 0`) the
+ * reciprocal factor made a low-contrast layer cover every texel above its contrast, where over the default microblend it covers only
+ * mask values well above `k = 0.592`.
+ */
+export const DEFAULT_MICROBLEND: readonly [number, number, number, number] = Object.freeze([126 / 255, 127 / 255, 1, 104 / 255]) as
+  readonly [number, number, number, number];
+/**
  * The template's colour-mask levels as the program's scale/bias pairs. Most templates (every earring template) store `Out = (0, 0)`,
  * which as a straight copy would never tint; the game's gold and paint are tinted, so that pair reads as "tint everywhere"
  * [hypothesis: the CPU mapping is unread; knowledge/materials-and-shaders.md open question].
@@ -116,16 +124,20 @@ export function bakeOrder(layered: RenderLayered): LayerBakeParameters[] {
 /**
  * Why a stack draws less than it should, from what the host could read (PREV-67): `mask` when the `.mlmask` it names could not be read
  * (no mask layer at all, or a masked layer inside the mask's layer count without its image); `templates` counts drawn layers skipped
- * because their `.mltemplate` could not be read; `base` when that includes the bottom layer, which is then drawn neutral (PREV-76). A
- * mask with fewer layers than the setup is not a problem: the upper layers cover nothing, as in game.
+ * because their `.mltemplate` could not be read; `base` when that includes the bottom layer, which is then drawn neutral (PREV-76);
+ * `microblends` counts drawn masked layers whose coverage depends on a microblend (contrast not 1) that is absent or unread, drawn
+ * over `DEFAULT_MICROBLEND` instead (PREV-138). A mask with fewer layers than the setup is not a problem: the upper layers cover
+ * nothing, as in game.
  */
-export function stackProblems(layered: RenderLayered): { mask: boolean; templates: number; base: boolean } {
+export function stackProblems(layered: RenderLayered): { mask: boolean; templates: number; base: boolean; microblends: number } {
   const mask = layered.mask;
   const unreadMask = !!mask && (mask.layers === 0 ||
     layered.layers.some((layer, index) => index > 0 && index < mask.layers && layer.opacity > 0 && !layer.templateUnreadable && !layer.textures.mask));
   const bottom = layered.layers[0];
+  const microblends = layered.layers.filter((layer, index) => index > 0 && layer.opacity > 0 && !layer.templateUnreadable && layer.textures.mask
+    && !layer.textures.microblend && microblendContrastFactor(layer.microblendContrast) !== 1).length;
   return { mask: unreadMask, templates: layered.layers.filter(layer => layer.opacity > 0 && layer.templateUnreadable).length,
-    base: !!bottom && bottom.opacity > 0 && !!bottom.templateUnreadable };
+    base: !!bottom && bottom.opacity > 0 && !!bottom.templateUnreadable, microblends };
 }
 
 /** What the program accumulates over the layers at one texel. */
@@ -133,9 +145,12 @@ export type LayerAccumulator = { colour: Rgb; remaining: number; roughness: numb
   normal: [number, number]; microNormal: [number, number] };
 export const EMPTY_ACCUMULATOR: LayerAccumulator = { colour: [0, 0, 0], remaining: 1, roughness: 0, metalness: 0, sumA: 0, microMix: 0,
   normal: [0, 0], microNormal: [0, 0] };
-/** One layer's samples at a texel: colour linear, normals as their stored RG in −1…1, the rest 0…1; `mask` is ignored for the bottom layer. */
-export type LayerSamples = { colour: Rgb; normal: [number, number]; roughness: number; metalness: number; microblend: [number, number, number, number];
-  mask: number };
+/**
+ * One layer's samples at a texel: colour linear, normals as their stored RG in −1…1, the rest 0…1; `mask` is ignored for the bottom layer;
+ * `microblend` null when the layer has none (it then samples `DEFAULT_MICROBLEND`, as the program does).
+ */
+export type LayerSamples = { colour: Rgb; normal: [number, number]; roughness: number; metalness: number;
+  microblend: readonly [number, number, number, number] | null; mask: number };
 
 /** A levels pair chain as the program runs it. */
 export const levels = (value: number, input: readonly [number, number], output: readonly [number, number]) =>
@@ -145,11 +160,12 @@ export const levels = (value: number, input: readonly [number, number], output: 
 export function accumulateLayer(acc: LayerAccumulator, layer: LayerBakeParameters, samples: LayerSamples, bottom: boolean): LayerAccumulator {
   const m = bottom ? 1 : samples.mask;
   if (acc.remaining <= 0 || m <= 0) return acc;
-  const k = 1 - samples.microblend[3];
+  const mb = samples.microblend ?? DEFAULT_MICROBLEND;
+  const k = 1 - mb[3];
   const mp = saturate(k + (m - k) * layer.mbContrast);
   const a = mp * layer.opacity;
   const e = saturate(saturate(Math.sqrt(Math.max(0, 1 - 2 * Math.abs(mp - 0.5)))) * layer.opacity - acc.sumA);
-  const micro: [number, number] = [samples.microblend[0] * 2 - 1, samples.microblend[1] * 2 - 1];
+  const micro: [number, number] = [mb[0] * 2 - 1, mb[1] * 2 - 1];
   const microNormal: [number, number] = [acc.microNormal[0] + (micro[0] * layer.mbNormal - acc.microNormal[0]) * e,
     acc.microNormal[1] + (micro[1] * layer.mbNormal - acc.microNormal[1]) * e];
   const next: LayerAccumulator = { ...acc, microNormal, microMix: Math.max(acc.microMix, Math.abs(layer.mbNormal) * e), sumA: acc.sumA + a };
@@ -196,6 +212,8 @@ export function layerMapUv(uv: readonly [number, number], tile: number, offset: 
   return [offset[0] + tile * frac(uv[0]) * ratio, 1 - (offset[1] + tile * frac(1 - uv[1]))];
 }
 
+/** A number as a GLSL float literal (always with a decimal point). */
+const glslFloat = (value: number) => Number.isInteger(value) ? `${value}.0` : String(value);
 /** GLSL twin of `levels`, `accumulateLayer` and `resolveSurface`. */
 export const LAYER_ACCUMULATE_GLSL = /* glsl */`
 float xfsLevels( float value, vec2 inLevels, vec2 outLevels ) {
@@ -275,7 +293,7 @@ void main() {
 	float m = bottom > 0.5 ? 1.0 : ( uMaps1.y > 0.5 ? textureLod( uMask, fract( uv ), 0.0 ).r : 0.0 );
 	float remaining = acc0.w;
 	if ( remaining <= 0.0 || m <= 0.0 ) return;
-	vec4 mb = uMaps1.x > 0.5 ? xfsTiled( uMicroblend, uv, uMicro.x, uMicro.yz, uTile.w ) : vec4( 0.5, 0.5, 1.0, 1.0 );
+	vec4 mb = uMaps1.x > 0.5 ? xfsTiled( uMicroblend, uv, uMicro.x, uMicro.yz, uTile.w ) : vec4( ${DEFAULT_MICROBLEND.map(glslFloat).join(", ")} );
 	float k = 1.0 - mb.a;
 	float mp = clamp( k + ( m - k ) * uLayer.w, 0.0, 1.0 );
 	float a = mp * opacity;

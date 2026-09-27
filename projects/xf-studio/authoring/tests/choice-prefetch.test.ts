@@ -2,7 +2,7 @@
 // (choice-manifest.ts), batched exports (game-asset-export.ts `exportAll`), the prepared files' budget (prepared-files.ts), the fetcher's
 // foreground and background lanes and the graph's read recording. Fakes stand in for WolvenKit; no game file is read.
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/archive-precedence";
@@ -564,6 +564,33 @@ describe("the prepared game files", () => {
     // Under budget: counted, nothing removed (and no entry listed: these folders have no entry.json, which listing would need).
     expect(evicted).toEqual({ removed: 0, freed: 0, bytes: a.bytes });
     expect(preparedFsStats.peak).toBeGreaterThan(1);
+    expect(preparedFsStats.peak).toBeLessThanOrEqual(PREPARED_FS_CONCURRENCY);
+  });
+
+  test("Clear removes file by file within the bound, never one recursive call per folder, and never follows a link (PREV-140)", async () => {
+    const root = temporary();
+    const roots = { exports: join(root, "exports"), resolver: join(root, "resolver"), store: join(root, "store"), manifests: join(root, "manifests") };
+    const files = 40 * 6;
+    for (let i = 0; i < 40; i++) {
+      const folder = join(roots.exports, "resources", `r${i}`, "textures");
+      mkdirSync(folder, { recursive: true });
+      for (let j = 0; j < 5; j++) writeFileSync(join(folder, `f${j}.bin`), "x".repeat(10));
+      writeFileSync(join(roots.exports, "resources", `r${i}`, "entry.json"), "{}");
+    }
+    // A link in the store to a folder outside the prepared files: removed, its target kept.
+    const outside = join(root, "outside");
+    mkdirSync(outside); writeFileSync(join(outside, "keep.txt"), "mine");
+    mkdirSync(roots.store, { recursive: true });
+    symlinkSync(outside, join(roots.store, "link"), "junction");
+    preparedFsStats.peak = 0; preparedFsStats.calls = 0;
+    const cleared = await clearPrepared(roots);
+    expect(cleared.freed).toBe(40 * (5 * 10 + 2));
+    expect(readdirSync(roots.exports)).toEqual([]);
+    expect(readdirSync(roots.store)).toEqual([]);
+    expect(readFileSync(join(outside, "keep.txt"), "utf8")).toBe("mine");
+    // The size count before reads each file once and the removal removes each once: at least two bounded calls a file (a recursive
+    // rm per export folder made about one call a file in all).
+    expect(preparedFsStats.calls).toBeGreaterThanOrEqual(2 * files);
     expect(preparedFsStats.peak).toBeLessThanOrEqual(PREPARED_FS_CONCURRENCY);
   });
 });

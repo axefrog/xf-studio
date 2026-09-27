@@ -17,6 +17,7 @@ import { h, isTextInput, setAttr, setText } from "./dom";
 import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
+import { layoutController, type LayoutController } from "./layouts";
 import { closeMenus, openMenu, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
@@ -149,14 +150,16 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
    * tools and crumb follow at once because they are derived. An open gesture or form edit is finished first. Its data and exports
    * are untouched, and its actions stay dispatchable.
    */
+  /** Finish an open gesture or form edit before its panels may leave the dock. */
+  function finishInput() {
+    port.viewport.cancelInput();
+    const control = port.authoring.previewState().control;
+    if (control) port.authoring.controlCommit(control.id);
+  }
   function setModuleShown(id: string, shown: boolean) {
     const module = modules.find(item => item.id === id);
     if (!module || rt.shownModules().includes(id) === shown) return;
-    if (!shown) {
-      port.viewport.cancelInput();
-      const control = port.authoring.previewState().control;
-      if (control) port.authoring.controlCommit(control.id);
-    }
+    if (!shown) finishInput();
     if (!setPreference(port, feedback, { kind: "modules.set", module: id, shown }, `${module.label} ${shown ? "shown" : "hidden"}`)) return;
     withdrawUnoffered();
     const ids = panelsOf(module);
@@ -165,6 +168,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     schedule();
   }
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
+  // Saved layouts (view-graph-design.md §4.5): a layout loads its arrangement and modules, and the rest is derived as for a module toggle.
+  const layouts = layoutController({ port, feedback, dock, catalogue, modules, shownModules: () => rt.shownModules(), parkedPanels,
+    panelSpecs: () => panels.map(specOf), area: () => dock.area(), finishInput, changed: () => { withdrawUnoffered(); schedule(); } });
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   /**
    * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
@@ -177,7 +183,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     requestAnimationFrame(() => settingsPanel?.show?.(section));
   } };
   guidance = mountGuidance(rt, { openHelp });
-  const header = shellHeader(rt, theme, view, openHelp);
+  const header = shellHeader(rt, theme, view, openHelp, layouts);
   const status = statusBar(rt);
   const setupCard = previewSetupCard(rt);
   const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
@@ -187,6 +193,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   requestAnimationFrame(() => dock.recover());
   if (restored.recovered === false && port.preferences.snapshot().layout)
     feedback.toast("warning", "Layout", "The saved panel layout could not be restored safely, so the default layout is shown.");
+  // A window that opens in another size class than last time counts as crossing into it.
+  requestAnimationFrame(() => layouts.sizeClass(dock.sizeClass, false));
 
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
@@ -245,13 +253,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (dock.sizeClass !== lastClass) {
         lastClass = dock.sizeClass; dock.render();
         feedback.announce(`${lastClass === "wide" ? "Wide" : "Compact"} layout`);
+        layouts.sizeClass(lastClass, true);
       }
       dock.recover(); dock.condenseTabs(); port.viewport.resize(); schedule();
     }, 120);
   });
 
   const commands = () => [...buildCommands(rt, theme, view, byId,
-    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()];
+    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx)), layouts), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()];
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -274,7 +283,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     else view.openReference();
   });
   header.bindPalette(() => openPalette(commands));
-  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands,
+  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, layouts,
     guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
   return { dock, runtime: rt };
 }
@@ -343,7 +352,7 @@ function themeItems(theme: Theme): MenuItem[] {
     { kind: "action", label: "Dark", icon: "moon", checked: theme.preference === "dark", run: () => theme.set("dark") }];
 }
 
-function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void) {
+function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void, layouts: LayoutController) {
   const port = rt.port;
   // The Modules menu (view-graph-design.md §4.2): the shown modules' names, and a menu to show or hide each.
   const categoryText = h("span");
@@ -374,6 +383,12 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
+  // Saved layouts (view-graph-design.md §4.5): the current layout's name, collapsing to its icon in narrow windows.
+  const layoutsButton = button({ label: "Layouts", icon: "layouts", variant: "ghost", menu: true, className: "layouts-btn", onClick: event => {
+    const anchor = event.currentTarget as Element;
+    openMenu(layouts.menuItems(anchor), anchor, { label: "Layouts", invoker: anchor });
+  } });
+  rt.anchors.register("header.layouts", layoutsButton);
   const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", menu: true, onClick: event =>
     openMenu([...themeItems(theme), { kind: "separator" }, ...view.items(), { kind: "separator" },
       { kind: "action", label: "All settings…", icon: "settings", hint: "Game, saves folder, WolvenKit, appearance and diagnostics", run: () => rt.settings.open("appearance") }],
@@ -385,7 +400,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
-    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, themeButton));
+    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, layoutsButton, themeButton));
   return {
     element,
     bindPalette(open: () => void) { palette.onclick = open; },
@@ -407,6 +422,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const saveCap = port.authoring.requestCapability({ kind: "save" });
       applyCapability(save, saveCap); save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
+      const layout = layouts.label(), layoutText = layoutsButton.querySelector("span");
+      if (layoutText) setText(layoutText, layout.name);
+      layoutsButton.title = layout.title; layoutsButton.dataset.title = layout.title; setAttr(layoutsButton, "aria-label", layout.accessible);
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
     },
@@ -532,7 +550,7 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
 }
 
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
-function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[]): Command[] {
+function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
   const port = rt.port;
   const act = (id: string, title: string, group: string, action: StudioAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
@@ -660,7 +678,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       return { id: `panel.collapse.${panel.spec.id}`, title: `${collapsed ? "Expand" : "Collapse"} ${panel.spec.title}`, group: "Layout",
         icon: (collapsed ? "chevronRight" : "chevronDown") as "chevronRight", keywords: "collapse expand fold minimise header",
         capability: () => collapsed || !blocked ? { available: true } : { available: false, reason: blocked }, run: () => rt.dock.toggleCollapse(panel.spec.id) }; }),
-    { id: "layout.reset", title: "Reset layout", group: "Layout", icon: "reset", ...always, run: () => rt.dock.reset() },
+    { id: "layout.reset", title: "Reset to factory layout", group: "Layout", icon: "reset", keywords: "reset layout default factory", ...always, run: () => layouts.resetFactory() },
+    ...layouts.commands(),
     { id: "theme.system", title: `Theme: match system (${theme.system})`, group: "Appearance", icon: "monitor", ...always, run: () => theme.set("system") },
     { id: "theme.light", title: "Theme: light", group: "Appearance", icon: "sun", ...always, run: () => theme.set("light") },
     { id: "theme.dark", title: "Theme: dark", group: "Appearance", icon: "moon", ...always, run: () => theme.set("dark") },

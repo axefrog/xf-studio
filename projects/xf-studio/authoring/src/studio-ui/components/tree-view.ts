@@ -15,6 +15,9 @@ import { icon } from "../icons";
  *   favourite) and returns true when it handled it.
  * - **Scale:** only the items in view (plus a margin, plus the focused one) are in the page; items are reused by ID and updated in
  *   place, so focus and the scroll position survive updates. Every item is one row high (28 px).
+ * - **Height:** by default the owner sizes the frame. With `maxRows` the tree is as tall as its visible items, up to that many rows,
+ *   then scrolls; `minRows` (default 1) keeps a floor so a search that shrinks the list doesn't pull what follows up and down as the
+ *   person types. Opening or closing a group changes the height, which the person asked for.
  * - **States:** current, disabled, loading (an overlaid status that never moves the rows), search-match highlight ranges per label.
  * - **Access:** `role=tree` of `treeitem`s in a flat, virtualised structure: the hierarchy is conveyed by `aria-level`, `aria-setsize`
  *   and `aria-posinset` (the ARIA pattern for trees whose rows are not all in the page; nested `role=group` needs every row present).
@@ -42,6 +45,10 @@ export type TreeViewOptions = {
   trailing?(row: TreeRowData, group: TreeGroupData): HTMLElement | null | undefined;
   /** Shown when there are no groups. */
   emptyText?: string;
+  /** Fit the frame to the visible items, at most this many rows tall (then it scrolls). */
+  maxRows?: number;
+  /** With `maxRows`: never shorter than this many rows (default 1). */
+  minRows?: number;
 };
 export const TREE_ROW_HEIGHT = 28;
 const OVERSCAN = 8;
@@ -82,6 +89,11 @@ export class TreeView {
       item.row && item.row.id === state.current, item.setsize, item.posinset]);
     if (!this.flat.some(item => item.ref.id === this.focusId)) this.focusId = this.flat.find(item => item.row?.id === state.current)?.ref.id ?? this.flat[0]?.ref.id;
     this.spacer.style.height = `${this.flat.length * TREE_ROW_HEIGHT}px`;
+    if (this.options.maxRows) {
+      const rows = Math.max(this.options.minRows ?? 1, Math.min(this.options.maxRows, this.flat.length));
+      // The frame's 1 px border on each side is outside the rows.
+      this.element.style.height = `${rows * TREE_ROW_HEIGHT + 2}px`;
+    }
     this.empty.hidden = this.flat.length > 0;
     setText(this.status, typeof state.loading === "string" ? state.loading : state.loading ? "Loading…" : "");
     this.status.hidden = !state.loading;

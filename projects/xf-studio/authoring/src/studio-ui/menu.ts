@@ -1,3 +1,4 @@
+import { Toggle } from "./controls";
 import { clamp, h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 
@@ -184,8 +185,15 @@ export type ValueField =
   | { kind: "range"; label: string; value: number; min: number; max: number; step: number; format(value: number): string }
   | { kind: "text"; label: string; value: string; maxLength: number }
   | { kind: "integer"; label: string; value: number; min: number; max: number };
+/** An option under the value (a switch), set to its default: the value alone is enough, the option only overrides. */
+export type ValueOption = { label: string; checked: boolean; help?: string };
+/**
+ * `options`: switches under the field (e.g. Save layout's "Remember shown modules"), each with a sensible default; `commit` gets their
+ * states in order.
+ */
 export function openValuePopover(field: ValueField, anchor: MenuAnchor, options: {
-  title: string; apply: string; validate?(value: string | number): Capability; commit(value: string | number): void;
+  title: string; apply: string; validate?(value: string | number): Capability; commit(value: string | number, options: boolean[]): void;
+  options?: readonly ValueOption[];
 }) {
   closeMenus(false);
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -197,11 +205,13 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
       : h("input", { id: inputId, type: "range", value: String(field.value), min: String(field.min), max: String(field.max), step: String(field.step), class: "slider" });
   const readout = field.kind === "range" ? h("output", { for: inputId, class: "readout", text: field.format(field.value) }) : null;
   const note = h("p", { class: "popover-note", role: "status" });
+  const switches = (options.options ?? []).map(option => { const toggle = new Toggle({ label: option.label, help: option.help, onChange: () => {} });
+    toggle.update(option.checked); return toggle; });
   const applyButton = h("button", { class: "btn primary", type: "submit", text: options.apply });
   const form = h("form", { class: "popover", role: "dialog", "aria-label": options.title },
     h("div", { class: "popover-title", text: options.title }),
     h("label", { class: "popover-field", for: inputId }, h("span", { text: field.label }), readout),
-    input, note,
+    input, note, ...switches.map(toggle => toggle.element),
     h("div", { class: "popover-actions" }, h("button", { class: "btn", type: "button", text: "Cancel", onclick: () => close(true) }), applyButton));
   const read = () => field.kind === "text" ? input.value : Number(input.value);
   const check = () => {
@@ -212,7 +222,7 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
     return result.available;
   };
   input.addEventListener("input", check);
-  form.addEventListener("submit", event => { event.preventDefault(); if (!check()) return; close(false); options.commit(read()); });
+  form.addEventListener("submit", event => { event.preventDefault(); if (!check()) return; close(false); options.commit(read(), switches.map(toggle => toggle.input.checked)); });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
   function close(restore: boolean) {

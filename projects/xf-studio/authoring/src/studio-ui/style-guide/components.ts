@@ -158,7 +158,7 @@ export function components() {
       a11y: "role=menu with roving focus, type-ahead, submenus on →, Escape returns focus to the invoker." }),
     pattern({ id: "c-popover", title: "Value popover", status: "implemented",
       specimen: `<form class="popover static-popover"><div class="popover-title">Point 3 pigment</div><label class="popover-field"><span>Pigment strength</span><output class="readout">72%</output></label><input class="slider" type="range" value=".72" min="0" max="1" step=".01" style="--fill:72%" aria-label="Pigment strength"><p class="popover-note"></p><div class="popover-actions">${btn("Cancel")}${btn("Apply", { variant: "primary" })}</div></form>`,
-      what: "A small anchored form for a command that needs one value (rename, move to position, point pigment/softness, warp reach). Apply is disabled while the application refuses the value, with its reason beneath.",
+      what: "A small anchored form for a command that needs one value (rename, move to position, point pigment/softness, warp reach). Apply is disabled while the application refuses the value, with its reason beneath. It can carry options under the value as switches (Save layout's Remember shown modules), each with a default, so the value alone is enough.",
       when: "From context menus and palette entries marked with an ellipsis (…).",
       drives: `${code("boundActionCapability(context, action)")} while editing; ${code("dispatchContext")} on Apply.`,
       a11y: "Enter applies, Escape cancels and restores focus." }),

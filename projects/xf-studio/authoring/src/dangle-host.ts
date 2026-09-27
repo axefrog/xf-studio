@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compileDangleSpec, DangleSpecError } from "./dangle-spec";
+import { compileDangleSpec, DangleSpecError, parseDangleSpec } from "./dangle-spec";
 import { refLabel } from "./depot-path";
 import type { PlannedComponent } from "./character-detail-plan";
 import type { RenderDangle } from "./render-detail";
@@ -37,6 +37,8 @@ export async function serveDangle(graph: ResourceGraph, dangle: NonNullable<Plan
   if (!rig) return { entry: null, notes: [`Its ${dangle.component} rig couldn't be read, so its strands follow the head.`] };
   try {
     const spec = compileDangleSpec(rig.root, animGraph?.root ?? null, paths);
+    // Only what the browser reads back whole is stored (PREV-139): a refusal is logged here with its reason, not met later in the browser.
+    parseDangleSpec(spec);
     const stored = storeRecordJson(storeRoot, spec);
     return { entry: { component: dangle.component.slice(0, 255), rig: paths.rig, graph: paths.graph || paths.rig, ...stored }, notes: spec.notes };
   } catch (error) {

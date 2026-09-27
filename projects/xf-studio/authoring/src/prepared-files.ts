@@ -13,7 +13,7 @@
  * budget can be exceeded by what this session uses, and eviction then stops. The resolver's failure markers, archive indexes and
  * creator texts are small and kept. The store and manifests are removed only by Clear.
  */
-import { lstat, readdir, rm, stat } from "node:fs/promises";
+import { lstat, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { usedThisSession } from "./game-asset-export";
 
@@ -30,13 +30,14 @@ export type PreparedSize = { bytes: number; exports: number; resolver: number; s
 export const PREPARED_FS_CONCURRENCY = 16;
 let fsActive = 0;
 const fsWaiting: (() => void)[] = [];
-/** The most calls in flight at once so far (tests read it). */
-export const preparedFsStats = { peak: 0 };
+/** The most calls in flight at once so far, and every call made (tests read them). */
+export const preparedFsStats = { peak: 0, calls: 0 };
 /** Run one file-system call within the shared bound; a finished call hands its slot straight to the next waiting one. */
 async function limited<T>(call: () => Promise<T>): Promise<T> {
   if (fsActive >= PREPARED_FS_CONCURRENCY) await new Promise<void>(resolve => fsWaiting.push(resolve));
   else fsActive++;
   preparedFsStats.peak = Math.max(preparedFsStats.peak, fsActive);
+  preparedFsStats.calls++;
   try { return await call(); } finally {
     const next = fsWaiting.shift();
     if (next) next(); else fsActive--;
@@ -67,6 +68,33 @@ async function folderBytes(root: string, skip: (name: string) => boolean = () =>
   return total;
 }
 const exportsSkip = (name: string) => name.startsWith(".work-") || name.endsWith(".tmp");
+
+/**
+ * Remove a file or a folder and everything in it, one file-system call per file and folder, each within the shared bound (PREV-140). A
+ * recursive `rm` is one call to the bound but many inside the runtime, so Clear's `rm` of every export folder at once still filled its
+ * I/O threads. A link is removed, never followed. Whatever can't be removed (in use) is kept; answers whether it is all gone.
+ */
+async function removeTree(path: string): Promise<boolean> {
+  let entries: import("node:fs").Dirent[];
+  try {
+    // A link (a junction to a folder included) is removed itself: listing it would list, and then remove, what it points to.
+    if (!(await limited(() => lstat(path))).isDirectory()) throw Object.assign(Error("not a folder"), { code: "ENOTDIR" });
+    entries = await limited(() => readdir(path, { withFileTypes: true }));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    try { await limited(() => rm(path, { force: true })); return true; }
+    catch { try { await limited(() => rmdir(path)); return true; } catch { return false; } }
+  }
+  let all = true;
+  await eachBounded(entries, async entry => {
+    const child = join(path, entry.name);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) { if (!await removeTree(child)) all = false; return; }
+    try { await limited(() => rm(child, { force: true })); }
+    catch { try { await limited(() => rmdir(child)); } catch { all = false; } }
+  });
+  if (!all) return false;
+  try { await limited(() => rmdir(path)); return true; } catch { return false; }
+}
 
 /** The prepared files' size on disk, by kind. */
 export async function preparedSize(roots: PreparedRoots): Promise<PreparedSize> {
@@ -117,7 +145,8 @@ export async function evictPrepared(roots: PreparedRoots, budget = PREPARED_BUDG
   for (const entry of entries) {
     if (bytes <= budget) break;
     if (usedThisSession(entry.folder ? join(entry.path, "entry.json") : entry.path)) continue;
-    try { await limited(() => rm(entry.path, { recursive: entry.folder, force: true })); } catch { continue; }
+    if (entry.folder) { if (!await removeTree(entry.path)) continue; }
+    else try { await limited(() => rm(entry.path, { force: true })); } catch { continue; }
     bytes -= entry.bytes; freed += entry.bytes; removed++;
   }
   return { removed, freed, bytes };
@@ -130,7 +159,7 @@ export async function evictPrepared(roots: PreparedRoots, budget = PREPARED_BUDG
  */
 export async function clearPrepared(roots: PreparedRoots): Promise<{ freed: number }> {
   const before = await preparedSize(roots);
-  const remove = async (path: string) => { try { await limited(() => rm(path, { recursive: true, force: true })); } catch { /* In use: kept. */ } };
+  const remove = async (path: string) => { await removeTree(path); /* What is in use is kept. */ };
   const children = async (folder: string, keep: (name: string) => boolean = () => false) => {
     let names: string[];
     try { names = await limited(() => readdir(folder)); } catch { return; }
