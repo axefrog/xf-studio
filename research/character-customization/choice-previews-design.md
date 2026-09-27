@@ -303,6 +303,16 @@ Phases 1–6 come to about 17 agent-days; phases 3 and 4 can run in parallel wit
 
 ## 12. Open questions, with proposed defaults
 
+**Decided 27 September 2026:** all proposed defaults accepted, with two refinements:
+- **Spin (Q5):** besides the slow spin on hover, pressing and dragging on a preview grabs and turns it directly, so nobody waits for the automatic spin.
+- **Preparation (Q7): no manual "load previews" step.** Smart scheduling decides what to prepare, in this priority order:
+  1. the active selection;
+  2. the choice under the pointer;
+  3. the current row;
+  4. the current feature set.
+
+  A load already past a progress threshold is never cancelled when priorities change. It finishes at low priority and is cached, so the work already spent isn't wasted. This scheduling rule applies to the Studio's other background preparation too ([performance](../backlog/performance.md)).
+
 | # | Question | Proposed default |
 |---|---|---|
 | 1 | Hair (and brow, makeup) previews in the theme's ink, or in the V's current colour? | Ink by default, with an **In my V's colours** toggle per feature type (free with channel images) |

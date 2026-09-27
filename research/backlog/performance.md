@@ -18,6 +18,12 @@
   - progressive display: show what's ready, fill in the rest;
   - [Activity view](README.md) for what's still happening.
 
+## Scheduling rule for background work (27 September 2026)
+
+- Priorities: the active selection, then what's under the pointer, then the current row, then the current feature set, then everything else.
+- A job that has passed a progress threshold is not cancelled when priorities change. It finishes at low priority and its result is cached for next time.
+- The person's own actions always come first.
+
 ## Budgets (initial targets)
 
 | Moment | Target |
