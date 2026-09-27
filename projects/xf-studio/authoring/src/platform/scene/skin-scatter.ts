@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { passParticipation, SCATTER_INPUT_DEFINE, SCATTER_INPUT_OUTPUTS, type PassParticipation } from "../api/scene";
 import { createPassVariants, occluderCutoff, type PassSpec } from "./pass-variants";
-import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_ROW, SCATTER_SLOTS, scatterSlot, type ScatterProfile,
+import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_RED_GATE, SCATTER_ROW, SCATTER_SLOTS, scatterSlot, type ScatterProfile,
   type ScatterQuality } from "./skin-scatter-kernel";
 
 /**
@@ -12,9 +12,10 @@ import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_ROW,
  *    diffuse irradiance at albedo 1 (RGB, half float) and the Subsurface flag as the pixel's view depth (A); S1 = √albedo after decals and
  *    the plate (RGB, 8 bit, blended by decals in that space as the G-buffer is) and the profile slot (A); S2 = the blended metalness (R).
  * 2. **Horizontal blur** S0 → P0 and 3. **vertical blur and combine** P0 → P1 = Δ = P · (B − E) · albedo: the §6.3.1 loop with the game's
- *    kernel (skin-scatter-kernel.ts) as a uniform table, the game's rules and nothing stricter: a tap counts only on a Subsurface pixel
- *    with positive red irradiance (no depth or normal test), whole-pixel taps (truncated, unfiltered), per-channel renormalisation, and
- *    only the centre's metalness (> 0.1) gates.
+ *    kernel (skin-scatter-kernel.ts) as a uniform table and the game's rules: a tap counts only on a Subsurface pixel (no depth or normal
+ *    test), whole-pixel taps (truncated, unfiltered), per-channel renormalisation, and only the centre's metalness (> 0.1) gates. The
+ *    decoded program's second test, positive red irradiance, is left out (`SCATTER_RED_GATE`, skin-scatter-kernel.ts): at exactly zero
+ *    light it renormalises over lit taps alone and streaks; without it the blur is the energy-conserving limit of the same rule.
  * 4. The display adds Δ to the scene value before its exposure and grade (linear-display.ts). Specular and image-based light never enter
  *    E, so they stay sharp; the albedo multiplies after the blur, so makeup and freckle colour stay sharp.
  *
@@ -64,8 +65,9 @@ export const SCATTER_INPUT_PASS: PassSpec = {
 
 const QUAD_VERTEX = /* glsl */`void main() { gl_Position = vec4( position.xy, 0.0, 1.0 ); }`;
 /**
- * One separable pass (`uVertical` 0: S0 → P0; 1: P0 → Δ with the combine). P0 keeps the depth in A, so a pixel the first pass skipped
- * (outside class 1, or metallic) reads as zero red in the second and is excluded there, as in the game.
+ * One separable pass (`uVertical` 0: S0 → P0; 1: P0 → Δ with the combine). A tap counts where its source's A is positive: S0's depth (class
+ * 1) in the first pass, P0's copy of it in the second, so a pixel the first pass skipped (outside class 1, or metallic) is excluded there,
+ * as in the game. `XFS_RED_GATE` adds the decoded `red > 0` test (off in the preview, `SCATTER_RED_GATE`).
  */
 const BLUR_FRAGMENT = /* glsl */`
 precision highp float;
@@ -103,7 +105,11 @@ void main() {
 			ivec2 q = p + axis * ( side * d );
 			if ( any( lessThan( q, ivec2( 0 ) ) ) || any( greaterThanEqual( q, size ) ) ) continue;
 			vec4 t = texelFetch( tSource, q, 0 );
+#ifdef XFS_RED_GATE
 			if ( t.a > 0.0 && t.r > 0.0 ) { num += k.rgb * t.rgb; den += k.rgb; }
+#else
+			if ( t.a > 0.0 ) { num += k.rgb * t.rgb; den += k.rgb; }
+#endif
 		}
 	}
 	vec3 blurred = num / den;
@@ -139,6 +145,7 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     uniforms: { tSource: { value: null }, tS0: { value: null }, tS1: { value: null }, tS2: { value: null }, uTable: { value: table },
       uFocal: { value: new THREE.Vector2() }, uVertical: { value: 0 } },
     vertexShader: QUAD_VERTEX, fragmentShader: BLUR_FRAGMENT, depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false,
+    defines: SCATTER_RED_GATE ? { XFS_RED_GATE: "" } : {},
   });
   blur.name = "xfs-skin-scatter-blur";
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blur);

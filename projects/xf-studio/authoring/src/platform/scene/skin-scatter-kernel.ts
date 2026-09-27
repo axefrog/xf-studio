@@ -147,20 +147,31 @@ export const scatterTapPixels = (offset: number, depth: number, focalPixels: num
   Math.trunc(offset * 1e-3 * focalPixels / Math.max(depth, 1e-6));
 
 /**
- * Reference blur (for tests and evidence): the §6.3.1 separable pass pair and the §6.3.5 combine on small CPU images, with the game's
- * rules: a neighbour counts only if it is class 1 and its red irradiance is positive (no depth test), taps are whole pixels
- * (truncated), weights renormalise per channel, and only the centre's metalness (> 0.1) gates. Returns `Δ = P · (B − E) · albedo`,
- * zero outside class 1. Images are row-major RGB (`E`, `albedo`) or scalars (`classOne`, `depth`, `metalness`, `slot`).
+ * Reference blur (for tests and evidence): the §6.3.1 separable pass pair and the §6.3.5 combine on small CPU images: a neighbour counts
+ * only if it is class 1 (no depth test), taps are whole pixels (truncated), weights renormalise per channel, and only the centre's
+ * metalness (> 0.1) gates. Returns `Δ = P · (B − E) · albedo`, zero outside class 1. Images are row-major RGB (`E`, `albedo`) or scalars
+ * (`classOne`, `depth`, `metalness`, `slot`).
+ *
+ * `redGate` adds the decoded program's second test, that the neighbour's red irradiance be positive. The preview leaves it off
+ * (`SCATTER_RED_GATE`): it is discontinuous at exactly zero. Where a shadow gets no direct light at all, an unlit pixel renormalises over
+ * its lit taps alone and takes most of their light (about 94 % of the red at a hard edge, energy added), while the least light there
+ * gives an ordinary, energy-conserving blur; so the renormalisation flips between the two across a penumbra (research/materials/
+ * shader-skin.md §11.3). Without the test the blur is that conserving limit, which is what the game's rule gives wherever any light
+ * reaches the shadow.
  */
 export type ScatterReferenceInput = {
   width: number; height: number;
   irradiance: Float32Array; albedo: Float32Array;
   classOne: Uint8Array; depth: Float32Array; metalness: Float32Array; slot: Uint8Array;
-  slots: readonly (ScatterSlot | null)[]; focalPixels: number;
+  slots: readonly (ScatterSlot | null)[]; focalPixels: number; redGate?: boolean;
 };
+/** Whether the preview applies the decoded program's `red > 0` neighbour test (off: see `referenceScatter`). */
+export const SCATTER_RED_GATE = false;
 export function referenceScatter(input: ScatterReferenceInput): Float32Array {
-  const { width, height, irradiance, albedo, classOne, depth, metalness, slot, slots, focalPixels } = input;
-  const pass = (source: Float32Array, horizontal: boolean) => {
+  const { width, height, irradiance, albedo, classOne, depth, metalness, slot, slots, focalPixels } = input, redGate = input.redGate ?? SCATTER_RED_GATE;
+  // Pixels the first pass processed (class 1, not metallic): the second pass's neighbours, as P0's depth marks them on the GPU.
+  const processed = (p: number) => !!classOne[p] && !(metalness[p]! > 0.1) && !!slots[slot[p]!];
+  const pass = (source: Float32Array, horizontal: boolean, second: boolean) => {
     const out = new Float32Array(width * height * 3);
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const p = y * width + x;
@@ -174,7 +185,8 @@ export function referenceScatter(input: ScatterReferenceInput): Float32Array {
           const qx = horizontal ? x + sign * d : x, qy = horizontal ? y : y + sign * d;
           if (qx < 0 || qy < 0 || qx >= width || qy >= height) continue;
           const q = qy * width + qx;
-          if (!classOne[q] || !(source[q * 3]! > 0)) continue;
+          if (second ? !processed(q) : !classOne[q]) continue;
+          if (redGate && !(source[q * 3]! > 0)) continue;
           for (let k = 0; k < 3; k++) { num[k] += entry.weight[k]! * source[q * 3 + k]!; den[k] += entry.weight[k]!; }
         }
       }
@@ -182,7 +194,7 @@ export function referenceScatter(input: ScatterReferenceInput): Float32Array {
     }
     return out;
   };
-  const blurred = pass(pass(irradiance, true), false);
+  const blurred = pass(pass(irradiance, true, false), false, true);
   const delta = new Float32Array(width * height * 3);
   for (let p = 0; p < width * height; p++) {
     if (!classOne[p] || metalness[p]! > 0.1) continue;

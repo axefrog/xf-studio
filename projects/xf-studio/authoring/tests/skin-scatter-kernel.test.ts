@@ -120,9 +120,27 @@ describe("reference blur (the GPU passes' oracle)", () => {
     for (let x = 0; x < W; x++) if (x < 2 || x > 21) for (let k = 0; k < 3; k++) expect(at(x, k)).toBe(0);
   });
 
-  test("a lit pixel is not darkened by unlit neighbours (the red > 0 rule)", () => {
-    const delta = referenceScatter(base());
-    for (let x = 2; x < 12; x++) for (let k = 0; k < 3; k++) expect(Math.abs(delta[(4 * W + x) * 3 + k]!)).toBeLessThan(1e-4);
+  test("energy is conserved across a hard edge, and the result is continuous as the shadow's light goes to zero", () => {
+    // A wide class-1 strip: what the unlit side gains the lit side loses (per channel), with E = 0 and E = 1e-4 in the shadow alike.
+    const wide = (dark: number, redGate = false) => {
+      const w = 120, h = 3, n = w * h;
+      const irradiance = new Float32Array(n * 3);
+      for (let p = 0; p < n; p++) for (let k = 0; k < 3; k++) irradiance[p * 3 + k] = p % w < 60 ? 1 : dark;
+      const delta = referenceScatter({ width: w, height: h, irradiance, albedo: new Float32Array(n * 3).fill(1), classOne: new Uint8Array(n).fill(1),
+        depth: new Float32Array(n).fill(1), metalness: new Float32Array(n), slot: new Uint8Array(n),
+        slots: [scatterSlot({ blurSize: 2.5, diffuse: [255, 255, 255], falloff: [255, 155, 119] }, "high")], focalPixels: 4000, redGate });
+      return (k: number) => Array.from({ length: w }, (_, x) => delta[(w + x) * 3 + k]!);
+    };
+    for (let k = 0; k < 3; k++) {
+      const zero = wide(0)(k), tiny = wide(1e-4)(k);
+      expect(Math.abs(zero.slice(20, 100).reduce((s, v) => s + v, 0))).toBeLessThan(5e-3); // against +16 with the red test
+      expect(Math.max(...zero.map((v, x) => Math.abs(v - tiny[x]!)))).toBeLessThan(1e-3);
+      expect(zero[59]!).toBeLessThan(0);
+      expect(zero[60]!).toBeGreaterThan(0);
+    }
+    // The decoded red > 0 test, which the preview leaves out, is discontinuous there: at exactly zero it adds most of the lit red.
+    expect(wide(0, true)(0)[60]!).toBeGreaterThan(0.8);
+    expect(wide(1e-4, true)(0)[60]!).toBeLessThan(0.5);
   });
 
   test("the centre's metalness above 0.1 gates the pixel off", () => {
