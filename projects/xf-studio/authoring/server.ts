@@ -6,7 +6,7 @@ import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
-import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
+import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
 import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/mod-install-host";
 import { localHostState, verificationInstallReceipts, verificationSettingsDirectory } from "./src/host-state";
 import { STUDIO_EXPORTERS } from "./src/compose/exporters";
@@ -93,7 +93,8 @@ const verificationDesktopAppRequest = createDesktopAppHandler({ detect: detectDe
 // Unreadable settings: Check plans with the defaults and Build answers a plain JSON refusal, as on desktop (PIPE-94).
 const packageRequest = createPackageHandler(action => localPackageAdapter({ exporters: STUDIO_EXPORTERS,
   tools: localPackageTools(packageRequestSettings(() => localSettings.load().settings, action), process.env, wolvenKit.managedExecutable()),
-  prerequisites: tools => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(tools), [EYE_PLATE_MASCULINE_PREREQUISITE]: localMasculineEyePlate(tools),
+  prerequisites: tools => ({ [EYE_PLATE_PREREQUISITE]: localEyePlate(tools),
+    [EYE_PLATE_MASCULINE_PREREQUISITE]: (state.isolated ? testMasculineEyePlate(process.env.XFS_TEST_MASCULINE_PLATE) : null) ?? localMasculineEyePlate(tools),
     [EXPRESSIONS_GAME_PREREQUISITE]: localExpressionsGame(tools) }) }));
 // "Add to my mod manager" (UI-82): a verified build from dist/ into the MO2 profile or game folder Local setup names, only after
 // the person accepted its plan. Receipts and the previous mod list stay in the private data folder.

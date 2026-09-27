@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { cachedPlateReach, cachedPlateStatus, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, FEMININE_ONLY,
+import { cachedPlateReach, cachedPlateStatus, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey,
   packagePlateRecord, unavailablePlate, type EyePlateRoute, type EyePlateTools, type UnavailablePlate } from "./eye-plate-service";
 import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, type EyePlateRecipe } from "./eye-plate-recipe";
 import { EYE_PLATE_HEAD_SETTING } from "./eye-plate-head-choice";
@@ -35,18 +35,29 @@ export type EyePlatePrerequisiteOptions = {
   readonly recipe?: EyePlateRecipe;
 };
 
-/** Why the masculine plate can't be used, in plain words with the one next step, by the plate service's code. */
-export function masculineUnavailable(code: string): UnavailablePlate {
-  const labels = EYE_PLATE_MASCULINE_RECIPE.source.supported.map(item => item.label).join(", ");
-  const why: Record<string, string> = {
-    plate_source_missing: "XF Studio couldn't find the male player head in your game files. Verify the game files in your launcher, then build again to include a masculine V.",
-    plate_source_unsupported: `your game's male player head isn't one XF Studio has checked (it supports ${labels}). Update XF Studio to include a masculine V.`,
-    plate_source_modded: `an installed head mod changes the male head in a way ${EYE_MAKEUP_MOD.modName} doesn't support yet. To include a masculine V, set “${EYE_PLATE_HEAD_SETTING.label}” to “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” in Settings › Game, then build again.`,
-    plate_source_incomplete: "XF Studio couldn't read every mod that might change the male head. Build again once your mods can be read to include a masculine V.",
-    plate_override: "the developer plate override has no masculine plate.",
+/**
+ * Why the masculine V isn't included, by the plate service's code: one sentence, the reason and then the step, and the
+ * control for the step. `unread` names the mod archives that couldn't be read, for `plate_source_incomplete`.
+ */
+export function masculineUnavailable(code: string, unread: readonly string[] = []): UnavailablePlate {
+  const named = unread.slice(0, 2).map(name => `“${name}”`).join(" and ") + (unread.length > 2 ? ` and ${unread.length - 2} more` : "");
+  const reasons: Record<string, UnavailablePlate["unavailable"]> = {
+    plate_source_missing: { code, message: "Your game files are missing the masculine V's head; verify them in your launcher, then build again." },
+    plate_source_unsupported: { code, message: "This game version's masculine V head is new to XF Studio; update XF Studio to include him." },
+    // The head choice is one setting for both heads, so the step says what it costs the feminine V too.
+    plate_source_modded: { code, next: "settings.game",
+      message: `A head mod changes the masculine V's head in a way ${EYE_MAKEUP_MOD.modName} can't follow yet; choose “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both V's to include him.` },
+    plate_source_incomplete: unread.length
+      ? { code, message: `XF Studio couldn't read the mod ${named}, which may change the masculine V's head; reinstall or remove it to include him.` }
+      : { code, message: "XF Studio couldn't read all your mods; close any tool changing mod files, then build again to include the masculine V." },
+    // Developer routes only: the localhost plate override, or a CLI build given no masculine plate.
+    plate_override: { code, message: "The developer plate override has no masculine V plate; unset XFS_PACKAGE_PLATE to include him." },
   };
-  return { unavailable: { code, message: `${FEMININE_ONLY}: ${why[code] ?? "XF Studio couldn't prepare the masculine eye plate this time. Build again to include a masculine V."}` } };
+  return { unavailable: reasons[code] ?? { code, message: "XF Studio couldn't prepare the masculine V's eye area this time; build again to include him." } };
 }
+/** The mod archives an incomplete-route failure names (its detail lists `name: error` per archive). */
+export const unreadArchives = (error: EyePlateError) => error.code !== "plate_source_incomplete" ? []
+  : error.detail.split("\n").map(line => line.slice(0, Math.max(0, line.indexOf(": ")))).filter(name => name.length > 0);
 
 /** A failure the person sees as it is, with its code. */
 const coded = (code: string, message: string) => Object.assign(Error(message), { code });
@@ -119,7 +130,8 @@ export function eyePlatePrerequisite(options: EyePlatePrerequisiteOptions): Host
 export function masculineEyePlatePrerequisite(options: Omit<EyePlatePrerequisiteOptions, "recipe">): HostPrerequisite {
   const plate = eyePlatePrerequisite({ ...options, override: undefined, recipe: EYE_PLATE_MASCULINE_RECIPE });
   const routeKey = eyePlateRouteKeyFor(options);
-  const unavailable = (code: string): PreparedPrerequisite => { const value = masculineUnavailable(code); return { builder: value, plan: value }; };
+  const unavailableWith = (value: UnavailablePlate): PreparedPrerequisite => ({ builder: value, plan: value });
+  const unavailable = (code: string): PreparedPrerequisite => unavailableWith(masculineUnavailable(code));
   return {
     cached() {
       if (options.override) return masculineUnavailable("plate_override");
@@ -135,7 +147,7 @@ export function masculineEyePlatePrerequisite(options: Omit<EyePlatePrerequisite
       catch (error) {
         if (signal.aborted || (error as { code?: unknown })?.code === "plate_cancelled") throw error;
         // The feminine route already logged the failure; here it only decides what the mod leaves out.
-        return unavailable(error instanceof EyePlateError ? error.code : "plate_failed");
+        return error instanceof EyePlateError ? unavailableWith(masculineUnavailable(error.code, unreadArchives(error))) : unavailable("plate_failed");
       }
     },
     discard(prepared) { if (!unavailablePlate(prepared.plan)) plate.discard(prepared); },

@@ -179,6 +179,31 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     h.panel.spec.element.remove();
   });
 
+  test("the product line says whom the mod is for, and a limit shows once as a warning with its step, above the build note", async () => {
+    const warning = { text: "A head mod changes the masculine V's head; choose “The unmodified game head” for both V's to include him.", next: "settings.game" };
+    const feminineOnly = { ...BUILD, result: { ...BUILD.result, products: BUILD.result.products.map(product => ({ ...product,
+      features: product.features.map(feature => ({ ...feature, audience: "for a feminine V only", warnings: [warning] })) })) } };
+    const h = await packageHarness({ files: { package: feminineOnly } });
+    const card = h.root.querySelector(".result-card")!;
+    expect(text(card.querySelector(".result-product")!)).toContain("Eye makeup in the “XF” selector, for a feminine V only");
+    const notes = [...card.querySelectorAll(".note")];
+    const shown = notes.find(item => text(item) === warning.text)!;
+    expect(shown.className).toContain("warning");
+    expect(notes.filter(item => text(item) === warning.text)).toHaveLength(1);
+    // Directly under the product block, before the build note.
+    expect(notes.indexOf(shown)).toBeLessThan(notes.findIndex(item => text(item).startsWith("Your mod was built")));
+    buttonNamed(card, "Open Settings")!.click();
+    expect(h.opened).toEqual(["game"]);
+    h.panel.spec.element.remove();
+    // Both bodies: the product line says so and no warning shows.
+    const both = { ...BUILD, result: { ...BUILD.result, products: BUILD.result.products.map(product => ({ ...product,
+      features: product.features.map(feature => ({ ...feature, audience: "for a feminine and a masculine V" })) })) } };
+    const b = await packageHarness({ files: { package: both } });
+    expect(text(b.root.querySelector(".result-product")!)).toContain("selector, for a feminine and a masculine V");
+    expect([...b.root.querySelectorAll(".result-card .note.warning")]).toHaveLength(0);
+    b.panel.spec.element.remove();
+  });
+
   test("Add reviews the plan first, names what changes and where, and adds only on consent", async () => {
     const h = await packageHarness();
     buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();

@@ -14,11 +14,15 @@ import {
 } from "../src/package-resources";
 import { expectedPaths } from "../src/archive-inventory";
 import { plateTopology, weldedSeams } from "../src/eye-plate-verify";
-import { EYE_MAKEUP_EXPORTER, MASCULINE_NOT_PREPARED_NOTE, MASCULINE_UNCHECKED_NOTE, MASCULINE_WINDOW_NOTE } from "../src/features/eye-makeup/export";
+import { AUDIENCE_BOTH, AUDIENCE_FEMININE, CHECK_BUILD_DECIDES_NOTE, CHECK_MASCULINE_NOTE, EYE_MAKEUP_EXPORTER, MASCULINE_NOT_PREPARED,
+  MASCULINE_WINDOW } from "../src/features/eye-makeup/export";
+import { PLATE_REACH_UNCHECKED_NOTE, describePackageBuild } from "../src/package-filter";
+import { EYE_PLATE_HEAD_SETTING } from "../src/eye-plate-head-choice";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { checkArchiveXl, verifierBodies, VERIFIER_BODY_RULES, type VerifierPlan } from "../src/features/eye-makeup/verify/resource-checks";
-import { FEMININE_ONLY, packagePlateRecord, type EyePlateManifest, type EyePlateTools } from "../src/eye-plate-service";
-import { eyePlateRouteKeyFor, masculineEyePlatePrerequisite, masculineUnavailable } from "../src/eye-plate-prerequisite";
+import { EyePlateError, packagePlateRecord, type EyePlateManifest, type EyePlateTools } from "../src/eye-plate-service";
+import { eyePlateRouteKeyFor, masculineEyePlatePrerequisite, masculineUnavailable, unreadArchives } from "../src/eye-plate-prerequisite";
+import { testMasculineEyePlate } from "../src/package-server";
 import { EyePlateCache, contentFingerprint } from "../src/eye-plate-cache";
 import { EYE_PLATE_MASCULINE_RECIPE } from "../src/eye-plate-recipe";
 import { runProductCommand, type ProductCommandOptions } from "../src/platform/export/product-builder";
@@ -157,6 +161,10 @@ test("Build with his plate ready makes one mod for both bodies; her files are th
   verifyProductBuildResult(result, both.hostPlan(), join(both.dir, "dist"));
   const [feature] = result.products[0].features;
   expect(feature.notes).toEqual([]);
+  expect(feature.audience).toBe(AUDIENCE_BOTH);
+  expect(feature.warnings).toBeUndefined();
+  // The manifest records whom the mod is for.
+  expect(JSON.parse(readFileSync(result.products[0].manifest, "utf8")).features[0].audience).toBe(AUDIENCE_BOTH);
   expect(feature.details).toMatchObject({ bodies: ["female", "male"], masculinePlate: { source: "derived", recipeId: EYE_PLATE_MASCULINE_RECIPE.id,
     cacheKey: "d".repeat(64), meshSha256: sha("masculine mesh fixture") } });
   const plan = planCollection(JSON.parse(readFileSync(join(both.dir, "collection.json"), "utf8")), { masculine: true });
@@ -171,7 +179,9 @@ test("Build with his plate ready makes one mod for both bodies; her files are th
     record: { meshSha256: sha("masculine mesh fixture") } });
   // Her resources and the shared textures are exactly what a feminine-only build writes; his four files are the only addition.
   const feminineOnly = await runProductCommand(alone.options) as PackageBuildResult;
-  expect(feminineOnly.products[0].features[0].notes).toEqual([MASCULINE_NOT_PREPARED_NOTE]);
+  expect(feminineOnly.products[0].features[0].notes).toEqual([]);
+  expect(feminineOnly.products[0].features[0].audience).toBe(AUDIENCE_FEMININE);
+  expect(feminineOnly.products[0].features[0].warnings).toEqual([MASCULINE_NOT_PREPARED]);
   expect(feminineOnly.products[0].features[0].details.bodies).toEqual(["female"]);
   const withHim = tree(staged(result, both.dir)), withoutHim = tree(staged(feminineOnly, alone.dir));
   const added = Object.keys(withHim).filter(path => !(path in withoutHim)).sort();
@@ -186,8 +196,12 @@ test("Build says plainly when the mod is for a feminine V only, and why", async 
   const result = await runProductCommand(run.options) as PackageBuildResult;
   verifyProductBuildResult(result, run.hostPlan(), join(run.dir, "dist"));
   const [feature] = result.products[0].features;
-  expect(feature.notes).toEqual([masculineUnavailable("plate_source_unsupported").unavailable.message]);
-  expect(feature.notes[0]).toStartWith(`${FEMININE_ONLY}: your game's male player head isn't one XF Studio has checked (it supports Cyberpunk 2077 2.31).`);
+  expect(feature.notes).toEqual([]);
+  expect(feature.audience).toBe(AUDIENCE_FEMININE);
+  expect(feature.warnings).toEqual([{ text: "This game version's masculine V head is new to XF Studio; update XF Studio to include him." }]);
+  // The manifest and the Build message carry the same reason and step.
+  expect(JSON.parse(readFileSync(result.products[0].manifest, "utf8")).features[0]).toMatchObject({ audience: AUDIENCE_FEMININE, warnings: feature.warnings });
+  expect(describePackageBuild(result)).toContain(feature.warnings![0].text);
   expect(feature.details.bodies).toEqual(["female"]);
   expect(result.products[0].verifiedUnpackedFiles).toBe(4 * 3 + 4);
 }, 60_000);
@@ -197,24 +211,48 @@ test("Check: his plate ready, not yet known, unavailable, or on other texture co
     prerequisites: { [EYE_PLATE_PREREQUISITE]: hers, ...his === undefined ? {} : { [EYE_PLATE_MASCULINE_PREREQUISITE]: his } } });
   const ready = plan(plateReachInput(FOOTPRINT));
   expect(ready.check.notes).toEqual([]);
+  expect(ready.check.audience).toBe(AUDIENCE_BOTH);
   expect(ready.check.details.bodies).toEqual(["female", "male"]);
   expect(ready.inventory).toEqual(expect.arrayContaining(Object.values(ready.plan.masculine!)));
   expect(ready.xl.customizations?.male).toEqual([ready.plan.masculine!.customization]);
   // Before a Build prepared his plate for this route, Check plans on including him and says Build checks his head.
   const unknown = plan(undefined);
-  expect(unknown.check.notes).toEqual([MASCULINE_UNCHECKED_NOTE]);
+  expect(unknown.check.notes).toEqual([CHECK_MASCULINE_NOTE]);
+  expect(unknown.check.audience).toBe(AUDIENCE_BOTH);
+  // Before any plate was prepared: one note says both things Build still decides.
+  const blind = EYE_MAKEUP_EXPORTER.plan({ collection: fixture, diagnostics: false, prerequisites: {} });
+  expect(blind.check.notes).toEqual([CHECK_BUILD_DECIDES_NOTE]);
+  expect(blind.check.notes).not.toContain(PLATE_REACH_UNCHECKED_NOTE);
   expect(unknown.check.details.bodies).toEqual(["female", "male"]);
   const unavailable = plan(masculineUnavailable("plate_source_modded"));
-  expect(unavailable.check.notes).toEqual([masculineUnavailable("plate_source_modded").unavailable.message]);
+  expect(unavailable.check.notes).toEqual([]);
+  expect(unavailable.check.audience).toBe(AUDIENCE_FEMININE);
+  expect(unavailable.check.warnings).toEqual([{ text: masculineUnavailable("plate_source_modded").unavailable.message, next: "settings.game" }]);
   expect(unavailable.plan.masculine).toBeUndefined();
   expect(unavailable.xl.customizations?.male).toBeUndefined();
   const other = { ...FOOTPRINT, window: { ...FOOTPRINT.window, u0: FOOTPRINT.window.u0 + 0.01 } };
   const shifted = plan({ footprint: other, sha256: "e".repeat(64) });
-  expect(shifted.check.notes).toEqual([MASCULINE_WINDOW_NOTE]);
+  expect(shifted.check.warnings).toEqual([MASCULINE_WINDOW]);
   expect(shifted.check.details.bodies).toEqual(["female"]);
-  // Every reason is one plain sentence that starts by saying who the mod is for.
-  for (const code of ["plate_source_missing", "plate_source_unsupported", "plate_source_modded", "plate_source_incomplete", "plate_tool_failed", "plate_override"])
-    expect(masculineUnavailable(code).unavailable.message).toMatch(/^This mod is for a feminine V only: [^\n]+[.]$/);
+  // Every reason is one sentence of about 100 characters, the reason then the step, naming him "the masculine V" and never
+  // the developer's words for his head; the head-choice step says it covers both V's and names the setting as Settings does.
+  const reasons = ["plate_source_missing", "plate_source_unsupported", "plate_source_modded", "plate_source_incomplete", "plate_tool_failed"]
+    .map(code => masculineUnavailable(code).unavailable).concat([masculineUnavailable("plate_source_incomplete", ["broken_head.archive"]).unavailable]);
+  for (const { message } of [...reasons, { message: MASCULINE_WINDOW.text }]) {
+    expect(message).toMatch(/^[A-Z][^;]*; [^;]*[.]$/); // one sentence: the reason; the step
+    expect(message.length).toBeLessThanOrEqual(150);
+    expect(message).toContain("masculine V");
+    expect(message).not.toMatch(/male player head|male head|texture coordinates|plate|This mod is for/);
+  }
+  expect(masculineUnavailable("plate_source_modded").unavailable).toMatchObject({ next: "settings.game" });
+  expect(masculineUnavailable("plate_source_modded").unavailable.message).toContain(`“${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both V's`);
+  expect(MASCULINE_WINDOW.text).toContain(`“${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both V's`);
+  // An unreadable mod is named (from the failure's detail, `name: error` per archive), with the step that clears it.
+  expect(unreadArchives(new EyePlateError("plate_source_incomplete", "x", "broken_head.archive: bad index: 3\nother.archive: gone"))).toEqual(["broken_head.archive", "other.archive"]);
+  expect(unreadArchives(new EyePlateError("plate_source_modded", "x", "a.archive: y"))).toEqual([]);
+  // An unreadable mod is named, with the step that clears it.
+  expect(masculineUnavailable("plate_source_incomplete", ["broken_head.archive"]).unavailable.message).toContain("“broken_head.archive”");
+  expect(masculineUnavailable("plate_source_incomplete", ["broken_head.archive"]).unavailable.message).toContain("reinstall or remove it");
 });
 
 test("the masculine plate prerequisite never stops a Build: a failure becomes the reason he is left out; cancelling still cancels", async () => {
@@ -245,4 +283,14 @@ test("the masculine plate prerequisite never stops a Build: a failure becomes th
   expect(prerequisite.cached()).toBeNull();
   // His status is his own file: the feminine plate's status.json is untouched.
   expect(readdirSync(cacheRoot).filter(name => name.startsWith("status")).sort()).toEqual([`status-${EYE_PLATE_MASCULINE_RECIPE.id}.json`]);
+});
+
+test("an isolated test server's masculine plate stand-in gives one fixed outcome, and only for a plate code", async () => {
+  expect(testMasculineEyePlate(undefined)).toBeNull();
+  expect(testMasculineEyePlate("on")).toBeNull();
+  const standIn = testMasculineEyePlate("plate_source_modded")!;
+  expect(standIn.cached()).toEqual(masculineUnavailable("plate_source_modded"));
+  expect((await standIn.prepare(new AbortController().signal)).plan).toEqual(masculineUnavailable("plate_source_modded"));
+  // The server offers it only when isolated (server.ts reads it under `state.isolated`).
+  expect(readFileSync(resolve(app, "server.ts"), "utf8")).toContain("state.isolated ? testMasculineEyePlate(process.env.XFS_TEST_MASCULINE_PLATE) : null");
 });

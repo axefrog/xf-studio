@@ -99,15 +99,15 @@ export function packagePlateRecord(manifest: EyePlateManifest): PackagePlate {
 
 /**
  * The masculine plate's prerequisite value when it can't be used (the host could not prepare it, or has none): the
- * mod is then for a feminine V only, and `message`, which starts with `FEMININE_ONLY`, says why in plain words with the
- * one next step. Check, Build and the manifest carry it as a note.
+ * mod is then for a feminine V only. `message` is one plain sentence, the reason and then the step, and `next` the
+ * control that takes the step; Check, Build and the manifest carry them as the feature's warning.
  */
-export type UnavailablePlate = { readonly unavailable: { readonly code: string; readonly message: string } };
-export const FEMININE_ONLY = "This mod is for a feminine V only";
+export type UnavailablePlate = { readonly unavailable: { readonly code: string; readonly message: string; readonly next?: "settings.game" } };
 /** A prerequisite value read as an unavailable plate, or null. */
 export function unavailablePlate(value: unknown): UnavailablePlate["unavailable"] | null {
   const item = (value as Partial<UnavailablePlate> | null)?.unavailable;
-  return item && typeof item.code === "string" && typeof item.message === "string" && item.message.startsWith(FEMININE_ONLY) ? item : null;
+  return item && typeof item.code === "string" && typeof item.message === "string" && (item.next === undefined || item.next === "settings.game")
+    ? item : null;
 }
 
 export const EYE_PLATE_RESOURCE_DIRECTORY = "resources";

@@ -167,6 +167,7 @@ export function verifyProductBuildResult(built: PackageBuildResult, planned: Pro
     const features = check.features.map((feature: FeatureCheck) => ({ feature: feature.feature, exporter: feature.exporter, exporterVersion: feature.exporterVersion,
       namespace: feature.namespace, brand: feature.brand, selectorLabel: feature.selectorLabel, selector: feature.selector, presets: feature.presets,
       omissions: feature.omissions, experimental: feature.experimental, requirements: feature.requirements, packagedSha256: feature.packagedSha256,
+      ...(feature.audience !== undefined ? { audience: feature.audience } : {}), ...(feature.warnings?.length ? { warnings: feature.warnings } : {}),
       details: feature.details }));
     // Each feature's plan hash is the host's own plan's (PIPE-95); the verification record is the builder's alone.
     const recorded = (raw.features as Record<string, unknown>[]).map(({ planSha256: _plan, verification: _verified, ...rest }) => rest);

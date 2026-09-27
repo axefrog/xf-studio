@@ -5,7 +5,7 @@
  * one-feature form every eye-makeup build wrote before products existed. One typed reader serves the
  * install transport and the hosts' result gates.
  */
-import type { ExportExperimental, ExportOmission, ExportedLook, FrameworkRequirements, SelectorPlacement } from "../api/export";
+import type { ExportExperimental, ExportOmission, ExportedLook, FrameworkRequirements, SelectorPlacement, ExportWarning } from "../api/export";
 
 export const LOCAL_PACKAGE_1 = "xfs/local-package-1";
 export const LOCAL_PACKAGE_2 = "xfs/local-package-2";
@@ -20,6 +20,9 @@ export type ManifestFeature = {
   readonly experimental: readonly ExportExperimental[];
   readonly requirements: FrameworkRequirements;
   readonly packagedSha256: string;
+  /** Who the mod is for and what it falls short of (`FeatureCheck`), when the feature says. */
+  readonly audience?: string;
+  readonly warnings?: readonly ExportWarning[];
   /** SHA-256 of the feature's plan (its compact JSON; `plan.json` holds the same plan pretty-printed). */
   readonly planSha256: string;
   readonly details: Readonly<Record<string, unknown>>;

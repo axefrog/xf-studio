@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { ExportRefusal, PrerequisiteStale, type FeatureCheck, type FeatureExporter, type FeatureOutcome } from "../../../platform/api";
+import { ExportRefusal, PrerequisiteStale, type ExportWarning, type FeatureCheck, type FeatureExporter, type FeatureOutcome } from "../../../platform/api";
 import { parsePlateUvFootprint } from "../../../engines/layered-makeup/plate-uv-window";
 import { compilePreset } from "../../../engines/layered-makeup/preset-compiler";
 import { COLLECTION_2 } from "../../../platform/api";
@@ -26,7 +26,7 @@ import type { PlateReachInput } from "../../../plate-reach";
 import type { PackagePlate } from "../../../package-action";
 import { EYE_MAKEUP_REGION } from "../region";
 import { EYE_MAKEUP_EXPORT, EYE_MAKEUP_EXPORTER_ID, EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../export-info";
-import { FEMININE_ONLY, unavailablePlate } from "../../../eye-plate-service";
+import { unavailablePlate } from "../../../eye-plate-service";
 import { manifestPlateReach, plateBuilderInput, plateBuildValue, type PlateBuildValue } from "./plate-input";
 
 /** Bumped whenever the same input would build different bytes. */
@@ -40,23 +40,30 @@ const DIAGNOSTICS_REFUSAL = "This collection carries diagnostic export knobs, wh
   "Pass --diagnostics to build one on purpose, or export the collection again from XF Studio.";
 
 /**
- * What the plan says about the masculine V. A Build names the plate it packages for him or why there is none; so does
- * a Check once a Build prepared his plate for this route (or found it couldn't). Before that, Check plans on including
- * him and says Build checks his head first.
+ * Who the mod is for. A Build names the plate it packages for the masculine V or why there is none; so does a Check once
+ * a Build prepared his plate for this route (or found it couldn't). Before that, Check plans on including him and its one
+ * note says Build checks that. When he isn't included, the result's product line says so (`audience`) and one warning
+ * says why and what to do (`warnings`).
  */
-export const MASCULINE_UNCHECKED_NOTE = "Whether it can also be made for a masculine V is checked when you Build.";
-export const MASCULINE_NOT_PREPARED_NOTE = `${FEMININE_ONLY}: no masculine eye plate was prepared for this build.`;
-export const MASCULINE_WINDOW_NOTE = `${FEMININE_ONLY}: the male head's eye area uses other texture coordinates in your game, so the same looks can't be placed on him.`;
-type MasculineDecision = { include: boolean; note?: string; plate?: PlateReachInput & { record?: PackagePlate } };
+export const AUDIENCE_BOTH = "for a feminine and a masculine V";
+export const AUDIENCE_FEMININE = "for a feminine V only";
+/** Check's one note before any Build prepared the plates for this route: what Build will still decide. */
+export const CHECK_BUILD_DECIDES_NOTE = "Build checks which looks reach the eye area and whether the mod can also fit a masculine V.";
+export const CHECK_MASCULINE_NOTE = "Build checks whether the mod can also fit a masculine V.";
+/** A developer's CLI build given no masculine plate (the hosts always prepare one). */
+export const MASCULINE_NOT_PREPARED: ExportWarning = { text: "No masculine V plate was given to this build; pass --plate-masculine to include him." };
+/** His plate's texture window differs from hers: only a head mod can move the head's eye UVs (the 2.31 heads share them). */
+export const MASCULINE_WINDOW: ExportWarning = { next: "settings.game",
+  text: "A head mod moves the masculine V's eye area, so these looks can't fit him; choose “The unmodified game head” for both V's to include him." };
+type MasculineDecision = { include: boolean; unchecked?: true; warning?: ExportWarning; plate?: PlateReachInput & { record?: PackagePlate } };
 function masculineDecision(value: unknown, feminine: (PlateReachInput & { record?: PackagePlate }) | null): MasculineDecision {
   const unavailable = unavailablePlate(value);
-  if (unavailable) return { include: false, note: unavailable.message };
+  if (unavailable) return { include: false, warning: { text: unavailable.message, ...(unavailable.next ? { next: unavailable.next } : {}) } };
   // Without a value, a Build (whose feminine plate carries its provenance) prepared none; a Check just doesn't know yet.
-  if (value === undefined || value === null) return feminine?.record ? { include: false, note: MASCULINE_NOT_PREPARED_NOTE }
-    : { include: true, note: MASCULINE_UNCHECKED_NOTE };
+  if (value === undefined || value === null) return feminine?.record ? { include: false, warning: MASCULINE_NOT_PREPARED } : { include: true, unchecked: true };
   const plate = planPlate(value)!;
   // One texture set serves both plates only when their windows agree (the male head uses the female head's UVs, 2.31).
-  if (feminine && JSON.stringify(plate.footprint.window) !== JSON.stringify(feminine.footprint.window)) return { include: false, note: MASCULINE_WINDOW_NOTE };
+  if (feminine && JSON.stringify(plate.footprint.window) !== JSON.stringify(feminine.footprint.window)) return { include: false, warning: MASCULINE_WINDOW };
   return { include: true, plate };
 }
 
@@ -96,7 +103,10 @@ function plan(input: { collection: unknown; prerequisites: Readonly<Record<strin
     omissions: prepared.omissions.filter(item => item.kind !== "part" && !(item.kind === "preset" && notOurs.has(item.presetId))),
     experimental: prepared.experimental,
     // Before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does (PIPE-36).
-    notes: [...prepared.plateUv ? [] : [PLATE_REACH_UNCHECKED_NOTE], ...masculine.note ? [masculine.note] : []],
+    // One note at most: what Build still decides (plate reach before any plate was prepared, and whether he fits).
+    notes: !prepared.plateUv ? [masculine.unchecked ? CHECK_BUILD_DECIDES_NOTE : PLATE_REACH_UNCHECKED_NOTE] : masculine.unchecked ? [CHECK_MASCULINE_NOTE] : [],
+    audience: masculine.include ? AUDIENCE_BOTH : AUDIENCE_FEMININE,
+    ...(masculine.warning ? { warnings: [masculine.warning] } : {}),
     requirements: planned.requirements,
     packagedSha256: sha256(packaged),
     // `bodies`: whose creators get the selector. His plate's provenance is recorded beside hers when a Build prepared it.
