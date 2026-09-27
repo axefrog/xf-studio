@@ -39,7 +39,9 @@ export type CharacterDetailPort = {
    */
   show(record: string, signal: AbortSignal): Promise<{ slots: (Omit<DetailSlotState, "limits"> & { limits?: DetailLimit[] })[];
     /** The head options whose parts the shown record draws. */
-    drawn?: string[] }>;
+    drawn?: string[];
+    /** The visual tags of the garments the shown record draws (a pose's outfit filter reads them). */
+    garmentTags?: string[] }>;
   /** Remove every resolved detail from the scene. */
   clear(): void;
   /** Shown slots' limit codes when the renderer's change after `show` (a slot shown later, a re-bake after a restore; PREV-74). */
@@ -67,6 +69,11 @@ export type CharacterDetailStatus = {
   /** The head options whose parts the shown V draws (settles a `conditional` coverage: drawn, or not shown yet). */
   drawn: string[];
   /**
+   * The visual tags of the garments the shown V wears in the view (render-detail.ts `garment.tags`), sorted: what the game's photo mode
+   * matches a pose's outfit filter against (pose-library-design.md §6). Empty without clothes or with a record that carries none.
+   */
+  garmentTags: string[];
+  /**
    * What must be set up before the V (or the change: `updateError`) can be prepared, as the presentation's next step: `wolvenkit`.
    * Null otherwise.
    */
@@ -87,7 +94,7 @@ const pending = (): CharacterSlotStatus[] => DETAIL_SLOTS.map(slot => ({ slot, s
 
 export class CharacterDetailActions {
   private status: CharacterDetailStatus = { phase: "idle", source: null, message: "", notice: null, progress: null, slots: pending(),
-    updating: false, updateError: null, choices: 0, drawn: [], need: null };
+    updating: false, updateError: null, choices: 0, drawn: [], garmentTags: [], need: null };
   private listeners = new Set<() => void>();
   private current: { key: string; request: CharacterRequest; controller: AbortController } | null = null;
   /** The last request asked for (kept after a failure, so asking for it again changes nothing until `retry`). */
@@ -137,7 +144,7 @@ export class CharacterDetailActions {
       this.port.clear();
       this.shown = null;
       this.publish({ phase: "preparing", source: request.source, message: "", notice: null, progress: null, slots: pending(),
-        updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: [], need: null });
+        updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: [], garmentTags: [], need: null });
     }
     return this.follow(request, controller.signal, sameV).catch(error => {
       if (controller.signal.aborted || this.disposed) return;
@@ -153,7 +160,7 @@ export class CharacterDetailActions {
       this.port.clear();
       this.shown = null;
       this.publish({ phase: "failed", source: request.source, message: notice ? "" : FAILED, notice, progress: null,
-        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: null });
+        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], garmentTags: [], need: null });
     });
   }
 
@@ -167,7 +174,7 @@ export class CharacterDetailActions {
           // Setting WolvenKit up let the host start: the V (or the change) is being prepared now.
           if (waiting) this.publish(updating ? { ...this.status, updating: true, updateError: null, need: null }
             : { phase: "preparing", source: request.source, message: "", notice: null, progress: state.progress, slots: pending(), updating: false,
-              updateError: null, choices: request.choices?.length ?? 0, drawn: [], need: null });
+              updateError: null, choices: request.choices?.length ?? 0, drawn: [], garmentTags: [], need: null });
           else if (!updating) this.publish({ ...this.status, progress: state.progress });
           waiting = false;
         }
@@ -191,7 +198,7 @@ export class CharacterDetailActions {
       this.port.clear();
       this.shown = null;
       this.publish({ phase: "failed", source: request.source, message: state.message || FAILED, notice: null, progress: null,
-        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: null });
+        slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], garmentTags: [], need: null });
       return;
     }
     markCharacter("answer", { record: state.record });
@@ -203,7 +210,7 @@ export class CharacterDetailActions {
     const lines = [...(state.message ? [state.message] : []), ...[...slots.filter(slot => slot.state === "unavailable" && slot.message),
       ...slots.filter(slot => slot.state === "shown" && slot.message)].map(slot => slot.message!)];
     this.publish({ phase: "ready", source: request.source, message: lines.join(" "), notice: null, progress: null, slots,
-      updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: shown.drawn ?? [], need: null });
+      updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: shown.drawn ?? [], garmentTags: shown.garmentTags ?? [], need: null });
   }
 
   /** The V (or a change on it) waits for WolvenKit: published once, not again on every question to the host. */
@@ -218,7 +225,7 @@ export class CharacterDetailActions {
     this.port.clear();
     this.shown = null;
     this.publish({ phase: "failed", source: request.source, message, notice: null, progress: null,
-      slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: "wolvenkit" });
+      slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], garmentTags: [], need: "wolvenkit" });
   }
 
   /** Stop following and remove the details (the head is being released). */

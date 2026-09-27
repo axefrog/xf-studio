@@ -15,6 +15,8 @@ import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserSaveExplorerDevice } from "./browser-save-explorer-device";
 import { createModuleServices } from "./compose/module-services";
+import { createBrowserPoseLibraryDevice } from "./browser-pose-device";
+import { PoseStageHub } from "./pose-stage";
 import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -117,8 +119,14 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
-  // Part-less modules' services (the Save Explorer), over their browser devices.
-  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document) });
+  // Part-less modules' services (the Save Explorer, Poses), over their browser devices. Poses reach the shown V through the stage, which
+  // the head fills in once it is attached; the whole-body view goes through the application like the toolbar's.
+  const poseStage = new PoseStageHub({
+    capability: () => core.app.capability({ kind: "camera.body" }),
+    frame: () => { const done = core.app.dispatch({ kind: "camera.body" }); return done.ok ? { available: true } : { available: false, reason: done.message }; },
+  });
+  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document),
+    poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } });
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
   const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
     verification ? "/api/verification/mod-install" : "/api/mod-install");
@@ -326,6 +334,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       head = attached;
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
       facial.attachScene(scene.face);
+      poseStage.attach({ motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
       status = { ...status, assets: { ...status.assets, loaded: true } };
       viewportDevice.headReady();
       session.setPreviewReady(); session.flush(); drawUV();
@@ -346,6 +355,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   function releaseHead(attached: AttachedHead | undefined) {
     if (head === attached) head = undefined;
     facial.attachScene(undefined);
+    poseStage.attach(null);
     attached?.dispose();
     scene = undefined; savedAppearance = undefined; previewActions = undefined; motionActions = undefined;
   }

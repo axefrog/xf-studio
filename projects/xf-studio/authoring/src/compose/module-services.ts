@@ -5,10 +5,15 @@
  */
 import type { ModuleService } from "../platform/api";
 import { saveExplorerFacade, SaveExplorerActions, type SaveExplorerDevice } from "../features/save-explorer";
+import { poseLibraryFacade, PoseLibraryActions, type PoseLibraryDevice, type PoseStage } from "../features/poses";
 
-/** The devices module services use; a host without one gets a service that says so. */
-export type ModuleDevices = { readonly saves: SaveExplorerDevice | null };
+/**
+ * The devices module services use; a host without one gets a service that says so. `poses.stage` is the shown V (her body, what she
+ * wears, her motion and the whole-body view), which the composition root fills in once the 3D view is ready.
+ */
+export type ModuleDevices = { readonly saves: SaveExplorerDevice | null; readonly poses: { readonly device: PoseLibraryDevice; readonly stage: PoseStage } };
 
 export function createModuleServices(devices: ModuleDevices): readonly ModuleService[] {
-  return Object.freeze([saveExplorerFacade(new SaveExplorerActions(devices.saves))]);
+  return Object.freeze([saveExplorerFacade(new SaveExplorerActions(devices.saves)),
+    poseLibraryFacade(new PoseLibraryActions(devices.poses.device, devices.poses.stage))]);
 }

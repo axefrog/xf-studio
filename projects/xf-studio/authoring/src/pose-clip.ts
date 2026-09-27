@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { PoseSample } from "./pose-catalogue";
+import type { PoseSample } from "./pose-sample";
 
 /**
  * A photo-mode pose as a body clip for the preview's idle rig (pose-library-design.md §5.2, P2). The host samples the pose's clip on its

@@ -301,27 +301,4 @@ export interface PoseCatalogueLoad {
 export type PoseCatalogueState =
   | { readonly schema: typeof POSE_STATE_SCHEMA; readonly phase: "needs-setup" | "preparing" | "failed"; readonly message: string }
   | { readonly schema: typeof POSE_STATE_SCHEMA; readonly phase: "ready"; readonly message: string; readonly catalogue: PoseCatalogue; readonly evidence: PoseCatalogueLoad["evidence"] };
-export interface PoseSample {
-  readonly schema: typeof POSE_SAMPLE_SCHEMA;
-  readonly id: string;
-  readonly clip: { readonly name: string; readonly set: string; readonly frames: number; readonly duration: number };
-  /** Seconds into the clip (the record's `animationTime`, clamped to the clip). */
-  readonly time: number;
-  readonly rig: string;
-  /** Game space (Z up), local to each joint's parent; a joint the clip doesn't key keeps the rig's reference, which is listed too. */
-  readonly joints: readonly { readonly bone: string; readonly parent: string | null; readonly translation: readonly number[]; readonly rotation: readonly number[];
-    readonly scale: readonly number[]; readonly keyed: boolean }[];
-  readonly tracks: Readonly<Record<string, number>>;
-  /**
-   * A clip that moves (its entry's `moves` badge): every frame from 0 to the clip's length at its own rate, for the joint channels whose
-   * keys change (game space, local to the parent; flat arrays of 3 or 4 values per frame). Every other channel holds its value in `joints`.
-   * Absent for a held pose.
-   */
-  readonly motion?: PoseMotion;
-}
-export interface PoseMotion {
-  /** Frames per second, and how many frames (the first at 0 s, the last at the clip's length). */
-  readonly rate: number;
-  readonly frames: number;
-  readonly channels: readonly { readonly bone: string; readonly channel: "translation" | "rotation" | "scale"; readonly values: readonly number[] }[];
-}
+export type { PoseMotion, PoseSample } from "./pose-sample";

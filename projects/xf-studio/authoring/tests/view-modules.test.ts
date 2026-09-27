@@ -46,8 +46,8 @@ test("rule 7: the module registration is complete, and an incomplete one says wh
   expect(PLATFORM_VIEW_TOOLS.every(tool => tool.module === "platform")).toBe(true);
   const broken: ModuleRegistration = { ...STUDIO_MODULE_REGISTRATION,
     modules: [...STUDIO_MODULE_REGISTRATION.modules, STUDIO_MODULE_REGISTRATION.modules[0]],
-    tools: [...STUDIO_MODULE_REGISTRATION.tools, { ...PLATFORM_VIEW_TOOLS[0] }, { id: "poses.menu", module: "poses", label: "Poses", icon: "dot", order: 1,
-      scenes: ["character"], placement: "toolbar", kind: "menu", state: "scene", dispatches: "poses.apply" }, { id: "surface", module: "eye-makeup", label: "x",
+    tools: [...STUDIO_MODULE_REGISTRATION.tools, { ...PLATFORM_VIEW_TOOLS[0] }, { id: "world.menu", module: "world", label: "World", icon: "dot", order: 1,
+      scenes: ["character"], placement: "toolbar", kind: "menu", state: "scene", dispatches: "world.apply" }, { id: "surface", module: "eye-makeup", label: "x",
       icon: "dot", order: 1, scenes: ["garage"], placement: "menu", kind: "toggle", state: "tools", dispatches: "view.setTool" },
     // Tools name the action they dispatch; a toggle in the tools node dispatches view.setTool, and only such a toggle turns on editing.
     { id: "eye-makeup.mute", module: "eye-makeup", label: "x", icon: "dot", order: 1, scenes: ["character"], placement: "menu", kind: "toggle", state: "scene" } as never,
@@ -57,7 +57,7 @@ test("rule 7: the module registration is complete, and an incomplete one says wh
       dispatches: "camera.front", editing: true }],
     summaries: [{ module: "nobody", scenes: ["character"] }] };
   expect(moduleRegistrationIssues(broken)).toEqual(["module eye-makeup is registered twice", "tool camera.front is registered twice",
-    "tool poses.menu names unregistered module poses", "tool surface is not prefixed with its module eye-makeup", "tool surface names an unregistered scene kind",
+    "tool world.menu names unregistered module world", "tool surface is not prefixed with its module eye-makeup", "tool surface names an unregistered scene kind",
     "tool eye-makeup.mute names no action to dispatch",
     "tool eye-makeup.frame must be a toggle dispatching view.setTool exactly when its state is the view's tools node",
     "tool eye-makeup.edit turns on editing but isn't held in the view's tools node",
@@ -100,7 +100,7 @@ test("the application resolves each tool's state and action; view.setTool edits 
   expect(app.capability({ kind: "view.setTool", tool: "camera.front", enabled: true })).toMatchObject({ available: false, code: "invalid_value" });
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true, view: "gone" })).toMatchObject({ available: false, code: "missing_target" });
   expect(app.capability({ kind: "view.undo" })).toMatchObject({ available: true });
-  expect(app.modules().map(module => module.id)).toEqual(["eye-makeup", "save-explorer", "expressions"]);
+  expect(app.modules().map(module => module.id)).toEqual(["eye-makeup", "save-explorer", "expressions", "poses"]);
   expect(app.views()?.views.map(view => [view.id, view.panel, view.sceneKind])).toEqual([["main", "head", "character"]]);
 });
 

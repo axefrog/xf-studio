@@ -4,7 +4,7 @@ import { refusal, type Capability } from "./platform/api";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
 import { pageFailure } from "./diagnostics/page-sink";
 import { DEFAULT_IDLE, type IdleEntry } from "./idle-catalogue";
-import type { PoseSample } from "./pose-catalogue";
+import type { PoseSample } from "./pose-sample";
 import type { PosePlacement } from "./pose-clip";
 
 /** A photo-mode pose as the body source (pose-library-design.md §5.2): its record, label and whether it moves. */

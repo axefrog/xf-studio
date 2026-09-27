@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../camera-depth";
 import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, posedBodyFrame, posedBodySubject, surfaceAnchoredDistance,
   type JointBox, type Subject } from "../../camera-framing";
-import type { PoseSample } from "../../pose-catalogue";
+import type { PoseSample } from "../../pose-sample";
 import { poseClip, type PosePlacement } from "../../pose-clip";
 import { coreSceneEvidence } from "../../scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";

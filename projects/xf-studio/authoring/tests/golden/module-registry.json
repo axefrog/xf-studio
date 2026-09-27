@@ -20,6 +20,13 @@
    "stage": "preview",
    "feature": "expressions",
    "shownByDefault": false
+  },
+  {
+   "id": "poses",
+   "group": "character",
+   "stage": "preview",
+   "feature": null,
+   "shownByDefault": false
   }
  ],
  "tools": [

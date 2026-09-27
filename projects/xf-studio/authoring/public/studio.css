@@ -1049,3 +1049,25 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .save-mod > summary, .save-classes > summary { list-style: none; }
 .save-mod > summary::-webkit-details-marker, .save-field > summary::-webkit-details-marker { display: none; }
 .save-field.leaf { padding-left: calc(var(--sp-3) * 2 + 1em); }
+
+/* Poses panel (features/poses/view). The tree rules style the stand-in adapter until the library's TreeView lands. */
+.poses-panel { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.poses-panel .poses-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.poses-panel .poses-current { min-height: 1.4em; }
+.pose-tree { list-style: none; margin: 0; padding: 0; overflow: auto; max-height: 62vh; background: var(--bg-panel); border: 1px solid var(--line); }
+.pose-tree ul { list-style: none; margin: 0; padding: 0; }
+.pose-tree [data-key]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pose-tree-group-head { display: flex; align-items: center; gap: var(--sp-3); min-height: 28px; padding: 0 var(--sp-4); cursor: default; font-weight: 600; }
+.pose-tree-group-head:hover { background: var(--bg-hover); }
+.pose-tree-group-head .expander-chevron { display: inline-flex; flex: none; transition: transform .12s; }
+.pose-tree-group[aria-expanded="true"] > .pose-tree-group-head .expander-chevron { transform: rotate(90deg); }
+.pose-tree-row { display: flex; align-items: center; gap: var(--sp-3); min-height: 26px; padding: 0 var(--sp-3) 0 calc(var(--sp-4) + 18px); cursor: default; }
+.pose-tree-row:hover { background: var(--bg-hover); }
+.pose-tree-row.is-current { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
+.pose-tree-row.is-disabled .pose-tree-label { color: var(--text-muted); }
+.pose-tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pose-tree-secondary { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-2xs); color: var(--text-muted); font-weight: 400; }
+.pose-tree-status { flex: none; width: 5.5em; text-align: right; font-size: var(--fs-2xs); color: var(--text-muted); }
+.pose-tree-star { flex: none; width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--text-muted); cursor: pointer; opacity: 0; font-size: 14px; line-height: 1; }
+.pose-tree-row:hover .pose-tree-star, .pose-tree-row:focus-within .pose-tree-star, .pose-tree-row:focus .pose-tree-star, .pose-tree-star[aria-pressed="true"] { opacity: 1; }
+.pose-tree-star[aria-pressed="true"] { color: var(--signal); }

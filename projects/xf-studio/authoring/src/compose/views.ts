@@ -12,8 +12,9 @@ import { SHELL_VIEW } from "../studio-ui/views/shell";
 import { EYE_MAKEUP_VIEW } from "../features/eye-makeup/view/contribution";
 import { SAVE_EXPLORER_VIEW } from "../features/save-explorer/view/contribution";
 import { EXPRESSIONS_VIEW } from "../features/expressions/view/contribution";
+import { POSES_VIEW } from "../features/poses/view/contribution";
 
-export const STUDIO_VIEWS = [SHELL_VIEW, EYE_MAKEUP_VIEW, SAVE_EXPLORER_VIEW, EXPRESSIONS_VIEW] as const satisfies readonly ViewContribution[];
+export const STUDIO_VIEWS = [SHELL_VIEW, EYE_MAKEUP_VIEW, SAVE_EXPLORER_VIEW, EXPRESSIONS_VIEW, POSES_VIEW] as const satisfies readonly ViewContribution[];
 
 /** Every contributed panel ID (grandfathered IDs included). */
 export type StudioPanelId = (typeof STUDIO_VIEWS)[number]["panels"][number]["id"];
