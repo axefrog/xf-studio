@@ -52,8 +52,7 @@ const STEP_TIMEOUT_MS = 3 * 60_000;
 
 /** Where the solver lives: the add-on checkout, the Python that runs it and the server script; or why there is none, in plain words. */
 export type FacialSolverLocation = { readonly addon: string; readonly python: string; readonly script: string } | { readonly missing: string };
-export const SOLVER_MISSING = "The live face preview needs the facial solver from the Cyberpunk Blender add-on, which this version of " +
-  "XF Studio can't set up by itself yet. You can still set every control: your expression is saved with the look.";
+export const SOLVER_MISSING = "The live face preview isn't available in this version yet. Every control still works and is saved with the look.";
 
 /**
  * Find the solver (localhost): `XFS_FACIAL_SOLVER` (the add-on checkout), else XF Studio's tools folder (`<tools>/io-suite/<pin>/`,

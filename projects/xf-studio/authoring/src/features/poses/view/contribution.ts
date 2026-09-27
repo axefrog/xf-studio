@@ -8,7 +8,7 @@ export const POSES_VIEW = {
   owner: "poses",
   panels: [
     { id: "poses.library", title: "Poses", icon: "body", order: 125, slot: "inspect",
-      description: "Every photo-mode pose your game and mods give V: search, star favourites, and one click poses her in the 3D view." },
+      description: "Every photo-mode pose from your game and mods: search, star favourites, one click poses V." },
   ],
   activity: [{ pattern: /^pose\./, label: "Poses" }],
 } as const satisfies ViewContribution;

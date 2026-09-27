@@ -10,10 +10,10 @@ afterAll(() => uninstallLightDom());
 test("setOptions rebuilds only a changed list, keeps focus on the same choice, and each button selects its value", async () => {
   const { Segmented } = await import("../src/studio-ui/controls");
   const chosen: string[] = [];
-  const control = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: "still", label: "Still" }], onSelect: value => chosen.push(value) });
+  const control = new Segmented<string>({ label: "Body", reserveNote: true, options: [{ value: "still", label: "Still" }], onSelect: value => chosen.push(value) });
   const root = control.element as unknown as LightElement;
   const buttons = () => root.querySelectorAll(".segment") as unknown as LightElement[];
-  expect(root.querySelector(".segmented.wrap")).toBeTruthy();
+  expect(root.querySelector(".segmented")).toBeTruthy();
   control.setOptions([{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }]);
   expect(buttons().map(b => b.textContent)).toEqual(["Still", "Creator close-up"]);
   const first = buttons()[1]!;

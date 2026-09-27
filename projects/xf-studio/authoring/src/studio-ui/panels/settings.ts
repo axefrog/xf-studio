@@ -23,7 +23,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
 
   const theme = new Segmented<Theme>({ label: "Theme", options: [{ value: "system", label: "Match system", icon: "monitor" },
     { value: "light", label: "Light", icon: "sun" }, { value: "dark", label: "Dark", icon: "moon" }], onSelect: value => { appearance.setTheme(value); rt.changed(); } });
-  const hints = new Toggle({ label: "Show input hints", help: "A corner strip and tooltips in the 3D view and UV map that follow the pointer and the keys you hold.",
+  const hints = new Toggle({ label: "Show input hints", help: "Hints in the 3D view and UV map that follow the pointer and the keys you hold.",
     onChange: on => { appearance.setHints(on); rt.changed(); } });
   const research = new Toggle({ label: "Show research tools", help: "Lighting calibration, glitter model studies, compiler plans and developer IDs. Off unless you're studying how XF Studio works.",
     onChange: on => { appearance.setResearch(on); rt.changed(); } });
@@ -49,8 +49,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     saves: group("saves", "Where the Save Explorer finds your saves. XF Studio uses the game's own saves folder unless you choose another.", form.saves),
     tools: group("tools", "XF Studio sets WolvenKit up for you (it asks before downloading). Name your own copy only if you'd rather use it.", form.tools),
     appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, h("div", { class: "row wrap gap-s" }, reference)),
-    privacy: group("privacy", "What XF Studio records about itself, and how to send a report.",
-      note("Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself."),
+    privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
       deep.element, h("div", { class: "row wrap gap-s" }, report)),
   };
   const element = h("div", { class: "panel-content settings-panel" }, ...Object.values(sections));

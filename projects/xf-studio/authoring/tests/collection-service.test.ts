@@ -110,7 +110,7 @@ test("loading a saved list does not replace a restored local draft", async () =>
   const result = await f.service.execute({ kind: "initialize" });
   expect(result.ok).toBe(true);
   expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#fedcba");
-  expect(f.service.view().progress?.message).toContain("without replacing unsaved edits");
+  expect(f.service.view().progress?.message).toContain("your unsaved edits are kept");
 });
 
 test("opening two saved collections keeps the earlier unsaved draft recoverable after reload", async () => {

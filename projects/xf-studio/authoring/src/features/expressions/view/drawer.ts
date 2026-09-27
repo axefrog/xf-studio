@@ -27,6 +27,7 @@
  */
 import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
   setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+import { COMING_SOON } from "../../../studio-ui/coming-soon";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
@@ -285,6 +286,10 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       { kind: "action", label: "Mirror left onto right", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "left" } as ExpressionAction) },
       { kind: "action", label: "Mirror right onto left", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "right" } as ExpressionAction) },
       { kind: "action", label: "Flip face", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "flip" } as ExpressionAction) },
+      // Decided but not built yet (coming-soon.ts): face handles and sculpting (phase 2 and later), export to the game (phase 3).
+      { kind: "separator" },
+      ...(["expressionHandles", "expressionSculpt", "expressionExport"] as const).map((id): MenuItem => ({ kind: "action", label: COMING_SOON[id].label,
+        icon: id === "expressionExport" ? "export" : "handles", tag: "Soon", quietReason: true, capability: { available: false, reason: COMING_SOON[id].reason }, run: () => {} })),
     ], anchor, { label: "Face commands" });
   }
   function renamePreset(id: string, anchor: Element | { x: number; y: number }) {

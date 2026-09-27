@@ -7,7 +7,7 @@ import type { StudioModule, ViewSummaryContribution, ViewToolContribution } from
 
 export const EYE_MAKEUP_MODULE: StudioModule = Object.freeze({
   id: "eye-makeup", label: "Eye makeup", icon: "category", group: "character", stage: "stable", feature: "eye-makeup", shownByDefault: true,
-  description: "Layered eye makeup: the layer stack, the UV map, four inspectors and two view tools.",
+  description: "Design layered eye makeup for your V.",
 });
 
 export const EYE_MAKEUP_VIEW_TOOLS: readonly ViewToolContribution[] = Object.freeze([

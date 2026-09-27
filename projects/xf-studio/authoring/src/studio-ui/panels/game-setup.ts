@@ -1,13 +1,12 @@
 import type { FolderField } from "../../local-setup-actions";
 import type { LocalSetupFields } from "../../local-settings-server";
 import { applyCapability, button, note, Segmented } from "../controls";
+import { ChoiceList, FolderSetting, type FolderChoice, type FolderOutcome } from "../components";
 import { h, setAttr, setText, setValue, uid } from "../dom";
 import { helpTip } from "../help-tip";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 
-type Choice = { value: string; label: string };
-const OTHER = "\u0000other";
 const samePath = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b &&
   a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
 
@@ -47,69 +46,50 @@ export function gameSetupForm(rt: StudioRuntime) {
     { value: "direct", label: "Vortex or by hand", title: "Mods go into the game's own folder" }],
   onSelect: value => void save({ launchRoute: value }, value === "mo2" ? "Mod Organizer 2 chosen" : "Game folder chosen") });
 
-  /** A folder setting: what XF Studio found as choices, another folder typed or picked, saved at once. */
-  function folderField(field: FolderField, label: string, help: string, found: (frame: Frame) => Choice[]) {
-    const id = uid("setup");
-    const select = h("select", { id, class: "field" });
-    const input = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": `${label}: type the folder`,
-      placeholder: "Type the folder, e.g. C:\\Games\\Cyberpunk 2077" });
-    const browse = button({ label: "Browse…", icon: "folder", small: true, onClick: () => void pick() });
-    const typed = h("div", { class: "row gap-s setup-typed" }, input, browse);
-    let other = false, signature = "";
-    // What the folder is, in a help tip beside its label (help-tip.ts).
-    const element = h("div", { class: "control" }, h("div", { class: "control-line" }, h("label", { class: "control-label", for: id, text: label }), helpTip(label, help)),
-      h("div", { class: "select-wrap" }, select, icon("chevronDown")), typed);
-    select.addEventListener("change", () => {
-      if (select.value === OTHER) { other = true; rt.changed(); requestAnimationFrame(() => input.focus()); return; }
-      other = false;
-      void save({ [field]: select.value || null });
-    });
-    // A typed folder, once saved, is listed as the current choice, so the list shows it rather than "Another folder…".
-    const commit = () => { const value = input.value.trim(); void save({ [field]: value || null }).then(ok => { if (ok && value) { other = false; rt.changed(); } }); };
-    input.addEventListener("change", commit);
-    input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); commit(); } });
-    async function pick() {
-      const outcome = await port.localSetup.dispatch({ kind: "setup.pickFolder", field });
-      if (outcome.ok) { other = false; rt.feedback.announce(`${label} saved`); }
-      else if (outcome.code !== "cancelled") rt.feedback.toast("warning", "Settings", outcome.message, [], { code: outcome.code });
+  /**
+   * A folder setting (the library's FolderSetting): what XF Studio found, all shown as choices, another folder typed or picked, saved at
+   * once. Defaults first: while none is chosen, the first folder XF Studio found is saved, once per session, so nothing needs a click.
+   */
+  const outcome = (result: { ok: boolean; message?: string; code?: string }): FolderOutcome =>
+    result.ok ? { ok: true } : { ok: false, message: result.message ?? "That didn't work. Try again.", cancelled: result.code === "cancelled" };
+  // One adoption at a time (settings are saved one request after another); the next field is adopted on the paint after it.
+  const adopted = new Set<FolderField>();
+  let adopting = false;
+  function folderField(field: FolderField, label: string, help: string, found: (frame: Frame) => FolderChoice[], optional = false) {
+    const saved = async (result: Promise<{ ok: boolean; message?: string; code?: string }>) => {
+      const done = outcome(await result);
+      if (done.ok) rt.feedback.announce(`${label} saved`);
       rt.changed();
-    }
+      return done;
+    };
+    const setting = new FolderSetting({ label, help, placeholder: "Type the folder, e.g. C:\\Games\\Cyberpunk 2077",
+      onChoose: path => saved(port.localSetup.dispatch({ kind: "setup.update", fields: { [field]: path } })),
+      onSelect: path => saved(port.localSetup.dispatch({ kind: "setup.update", fields: { [field]: path } })),
+      onPick: () => saved(port.localSetup.dispatch({ kind: "setup.pickFolder", field })),
+      ...(optional ? { onClear: () => saved(port.localSetup.dispatch({ kind: "setup.update", fields: { [field]: null } })) } : {}) });
     return {
-      element,
+      element: setting.element,
       update(frame: Frame, value: string | null, disabled: boolean) {
         const choices = found(frame);
-        const current = value && !choices.some(choice => samePath(choice.value, value)) ? [{ value, label: value }] : [];
-        const all = [...current, ...choices];
-        // Nothing found and nothing chosen: the text box and Browse… are the whole field.
-        const listed = all.length > 0;
-        const key = JSON.stringify(all);
-        if (key !== signature) {
-          signature = key;
-          select.replaceChildren(...all.map(choice => h("option", { value: choice.value, text: choice.label })),
-            h("option", { value: OTHER, text: "Another folder…" }), ...(value ? [] : [h("option", { value: "", text: "Not chosen yet" })]));
+        setting.update({ chosen: value, found: choices, canPick: frame.localSetup.canPickFolder,
+          pickCapability: port.localSetup.capability({ kind: "setup.pickFolder", field }), disabled, reason: "Restore your previous settings first." });
+        // Defaults first ("It just works"): nothing chosen yet and XF Studio found one, so it is used.
+        if (!value && !disabled && choices.length && !adopted.has(field) && !adopting && !frame.localSetup.busy) {
+          adopted.add(field); adopting = true;
+          void save({ [field]: choices[0]!.path }, `Using the ${label} XF Studio found.`).finally(() => { adopting = false; rt.changed(); });
         }
-        const selected = all.find(choice => samePath(choice.value, value))?.value ?? "";
-        if (document.activeElement !== select) select.value = other ? OTHER : selected;
-        select.closest<HTMLElement>(".select-wrap")!.hidden = !listed;
-        typed.hidden = listed && !other;
-        setValue(input, value ?? "");
-        select.disabled = disabled; input.disabled = disabled;
-        const canPick = frame.localSetup.canPickFolder;
-        browse.hidden = !canPick;
-        if (canPick) applyCapability(browse, disabled ? { available: false, reason: "Restore your previous settings first." }
-          : port.localSetup.capability({ kind: "setup.pickFolder", field }));
       },
     };
   }
 
   const game = folderField("gameRoot", "Cyberpunk 2077 folder", "The folder the game is installed in. XF Studio reads your game here; it never changes it.",
-    frame => (frame.installDetection?.games?.candidates ?? []).map(candidate => ({ value: candidate.root,
-      label: `${candidate.root} (${[...new Set(candidate.evidence.map(item => ({ steam: "Steam", gog: "GOG", epic: "Epic", mo2: "Mod Organizer 2" })[item.source]))].join(", ")})` })));
+    frame => (frame.installDetection?.games?.candidates ?? []).map(candidate => ({ path: candidate.root,
+      source: [...new Set(candidate.evidence.map(item => ({ steam: "Steam", gog: "GOG", epic: "Epic", mo2: "Mod Organizer 2" })[item.source]))].join(", ") })));
   const mo2 = folderField("mo2Root", "Mod Organizer 2 instance", "The Mod Organizer 2 you play Cyberpunk 2077 with (the folder with ModOrganizer.ini).",
     frame => (frame.installDetection?.mo2?.instances ?? []).filter(instance => instance.managesCyberpunk || instance.kind === "configured")
-      .map(instance => ({ value: instance.root, label: `${instance.name} (${instance.root})` })));
+      .map(instance => ({ path: instance.root, source: instance.name })));
   const direct = folderField("manualModRoot", "Extra mod folder (optional)", "Only if you keep mods in a folder outside the game as well. Leave it empty otherwise.",
-    () => []);
+    () => [], true);
 
   // Profiles of the chosen instance, as choices; a text box where the instance isn't one XF Studio could read.
   const profileId = uid("setup");
@@ -126,9 +106,10 @@ export function gameSetupForm(rt: StudioRuntime) {
   wolvenKit.addEventListener("change", () => void save({ wolvenKitCli: wolvenKit.value.trim() || null }));
   const wolvenKitField = h("div", { class: "control" }, h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Your own WolvenKit (optional)" }),
     helpTip("Your own WolvenKit", "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading).")), wolvenKit);
-  const plateHead = h("select", { class: "field" });
-  const plateHeadLabel = h("span", { class: "control-label" });
-  plateHead.addEventListener("change", () => void save({ eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] }));
+  // Two long choices, both shown (ChoiceList `rows`); the label and choices come from the settings view (one wording everywhere).
+  const plateHead = new ChoiceList<LocalSetupFields["eyePlateHead"]>({ label: "Head used for the eye plate", layout: "rows",
+    help: "Build cuts the eye plate from this head. Choose the unmodified head only if a head mod stops Build.",
+    onSelect: value => void save({ eyePlateHead: value }) });
 
   const findAgain = button({ label: "Find my game and mod manager again", icon: "search", small: true, variant: "quiet", onClick: () => void detect(true) });
   const restore = button({ label: "Restore previous settings", icon: "reset", small: true, onClick: () => void (async () => {
@@ -139,7 +120,7 @@ export function gameSetupForm(rt: StudioRuntime) {
   const mo2Section = h("div", { class: "setup-mo2" }, mo2.element, profileField), directSection = h("div", { class: "setup-direct" }, direct.element);
   const gameElement = h("div", { class: "setup-section setup-game" },
     h("div", { class: "row wrap gap-s" }, restore), route.element, game.element, mo2Section, directSection,
-    h("label", { class: "control" }, plateHeadLabel, plateHead), h("div", { class: "row wrap gap-s" }, findAgain));
+    plateHead.element, h("div", { class: "row wrap gap-s" }, findAgain));
   const toolsElement = h("div", { class: "setup-section setup-tools" }, wolvenKitField);
   const saves = savesFolderField(rt, save);
   // Finding is read only and quick: done once when the form is first shown, and again on request.
@@ -167,7 +148,7 @@ export function gameSetupForm(rt: StudioRuntime) {
       if (section === "tools") { requestAnimationFrame(() => wolvenKit.focus()); return; }
       const view = port.localSetup.snapshot().view;
       const first = !view?.fields.gameRoot ? game.element : view.fields.launchRoute === "mo2" && !view.fields.mo2Root ? mo2.element : game.element;
-      requestAnimationFrame(() => first.querySelector<HTMLElement>("select:not([hidden]), input")?.focus());
+      requestAnimationFrame(() => first.querySelector<HTMLElement>("button:not([hidden]), input:not([hidden])")?.focus());
     },
     update(frame: Frame) {
       const setup = frame.localSetup, view = setup.view, fields = view?.fields;
@@ -193,7 +174,7 @@ export function gameSetupForm(rt: StudioRuntime) {
       if (key !== profileKey) {
         profileKey = key;
         profile.replaceChildren(...(current ? [] : [h("option", { value: "", text: "Choose a profile" })]),
-          ...choices.map(name => h("option", { value: name, text: name === instance?.selectedProfile ? `${name} (last used)` : name })));
+          ...choices.map(name => h("option", { value: name, text: name === instance?.selectedProfile ? `${name} · last used` : name })));
       }
       if (document.activeElement !== profile) profile.value = current ?? "";
       profile.closest<HTMLElement>(".select-wrap")!.hidden = !profiles.length;
@@ -202,13 +183,10 @@ export function gameSetupForm(rt: StudioRuntime) {
       setValue(wolvenKit, fields?.wolvenKitCli ?? "");
       if (view) {
         const choice = view.eyePlateHead;
-        setText(plateHeadLabel, choice.label);
-        setAttr(plateHead, "aria-label", choice.label);
-        if (plateHead.options.length !== choice.options.length)
-          plateHead.replaceChildren(...choice.options.map(option => h("option", { value: option.value, text: option.label })));
-        if (document.activeElement !== plateHead) plateHead.value = view.fields.eyePlateHead;
+        plateHead.setOptions(choice.options.map(option => ({ value: option.value, label: option.label })));
+        plateHead.update(view.fields.eyePlateHead, undefined, locked ? { disabled: true, reason: "Restore your previous settings first." } : {});
       }
-      for (const control of [profile, profileText, wolvenKit, plateHead]) control.disabled = locked;
+      for (const control of [profile, profileText, wolvenKit]) control.disabled = locked;
       applyCapability(findAgain, frame.installDetection?.busy ? { available: false, reason: "XF Studio is looking now." }
         : port.installDetection.capability({ kind: "detect.gameInstalls" }));
       saves.update(frame, locked);

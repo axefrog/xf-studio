@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only)",
  "states": {
   "starter": {
    "modes": {
@@ -3158,7 +3158,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "layer/glitter.setIrregular/spread": {
@@ -3731,7 +3731,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "point/glitter.setIrregular/spread": {
@@ -6192,7 +6192,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "layer/glitter.setIrregular/spread": {
@@ -6766,7 +6766,7 @@
       "dependsOn": [
        "count"
       ],
-      "note": "Dense fields are restricted to the eye UV regions and small flakes."
+      "note": "Dense fields: eye regions and small flakes only."
      }
     },
     "point/glitter.setIrregular/spread": {

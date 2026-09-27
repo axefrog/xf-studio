@@ -202,7 +202,7 @@ describe("one hierarchy in the Character panel (Next 4)", () => {
     expect(h.root.querySelectorAll(".cc-group-title").map(title => title.textContent)).toEqual(["Head", "Body", "Clothing"]);
     const group = (id: string) => h.root.querySelectorAll(".cc-group").find(element => element.getAttribute("data-group") === id)!;
     // The uncensored setting and the body's switch are on Body; the clothes' switch on Clothing.
-    expect(group("body").querySelectorAll(".toggle-label").map(label => label.textContent)).toContain("Show my V uncensored, as the game can");
+    expect(group("body").querySelectorAll(".toggle-label").map(label => label.textContent)).toContain("Show my V uncensored");
     const switches = (element: LightElement) => element.querySelectorAll("input").map(input => input.getAttribute("aria-label")).filter(Boolean);
     expect(switches(group("body"))).toContain("Show the body in the 3D view");
     expect(switches(group("clothing"))).toEqual(["Show clothes in the 3D view"]);
@@ -210,7 +210,7 @@ describe("one hierarchy in the Character panel (Next 4)", () => {
     const sectionOf = (element: LightElement) => { let at: LightElement | null = element; while (at && !at.classList.contains("cc-section")) at = at.parentNode; return at; };
     const piercings = h.root.querySelectorAll("input").find(input => input.getAttribute("aria-label") === "Show piercings in the 3D view")!;
     expect(sectionOf(piercings)!.getAttribute("data-section")).toBe("head/piercings");
-    expect(h.root.querySelectorAll("select").some(select => sectionOf(select)?.getAttribute("data-section") === "head/eyes")).toBe(true);
+    expect(h.root.querySelectorAll(".choice-list").some(list => sectionOf(list)?.getAttribute("data-section") === "head/eyes")).toBe(true);
     // Without a 3D preview a switch can't change: it stays focusable, says why (its description and the page's reason tip; no line is
     // reserved under the heading), and a click runs nothing.
     expect(piercings.disabled).toBe(false);
@@ -333,13 +333,13 @@ describe("one Undo rule in the Character panel (UI-81)", () => {
       target.dispatchEvent(event);
       return event;
     };
-    // A switch (a checkbox) and a list (a select) follow the panel's rule, not the makeup's.
+    // A switch (a checkbox) and a list of choices follow the panel's rule, not the makeup's.
     const eyebrows = h.root.querySelectorAll("input").find(input => input.getAttribute("role") === "switch")!;
     const undone = key(eyebrows, {});
     expect(undone.defaultPrevented).toBe(true);
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.undo" });
-    const select = h.root.querySelector("select")!;
-    key(select, { key: "y" });
+    const list = h.root.querySelector(".choice-list")!;
+    key(list, { key: "y" });
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.redo" });
     // The search box keeps its own text Undo.
     const search = h.root.querySelector(".cc-search")!;
@@ -428,13 +428,13 @@ describe("the choice list", () => {
     const h = await harness();
     for (let i = 0; i < 3; i++) { h.paint(); await settle(); }
     const text = () => h.root.querySelector(".cc-prepared-text")!.textContent;
-    expect(text()).toBe("Prepared game files on this computer: 1.5 GB.");
+    expect(text()).toBe("Prepared game files: 1.5 GB");
     const clear = h.root.querySelectorAll("button").find(button => button.textContent?.includes("Clear prepared game files"))!;
     clear.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.clearPreparedFiles" });
     h.paint();
     expect(text()).toBe("Clearing the prepared game files…");
     for (let i = 0; i < 3; i++) { await settle(); h.paint(); }
-    expect(text()).toBe("Prepared game files on this computer: 1.5 GB. Cleared 1.5 GB.");
+    expect(text()).toBe("Prepared game files: 1.5 GB · cleared 1.5 GB");
   });
 });
