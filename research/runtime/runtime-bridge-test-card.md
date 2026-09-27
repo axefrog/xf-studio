@@ -308,7 +308,16 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (bridge 0.4.0, branch build, not staged)
 
-BUILD_RECORD_PLACEHOLDER
+Built 28 September 2026 on `claude/bridge-0.4` at `82574b7e8345`, clean tree (`XFB_BUILD=82574b7e8345c4628b9bf43e491426081d98fb80;dirty=0`), by `bun tools/package.ts`: version 0.4.0, session 3's six fixes (framing waits for each change and picks its axis, presets read last and the camera levelled, light placement and the missing type row, scene tier 2 accepted, the creator's busy flag, `cc.confirm` with nothing to confirm) and the requested `ui.message`, `inventory.equip`/`inventory.unequip` and `game.save`/`game.load`. On that commit: `xfb_selftest --unit` OK (241 checks), self-test 308 of 308, `bun test tools` 155 of 155, typecheck, redscript lint (against the installed 2.31 `final.redscripts`, SHA-256 `2119046f…ee86`) and Lua lint clean. The default zip keeps the bridge off with every switch off and carries no presets or panel; the -diagnostic zip adds the presets (`^xf_photo_mode_presets.yaml`) and the panel, read-only; the -writes zip allows writes with the classes photo, world, character and **save**, leaving the creator and the live-pose carrier. **Inventory writes are off** (`"inventory_writes": false`): add `inventory` to the staged `allow_write_classes` only after the maintainer approves, or rebuild with `--allow-inventory`. A rebuild after merging gives new hashes.
+
+| Zip | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.4.0-writes.zip` | `be3f588db383a82e2e488763be93443e22af5b02fa43d20cec0d75cd1faccc0d` |
+| `xf-runtime-bridge-0.4.0-diagnostic.zip` | `c425b719e80169e8d296fd2069d59770f898ac343ae44d8bd221a31123c68429` |
+| `xf-runtime-bridge-0.4.0.zip` (default) | `23feb9f9faaf96f94e52dccf1ab55c4e69b75a5debb9bf3a8347172019c21927` |
+| (`XFRuntimeBridge.dll` inside each) | `8c76afd0b07f12dd87447ac2093667e219066c44a68a40fd30453a02bb488a4c` |
+
+**New in this build, watch in the session:** the plugin log's load lines say `natives=10`; the status label may carry the coordinator's lines under it; a failed `photo.frame` leaves its steps in the command log's `detail`; restage removes the old `xf_photo_mode_presets.yaml` (the new file starts with `^`). The [session-4 preflight](#session-4-preflight-bridge-040) checks each fix.
 
 ## Build record (batch 4, branch build, not staged)
 
