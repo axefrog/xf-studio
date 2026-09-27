@@ -14,20 +14,26 @@ const app = resolve(import.meta.dir, "..");
 const cache = resolve(app, "data/preview-cache");
 const assets = resolve(app, "public/assets");
 
-/** The newest derived core head in the local preview cache. */
+/**
+ * The newest derived feminine core head in the local preview cache: the blink is baked against the female player head's rig
+ * (tools/bake_game_blink.py), and GameBlink refuses another body type's head.
+ */
 export function findCoreHead(): string | null {
   if (!existsSync(cache)) return null;
-  const heads = readdirSync(cache).map(name => resolve(cache, name, "assets/head.glb")).filter(existsSync);
+  const heads = readdirSync(cache).filter(name => name.includes("-female-")).map(name => resolve(cache, name, "assets/head.glb")).filter(existsSync);
   return heads.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0] ?? null;
 }
-/** One geometry file per distinct lash and brow component in the cached character records. */
+/**
+ * One geometry file per distinct lash and brow component in the cached character records, feminine only (player head
+ * components are named for their body type, `_pwa` or `_pma`), to match the head from findCoreHead.
+ */
 function detailFiles(slot: "lashes" | "brows"): { component: string; file: string }[] {
   const records = resolve(cache, "characters/records"), files = resolve(cache, "characters/files");
   if (!existsSync(records)) return [];
   const found = new Map<string, string>();
   for (const name of readdirSync(records).sort()) {
     const record = JSON.parse(readFileSync(resolve(records, name), "utf8"));
-    for (const component of record.components ?? []) if (component.slot === slot && !found.has(component.component)) {
+    for (const component of record.components ?? []) if (component.slot === slot && !/_pma(_|$)/.test(component.component) && !found.has(component.component)) {
       const file = resolve(files, component.geometry.file);
       if (existsSync(file)) found.set(component.component, file);
     }
