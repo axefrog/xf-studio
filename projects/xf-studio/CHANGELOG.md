@@ -66,6 +66,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
+- Resizing a panel (dragging a divider, resizing the window, floating or docking it) keeps the rows you were looking at at the top instead of losing your place.
 - **Tidier panels.** Camera & light groups a light's controls under Position, Output and Spot cone, and says where the game's colour grade comes from in the Colour grade help icon. In Poses, Stand still and Idle show which one V is doing. Character rows keep their names readable in a narrow panel. Hairstyle pictures are drawn in a neutral grey in the dark theme, with room above tall styles.
 - Choosing a hairstyle picture (or any choice) in the Character panel no longer scrolls the panel away from where you were.
 - **Softer, even shadow edges, and shadows that stay put.** Shadow edges on your V's face (the nose's, the hair's) now fade smoothly instead of in small steps. The studio key and rim lights no longer lose their shadows when the preview quality setting refreshes, and shadows come back at once after the graphics driver resets, instead of only after something moves. A calibration value that happened to equal the old default is now kept exactly as chosen. Checked by automated tests (the new filter simulated across a shadow edge, and the shadow maps' lifecycle).

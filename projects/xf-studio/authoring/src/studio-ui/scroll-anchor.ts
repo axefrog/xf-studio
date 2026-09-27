@@ -20,6 +20,12 @@ import { viewState, type ViewStateStore } from "./view-state";
  *   for a moment, whatever the choice rebuilds, focuses or moves above it, until they scroll or press something.
  * - **Reveals go through it** (`revealInView`): bringing an element into view scrolls only its own container, minimally, and never while
  *   a restore or a hold is pending.
+ * - **Resizing never loses the place** (a ResizeObserver on the container): the anchor is kept current on every scroll, so it is never
+ *   stale when a resize arrives. A height-only change keeps the scroll position as it is; a width change (the content reflows) puts the
+ *   anchor back at minus its clip offset after layout, and keeps going back to that same anchor through a whole splitter drag or window
+ *   resize, so growing back returns exactly. A panel floated, docked or re-laid out gets a new container, which restores from the anchor
+ *   recorded as the old one was torn down. Nothing is corrected while the person is scrolling (a wheel, touch or key within the last
+ *   half second, or a pointer held down in the container).
  *
  * Keys: `data-view-key` on the elements (GroupSection, `section()`, the Character panel's groups, sections and rows set it); a source
  * of its own (`AnchorSource`) where the elements aren't all in the page (a virtualised `TreeView`).
@@ -113,6 +119,8 @@ export type ScrollMemoryOptions = {
   patienceMs?: number;
   /** Watch the container's content for changes (default true where MutationObserver exists); else the owner calls `contentChanged`. */
   observe?: boolean;
+  /** Keep the place when the container resizes (default true where ResizeObserver exists). */
+  resize?: boolean;
 };
 
 /** One remembered scroll container: records its anchor under `key` and restores it once its content is there. */
@@ -128,12 +136,26 @@ export class ScrollMemory {
   private mutations?: MutationObserver;
   private sizes?: ResizeObserver;
   private disposed = false;
+  /** The anchor as of the last scroll (or settled restore): what was at the top edge before any resize. */
+  private live: ScrollAnchor | undefined;
+  /** The container's size at the last resize seen (-1: none yet). */
+  private width = -1;
+  /** The scroll position a resize correction set, so its own scroll event doesn't replace `live`. */
+  private ownTop = Number.NaN;
+  /** The person is scrolling: until this time (wheel, touch, keys), or while a pointer is held in the container. */
+  private userUntil = 0;
+  private held = false;
+  private readonly resizer?: ResizeObserver;
   constructor(readonly container: HTMLElement, readonly key: string, private readonly options: ScrollMemoryOptions = {}) {
     this.source = options.source ?? domAnchorSource(container);
     this.store = options.store ?? viewState;
     container.addEventListener("scroll", this.scrolled, { passive: true });
     for (const type of USER_INPUT) container.addEventListener(type, this.userInput, { passive: true });
     memories.add(this);
+    if (options.resize !== false && typeof ResizeObserver === "function") {
+      this.resizer = new ResizeObserver(() => this.resized());
+      this.resizer.observe(container);
+    }
     const stored = this.store().anchor(key);
     if (stored && (stored.top > 0 || stored.key)) {
       this.pending = stored;
@@ -148,7 +170,23 @@ export class ScrollMemory {
   contentChanged() {
     if (!this.pending) return;
     if (Date.now() > this.deadline) { this.settle(); return; }
-    if (this.source.restore(this.pending) === "exact" && !this.sticky) this.settle();
+    if (this.source.restore(this.pending) === "exact" && !this.sticky) { this.settle(); this.captureLive(); }
+  }
+  /**
+   * The container changed size (its ResizeObserver; tests call it directly). Height only: the scroll position stays. Width: the content
+   * reflowed, so the anchor from before goes back to minus its clip offset, unless the person is scrolling.
+   */
+  resized() {
+    if (this.disposed) return;
+    const width = this.container.clientWidth, height = this.container.clientHeight, before = this.width;
+    // Hidden or folded away: nothing to measure; the anchor from before stays for when it shows.
+    if (!width || !height) return;
+    this.width = width;
+    if (this.pending) { this.contentChanged(); return; }
+    if (before < 0 || width === before) { if (!this.live) this.captureLive(); return; }
+    if (this.userScrolling() || !this.live) { this.captureLive(); return; }
+    this.source.restore(this.live);
+    this.ownTop = this.container.scrollTop;
   }
   /**
    * Keep what is at the top edge where it is for `ms` (the person just chose something): whatever the choice rebuilds, focuses, reveals
@@ -162,7 +200,7 @@ export class ScrollMemory {
     this.pending = anchor;
     this.sticky = true;
     this.deadline = Date.now() + ms;
-    this.holdTimer = setTimeout(() => this.settle(), ms);
+    this.holdTimer = setTimeout(() => { this.settle(); this.captureLive(); }, ms);
     this.watch();
   }
   /** Record now if a scroll is waiting to be recorded. */
@@ -182,8 +220,15 @@ export class ScrollMemory {
     this.settle();
     this.container.removeEventListener("scroll", this.scrolled);
     for (const type of USER_INPUT) this.container.removeEventListener(type, this.userInput);
+    this.resizer?.disconnect();
     memories.delete(this);
   }
+  private captureLive() {
+    if (this.disposed || this.pending) return;
+    const anchor = this.source.capture();
+    if (anchor) this.live = anchor;
+  }
+  private userScrolling() { return this.held || Date.now() < this.userUntil; }
   private record() {
     if (this.pending || this.disposed || !this.container.isConnected) return;
     const anchor = this.source.capture();
@@ -193,11 +238,23 @@ export class ScrollMemory {
   private readonly scrolled = () => {
     // While a restore or a hold is pending, scrolling is never the person's (their input settles it first): put the anchor back.
     if (this.pending) { this.contentChanged(); return; }
+    // A resize correction's own scroll keeps the anchor from before the resize (so a drag back returns exactly); any other is the new place.
+    if (Math.abs((this.container.scrollTop || 0) - this.ownTop) < 1) this.ownTop = Number.NaN;
+    else this.captureLive();
     if (this.timer !== undefined) clearTimeout(this.timer);
     this.timer = setTimeout(() => { this.timer = undefined; this.record(); }, this.options.delayMs ?? 200);
   };
-  /** The person scrolled, pressed or typed here: their position wins over a restore still waiting. */
-  private readonly userInput = () => { if (this.pending) this.settle(); };
+  /** The person scrolled, pressed or typed here: their position wins over a restore still waiting, and over resize corrections for now. */
+  private readonly userInput = (event: Event) => {
+    if (this.pending) { this.settle(); this.captureLive(); }
+    this.userUntil = Date.now() + 500;
+    if (event.type === "pointerdown" && !this.held) {
+      this.held = true;
+      const doc = this.container.ownerDocument ?? document;
+      const release = () => { this.held = false; this.userUntil = Date.now() + 500; doc.removeEventListener("pointerup", release); doc.removeEventListener("pointercancel", release); };
+      doc.addEventListener("pointerup", release); doc.addEventListener("pointercancel", release);
+    }
+  };
   private watch() {
     if (this.options.observe === false) return;
     const retry = () => this.contentChanged();
