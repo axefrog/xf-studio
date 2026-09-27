@@ -14,7 +14,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   rate_limited: "Too many requests in a short time. Wait a second and try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
-    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character). Nothing was changed.",
+    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save; inventory stays off until the maintainer allows it). Nothing was changed.",
   write_mismatch:
     "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
   writes_paused:
@@ -66,6 +66,16 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   not_in_gameplay: "This needs V in the world (or, for the clock, the appearance screen): load a save and close any other menus first.",
   not_in_character_menu:
     "Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first.",
+  bridge_save_lock:
+    "The bridge has changed the game since the last load, so it keeps saving locked (a save now would keep those changes). Nothing was saved. Load a save first, or ask again with override_lock if the save should keep them.",
+  saving_locked: "The game doesn't allow saving right now (combat, a scene, or another lock). Nothing was saved. Try again from a quiet moment in normal play.",
+  no_free_slot: "The game has no free manual save slot. Nothing was saved. Delete an old manual save in the game's Load menu, then try again.",
+  save_failed: "The game answered that the save failed. Nothing new was saved. Check free disk space and the game's save folder.",
+  save_uncertain:
+    "The game took the save request but didn't confirm it in time. Check the game's Load menu before saving again, so no duplicate save is made.",
+  save_not_found: "No save has that name in the game's list, so nothing was loaded. The detail lists some of the names the game shows.",
+  not_in_inventory: "V doesn't have that item. Nothing was changed. Ask again with add_if_missing to add one to V's inventory first.",
+  not_added_by_bridge: "That item wasn't added by the bridge this session, so it stays in V's inventory. Nothing was removed.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",

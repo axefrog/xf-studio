@@ -24,14 +24,15 @@ export type McpServerOptions = {
 };
 
 /**
- * Reads the permission flags of the command line: `--read-only` (read and control tools) or
+ * Reads the permission flags of the command line: `--read-only` (read, notify and control tools: nothing
+ * that changes the game) or
  * `--allow <classes>` (a comma-separated list), never both. `control` (the kill switch) is always
  * included. Returns undefined for "every class", or a plain error.
  */
 export function parsePermissionFlags(args: readonly string[]): { allow?: Permission[] } | { error: string } {
   const readOnly = args.includes("--read-only");
   const at = args.indexOf("--allow");
-  if (at < 0) return readOnly ? { allow: ["read", "control"] } : {};
+  if (at < 0) return readOnly ? { allow: ["read", "notify", "control"] } : {};
   if (readOnly) return { error: "Use either --read-only or --allow <classes>, not both." };
   if (args.indexOf("--allow", at + 1) >= 0) return { error: "Give --allow once, with a comma-separated list." };
   const value = args[at + 1];
@@ -49,7 +50,8 @@ export const INSTRUCTIONS = [
   "Start with bridge_ping or game_status. Actions that change the game only work when the bridge's config.ini allows them (the dedicated test profile); otherwise they are refused and nothing changes.",
   "Photo-mode actions need photo mode open: for now the player presses the photo mode key (photo_enter answers so), and game_wait with phase photo_mode notices it. photo_frame frames V automatically; photo_hud_hide hides the menu and cursor before a capture.",
   "capture_screenshot works without the bridge and returns a small preview plus the path of a full-resolution file; capture_recrop cuts a tighter area from that file; capture_burst takes a short series for flicker checks.",
-  "Nothing here saves the game.",
+  "ui_message shows a short line to the player under the bridge's in-game label (and the session runner echoes its notes and asks there).",
+  "Only game_save saves the game, and only when asked: it refuses while the bridge's own save lock is held unless override_lock is given. inventory_equip and inventory_unequip need the inventory permission, which the bridge's config.ini keeps off until the maintainer approves it.",
 ].join(" ");
 
 function describe(command: CommandDef): string {
@@ -71,7 +73,7 @@ export function toolsFor(commands: readonly CommandDef[], allow?: readonly Permi
       annotations: {
         title: command.title,
         readOnlyHint: command.permission === "read",
-        destructiveHint: command.permission === "write-character" || command.permission === "control",
+        destructiveHint: ["write-character", "write-inventory", "write-save", "control"].includes(command.permission),
         idempotentHint: command.permission === "read",
         openWorldHint: false,
       },

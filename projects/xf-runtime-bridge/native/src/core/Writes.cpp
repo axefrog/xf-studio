@@ -1,5 +1,7 @@
 #include "core/Writes.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <thread>
 
@@ -266,6 +268,9 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
     };
 
     json applied = json::array();
+    json skipped = json::array();
+    json placement;
+    json placeUndo;
     std::string current;
     try
     {
@@ -276,9 +281,86 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
         for (const auto& attribute : aRequest.attributes)
         {
             current = attribute.name;
-            auto result = aOps.set(attribute.key, attribute.value);
+            json result;
+            try
+            {
+                result = aOps.set(attribute.key, attribute.value);
+            }
+            catch (const MethodError& e)
+            {
+                // Game 2.31's photo-mode menu has no light type row (setting 45): the light keeps its type.
+                if (attribute.key == params::key::kLightType && e.code == "unavailable")
+                {
+                    skipped.push_back({{"name", attribute.name}, {"reason", e.what()}});
+                    continue;
+                }
+                throw;
+            }
             result["name"] = attribute.name;
             applied.push_back(result);
+        }
+        if (aRequest.place)
+        {
+            current = "place";
+            const auto& place = *aRequest.place;
+            if (place.kind == params::LightPlacement::Kind::Camera)
+            {
+                // Photo mode places a light where the camera is when it switches on: off, then on again.
+                const auto off = aOps.set(params::key::kLightState, 0.0f);
+                aOps.settle();
+                aOps.set(params::key::kLightState, 1.0f);
+                aOps.settle();
+                placement = {{"requested", "camera"}, {"route", "switched_again"}};
+                if (BeforeKnown(off) && off["before"].get<double>() < 0.5)
+                {
+                    placeUndo["on"] = false;
+                }
+                if (aOps.position)
+                {
+                    try
+                    {
+                        placement["now"] = aOps.position(aRequest.light).value("position", json());
+                    }
+                    catch (const std::exception& e)
+                    {
+                        placement["now_unknown"] = e.what();
+                    }
+                }
+            }
+            else
+            {
+                if (!aOps.place)
+                {
+                    throw MethodError("unavailable", "this build can't move photo-mode lights");
+                }
+                const auto moved = aOps.place(aRequest.light, place);
+                aOps.settle();
+                placement = {{"requested", params::PlacementJson(place)}, {"route", "moved"}, {"before", moved.value("before", json())},
+                             {"after", moved.value("after", json())}};
+                if (moved.contains("head"))
+                {
+                    placement["head"] = moved["head"];
+                }
+                if (aOps.position)
+                {
+                    const auto now = aOps.position(aRequest.light).value("position", json());
+                    placement["now"] = now;
+                    const auto& after = placement["after"];
+                    const bool held = now.is_object() && after.is_object() &&
+                                      std::hypot(now.value("x", 0.0) - after.value("x", 0.0), now.value("y", 0.0) - after.value("y", 0.0),
+                                                 now.value("z", 0.0) - after.value("z", 0.0)) < 0.05;
+                    placement["held"] = held;
+                    if (!held)
+                    {
+                        placement["note"] = "photo mode put the light somewhere else again a few frames later; place \"camera\" is the fallback";
+                    }
+                }
+                const auto& before = placement["before"];
+                if (before.is_object())
+                {
+                    placeUndo["place"] = {{"world", {before.value("x", 0.0), before.value("y", 0.0), before.value("z", 0.0)}}};
+                }
+            }
         }
     }
     catch (const std::exception& e)
@@ -299,6 +381,15 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
     }
 
     json out{{"light", aRequest.light}, {"applied", applied}, {"selected_before", previousKnown ? json(previous) : json(nullptr)}};
+    if (!skipped.empty())
+    {
+        out["skipped"] = skipped;
+        out["note"] = "the light type (spot or ambient) isn't in this game version's photo-mode menu, so the light keeps its type";
+    }
+    if (!placement.is_null())
+    {
+        out["placement"] = placement;
+    }
     int32_t selectedNow = aRequest.light;
     if (aRequest.selectAfter > 0 && aRequest.selectAfter != aRequest.light)
     {
@@ -317,6 +408,10 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
 
     std::vector<std::string> unknown;
     auto undo = UndoParams(applied, &unknown);
+    for (const auto& [name, value] : placeUndo.items())
+    {
+        undo[name] = value;
+    }
     if (!undo.empty())
     {
         undo["light"] = aRequest.light;
@@ -612,5 +707,261 @@ bool RestoreOnce::Tick(bool aReady, const std::function<void()>& aRestore,
         }
     }
     return true;
+}
+// --- inventory.equip / inventory.unequip --------------------------------------------------------------
+
+namespace
+{
+// Reads the slot until aWanted says it's done, settling between reads. The last reading, or null.
+json PollSlot(const InventoryOps& aOps, const std::string& aSlot, const std::string& aItem, const std::function<bool(const json&)>& aWanted)
+{
+    json last;
+    for (int i = 0; i < kInventoryPolls; ++i)
+    {
+        aOps.settle();
+        last = aOps.slot(aSlot, aItem);
+        if (aWanted(last))
+        {
+            break;
+        }
+    }
+    return last;
+}
+} // namespace
+
+json InventoryEquip(const params::InventoryEquipRequest& aRequest, const InventoryOps& aOps)
+{
+    auto step = aOps.equip();
+    const auto slot = step.value("slot", aRequest.slot);
+    const auto previous = step.value("previous", std::string());
+    const bool added = step.value("added", false);
+    bool equipped = step.value("already_equipped", false);
+    json out{{"item", aRequest.item}, {"slot", slot}, {"added", added}, {"previous", previous}};
+    if (!equipped)
+    {
+        const auto now = PollSlot(aOps, slot, std::string(), [&](const json& aNow) { return aNow.value("item", std::string()) == aRequest.item; });
+        equipped = now.value("item", std::string()) == aRequest.item;
+        if (!equipped)
+        {
+            out["note"] = "the game took the request, but the slot didn't show the item within the wait (it may still change)";
+            out["slot_now"] = now.value("item", std::string());
+        }
+    }
+    out["equipped"] = equipped;
+    if (!previous.empty() && previous != aRequest.item)
+    {
+        out["undo"] = {{"method", "inventory.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
+        if (added)
+        {
+            out["undo_note"] = "then inventory.unequip with this item and remove_added: true takes the added item out of V's inventory";
+        }
+    }
+    else if (previous.empty())
+    {
+        out["undo"] = added ? json{{"method", "inventory.unequip"}, {"params", {{"item", aRequest.item}, {"remove_added", true}}}}
+                            : json{{"method", "inventory.unequip"}, {"params", {{"slot", slot}}}};
+    }
+    else
+    {
+        out["undo"] = nullptr;
+        out["undo_note"] = "the item was already worn; nothing to undo";
+    }
+    return out;
+}
+
+json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const InventoryOps& aOps)
+{
+    json out;
+    std::string previous;
+    std::string slot = aRequest.slot;
+    bool worn = true;
+    if (!aRequest.item.empty() && aRequest.removeAdded)
+    {
+        // An added item that isn't worn (another item was equipped over it) is only removed.
+        const auto now = aOps.slot(std::string(), aRequest.item);
+        slot = now.value("slot", slot);
+        worn = now.value("item", std::string()) == aRequest.item;
+    }
+    if (worn)
+    {
+        const auto step = aOps.unequip();
+        slot = step.value("slot", slot);
+        previous = step.value("previous", std::string());
+        bool empty = step.value("was_empty", false);
+        if (!empty)
+        {
+            const auto now = PollSlot(aOps, slot, std::string(), [](const json& aNow) { return aNow.value("empty", false); });
+            empty = now.value("empty", false);
+            if (!empty)
+            {
+                out["note"] = "the game took the request, but the slot still showed an item at the end of the wait";
+            }
+        }
+        out["unequipped"] = empty;
+    }
+    else
+    {
+        out["unequipped"] = false;
+        out["note"] = "the item wasn't worn, so it was only removed";
+    }
+    out["slot"] = slot;
+    out["previous"] = previous;
+    bool removed = false;
+    if (aRequest.removeAdded)
+    {
+        removed = aOps.removeAdded(aRequest.item).value("removed", false);
+        out["removed"] = removed;
+    }
+    if (!previous.empty() && !removed)
+    {
+        out["undo"] = {{"method", "inventory.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
+    }
+    else
+    {
+        out["undo"] = nullptr;
+        out["undo_note"] = removed ? "the item the bridge added was removed again; inventory.equip with add_if_missing adds it back"
+                                   : "the slot was already empty; nothing to undo";
+    }
+    return out;
+}
+
+// --- game.save / game.load --------------------------------------------------------------------------
+
+json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
+{
+    const auto prepared = aOps.prepare();
+    const bool released = prepared.value("lock_released", false);
+    if (released)
+    {
+        bool unlocked = false;
+        for (int32_t waited = 0; waited <= kSaveUnlockWaitMs; waited += 100)
+        {
+            if (!aOps.status().value("locked", true))
+            {
+                unlocked = true;
+                break;
+            }
+            aOps.sleep(std::chrono::milliseconds(100));
+        }
+        if (!unlocked)
+        {
+            aOps.relock();
+            throw MethodError("saving_locked", "the game still reported saving locked after the bridge released its own lock, so nothing was "
+                                               "saved; the bridge's lock is back on");
+        }
+    }
+    aOps.save();
+    std::string state = "pending";
+    for (int32_t waited = 0; waited <= aRequest.timeoutMs; waited += 200)
+    {
+        aOps.sleep(std::chrono::milliseconds(200));
+        state = aOps.status().value("state", std::string("pending"));
+        if (state == "saved" || state == "failed")
+        {
+            break;
+        }
+    }
+    if (state == "failed")
+    {
+        throw MethodError("save_failed", "the game answered that the manual save failed; nothing new was saved");
+    }
+    if (state != "saved")
+    {
+        throw MethodError("save_uncertain", "the game took the save request but didn't confirm it within " + std::to_string(aRequest.timeoutMs / 1000) +
+                                                " s; check the game's Load menu before saving again");
+    }
+    json out{{"saved", true}, {"slot", "a new manual save (the game names it ManualSave-<n>)"}, {"lock_overridden", released}};
+    if (!aRequest.name.empty())
+    {
+        out["name"] = aRequest.name;
+    }
+    if (released)
+    {
+        out["note"] = "saved with the bridge's save lock overridden: this save keeps whatever the bridge changed since the last load; the lock is back on";
+    }
+    out["undo"] = nullptr;
+    out["undo_note"] = "a save can't be unsaved; delete it in the game's Load menu if it isn't wanted";
+    return out;
+}
+
+int32_t FindSave(const std::vector<std::string>& aSaves, const std::string& aName)
+{
+    for (size_t i = 0; i < aSaves.size(); ++i)
+    {
+        if (aSaves[i] == aName)
+        {
+            return static_cast<int32_t>(i);
+        }
+    }
+    const auto lower = [](std::string aText) {
+        std::transform(aText.begin(), aText.end(), aText.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return aText;
+    };
+    const auto wanted = lower(aName);
+    int32_t found = -1;
+    for (size_t i = 0; i < aSaves.size(); ++i)
+    {
+        if (lower(aSaves[i]) == wanted)
+        {
+            if (found >= 0)
+            {
+                return -2;
+            }
+            found = static_cast<int32_t>(i);
+        }
+    }
+    return found;
+}
+
+json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
+{
+    json out;
+    if (aRequest.latest)
+    {
+        out = aOps.latest();
+    }
+    else
+    {
+        aOps.list();
+        json list;
+        for (int32_t waited = 0; waited <= kSaveListWaitMs; waited += 100)
+        {
+            aOps.sleep(std::chrono::milliseconds(100));
+            list = aOps.saves();
+            if (list.value("ready", false))
+            {
+                break;
+            }
+        }
+        if (!list.value("ready", false))
+        {
+            throw MethodError("timeout", "the game didn't list its saves in time; nothing was loaded");
+        }
+        std::vector<std::string> saves;
+        for (const auto& name : list.value("saves", json::array()))
+        {
+            if (name.is_string())
+            {
+                saves.push_back(name.get<std::string>());
+            }
+        }
+        const auto index = FindSave(saves, aRequest.name);
+        if (index < 0)
+        {
+            std::string some;
+            for (size_t i = 0; i < saves.size() && i < 12; ++i)
+            {
+                some += (some.empty() ? "" : ", ") + saves[i];
+            }
+            throw MethodError("save_not_found", (index == -2 ? "more than one save is named '" : "no save is named '") + aRequest.name +
+                                                    "'; nothing was loaded (the game lists " + std::to_string(saves.size()) + " saves" +
+                                                    (some.empty() ? "" : ": " + some + (saves.size() > 12 ? ", ..." : "")) + ")");
+        }
+        out = aOps.load(index, saves[static_cast<size_t>(index)]);
+    }
+    out["undo"] = nullptr;
+    out["undo_note"] = "loading can't be undone: everything since that save was discarded, the bridge's save lock with it";
+    out["note"] = "the game is loading; wait for game_wait with phase gameplay before the next command";
+    return out;
 }
 } // namespace xfb::writes

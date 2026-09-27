@@ -9,8 +9,12 @@
 //    "Head" slot plus an anatomical offset for the target), the camera's transform, and the game's
 //    own projection of those points onto the screen (CameraSystem.ProjectPoint). The loop turns V to
 //    face the camera (a probe tells which way the rotation slider turns), measures how the target
-//    moves on screen per unit of left/right and up/down (a small probe of each, a 2x2 Jacobian,
-//    refined with Broyden updates), moves the target to the requested screen position, then sets
+//    moves on screen per unit of left/right, close/far and up/down (a small probe of each), keeps
+//    the horizontal axis that moves V across the screen (V's placement axes need not be the
+//    camera's), or only up/down when neither does (vertical-only), and corrects with a 2x2 Jacobian
+//    refined with Broyden updates, each step capped; after every change it reads photo.subject until
+//    the world has taken the change (session 3: the first read after a change is a frame stale).
+//    It moves the target to the requested screen position, then sets
 //    the field of view so a span of `span_m` metres at the target fills the window height (the
 //    projection of a point 10 cm above the target gives the current scale; tan(fov/2) scales with
 //    it), and centres again. Every read is cheap, so it converges in a handful of steps.
@@ -86,11 +90,13 @@ export type CameraApplied = { name: string; before?: number; after?: number; bef
 export interface FramingAdapter {
   subject(offset: Offset): Promise<SubjectReading>;
   /** photo.camera.set with absolute values; returns its applied list (with before values). */
-  setCamera(values: { fov?: number; subject?: { yaw?: number; left_right?: number; up_down?: number } }): Promise<CameraApplied[]>;
+  setCamera(values: { fov?: number; subject?: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } }): Promise<CameraApplied[]>;
   /** A small capture of the window (capture route only). */
   grab?(): Promise<Pixels>;
   /** The current camera and placement values from the photo-mode menu (capture route, when photo.subject gave nothing). */
   pose?(): Promise<{ fov: number; yaw: number; lr: number; ud: number; ranges?: Partial<Ranges> } | null>;
+  /** Waits between the reads that check a change has taken (the real adapter sleeps; test fakes may skip it). */
+  pause?(ms: number): Promise<void>;
 }
 
 export type FrameStep = { kind: string; values?: Record<string, number>; error?: { x: number; y: number }; size?: number; note?: string };
@@ -100,7 +106,9 @@ export type FrameResult = {
   span_m: number;
   offset: Offset;
   position: { x: number; y: number };
-  chosen: { fov: number; subject: { yaw: number; left_right: number; up_down: number } };
+  /** Projection route: the horizontal placement axis used, or vertical-only when neither moved V across the screen. */
+  axis?: HorizontalAxis | "vertical-only";
+  chosen: { fov: number; subject: { yaw: number; left_right: number; near_far?: number; up_down: number } };
   residual: { x: number; y: number; size: number };
   converged: boolean;
   steps: FrameStep[];
@@ -113,6 +121,8 @@ export class FramingError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    /** The steps taken before the failure, recorded with the refusal for diagnosis. */
+    readonly steps: FrameStep[] = [],
   ) {
     super(message);
   }
@@ -193,16 +203,19 @@ const round = (v: number, digits = 3) => Number(v.toFixed(digits));
 
 // --- the projection route ------------------------------------------------------------------------
 
-type Pose = { fov: number; yaw: number; lr: number; ud: number };
-export type Ranges = { fov: [number, number]; yaw: [number, number]; lr: [number, number]; ud: [number, number] };
+type Pose = { fov: number; yaw: number; lr: number; nf: number; ud: number };
+export type Ranges = { fov: [number, number]; yaw: [number, number]; lr: [number, number]; nf: [number, number]; ud: [number, number] };
+/** The placement axis framing moves V sideways with: the pose tab's left/right or close/far (whichever moves V across the screen). */
+export type HorizontalAxis = "left_right" | "near_far";
 
-function poseOf(reading: SubjectReading): { pose: Pose; ranges: Ranges } {
+function poseOf(reading: SubjectReading): { pose: Pose; ranges: Ranges; hasNearFar: boolean } {
   const p = reading.pose ?? {};
   const v = (x: PoseValue | undefined, fallback: number) => (x && Number.isFinite(x.value) ? x.value : fallback);
   const range = (x: PoseValue | undefined, lo: number, hi: number): [number, number] => [x?.min ?? lo, x?.max ?? hi];
   return {
-    pose: { fov: v(p.fov, reading.camera.fov), yaw: v(p.yaw, 0), lr: v(p.left_right, 0), ud: v(p.up_down, 0) },
-    ranges: { fov: range(p.fov, 1, 120), yaw: range(p.yaw, -180, 180), lr: range(p.left_right, -5, 5), ud: range(p.up_down, -5, 5) },
+    pose: { fov: v(p.fov, reading.camera.fov), yaw: v(p.yaw, 0), lr: v(p.left_right, 0), nf: v(p.near_far, 0), ud: v(p.up_down, 0) },
+    ranges: { fov: range(p.fov, 1, 120), yaw: range(p.yaw, -180, 180), lr: range(p.left_right, -5, 5), nf: range(p.near_far, -5, 5), ud: range(p.up_down, -5, 5) },
+    hasNearFar: Boolean(p.near_far && Number.isFinite(p.near_far.value)),
   };
 }
 
@@ -233,6 +246,75 @@ function resolve(options: FrameOptions) {
   return { offset, span, position, maxSteps: options.max_steps ?? 6, tolerance: options.tolerance ?? 0.01 };
 }
 
+// --- reading after a change ----------------------------------------------------------------------
+//
+// Session 3 (28 September 2026) showed that a photo.subject read made straight after a placement or
+// field-of-view change returns the world as it was before the change: the menu value is already new,
+// but V's stand-in and the camera move on the next frame. Every probe measured the previous step, the
+// Jacobian came out as nonsense (the left/right probe "didn't move" V, the up/down probe measured the
+// left/right move) and framing slammed V to the ends of the slider range (no_response). So after every
+// change the loop reads until the world has taken it: at least two reads, the last two identical and
+// different from the reading before the change, or SETTLE.unchangedReads identical reads when the
+// change moved nothing.
+
+/** Readings of the same world state: V, the target, the camera and the projection agree. */
+export function sameWorld(a: SubjectReading, b: SubjectReading, tolerance = 1e-4): boolean {
+  type P = { x: number; y: number; z?: number } | undefined;
+  const near = (p: P, q: P, scale = 1) =>
+    !!p && !!q && Math.abs(p.x - q.x) <= tolerance * scale && Math.abs(p.y - q.y) <= tolerance * scale && Math.abs((p.z ?? 0) - (q.z ?? 0)) <= tolerance * scale;
+  // Pixels need a larger tolerance than NDC or world metres.
+  const screenScale = Math.max(1, Math.abs(a.screen.center.x), Math.abs(a.screen.center.y));
+  return (
+    near(a.head, b.head) &&
+    near(a.target, b.target) &&
+    near(a.subject_forward, b.subject_forward) &&
+    near(a.camera.position, b.camera.position) &&
+    Math.abs(a.camera.fov - b.camera.fov) <= 1e-3 &&
+    near(perspective(a.screen.target), perspective(b.screen.target), screenScale) &&
+    near(perspective(a.screen.up), perspective(b.screen.up), screenScale)
+  );
+}
+
+export const SETTLE = { maxReads: 8, unchangedReads: 4, pauseMs: 30 };
+
+/** Reads photo.subject until the world has taken the last change (see above). */
+export async function settledReading(adapter: FramingAdapter, offset: Offset, before: SubjectReading | null): Promise<{ reading: SubjectReading; reads: number; settled: boolean }> {
+  let previous = await adapter.subject(offset);
+  let reads = 1;
+  let moved = !before || !sameWorld(previous, before);
+  while (reads < SETTLE.maxReads) {
+    await adapter.pause?.(SETTLE.pauseMs);
+    const next = await adapter.subject(offset);
+    reads++;
+    if (!before || !sameWorld(next, before)) moved = true;
+    if (sameWorld(next, previous) && (moved || reads >= SETTLE.unchangedReads)) return { reading: next, reads, settled: true };
+    previous = next;
+  }
+  return { reading: previous, reads, settled: false };
+}
+
+type V2 = { x: number; y: number };
+const cross = (a: V2, b: V2) => a.x * b.y - a.y * b.x;
+const length = (a: V2) => Math.hypot(a.x, a.y);
+
+/**
+ * Which horizontal placement axis moves V across the screen independently of up/down: the one whose
+ * screen response is furthest from parallel to up/down's (the largest |cross product|, relative to
+ * up/down's own response). None when even the better one is below a twentieth: V's placement axes can
+ * turn with V (after V turned to face the camera, left/right can run along the view), and then only
+ * the vertical-only route is left.
+ */
+export function chooseHorizontal(responses: Partial<Record<HorizontalAxis, V2>>, upDown: V2): { axis: HorizontalAxis | null; strength: number } {
+  const scale = length(upDown) ** 2;
+  let best: { axis: HorizontalAxis | null; strength: number } = { axis: null, strength: 0 };
+  for (const [axis, response] of Object.entries(responses) as [HorizontalAxis, V2 | undefined][]) {
+    if (!response || !finite(response.x, response.y)) continue;
+    const strength = scale > 0 ? Math.abs(cross(response, upDown)) / scale : 0;
+    if (strength > best.strength) best = { axis, strength };
+  }
+  return best.strength >= 0.05 ? best : { axis: null, strength: best.strength };
+}
+
 export async function frameByProjection(adapter: FramingAdapter, options: FrameOptions, first?: SubjectReading): Promise<FrameResult> {
   const { offset, span, position, maxSteps, tolerance } = resolve(options);
   const steps: FrameStep[] = [];
@@ -240,31 +322,45 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   const undo = new UndoTracker();
   let reading = first ?? (await adapter.subject(offset));
   const problem = readingProblem(reading);
-  if (problem) throw new FramingError(`Framing by projection isn't possible: ${problem}.`, "no_projection");
+  if (problem) throw new FramingError(`Framing by projection isn't possible: ${problem}.`, "no_projection", steps);
   if (reading.approximate) notes.push("V's head slot wasn't found, so the head position is V's position plus a standing head height; framing may be off vertically.");
-  const { pose, ranges } = poseOf(reading);
+  const { pose, ranges, hasNearFar } = poseOf(reading);
   const aspect = reading.camera.aspect > 0 ? reading.camera.aspect : 16 / 9;
   const want = { x: (position.x - 0.5) * aspect, y: position.y - 0.5 };
+  let unsettled = 0;
 
   const set = async (values: Partial<Pose>, kind: string) => {
-    const payload: { fov?: number; subject?: { yaw?: number; left_right?: number; up_down?: number } } = {};
+    const payload: { fov?: number; subject?: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } } = {};
     if (values.fov !== undefined) payload.fov = round(clamp(values.fov, ...ranges.fov), 2);
-    const subject: { yaw?: number; left_right?: number; up_down?: number } = {};
+    const subject: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } = {};
     if (values.yaw !== undefined) subject.yaw = round(clamp(wrap180(values.yaw), ...ranges.yaw), 1);
     if (values.lr !== undefined) subject.left_right = round(clamp(values.lr, ...ranges.lr), 3);
+    if (values.nf !== undefined) subject.near_far = round(clamp(values.nf, ...ranges.nf), 3);
     if (values.ud !== undefined) subject.up_down = round(clamp(values.ud, ...ranges.ud), 3);
     if (Object.keys(subject).length) payload.subject = subject;
     undo.note(await adapter.setCamera(payload));
     if (payload.fov !== undefined) pose.fov = payload.fov;
     if (subject.yaw !== undefined) pose.yaw = subject.yaw;
     if (subject.left_right !== undefined) pose.lr = subject.left_right;
+    if (subject.near_far !== undefined) pose.nf = subject.near_far;
     if (subject.up_down !== undefined) pose.ud = subject.up_down;
-    if ((values.lr !== undefined && subject.left_right !== round(values.lr, 3)) || (values.ud !== undefined && subject.up_down !== round(values.ud, 3))) {
-      notes.push("V reached the end of the pose tab's left/right or up/down range; the camera may need to start closer to V.");
+    const clipped =
+      (values.lr !== undefined && subject.left_right !== round(values.lr, 3)) ||
+      (values.nf !== undefined && subject.near_far !== round(values.nf, 3)) ||
+      (values.ud !== undefined && subject.up_down !== round(values.ud, 3));
+    if (clipped && !notes.some((n) => n.startsWith("V reached the end"))) {
+      notes.push("V reached the end of the pose tab's placement range; the camera may need to start closer to V (an XF camera preset).");
     }
-    reading = await adapter.subject(offset);
+    const settled = await settledReading(adapter, offset, reading);
+    reading = settled.reading;
+    if (!settled.settled) unsettled++;
     const m = measure(reading);
-    steps.push({ kind, values: { fov: pose.fov, yaw: pose.yaw, left_right: pose.lr, up_down: pose.ud }, error: { x: round(want.x - m.x, 4), y: round(want.y - m.y, 4) }, size: round((m.scale * span) / 0.1, 3) });
+    steps.push({
+      kind,
+      values: { fov: pose.fov, yaw: pose.yaw, left_right: pose.lr, ...(hasNearFar ? { near_far: pose.nf } : {}), up_down: pose.ud, reads: settled.reads },
+      error: { x: round(want.x - m.x, 4), y: round(want.y - m.y, 4) },
+      size: round((m.scale * span) / 0.1, 3),
+    });
     return m;
   };
 
@@ -292,43 +388,81 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     await turn(2);
   }
 
-  // 2. Centre, 3. size, 4. centre again.
-  let m = measure(reading);
+  // 2. Probe each placement axis once, from where V now faces the camera. V's placement axes can turn
+  // with V, so left/right may run along the view after the turn: close/far is probed too, and the axis
+  // that moves V across the screen independently of up/down is used for sideways corrections.
   const probe = clamp(0.05 * (span / 0.36), 0.01, 0.2);
-  const m0 = m;
-  const mx = await set({ lr: pose.lr + probe }, "probe-left-right");
-  const my = await set({ ud: pose.ud + probe }, "probe-up-down");
+  const maxStep = clamp(2 * span, 0.2, 1.0); // metres per correction, so a bad estimate can't throw V away
+  let m = measure(reading);
+  const response = async (key: "lr" | "nf" | "ud", kind: string): Promise<V2> => {
+    const from = m;
+    const values: Partial<Pose> = {};
+    values[key] = pose[key] + probe;
+    m = await set(values, kind);
+    return { x: (m.x - from.x) / probe, y: (m.y - from.y) / probe };
+  };
+  const horizontal: Partial<Record<HorizontalAxis, V2>> = {};
+  horizontal.left_right = await response("lr", "probe-left-right");
+  if (hasNearFar) horizontal.near_far = await response("nf", "probe-near-far");
+  const upDown = await response("ud", "probe-up-down");
+  if (!(length(upDown) > 1e-4)) {
+    throw new FramingError("Moving V up and down doesn't move V on screen, so framing stopped (the camera may not be looking at V).", "no_response", steps);
+  }
+  const choice = chooseHorizontal(horizontal, upDown);
+  const axis = choice.axis;
+  const hKey: "lr" | "nf" = axis === "near_far" ? "nf" : "lr";
+  if (!axis) {
+    notes.push("Neither left/right nor close/far moves V across the screen (V's placement axes may point along the view), so V was only centred vertically and sized.");
+  } else if (axis === "near_far") {
+    notes.push("Left/right moves V along the view here, so V was centred sideways with close/far.");
+  }
+  // J maps a change of [the horizontal axis, up/down] to a change of the target's screen position.
+  const h = axis ? horizontal[axis]! : { x: 0, y: 0 };
   let J = [
-    [(mx.x - m0.x) / probe, (my.x - mx.x) / probe],
-    [(mx.y - m0.y) / probe, (my.y - mx.y) / probe],
+    [h.x, upDown.x],
+    [h.y, upDown.y],
   ];
-  m = my;
   let budget = maxSteps;
+  const limit = (a: number, b: number): [number, number] => {
+    const n = Math.hypot(a, b);
+    return n > maxStep ? [(a * maxStep) / n, (b * maxStep) / n] : [a, b];
+  };
+  const done = () => (axis ? Math.hypot(want.x - m.x, want.y - m.y) <= tolerance : Math.abs(want.y - m.y) <= tolerance);
   const centre = async (label: string) => {
     while (budget > 0) {
+      if (done()) return true;
       const ex = want.x - m.x;
       const ey = want.y - m.y;
-      if (Math.hypot(ex, ey) <= tolerance) return true;
-      const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
-      if (!Number.isFinite(det) || Math.abs(det) < 1e-9) throw new FramingError("Moving V doesn't move V on screen as expected, so framing stopped.", "no_response");
-      const dlr = (J[1][1] * ex - J[0][1] * ey) / det;
-      const dud = (-J[1][0] * ex + J[0][0] * ey) / det;
+      let dh = 0;
+      let dud: number;
+      if (axis) {
+        const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+        if (!Number.isFinite(det) || Math.abs(det) < 1e-9) throw new FramingError("Moving V doesn't move V on screen as expected, so framing stopped.", "no_response", steps);
+        [dh, dud] = limit((J[1][1] * ex - J[0][1] * ey) / det, (-J[1][0] * ex + J[0][0] * ey) / det);
+      } else {
+        // Vertical only: the up/down change that best removes the error along up/down's own screen direction.
+        const u = { x: J[0][1], y: J[1][1] };
+        dud = limit(0, (ex * u.x + ey * u.y) / (u.x * u.x + u.y * u.y))[1];
+      }
       budget--;
       const prev = m;
-      m = await set({ lr: pose.lr + dlr, ud: pose.ud + dud }, label);
-      // Broyden update of the Jacobian from the step just taken.
-      const dx = [dlr, dud];
+      const values: Partial<Pose> = { ud: pose.ud + dud };
+      if (axis) values[hKey] = pose[hKey] + dh;
+      m = await set(values, label);
+      // Broyden update of the Jacobian from the step just taken (the up/down column only, vertical-only).
+      const dx = [dh, dud];
       const dy = [m.x - prev.x, m.y - prev.y];
-      const norm = dlr * dlr + dud * dud;
+      const norm = dh * dh + dud * dud;
       if (norm > 1e-12) {
         for (let r = 0; r < 2; r++) {
-          const predicted = J[r][0] * dlr + J[r][1] * dud;
-          for (let c = 0; c < 2; c++) J[r][c] += ((dy[r] - predicted) * dx[c]) / norm;
+          const predicted = J[r][0] * dh + J[r][1] * dud;
+          for (let c = axis ? 0 : 1; c < 2; c++) J[r][c] += ((dy[r] - predicted) * dx[c]) / norm;
         }
       }
     }
-    return Math.hypot(want.x - m.x, want.y - m.y) <= tolerance;
+    return done();
   };
+  // 3. Centre, 4. size, 5. centre again.
   await centre("centre");
   for (let zoom = 0; zoom < 2; zoom++) {
     const size = (m.scale * span) / 0.1; // window heights the span covers now
@@ -351,9 +485,11 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     budget = Math.max(budget, 2);
     await centre("centre-after-yaw");
   }
+  if (unsettled) notes.push(`${unsettled} reading${unsettled === 1 ? "" : "s"} didn't settle within ${SETTLE.maxReads} reads (V or the camera still moving); the result may be slightly off.`);
   const size = (m.scale * span) / 0.1;
   const residual = { x: round(want.x - m.x, 4), y: round(want.y - m.y, 4), size: round(size, 3) };
   const converged = Math.hypot(residual.x, residual.y) <= tolerance && Math.abs(size - 1) <= 0.05;
+  if (!axis && Math.abs(residual.x) > tolerance) notes.push(`V is ${round(Math.abs(residual.x), 3)} window heights off centre sideways, which the vertical-only route can't correct.`);
   if (!converged) notes.push("The framing didn't fully converge within the step budget; see steps and residual.");
   return {
     method: "project",
@@ -361,7 +497,8 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     span_m: span,
     offset,
     position,
-    chosen: { fov: pose.fov, subject: { yaw: pose.yaw, left_right: pose.lr, up_down: pose.ud } },
+    axis: axis ?? "vertical-only",
+    chosen: { fov: pose.fov, subject: { yaw: pose.yaw, left_right: pose.lr, ...(hasNearFar ? { near_far: pose.nf } : {}), up_down: pose.ud } },
     residual,
     converged,
     steps,
@@ -494,7 +631,7 @@ export async function frameByCapture(adapter: FramingAdapter, options: FrameOpti
   const steps: FrameStep[] = [];
   const notes: string[] = ["Framed from window captures (coarse): the target is estimated from V's head outline with fixed proportions."];
   const undo = new UndoTracker();
-  const ranges: Ranges = { fov: [1, 120], yaw: [-180, 180], lr: [-5, 5], ud: [-5, 5], ...(start.ranges ?? {}) };
+  const ranges: Ranges = { fov: [1, 120], yaw: [-180, 180], lr: [-5, 5], nf: [-5, 5], ud: [-5, 5], ...(start.ranges ?? {}) };
   const pose = { fov: start.fov, lr: start.lr, ud: start.ud, yaw: start.yaw };
   const setPose = async (values: Partial<typeof pose>) => {
     const payload: { fov?: number; subject?: { left_right?: number; up_down?: number } } = {};
