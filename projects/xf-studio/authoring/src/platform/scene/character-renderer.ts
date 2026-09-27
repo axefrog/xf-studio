@@ -3,7 +3,7 @@ import { extendSkin } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
-import { BODY_SHAPE_KEY, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
+import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
 import { priorityRank } from "../../render-templates";
@@ -135,10 +135,15 @@ export function createCharacterRenderer(input: {
         return result.attribute;
       } } : {}) };
   }
+  /**
+   * Parts that left the scene (or whose change was superseded before it was shown), kept on this renderer's context for the next change
+   * that brings them back (character-detail-loader.ts `DetailPartPool`).
+   */
+  const pool = new DetailPartPool();
   /** The host's detail loader: this renderer's anisotropy and skin placement, the record's chunks through their template's adapter. */
   const details: DetailLoader = {
     load: (record, options) => loadCharacterDetails(record, { ...options, anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
-      context: detailContext }),
+      context: detailContext, pool }),
   };
   // The skin drawn under a feature's surfaces (the scene port's `skin`): the shown resolved skin's light, and the skin under a surface
   // read on the drawn head, like the face decals' underlay. Features read both again whenever the drawn skin changes, told once.
@@ -325,6 +330,8 @@ export function createCharacterRenderer(input: {
    * baked (PREV-74).
    */
   function contextRestored() {
+    // Kept parts' bakes died with the context; they are loaded again when a change brings them back.
+    pool.clear();
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
     publishBakeLimits([...skinLimits(), ...bakeLayered()]);
@@ -341,6 +348,12 @@ export function createCharacterRenderer(input: {
     /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
+    /** Release the V and every kept part (the scene is going away). */
+    dispose() { setCharacterDetails(null); pool.clear(); },
+    /** How many parts are kept for later (developer evidence). */
+    keptParts: () => pool.size,
+    /** Release the parts kept for later (another V is being shown). */
+    releaseKeptParts: () => pool.clear(),
     setSlotVisible,
     refreshVisibility: refreshDetailVisibility,
     setEyeOptics,

@@ -145,6 +145,26 @@ Measured on the reference MO2 route with WolvenKit 9.0.1, 26 September 2026, thr
 
 Preparing ahead, per row: 16 CCXL hairstyles 44–116 s and 11 launches, 11.5 MB each; their 16 hair colours 26 s and 6 launches, 0.05 MB each; 24 eye colours 34 s and 11 launches, 0.16 MB each; 15 piercing styles 60 s and 11 launches, 3.5 MB each; all 51 vanilla hairstyles 133 s and 39 launches, 1 MB each. In the browser (`?verify=1`), a click on a prepared hairstyle answered 0.31 s after the click, and the next session opened the row with the choices prepared before already ready.
 
+**Click → pixels: the page, and the host's one thread.** Measured 27 September 2026 on the reference MO2 route with the reference save's V (29 parts, clothes on), through an isolated server and a headless GPU Chrome (`tools/measure-character-page.ts`, page marks from `src/character-timing.ts`; offline measurements, not game evidence):
+
+- **The page was not the slow part.** A change reuses every unchanged part (PREV-68): 22–24 of 23–29 parts, and a record takes 20–250 ms from its arrival to the first frame drawn with it. The page waited a fixed 600 ms before its first poll; it now asks again after 25, 50, 100, 200 and 400 ms, then every 600 ms.
+- **The host's event loop was.** With a Character row open, the host checked which of the row's choices were ready (every read of every choice's manifest: an archive `stat` and a cache `exists` check per resource, all synchronous), asked the registry for .NET with a synchronous `reg` launch every 3 s, and walked the prepared files' size with every `lstat` in flight at once. A `/health` probe stalled for up to 26.6 s, and changes took 3–28 s (Reset all after a burst of hairstyles: 27.8 s) while the log said 0.2–0.3 s, because it timed only the preparation. Now the ready check runs one manifest entry at a time and takes a turn between them (`manifestProblemSliced`, `src/event-loop.ts`), reading each archive's identity once per manifest (`withArchiveFingerprints`); background work waits while a person's change is asked for, prepared or read, and until the page has been quiet for 400 ms; a change stops the batch in progress even when its answer is ready; the registry is asked in the background at most once a minute; the size walk keeps 16 calls in flight. The log line gives the wait too ("waited 1.2 s before starting, 2.9 s in all").
+- **Parts are kept for the next change** (`DetailPartPool`, `character-detail-loader.ts`): parts the next record doesn't use, and those a superseded change built, stay loaded on the renderer's context, keyed by their content and what they were built on (a face decal's skin, a garment's body shape), up to 48 parts or 64 M texels that only kept parts use. Undo, a hairstyle tried again, makeup shown again or a burst's last step then fetch, decode and upload nothing. Another V releases them. A part being built when its change is superseded is finished and kept.
+
+| Change (reference save V) | Row open, before (four runs) | Row open, after: first time, again | No row open, after: first time, again |
+|---|---|---|---|
+| Hairstyle 12 | 0.38–7.2 s | 1.07 s, 0.10 s | 0.79 s, 0.09 s |
+| Hairstyle 01 | 0.77–9.3 s | 0.35 s, 0.10 s | 0.33 s, 0.08 s |
+| Hair colour | 0.09–15.7 s | 0.56 s, 0.09 s | 0.30 s, 0.08 s |
+| Makeup on (four rows in one step) | 0.83–8.5 s | 1.12 s, 0.10 s | 0.41 s, 0.08 s |
+| Hide makeup | 0.11–14.0 s | 0.32 s, 0.08 s | 0.31 s, 0.08 s |
+| Reset all | 0.19–7.5 s | 0.28 s, 0.11 s | 0.08 s, 0.07 s |
+| Three hairstyles back to back | 0.30–12.5 s | 0.13 s, 0.12 s | 0.10 s, 0.10 s |
+| Reset all after them | 0.14–27.8 s | 0.09 s, 0.11 s | 0.07 s, 0.08 s |
+| `/health` while it ran: median, p95, max | 0.12, 0.76, 26.6 s | 0.10, 0.25, 2.0 s | 0.10, 0.15, 0.23 s |
+
+"First time" is the first round after a server restart: it includes the host preparing each record (0.2–0.7 s) and the page loading parts it hadn't shown. "Again" is the second round. The `/health` median is mostly the probe's own start-up. What is left: a part new to the page costs its first frame about 150–220 ms (a new hairstyle: texture upload about 125 ms, program link about 60 ms), and each change asked for checks the mod setup's watched paths (about 55–90 ms of the 75–110 ms). Both are in the [performance backlog](../research/backlog/performance.md).
+
 **Prepared files: what persists, and when it is prepared again.** A choice is shown ready when a later preparation of it would need no WolvenKit. Everything prefetch writes is keyed so that a changed source is never served:
 
 | What | Where | Keyed by | Invalidated when |

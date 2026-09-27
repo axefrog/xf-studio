@@ -55,6 +55,9 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(memory.aAgain).toEqual(memory.a);
     expect(character.none).toEqual({ drawn: [] });
     expect(memory.none).toEqual(memory.empty);
+    // Within one V, removed parts are kept for later (more memory), and releasing them costs only the V shown again.
+    expect(memory.bKeepingA.textures).toBeGreaterThan(memory.b.textures);
+    expect(memory.bReleased).toEqual(memory.b);
     // Makeup layers release their textures when the stack is cleared.
     expect(memory.layers.textures).toBeGreaterThan(memory.empty.textures);
     expect(memory.layersCleared).toEqual(memory.empty);

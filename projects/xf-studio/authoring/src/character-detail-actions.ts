@@ -19,6 +19,7 @@ import type { DetailSlot, DetailSlotState } from "./render-detail";
 import { DETAIL_SLOTS } from "./render-detail";
 import { withSlotLimits, type DetailLimit, type DetailNotice, type SlotLimits } from "./detail-limits";
 import { pageFailure } from "./diagnostics/page-sink";
+import { markCharacter } from "./character-timing";
 
 /** The host's preparation state (character-detail-host.ts), as the transport returns it. */
 export type HostCharacterState = {
@@ -72,7 +73,12 @@ export type CharacterDetailStatus = {
   need: "wolvenkit" | null;
 };
 
+/**
+ * How long to wait before asking the host again: a prepared change is ready within a few tens of milliseconds, so the first questions
+ * come quickly, then settle at `POLL_MS` for a long preparation (the host answers a poll from memory).
+ */
 const POLL_MS = 600;
+export const pollDelay = (attempt: number) => Math.min(POLL_MS, 25 * 2 ** attempt);
 /** How often a V waiting for WolvenKit asks the host again (a cheap answer until WolvenKit is set up). */
 const SETUP_POLL_MS = 4_000;
 const FAILED = "Your V's own skin, face details, eyes, brows, lashes, hair, piercings and body couldn't be prepared, so they aren't shown. The head still works.";
@@ -152,6 +158,7 @@ export class CharacterDetailActions {
   }
 
   private async follow(request: CharacterRequest, signal: AbortSignal, updating: boolean) {
+    markCharacter("ask", { updating });
     let state = await this.port.request(request, signal);
     for (let waiting = false; ; waiting = true) {
       for (let attempts = 0; state.phase === "preparing" || state.phase === "unknown"; attempts++) {
@@ -164,7 +171,7 @@ export class CharacterDetailActions {
           else if (!updating) this.publish({ ...this.status, progress: state.progress });
           waiting = false;
         }
-        await this.port.wait(POLL_MS, signal);
+        await this.port.wait(pollDelay(attempts), signal);
         if (signal.aborted) return;
         // The host forgets a request it cancelled or never saw (a restart): ask again.
         state = state.phase === "unknown" || attempts % 50 === 49 ? await this.port.request(request, signal) : await this.port.poll(state.key, signal);
@@ -187,6 +194,7 @@ export class CharacterDetailActions {
         slots: DETAIL_SLOTS.map(slot => ({ slot, state: "unavailable", label: "" })), updating: false, updateError: null, choices: 0, drawn: [], need: null });
       return;
     }
+    markCharacter("answer", { record: state.record });
     const shown = await this.port.show(state.record, signal);
     if (signal.aborted) return;
     this.shown = request;
