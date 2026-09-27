@@ -60,7 +60,7 @@ export type PreviewSetupSnapshot = {
   head: PreviewHeadView;
   /**
    * Counts requests to open setup on a host with no setup form of its own; the Studio then reveals
-   * its own Game & tools section.
+   * its own Settings panel at Game.
    */
   setupRequests: number;
   /** Counts requests to show the card (from the head pane or a menu); the card takes focus only then. */
@@ -82,9 +82,9 @@ export type PreviewSetupPort = {
   localSetup: Pick<LocalSetupActions, "dispatch" | "snapshot" | "subscribe" | "requestRefresh">;
   /** Opens one named official page in the person's browser; rejects with plain wording. */
   openLink(link: WolvenKitLink): Promise<void>;
-  /** The host's own setup form (the desktop's Build setup); without it the Studio's Game & tools is used. */
+  /** The host's own setup form (the desktop's Build setup); without it the Studio's Settings panel is used. */
   openHostSetup?: () => void;
-  /** Where the game folder and WolvenKit are set, in the host's words ("Build setup", "Game & tools"). */
+  /** Where the game folder and WolvenKit are set, in the host's words ("Build setup", "Settings"). */
   setupPlace: string;
   /** May the preview start preparing by itself? Kept in the workspace. */
   autostart: { get(): boolean; set(on: boolean): void };

@@ -8,9 +8,9 @@ import type { LocalSetupFields, LocalSetupView } from "./local-settings-server";
 export type LocalSetupAction = { kind: "setup.refresh" } | { kind: "setup.save"; fields: LocalSetupFields } |
   { kind: "setup.update"; fields: Partial<LocalSetupFields> } | { kind: "setup.restorePrevious" } |
   { kind: "setup.pickFolder"; field: FolderField };
-/** The folders a person may choose with the host's own folder picker (UI-83). */
-export type FolderField = "gameRoot" | "mo2Root" | "manualModRoot";
-export const FOLDER_FIELDS: readonly FolderField[] = ["gameRoot", "mo2Root", "manualModRoot"];
+/** The folders a person may choose with the host's own folder picker (UI-83; the saves folder, UI-108). */
+export type FolderField = "gameRoot" | "mo2Root" | "manualModRoot" | "savesDirectory";
+export const FOLDER_FIELDS: readonly FolderField[] = ["gameRoot", "mo2Root", "manualModRoot", "savesDirectory"];
 /** The host's native folder picker: the folder chosen, or null when the person cancelled. */
 export type FolderPicker = (field: FolderField) => Promise<string | null>;
 export type LocalSetupState = { view?: LocalSetupView; busy: boolean; error?: string;
@@ -37,7 +37,7 @@ export class LocalSetupActions {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   /**
    * Resolves once no request is in flight. Several views share one instance (the desktop's Build
-   * setup, the Studio's Game & tools form and the preview setup), so a save waits for a refresh
+   * setup, the Studio's Settings panel and the preview setup), so a save waits for a refresh
    * another view started instead of being refused as busy.
    */
   idle(): Promise<void> {

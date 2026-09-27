@@ -13,7 +13,7 @@ import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from
 import { PROJECT_LINKS, type ProjectLink } from "./project-links";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
-import { createBrowserSaveExplorerDevice } from "./browser-save-explorer-device";
+import { createBrowserSaveExplorerDevice, savesLocationSignal } from "./browser-save-explorer-device";
 import { createModuleServices } from "./compose/module-services";
 import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf } from "./mod-install-actions";
@@ -59,15 +59,15 @@ export type StudioHost = {
   localSetup?: LocalSetupActions;
   /** Opens a named official page (WolvenKit's, or XF Studio's own); without it the page opens in a new browser tab. */
   openLink?: (link: WolvenKitLink | ProjectLink) => Promise<void>;
-  /** Where the game folder and WolvenKit CLI are set, in the host's own words ("Build setup", "Game & tools"). */
+  /** Where the game folder and WolvenKit CLI are set, in the host's own words ("Build setup", "Settings"). */
   setupPlace: string;
-  /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Game & tools is shown. */
+  /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Settings › Game is shown. */
   openSetup?: () => void;
   /** The host's About view (version, licences, updates); the Studio offers it in Help and the command palette (UI-87). */
   about?: () => void;
   /** "Get the desktop app": localhost only; the desktop app leaves it out, so it offers nothing about itself. */
   desktopApp?: DesktopAppActions;
-  /** Called once the Studio is mounted, with what the host may ask of it (the desktop's welcome and About open Game & tools). */
+  /** Called once the Studio is mounted, with what the host may ask of it (the desktop's welcome and About open Settings › Game). */
   onMounted?: (studio: { openGameSetup(): void }) => void;
   /** Lets the host ask for an immediate workspace save (the desktop does before closing). */
   onFlushRequest?: (flush: () => void) => void;
@@ -114,8 +114,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
-  // Part-less modules' services (the Save Explorer), over their browser devices.
-  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document) });
+  // Part-less modules' services (the Save Explorer), over their browser devices. The saves device reads the workspace's own saves
+  // folder and follows Settings › Saves (UI-108).
+  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
+    { verification, locationChanged: savesLocationSignal(localSetup) }) });
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
   const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
     verification ? "/api/verification/mod-install" : "/api/mod-install");

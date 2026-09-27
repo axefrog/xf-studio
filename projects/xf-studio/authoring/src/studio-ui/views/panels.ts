@@ -12,6 +12,8 @@ import { characterPanel } from "../panels/character";
 import { libraryPanel, packagePanel, presetsPanel } from "../panels/collection";
 import { historyPanel } from "../panels/history";
 import { headPanel } from "../panels/viewports";
+import { settingsPanel } from "../panels/settings";
+import type { ThemePreference } from "../../ui-preferences";
 import { helpPanel, type HelpGuidance } from "../guidance/help-panel";
 import type { StudioRuntime } from "../runtime";
 import type { ViewCatalogue } from "./contribution";
@@ -23,7 +25,18 @@ import type { SHELL_VIEW } from "./shell";
  * modules contribute to a view (view-graph-design.md §3.9): their crumbs after the preset, and a readiness badge.
  */
 export type ViewContext = { readonly guidance: HelpGuidance;
-  readonly view: { summaries(): ViewSummary[]; badge(): ViewBadge | undefined } };
+  readonly view: { summaries(): ViewSummary[]; badge(): ViewBadge | undefined };
+  /** The appearance preferences Settings shows (theme, input hints, research tools), set through the UI preferences' capabilities. */
+  readonly appearance: AppearanceControls };
+export type AppearanceControls = {
+  theme(): ThemePreference;
+  setTheme(theme: ThemePreference): void;
+  hints(): boolean;
+  setHints(enabled: boolean): void;
+  research(): boolean;
+  setResearch(enabled: boolean): void;
+  openReference(): void;
+};
 /** One of the shell's own panel factories. A feature's panels get a `FeatureViewContext` instead (`feature-view.ts`). */
 export type PanelFactory = (rt: StudioRuntime, context: ViewContext) => PanelController;
 /** A view's factories, keyed by exactly its panel IDs. */
@@ -32,7 +45,7 @@ export type PanelFactories<V extends { panels: readonly { id: string }[] }> = { 
 export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
   presets: presetsPanel, history: historyPanel, library: libraryPanel, package: packagePanel, head: (rt, context) => headPanel(rt, context),
   character: characterPanel, lighting: lightingPanel, motion: motionPanel, quality: qualityPanel, activity: activityPanel,
-  help: (rt, context) => helpPanel(rt, context.guidance),
+  settings: settingsPanel, help: (rt, context) => helpPanel(rt, context.guidance),
 };
 
 /**

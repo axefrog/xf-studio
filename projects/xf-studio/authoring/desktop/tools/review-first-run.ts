@@ -22,7 +22,7 @@ let browser: Awaited<ReturnType<typeof launch>> | undefined;
 try {
   browser = await launch(server.url + "&verify=1", { width: 900, height: 650, debugPort: 9438, scheme: "dark" });
   await browser.waitFor("document.querySelector('#desktop-welcome')?.open");
-  // Settings have one form, the Studio's Game & tools (UI-03): no desktop setup dialog opens over the welcome.
+  // Settings have one form, the Studio's Settings panel (UI-03, UI-108): no desktop setup dialog opens over the welcome.
   const firstRun = await browser.evaluate(`({ setupOpen: !!document.querySelector('#desktop-setup'),
     welcome: document.querySelector('#desktop-welcome').textContent })`);
   if (firstRun.setupOpen || !firstRun.welcome.includes("3D head preview is built from your own Cyberpunk 2077 files"))
@@ -91,19 +91,19 @@ try {
   await browser.waitFor("document.querySelector('#desktop-licence-text').textContent.includes('JavaScriptCore')");
   await browser.screenshot(resolve(screenshots, "desktop-licences.png"));
   await browser.evaluate("document.querySelector('#desktop-licences').close()");
-  // The preview card names the missing game folder: it offers a detected install, or Game & tools.
+  // The preview card names the missing game folder: it offers a detected install, or Settings › Game.
   await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['previewSetup.openSetup', 'previewSetup.useDetectedGame'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
-  // About's Game & tools opens the Studio's one setup form (UI-03); a typed folder saves as it is entered.
+  // About's Settings opens the Studio's one setup form at Game (UI-03, UI-108); a typed folder saves as it is entered.
   await browser.evaluate("window.xfDesktopOpenAbout(); document.querySelector('#desktop-setup-open').click()");
-  await browser.waitFor("document.querySelector('.setup-section')?.open && document.querySelector('.setup-status')?.textContent.includes('Cyberpunk 2077 folder')");
+  await browser.waitFor("document.querySelector('.settings-panel')?.isConnected && document.querySelector('.setup-game')?.closest('section')?.querySelector('.setup-status')?.textContent.includes('Cyberpunk 2077 folder')");
   await browser.screenshot(resolve(screenshots, "desktop-build-setup.png"));
-  await browser.evaluate(`(() => { const input = [...document.querySelectorAll('.setup-section input')].find(item => item.placeholder?.includes('Cyberpunk 2077'));
+  await browser.evaluate(`(() => { const input = [...document.querySelectorAll('.setup-game input')].find(item => item.placeholder?.includes('Cyberpunk 2077'));
     input.value = ${JSON.stringify(game)}; input.dispatchEvent(new Event('change')); })()`);
   await browser.waitFor(`fetch('/api/local-settings').then(r => r.json()).then(v => v.fields.gameRoot === ${JSON.stringify(game)})`);
   const state = await browser.evaluate(`({
     intro: document.querySelector('.boot')?.textContent,
-    setup: document.querySelector('.setup-status')?.textContent,
+    setup: document.querySelector('.setup-game')?.closest('section')?.querySelector('.setup-status')?.textContent,
     errors: document.querySelectorAll('.boot-error').length
   })`);
   if (state.errors || !state.setup) throw Error(`Desktop first-run setup did not render and persist accurately: ${JSON.stringify(state)}`);

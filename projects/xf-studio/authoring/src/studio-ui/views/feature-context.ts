@@ -101,6 +101,7 @@ export function moduleViewContext(rt: StudioRuntime, owner: string): ModuleViewC
     }),
     anchors: Object.freeze({ register: (...args: Parameters<StudioRuntime["anchors"]["register"]>) => rt.anchors.register(...args) }),
     reveal: (panel: string, focus?: boolean) => rt.dock.reveal(panel, focus),
+    openSettings: (section?: Parameters<StudioRuntime["settings"]["open"]>[0]) => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof rt.port.links.open>[0]) => rt.port.links.open(link) }),
     changed: () => rt.changed(),
   } satisfies ModuleViewContext);

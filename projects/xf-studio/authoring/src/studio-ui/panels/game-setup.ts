@@ -1,6 +1,6 @@
 import type { FolderField } from "../../local-setup-actions";
 import type { LocalSetupFields } from "../../local-settings-server";
-import { applyCapability, button, Segmented } from "../controls";
+import { applyCapability, button, note, Segmented } from "../controls";
 import { h, setAttr, setText, setValue, uid } from "../dom";
 import { helpTip } from "../help-tip";
 import { icon } from "../icons";
@@ -11,20 +11,34 @@ const OTHER = "\u0000other";
 const samePath = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b &&
   a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
 
+/** The one plain line about the game setup: damaged settings, the first thing to do before a Build, or ready. */
+export function setupStatus(frame: Frame): { text: string; tone: "warning" | "ready" } {
+  const setup = frame.localSetup, view = setup.view, readiness = view?.readiness;
+  const damaged = view?.source === "backup";
+  const firstIssue = readiness && [...readiness.build.issues, ...readiness.sourceDiscovery.issues][0];
+  const onMo2 = view?.fields.launchRoute === "mo2";
+  const text = setup.error ?? (!view ? "Loading your settings…" : damaged
+    ? "Your settings file is damaged. Restore the previous copy to keep using it."
+    : firstIssue ? `To build your mod files: ${firstIssue.reason}` : `Ready: XF Studio can build your mods and add them to ${onMo2 ? "Mod Organizer 2" : "your game folder"}.`);
+  return { text, tone: damaged || firstIssue || setup.error ? "warning" : "ready" };
+}
+
 /**
- * Game & tools (UI-83, UI-03): the one setup form both hosts use (the desktop's Build setup opens it too). Every choice is saved
- * the moment it is made (`setup.update` merges only that field over the saved settings), so there is no second copy of the
- * settings to go stale and no Save button. Folders XF Studio found are offered as choices (`detect.gameInstalls`,
- * `detect.mo2Instances`, with each instance's profiles); "Another folder…" opens a text box, and the desktop app adds its native
- * folder picker (`setup.pickFolder`). One plain line says what is ready and, when something isn't, the one next step.
+ * The game, saves and tools settings (UI-83, UI-03, UI-108): the one setup form both hosts use, shown in the Settings panel's Game, Saves
+ * and Tools groups (the desktop's Build setup and every "Open Settings" opens it). Every choice is saved the moment it is made
+ * (`setup.update` merges only that field over the saved settings), so there is no second copy of the settings to go stale and no Save
+ * button. Folders XF Studio found are offered as choices (`detect.gameInstalls`, `detect.mo2Instances`, with each instance's profiles);
+ * "Another folder…" opens a text box, and the desktop app adds its native folder picker (`setup.pickFolder`). One plain line says what
+ * is ready and, when something isn't, the one next step. The saves folder is detected; "Choose another folder…" and "Use the detected
+ * folder" override it and go back.
  */
-export function gameSetupSection(rt: StudioRuntime) {
+export function gameSetupForm(rt: StudioRuntime) {
   const port = rt.port;
   const status = h("p", { class: "setup-status", role: "status", "aria-live": "polite" });
   const save = async (fields: Partial<LocalSetupFields>, announce = "Saved on this computer.") => {
     const outcome = await port.localSetup.dispatch({ kind: "setup.update", fields });
     if (outcome.ok) rt.feedback.announce(announce);
-    else rt.feedback.toast("warning", "Game & tools", outcome.message, [], { code: outcome.code });
+    else rt.feedback.toast("warning", "Settings", outcome.message, [], { code: outcome.code });
     rt.changed();
     return outcome.ok;
   };
@@ -57,7 +71,7 @@ export function gameSetupSection(rt: StudioRuntime) {
     async function pick() {
       const outcome = await port.localSetup.dispatch({ kind: "setup.pickFolder", field });
       if (outcome.ok) { other = false; rt.feedback.announce(`${label} saved`); }
-      else if (outcome.code !== "cancelled") rt.feedback.toast("warning", "Game & tools", outcome.message, [], { code: outcome.code });
+      else if (outcome.code !== "cancelled") rt.feedback.toast("warning", "Settings", outcome.message, [], { code: outcome.code });
       rt.changed();
     }
     return {
@@ -119,15 +133,15 @@ export function gameSetupSection(rt: StudioRuntime) {
   const findAgain = button({ label: "Find my game and mod manager again", icon: "search", small: true, variant: "quiet", onClick: () => void detect(true) });
   const restore = button({ label: "Restore previous settings", icon: "reset", small: true, onClick: () => void (async () => {
     const outcome = await port.localSetup.dispatch({ kind: "setup.restorePrevious" });
-    if (outcome.ok) rt.feedback.toast("success", "Game & tools", "Your previous settings are back.");
-    else rt.feedback.toast("warning", "Game & tools", outcome.message, [], { code: outcome.code });
+    if (outcome.ok) rt.feedback.toast("success", "Settings", "Your previous settings are back.");
+    else rt.feedback.toast("warning", "Settings", outcome.message, [], { code: outcome.code });
   })() });
-  const element = h("details", { class: "section setup-section" }, h("summary", { text: "Game & tools" }),
-    h("div", { class: "control-line" }, status, helpTip("Game & tools",
-      "Saved on this computer as you choose. XF Studio finds your game and mod manager and sets up WolvenKit for you; change a choice only if it picked the wrong one.")), h("div", { class: "row wrap gap-s" }, restore),
-    route.element, game.element, h("div", { class: "setup-mo2" }, mo2.element, profileField), h("div", { class: "setup-direct" }, direct.element),
-    wolvenKitField, h("label", { class: "control" }, plateHeadLabel, plateHead),
-    h("div", { class: "row wrap gap-s" }, findAgain));
+  const mo2Section = h("div", { class: "setup-mo2" }, mo2.element, profileField), directSection = h("div", { class: "setup-direct" }, direct.element);
+  const gameElement = h("div", { class: "setup-section setup-game" },
+    h("div", { class: "row wrap gap-s" }, restore), route.element, game.element, mo2Section, directSection,
+    h("label", { class: "control" }, plateHeadLabel, plateHead), h("div", { class: "row wrap gap-s" }, findAgain));
+  const toolsElement = h("div", { class: "setup-section setup-tools" }, wolvenKitField);
+  const saves = savesFolderField(rt, save);
   // Finding is read only and quick: done once when the form is first shown, and again on request.
   let detected = false;
   async function detect(force = false) {
@@ -137,16 +151,20 @@ export function gameSetupSection(rt: StudioRuntime) {
       if (port.installDetection.capability({ kind }).available) await port.installDetection.dispatch({ kind });
     rt.changed();
   }
-  element.addEventListener("toggle", () => { if (element.open) void detect(); });
-  const mo2Section = element.querySelector<HTMLElement>(".setup-mo2")!, directSection = element.querySelector<HTMLElement>(".setup-direct")!;
 
   return {
-    element,
-    /** Open the form, find folders if not yet done, and focus the first thing to choose. */
-    show() {
-      element.open = true;
+    /** The one plain line (shown at the top of the Game group). */
+    status,
+    game: gameElement,
+    saves: saves.element,
+    tools: toolsElement,
+    /** Find the game and mod manager, once (the first time Settings is shown). */
+    detect: () => void detect(),
+    /** Focus the first thing to choose in a group: the game folder or MO2 instance still missing, the saves folder, or WolvenKit. */
+    focus(section: "game" | "saves" | "tools") {
       void detect();
-      element.scrollIntoView?.({ block: "nearest" });
+      if (section === "saves") { saves.focus(); return; }
+      if (section === "tools") { requestAnimationFrame(() => wolvenKit.focus()); return; }
       const view = port.localSetup.snapshot().view;
       const first = !view?.fields.gameRoot ? game.element : view.fields.launchRoute === "mo2" && !view.fields.mo2Root ? mo2.element : game.element;
       requestAnimationFrame(() => first.querySelector<HTMLElement>("select:not([hidden]), input")?.focus());
@@ -156,14 +174,11 @@ export function gameSetupSection(rt: StudioRuntime) {
       const damaged = view?.source === "backup";
       restore.hidden = !damaged;
       applyCapability(restore, port.localSetup.capability({ kind: "setup.restorePrevious" }));
-      const readiness = view?.readiness;
       const onMo2 = fields?.launchRoute === "mo2";
       // One plain line: damaged settings, what is missing (the first thing to do), or ready.
-      const firstIssue = readiness && [...readiness.build.issues, ...readiness.sourceDiscovery.issues][0];
-      setText(status, setup.error ?? (!view ? "Loading your settings…" : damaged
-        ? "Your settings file is damaged. Restore the previous copy to keep using it."
-        : firstIssue ? `To build your mod files: ${firstIssue.reason}` : `Ready: XF Studio can build your mods and add them to ${onMo2 ? "Mod Organizer 2" : "your game folder"}.`));
-      status.className = `setup-status${damaged || firstIssue || setup.error ? " warning" : " ready"}`;
+      const line = setupStatus(frame);
+      setText(status, line.text);
+      status.className = `setup-status ${line.tone}`;
       route.update(fields?.launchRoute, () => view && !damaged ? { available: true } : { available: false, reason: damaged ? "Restore your previous settings first." : "Loading your settings…" });
       const locked = !view || damaged;
       game.update(frame, fields?.gameRoot ?? null, locked);
@@ -196,6 +211,78 @@ export function gameSetupSection(rt: StudioRuntime) {
       for (const control of [profile, profileText, wolvenKit, plateHead]) control.disabled = locked;
       applyCapability(findAgain, frame.installDetection?.busy ? { available: false, reason: "XF Studio is looking now." }
         : port.installDetection.capability({ kind: "detect.gameInstalls" }));
+      saves.update(frame, locked);
+    },
+  };
+}
+
+/**
+ * Settings › Saves (UI-108): where the Save Explorer reads saves. The detected Saved Games folder is the default and is only described
+ * ("Detected: Saved Games › CD Projekt Red › Cyberpunk 2077" in words), never shown as a path with the person's profile in it. "Choose another
+ * folder…" opens the desktop's folder picker, or a text box where there is none (localhost), whose refusals say what to do; "Use the
+ * detected folder" goes back to the default.
+ */
+function savesFolderField(rt: StudioRuntime, save: (fields: Partial<LocalSetupFields>, announce?: string) => Promise<boolean>) {
+  const port = rt.port;
+  const current = h("p", { class: "setup-status saves-current", role: "status" });
+  const input = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": "Your saves folder: type or paste it",
+    placeholder: "e.g. D:\\Saves\\Cyberpunk 2077" });
+  const guidance = note("Paste the folder that holds your save folders (ManualSave-0, AutoSave-1 and so on). In File Explorer, open that folder and copy its address bar.");
+  const problem = h("p", { class: "note warning", role: "alert", hidden: true });
+  const useTyped = button({ label: "Use this folder", icon: "check", small: true, onClick: () => void commit() });
+  const typed = h("div", { class: "setup-typed-block", hidden: true }, h("div", { class: "row gap-s setup-typed" }, input, useTyped), guidance, problem);
+  const choose = button({ label: "Choose another folder…", icon: "folder", small: true, onClick: () => void chooseAnother() });
+  const useDetected = button({ label: "Use the detected folder", icon: "reset", small: true, variant: "quiet",
+    onClick: () => void save({ savesDirectory: null }, "Saves are read from the detected folder.").then(ok => { if (ok) { typing = false; rt.changed(); } }) });
+  const developer = note("", "info");
+  const element = h("div", { class: "setup-section setup-saves" }, current, developer, h("div", { class: "row wrap gap-s" }, choose, useDetected), typed);
+  let typing = false;
+  const showProblem = (message: string | null) => { setText(problem, message ?? ""); problem.hidden = !message; setAttr(input, "aria-invalid", message ? "true" : undefined); };
+  async function commit() {
+    const value = input.value.trim();
+    if (!value) { showProblem("Type or paste the folder your saves are in."); input.focus(); return; }
+    const outcome = await port.localSetup.dispatch({ kind: "setup.update", fields: { savesDirectory: value } });
+    // A refusal is said beside the field, in words that say what to do (the host checks the folder is there).
+    if (!outcome.ok) { showProblem(outcome.message); input.focus(); rt.changed(); return; }
+    showProblem(null); typing = false;
+    rt.feedback.announce("Saves folder saved.");
+    rt.changed();
+  }
+  input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); void commit(); } });
+  input.addEventListener("input", () => showProblem(null));
+  async function chooseAnother() {
+    if (port.localSetup.snapshot().canPickFolder) {
+      const outcome = await port.localSetup.dispatch({ kind: "setup.pickFolder", field: "savesDirectory" });
+      if (outcome.ok) { rt.feedback.announce("Saves folder saved."); typing = false; }
+      // The picker couldn't open: the text box is the way instead.
+      else if (outcome.code !== "cancelled") { typing = true; showProblem(outcome.message); }
+      rt.changed();
+      return;
+    }
+    // Shown at once, so focus lands in the box before the next paint.
+    typing = true; typed.hidden = false; input.focus();
+    rt.changed();
+  }
+  return {
+    element,
+    focus() { requestAnimationFrame(() => (typed.hidden ? choose : input).focus()); },
+    update(frame: Frame, locked: boolean) {
+      const view = frame.localSetup.view, saves = view?.saves, chosen = view?.fields.savesDirectory ?? null;
+      const detected = saves?.detected;
+      setText(current, !view ? "Loading your settings…" : chosen
+        ? `Your folder: ${chosen}${saves?.chosenFound === false ? " (not found: choose it again, or use the detected folder)" : ""}`
+        : detected ? `Detected: ${detected.display}${detected.found ? "" : " (not on this computer yet: save in the game, or choose where your saves are)"}`
+          : "XF Studio can't detect a saves folder on this computer. Choose the folder your saves are in.");
+      current.className = `setup-status saves-current ${(chosen ? saves?.chosenFound === false : !detected?.found) ? "warning" : "ready"}`;
+      setText(developer, saves?.source === "developer" ? "XFS_SAVES_DIR is set, so this server reads that folder instead." : "");
+      developer.hidden = saves?.source !== "developer";
+      useDetected.hidden = !chosen;
+      typed.hidden = !typing;
+      if (document.activeElement !== input && !input.value) setValue(input, chosen ?? "");
+      const reason = !view ? { available: false, reason: "Your settings are still loading." }
+        : locked ? { available: false, reason: "Restore your previous settings first." } : { available: true };
+      applyCapability(choose, reason); applyCapability(useDetected, reason); applyCapability(useTyped, reason);
+      input.disabled = locked;
     },
   };
 }

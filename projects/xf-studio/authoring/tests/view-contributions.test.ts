@@ -22,7 +22,11 @@ import { STUDIO_MODULES } from "../src/compose/modules";
  * The composition before any module without a document part existed: the shell's view and eye makeup's. Panels of modules hidden by
  * default (the Save Explorer) are parked at startup, so the factory layouts a person gets are still exactly these.
  */
-const HISTORICAL = viewCatalogue([SHELL_VIEW, EYE_MAKEUP_VIEW]);
+/** Closed-by-default shell panels added since (Settings, UI-108): they change no factory arrangement, only the closed list. */
+const ADDED_CLOSED = ["settings"];
+const HISTORICAL = viewCatalogue([{ ...SHELL_VIEW, panels: SHELL_VIEW.panels.filter(panel => !ADDED_CLOSED.includes(panel.id)) }, EYE_MAKEUP_VIEW]);
+/** A tree's closed list with the closed panels added since, in catalogue order (before Help). */
+const withAddedClosed = (tree: DockTree): DockTree => ({ ...tree, closed: tree.closed.flatMap(id => id === "help" ? [...ADDED_CLOSED, id] : [id]) });
 const HIDDEN_BY_DEFAULT = STUDIO_CATALOGUE.panels.filter(panel => STUDIO_MODULES.some(module => !module.shownByDefault && module.id === panel.owner)).map(panel => panel.id);
 
 /** The factory layouts exactly as the hand-kept `layout-defaults.ts` built them before step 5 (481c3ad). */
@@ -49,12 +53,13 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   expect([...HISTORICAL.ids] as string[]).toEqual(GRANDFATHERED);
   expect(defaultWide(HISTORICAL)).toEqual(BEFORE.wide());
   expect(defaultCompact(HISTORICAL)).toEqual(BEFORE.compact());
-  // The Studio's catalogue adds only panels of modules hidden by default, and parks them: the defaults a person gets are unchanged.
-  expect(([...PANEL_IDS] as string[]).filter(id => !GRANDFATHERED.includes(id))).toEqual(HIDDEN_BY_DEFAULT);
+  // The Studio's catalogue adds only panels of modules hidden by default, which it parks, and closed-by-default panels: the arrangement
+  // a person gets is unchanged.
+  expect(([...PANEL_IDS] as string[]).filter(id => !GRANDFATHERED.includes(id)).sort()).toEqual([...HIDDEN_BY_DEFAULT, ...ADDED_CLOSED].sort());
   expect(HIDDEN_BY_DEFAULT).toEqual(["save-explorer.explorer"]);
   const parked = defaultDockStateFor(STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
-  expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, BEFORE.wide().closed]);
-  expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, BEFORE.compact().closed]);
+  expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, withAddedClosed(BEFORE.wide()).closed]);
+  expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, withAddedClosed(BEFORE.compact()).closed]);
   expect(STUDIO_CATALOGUE.homes).toEqual({ help: ["finish", "layers"] });
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
@@ -73,9 +78,12 @@ test("a dock layout saved before step 5 restores unchanged", () => {
   const saved = JSON.parse(JSON.stringify(serializeDockState({ wide, compact: BEFORE.compact() })));
   const restored = restoreDockPreference(saved, area, STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
   expect(restored.recovered).toBe(true);
-  // Unchanged, apart from the hidden module's panel, parked beside the UV map for when that module is shown.
+  // Unchanged, apart from the hidden module's panel, parked beside the UV map for when that module is shown, and the closed-by-default
+  // panels added since, which join the closed list.
   const withoutParked = (tree: DockTree) => { const { parked, ...rest } = tree as DockTree & { parked?: unknown }; void parked; return rest; };
-  expect({ wide: withoutParked(restored.state.wide), compact: withoutParked(restored.state.compact) }).toEqual(saved.state);
+  const expected = structuredClone(saved.state) as { wide: DockTree; compact: DockTree };
+  expected.wide.closed.push(...ADDED_CLOSED); expected.compact.closed.push(...ADDED_CLOSED);
+  expect({ wide: withoutParked(restored.state.wide), compact: withoutParked(restored.state.compact) }).toEqual(expected);
   expect(Object.keys((restored.state.wide as DockTree & { parked?: object }).parked ?? {})).toEqual(HIDDEN_BY_DEFAULT);
 });
 

@@ -42,7 +42,10 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     return { element: h("li", {}, label, detail), render() { const entry = desktopAppEntry(rt.port.desktopApp.snapshot()); setText(label, entry.label); setText(detail, entry.detail); } };
   })() : null;
   desktop?.render();
-  const links = h("ul", { class: "help-links" }, about, desktop?.element ?? null, h("li", {},
+  // Settings, where everything about this computer is chosen (UI-108).
+  const settings = h("li", {}, h("button", { class: "link-button help-settings", type: "button", text: "Settings", onclick: () => rt.settings.open() }),
+    h("small", { class: "muted", text: "Your game and mod manager, where your saves are, WolvenKit, appearance and diagnostics." }));
+  const links = h("ul", { class: "help-links" }, settings, about, desktop?.element ?? null, h("li", {},
     h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
     h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
     h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),

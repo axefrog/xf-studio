@@ -53,12 +53,12 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
     return { ok: true, data: host.wolvenKit };
   }, 5);
   let fields: LocalSetupFields = { gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null,
-    wolvenKitCli: null, eyePlateHead: "installed" };
+    wolvenKitCli: null, eyePlateHead: "installed", savesDirectory: null };
   let revision = 0;
   const saved: Partial<LocalSetupFields>[] = [];
   const view = (): LocalSetupView => ({ revision, source: "primary", fields, overridden: [],
     readiness: { build: { ready: false, issues: [], limits: [] } } as unknown as LocalSetupView["readiness"],
-    eyePlateHead: { label: "Head used for the eye plate", options: [] } });
+    eyePlateHead: { label: "Head used for the eye plate", options: [] }, saves: { source: "detected", detected: null, chosenFound: null } });
   const localSetup = new LocalSetupActions(async (method, body) => {
     if (method === "PATCH") {
       const next = (body as { fields: LocalSetupFields }).fields;
@@ -72,7 +72,7 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
       issues: options.issues ?? [] } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
   let autostart = options.autostart ?? true, hostSetupOpened = 0;
   const links: string[] = [];
-  const setup = new PreviewSetupActions({ preparation, wolvenKit, detection, localSetup, setupPlace: "Game & tools",
+  const setup = new PreviewSetupActions({ preparation, wolvenKit, detection, localSetup, setupPlace: "Settings",
     openLink: async link => { links.push(link); },
     ...(options.hostSetup ? { openHostSetup: () => { hostSetupOpened++; } } : {}),
     autostart: { get: () => autostart, set: on => { autostart = on; } },
@@ -220,7 +220,7 @@ test("a detected game folder is saved over the other settings, and setup opens w
   await until(() => h.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
   expect(await h.setup.dispatch({ kind: "previewSetup.useDetectedGame" })).toEqual({ ok: true });
   expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Games\\Cyberpunk 2077", manualModRoot: "D:\\Mods" });
-  // Localhost has no setup form of its own: the Studio reveals Game & tools (UI-29).
+  // Localhost has no setup form of its own: the Studio opens Settings › Game (UI-29, UI-108).
   expect(h.setup.snapshot().setupRequests).toBe(0);
   await h.setup.dispatch({ kind: "previewSetup.openSetup" });
   expect(h.setup.snapshot().setupRequests).toBe(1);
@@ -498,6 +498,6 @@ test("the WolvenKit step follows WolvenKit's own state: its runtime, its downloa
   expect(await step(wolvenKitState("needs-runtime", { message: "WolvenKit needs .NET.", runtime: { name: ".NET 8.0 Runtime", installed: false } as never })))
     .toMatchObject({ action: { kind: "previewSetup.openLink", link: "runtime-installer" } });
   expect(await step(wolvenKitState("downloading", { canCancel: true, progress: { receivedBytes: 1, totalBytes: 4 } }))).toBeNull();
-  expect(await step(wolvenKitState("ready"))).toEqual({ label: "Open Game & tools", action: { kind: "previewSetup.openSetup" } });
-  expect(await step(wolvenKitState("custom-missing", { message: "WolvenKit isn't where it was set." }))).toEqual({ label: "Open Game & tools", action: { kind: "previewSetup.openSetup" } });
+  expect(await step(wolvenKitState("ready"))).toEqual({ label: "Open Settings", action: { kind: "previewSetup.openSetup" } });
+  expect(await step(wolvenKitState("custom-missing", { message: "WolvenKit isn't where it was set." }))).toEqual({ label: "Open Settings", action: { kind: "previewSetup.openSetup" } });
 });

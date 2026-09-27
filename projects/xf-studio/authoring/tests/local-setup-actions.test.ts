@@ -5,10 +5,11 @@ import { LocalSetupActions } from "../src/local-setup-actions";
 // The settings port owns field merges and queued refreshes, so views never re-implement them (UI-26).
 function fixture() {
   let fields: LocalSetupFields = { gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: "D:\Mods",
-    wolvenKitCli: null, eyePlateHead: "installed" };
+    wolvenKitCli: null, eyePlateHead: "installed", savesDirectory: null };
   let revision = 1, gets = 0, release: (() => void) | undefined;
   const view = (): LocalSetupView => ({ revision, source: "primary", fields, overridden: [],
-    readiness: {} as LocalSetupView["readiness"], eyePlateHead: { label: "Head used for the eye plate", options: [] } });
+    readiness: {} as LocalSetupView["readiness"], eyePlateHead: { label: "Head used for the eye plate", options: [] },
+    saves: { source: "detected", detected: null, chosenFound: null } });
   const actions = new LocalSetupActions(async (method, body) => {
     if (method === "GET") { gets++; if (release === undefined) await new Promise<void>(resolve => { release = resolve; }); }
     if (method === "PATCH") { fields = (body as { fields: LocalSetupFields }).fields; revision++; }
