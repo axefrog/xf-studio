@@ -75,6 +75,16 @@ frames: try {
       const flags = await page.evaluate(`[...document.querySelectorAll(".item-row")].map(row => { const flag = row.querySelector(".finish-flag");
         return flag && !flag.hidden ? { name: row.querySelector(".item-name")?.textContent, reason: flag.dataset.reason, title: flag.title } : null; }).filter(Boolean)`);
       console.log(recipe, JSON.stringify(flags));
+      // The flagged row with its tooltip, as a crop: the flag's title drawn beside it (a native tooltip isn't in a screenshot).
+      const row = await page.evaluate<{ x: number; y: number; width: number; height: number; title: string } | null>(`(() => {
+        const flag = [...document.querySelectorAll(".item-row .finish-flag")].find(f => !f.hidden && f.dataset.reason === "edge");
+        if (!flag) return null; const r = flag.closest(".item-row").getBoundingClientRect();
+        const tip = document.createElement("div"); tip.id = "seam-tip"; tip.textContent = flag.title; tip.setAttribute("role", "tooltip");
+        Object.assign(tip.style, { position: "fixed", left: r.left + "px", top: r.bottom + 4 + "px", maxWidth: "320px", zIndex: 99, font: "12px system-ui",
+          padding: "4px 8px", background: "#222", color: "#eee", border: "1px solid #555", borderRadius: "3px" });
+        document.body.append(tip); const t = tip.getBoundingClientRect();
+        return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(Math.max(r.width, t.width)), height: Math.round(t.bottom - r.top + 4), title: flag.title }; })()`);
+      if (row) { await page.screenshot(resolve(out, `ui-${recipe}-row-tooltip.png`), row); await page.evaluate(`document.getElementById("seam-tip")?.remove()`); }
     }
     break frames;
   }

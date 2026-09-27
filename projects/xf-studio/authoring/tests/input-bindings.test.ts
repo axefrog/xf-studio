@@ -119,6 +119,9 @@ test("hints follow the target and held modifiers; outside the viewport modifiers
   expect(viewportHints({ ...base, target: "shape", modifiers: held("ctrl") }).items.some(item => item.ids.includes("gesture.cancel"))).toBe(false);
   expect(viewportHints({ ...base, target: "shape", gesture: "rotate" }).items.map(item => item.input)).toEqual(["Release", "Esc"]);
   expect(viewportHints({ ...base, target: "empty", blocked: "surface-off" }).note).toContain("Surface controls");
+  // A mode the person chose is muted; something that stops the edit is a warning.
+  expect(viewportHints({ ...base, target: "empty", blocked: "surface-off" }).noteTone).toBe("mode");
+  expect(viewportHints({ ...base, target: "empty", blocked: "look-locked" }).noteTone).toBe("warning");
   expect(targetTip({ ...base, target: "shape" })?.lines.map(line => line.input)).toEqual(["Drag", "Shift-drag", "Wheel", "Right-click"]);
   expect(targetTip({ ...base, target: "empty" })).toBeUndefined();
 });

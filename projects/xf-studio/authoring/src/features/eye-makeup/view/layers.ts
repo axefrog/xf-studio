@@ -9,6 +9,9 @@ import { addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } f
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 import { openLayerMenu } from "./layer-menu";
 
+/** The Layers flag's words for a layer cut off at the plate's outer edge: the consequence first, then the fix (90 characters or fewer). */
+export const EDGE_CUT_NOTE = "Cut off at the plate's edge in game: pull the shape in or make its edge less soft.";
+
 export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   const view = ctx.facade.view(), { finishOf } = catalogues(ctx);
   const count = h("span", { class: "count" });
@@ -59,15 +62,13 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       const flag = row.trailing.querySelector<HTMLElement>(".finish-flag")!;
       const status = ctx.facade.layerExport(layer.id);
       const leftOut = status ? !status.exportable : descriptor?.exportAdapter === "none";
-      // Makeup still showing where the eye plate ends stops there in a hard line, in game too (PREV-146); the UV view marks where.
+      // Makeup still showing where the eye plate ends stops there in a hard line, in game too (PREV-146); the UV map marks where.
       const cut = !!ctx.facade.layerSurfaceEdge(layer.id)?.length;
       flag.hidden = !leftOut && !cut;
       flag.title = [leftOut ? status && !status.exportable ? `Left out of your mod files: ${status.reason}` : "Preview only: left out of your mod files" : "",
-        cut ? `${leftOut ? "Also, its" : "Its"} edge is cut off where the makeup area ends (marked in the UV map), so it stops in a hard line there, in game too. Pull the shape in or make its edge less soft.` : ""]
-        .filter(Boolean).join(" ");
-      const reason = leftOut ? "export" : "edge";
-      if (flag.dataset.reason !== reason) { flag.dataset.reason = reason; flag.replaceChildren(icon(leftOut ? "warning" : "info")); }
-      // The flag is drawn for sighted people; the row says the same to screen readers (UI-95).
+        cut ? EDGE_CUT_NOTE : ""].filter(Boolean).join(" ");
+      flag.dataset.reason = leftOut ? "export" : "edge";
+      if (!flag.childElementCount) flag.append(icon("warning"));
       setAttr(row.main, "aria-description", flag.hidden ? undefined : flag.title);
       row.element.classList.toggle("hidden-layer", !layer.enabled);
       const menu = row.trailing.querySelector<HTMLButtonElement>("button")!;

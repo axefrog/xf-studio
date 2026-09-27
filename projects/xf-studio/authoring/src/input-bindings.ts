@@ -312,8 +312,10 @@ const BLOCK_NOTES: Record<BlockReason, string> = {
   "no-layer": "Add a layer to edit a shape",
   "look-locked": "This look needs a newer XF Studio · see Layers",
   "layer-hidden": "The selected layer is hidden · show it to edit",
-  "surface-off": "Surface controls are off · turn them on to edit on the head",
+  "surface-off": "Surface controls off · turn on to edit the head",
 };
+/** Notes that describe a mode the person chose or an empty start, not a problem: shown muted, not in the warning colour. */
+const MODE_NOTES: ReadonlySet<BlockReason> = new Set(["no-layer", "surface-off"]);
 /** Read-only input context a viewport reports, plus what the presentation knows about the layer. */
 export type ViewportInputContext = Readonly<{
   scope: ViewportScope;
@@ -335,7 +337,10 @@ export type ViewportHints = Readonly<{
   hold: readonly HintItem[];
   /** Trailing key hints ("?: all shortcuts"). */
   more: readonly HintItem[];
-  note?: string; tone: "idle" | "held" | "gesture";
+  note?: string;
+  /** `mode`: the note describes a chosen mode or an empty start (muted); `warning`: something stops the edit. */
+  noteTone?: "mode" | "warning";
+  tone: "idle" | "held" | "gesture";
 }>;
 const STRIP_INPUTS: readonly PointerInput[] = ["drag", "wheel", "double-click", "right-drag"];
 const EDIT_EFFECTS: readonly PointerEffect[] = ["handle-drag", "shape-translate", "shape-rotate", "shape-scale", "insert-point"];
@@ -356,6 +361,7 @@ const keyItem = (id: string): HintItem => { const binding = keyBindingById(id); 
 export function viewportHints(context: ViewportInputContext): ViewportHints {
   const { scope } = context, inside = context.target !== undefined, target = context.target ?? "empty";
   const note = context.blocked ? BLOCK_NOTES[context.blocked] : undefined;
+  const noteTone = context.blocked ? MODE_NOTES.has(context.blocked) ? "mode" as const : "warning" as const : undefined;
   if (context.gesture) {
     const gesture = GESTURES[context.gesture];
     const items = [...GESTURE_BINDINGS.filter(binding => binding.gestures.includes(context.gesture!))
@@ -374,7 +380,7 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
   if (mods) {
     // Esc is offered once a held modifier arms an edit of the makeup under the pointer.
     const armed = MAKEUP_TARGETS.includes(target) && items.some(item => item.ids.some(id => EDIT_EFFECTS.includes(pointerBindingById(id).effect)));
-    return { scope, heading, held: modifierLabel(mods), tone: "held", note,
+    return { scope, heading, held: modifierLabel(mods), tone: "held", note, noteTone,
       items: items.length ? [...items, ...(armed ? [keyItem("gesture.cancel")] : [])] : [{ input: "", label: "no action here", ids: [] }],
       hold: [], more: [] };
   }
@@ -383,7 +389,7 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
     ({ input: modifierLabel(key), label: summaries[key]!, ids: POINTER_BINDINGS.filter(binding => binding.scope === scope &&
       binding.mods !== ANY && binding.mods.includes(key)).map(binding => binding.id) }));
   const keys = KEY_BINDINGS.filter(binding => binding.scope === scope && binding.strip).map(binding => keyItem(binding.id));
-  return { scope, heading, items: [...items, ...keys], hold, more: [keyItem("shell.shortcuts")], tone: "idle", note };
+  return { scope, heading, items: [...items, ...keys], hold, more: [keyItem("shell.shortcuts")], tone: "idle", note, noteTone };
 }
 export function pointerBindingById(id: string): PointerBinding {
   const binding = POINTER_BINDINGS.find(item => item.id === id);
