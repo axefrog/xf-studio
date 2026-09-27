@@ -6,7 +6,7 @@ The project requires familiar categories rather than arbitrary legacy labels. Cu
 |---|---|---|---|
 | Matte | Low shine, soft colour | Flat decal, roughness 1.0 (provisional; 0.88 until 27 September, [decal reference §10](shader-decal.md#10-recommended-changes-ranked)) | Same values |
 | Satin | Gentle sheen without distinct sparkle | Flat decal, roughness 0.38; internal `regular` | Same values |
-| Shimmer / pearl | Fine reflective sheen that sparkles close up | **Experimental**: facet normal map composed with the skin normal, variance-widened roughness mips ([design](finish-designs/shimmer.md)) | Game-matched model follows the route; earlier layers keep the fine-facet study |
+| Shimmer / pearl | Fine reflective sheen that sparkles close up | **Experimental**: facet normal map composed with the skin normal, variance-widened roughness mips ([design](finish-designs/shimmer.md)); in game a static dot field, no sparkle yet (route reworked) | Game-matched model follows the route; earlier layers keep the fine-facet study |
 | Metallic / foil | Strong continuous reflective finish | Flat decal, roughness 0.27, metalness 0.65; never an alias for shimmer | Same values |
 | Glitter | Individually visible reflective flecks | **None**: preview only; resolved glint-flake route proposed ([design](finish-designs/glitter.md)) | Opt-in glitter studies (recipes 7–10) |
 | Glossy / wet look | Smooth wet-looking reflection over colour | **Experimental**: one low-roughness dielectric lobe (0.12), no clear coat ([design](finish-designs/glossy.md)) | Game-matched model: the same single lobe; earlier layers keep the clear-coat study |
@@ -24,6 +24,13 @@ Primary sources inspected:
 
 Renderer implementation: every eye-plate layer is a [Three MeshPhysicalMaterial](https://threejs.org/docs/pages/MeshPhysicalMaterial.html) with the full eight-influence skin adapter. **Game-matched models** (recipe schema `xfs/recipe-11`, layer `optics`) follow the export routes: Glossy is one lobe at roughness 0.12 with no clear coat; Shimmer uploads the export route's faded facet normals and widened roughness mips; Colour-shifting adds the shift colour × 2 × strength × saturate(|1 − N·V|²) to the base colour before lighting, at roughness 0.32 and metalness 0.08 (0.25 until 27 September: below 0.1 the covered skin keeps its subsurface scattering). Choosing one of these finishes uses its game-matched model. **Earlier studies** stay pinned on layers made before it: Gloss with roughness .16, metalness 0 and clear coat 1 / roughness .08; Colour shift with roughness .27, metalness .65 and thin-film iridescence (IOR 1.3, 400 nm). The earlier values were exploratory, not measured makeup optics; the game-matched values are provisional choices inside proven engine routes, not measured either.
 
-Existing recipes remain supported, including the `satin` alias for `regular`. Metallic retains its identity. Experiment 003's ten materials remain its historical four-finish fixture. The [finish board](../../experiments/016-finish-board/README.md) is the first package meant to show these families side by side in game; nothing here has been observed there yet.
+Existing recipes remain supported, including the `satin` alias for `regular`. Metallic retains its identity. Experiment 003's ten materials remain its historical four-finish fixture. **In game** (feminine V, game 2.31), from the [finish board](../../experiments/016-finish-board/README.md#runtime-results) (25 September) and [session 3](../../experiments/028-session-3/README.md#5-results-28-september-2026) (28 September):
+- Colour-shifting behaves as designed.
+- Matte and Satin first read too glossy. Matte's roughness has since gone to 1.0, which hasn't been seen yet.
+- Under the creator's soft light the flat finishes (Matte, Satin, Glossy, Metallic) barely separate, so their defaults wait for a controlled-light verdict.
+- Metallic's ramp shows no angular highlights.
+- Shimmer shows a static field of dots rather than sparkle, so it stays experimental ([finishes backlog](../backlog/glitter-material.md#open)).
+
+Glitter has not been in game.
 
 Required research: distinct finish reference comparisons; authentic pearl and multichrome pigment responses; a second gloss lobe (the `eye_shadow` shell); colour shift inside mixed presets; glitter beyond resolved facets; the finish board's runtime session. Emissive/neon fantasy effects are a separate potential expansion, not needed to complete this familiar cosmetics list.

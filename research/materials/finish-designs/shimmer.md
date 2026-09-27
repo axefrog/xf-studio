@@ -1,6 +1,6 @@
 # Shimmer / pearl
 
-**Status:** experimental export (faceted decal), game-matched model only. First seen in game on 25 September: the default fine facets (128 cells, tilt 0.65) read as a diffused gloss rather than sparkle at photo-mode distances. [Experiment 017](../../../experiments/017-plate-depth/README.md) tests a stronger setting (64 cells, tilt 1.0) beside it.
+**Status:** experimental export (faceted decal), game-matched model only. First seen in game on 25 September: the default fine facets (128 cells, tilt 0.65) read as a diffused gloss rather than sparkle at photo-mode distances. On 28 September the stronger setting (*Shimmer · strong*, 64 cells, tilt 1.0) showed a static field of dots with no flash as V moved ([experiment 028](../../../experiments/028-session-3/README.md#5-results-28-september-2026)), judged under the creator's soft light with DLSS on. The route is being reworked ([finishes backlog, Open 7](../../backlog/glitter-material.md#open)).
 
 ## Intended look
 

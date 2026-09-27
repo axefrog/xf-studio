@@ -1,5 +1,5 @@
 {
- "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only)",
+ "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix",
  "recipes": {
   "eye-artistry/recipe-1": {
    "recipe": "bec95166e1104aeaccba8465585abc6b204848a14aae7bb2721f47049b573fc1",
@@ -1886,59 +1886,59 @@
   "005-preset-collection/collection.json": {
    "direct": {
     "parsed": "2bccbae0e46d56c137295333ef863d0b1589c1cf38af52475364ea6a2c6fe0d7",
-    "plan": "1d41c412e2b32b12dc466c7be21bef3490a2e2bddc9e0622f1bfc31aff02d190",
-    "packaged": "a3764030970d3d1f98bb5e48d322bfaac91aec73a556cb9f584ca440149e5afa"
+    "plan": "e5ae64cac3cfb4dbb8c8d073efeaf1cb084120efcd85449d6c0d801ca1c1be74",
+    "packaged": "ee2d352a26221c44e54fdd8045e3577a552ea071c35111abf3ea78010b495a13"
    },
    "minimal": {
     "parsed": "2bccbae0e46d56c137295333ef863d0b1589c1cf38af52475364ea6a2c6fe0d7",
-    "plan": "1d41c412e2b32b12dc466c7be21bef3490a2e2bddc9e0622f1bfc31aff02d190",
-    "packaged": "a3764030970d3d1f98bb5e48d322bfaac91aec73a556cb9f584ca440149e5afa"
+    "plan": "e5ae64cac3cfb4dbb8c8d073efeaf1cb084120efcd85449d6c0d801ca1c1be74",
+    "packaged": "ee2d352a26221c44e54fdd8045e3577a552ea071c35111abf3ea78010b495a13"
    },
    "collection-2": {
     "parsed": "2bccbae0e46d56c137295333ef863d0b1589c1cf38af52475364ea6a2c6fe0d7",
-    "plan": "1d41c412e2b32b12dc466c7be21bef3490a2e2bddc9e0622f1bfc31aff02d190",
-    "packaged": "a3764030970d3d1f98bb5e48d322bfaac91aec73a556cb9f584ca440149e5afa"
+    "plan": "e5ae64cac3cfb4dbb8c8d073efeaf1cb084120efcd85449d6c0d801ca1c1be74",
+    "packaged": "ee2d352a26221c44e54fdd8045e3577a552ea071c35111abf3ea78010b495a13"
    }
   },
   "005-preset-collection/editor-collection.json": {
    "direct": {
     "parsed": "c9469b66b310d27ec40527957f15024dc574deb0d8ae4355308babd2fd76c66f",
-    "plan": "9dd66bde9247f6f37bf7478907f6dcf9eb56b9c7ccffbe792d9c8a10f8480da7",
-    "packaged": "8c3bbf5cfb0bff0dd9e22ee1704e3e2389abccd708b0a3d2125e23199dfb757f"
+    "plan": "286b5bb15899e18e355f01ea036a255a855fae05e848f46ba2ce9866a16120ad",
+    "packaged": "d76afbb12043cee0e208808b6d9477052f9a8d58d01162db8c6b18e34cdc3d04"
    },
    "minimal": {
     "parsed": "c9469b66b310d27ec40527957f15024dc574deb0d8ae4355308babd2fd76c66f",
-    "plan": "9dd66bde9247f6f37bf7478907f6dcf9eb56b9c7ccffbe792d9c8a10f8480da7",
-    "packaged": "8c3bbf5cfb0bff0dd9e22ee1704e3e2389abccd708b0a3d2125e23199dfb757f"
+    "plan": "286b5bb15899e18e355f01ea036a255a855fae05e848f46ba2ce9866a16120ad",
+    "packaged": "d76afbb12043cee0e208808b6d9477052f9a8d58d01162db8c6b18e34cdc3d04"
    },
    "collection-2": {
     "parsed": "c9469b66b310d27ec40527957f15024dc574deb0d8ae4355308babd2fd76c66f",
-    "plan": "9dd66bde9247f6f37bf7478907f6dcf9eb56b9c7ccffbe792d9c8a10f8480da7",
-    "packaged": "8c3bbf5cfb0bff0dd9e22ee1704e3e2389abccd708b0a3d2125e23199dfb757f"
+    "plan": "286b5bb15899e18e355f01ea036a255a855fae05e848f46ba2ce9866a16120ad",
+    "packaged": "d76afbb12043cee0e208808b6d9477052f9a8d58d01162db8c6b18e34cdc3d04"
    }
   },
   "016-finish-board/finish-board.collection.json": {
    "direct": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
-    "packaged": "5908f67ccf3961c254ce32884a6a02da2a1c75251b15dce6325894940ab28d20"
+    "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
+    "packaged": "2538e4b4fdc37304fcc522de2f93df4e01bfae5e90591764ab7937e497e2ea7c"
    },
    "minimal": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
-    "packaged": "5908f67ccf3961c254ce32884a6a02da2a1c75251b15dce6325894940ab28d20"
+    "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
+    "packaged": "2538e4b4fdc37304fcc522de2f93df4e01bfae5e90591764ab7937e497e2ea7c"
    },
    "collection-2": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
-    "packaged": "5908f67ccf3961c254ce32884a6a02da2a1c75251b15dce6325894940ab28d20"
+    "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
+    "packaged": "2538e4b4fdc37304fcc522de2f93df4e01bfae5e90591764ab7937e497e2ea7c"
    }
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "direct": {
     "parsed": "f8375741933c8f24281b06d64d7ccdb5b6a2fea4d257d449fa07ba1236c34f56",
-    "plan": "0f9406ce6ed08da528f95acda469f253b15aa782ca5dab72abcea1ec8466f748",
-    "packaged": "90fcf97932e366764ae3c69d950e19ac6330aed51da0b1ffb0f0f86a95b6c284"
+    "plan": "66d833d42d5c5a9d58f2ec1246de97241e1b014e503df51841ff5e6988635641",
+    "packaged": "db9234dbb425a5659ad2a14871d8f2d5a6425a63597eeae4771b5e5d667c67f6"
    },
    "minimal": {
     "parsed": "f8375741933c8f24281b06d64d7ccdb5b6a2fea4d257d449fa07ba1236c34f56"
@@ -1950,8 +1950,8 @@
   "019-uv-window/uv-window.collection.json": {
    "direct": {
     "parsed": "304fe2356856dac4fa0e52a18b2bec7e1f1a12413d8fab4a2820262f846a17e4",
-    "plan": "34469f4214edeb50dd235a438f8459e63752e8fd971b346fa3d64fe368e96433",
-    "packaged": "aa9c80cdb1ea2e3abb161533a1f09a6112842e8429f4e270fa1fd693dfe8d28d"
+    "plan": "7dbb4f484f83140f6f8c30b6339557a395475e48352d98036c646c5ca7624089",
+    "packaged": "287487bff3729c18a97809f001a17d1634161c16b2ca76dc1c5e821fe6eaffff"
    },
    "minimal": {
     "parsed": "304fe2356856dac4fa0e52a18b2bec7e1f1a12413d8fab4a2820262f846a17e4"
@@ -1963,8 +1963,8 @@
   "020-session-2/session-2.collection.json": {
    "direct": {
     "parsed": "2827a08f547a7f3b741f9803879f53e40578674572b3dc44a8e2e40ead0840ee",
-    "plan": "830b3596e4accb8239908a76c1fcce96ca742493242b8f443d313ca354e15dc5",
-    "packaged": "0af680c90d5b93bf7becb15743319d7a5139acd52cf415775b8781c564d2bdc3"
+    "plan": "cc0150b4e73f8837ad6f85998edb61ada70461602980b8da7b8d76d298b6190e",
+    "packaged": "a2faa55ed9f2aaa9ff45758f54b44e6abbcb73456ece8f2845e4d713c0541169"
    },
    "minimal": {
     "parsed": "2827a08f547a7f3b741f9803879f53e40578674572b3dc44a8e2e40ead0840ee"
