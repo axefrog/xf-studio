@@ -269,4 +269,17 @@ describe("the choice list grouped by maker", () => {
     expect(root.querySelector(".cc-choices")!.classList.contains("grouped")).toBe(false);
     expect(heads(element)).toHaveLength(4);
   });
+
+  test("a picture tile keeps its name as its accessible name and tooltip at size S, where the label is hidden (UI-132)", async () => {
+    const { ChoiceList } = await import("../src/studio-ui/panels/character-choices");
+    const tiles = new ChoiceList("t", () => {});
+    tiles.update(input(choices, 1, { groups: null, previews: { size: "s", row: null } }));
+    const root = tiles.element as unknown as LightElement;
+    expect(root.querySelector(".cc-choices")!.getAttribute("data-size")).toBe("s");
+    const item = root.querySelector('[data-position="2"]')!;
+    expect(item.classList.contains("preview-choice")).toBe(true);
+    expect(item.getAttribute("aria-label")).toBe("C2");
+    expect(item.getAttribute("title")).toBe("C2 · From Zeta Hair Colours");
+    expect(item.querySelector(".pv-label")!.textContent).toBe("C2");
+  });
 });

@@ -1,6 +1,6 @@
 import { h, setAttr, setUnavailable, uid } from "../dom";
 import { NoteLine } from "../controls";
-import { helpTip, type HelpText } from "../help-tip";
+import { helpTip, setHelp, type HelpText } from "../help-tip";
 import { contrastMark, setContrastMark, SwatchCard, type SwatchSample } from "./swatch-card";
 
 /**
@@ -84,15 +84,18 @@ export class ChoiceList<T extends string> {
   private readonly mark: HTMLElement | null;
   private signature = "";
   private selected: T | undefined;
+  /** The help tip beside the label, when the list was given `help`. */
+  private readonly tip: HTMLButtonElement | null;
   constructor(private readonly options: ChoiceListOptions<T>) {
     const labelId = uid("choices");
     this.list = h("div", { class: `choices ${options.layout ?? "chips"}`, role: "listbox",
       "aria-label": options.showLabel === false ? options.label : undefined, "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.mark = options.swatchCard && options.showLabel !== false ? contrastMark() : null;
+    this.tip = options.help !== undefined && options.showLabel !== false ? helpTip(options.label, options.help) : null;
     this.element = h("div", { class: "control choice-list" },
       options.showLabel === false ? null : h("div", { class: "control-line" }, h("span", { class: "control-label", id: labelId, text: options.label }),
-        options.help !== undefined ? helpTip(options.label, options.help) : null, this.mark),
+        this.tip, this.mark),
       this.list, this.note.element);
     this.list.addEventListener("keydown", event => this.key(event));
     if (options.swatchCard) attachSwatchCard(this.list, item => {
@@ -133,6 +136,8 @@ export class ChoiceList<T extends string> {
     this.rove(this.items.find(item => item.value === (focused ?? this.selected))?.element);
     if (focused !== undefined) this.items.find(item => item.value === focused)?.element.focus();
   }
+  /** Change the help tip's text (a list made with `help` only): what the chosen option is, when that differs per choice. */
+  setHelp(text: HelpText) { if (this.tip) setHelp(this.tip, text); }
   /** The chosen value, each choice's capability, and the whole list's state (unavailable with its reason, or a passing note). */
   update(selected: T | undefined, capability: (value: T) => { available: boolean; reason?: string } = () => ({ available: true }),
     state: { disabled?: boolean; reason?: string; note?: string; enhanced?: boolean } = {}) {

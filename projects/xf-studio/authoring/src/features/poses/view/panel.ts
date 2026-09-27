@@ -6,7 +6,7 @@
  */
 import { keyBinding } from "../../../input-bindings";
 import { applyCapability, button, emptyState, favouriteToggle, note, SearchField, TreeView, type TreeGroupData, type TreeRowData } from "../../../studio-ui/components";
-import { h, setText } from "../../../studio-ui/dom";
+import { h, setAttr, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { PoseBadge } from "../types";
@@ -93,8 +93,12 @@ export function posesPanel(ctx: Ctx): PanelController {
       applyCapability(idle, facade.capability({ kind: "pose.clear", to: "idle" }));
       applyCapability(frame, facade.capability({ kind: "pose.frame" }));
       const held = snapshot.current;
-      setText(current, held ? (held.loading ? `Loading ${held.label}…` : `V holds ${held.label}.`)
-        : !snapshot.playable.available ? snapshot.playable.reason ?? "" : snapshot.body === "idle" ? "V plays the idle. Choose a pose to hold it." : "V stands still. Choose a pose to hold it.");
+      // Stand still and Idle show which of them V is doing (pressed); the status line says only what they don't (UI-127): the pose
+      // V holds, its loading, or why none can play. It keeps its line when empty, so nothing moves when a pose is chosen.
+      const playable = snapshot.playable.available;
+      setAttr(still, "aria-pressed", String(!held && playable && snapshot.body !== "idle"));
+      setAttr(idle, "aria-pressed", String(!held && playable && snapshot.body === "idle"));
+      setText(current, held ? (held.loading ? `Loading ${held.label}…` : `V holds ${held.label}.`) : !playable ? snapshot.playable.reason ?? "" : "");
       // Catalogue states: one plain line and, where it helps, the one next step.
       const sKey = JSON.stringify([catalogue.phase, catalogue.message]);
       if (sKey !== stateKey) {

@@ -32,7 +32,7 @@ export type PreviewStyle = {
   readonly light: readonly [number, number, number]; readonly range: readonly [number, number];
 };
 export const PREVIEW_STYLES: Readonly<Record<PreviewKind, PreviewStyle>> = Object.freeze({
-  hair: Object.freeze({ producer: "flat-render", version: 3, size: 256, supersample: 2, msaa: 4, yaw: -28, elevation: 8, fov: 18, drop: 0.12, extent: 1.65,
+  hair: Object.freeze({ producer: "flat-render", version: 4, size: 256, supersample: 2, msaa: 4, yaw: -28, elevation: 8, fov: 18, drop: 0.04, extent: 1.78,
     light: Object.freeze([-0.45, 0.6, 0.66]) as readonly [number, number, number], range: Object.freeze([0.18, 1]) as readonly [number, number] }),
 });
 /** The preview kind of an option, from the preview detail it draws (null: no preview yet; phase 1 draws the hair). */

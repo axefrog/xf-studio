@@ -47,6 +47,8 @@ try {
   await page.waitFor(`!!window.xfStudioPresentation.snapshot`, 1000);
   const first = await page.evaluate(`(() => { const t = ${poses}.tree(""); const g = t.groups.find(g => g.kind === "category" && g.rows.some(r => !r.unavailable && !r.badges.length)); return g ? { group: g.id, pose: g.rows.find(r => !r.unavailable && !r.badges.length).id } : null; })()`) as { group: string; pose: string };
   const second = await page.evaluate(`(() => { const t = ${poses}.tree(""); const g = t.groups.find(g => g.kind === "category" && g.rows.some(r => r.badges.length)); return g ? { group: g.id, pose: g.rows.find(r => r.badges.length).id } : null; })()`) as { group: string; pose: string };
+  // Poses play once V's motion is prepared; until then a selection is refused.
+  await page.waitFor(`${poses}.snapshot().playable.available`, 240000).catch(() => {});
   // The held pose, a favourite and Recent (only then does Recent exist).
   await dispatch({ kind: "pose.select", id: second.pose });
   await dispatch({ kind: "pose.select", id: first.pose });
@@ -58,6 +60,12 @@ try {
       await page.evaluate(`window.xfStudioShell.dock.moveTo("poses.library", { kind: "float", x: ${1420 - width}, y: 30, w: ${width}, h: 900 }, "")`);
       await page.wait(600);
       const tag = `${scheme}-${width}`;
+      // Standing still: Stand still pressed, and the status line empty (UI-127); then the pose again.
+      await dispatch({ kind: "pose.clear", to: "still" });
+      await page.wait(400);
+      await snap(`${tag}-still`, panelWindow);
+      await dispatch({ kind: "pose.select", id: first.pose });
+      await page.wait(600);
       await snap(`${tag}-open`, panelWindow);
       await dispatch({ kind: "pose.openGroup", group: first.group, open: true });
       await page.wait(400);
