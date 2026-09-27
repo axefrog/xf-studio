@@ -25,7 +25,7 @@ export { assignEyeMakeupIds } from "./core";
 export type { EyeMakeupEditor, EyeMakeupMemory } from "./part";
 export { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, RECIPE_SCHEMAS, eyeMakeupPartCodec } from "./part";
 export { EYE_MAKEUP_REGION } from "./region";
-export { EYE_MAKEUP_EXPORT, EYE_MAKEUP_EXPORTER_ID, EYE_PLATE_PREREQUISITE } from "./export-info";
+export { EYE_MAKEUP_EXPORT, EYE_MAKEUP_EXPORTER_ID, EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "./export-info";
 
 /** Registration order is the catalogue order the descriptor table has always had. */
 const KINDS: Record<EyeMakeupAction["kind"], true> = {

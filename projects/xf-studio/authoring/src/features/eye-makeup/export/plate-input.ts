@@ -10,7 +10,7 @@ import { ExportRefusal, type ResourceTools } from "../../../platform/api";
 import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "../../../eye-plate-service";
 import { plateReachInput, readManifestPlateReach } from "../../../plate-uv-footprint-io";
 import { plateUvFootprint } from "../../../engines/layered-makeup/plate-uv-window";
-import { plateStem } from "../../../package-resource-builder";
+import { PLATE_STEMS, plateStem } from "../../../package-resource-builder";
 import { PackageToolError } from "../../../package-build-wolvenkit";
 import type { PackagePlate } from "../../../package-action";
 import type { PlateReachInput } from "../../../plate-reach";
@@ -99,11 +99,15 @@ async function packagedPlateReach(manifestPath: string | undefined, plate: strin
   } finally { rmSync(work, { recursive: true, force: true }); }
 }
 
-/** Resolve the plate a Build packages: its files, provenance and UV footprint. `work` is a fresh private folder. */
-export async function plateBuildValue(input: PlateBuilderInput, tools: ResourceTools, work: string): Promise<PlateBuildValue> {
+/**
+ * Resolve the plate a Build packages: its files, provenance and UV footprint. `work` is a fresh private folder; `stems`
+ * are the plate names accepted in the directory (the feminine plate's by default).
+ */
+export async function plateBuildValue(input: PlateBuilderInput, tools: ResourceTools, work: string,
+  stems: readonly string[] = PLATE_STEMS): Promise<PlateBuildValue> {
   const directory = existing(input.directory, "Plate directory");
   const stem = (() => {
-    try { return plateStem(directory); }
+    try { return plateStem(directory, stems); }
     catch { return refuse("package_plate_invalid", `Plate directory must hold exactly one mesh/morphtarget pair: ${directory}`); }
   })();
   const mesh = join(directory, stem + ".mesh"), morph = join(directory, stem + ".morphtarget");

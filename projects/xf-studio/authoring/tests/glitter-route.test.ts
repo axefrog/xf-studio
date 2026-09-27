@@ -268,9 +268,9 @@ async function makeBuild(mutate?: (d: { mesh: any; plan: Plan }) => void, tamper
   const app = { appearances: [
     { Data: { name: cname(plan.offAppearance), components: [], partsOverrides: [{ componentsOverrides: [] }] } },
     { Data: { name: cname(plan.templateAppearance), components: [component], partsOverrides: [{ componentsOverrides: [{ componentName: cname(plan.component) }] }],
-      compiledData: { Data: { CruidDict: { "0": id }, Chunks: [{}] } } } }] };
+      visualTags: { tags: [cname("Female")] }, compiledData: { Data: { CruidDict: { "0": id }, Chunks: [{}] } } } }] };
   const cc = { headCustomizationOptions: [{ Data: { $type: "gameuiAppearanceInfo", name: cname(plan.selector), uiSlot: cname(plan.selector),
-    localizedName: plan.selectorLabel, enabled: 1, hidden: 0, defaultIndex: 0, resource: ref(plan.app, true),
+    localizedName: plan.selectorLabel, enabled: 1, hidden: 0, index: 311, defaultIndex: 0, resource: ref(plan.app, true),
     definitions: [{ name: cname(plan.offAppearance), index: 0 }, ...plan.presets.map(p => ({ name: cname(p.appAppearance), index: p.index, localizedName: p.name }))] } }],
     headGroups: ["character_customization", "face"].map(group => ({ name: cname(group), options: [cname(plan.selector)] })) };
   const xbm: Record<string, unknown> = {}, dds = new Map<string, Uint8Array>();

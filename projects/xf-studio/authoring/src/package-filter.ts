@@ -64,7 +64,8 @@ const mods = (products: readonly { modName: string }[]) => products.length === 1
 
 /** A Check's result in plain words: how many looks can become mod files and in which mod, then notes, omissions and experimental finishes. */
 export function describePackageCheck(result: PackageCheckResult): string {
-  const notes = [...new Set(result.products.flatMap(product => product.features.flatMap(feature => feature.notes)))];
+  const notes = [...new Set(result.products.flatMap(product => product.features.flatMap(feature => [...feature.notes,
+    ...(feature.warnings ?? []).map(warning => warning.text)])))];
   return `${packagedLookCount(result)} of ${result.originalPresetCount} preset(s) can become mod files in ${mods(result.products)}. ` +
     `This check created no files.${notes.map(note => ` ${note}`).join("")}${describePackageOmissions(allOmissions(result))}` +
     describePackageExperimental(allExperimental(result));
@@ -74,7 +75,8 @@ export function describePackageCheck(result: PackageCheckResult): string {
 export function describePackageBuild(result: PackageBuildResult): string {
   const built = result.products.map(product => `${product.modName} mod files for ${new Set(product.features.flatMap(feature =>
     feature.presets.map(look => look.id))).size} of ${result.originalPresetCount} preset(s): ${product.package} · Manifest: ${product.manifest}`);
-  return `Verified local ${built.join("; ")}. Not installed or game-tested.${describePackageOmissions(allOmissions(result))}` +
+  const warnings = [...new Set(result.products.flatMap(product => product.features.flatMap(feature => (feature.warnings ?? []).map(warning => warning.text))))];
+  return `Verified local ${built.join("; ")}. Not installed or game-tested.${warnings.map(text => ` ${text}`).join("")}${describePackageOmissions(allOmissions(result))}` +
     describePackageExperimental(allExperimental(result));
 }
 
@@ -97,7 +99,8 @@ export const originalPresetCount = (source: PresetCollection) =>
  * plate is omitted too, as a reported omission; the result then records that plate (`plateUv`). Without it
  * (Check before any plate has been prepared) nothing is judged against the plate and `plateUv` is null.
  */
-export function preparePackageCollection(value: unknown, region: Pick<LayeredMakeupRegion, "mirror" | "skin">, plate: PlateReachInput | null = null) {
+export function preparePackageCollection(value: unknown, region: Pick<LayeredMakeupRegion, "mirror" | "skin">, plate: PlateReachInput | null = null,
+  options: { readonly masculine?: boolean } = {}) {
   const source = parseCollection(value);
   // Looks without eye makeup and other features' parts, which the collection's eye-makeup view left out, come first.
   const omissions: PackageOmission[] = (source.omitted ?? []).map(item => item.feature === undefined
@@ -138,6 +141,6 @@ export function preparePackageCollection(value: unknown, region: Pick<LayeredMak
   // The omitted list is a report, not content: the packaged copy (and its hash) never carries it.
   const { omitted: _omitted, ...content } = source;
   const packaged: PresetCollection = { ...content, presets, ...(diagnostics ? { diagnostics } : {}) };
-  const plan = planCollection(packaged);
+  const plan = planCollection(packaged, options);
   return { source, packaged, plan, omissions, experimental, plateUv: plate ? plateUvRecord(plate) : null };
 }

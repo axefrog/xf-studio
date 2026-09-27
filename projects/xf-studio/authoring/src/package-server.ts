@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
 import { eyePlateHeadOverride } from "./eye-plate-service";
-import { eyePlatePrerequisite, eyePlateRouteKeyFor } from "./eye-plate-prerequisite";
+import { eyePlatePrerequisite, eyePlateRouteKeyFor, masculineEyePlatePrerequisite, masculineUnavailable } from "./eye-plate-prerequisite";
 import { expressionsGamePrerequisite } from "./expressions-game-prerequisite";
 import { runProcessTree } from "./process-tree";
 import { hostFailure } from "./diagnostics/host-log";
@@ -64,6 +64,21 @@ export const localPlateRouteKey = (tools: PackageTools) => eyePlateRouteKeyFor({
 export const localEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
   eyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
     ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
+
+/** Eye makeup's optional masculine plate for these localhost tools: cut from the male head the route loads (none with the override). */
+export const localMasculineEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
+  masculineEyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
+    ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
+/**
+ * An isolated test server's stand-in for the masculine plate (`XFS_TEST_MASCULINE_PLATE=<plate code>`, e.g. `plate_source_modded`):
+ * every preparation and Check gives that outcome, so a UI check can show a real feminine-only Build without a broken head.
+ * Null for any other value; the server offers it only when isolated.
+ */
+export function testMasculineEyePlate(code: string | undefined): HostPrerequisite | null {
+  if (!code || !/^plate_[a-z_]+$/.test(code)) return null;
+  const value = masculineUnavailable(code);
+  return { cached: () => value, prepare: async () => ({ builder: value, plan: value }), discard: () => {} };
+}
 
 /**
  * Expressions' game inputs for these localhost tools (photo mode's table and V's face rigs, read from the route's winning files): private,

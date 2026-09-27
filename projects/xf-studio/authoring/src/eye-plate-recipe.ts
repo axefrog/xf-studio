@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import recipeJson from "./eye-plate-recipe.json" with { type: "json" };
+import masculineRecipeJson from "./eye-plate-recipe-pma.json" with { type: "json" };
 
 /**
  * The expanded eye plate ships as an asset-free recipe: a triangle selection of the
@@ -12,6 +13,16 @@ export const EYE_PLATE_DERIVER_VERSION = 1;
 
 export type EyePlateSourceRevision = { id: string; label: string; meshSha256: string; morphSha256: string };
 export type EyePlateTopology = { componentVertexCounts: number[]; boundaryEdges: number; boundaryLoops: number; nonManifoldEdges: number };
+/**
+ * Native unwelded seams of the source head inside the selection: plate vertices that the head stores twice at one
+ * position, with byte-identical normal, skin indices and weights and every morph diff row, so the two copies never part
+ * (not under skinning, any morph target or the lift along the normal). The head's own triangles leave a zero-width slit
+ * between them, which the raw topology counts as extra boundary loops (and, where two slits meet, a pinched vertex).
+ * `topology` is the selection's topology with each such group welded to one vertex: the surface as it deforms.
+ * Only a recipe whose head has such seams declares it (the masculine plate; the feminine plate's raw topology is
+ * already closed, so its recipe carries none).
+ */
+export type EyePlateSeams = { weldedVertices: number; topology: EyePlateTopology };
 export type EyePlateRecipe = {
   schema: typeof EYE_PLATE_RECIPE_SCHEMA;
   id: string;
@@ -22,6 +33,7 @@ export type EyePlateRecipe = {
     renderChunk: number; faceCount: number; vertexCount: number; morphTargetCount: number;
     faceIdsSha256: string; vertexIdsSha256: string; topology: EyePlateTopology;
     faceRangesInclusive: [number, number][];
+    seams?: EyePlateSeams;
   };
   output: { stem: string; appearance: string; dropVertexUsages: string[]; vertexFactory: number;
     baseMaterial: string; morphBaseTexture: string };
@@ -83,11 +95,23 @@ export function parseEyePlateRecipe(value: unknown): EyePlateRecipe {
   if (new Set(supported.map(item => item.id)).size !== supported.length) fail("source revision ids must be unique.");
   const selection = record(root.selection, "selection");
   exactKeys(selection, ["renderChunk", "faceCount", "vertexCount", "morphTargetCount", "faceIdsSha256",
-    "vertexIdsSha256", "topology", "faceRangesInclusive"], "selection");
-  const topology = record(selection.topology, "selection.topology");
-  exactKeys(topology, ["componentVertexCounts", "boundaryEdges", "boundaryLoops", "nonManifoldEdges"], "selection.topology");
-  if (!Array.isArray(topology.componentVertexCounts) || topology.componentVertexCounts.length === 0) fail("topology components are missing.");
-  const components = (topology.componentVertexCounts as unknown[]).map(item => count(item, "topology component", 1));
+    "vertexIdsSha256", "topology", "faceRangesInclusive", ...("seams" in selection ? ["seams"] : [])], "selection");
+  const parseTopology = (value: unknown, name: string): EyePlateTopology => {
+    const topology = record(value, name);
+    exactKeys(topology, ["componentVertexCounts", "boundaryEdges", "boundaryLoops", "nonManifoldEdges"], name);
+    if (!Array.isArray(topology.componentVertexCounts) || topology.componentVertexCounts.length === 0) fail(`${name} components are missing.`);
+    return { componentVertexCounts: (topology.componentVertexCounts as unknown[]).map(item => count(item, `${name} component`, 1)),
+      boundaryEdges: count(topology.boundaryEdges, `${name} boundary edges`), boundaryLoops: count(topology.boundaryLoops, `${name} boundary loops`),
+      nonManifoldEdges: count(topology.nonManifoldEdges, `${name} non-manifold edges`) };
+  };
+  const rawTopology = parseTopology(selection.topology, "selection.topology");
+  const components = rawTopology.componentVertexCounts;
+  let seams: EyePlateSeams | undefined;
+  if ("seams" in selection) {
+    const value = record(selection.seams, "selection.seams");
+    exactKeys(value, ["weldedVertices", "topology"], "selection.seams");
+    seams = { weldedVertices: count(value.weldedVertices, "welded vertices", 1), topology: parseTopology(value.topology, "selection.seams.topology") };
+  }
   if (!Array.isArray(selection.faceRangesInclusive) || selection.faceRangesInclusive.length === 0) fail("face ranges are missing.");
   let previous = -1;
   const ranges = (selection.faceRangesInclusive as unknown[]).map(range => {
@@ -115,9 +139,9 @@ export function parseEyePlateRecipe(value: unknown): EyePlateRecipe {
       morphTargetCount: count(selection.morphTargetCount, "morph target count"),
       faceIdsSha256: sha(selection.faceIdsSha256, "face ID hash"),
       vertexIdsSha256: sha(selection.vertexIdsSha256, "vertex ID hash"),
-      topology: { componentVertexCounts: components, boundaryEdges: count(topology.boundaryEdges, "boundary edges"),
-        boundaryLoops: count(topology.boundaryLoops, "boundary loops"), nonManifoldEdges: count(topology.nonManifoldEdges, "non-manifold edges") },
+      topology: rawTopology,
       faceRangesInclusive: ranges,
+      ...(seams ? { seams } : {}),
     },
     output: {
       stem: text(output.stem, "output stem", resourceName),
@@ -132,6 +156,8 @@ export function parseEyePlateRecipe(value: unknown): EyePlateRecipe {
   if (faces.length !== recipe.selection.faceCount) fail("face ranges do not add up to faceCount.");
   if (idListSha256(faces) !== recipe.selection.faceIdsSha256) fail("face ranges do not match faceIdsSha256.");
   if (components.reduce((sum, value) => sum + value, 0) !== recipe.selection.vertexCount) fail("topology components do not add up to vertexCount.");
+  if (seams && seams.topology.componentVertexCounts.reduce((sum, value) => sum + value, 0) !== recipe.selection.vertexCount - seams.weldedVertices)
+    fail("welded topology components do not add up to vertexCount less the welded vertices.");
   return recipe;
 }
 
@@ -162,3 +188,16 @@ export function supportedEyePlateSource(recipe: EyePlateRecipe, source: EyePlate
 }
 
 export const EYE_PLATE_RECIPE: EyePlateRecipe = parseEyePlateRecipe(recipeJson);
+/**
+ * The masculine V's plate: the male head's triangles over the feminine plate's UVs (male V plan §4.1), audited like the
+ * feminine one against the 2.31 male head, with the head's native seams declared (`selection.seams`).
+ */
+export const EYE_PLATE_MASCULINE_RECIPE: EyePlateRecipe = parseEyePlateRecipe(masculineRecipeJson);
+
+export type EyePlateBody = "female" | "male";
+/** Each body's plate recipe. */
+export const EYE_PLATE_RECIPES: Readonly<Record<EyePlateBody, EyePlateRecipe>> = Object.freeze({ female: EYE_PLATE_RECIPE, male: EYE_PLATE_MASCULINE_RECIPE });
+/** Whose head a recipe cuts, from its head's depot folder: the male player head lives in `player_man_average`, the female one in `player_female_average`. */
+export function eyePlateBody(recipe: Pick<EyePlateRecipe, "source">): EyePlateBody {
+  return recipe.source.meshDepotPath.split("\\").includes("player_man_average") ? "male" : "female";
+}

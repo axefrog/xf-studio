@@ -374,7 +374,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       if (signature !== resultSignature) {
         resultSignature = signature;
         const pkg = files.package;
-        result.replaceChildren(pkg ? renderResult(pkg, library.draft?.presets ?? [], installRow) : lastError ? failureCard(rt, lastError)
+        result.replaceChildren(pkg ? renderResult(pkg, library.draft?.presets ?? [], installRow, showSetup) : lastError ? failureCard(rt, lastError)
           : emptyState("No check yet", "Run Check to see which presets and layers can become mod files. Check creates no files."));
       }
       // The install rows follow every paint: availability, and what happened last.
@@ -421,7 +421,7 @@ function technicalDetails(rows: [string, string][], footnote?: string) {
 type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheckResult; freshness: "current" | "stale" } |
   { kind: "packageBuild"; result: PackageBuildResult; freshness: "current" | "stale" }>;
 function renderResult(pkg: PackageResultView, presets: readonly { id: string; name: string }[],
-  installRow: (product: string) => { element: HTMLElement }) {
+  installRow: (product: string) => { element: HTMLElement }, openSetup: () => void) {
   const name = (id: string) => presets.find(preset => preset.id === id)?.name ?? "Preset no longer in draft";
   const isBuild = pkg.kind === "packageBuild";
   const r = pkg.result;
@@ -432,17 +432,26 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     h("p", { class: "result-summary", text: `${retained} of ${r.originalPresetCount} preset${r.originalPresetCount === 1 ? "" : "s"} can become mod files.${isBuild ? "" : " This check created no files."}` }));
   // One block per mod the collection builds (one by default); each feature in it has its own selector.
   for (const product of r.products) {
+    // The product line says whom each feature's part is for when the feature says (eye makeup: a feminine and a masculine V).
     const block = h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: product.modName }),
-      product.features.map(feature => ` · ${feature.label} in the “${feature.selectorLabel}” selector`).join("")));
+      product.features.map(feature => ` · ${feature.label} in the “${feature.selectorLabel}” selector${feature.audience ? `, ${feature.audience}` : ""}`).join("")));
     // The game's own names for the looks (appearance IDs) are in Details, not the list (UI-85).
     if (!isBuild) block.append(h("ul", { class: "result-list" }, product.features.flatMap(feature => feature.presets.map(preset =>
       h("li", {}, icon("check"), h("span", { text: name(preset.id) }))))));
     // A built mod is added to the mod manager, or its folder shown, from here; its path is in Details (UI-82).
     if (isBuild) block.append(installRow(product.productId).element);
     card.append(block);
+    // What the mod falls short of (eye makeup: not for a masculine V this time): one warning each, the reason and the step,
+    // directly under its product and above the build note, with the button that takes the step.
+    for (const warning of new Set(product.features.flatMap(feature => feature.warnings ?? []))) {
+      card.append(note(warning.text, "warning"));
+      if (warning.next === "settings.game") card.append(h("div", { class: "row wrap gap-s" },
+        button({ label: "Open Settings", icon: "settings", small: true, onClick: openSetup })));
+    }
   }
-  // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
-  if (!isBuild) for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
+  // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does. A Build's
+  // notes say what the mod is not made for (a masculine V, when his eye plate couldn't be prepared).
+  for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
   // Each omission once: whole looks, parts and features (the host decided them), then each feature's own, labelled with
   // its feature when several features export (PIPE-88; the same order as `resultOmissions` in the export contract).
   const features = r.products.flatMap(product => product.features), several = new Set(features.map(feature => feature.feature)).size > 1;

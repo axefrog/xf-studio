@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureEyePlate } from "../src/eye-plate-service";
+import { EYE_PLATE_MASCULINE_RECIPE } from "../src/eye-plate-recipe";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 import { oracleTest } from "./optional-oracles";
 
@@ -32,5 +33,22 @@ gameTest("the built-in eye plate derives from the installed game with exact nati
     const reused = await ensureEyePlate({ gameRoot: game!, cacheRoot, tools });
     expect(reused.reused).toBe(true);
     expect(reused.manifest.cacheKey).toBe(derived.manifest.cacheKey);
+  } finally { rmSync(cacheRoot, { recursive: true, force: true }); }
+}, 600_000);
+
+// The masculine plate from the 2.31 male head: WolvenKit CLI 8.17.4 and 9.0.1 give identical bytes (28 September 2026).
+const MASCULINE_REFERENCE = { mesh: "7e8975c2d2a5f429560096d8f5b78406e391e50322479a396240e34ccad9aedc",
+  morph: "4397f3aa4899cce4042bc3335b6c9e4f2b3c0de3710346789bf23f48b1c7c449" };
+
+gameTest("the masculine eye plate derives from the installed male head with exact native bytes and the head's native seams", async () => {
+  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-eye-plate-game-pma-"));
+  try {
+    const derived = await ensureEyePlate({ gameRoot: game!, cacheRoot, tools: createWolvenKitEyePlateTools(wolvenkit!), recipe: EYE_PLATE_MASCULINE_RECIPE });
+    const { verification, files, source } = derived.manifest;
+    expect(source.revisionId).toBe("cp2077-2.31");
+    expect([verification.vertices, verification.triangles, verification.morphTargets, verification.morphDiffs]).toEqual([1627, 3010, 100, 69920]);
+    expect(verification.exactNativeSkinBytesMesh && verification.exactNativeSkinBytesMorphBase && verification.exactMorphDiffRows).toBe(true);
+    expect(verification.seams).toEqual(EYE_PLATE_MASCULINE_RECIPE.selection.seams);
+    expect({ mesh: files.mesh.sha256, morph: files.morph.sha256 }).toEqual(MASCULINE_REFERENCE);
   } finally { rmSync(cacheRoot, { recursive: true, force: true }); }
 }, 600_000);

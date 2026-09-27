@@ -158,20 +158,43 @@ export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: Hand
   return mesh;
 }
 
-/** Point the plate morph target at the collection's mesh and seed appearance. */
-export function rewritePlateMorph(morph: Json, plan: CollectionPlan): Json {
+/**
+ * One body's selector resources: the plan's own (feminine) paths, or its `masculine` block. The looks, names, materials
+ * and textures are shared; each body has its own customization resource, `.app` and plate.
+ */
+export type SelectorBody = { readonly body: "female" | "male"; readonly app: string; readonly customization: string; readonly mesh: string; readonly morph: string };
+/** The template's visual tag, as vanilla eye makeup tags each body's appearances (`hx_000__basehead_makeup_eyes_01.app`: pwa `Female`, pma `Male`). */
+export const SELECTOR_VISUAL_TAG = Object.freeze({ female: "Female", male: "Male" } as const);
+/**
+ * The option's creator order: right after teeth and before the vanilla eye makeup, in each creator (female: teeth 310, eye
+ * makeup 450; male: teeth 540, eye makeup 550, while 311 is his `beard_color5_0`). Two options with one index show only the first.
+ */
+export const SELECTOR_OPTION_INDEX = Object.freeze({ female: 311, male: 541 } as const);
+/** The bodies a plan builds a selector for: always the feminine V, and the masculine V when the plan includes him. */
+export function selectorBodies(plan: Pick<CollectionPlan, "app" | "customization" | "mesh" | "morph" | "masculine">): SelectorBody[] {
+  return [{ body: "female", app: plan.app, customization: plan.customization, mesh: plan.mesh, morph: plan.morph },
+    ...(plan.masculine ? [{ body: "male" as const, ...plan.masculine }] : [])];
+}
+const feminine = (plan: Pick<CollectionPlan, "app" | "customization" | "mesh" | "morph">): SelectorBody =>
+  ({ body: "female", app: plan.app, customization: plan.customization, mesh: plan.mesh, morph: plan.morph });
+
+/** Point the plate morph target at its body's mesh and the seed appearance. */
+export function rewritePlateMorph(morph: Json, plan: CollectionPlan, body: SelectorBody = feminine(plan)): Json {
   const root = morph.Data.RootChunk;
-  root.baseMesh = resourceRef(plan.mesh);
+  root.baseMesh = resourceRef(body.mesh);
   root.baseMeshAppearance = cname(plan.presets[0].appearance);
   return morph;
 }
 
-/** The `.app` resource: an empty Off definition and one template whose component ArchiveXL expands per preset. */
-export function appearanceResource(plan: CollectionPlan, handles: HandleCounter): Json {
+/**
+ * A body's `.app` resource: an empty Off definition and one template whose component (bound to that body's plate) ArchiveXL
+ * expands per preset.
+ */
+export function appearanceResource(plan: CollectionPlan, handles: HandleCounter, body: SelectorBody = feminine(plan)): Json {
   const seed = plan.presets[0].appearance;
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(plan.component), id: componentId(plan.component),
     isEnabled: 1, version: 1, autoHideDistance: 50, chunkMask: FULL_CHUNK_MASK, forceLODLevel: -1,
-    meshAppearance: cname(seed), morphResource: resourceRef(plan.morph),
+    meshAppearance: cname(seed), morphResource: resourceRef(body.morph),
     parentTransform: handles.handle({ $type: "entHardTransformBinding", bindName: cname("root"), enabled: 1 }),
     skinning: handles.handle({ $type: "entSkinningBinding", bindName: cname("root"), enabled: 1 }) };
   const overrides = (items: Json[]) => [{ $type: "appearanceAppearancePartOverrides", componentsOverrides: items }];
@@ -180,7 +203,7 @@ export function appearanceResource(plan: CollectionPlan, handles: HandleCounter)
   const template = { $type: "appearanceAppearanceDefinition", name: cname(plan.templateAppearance), components: [component],
     partsOverrides: overrides([{ $type: "appearancePartComponentOverrides", componentName: cname(plan.component),
       meshAppearance: cname(seed), chunkMask: FULL_CHUNK_MASK, visualScale: { $type: "Vector3", X: 1, Y: 1, Z: 1 } }]),
-    resolvedDependencies: [resourceRef(plan.morph, true)], visualTags: { $type: "redTagList", tags: [cname("Female")] } };
+    resolvedDependencies: [resourceRef(body.morph, true)], visualTags: { $type: "redTagList", tags: [cname(SELECTOR_VISUAL_TAG[body.body])] } };
   return cr2wDocument({ $type: "appearanceAppearanceResource", cookingPlatform: "PLATFORM_PC",
     appearances: [handles.handle(off), handles.handle(template)] });
 }
@@ -194,16 +217,19 @@ export function assertBrandedPlan(plan: { selectorLabel?: unknown }): void {
 /** Head groups the selector joins; ArchiveXL merges each into the vanilla group of the same name. */
 export const SELECTOR_GROUPS = Object.freeze(["character_customization", "face"] as const);
 
-/** The one female head customization option: Off at index 0, then one definition per packaged preset. */
-export function customizationResource(plan: CollectionPlan, handles: HandleCounter): Json {
+/**
+ * A body's one head customization option: Off at index 0, then one definition per packaged preset. Each body's creator is
+ * its own resource, so both use the same selector name, groups and label.
+ */
+export function customizationResource(plan: CollectionPlan, handles: HandleCounter, body: SelectorBody = feminine(plan)): Json {
   assertBrandedPlan(plan);
   const definitions = [{ $type: "gameuiIndexedAppearanceDefinition", name: cname(plan.offAppearance), index: 0, localizedName: "Common-Off" },
     ...plan.presets.map(preset => ({ $type: "gameuiIndexedAppearanceDefinition", name: cname(preset.appAppearance),
       index: preset.index, localizedName: preset.name }))];
   const option = { $type: "gameuiAppearanceInfo", name: cname(plan.selector), uiSlot: cname(plan.selector),
-    localizedName: plan.selectorLabel, enabled: 1, hidden: 0, index: 311, defaultIndex: 0,
+    localizedName: plan.selectorLabel, enabled: 1, hidden: 0, index: SELECTOR_OPTION_INDEX[body.body], defaultIndex: 0,
     editTags: ["NewGame", "HairDresser", "Ripperdoc"], randomizeCategory: "Makeup", useThumbnails: 0,
-    resource: resourceRef(plan.app, true), definitions };
+    resource: resourceRef(body.app, true), definitions };
   return cr2wDocument({ $type: "gameuiCharacterCustomizationInfoResource", cookingPlatform: "PLATFORM_PC",
     headCustomizationOptions: [handles.handle(option)],
     // Like vanilla eye makeup (`makeupEyes_NN`), the appearance option joins `character_customization` (the creator
@@ -212,18 +238,21 @@ export function customizationResource(plan: CollectionPlan, handles: HandleCount
 }
 
 /**
- * Eye makeup's part of its product's `.archive.xl`: its character-customization resource for the female body
- * and its `.app` in the player customization scope. A product holding only eye makeup declares exactly this.
+ * Eye makeup's part of its product's `.archive.xl`: its character-customization resource for each body it builds
+ * (ArchiveXL merges `female` into the feminine creator and `male` into the masculine one) and each body's `.app` in the
+ * player customization scope. A product holding only eye makeup declares exactly this.
  */
-export function eyeMakeupXl(plan: Pick<CollectionPlan, "customization" | "app">): XlFragment {
-  return { customizations: { female: [plan.customization] }, scope: { "player_customization.app": [plan.app] } };
+export function eyeMakeupXl(plan: Pick<CollectionPlan, "customization" | "app"> & { masculine?: { customization: string; app: string } }): XlFragment {
+  const male = plan.masculine;
+  return { customizations: { female: [plan.customization], ...(male ? { male: [male.customization] } : {}) },
+    scope: { "player_customization.app": [plan.app, ...(male ? [male.app] : [])] } };
 }
 
 /**
  * The `.archive.xl` text of a product holding only eye makeup (`archiveXlText` of its fragment). CRLF line
  * endings: the Python builder wrote this file in Windows text mode, so every candidate built so far has them.
  */
-export function archiveXlDeclaration(plan: Pick<CollectionPlan, "customization" | "app">): string {
+export function archiveXlDeclaration(plan: Pick<CollectionPlan, "customization" | "app"> & { masculine?: { customization: string; app: string } }): string {
   return archiveXlText(eyeMakeupXl(plan));
 }
 

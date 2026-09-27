@@ -130,10 +130,10 @@ function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
   const app = { appearances: [
     { HandleId: "30", Data: { name: cname(p.offAppearance), components: [], partsOverrides: [{ componentsOverrides: [] }] } },
     { HandleId: "31", Data: { name: cname(p.templateAppearance), components: [component],
-      partsOverrides: [{ componentsOverrides: [{ componentName: cname(p.component) }] }],
+      partsOverrides: [{ componentsOverrides: [{ componentName: cname(p.component) }] }], visualTags: { tags: [cname("Female")] },
       compiledData: { Data: { CruidDict: { "0": id }, Chunks: [{ HandleId: "21", Data: { $type: "entSkinningBinding", bindName: cname("root"), enabled: 1 } }] } } } }] };
   const cc = { headCustomizationOptions: [{ HandleId: "40", Data: { $type: "gameuiAppearanceInfo", name: cname(p.selector), uiSlot: cname(p.selector),
-    localizedName: p.selectorLabel, enabled: 1, hidden: 0, defaultIndex: 0, resource: ref(p.app, true),
+    localizedName: p.selectorLabel, enabled: 1, hidden: 0, index: 311, defaultIndex: 0, resource: ref(p.app, true),
     definitions: [{ name: cname(p.offAppearance), index: 0, localizedName: "Common-Off" },
       ...p.presets.map(preset => ({ name: cname(preset.appAppearance), index: preset.index, localizedName: preset.name }))] } }],
     headGroups: ["character_customization", "face"].map(group => ({ name: cname(group), options: [cname(p.selector)] })) };
@@ -236,7 +236,7 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     expect(Object.keys(report)).toEqual(["build", "presetCount", "selectorCount", "selectorOptionCount", "appDefinitions",
       "compiledComponentTemplates", "meshAppearances", "materialTemplates", "textureCount", "archiveBytes", "archiveSha256",
       "unpackedFilesVerified", "preservedMorphs", "plateGeometry", "plateUvWindow", "resolvedDynamicPaths", "decodedPixelChecks",
-      "decodedMipChecks", "presetRoutes", "archiveXlSha256", "plateInputs", "installed", "gameRenderingVerified", "limits"]);
+      "decodedMipChecks", "presetRoutes", "archiveXlSha256", "plateInputs", "bodies", "installed", "gameRenderingVerified", "limits"]);
     expect(report).toMatchObject({ presetCount: 2, selectorOptionCount: 3, meshAppearances: 2, materialTemplates: 1, textureCount: 6,
       unpackedFilesVerified: 10, preservedMorphs: PLATE_TARGETS, installed: false, gameRenderingVerified: false,
       archiveXlSha256: sha(declaration(plan)),
@@ -333,8 +333,8 @@ test("archive failures: inventory, archive hash, structural declaration and unpa
   expectFailure(/not valid YAML/, undefined, f => xl(f, "customizations: [\n"));
   // A substring match would accept these; the structural check does not.
   expectFailure(/exactly customizations and resource/, undefined, f => xl(f, declaration(plan) + "extra: 1\r\n"));
-  expectFailure(/only the female list/, undefined, f => xl(f, declaration(plan).replace("  female:", "  male: x\r\n  female:")));
-  expectFailure(/exactly the planned customization/, undefined, f => xl(f, declaration(plan).replace("female: ", "female: other\\")));
+  expectFailure(/exactly the female list/, undefined, f => xl(f, declaration(plan).replace("  female:", "  male: x\r\n  female:")));
+  expectFailure(/exactly the planned female customization/, undefined, f => xl(f, declaration(plan).replace("female: ", "female: other\\")));
   expectFailure(/exactly the planned app/, undefined, f => xl(f, declaration(plan) + "      - other\\x.app\r\n"));
   expectFailure(/differs from its generated payload/, undefined, undefined, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
   expectFailure(/Unpacked 11 files/, undefined, undefined, { tamper: out => writeFileSync(join(out, depot, "xfs_extra.app"), "x") });
@@ -703,15 +703,15 @@ test("merged product: the real verifier checks only its own members and entries 
     try { expect(() => runMerged(f, options)).toThrow(message); } finally { rmSync(f.build, { recursive: true, force: true }); }
   };
   // Its entries must each be declared once in the merged declaration.
-  failing(/register the planned customization exactly once/, { xl: mergedDeclaration(plan, false) });
-  failing(/register the planned customization exactly once/, { xl: mergedDeclaration(plan).replace("  female:\r\n",
+  failing(/register the planned female customization exactly once/, { xl: mergedDeclaration(plan, false) });
+  failing(/register the planned female customization exactly once/, { xl: mergedDeclaration(plan).replace("  female:\r\n",
     `  female:\r\n    - ${plan.customization.replaceAll("/", "\\")}\r\n`) });
   failing(/list the planned app exactly once/, { xl: mergedDeclaration(plan).replace(`      - ${plan.app.replaceAll("/", "\\")}\r\n`, "") });
   // Its members in the product archive must still be byte for byte what it generated, and all present.
   failing(/differs from its generated payload/, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
   failing(/member paths differ/, { tamper: out => rmSync(join(out, plan.app)) });
   // The same product claimed to hold eye makeup alone: the declaration and the member count must be exactly its own.
-  failing(/exactly the planned customization|only the female list|exactly customizations/, { features: 1 });
+  failing(/exactly the planned female customization|exactly the female list|exactly customizations/, { features: 1 });
   failing(/Unpacked 12 files; expected 10/, { features: 1, xl: declaration(plan) });
 }, 60_000);
 

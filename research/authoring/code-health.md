@@ -79,6 +79,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-147 | Low | Mod package (copy) | The head-mod reason says "for both V's" next to "the masculine V's head"; "for both heads" reads cleaner (masculine export gate, 28 September) | Open |
+| UI-148 | Low | Mod package (Check) | Before any Build, the mod line already says "for a feminine and a masculine V" while the note below says Build still decides whether he fits; leave the masculine part off until a Build has checked | Open |
+| UI-149 | Low | Mod package (warnings) | The panel deduplicates `FeatureCheck.warnings` by object, not text, so the same warning from two features shows twice | Open |
+| UI-150 | Low | Mod package (layout) | An empty line under the Build buttons leaves about a 40 px gap (pre-existing) | Open, UI track |
+| UI-151 | Low | Mod package (toasts) | The Build toast prints full local folder paths, and the Check toast repeats the whole result card (pre-existing) | Open |
 | UI-146 | Low | Presentation (reduced motion) | Under `prefers-reduced-motion: reduce`, `studio.css` (about lines 1381–1382) sets `transition-duration: 1ms !important` on every element, so every property change becomes a 1 ms transition and code that measures right after a change reads stale sizes until the next frame (found by the Windows release runner, 28 September). Use `transition: none` for reduced motion | Open, UI track |
 | NATIVE-70 | Low | Native reader (depth) | `MAX_REQUEST_DEPTH` 4,096 leaves about 1.3× headroom under the measured stack limit of about 5,400 levels (the 2,048 default had 2.6×), and the graph read runs on the resolver's worker with a 30 s budget (`native/native-decode.ts:109,117`, `idle-host.ts:237`) [plausible]. | Open |
 | PREV-165 | Low | Expression transitions (shared solver) | Each animating page asks for up to 60 solves a second, and the fair host makes a second page's drag solves wait (`facial-preview.ts`) [plausible]. Lower the rate while others wait. | Open |

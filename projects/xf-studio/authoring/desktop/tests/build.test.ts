@@ -232,7 +232,8 @@ test("a matching staged result is promoted with partial-export identities and no
     omissions: product.omissions, requirements: product.requirements,
     features: product.features.map((f, i) => ({ feature: f.feature, exporter: f.exporter, exporterVersion: f.exporterVersion, namespace: f.namespace,
       brand: f.brand, selectorLabel: f.selectorLabel, selector: f.selector, presets: f.presets, omissions: f.omissions, experimental: f.experimental,
-      requirements: f.requirements, packagedSha256: f.packagedSha256, details: f.details, planSha256: createHash("sha256").update(JSON.stringify(planned.products[0].features[i].outcome.plan)).digest("hex"),
+      requirements: f.requirements, packagedSha256: f.packagedSha256, ...(f.audience !== undefined ? { audience: f.audience } : {}),
+      ...(f.warnings?.length ? { warnings: f.warnings } : {}), details: f.details, planSha256: createHash("sha256").update(JSON.stringify(planned.products[0].features[i].outcome.plan)).digest("hex"),
       verification: { presetCount: f.presets.length, verifiedFiles: 13, limits: [] } })),
     files: fileEntries, verifiedUnpackedFiles: 13, installed: false, gameRenderingVerified: false };
   const { schema: _schema, ready: _ready, products: _products, ...common } = expected;

@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
-import { desktopEyePlate, desktopExpressionsGame, desktopPackageAdapter, type WolvenKitProbe } from "./build";
+import { desktopEyePlate, desktopExpressionsGame, desktopMasculineEyePlate, desktopPackageAdapter, type WolvenKitProbe } from "./build";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "../src/features/expressions/export/game";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { defaultLocalSettings } from "../src/local-settings";
 import { DesktopWorkActivity } from "./work-activity";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
-import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
+import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction } from "../src/platform/export/product-host";
 
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
@@ -56,6 +56,7 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
     const adapter = desktopPackageAdapter({ exporters: STUDIO_EXPORTERS, settings, dataRoot, toolsRoot: buildHost?.toolsRoot ?? "",
       checkWorker: workerPath, wolvenKitProbe: buildHost?.wolvenKitProbe, log: buildHost?.log,
       prerequisites: (current): Record<string, HostPrerequisite> => buildHost ? { [EYE_PLATE_PREREQUISITE]: desktopEyePlate(current, dataRoot),
+        [EYE_PLATE_MASCULINE_PREREQUISITE]: desktopMasculineEyePlate(current, dataRoot),
         [EXPRESSIONS_GAME_PREREQUISITE]: desktopExpressionsGame(current, dataRoot) } : {} });
     const signal = buildHost?.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
     const outcome = await service.run(adapter, action, input.collection, signal, action === "check" ? timeoutMs : buildHost?.deadlineMs);

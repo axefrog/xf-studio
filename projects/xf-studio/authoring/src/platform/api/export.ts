@@ -253,6 +253,14 @@ export type ExportExperimental = { presetId: string; presetName: string; layerId
 /** A packaged look's stable identity and whatever the feature records beside it (export route, diagnostic knobs). */
 export type ExportedLook = { readonly id: string; readonly revision: number; readonly appearance?: string; readonly [extra: string]: unknown };
 
+/** The one control a result warning's next step needs; each presentation maps it to its own button. */
+export type ExportNextStep = "settings.game";
+/**
+ * Something a feature's mod falls short of that is not a left-out look or layer (eye makeup: it isn't for a masculine V
+ * this time), in one plain sentence: the reason, then the step, with the control that takes the step when there is one.
+ */
+export type ExportWarning = { readonly text: string; readonly next?: ExportNextStep };
+
 /**
  * One feature's part of a Check or Build: what it packages, what it leaves out and why. `details` holds
  * facts only this feature knows (eye makeup: the plate's lifts and UV footprint); the host's result
@@ -268,6 +276,13 @@ export type FeatureCheck = {
   readonly omissions: readonly ExportOmission[];
   readonly experimental: readonly ExportExperimental[];
   readonly notes: readonly string[];
+  /**
+   * Who the feature's mod is for, as a plain phrase a result's product line ends with (eye makeup: "for a feminine and a
+   * masculine V" or "for a feminine V only"). Absent: the feature says nothing about it.
+   */
+  readonly audience?: string;
+  /** What the mod falls short of beyond its omissions, each shown once as a warning under its product. Absent: none. */
+  readonly warnings?: readonly ExportWarning[];
   readonly requirements: FrameworkRequirements;
   /** SHA-256 of the feature's package-only snapshot (its eligible looks, filtered). */
   readonly packagedSha256: string;
@@ -402,6 +417,11 @@ export interface FeatureExporter<Plan = unknown> {
   readonly info: ExportInfo;
   /** Host prerequisites a Build of this feature needs, by ID (the host prepares them before the builder runs). */
   readonly prerequisites: readonly string[];
+  /**
+   * Host prerequisites a Build uses when the host offers them, by ID (eye makeup: the masculine eye plate). A host without
+   * one still builds; the plan then says what that leaves out.
+   */
+  readonly optionalPrerequisites?: readonly string[];
   /** Whether any look of the collection holds this feature's part (cheap; decides product membership). */
   present(collection: unknown): boolean;
   /** Eligibility and plan. Throws `ExportRefusal` when nothing can be packaged or the input is invalid. */

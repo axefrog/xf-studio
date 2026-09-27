@@ -67,6 +67,8 @@ export interface BakeOptions {
   readonly region: LayeredMakeupRegion;
   /** The packaged plate's UV window; absent keeps every preset on head UV (the oracle's historical layout). */
   readonly window?: UvWindow;
+  /** Plan the masculine V's selector and plate too (preset-collection.ts `MasculinePlan`); the maps are the same. */
+  readonly masculine?: boolean;
 }
 
 /**
@@ -111,7 +113,7 @@ function bakeGlitter(preset: CollectionPlan["presets"][number], out: string, win
 export async function bakeCollection(value: unknown, outDir: string, options: BakeOptions,
   beforePreset: (index: number) => void | Promise<void> = () => {}): Promise<{ plan: CollectionPlan; records: BakedRecord[] }> {
   const region = options.region;
-  const planned = planCollection(value), out = resolve(outDir);
+  const planned = planCollection(value, { masculine: options.masculine === true }), out = resolve(outDir);
   // The oracle layout: every map on head UV, so the plan may not claim the plate window for any preset.
   const plan: CollectionPlan = options.window ? planned
     : { ...planned, presets: planned.presets.map(preset => ({ ...preset, uvSpace: "head" as const })) };

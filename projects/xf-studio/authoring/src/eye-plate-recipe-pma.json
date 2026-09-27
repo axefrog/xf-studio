@@ -1,8 +1,8 @@
 {
   "schema": "xfs/eye-plate-recipe-1",
   "id": "xfs-expanded-eye-plate-pma",
-  "revision": 1,
-  "description": "Asset-free triangle selection of the installed male player head, derived from the feminine plate by shared UVs (male V plan section 4.1). Preview only: it has not passed the eye plate gates, and Build does not use it.",
+  "revision": 2,
+  "description": "Asset-free triangle selection of the installed male player head, derived from the feminine plate by shared UVs (male V plan section 4.1) and cut byte for byte from the player's own game files. Its extra raw boundary loops and pinched vertex are native unwelded seams of the male head, declared under seams.",
   "source": {
     "archiveDirectory": "archive/pc/content",
     "meshDepotPath": "base\\characters\\head\\player_base_heads\\player_man_average\\h0_000_pma_c__basehead\\h0_000_pma_c__basehead.mesh",
@@ -138,7 +138,16 @@
       [12488, 12488],
       [12490, 12492],
       [12494, 12497]
-    ]
+    ],
+    "seams": {
+      "weldedVertices": 23,
+      "topology": {
+        "componentVertexCounts": [802, 802],
+        "boundaryEdges": 198,
+        "boundaryLoops": 4,
+        "nonManifoldEdges": 0
+      }
+    }
   },
   "output": {
     "stem": "xfs_eye_plate_pma",

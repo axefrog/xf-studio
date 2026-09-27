@@ -15,6 +15,8 @@ export interface InventoryPlan {
   readonly morph: string;
   readonly app: string;
   readonly customization: string;
+  /** The masculine V's own customization, `.app` and plate, when the plan includes him. */
+  readonly masculine?: { readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string };
   /** Each preset's texture depot paths; which channels exist depends on its export route. */
   readonly presets: readonly { readonly textures: Readonly<Record<string, string | undefined>> }[];
 }
@@ -62,9 +64,10 @@ export function pathHash(value: string): bigint {
   return hashed;
 }
 
-/** The exact resource paths a collection plan requires: 4 plus each preset's route textures (3 for flat). */
+/** The exact resource paths a collection plan requires: 4 (8 with the masculine V) plus each preset's route textures (3 for flat). */
 export function expectedPaths(plan: InventoryPlan): Set<string> {
   const paths = [plan.mesh, plan.morph, plan.app, plan.customization];
+  if (plan.masculine) paths.push(plan.masculine.mesh, plan.masculine.morph, plan.masculine.app, plan.masculine.customization);
   for (const preset of plan.presets) for (const path of Object.values(preset.textures)) if (path !== undefined) paths.push(path);
   if (paths.length !== new Set(paths).size) throw new Error("Collection plan contains duplicate depot paths.");
   for (const path of paths) depotPath(path);

@@ -1,12 +1,12 @@
 /**
- * The masculine V's core head (male V plan phase 1): his own preview-core recipe and preview-only plate selection, served beside the
+ * The masculine V's core head (male V plan phase 1): his own preview-core recipe and the plate recipe Build also cuts him, served beside the
  * feminine core under `pma/`, prepared on first use through the same host, and loaded when the shown V is masculine.
  */
 import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { EYE_PLATE_RECIPE, idListSha256, selectedFaceIds } from "../src/eye-plate-recipe";
+import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, EYE_PLATE_RECIPES, eyePlateBody, idListSha256, selectedFaceIds } from "../src/eye-plate-recipe";
 import { createGameAssetExporter } from "../src/game-asset-export";
 import { HeadLoadError } from "../src/head-load-error";
 import { PreviewCoreHost, type PreviewCoreState } from "../src/preview-core-host";
@@ -52,19 +52,20 @@ test("the masculine core is his own head, eyes (chunk 2) and plate cut; the femi
     .toBe(previewCoreRecipeSha256({ ...before, body: "male" } as typeof PREVIEW_CORE_RECIPE, EYE_PLATE_RECIPE));
 });
 
-test("the masculine plate is preview only: nothing but the preview core recipe reads it", () => {
-  const src = resolve(import.meta.dir, "..", "src");
-  const readers: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (/\.ts$/.test(entry.name) && /eye-plate-recipe-pma\.json|PREVIEW_MASCULINE_PLATE_RECIPE|PREVIEW_CORE_RECIPES/.test(readFileSync(path, "utf8")))
-        readers.push(path.slice(src.length + 1).replaceAll("\\", "/"));
-    }
-  };
-  walk(src);
-  expect(readers.sort()).toEqual(["preview-core-host.ts", "preview-core-recipe.ts", "preview-core-service.ts"]);
+test("the preview and Build cut the masculine plate from one audited recipe, with the male head's native seams declared", () => {
+  // One recipe: the preview core shows the plate Build packages for a masculine V (male V plan phase 5).
+  expect(PREVIEW_MASCULINE_PLATE_RECIPE).toBe(EYE_PLATE_MASCULINE_RECIPE);
+  expect(EYE_PLATE_RECIPES.male).toBe(EYE_PLATE_MASCULINE_RECIPE);
+  expect(eyePlateBody(EYE_PLATE_MASCULINE_RECIPE)).toBe("male");
+  expect(eyePlateBody(EYE_PLATE_RECIPE)).toBe("female");
+  // The raw selection has the head's own slits (11 loops, one pinch); welded where the head's copies never part, it is the
+  // feminine plate's shape: two eye rings of 802 vertices, each with its outline and its eye opening.
+  expect(EYE_PLATE_MASCULINE_RECIPE.selection.topology).toEqual({ componentVertexCounts: [20, 20, 791, 796], boundaryEdges: 252, boundaryLoops: 11, nonManifoldEdges: 0 });
+  expect(EYE_PLATE_MASCULINE_RECIPE.selection.seams).toEqual({ weldedVertices: 23,
+    topology: { componentVertexCounts: [802, 802], boundaryEdges: 198, boundaryLoops: 4, nonManifoldEdges: 0 } });
+  // The feminine recipe declares none: its raw topology already closes (its own 16 seam pairs, where its corner strips meet the rings, leave it closed).
+  expect(EYE_PLATE_RECIPE.selection.seams).toBeUndefined();
+  expect(EYE_PLATE_MASCULINE_RECIPE.description).not.toMatch(/preview only/i);
 });
 
 test("each body's core is served under its own names: the feminine at the top, the masculine under pma/", () => {

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { FeatureExporter, FeatureExporterEntry, FeatureVerification, FeatureVerifier, ResourceTools, VerifierTools, XlFragment } from "../../src/platform/api";
 import { COLLECTION_2, ExportRefusal } from "../../src/platform/api";
 import { EYE_MAKEUP_EXPORTER } from "../../src/features/eye-makeup/export";
-import { EYE_PLATE_PREREQUISITE, EYE_MAKEUP_EXPORTER_ID } from "../../src/features/eye-makeup";
+import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE, EYE_MAKEUP_EXPORTER_ID } from "../../src/features/eye-makeup";
 import { VERIFICATION_LIMITS } from "../../src/features/eye-makeup/verify";
 import { derivePlateDocuments } from "../../src/eye-plate-cut";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../eye-plate-fixture";
@@ -67,7 +67,8 @@ export function fakeVerifierTools(packed: Map<string, string>, calls: string[] =
   };
 }
 
-type EyeReport = { presetRoutes?: unknown; plateInputs?: { mesh: string; morph: string }; plateGeometry?: { liftsMm: unknown } };
+type EyeReport = { presetRoutes?: unknown; plateInputs?: { mesh: string; morph: string }; plateGeometry?: { liftsMm: unknown }; bodies?: unknown;
+  masculine?: { plateInputs: { mesh: string; morph: string } } };
 /**
  * Eye makeup's verifier stand-in: reports the plan's routes, lifts and the packaged plate's hashes as the real one
  * would (overridable), and records what it was given.
@@ -80,11 +81,13 @@ export function fakeEyeVerifier(seen: Parameters<FeatureVerifier["verify"]>[0][]
       if (overrides.report === undefined && "throws" in overrides) throw Error(String((overrides as { throws: unknown }).throws));
       const build = JSON.parse(readFileSync(join(input.work, "build.json"), "utf8"));
       const plate = input.prerequisites[EYE_PLATE_PREREQUISITE] as { mesh: string; morph: string };
+      const his = build.plan.masculine ? input.prerequisites[EYE_PLATE_MASCULINE_PREREQUISITE] as { mesh: string; morph: string } : undefined;
       return { presetCount: build.plan.presets.length, verifiedFiles: build.artifacts.length, limits: [...VERIFICATION_LIMITS],
         ...overrides,
         report: { presetRoutes: build.plan.presets.map((p: { id: string; route: string }) => ({ id: p.id, route: p.route })),
           plateInputs: { mesh: sha(readFileSync(plate.mesh)), morph: sha(readFileSync(plate.morph)) },
-          plateGeometry: { liftsMm: build.plan.plate.liftsMm }, ...overrides.report } };
+          plateGeometry: { liftsMm: build.plan.plate.liftsMm }, bodies: his ? ["female", "male"] : ["female"],
+          ...(his ? { masculine: { plateInputs: { mesh: sha(readFileSync(his.mesh)), morph: sha(readFileSync(his.morph)) } } } : {}), ...overrides.report } };
     },
   };
 }

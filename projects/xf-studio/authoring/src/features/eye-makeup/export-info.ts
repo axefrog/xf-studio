@@ -16,3 +16,9 @@ export const EYE_MAKEUP_EXPORT: ExportInfo = Object.freeze({ exporterId: EYE_MAK
   brand: EYE_MAKEUP_MOD.modName, selectorLabel: EYE_MAKEUP_MOD.selectorLabel, selector: "own" });
 /** The host prerequisite a Build needs: the built-in eye plate, cut from the head the game loads. */
 export const EYE_PLATE_PREREQUISITE = "eye-makeup/plate";
+/**
+ * The optional masculine Build prerequisite: the masculine V's eye plate, cut from the male head the game loads. When
+ * a host offers it and it is ready, the mod also gets the masculine creator's selector; otherwise the mod is for a
+ * feminine V only and Check, Build and the manifest say so.
+ */
+export const EYE_PLATE_MASCULINE_PREREQUISITE = "eye-makeup/plate-masculine";

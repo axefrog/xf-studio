@@ -380,6 +380,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
           namespace: feature.check.namespace, brand: feature.check.brand, selectorLabel: feature.check.selectorLabel,
           selector: feature.check.selector, presets: feature.check.presets, omissions: feature.check.omissions,
           experimental: feature.check.experimental, requirements: feature.check.requirements, packagedSha256: feature.check.packagedSha256,
+          ...(feature.check.audience !== undefined ? { audience: feature.check.audience } : {}),
+          ...(feature.check.warnings?.length ? { warnings: feature.check.warnings } : {}),
           planSha256: textHash(JSON.stringify(feature.plan)), details: feature.check.details,
           verification: { presetCount: item.verifications[i].presetCount, verifiedFiles: item.verifications[i].verifiedFiles,
             limits: item.verifications[i].limits } })),

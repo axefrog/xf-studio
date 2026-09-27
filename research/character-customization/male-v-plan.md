@@ -1,15 +1,15 @@
 # Supporting a masculine V: resources, Studio gaps and a phased plan
 
-**Status (27 September 2026): phase 1 built (`claude/male-v-core`), with phase 4 and the stubble of phase 3; phases 2, 5, 6 and 7 open. Nothing here has runtime evidence.** Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** engine, framework or tool source; **[resource]** extracted game resources; **[wiki]** Modding Docs; **[runtime]** the running game; **[offline]** the Studio preview; **[hypothesis]** not yet established. Measurements, hashes and methods are under [provenance](#provenance).
+**Status (28 September 2026): phases 1, 5 and 6 built (`claude/male-v-core`, `claude/masculine-export`), with phase 4 and the stubble of phase 3; phases 2 and 7 open. XF Eye Artistry now builds for both bodies, offline-verified; nothing here has runtime evidence.** Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** engine, framework or tool source; **[resource]** extracted game resources; **[wiki]** Modding Docs; **[runtime]** the running game; **[offline]** the Studio preview; **[hypothesis]** not yet established. Measurements, hashes and methods are under [provenance](#provenance).
 
-The Studio draws a feminine V and a masculine V from the generic resolver's output, each on its own core head prepared from the player's game files ([head CC rendering](../../knowledge/head-cc-rendering.md), [body rendering](../../knowledge/body-rendering.md)). XF Eye Artistry still builds only for the feminine creator. The product direction wants every character detail rendered and creator values editable "so users can check work on characters other than their own" (AGENTS.md, Character context). This page says what a masculine V needs in each layer, in what order, and [what is built](#phase-status).
+The Studio draws a feminine V and a masculine V from the generic resolver's output, each on its own core head prepared from the player's game files ([head CC rendering](../../knowledge/head-cc-rendering.md), [body rendering](../../knowledge/body-rendering.md)). XF Eye Artistry builds a selector for both creators when the masculine plate can be prepared, and says plainly when a mod is for a feminine V only ([pipeline](../authoring/studio-to-mod-pipeline.md#the-masculine-vs-selector)). The product direction wants every character detail rendered and creator values editable "so users can check work on characters other than their own" (AGENTS.md, Character context). This page says what a masculine V needs in each layer, in what order, and [what is built](#phase-status).
 
 ## Findings in brief
 
 1. **The resolver side is already gender-neutral.** CCO selection, the ArchiveXL merge, the creator catalogue, save reading, the character context and the host's resolve/plan/export path all take the body gender as data. What blocks a masculine V is a small set of female-only gates in the browser, and the **core head**, which is one female recipe (§3).
-2. **The masculine head shares the feminine head's UV layout in the eye region.** All 1,620 vertices of the feminine eye plate have an exact UV twin on the masculine head. The masculine triangles spanning those UVs number 3,010, the plate's own face count, and cover the same UV area to within 0.3 %. But the triangle order differs, and the surface sits a median 4.9 mm (up to 8.3 mm) away at the same UV. So a masculine V needs **his own plate mesh**, cut from his own head under the same skin-byte and 0.4 mm lift rules. Every preset's **textures can be shared** between the two plates, because the plate's UV window depends only on those UVs (§4.1–4.2). Vanilla does the same: both genders' cheek decals list the same 55 textures [resource].
+2. **The masculine head shares the feminine head's UV layout in the eye region, and his plate passes the plate's gates.** All 1,620 vertices of the feminine eye plate have an exact UV twin on the masculine head. The masculine triangles spanning those UVs number 3,010, the plate's own face count, and cover the same UV area to within 0.3 %. But the triangle order differs, and the surface sits a median 4.9 mm (up to 8.3 mm) away at the same UV. So a masculine V needs **his own plate mesh**, cut from his own head under the same skin-byte and 0.4 mm lift rules. The audited cut has native bytes in the mesh and the morph base buffer and all 100 targets; its extra boundary loops and pinched vertex are the male head's own unwelded seams, whose copies never part (§4.1). Every preset's **textures can be shared** between the two plates, because the plate's UV window depends only on those UVs (§4.1–4.2). Vanilla does the same: both genders' cheek decals list the same 55 textures [resource].
 3. **The masculine face rig is simpler than the feminine one.** Every player `face_rig`, feminine included, names the **male** player facial setup. For a masculine V that is his own setup, with his own skeleton, graph and `ui_male_face.anims`, so the facial-setup question open for the feminine V does not arise (§2.6).
-4. **Export needs a second customization resource and a second template, not a second look.** ArchiveXL merges customizations per gender, so XF Eye Artistry for a masculine V is a `male:` entry with its own `.inkcharcustomization`, a masculine plate component and an appearance template. ArchiveXL picks a dynamic appearance's template by **name prefix, first match wins**, so the two templates must not share a prefix; separate `.app`s per gender avoid the problem (§4.3).
+4. **Export needs a second customization resource and a second template, not a second look** (built). ArchiveXL merges customizations per gender, so XF Eye Artistry for a masculine V is a `male:` entry with its own `.inkcharcustomization`, a masculine plate component and an appearance template. ArchiveXL picks a dynamic appearance's template by **name prefix, first match wins**, so the two templates must not share a prefix; separate `.app`s per gender avoid the problem. His option needs its own creator index too: the feminine 311 is a beard colour option in his creator (§4.3).
 5. **Brain gender (voice) changes nothing the Studio draws.** It must be carried through untouched on any save write-back (§1).
 
 ## 1. Body gender and brain gender
@@ -124,8 +124,8 @@ Audit of `projects/xf-studio/authoring` at `4193fcb` (26 September 2026). Line n
 | `src/cc-render-coverage.ts` 64, 73, 96, 104, 112 | Every masculine option reads "not drawn" | Drop the masculine branches as parts land |
 | `src/character-detail-plan.ts` 299 | Feet state names `flat_feet`/`lifted_feet` | Harmless for a masculine V (no such group, so nothing is added) but should be documented |
 | `tools/prepare_idle.py` 33–40, `tools/bake_idle_face.py` 64–65, `tools/bake_game_blink.py` 177–236 | Feminine clips, skeleton, setup and morph targets | Parameterise by body gender (the blink bake already infers it from the rig name, line 183) |
-| `src/package-resources.ts` 183, 197–219 | The template's `visualTags` is `Female`; one feminine customization option; `eyeMakeupXl` declares only `female:` | Per-gender resources (§4.3) |
-| `src/features/eye-makeup/verify/resource-checks.ts` 657–680 | "customizations must declare only the female list"; one plate | A verifier plan per gender (§4.4) |
+| `src/package-resources.ts` 183, 197–219 | The template's `visualTags` is `Female`; one feminine customization option; `eyeMakeupXl` declares only `female:` | Per-gender resources (§4.3). **Done in phase 6** |
+| `src/features/eye-makeup/verify/resource-checks.ts` 657–680 | "customizations must declare only the female list"; one plate | A verifier plan per gender (§4.4). **Done in phase 6** |
 
 ### 3.3 What each preview device assumes
 
@@ -155,13 +155,25 @@ The masculine cut is well defined by the feminine one:
 | Plate faces matched triangle for triangle by corner UVs | 2,458 exactly, 22 ambiguous, 530 differently triangulated |
 | The same face indices on the masculine head | Land elsewhere (UV shift up to 0.49), so face ranges do not transfer |
 
-Proposed rule for a masculine recipe: **the masculine chunk-0 triangles whose corner UVs all belong to the feminine plate's vertex UVs**. Then store that selection as the masculine recipe's own face ranges and topology, audited against the 2.31 masculine hashes. Before it is accepted it must pass the same gates as the feminine plate:
+The rule for the masculine recipe: **the masculine chunk-0 triangles whose corner UVs all belong to the feminine plate's vertex UVs**, stored as the masculine recipe's own face ranges and topology ([`eye-plate-recipe-pma.json`](../../projects/xf-studio/authoring/src/eye-plate-recipe-pma.json), revision 2), audited against the 2.31 masculine hashes.
 
-- topology (the feminine plate is 4 components of 20, 20, 790 and 790 vertices, with 6 boundary loops);
-- skin bytes preserved through the vertex mapping in mesh and morph base buffer;
-- all 100 targets;
-- the 0.40 mm lift along the masculine head's normals, morph targets included (the masculine vanilla decals measure 0.40 mm too);
-- the eyelid-contact and clearance gates of experiments 006/012, which are open for the feminine plate as well.
+**Audit (phase 5, 28 September 2026).** The feminine plate's gates, run on the masculine cut:
+
+| Gate | Result | Grade |
+|---|---|---|
+| Selection | 3,010 triangles, 1,627 vertices, UV area 0.041558 (feminine 0.041417); stored UV bounds U 0.2732–0.7266, V 0.6763–0.8213, **identical** to the feminine plate's, so the texture window and every window constant are the same | [resource] measured |
+| Native bytes | Every retained vertex element (10), the triangles in native order and winding, and all 69,920 morph diff rows of the 100 targets equal the installed 2.31 male head's; skin indices and weights identical in the mesh and the morph resource's base buffer (skin rows SHA-256 `5dd1e957…` in both); head quantization kept | [offline] the plate verifier (`eye-plate-verify.ts`) on the real cut |
+| Raw topology | Components 20, 20, 791 and 796; 252 boundary edges in **11 loops**, **one pinched vertex**, no non-manifold edge (feminine: 20, 20, 790, 790; 226 edges; 6 loops; none) | [offline] |
+| What the extra loops are | Each of the five extra loops (4, 4, 4, 6 and 8 edges) consists **only of edges the whole head also uses once**: they are the head's own slits, not gaps in the selection. The head stores 23 plate vertices twice at one position, and each pair has byte-identical normal, tangent, skin indices and weights and every morph target's position, normal and tangent delta, so the two copies never part under skinning, any morph or the lift along the normal. The pinched vertex (glTF UV 0.6016, 0.2329, pma vertex 5979) is where two such slits meet. The feminine plate has 16 such pairs too, where its two 20-vertex corner strips meet the rings, and its raw topology is already closed | [resource] measured on the GLB exports; confirmed on native bytes by the verifier |
+| Welded topology | Welding only those copies: **2 components of 802 vertices, 198 boundary edges in 4 loops, no pinch**: each eye ring with its outline and its eye opening, exactly the feminine plate's welded shape (loops 69/71 and 29/29 edges against 70/70 and 29/29) | [offline] |
+| Morph targets | All 100 (`h011`…`h205` by region), names, order and metadata equal the head's | [offline] |
+| Lift | 0.40 mm along his stored normals, morph-aware, like hers; 22 of 100 targets re-encoded to the lifted range (largest position error 3.0 µm, largest morph delta error 6.6 µm); the vanilla masculine decals sit at 0.40 mm too (§2.3) | [offline] the package verifier on a real Build |
+| Determinism | WolvenKit CLI 8.17.4 and 9.0.1 cut identical files (mesh `7e8975c2…`, morph `4397f3aa…`) | [offline] |
+| Eyelid contact and clearance | Not run offline, as for the feminine plate: its offline dense-idle and finite-contact gates were never passed either and the masculine idle doesn't exist yet (phase 2). The feminine plate's contact gates were closed **in game** (28 September); his are session checks 2 and 3 (§6) | [hypothesis] until the session |
+
+**The repair.** No triangle was added or removed and no byte changed: the recipe now declares the head's native seams (`selection.seams`: 23 welded vertices and the welded topology), and the plate verifier checks both the raw topology (pinches counted, not refused) and, from the plate's own bytes, that only copies with identical position, normal, skin and morph rows weld and that the welded surface is closed, unpinched and exactly the declared one. A head whose copies differ, or whose half-welded slit pinches, fails the gate. Welding the plate's own index buffer instead would have made the plate's triangles differ from the head's, which the plate rule forbids.
+
+**Head-surface correspondence.** As for the feminine plate, the cut is the head's own bytes (the verifier compares every retained element and diff row with the installed head), so the plate is the male head's surface at every vertex before the lift.
 
 ### 4.2 One texture set for both plates
 
@@ -182,6 +194,7 @@ ArchiveXL merges `customizations.female` into the feminine creator resource and 
 | `.app` | Off + template `xfs_c<collection>__xfs_template`, `visualTags` `Female` | **its own `.app`**: Off + a template whose component uses the masculine plate morph target, `visualTags` `Male` |
 | Plate | `xfs_eye_plate` mesh + morph | a masculine mesh + morph (a name such as `xfs_eye_plate_pma`; existing names stay unchanged under the [naming contract](../../projects/xf-studio/data/naming.md)) |
 | Definitions | `xfs_c<collection>__xfs_p<preset>` | the same names, in the masculine `.app` |
+| Option `index` | 311, right after teeth (310) and before eye makeup (450) | **541**, right after his teeth (540) and before his eye makeup (550). In `male_cco_ep1`, 311 is `beard_color5_0`, and two options with one index show only the first [wiki] |
 
 **Why a separate `.app`.** ArchiveXL clones a dynamic customization appearance from a template. When an `.app` has several appearances, it takes **the first one whose name starts with the requested name's part before its last `__`** [source: ArchiveXL 1.27.3 `Customization/Extension.cpp` 779–840, `FixCustomizationAppearance`]. Consider a masculine template in the same `.app` named by extending the feminine prefix (`xfs_c<collection>_m__…`). A feminine request (`xfs_c<collection>__…`) would also match it whenever it is listed first. Separate `.app`s per gender keep the existing names and remove the ordering hazard. The save then stores a different app hash per gender, which is expected.
 
@@ -197,6 +210,8 @@ The product-level merger (`platform/api/export.ts`) already combines gender list
 - the UV window per plate (equal by construction, and still checked).
 
 The declaration check then accepts exactly the planned `female:` and/or `male:` lists. Check and Build must report per gender, and the partial-export rules apply per gender. A masculine plate that fails a gate is **omitted and reported**, never packaged silently, and the feminine selector still builds. A verified masculine archive is not game-tested until the session in §6.
+
+**Built (phase 6).** The verifier (`features/eye-makeup/verify/`, still importing nothing from the builder) restates the bodies from the plan (his four files must be the feminine ones' `_pma` twins), the per-body visual tag (`Female`, `Male`) and option index (311, 541), checks his customization, `.app` and plate against his own plate input with his recipe's 100 targets, requires his plate's UV window to equal hers and every look to resolve to the same textures, and accepts exactly the planned `female:` and `male:` lists. Pixel and mip checks run once, on her plate's UVs. The report and the manifest carry `bodies` and his plate's inputs and record.
 
 ## 5. Phased plan
 
@@ -222,8 +237,9 @@ Phases 1 and 5 can start at once in separate worktrees. Phase 1 touches the prev
 | 2. Idle and blink | Open | A masculine head holds still: the prepared idle is the feminine V's, so it is not played on him (`IDLE_MASCULINE`, in plain words in the Motion panel). The game blink refuses his head through its own joint check ("made for a different head") |
 | 3. Beard | **Stubble drawn** [offline]; cards open | The stubble decal draws through the face-decal path like the makeup (beard 05, part 2, checked). The hair cards need the hair adapter on a `beard` slot |
 | 4. Masculine body | **Drawn** [offline] | The same planner, consumer groups and censorship rules as the feminine body, with the gender gate removed: body, arms, nails, personal link and the underwear cover `i0_000_pma_base_full_censored` draw, and the body mesh draws the feet (no feet controller, as §2.4 expected). His body idle rig is phase 2 |
-| 5. Masculine plate recipe | Open; a **preview-only selection** exists | Below |
-| 6. Export, 7. Session | Open | – |
+| 5. Masculine plate recipe | **Built** (28 September, `claude/masculine-export`) | The audited recipe with the head's native seams (§4.1); the preview and Build cut from it |
+| 6. Masculine export | **Built** (28 September, `claude/masculine-export`) [offline] | Below |
+| 7. Session | Open | [N12 in the next-sessions plan](../runtime/next-sessions-plan.md#n12-masculine-v-xf-eye-artistry-for-him) |
 
 **What phase 1 built.**
 
@@ -234,13 +250,22 @@ Phases 1 and 5 can start at once in separate worktrees. Phase 1 touches the prev
 - **Default V for both.** The Character panel offers **Default V (feminine)** and **Default V (masculine)** (the existing `character.useDefault` action with its `bodyGender`), and so does the command palette. The masculine default V is always stored, so a reload shows him again.
 - **Drawn on a masculine V** [offline, the maintainer's install, the default masculine V]: head and skin on his core head (the resolved skin matches its surface and draws on it), eyes (None + 20 eye shapes, the eyes following), brows, lashes, hair, teeth, face decals (the personal link, the stubble), the eye makeup on his preview plate, and the body. The screenshots are private renders (the worktree's ignored `evidence/screenshots/male-v-core/`).
 
-**The preview-only plate selection** (`src/eye-plate-recipe-pma.json`, derived by `tools/derive-plate-selection.ts` by the §4.1 rule from WolvenKit 9.0.1 GLB exports of both heads): 3,010 triangles over UV area 0.041558, **1,627 vertices** (the feminine plate: 1,620), components of 20, 20, 791 and 796 vertices, **252 boundary edges in 11 loops** (feminine: 226 in 6), **one pinched boundary vertex** and no non-manifold edge; the face ranges and ID hashes are in the file. The preview assembles it from his exported head and verifies it (vertex IDs by hash, all 100 targets). Nothing in Build or the package verifier reads it. The extra loops and the pinch come from split seams or small gaps in the UV rule, and are the first thing phase 5 must resolve before an audited recipe.
+**The masculine plate recipe** (`src/eye-plate-recipe-pma.json`, derived by `tools/derive-plate-selection.ts` by the §4.1 rule from WolvenKit 9.0.1 GLB exports of both heads; the tool now also prints the `seams` block) is the one the preview assembles for his core head and the one Build cuts; its audit is in §4.1. Changing it to revision 2 changed the masculine preview core's identity, so his preview head is prepared once more (about a minute) the first time he is shown.
+
+**What phase 6 built.**
+
+- **An optional masculine plate prerequisite** (`eye-makeup/plate-masculine`; `optionalPrerequisites`, a platform API addition: prepared when the host offers it, never required). Both hosts prepare it after the feminine plate with the same service, route resolution and cache (his status in `status-xfs-expanded-eye-plate-pma.json`). A failure never stops the Build; only cancellation does.
+- **A plan per body.** `planCollection(…, { masculine })` adds `masculine: { app, customization, mesh, morph }` (`xfs_collection_pma.*`, `models/xfs_eye_plate_pma.*`) and nothing else; the looks, names, materials and textures are shared. The resource builder lifts his plate, gives it her appearances and materials, writes his `.app` (visual tag `Male`, component bound to his morph target) and customization (index 541) with their own handle counter, so her resources are byte for byte the feminine-only build's. `.archive.xl` gains `male:` and his `.app` in the scope.
+- **Plain words.** The result's product line says whom the mod is for ("…, for a feminine and a masculine V" or "…, for a feminine V only"; the generic `FeatureCheck.audience`). When his plate can't be used, one warning under the product gives the reason and the step, with its button where there is one (`FeatureCheck.warnings`), e.g. "This game version's masculine V head is new to XF Studio; update XF Studio to include him." Before any Build prepared the plates for the route, Check's one note says "Build checks which looks reach the eye area and whether the mod can also fit a masculine V." The manifest records both.
+- **Checked offline** [offline]: a real Build of the four-preset fixture for both bodies on the reference installation (WolvenKit 9.0.1, 28 September) passed the independent verifier with 20 members (16 feminine, byte-identical to a feminine-only build of the same collection, plus his four), and a real derivation test of his plate against the installed game passes. Not seen in game.
 
 ## 6. In-game checks worth batching
 
 One session with a masculine V made in a new game (keep the save), plus the reference feminine V for comparison. Record the game, ArchiveXL and TweakXL versions.
 
-1. **Selector registration.** With a both-gender XF Eye Artistry build, the masculine creator shows one XF Eye Artistry row, with Off first, in the creator, gameplay and photo mode (the `face` group).
+The prepared sitting, with the save needed and a staging checklist, is [N12 in the next-sessions plan](../runtime/next-sessions-plan.md#n12-masculine-v-xf-eye-artistry-for-him).
+
+1. **Selector registration.** With a both-gender XF Eye Artistry build, the masculine creator shows one XF Eye Artistry row (between Teeth and Eye makeup, index 541), with Off first, in the creator, gameplay and photo mode (the `face` group).
 2. **Plate placement and depth.** One Matte preset and one Metallic preset on the masculine V, close-ups at the creator's eye camera. The look sits on the lids without breakup at close range (the 0.40 mm lift), closes with the blink and follows eye shapes `None`, `h091` and `h201`.
 3. **Same look, both genders.** The same preset on the feminine and masculine V, same framing: the liner and lid areas land on the same anatomical spots (the shared UV window).
 4. **Save round trip.** Save with the masculine V wearing a look, reload it and hand the save over. The save should list the masculine `.app` hash with the preset's definition in `face` and `character_customization`.
@@ -252,7 +277,8 @@ One session with a masculine V made in a new game (keep the save), plus the refe
 
 **Risks.**
 
-- *Plate seams.* The masculine selection has 9 more vertices (split seams) and 530 differently triangulated faces. The cut, skin-byte mapping and verifier must not assume the feminine vertex count; they already read counts from the recipe.
+- *Plate seams.* Resolved (§4.1): the masculine selection's extra loops and pinch are the male head's own seams, declared and checked; the cut, skin-byte mapping and verifier read every count from the recipe.
+- *Shared textures on another face.* The window is identical by construction, but whether the same texel lands on the same anatomical spot of his face is session check 3. A preset that reaches her plate only where his triangulation differs (530 faces) would be invisible on him; the reach filter judges her plate only [hypothesis: negligible, the outlines match to 0.3 % of UV area].
 - *Clearance.* The masculine eyelids are unmeasured; the feminine plate's contact gates are still open, and a masculine plate inherits that uncertainty.
 - *Template matching.* ArchiveXL's prefix rule (§4.3) makes template names or order load-bearing; the separate `.app` avoids it.
 - *Head mods.* Masculine head replacers exist the same way feminine ones do. Build must use the installed masculine head through the same `eye-plate-head-source` rules and refuse an unaudited head as it does today.
@@ -261,7 +287,7 @@ One session with a masculine V made in a new game (keep the save), plus the refe
 
 **Decisions for the maintainer** (a default is proposed for each):
 
-1. *Which body genders an export targets.* Proposed default: both, once the masculine plate passes its offline gates, because the texture set is shared and the extra cost is one small mesh pair. Until then, feminine only, with Check saying in one line that a masculine V isn't supported yet. The user can always choose one gender.
+1. *Which body genders an export targets.* Proposed default: both, once the masculine plate passes its offline gates, because the texture set is shared and the extra cost is one small mesh pair. Until then, feminine only, with Check saying in one line that a masculine V isn't supported yet. The user can always choose one gender. **Built:** both by default, feminine only (said plainly) when his plate can't be prepared. A person's own choice of one body is not built yet (it would be a package-plan option and a UI control, for the UI track).
 2. *The Default V control.* Proposed: two choices, "Default V (feminine)" and "Default V (masculine)", replacing the single feminine button.
 3. *The preview-only core plate for a masculine V before phase 5 is audited.* Proposed: derive it by the §4.1 rule for the preview, labelled like the feminine plate's preview until Build accepts it.
 
@@ -279,7 +305,10 @@ One session with a masculine V made in a new game (keep the save), plus the refe
   | `…\player_female_average\h0_000_pwa_c__basehead\h0_000_pwa_c__basehead.mesh` | `e877b91a7b3f6bd678f0365d484a0dd32f7d7d4d6c13b213d2a7e73fcce874c6` (the plate recipe's audited 2.31 source) |
   | `…\player_female_average\h0_000_pwa__morphs.morphtarget` | `3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e` (likewise) |
 
-- **Masculine preview plate selection** (phase 1): `tools/derive-plate-selection.ts` over the same two GLB exports prints the selection block of `src/eye-plate-recipe-pma.json` (1,627 vertices, 11 boundary loops, one pinched boundary vertex). The preview assembled it from the masculine head the maintainer's installation exported and verified its vertex IDs by hash (a 65 s preparation with WolvenKit 9.0.1 on 27 September).
+- **Masculine plate selection** (phases 1 and 5): `bun tools/derive-plate-selection.ts --reference <pwa morphs GLB> --target <pma morphs GLB>` over the same two GLB exports prints the selection block of `src/eye-plate-recipe-pma.json` (1,627 vertices, 11 boundary loops, one pinched boundary vertex) and its `seams` block (23 welded vertices, welded 802 + 802, 198 edges, 4 loops). The seam analysis (which loop edges the whole head uses once, and which coincident copies have identical attributes and morph deltas) ran as an uncommitted script over the same inputs under `tools/memory_guard.py` (peak 0.2 GB).
+- **Masculine plate derivation** (phase 5): `ensureEyePlate` with `EYE_PLATE_MASCULINE_RECIPE` against the reference installation's base-game content (game 2.31), WolvenKit CLI 9.0.1 and 8.17.4, private cache outside the repository, 24 s: mesh `7e8975c2d2a5f429560096d8f5b78406e391e50322479a396240e34ccad9aedc` (145,185 bytes), morph `4397f3aa4899cce4042bc3335b6c9e4f2b3c0de3710346789bf23f48b1c7c449` (6,769,933 bytes), from the audited source hashes above. Reproduced by the opt-in `tests/eye-plate-game.test.ts` (`XFS_TEST_GAME_ROOT`, `XFS_TEST_WOLVENKIT`).
+- **Creator option indices** (§4.3): `female_cco_ep1` and `male_cco_ep1` as above; feminine teeth 310, eye makeup 450, 311 free; masculine teeth 540, eye makeup 550, 541 free, 311 = `beard_color5_0`.
+- **Vanilla visual tags** (§4.3): `hx_000__basehead_makeup_eyes_01.app` in the same serialized folder: 14 `pwa` appearances tagged `Female`, 14 `pma` tagged `Male`.
 - **Plate correspondence method**: the feminine plate's faces were expanded from the recipe's `faceRangesInclusive`. Vertex UVs were matched exactly (quantised at 1e-5); triangles by sorted corner UVs at 1e-3 and 1e-4; the 3D offset is taken between the feminine plate vertex and the masculine vertex with the same UV. Lift is the offset from the nearest head vertex along that vertex's normal, as in the brows and cheeks evidence. The scripts ran under `tools/memory_guard.py` (peak 0.7 GB) and are not committed; their inputs are listed above.
 - **ArchiveXL**: 1.27.3, commit `5474e34d`, `src/App/Extensions/Customization/Extension.cpp` (template selection 779–840).
 - **Studio code**: `projects/xf-studio/authoring` at `4193fcb`.

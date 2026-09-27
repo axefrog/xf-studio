@@ -25,7 +25,7 @@ import type { TextureChannel } from "./engines/layered-makeup/finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
   appearanceResource, assertBrandedPlan, customizationResource, HandleCounter,
-  resourceJson, rewritePlateMesh, rewritePlateMorph,
+  resourceJson, rewritePlateMesh, rewritePlateMorph, selectorBodies,
 } from "./package-resources";
 
 /** Accepted plate stems: the host-derived built-in plate, then the historical Experiment 004 override name. */
@@ -37,6 +37,14 @@ import {
 export class PlateFootprintChangedError extends Error {}
 
 export const PLATE_STEMS = ["xfs_eye_plate", "xfas_eye_plate"] as const;
+/** The masculine plate's stem (eye-plate-recipe-pma.json `output.stem`). */
+export const MASCULINE_PLATE_STEMS = ["xfs_eye_plate_pma"] as const;
+
+/**
+ * The masculine plate's recorded UV footprint differs from the plate itself (PIPE-37, as for the feminine plate); the
+ * exporter reports it for the masculine prerequisite.
+ */
+export class MasculinePlateFootprintChangedError extends PlateFootprintChangedError {}
 
 export interface ResourceBuildOptions {
   /** Filtered, package-only collection value (already validated by the preflight). */
@@ -58,6 +66,12 @@ export interface ResourceBuildOptions {
    * serializes must give exactly this footprint; absent only for callers that plan on no plate.
    */
   readonly plateUv?: PlateUvFootprint;
+  /**
+   * The masculine V's plate (a directory holding its one mesh/morphtarget pair) and the UV footprint the plan was made
+   * on. Given when the plan includes him (`plan.masculine`); his plate must give exactly that footprint and the
+   * feminine plate's texture window, so every texture serves both.
+   */
+  readonly masculine?: { readonly plate: string; readonly plateUv: PlateUvFootprint };
   readonly signal?: AbortSignal;
   readonly log?: (line: string) => void;
 }
@@ -74,6 +88,9 @@ export interface BuildRecord {
   plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants; footprintSha256: string };
   /** This feature's resources in the staging tree, as the pre-pack gate recorded them. */
   artifacts: ReturnType<typeof inventoryFromFiles>;
+  /** The masculine plate packaged beside the feminine one, when the plan includes him: its inputs, lift and UVs. */
+  masculine?: { plateStem: string; plateInputs: { path: string; sha256: string }[]; plateLift: PlateLiftReport;
+    plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants; footprintSha256: string } };
   installed: false; gameRenderingVerified: false;
 }
 
@@ -111,8 +128,8 @@ const isFile = (path: string) => { try { return statSync(path).isFile(); } catch
 const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
 
 /** The one plate stem present as a complete mesh/morphtarget pair in `plate`, or an error. */
-export function plateStem(plate: string): string {
-  const stems = PLATE_STEMS.filter(stem => isFile(join(plate, stem + ".mesh")) && isFile(join(plate, stem + ".morphtarget")));
+export function plateStem(plate: string, accepted: readonly string[] = PLATE_STEMS): string {
+  const stems = accepted.filter(stem => isFile(join(plate, stem + ".mesh")) && isFile(join(plate, stem + ".morphtarget")));
   if (stems.length !== 1) throw Error(`Plate directory must contain exactly one mesh/morphtarget pair: ${plate}`);
   return stems[0];
 }
@@ -126,7 +143,9 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
   const log = options.log ?? (() => {});
   if (existsSync(out)) throw Error(`Output already exists: ${out}`);
   const stem = plateStem(plate);
-  for (const folder of FOLDERS) mkdirSync(join(out, ...folder.split("/")), { recursive: true });
+  const masculinePlate = options.masculine ? resolve(options.masculine.plate) : null;
+  const masculineStem = masculinePlate ? plateStem(masculinePlate, MASCULINE_PLATE_STEMS) : null;
+  for (const folder of [...FOLDERS, ...(masculinePlate ? ["source-json-pma"] : [])]) mkdirSync(join(out, ...folder.split("/")), { recursive: true });
   mkdirSync(archive, { recursive: true });
   const steps: BuildRecord["steps"] = [];
   const step = async (name: string, run: () => Promise<ToolStep>) => {
@@ -154,10 +173,23 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
     throw new PlateFootprintChangedError("The eye plate's recorded UV footprint differs from the plate itself.");
   const plateUv = { bounds, window, transform: uvTransformConstants(window), footprintSha256 };
   writeFileSync(join(out, "logs", "plate-uv.log"), JSON.stringify(plateUv) + "\n", "utf8");
+  // The masculine plate: its own UVs must give the footprint his plan was made on and her texture window, so the one
+  // texture set (and each window entry's UV transform) serves both plates.
+  let masculineSource: { mesh: any; morph: any; plateUv: NonNullable<BuildRecord["masculine"]>["plateUv"] } | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (masculinePlate && masculineStem && options.masculine) {
+    await step("serialize-masculine-models", () => options.tools.serialize(masculinePlate, join(out, "source-json-pma")));
+    const mesh = readJson(join(out, "source-json-pma", masculineStem + ".mesh.json"));
+    const his = plateUvFootprint(mesh.Data.RootChunk), hisSha256 = sha256(JSON.stringify(his));
+    if (sha256(JSON.stringify(options.masculine.plateUv)) !== hisSha256)
+      throw new MasculinePlateFootprintChangedError("The masculine eye plate's recorded UV footprint differs from the plate itself.");
+    if (JSON.stringify(his.window) !== JSON.stringify(window)) throw Error("The masculine eye plate's texture window differs from the feminine plate's.");
+    masculineSource = { mesh, morph: readJson(join(out, "source-json-pma", masculineStem + ".morphtarget.json")),
+      plateUv: { bounds: his.bounds, window: his.window, transform: uvTransformConstants(his.window), footprintSha256: hisSha256 } };
+  }
 
   // 2. Compile each preset's route maps in-process, yielding between presets so a cancel is seen.
   const baked = join(out, "baked");
-  const { records } = await bakeCollection(options.collection, baked, { window, region: options.region }, async () => {
+  const { records } = await bakeCollection(options.collection, baked, { window, region: options.region, masculine: !!masculineSource }, async () => {
     await new Promise(done => setImmediate(done));
     checkCancelled(options.signal);
   });
@@ -222,12 +254,31 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
   writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
   const morph = rewritePlateMorph(lifted.morph, plan);
   writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
+  // His plate gets the same lift, appearances and materials (one texture set), bound to his own mesh. Its handles are
+  // counted apart, so every feminine resource keeps exactly the bytes a feminine-only build writes.
+  const [, male] = selectorBodies(plan);
+  if (!!male !== !!masculineSource) throw Error("The plan and the prepared plates disagree on the masculine V.");
+  let masculineLift: PlateLiftReport | undefined;
+  const maleHandles = new HandleCounter();
+  if (male && masculineSource) {
+    const hisLift = liftPlate(masculineSource.mesh, masculineSource.morph, plan.plate.liftsMm);
+    masculineLift = hisLift.report;
+    writeFileSync(join(out, "logs", "plate-lift-pma.log"), JSON.stringify(hisLift.report) + "\n", "utf8");
+    const hisMesh = rewritePlateMesh(hisLift.mesh, plan, maleHandles, masculineSource.plateUv.transform);
+    writeFileSync(join(out, "models-json", male.mesh.slice(male.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(hisMesh), "utf8");
+    writeFileSync(join(out, "models-json", male.morph.slice(male.morph.lastIndexOf("/") + 1) + ".json"),
+      resourceJson(rewritePlateMorph(hisLift.morph, plan, male)), "utf8");
+  }
   await step("deserialize-models", () => options.tools.deserialize(join(out, "models-json"), modelDir));
 
-  // 5. The .app template and the character-customization selector.
+  // 5. The .app template and the character-customization selector (one of each per body).
   const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
   writeFileSync(join(out, "app-json", fileName(plan.app) + ".json"), resourceJson(appearanceResource(plan, handles)), "utf8");
   writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
+  if (male) {
+    writeFileSync(join(out, "app-json", fileName(male.app) + ".json"), resourceJson(appearanceResource(plan, maleHandles, male)), "utf8");
+    writeFileSync(join(out, "cc-json", fileName(male.customization) + ".json"), resourceJson(customizationResource(plan, maleHandles, male)), "utf8");
+  }
   await step("deserialize-app", () => options.tools.deserialize(join(out, "app-json"), appDir));
   await step("deserialize-customization", () => options.tools.deserialize(join(out, "cc-json"), appDir));
 
@@ -237,8 +288,12 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
   const artifacts = inventoryFromFiles(generatedFiles(archive).filter(file => planned.has(file.path)), plan);
   const plateInputs = [".mesh", ".morphtarget"].map(suffix => join(plate, stem + suffix))
     .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
+  const masculine: BuildRecord["masculine"] = masculinePlate && masculineStem && masculineSource && masculineLift ? {
+    plateStem: masculineStem, plateLift: masculineLift, plateUv: masculineSource.plateUv,
+    plateInputs: [".mesh", ".morphtarget"].map(suffix => join(masculinePlate, masculineStem + suffix)).map(path => ({ path, sha256: sha256(readFileSync(path)) })),
+  } : undefined;
   const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, plateLift: lifted.report, plateUv, artifacts,
-    installed: false, gameRenderingVerified: false };
+    ...(masculine ? { masculine } : {}), installed: false, gameRenderingVerified: false };
   writeFileSync(join(out, "build.json"), JSON.stringify(record) + "\n", "utf8");
   log(`BUILD ${out}`);
   return record;

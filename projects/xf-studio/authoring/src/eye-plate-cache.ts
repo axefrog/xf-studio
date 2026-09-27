@@ -1,5 +1,6 @@
+import { join } from "node:path";
 import { contentFingerprint, DerivedCache, samePath } from "./derived-cache";
-import type { EyePlateRecipe } from "./eye-plate-recipe";
+import { eyePlateBody, type EyePlateRecipe } from "./eye-plate-recipe";
 
 /**
  * Storage adapter for derived eye plates. The cache lives in host-owned private storage
@@ -22,8 +23,15 @@ export type EyePlateStatus = {
 
 export { contentFingerprint, fileSha256 } from "./derived-cache";
 
+/**
+ * One cache for both bodies' plates. Each body keeps its own status, so preparing one body's plate never hides the
+ * other's: the feminine plate keeps `status.json`, where every earlier status is, the masculine plate `status-<recipe id>.json`.
+ */
 export class EyePlateCache extends DerivedCache {
-  constructor(root: string) { super(root, "eye plate"); }
+  constructor(root: string, private readonly recipe?: Pick<EyePlateRecipe, "id" | "source">) { super(root, "eye plate"); }
+  protected override get statusFile() {
+    return this.recipe && eyePlateBody(this.recipe) === "male" ? join(this.root, `status-${this.recipe.id}.json`) : super.statusFile;
+  }
   writeStatus(status: Omit<EyePlateStatus, "schema" | "updatedAt">): void {
     this.writeStatusDocument({ schema: EYE_PLATE_STATUS_SCHEMA, ...status, updatedAt: new Date().toISOString() });
   }
@@ -44,7 +52,7 @@ export function eyePlateReadiness(cacheRoot: string | null, gameRoot: string | n
   const limit = `The expanded eye plate is built from your installed game on first Build (supports ${labels}) and cached privately.`;
   if (!cacheRoot || !gameRoot) return { issue: null, limit };
   let status: EyePlateStatus | null = null;
-  try { status = new EyePlateCache(cacheRoot).readStatus(); } catch { return { issue: null, limit }; }
+  try { status = new EyePlateCache(cacheRoot, recipe).readStatus(); } catch { return { issue: null, limit }; }
   if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot) ||
       (status.state !== "missing" && status.state !== "unsupported") ||
       status.contentFingerprint !== contentFingerprint(gameRoot, recipe.source.archiveDirectory))
