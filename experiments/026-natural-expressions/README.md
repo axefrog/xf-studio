@@ -26,6 +26,7 @@ All take `--server http://127.0.0.1:<port>`, an isolated Studio server (its own 
 |---|---|
 | [`lib.ts`](lib.ts) | The server's rig and solver, forward kinematics, the face frame (left = V's left) |
 | [`control-atlas.ts`](control-atlas.ts) | Solves each control alone at 0.5 and 1: which regions move, how far, which way, and how linear |
+| [`head-controls.ts`](head-controls.ts) | Whether the neck and head controls move the head (nose tip, chin and glabella displacement): they don't |
 | [`region-balance.ts`](region-balance.ts) | Eye opening, lower-lid rise, corner lift, controls at 0.7 or more, and regional peaks for vanilla faces and the samples |
 | [`make-samples.ts`](make-samples.ts) | The five FACS recipes; writes `projects/xf-studio/authoring/data/expression-samples/*.json` in the editor's preset format (`--post <server>/api/verification/part-presets` also saves them) |
 | [`expression-look.ts`](expression-look.ts) | Fixed-camera renders (front, three-quarter) of vectors, samples or installed expressions in a throwaway headless Chrome on `?verify=1`, applied with `expression.startFrom` and solved live |
