@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { INNO_DATA_FORMAT, INNO_DATA_MARKER, INNO_SETUP, WRAPPER_BUDGET, WRAPPER_MEASURED, WRAPPER_PLAIN_TEXT, innoSetupHome, payloadMembers,
+import { INNO_DATA_FORMAT, INNO_DATA_MARKER, INNO_SETUP, WRAPPER_BUDGET, WRAPPER_MEASURED, WRAPPER_PLAIN_TEXT, innoSetupHome, installIdentity, payloadMembers,
   quadVersion, setupProgramName, singleInstallerWrapper, wrapperTexts } from "../single-installer";
 import { contentIssues } from "../package-content-scan";
 
@@ -95,12 +95,39 @@ describe("single-file setup", () => {
 
   test("custom exit codes stay clear of Inno Setup's own 1-8, and are documented (REL-05)", () => {
     const script = readFileSync(resolve(import.meta.dir, "../installer/xf-studio-setup.iss"), "utf8");
-    const codes = [...script.matchAll(/InstallExitCode := (\d+);/g)].map(match => Number(match[1]));
-    expect(codes).toEqual([100, 101]);
+    const outcomes = readFileSync(resolve(import.meta.dir, "../installer/install-outcome.iss"), "utf8");
+    const exitCodes = outcomes.slice(outcomes.indexOf("function OutcomeExitCode"), outcomes.indexOf("function OutcomeHeading"));
+    const codes = [...exitCodes.matchAll(/Result := (\d+);/g)].map(match => Number(match[1])).filter(code => code !== 0).sort();
+    expect(codes).toEqual([100, 101, 103]);
+    expect(script).toContain("InstallExitCode := OutcomeExitCode(Outcome);");
     const readme = readFileSync(resolve(import.meta.dir, "../README.md"), "utf8");
     for (const code of codes) {
       expect(script).toMatch(new RegExp(`^;\\s+${code}\\s`, "m"));
       expect(readme).toContain(`exit code ${code}`);
     }
+  });
+
+  test("one progress display, and success decided by what is installed (REL-05)", () => {
+    const script = readFileSync(resolve(import.meta.dir, "../installer/xf-studio-setup.iss"), "utf8");
+    // Electrobun's own dialog runs hidden and closes itself; the wizard stays up with a moving bar and plain phase text.
+    for (const text of ["SW_HIDE", "'ELECTROBUN_INSTALLER_UI_AUTOCLOSE', '1'", "npbstMarquee", "ExecAndLogOutput(", "PhaseStatus(S)"])
+      expect(script).toContain(text);
+    expect(script).not.toContain("WizardForm.Hide");
+    // The result: this build's version.json and launcher, Electrobun's uninstaller and its uninstall entry.
+    for (const text of ['#include "install-outcome.iss"', "VersionFileMatches(String(Text), BuildHash)", "\\bin\\launcher.exe",
+      "\\uninstall.exe", "Uninstall\\{#AppIdentifier}.{#AppChannel}", "ClassifyInstall(Started, Files, Added, FatalError)"])
+      expect(script).toContain(text);
+    // A real failure: a plain reason, Try again and the setup log; a Microsoft Store app's private storage is caught before any page.
+    expect(script).toContain("['Try again', 'Open the setup log', 'Close']");
+    expect(script).toContain("XF Studio setup.log");
+    expect(script).toMatch(/function InitializeSetup[\s\S]*InstallFolderRedirected[\s\S]*explorer\.exe/);
+  });
+
+  test("the install identity compiled into the wrapper comes from Electrobun's metadata and is refused when unusable", () => {
+    expect(installIdentity('{"identifier":"dev.axefrog.xf-studio","name":"XF Studio","channel":"canary","hash":"t616yf10pay6"}'))
+      .toEqual({ identifier: "dev.axefrog.xf-studio", channel: "canary", hash: "t616yf10pay6" });
+    for (const bad of ['{"identifier":"dev.axefrog.xf-studio","channel":"canary"}', '{"identifier":"a\'b","channel":"canary","hash":"t616yf10pay6"}',
+      '{"identifier":"dev.axefrog.xf-studio","channel":"can ary","hash":"t616yf10pay6"}', '{"identifier":"x","channel":"canary","hash":"a\\\\b"}'])
+      expect(() => installIdentity(bad), bad).toThrow("install metadata");
   });
 });
