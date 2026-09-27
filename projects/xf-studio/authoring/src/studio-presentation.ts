@@ -8,7 +8,7 @@ import type { Layer, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
 import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
-import type { ModuleService, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
+import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "./platform/api";
@@ -152,6 +152,8 @@ export type StudioPresentationPort<Slot> = {
   readonly views: {
     snapshot(): ReadonlyDeep<ReturnType<StudioApplication["views"]>>;
     modules(): readonly StudioModule[];
+    /** Modules with an agreed design, not built yet: the Modules menu lists them as Planned. */
+    plannedModules(): readonly PlannedModule[];
     tools(view: ViewId | undefined, filter: ViewToolFilter): readonly ViewToolEntry[];
     summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
     /** Each view's derived title and its scene's subject, with the panel that shows it. */
@@ -373,7 +375,7 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
   const views: StudioPresentationPort<Slot>["views"] = Object.freeze({
-    snapshot: () => a.views(), modules: () => a.modules(),
+    snapshot: () => a.views(), modules: () => a.modules(), plannedModules: () => a.plannedModules(),
     tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
     titles: () => a.viewTitles(),

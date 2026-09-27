@@ -1,4 +1,5 @@
 import { allowsNativeTextMenu } from "../context-menu";
+import { comingSoon, liveFeatures } from "./coming-soon";
 import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
 import { effectiveTheme, type ThemePreference } from "../ui-preferences";
@@ -333,7 +334,7 @@ function viewPreferences(port: Port, feedback: Feedback) {
     hints, setHints, research, setResearch, openReference,
     items(): MenuItem[] {
       return [{ kind: "heading", label: "Viewports", detail: "Stored with your workspace" },
-        { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Corner strip and target tooltips that follow the pointer and held keys",
+        { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Hints in the 3D view and UV map that follow the pointer and the keys you hold",
           run: () => setHints(!hints()) },
         { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference },
         { kind: "separator" },
@@ -371,7 +372,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
   // One place for everything configured (UI-109): the game and mod manager, the saves folder, WolvenKit, appearance and diagnostics.
   const settingsButton = button({ label: "Settings", icon: "settings", iconOnly: true, variant: "ghost",
-    title: "Settings: your game and mod manager, saves folder, WolvenKit and appearance", onClick: () => rt.settings.open() });
+    title: "Settings: game, mod manager, saves, tools and appearance", onClick: () => rt.settings.open() });
   for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton],
     ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
@@ -487,11 +488,15 @@ function moduleMenuItems(rt: StudioRuntime): MenuItem[] {
   const shown = rt.shownModules(), items: MenuItem[] = [{ kind: "heading", label: "Modules", detail: "Show or hide; your work and exports are kept either way" }];
   for (const [group, label] of Object.entries(MODULE_GROUPS)) {
     const members = rt.modules.list.filter(module => module.group === group);
-    if (!members.length) continue;
+    const planned = rt.port.views.plannedModules().filter(module => module.group === group);
+    if (!members.length && !planned.length) continue;
     items.push({ kind: "heading", label });
     for (const module of members) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
       checked: shown.includes(module.id), hint: `${module.stage === "stable" ? "" : "Preview · "}${module.description} ${moduleAdds(rt, module)}`,
       run: () => rt.modules.set(module.id, !shown.includes(module.id)) });
+    // Planned modules (ui-copy-and-layout-review.md §6): listed, never shown; each says what it will let the person do.
+    for (const module of planned) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
+      tag: "Soon", quietReason: true, capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
   }
   return items;
 }
@@ -530,13 +535,17 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
         run: () => rt.modules.set(module.id, !on) },
       ...rt.modules.panels(module).map(row));
   }
-  // The views (view-graph-design.md §3.4): each 3D view and its panel. New view and Duplicate view (shared camera) join here in P4.
+  // The views (view-graph-design.md §3.4): each 3D view and its panel, then New view and Duplicate view (shared camera), shown as
+  // Coming soon until P4 registers their actions (coming-soon.ts).
   const graph = rt.port.views.snapshot();
+  const live = liveFeatures(rt.port);
+  const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live);
+    return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", quietReason: true, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
   if (graph) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;
       return { kind: "action" as const, label: entry.title ?? rt.views.meta[panel]?.title ?? entry.id, icon: "head" as const,
         hint: `${entry.id === graph.focused ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,
-        run: () => dock.reveal(panel) }; }));
+        run: () => dock.reveal(panel) }; }), ...upcoming);
   return items;
 }
 

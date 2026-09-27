@@ -21,6 +21,8 @@ import { icon } from "../icons";
  * - **States:** current, disabled, loading (an overlaid status that never moves the rows), search-match highlight ranges per label.
  * - **Access:** `role=tree` of `treeitem`s in a flat, virtualised structure: the hierarchy is conveyed by `aria-level`, `aria-setsize`
  *   and `aria-posinset` (the ARIA pattern for trees whose rows are not all in the page; nested `role=group` needs every row present).
+ *   A row's label keeps priority over its secondary text: the secondary text shrinks first and hides in a narrow tree (under about 320 px),
+ *   the full text staying in the item's tooltip and accessible name.
  *   Groups carry `aria-expanded`. Each item's name is its label, secondary text and badges as text; a trailing action (a favourite
  *   toggle) is outside the name, reached by the pointer or the owner's key binding, never by Tab.
  */
@@ -156,7 +158,7 @@ export class TreeView {
     if (item.level === 1) {
       const group = item.group, open = this.expanded.has(group.id), count = group.count ?? group.rows.length;
       return h("div", { class: "tree-item tree-group", role: "treeitem", "data-id": group.id, "aria-level": "1", "aria-setsize": String(item.setsize),
-        "aria-posinset": String(item.posinset), "aria-expanded": String(open),
+        "aria-posinset": String(item.posinset), "aria-expanded": String(open), title: group.secondary ? `${group.label} · ${group.secondary}` : undefined,
         "aria-label": name([group.label, group.secondary, `${count} item${count === 1 ? "" : "s"}`, ...(group.badges ?? []).map(b => b.text)]) },
         h("span", { class: "tree-chevron", "aria-hidden": "true" }, icon("chevronRight")), this.label(group.label, group.highlight),
         group.secondary ? h("span", { class: "tree-secondary", text: group.secondary }) : null, ...badges(group.badges),
@@ -166,7 +168,9 @@ export class TreeView {
     const element = h("div", { class: `tree-item tree-row${row.disabled ? " disabled" : ""}${row.id === this.current ? " current" : ""}`, role: "treeitem",
       "data-id": row.id, "aria-level": "2", "aria-setsize": String(item.setsize), "aria-posinset": String(item.posinset),
       "aria-current": row.id === this.current ? "true" : undefined, "aria-disabled": row.disabled ? "true" : undefined,
-      "aria-description": row.disabled ? row.reason : undefined, title: row.disabled ? row.reason : undefined,
+      "aria-description": row.disabled ? row.reason : undefined,
+      // The full text in the tooltip: the secondary text is the first to shrink, and hides in a narrow tree (studio.css `.tree-view`).
+      title: row.disabled ? row.reason : row.secondary ? `${row.label} · ${row.secondary}` : undefined,
       "aria-label": name([row.label, row.secondary, ...(row.badges ?? []).map(b => b.text)]) },
       this.label(row.label, row.highlight), row.secondary ? h("span", { class: "tree-secondary", text: row.secondary }) : null, ...badges(row.badges),
       trailing ? h("span", { class: "tree-trailing" }, trailing) : null);
