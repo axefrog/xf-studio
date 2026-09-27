@@ -49,7 +49,7 @@ export const LIBRARY: readonly LibraryEntry[] = [
     what: "An on/off setting that takes effect at once.",
     anatomy: "Track and thumb · label to its right · optional help tip beside it · reserved note line when it can carry a reason.",
     variants: "with or without <code>help</code>; <code>reserveNote</code>.",
-    states: "off, on, focus-visible, disabled (a form field: native disabled with its reason on the note line or in the tooltip).; mixed (<code>update(false, { mixed: true })</code>: a switch over several things of which some are on shows its thumb halfway and reads \"mixed\", announced as a checkbox since ARIA's switch has no mixed value; a press turns it fully on)",
+    states: "off, on, focus-visible, disabled (a form field: native disabled with its reason on the note line or in the tooltip).; mixed (<code>update(false, { mixed: true })</code>: a switch over several things of which some are on shows a dash across its track instead of a thumb, never a half-slid thumb, says so in its label (<code>mixedLabel</code>, \"Symmetric · some regions\") and reads \"mixed\", announced as a checkbox since ARIA's switch has no mixed value; a press turns it fully on)",
     sizes: "30 × 16 px track; row height 24 px.",
     when: "Settings and visibility toggles that apply immediately (Show my V's own makeup).",
     combine: "Stack switches in a section; one per line.", adapt: "The label wraps; the track stays at its start.",

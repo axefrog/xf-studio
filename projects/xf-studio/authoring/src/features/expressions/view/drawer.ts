@@ -187,7 +187,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   let controlQuery = "";
   const controlSearch = new SearchField({ label: "Find a face control", placeholder: "Find a control", onFilter: query => { controlQuery = query.toLowerCase(); filter(); } });
   // Symmetric: every left/right pair linked (one Undo step), so a change on one side follows on the other by its rule.
-  const symmetric = new Toggle({ label: "Symmetric",
+  const symmetric = new Toggle({ label: "Symmetric", mixedLabel: "Symmetric · some regions",
     onChange: on => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(allLinkKeys().map(key => [key, on])) } as ExpressionAction) });
   symmetric.element.classList.add("expr-symmetric");
   symmetric.input.title = "Each left/right pair follows the other: skin as a mirror image, the eyes looking the same way. Turn it off to set each side on its own.";
@@ -233,10 +233,10 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       intensity.element),
     h("section", { class: "section", "aria-label": "Face" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Face" }), faceHelp,
-        h("span", { class: "block-actions" }, symmetric.element, more, resetAll), updating.element, updatingText),
-      controlSearch.element, waiting, noControls, groupsHost));
+        h("span", { class: "block-actions" }, more, resetAll), updating.element, updatingText),
+      symmetric.element, controlSearch.element, waiting, noControls, groupsHost));
 
-  let entries: Entry[] = [], groups: { id: string; title: string; section: GroupSection; entries: Entry[]; keys: string[]; mirror?: HTMLButtonElement }[] = [], built = "";
+  let entries: Entry[] = [], groups: { id: string; title: string; section: GroupSection; entries: Entry[]; keys: string[]; mirror?: HTMLButtonElement; sides?: HTMLElement }[] = [], built = "";
   let preview: FacialPreviewSnapshot | undefined, startPoints = new Map<string, FacialStartPoint>(), current = EMPTY, availability: Availability = { disabled: false };
   const part = (): ExpressionPart => (ctx.facade.view()?.part as ExpressionPart | undefined) ?? EMPTY;
 
@@ -371,6 +371,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       if (group.mirror) {
         const on = group.keys.every(key => current.links[key] ?? true);
         group.mirror.setAttribute("aria-pressed", String(on));
+        group.sides?.classList.toggle("mirrored", on);
         group.mirror.title = on ? `Mirror sides: ${group.title} — each pair follows the other. Press to set each side on its own.`
           : `Mirror sides: ${group.title} is off — each side is set on its own. Press to mirror them (the next change sets both).`;
         applyCapability(group.mirror, availability.disabled ? { available: false, reason: availability.reason } : { available: true });
@@ -421,11 +422,12 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       const mirror = keys.length ? iconButton({ label: `Mirror sides: ${group.label}`, icon: "mirror", small: true, mode: true, pressed: true,
         onClick: () => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(keys.map(key => [key, mirror!.getAttribute("aria-pressed") !== "true"])) } as ExpressionAction) })
         : undefined;
+      const sides = mirror ? h("span", { class: "expr-sides mirrored", text: "Separate" }) : undefined;
       const section = new GroupSection({ title: group.label, key: `expressions.${group.id}`, expanded: group.id === "mouth" || group.id === "brows",
-        className: "expr-group", level: "subsection", actions: mirror ? [mirror] : [], onReset: () => ctx.dispatch({ kind: "expression.reset", scope: "group", target: group.id } as ExpressionAction) });
+        className: "expr-group", level: "subsection", actions: mirror && sides ? [sides, mirror] : [], onReset: () => ctx.dispatch({ kind: "expression.reset", scope: "group", target: group.id } as ExpressionAction) });
       section.element.dataset.group = group.id;
       section.body.append(...own.map(entry => entry.element));
-      return { id: group.id, title: group.label, section, entries: own, keys, mirror };
+      return { id: group.id, title: group.label, section, entries: own, keys, mirror, sides };
     }).filter(group => group.entries.length);
     groupsHost.replaceChildren(...groups.map(group => group.section.element));
   }

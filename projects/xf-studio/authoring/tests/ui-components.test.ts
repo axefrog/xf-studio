@@ -671,11 +671,14 @@ test("choice list with swatches: the swatch card shows a choice's colour and nam
 test("switch: a mixed state (some of what it covers is on) reads mixed, shows no check, and a press turns it fully on", async () => {
   const { Toggle } = await lib();
   const changes: boolean[] = [];
-  const toggle = new Toggle({ label: "Symmetric", onChange: on => changes.push(on) });
+  const toggle = new Toggle({ label: "Symmetric", mixedLabel: "Symmetric · some regions", onChange: on => changes.push(on) });
+  const label = toggle.element.querySelector<HTMLElement>(".toggle-label")!;
   toggle.update(false, { mixed: true });
-  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked")]).toEqual([true, false, "checkbox", "mixed"]);
+  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked"), label.textContent])
+    .toEqual([true, false, "checkbox", "mixed", "Symmetric · some regions"]);
   toggle.update(true);
-  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked")]).toEqual([false, true, "switch", null]);
+  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked"), label.textContent])
+    .toEqual([false, true, "switch", null, "Symmetric"]);
 });
 
 test("scrub slider: rests at the middle, previews while moved, applies on release away from it, cancels at the middle, on Escape and in the bleed area", async () => {
