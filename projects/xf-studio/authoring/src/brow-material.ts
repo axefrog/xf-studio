@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { decodeSrgbByte, nearestVertices, sampleAtVertices } from "./decal-underlay";
 import { imageTexels, type SkinImage, type SkinTexels } from "./skin-material";
+import { declarePass, SCATTER_INPUT_OUTPUTS } from "./platform/api/scene";
 
 /**
  * Adapter for `mesh_decal_double_diffuse.mt` (the brows' post-G-buffer decal), driven by the material's
@@ -42,6 +43,18 @@ export function browCoverage(primaryAlpha: number, secondaryAlpha: number, secon
   const combined = p + (1 - p) * s * secondaryIntensity;
   return combined * combined;
 }
+
+/**
+ * The brow's scatter input (research/materials/shader-skin.md §11.3): √colour at its coverage over the skin's √albedo, and nothing
+ * else (alpha 0 keeps the skin's irradiance and metalness under it; its standard light has no skin irradiance to write).
+ */
+const BROW_SCATTER_OUTPUT = /* glsl */`
+#include <dithering_fragment>
+#ifdef XFS_SCATTER_INPUT
+       gl_FragColor = vec4( 0.0 );
+       xfsScatterOut1 = vec4( sqrt( clamp( xfsBrowTrue, 0.0, 1.0 ) ), xfsBrowTrueAlpha );
+       xfsScatterOut2 = vec4( 0.0 );
+#endif`;
 
 /**
  * The 2.31 brow is a post-G-buffer decal: it writes sqrt(colour) with SrcAlpha
@@ -104,6 +117,9 @@ varying vec3 vXfsUnderlay;
          browSecondaryColor * (browS * (1.0 - browPrimary.a) * browGradientParams.w);
        float browCombined = browP + (1.0 - browP) * browS * browGradientParams.w;
        float browAlpha = browCombined * browCombined;
+       // The decal as the G-buffer blends it, before the forward solve (the scatter input's colour write).
+       vec3 xfsBrowTrue = browColor;
+       float xfsBrowTrueAlpha = browAlpha;
 #ifdef XFS_GBUFFER_DECAL
        {
          vec3 underlay = max(vXfsUnderlay, vec3(0.0));
@@ -122,9 +138,12 @@ varying vec3 vXfsUnderlay;
       "#include <alphamap_fragment>",
       `diffuseColor.a *= browAlpha;`,
     ).replace("#include <common>", `#include <common>
-vec3 a_pow2(vec3 v) { return v * v; }`);
+vec3 a_pow2(vec3 v) { return v * v; }
+${SCATTER_INPUT_OUTPUTS}`).replace("#include <dithering_fragment>", BROW_SCATTER_OUTPUT);
   };
-  material.customProgramCacheKey = () => `xfs-double-diffuse-decal-v3${options.gbufferBlend ? "-gbuffer" : ""}`;
+  material.customProgramCacheKey = () => `xfs-double-diffuse-decal-v4${options.gbufferBlend ? "-gbuffer" : ""}`;
+  // A post-G-buffer decal over the skin: in the scatter's input it changes only the albedo the scattered light lands on.
+  declarePass(material, { role: "decal" });
   return material;
 }
 

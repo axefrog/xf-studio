@@ -290,8 +290,10 @@ export function spotLightSpec(l: CreatorLight, options: Pick<CreatorLightingOpti
   });
 }
 
-export function creatorRigSpecs(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone"> & { shadows?: boolean; yawOffset?: number }): SpotLightSpec[] {
-  const head = CREATOR_HEAD_SLOT[sex], casters = new Set(options.shadows ? creatorShadowCasters(sex, options) : []);
+export function creatorRigSpecs(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone"> & { shadows?: boolean; yawOffset?: number;
+  /** A trial set of casting lights by name (developer evidence), in place of the budgeted flagged ones. */
+  casters?: readonly string[] }): SpotLightSpec[] {
+  const head = CREATOR_HEAD_SLOT[sex], casters = new Set(options.shadows ? options.casters ?? creatorShadowCasters(sex, options) : []);
   const yaw = options.yawOffset ?? CREATOR_CALIBRATION.yawOffset;
   return CREATOR_RIGS[sex].map(l => spotLightSpec(yaw ? rotateLight(l, yaw) : l, options, head, casters.has(l.name)));
 }
