@@ -160,7 +160,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
       const details = frame.status.assets.characterDetails;
       const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
       const line = state.phase !== "ready" || !details ? ""
-        : details.phase === "preparing" ? "Preparing your V's skin, face details, eyes, brows, lashes, hair, piercings and body…"
+        : details.phase === "preparing" ? "Preparing your V's details…"
         : details.phase === "failed" ? (details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message)
         : details.need ? details.updateError ?? ""
         : unavailable?.message ?? "";

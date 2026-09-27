@@ -2,7 +2,7 @@ import { chordsLabel, keyBindingById, shortcutLabel } from "../../../input-bindi
 import { applyCapability, button, emptyState, note } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
 import { icon } from "../../../studio-ui/icons";
-import { EmptyState, iconButton } from "../../../studio-ui/components";
+import { EmptyState, helpTip, iconButton } from "../../../studio-ui/components";
 import { ItemList } from "../../../studio-ui/item-list";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import { addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } from "./actions";
@@ -49,7 +49,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       }
       setAttr(eye, "aria-pressed", String(layer.enabled));
       setAttr(eye, "aria-label", `${layer.enabled ? "Hide" : "Show"} ${layer.name}`);
-      eye.title = layer.enabled ? "Shown. A hidden layer is kept, but left out of your mod files." : "Hidden: left out of your mod files. Click to show it.";
+      eye.title = layer.enabled ? "Hide layer (a hidden layer isn't built into your mod)" : "Hidden: not built into your mod. Click to show it.";
       eye.tabIndex = selected ? 0 : -1;
       const swatch = row.lead.querySelector<HTMLElement>(".swatch")!;
       swatch.style.setProperty("--swatch", layer.color);
@@ -74,7 +74,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
     if (ctx.dispatch({ kind: "layer.edit", command: { kind: "remove", id } }))
       ctx.feedback.toast("info", "Layers", `Removed “${name}”.`, [ctx.undoAction()]);
   }
-  const empty = emptyState("No layers in this preset", "Layers stack like makeup: the top of the list is applied last and appears in front.",
+  const empty = emptyState("No layers in this preset", "Layers stack like makeup: the top one sits in front.",
     button({ label: "Add layer", icon: "plus", variant: "primary", onClick: () => ctx.dispatch(addLayer()) }));
   const noPreset = emptyState("No preset selected", "Layers belong to a preset. Add or select one to edit its layers.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => ctx.platform({ kind: "preset.edit", command: { kind: "add" } }) }));
@@ -83,9 +83,11 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       void ctx.links.open("project-releases").then(result => { if (!result.ok) ctx.feedback.toast("info", "Layers", result.message); });
     } })] });
   const element = h("div", { class: "panel-content" },
-    h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
-    noPreset, newer.element, empty, list.element,
-    note(`Top = front. Drag the grip or use ${chordsLabel(keyBindingById("rows.reorder"))} to reorder · ${shortcutLabel("rows.rename")} renames · ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`));
+    // How the stack works and its keys are the heading's help tip, not a permanent footer (ui-copy-and-layout-review.md §3.3).
+    h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, "Stack ", count),
+      helpTip("the layer stack", `The top layer is in front. Drag a row's grip or press ${chordsLabel(keyBindingById("rows.reorder"))} to reorder; ${shortcutLabel("rows.rename")} renames and ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`)),
+      h("div", { class: "row gap-xs" }, add, duplicate, more)),
+    noPreset, newer.element, empty, list.element);
   ctx.anchors.register("layers.add", add);
   ctx.anchors.register("layers.list", list.element);
   return {

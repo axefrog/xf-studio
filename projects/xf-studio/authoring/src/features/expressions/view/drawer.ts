@@ -9,6 +9,8 @@
  * the facial preview's snapshot and its part presets.
  */
 import { applyCapability, button, note, Slider } from "../../../studio-ui/controls";
+import { helpTip, setHelp } from "../../../studio-ui/components";
+import { COMING_SOON } from "../../../studio-ui/coming-soon";
 import { ItemList } from "../../../studio-ui/item-list";
 import { h, setAttr, setText, setValue } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -122,10 +124,21 @@ function pairEntry(ctx: Ctx, left: FacialControl, right: FacialControl): Entry {
     } };
 }
 
+/** What the live face preview is, in the status line's help tip. */
+const PREVIEW_HELP = ["Your expression, solved with the game's own face rig on your V.", "Not yet compared with the game's photo mode."];
+
 export function expressionDrawer(ctx: Ctx): PanelController {
   const status = h("p", { class: "note info expr-status", role: "status", "aria-live": "polite" });
   const next = button({ label: "", small: true, onClick: () => runNext() });
-  const statusLine = h("div", { class: "expr-status-line" }, status, next);
+  // What the preview is (and how fast it answers) is the status line's help tip, not a footnote (ui-copy-and-layout-review.md §3.17).
+  const previewTip = helpTip("the live face preview", PREVIEW_HELP);
+  const statusLine = h("div", { class: "expr-status-line" }, status, previewTip, next);
+  // Decided but not built yet (coming-soon.ts): face handles and sculpting (phase 2 and later), and export to the game (phase 3).
+  const upcoming = (["expressionHandles", "expressionSculpt", "expressionExport"] as const).map(id => {
+    const entry = COMING_SOON[id], control = button({ label: entry.label, small: true, variant: "quiet", onClick: () => {} });
+    applyCapability(control, { available: false, reason: entry.reason });
+    return control;
+  });
   // Start from: rest, your saved expressions, then each provider's installed ones.
   const startFrom = h("select", { class: "field expr-start", "aria-label": "Start from" });
   startFrom.addEventListener("change", () => { const value = startFrom.value; startFrom.value = ""; if (value) begin(value); });
@@ -152,13 +165,13 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   const groupsHost = h("div", { class: "expr-groups" });
   const waiting = note("", "muted");
   const presetsNote = note("", "muted");
-  const footnote = h("p", { class: "note muted small expr-footnote" });
   const element = h("div", { class: "panel-body expr-drawer" },
     statusLine,
     h("div", { class: "expr-bar" }, h("span", { class: "control-label", text: "Start from" }), startFrom),
     h("div", { class: "expr-bar" }, presetName, save), presetList.element, presetsNote,
     h("div", { class: "expr-bar" }, search.element), h("div", { class: "expr-bar expr-tools" }, mirrorLeft, mirrorRight, resetAll),
-    waiting, groupsHost, footnote);
+    h("div", { class: "row wrap gap-s expr-upcoming" }, ...upcoming),
+    waiting, groupsHost);
   let entries: Entry[] = [], groups: { id: string; section: ReturnType<typeof groupSection>; entries: Entry[] }[] = [], built = "";
   let preview: FacialPreviewSnapshot | undefined, startPoints = new Map<string, FacialStartPoint>();
 
@@ -285,8 +298,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
         group.section.setCount(set);
       }
       const latency = preview?.latency;
-      setText(footnote, `A solved preview of the game's facial rig on your V; not yet compared with the game in photo mode.${latency
-        ? ` Updates in about ${Math.round(latency.median)} ms.` : ""}`);
+      setHelp(previewTip, latency ? [...PREVIEW_HELP, `It updates in about ${Math.round(latency.median)} ms.`] : PREVIEW_HELP);
     },
   };
 }

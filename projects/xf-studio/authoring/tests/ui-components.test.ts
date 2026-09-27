@@ -340,10 +340,11 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   folder.update({ chosen: null, detected: "%USERPROFILE%\Saves" });
   const el = folder.element as unknown as LightElement;
   const using = el.querySelector(".folder-using")!, note = el.querySelector(".folder-note")!, typed = el.querySelector(".folder-typed")!;
-  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", false, true]);
+  // The note line takes no room until the text box opens (then it is reserved, so a refusal of what was typed moves nothing).
+  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", true, true]);
   const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose another folder…")!;
   choose.click(); await Promise.resolve();
-  expect(typed.hidden).toBe(false);
+  expect([typed.hidden, note.hidden]).toEqual([false, false]);
   folder.input.value = "D:\Elsewhere"; key(folder.input, "Enter");
   await new Promise(resolve => setTimeout(resolve, 0));
   expect([note.textContent, note.classList.contains("empty"), typed.hidden]).toEqual(["That folder has no saves in it.", false, false]);
@@ -376,6 +377,64 @@ test("folder setting: an action that fails outright is a plain refusal on the no
       .toEqual(["Couldn't change the folder. Try again.", false, false, "D:\\Games\\Cyberpunk 2077", null]);
     expect(rejections).toEqual([]);
   } finally { process.off("unhandledRejection", onRejection); }
+});
+
+test("folder setting: several found folders are all shown as choices with where they were found; pressing one saves it; an optional folder can be cleared", async () => {
+  const { FolderSetting } = await lib();
+  const selected: string[] = []; let cleared = 0;
+  const folder = new FolderSetting({ label: "Cyberpunk 2077 folder", onChoose: async () => ({ ok: true as const }),
+    onSelect: async path => { selected.push(path); return { ok: true as const }; }, onClear: async () => { cleared++; return { ok: true as const }; } });
+  const found = [{ path: "D:\Steam\Cyberpunk 2077", source: "Steam" }, { path: "E:\GOG\Cyberpunk 2077", source: "GOG, Mod Organizer 2" }];
+  folder.update({ chosen: "E:\GOG\Cyberpunk 2077", found });
+  const el = folder.element as unknown as LightElement;
+  const choices = () => Array.from(el.querySelectorAll(".folder-choice"));
+  expect(choices().map(choice => [choice.querySelector(".folder-choice-path")!.textContent, choice.querySelector(".folder-choice-source")!.textContent,
+    choice.getAttribute("aria-pressed")])).toEqual([["D:\Steam\Cyberpunk 2077", "Steam", "false"], ["E:\GOG\Cyberpunk 2077", "GOG, Mod Organizer 2", "true"]]);
+  // The pressed choice says what is in use, so the "Using" line is quiet.
+  expect(el.querySelector(".folder-using")!.hidden).toBe(true);
+  choices()[1]!.click(); await Promise.resolve();
+  expect(selected).toEqual([]);
+  choices()[0]!.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(selected).toEqual(["D:\Steam\Cyberpunk 2077"]);
+  // A chosen folder that isn't among those found is listed first.
+  folder.update({ chosen: "F:\Elsewhere", found });
+  expect(choices().map(choice => choice.querySelector(".folder-choice-path")!.textContent)).toEqual(["F:\Elsewhere", "D:\Steam\Cyberpunk 2077", "E:\GOG\Cyberpunk 2077"]);
+  const clear = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Don't use a folder")!;
+  expect(clear.hidden).toBe(false);
+  clear.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(cleared).toBe(1);
+  folder.update({ chosen: null, found: [] });
+  expect([clear.hidden, el.querySelector(".folder-using")!.textContent]).toEqual([true, "Not chosen yet"]);
+});
+
+test("choice list: every choice shown in the Character look; arrows move focus without choosing, a click chooses; unavailable choices keep their reason; tiles carry an accessible name", async () => {
+  const { ChoiceList } = await lib();
+  const chosen: string[] = [];
+  const list = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => chosen.push(value),
+    options: [{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "inventory", label: "Inventory" }] });
+  const el = list.element as unknown as LightElement;
+  const items = () => Array.from(el.querySelectorAll(".choice"));
+  expect(el.querySelector(".choices")!.classList.contains("chips")).toBe(true);
+  list.update("closeup");
+  expect(items().map(item => [item.getAttribute("role"), item.getAttribute("aria-selected"), item.tabIndex])).toEqual([["option", "false", -1], ["option", "true", 0], ["option", "false", -1]]);
+  // An unchanged list rebuilds nothing.
+  const before = items()[0];
+  list.setOptions([{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "inventory", label: "Inventory" }]);
+  expect(items()[0]).toBe(before);
+  items()[1]!.focus();
+  key(el.querySelector(".choices") as unknown as HTMLElement, "ArrowRight");
+  expect(chosen).toEqual([]);
+  items()[2]!.click();
+  expect(chosen).toEqual(["inventory"]);
+  list.update("still", value => value === "inventory" ? { available: false, reason: "That idle isn't prepared." } : { available: true });
+  expect([items()[2]!.getAttribute("aria-disabled"), items()[2]!.getAttribute("data-reason")]).toEqual(["true", "That idle isn't prepared."]);
+  items()[2]!.click();
+  expect(chosen).toEqual(["inventory"]);
+  list.update("still", undefined, { disabled: true, reason: "Your V's motion appears once the 3D preview is ready." });
+  expect(el.querySelector(".control-note")!.textContent).toBe("Your V's motion appears once the 3D preview is ready.");
+  const tiles = new ChoiceList<string>({ label: "Eye shape", layout: "tiles", onSelect: () => {}, options: [{ value: "0", label: "1", name: "Eye shape 1" }] });
+  const tile = (tiles.element as unknown as LightElement).querySelector(".choice")!;
+  expect([tile.getAttribute("aria-label"), tile.textContent]).toEqual(["Eye shape 1", "1"]);
 });
 
 test("bipolar slider: the readout names the direction, drags snap to the centre, Enter types an exact value, Delete returns to the centre, mixed until edited", async () => {

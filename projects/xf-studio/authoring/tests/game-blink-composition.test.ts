@@ -6,7 +6,7 @@ import { IdleAnimation } from "../src/idle-animation";
 import { MotionActions, type MotionPort } from "../src/motion-actions";
 import { composePreviewMotion } from "../src/preview-motion";
 import { createRenderScheduler } from "../src/render-scheduler";
-import { blinkNoteLine } from "../src/studio-ui/panels/preview";
+import { blinkHelp, blinkNoteLine } from "../src/studio-ui/panels/preview";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 /**
@@ -299,7 +299,9 @@ test("a saved Closure and Play blink come back on reload; the Motion note says w
   expect([blink.closure, blink.playing]).toEqual([.7, true]);
   playing.dispatch({ kind: "motion.playBlink", playing: false });
   expect(world(head.bones[0]!).distanceTo(at70)).toBeLessThan(1e-12); // stopping returns to the saved closure
-  expect(blinkNoteLine(playing.snapshot())).toContain("repeated every 2.45 s (a Studio choice: the idle's average blink spacing)");
+  // What the blink is lives in the Blink heading's help tip; the line under it is only for why it isn't available.
+  expect(blinkHelp(playing.snapshot()).join(" ")).toContain("Play blink plays it at the game's speed, every 2.45 s.");
+  expect(blinkNoteLine(playing.snapshot())).toBe("");
   // Not prepared: the reason comes from one place, whatever the port left out.
   const missing = new MotionActions(freshWorkspace().preview, { ...port, blink: { available: false } });
   expect(missing.snapshot().blinkError).toBe(GAME_BLINK_MISSING);

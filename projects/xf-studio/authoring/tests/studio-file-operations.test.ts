@@ -236,7 +236,7 @@ test("Build explains the missing developer setup everywhere Build is offered, wh
   expect(await f.files.execute({ kind: "package.build" })).toMatchObject({ ok: false, message: BUILD_NEEDS_SETUP });
   expect(f.packageInput()).toBeUndefined();
   readiness = "loading";
-  expect(f.files.capability({ kind: "package.build" }).reason).toBe("Build setup is still loading.");
+  expect(f.files.capability({ kind: "package.build" }).reason).toBe("Your settings are still loading.");
   readiness = "damaged";
   expect(f.files.capability({ kind: "package.build" }).reason).toContain("Restore the previous copy");
   readiness = "ready";

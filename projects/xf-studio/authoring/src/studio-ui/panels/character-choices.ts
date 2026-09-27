@@ -19,6 +19,8 @@
  *   the colour the host derived from the winning resource (a hair, brow or lash profile as a small root-to-tip gradient), else the
  *   definition's own colour. Swatches arriving later update the items in place; a choice still without one keeps its place, marked as
  *   waiting. The label stays the item's accessible name and tooltip.
+ * - **Every choice shows** (no "Show more"): the row loads its pages one after another and appends them; the V's choice is scrolled into
+ *   view when the row opens, and the maker group holding it opens.
  * - **Grouped by who made them** (cc-panel.ts `groups`, cc-controls backlog 4a): when a row's choices come from more than one maker, each
  *   maker's choices sit under a small heading (the base game first, then XF Studio, then every author or mod by name), in the creator's
  *   order within it; Off stays above the groups. A heading is a button that folds its group away and back (Enter, Space or a click;
@@ -32,6 +34,7 @@ import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTH
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 import { expander, expanderLabel, setExpanded } from "../expander";
+import { choiceItem } from "../components/choice-list";
 
 export type ChoiceListInput = {
   /** The option shown (its ID) and the search the list is limited to: another of either rebuilds the list. */
@@ -107,11 +110,13 @@ export class ChoiceList {
   /** Folded groups, by option and group label (kept while the panel is open). */
   private readonly folded = new Set<string>();
   private selected: number | null = null;
+  /** The V's choice is still to be brought into view (a row just opened, or another search). */
+  private reveal = false;
   /** The item that takes Tab focus (roving tabindex). */
   private active: HTMLButtonElement | null = null;
 
   constructor(id: string, private readonly onChoose: (choice: CcPanelChoice) => void, private readonly onHint: (choice: CcPanelChoice) => void = () => {}) {
-    this.list = h("div", { class: "cc-choices", id, role: "listbox" });
+    this.list = h("div", { class: "choices cc-choices", id, role: "listbox" });
     this.status = h("p", { class: "note cc-choices-status", hidden: true });
     this.element = h("div", { class: "cc-choice-list" }, this.list, this.status);
     this.list.addEventListener("keydown", event => this.key(event));
@@ -133,10 +138,26 @@ export class ChoiceList {
       this.paintSwatch(entry, input.swatches);
     }
     this.markChosen();
+    this.revealChosen();
     const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
     setText(this.status, line);
     this.status.hidden = !line;
     this.status.classList.toggle("warning", !!input.error);
+  }
+
+  /**
+   * The V's choice is never hidden (show the options, don't hide them): once it has loaded after a row opens, the maker group holding it
+   * opens (even one folded earlier), and it is scrolled into view.
+   */
+  /** Bring the V's choice into view at the next update where it is listed (the row just opened). */
+  revealChosenNext() { this.reveal = true; }
+  private revealChosen() {
+    if (!this.reveal || this.selected === null) return;
+    const entry = this.items.find(item => item.choice.position === this.selected);
+    if (!entry) return;
+    this.reveal = false;
+    if (entry.group && !entry.group.open) this.fold(entry.group, false);
+    if (typeof entry.element.scrollIntoView === "function" && entry.element.isConnected) entry.element.scrollIntoView({ block: "nearest" });
   }
 
   /** Another option or search: new items, and focus back on the same choice when it is still listed. */
@@ -145,6 +166,7 @@ export class ChoiceList {
     this.list.replaceChildren();
     this.items = []; this.byPosition.clear(); this.active = null; this.selected = null;
     this.shown = { option: input.option, query: input.query, grouped: groupedKey(input) };
+    this.reveal = true;
     this.groups = input.groups ? new Map() : null;
     this.pooled = new Set(input.groups?.pooled ?? []);
     this.order = input.groups ? compareGroups(input.groups.list) : (a, b) => a - b;
@@ -271,10 +293,11 @@ export class ChoiceList {
     const from = choice.mod >= 0 ? `From ${input.mods[choice.mod] ?? "a mod"}` : "From the game";
     // In a colour grid every choice but Off is a narrow swatch; its label is the accessible name and tooltip.
     const swatch = input.grid && !choice.off ? h("span", { class: "swatch", "aria-hidden": "true" }) : null;
-    const item = h("button", { class: `cc-choice${input.grid ? " swatch-choice" : ""}${choice.off ? " off" : ""}`, type: "button", role: "option",
-      "aria-selected": String(choice.position === input.selected), tabindex: "-1", title: `${choice.off ? "Off" : choice.label} · ${from}`,
-      "aria-label": choice.off ? "Off" : choice.label, "aria-description": from, "data-position": String(choice.position) },
-      swatch, swatch ? null : h("span", { class: "cc-choice-label", text: choice.off ? "Off" : choice.label }));
+    // One look with every choice list (the library's `choiceItem`); the creator's own marks (prepared ahead) ride on `cc-choice`.
+    const label = choice.off ? "Off" : choice.label;
+    const item = choiceItem({ label, selected: choice.position === input.selected, title: `${label} · ${from}`, description: from, off: choice.off,
+      swatch: input.grid, className: "cc-choice", content: swatch ?? h("span", { class: "choice-label cc-choice-label", text: label }) });
+    item.dataset.position = String(choice.position);
     // The choice shows as chosen at once, before anything is prepared; the next update puts back the V's own if the change was refused.
     item.addEventListener("click", () => { this.rove(item); this.select(choice.position); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });

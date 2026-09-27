@@ -82,8 +82,8 @@ export interface FinishExportRule {
   readonly refusal?: string;
 }
 
-const FLAT_NOTE = "Flat colour with provisional roughness and metalness.";
-const FLAT_SUMMARY = "Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet.";
+const FLAT_NOTE = "Built as a flat colour. Not yet checked in game.";
+const FLAT_SUMMARY = "Built into your mod as a flat colour. Not yet checked in game.";
 /**
  * The single per-finish export table: game-optics support, route, surface and user-facing notes. The
  * catalogue, recipe validation, preview surfaces and compiler derive from it. The independent verifier
@@ -97,19 +97,19 @@ export const FINISH_EXPORT = {
   // One G-buffer lobe: a low-roughness dielectric. The engine clamps roughness at 0.04 and
   // fixes dielectric F0 at 0.04, so gloss can only sharpen the skin's own reflection.
   glossy: { gameOptics: true, route: "flat", experimental: true, surface: { roughness: .12, metalness: 0 },
-    layerNote: "Experimental single-lobe gloss: one smooth reflection, no separate clear coat. Needs in-game confirmation.",
-    summary: "Experimental: exports as one smooth reflection (the game has no separate clear coat). Not yet tested in game.",
+    layerNote: "Built as one smooth reflection (the game has no separate clear coat). Not yet checked in game.",
+    summary: "Experimental: built as one smooth reflection. Not yet checked in game.",
     earlierModel: "a separate clear coat" },
   shimmer: { gameOptics: true, route: "faceted", experimental: true,
-    layerNote: "Experimental facet normals over the skin normal; fine facets merge into a broader sheen at distance. Needs in-game confirmation.",
-    summary: "Experimental: exports as fine facet normals that merge into a sheen at distance. Not yet tested in game.",
+    layerNote: "Built as fine facets that merge into a sheen at a distance. Not yet checked in game.",
+    summary: "Experimental: built as fine facets that merge into a sheen at a distance. Not yet checked in game.",
     earlierModel: "browser-only facet filtering" },
   iridescent: { gameOptics: true, route: "fresnel", experimental: true,
-    layerNote: "Experimental two-tone Fresnel tint: one shift colour added toward grazing angles. Needs in-game confirmation.",
-    summary: "Experimental: exports as a two-tone Fresnel tint when the whole preset is one colour-shift pigment. Not yet tested in game.",
+    layerNote: "Built as one shift tint toward the lid's edges. Not yet checked in game.",
+    summary: "Experimental: built as one shift tint when the whole preset is one colour-shift pigment. Not yet checked in game.",
     earlierModel: "a fixed thin-film study with no chosen shift colour" },
   glitter: { gameOptics: false, route: null, experimental: false, layerNote: "",
-    summary: "Preview only for now. Check and Build leave out layers with this finish and tell you which.",
+    summary: "Not built into mods yet: Check and Build leave these layers out and say so.",
     refusal: "No game material can show individual glitter flakes yet, so Glitter stays preview-only." },
 } as const satisfies Record<FinishId, FinishExportRule>;
 
@@ -123,7 +123,7 @@ export const hasGameOptics = (finish: Finish): boolean => finishExportRule(finis
 const gameModel = (layer: Pick<Layer, "optics">): layer is { optics: GameOptics } => layer.optics?.model === "game-matched-1";
 const capitalised = (finish: Finish) => { const name = finishLabel(finish); return name[0].toUpperCase() + name.slice(1); };
 const earlierModel = (finish: Finish, what: string) =>
-  `This layer uses the earlier ${capitalised(finish)} preview (${what}), which the game cannot draw. Switch it to the game-matched model in the Finish panel to include it.`;
+  `This layer uses the earlier ${capitalised(finish)} preview (${what}), which the game can't draw. Choose Use game-matched model in Colour & finish to include it.`;
 
 /** Export status of one layer's finish, independent of the rest of its preset. */
 export function layerExport(layer: Pick<Layer, "finish" | "optics" | "flakes">): LayerExport {
@@ -138,7 +138,7 @@ export function layerExport(layer: Pick<Layer, "finish" | "optics" | "flakes">):
 
 const active = (layer: Pick<Layer, "enabled" | "opacity">) => layer.enabled && layer.opacity > 0;
 const fresnelKey = (layer: Layer) => JSON.stringify([layer.color.toLowerCase(), layer.optics?.shift?.color.toLowerCase(), layer.optics?.shift?.strength]);
-export const FRESNEL_PRESET_RULE = "Colour-shifting exports only when every other layer the game can draw in this preset is Colour-shifting with the same colour, shift colour and strength: the game adds one shift tint to the whole preset.";
+export const FRESNEL_PRESET_RULE = "Built only when every drawn layer of this preset is Colour-shifting with the same colours and strength: the game adds one tint to the whole preset.";
 
 export type PresetExportPlan = {
   route: ExportRoute;
