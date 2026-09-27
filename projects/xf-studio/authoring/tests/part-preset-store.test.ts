@@ -182,3 +182,34 @@ test("a set exports as a package-only collection named for the mod, members in o
   expect(setCollection({ ...set, table: "sharing", modName: "Mine" }, presets)).toMatchObject({ presetSet: { table: "sharing" },
     packagePlan: { products: [{ name: "Mine" }] } });
 });
+
+test("a set's Check and Build go through the package route with its package-only collection; reveal waits for a build", async () => {
+  const { PartPresetService } = await import("../src/part-presets");
+  const presetId = "00000000-0000-4000-8000-000000000001", setId = "00000000-0000-4000-8000-0000000000aa";
+  const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
+  const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [] as string[], updatedAt: "now" }];
+  const sent: unknown[] = [], revealed: string[] = [];
+  const service = new PartPresetService({
+    list: async () => [preset], save: async () => { throw Error("unused"); }, rename: async () => { throw Error("unused"); }, delete: async id => ({ id }),
+    listSets: async () => structuredClone(sets), createSet: async () => { throw Error("unused"); }, deleteSet: async id => ({ id }),
+    updateSet: async (id, input) => { Object.assign(sets[0]!, input, { revision: sets[0]!.revision + 1 }); return structuredClone(sets[0]!); },
+  }, {
+    package: async (action, collection) => { sent.push({ action, collection }); return { schema: action === "build" ? "xfs/package-build-2" : "xfs/package-check-2",
+      products: [{ package: "C:/dist/xfs_c00-1", features: [] }], omissions: [], originalPresetCount: 1 } as never; },
+    reveal: async id => { revealed.push(id); return { ok: true }; },
+  });
+  service.snapshot("expressions"); service.sets("expressions");
+  await Bun.sleep(0);
+  expect(service.capability({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toMatchObject({ available: false, code: "needs_input" });
+  expect(service.capability({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toMatchObject({ available: false, code: "missing_target" });
+  expect(await service.execute({ kind: "partPresetSet.setMembers", feature: "expressions", id: setId, members: [presetId], revision: 1 })).toMatchObject({ ok: true });
+  expect(service.capability({ kind: "partPresetSet.setExport", feature: "expressions", id: setId, revision: 2, modName: "XF: bad" }))
+    .toMatchObject({ available: false, code: "invalid_value" });
+  expect(await service.execute({ kind: "partPresetSet.build", feature: "expressions", id: setId })).toEqual({ ok: true });
+  expect(sent).toHaveLength(1);
+  expect((sent[0] as { collection: { presetSet: unknown; presets: { id: string }[] } }).collection).toMatchObject({ presetSet: { table: "installed" },
+    presets: [{ id: presetId }] });
+  expect(service.exportState().results[setId]).toMatchObject({ kind: "build", revision: 2, missing: 0 });
+  expect(await service.execute({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toEqual({ ok: true });
+  expect(revealed).toEqual(["xfs_c00-1"]);
+});
