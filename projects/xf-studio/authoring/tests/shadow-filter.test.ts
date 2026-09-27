@@ -42,3 +42,19 @@ test("the shadow fingerprint ignores the camera and changes with a caster's pose
   mesh.castShadow = false;
   expect(shadowState(scene)).not.toBe(placed);
 });
+
+test("the shadow fingerprint tells opposite yaws, moves along different axes and bone scales apart (PREV-159)", () => {
+  const scene = new THREE.Scene(), light = new THREE.DirectionalLight();
+  light.castShadow = true; scene.add(light, light.target);
+  const bone = new THREE.Bone(), mesh = new THREE.SkinnedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  mesh.add(bone); mesh.bind(new THREE.Skeleton([bone]));
+  mesh.castShadow = true; scene.add(mesh);
+  const at = (set: () => void) => { mesh.rotation.set(0, 0, 0); mesh.position.set(0, 0, 0); bone.rotation.set(0, 0, 0); bone.position.set(0, 0, 0); bone.scale.set(1, 1, 1); set(); return shadowState(scene); };
+  expect(at(() => { mesh.rotation.y = 0.5; })).not.toBe(at(() => { mesh.rotation.y = -0.5; }));
+  expect(at(() => { mesh.position.x = 1; })).not.toBe(at(() => { mesh.position.z = 1; }));
+  expect(at(() => { bone.rotation.y = 0.3; })).not.toBe(at(() => { bone.rotation.y = -0.3; }));
+  expect(at(() => { bone.position.x = 0.2; })).not.toBe(at(() => { bone.position.y = 0.2; }));
+  expect(at(() => { bone.scale.set(1.2, 1, 1); })).not.toBe(at(() => {}));
+  // The same placement gives the same fingerprint.
+  expect(at(() => { mesh.rotation.y = 0.5; })).toBe(at(() => { mesh.rotation.y = 0.5; }));
+});

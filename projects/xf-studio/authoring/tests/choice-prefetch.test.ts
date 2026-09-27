@@ -12,7 +12,8 @@ import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceMa
 import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/choice-prefetch";
 import { depotHash, refFromPath } from "../src/depot-path";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
-import { clearPrepared, evictPrepared, PREPARED_FS_CONCURRENCY, preparedFsStats, preparedSize } from "../src/prepared-files";
+import { clearPrepared, evictPrepared, PREPARED_FS_CONCURRENCY, preparedBudgetFrom, preparedFsStats, preparedSize } from "../src/prepared-files";
+import { ChoicePreviewStore } from "../src/choice-preview-host";
 import { backgroundExtraction, foregroundExtraction, WolvenKitFetcher } from "../src/resolver-host";
 import { ResourceGraph, stoppableGraph } from "../src/resource-graph";
 import { app, cr2w, fixtureInstallation, mesh, meshComponent } from "./resolver-fixtures";
@@ -545,6 +546,38 @@ describe("the prepared game files", () => {
     // Lasting failure markers are tiny and kept.
     expect(readdirSync(join(roots.resolver, "json"))).toEqual(["2-a-b.json.failed"]);
     expect(readdirSync(join(roots.resolver, "native"))).toEqual([]);
+  });
+
+  test("choice preview images and sources are evicted with the budget, least recently used first, never one this session showed (PREV-157)", async () => {
+    const root = temporary();
+    const roots = { exports: join(root, "exports"), resolver: join(root, "resolver"), store: join(root, "characters"), manifests: join(root, "choices"),
+      previews: join(root, "choice-previews") };
+    const store = new ChoicePreviewStore(roots.previews);
+    const webp = (size: number) => new Uint8Array([...new TextEncoder().encode("RIFF"), 0, 0, 0, 0, ...new TextEncoder().encode("WEBP"), ...new Uint8Array(size - 12)]);
+    const key = (n: number) => n.toString(16).padStart(64, "0");
+    const age = (path: string, ms: number) => { const when = new Date(Date.now() - ms); utimesSync(path, when, when); };
+    // Two pictures an old style version left, and one this session showed.
+    mkdirSync(join(roots.previews, "images"), { recursive: true });
+    for (const n of [1, 2]) { writeFileSync(join(roots.previews, "images", `${key(n)}.webp`), webp(1000)); age(join(roots.previews, "images", `${key(n)}.webp`), n * 60_000); }
+    expect(store.putImage(key(3), webp(1000))).toBe(true);
+    age(join(roots.previews, "images", `${key(3)}.webp`), 600_000);
+    const evicted = await evictPrepared(roots, 1500);
+    expect(evicted.removed).toBe(2);
+    expect(readdirSync(join(roots.previews, "images"))).toEqual([`${key(3)}.webp`]);
+    // Without the previews root nothing of theirs is counted or removed (the size of the rest is under budget).
+    writeFileSync(join(roots.previews, "images", `${key(4)}.webp`), webp(5000));
+    expect(await evictPrepared({ ...roots, previews: undefined }, 1500)).toEqual({ removed: 0, freed: 0, bytes: 0 });
+  });
+
+  test("the budget setting is read once: off, or a positive number of gigabytes; anything else is reported and ignored (CORE-113)", () => {
+    const warned: string[] = [];
+    const warn = (message: string) => { warned.push(message); };
+    expect([preparedBudgetFrom(undefined, warn), preparedBudgetFrom("", warn), preparedBudgetFrom("off", warn), preparedBudgetFrom("OFF", warn), preparedBudgetFrom("0", warn),
+      preparedBudgetFrom("2", warn), preparedBudgetFrom("0.5", warn)]).toEqual([undefined, undefined, Infinity, Infinity, Infinity, 2 * 1024 ** 3, 0.5 * 1024 ** 3]);
+    expect(warned).toEqual([]);
+    for (const value of ["of", "-1", "8GB", "NaN", "Infinity"]) expect(preparedBudgetFrom(value, warn)).toBeUndefined();
+    expect(warned).toHaveLength(5);
+    expect(warned[0]).toContain("\"of\"");
   });
 
   test("every check of the prepared files together keeps at most a bounded number of file-system calls in flight; under budget nothing is listed (PREV-125)", async () => {

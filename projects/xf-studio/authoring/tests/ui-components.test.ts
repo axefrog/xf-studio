@@ -783,3 +783,30 @@ test("direction dial: the resize bar clamps between the minimum and what the con
   expect(dial.shownSize).toBe(420);
   expect([dial.grip.getAttribute("role"), dial.grip.getAttribute("aria-orientation")]).toEqual(["separator", "horizontal"]);
 });
+
+test("direction dial: a drag ends cleanly on a lost pointer capture or a second press, one transaction each (UI-138)", async () => {
+  const { DirectionDial } = await lib();
+  const { calls, t } = log();
+  const dial = new DirectionDial({ label: "Direction", transaction: t });
+  dial.update({ azimuth: 0, elevation: 0 }, {});
+  const target = dial.dial as unknown as LightElement & { setPointerCapture?: (id: number) => void };
+  target.setPointerCapture = () => {};
+  const pointer = (type: string, pointerId: number) => target.dispatchEvent(lightEvent(type, { button: 0, pointerId, clientX: 10, clientY: 10 }));
+  const count = (name: string) => calls.filter(call => call === name).length;
+  pointer("pointerdown", 1); pointer("pointermove", 1);
+  // The capture goes elsewhere: committed where it is; later moves change nothing.
+  pointer("lostpointercapture", 1);
+  expect([count("begin"), count("commit")]).toEqual([1, 1]);
+  const edits = calls.length;
+  pointer("pointermove", 1); pointer("pointerup", 1);
+  expect(calls.length).toBe(edits);
+  // A second press while a drag is under way ends the first before the next begins; never two open at once.
+  pointer("pointerdown", 2);
+  pointer("pointerdown", 3);
+  expect(calls.filter(call => call === "begin" || call === "commit").slice(2)).toEqual(["begin", "commit", "begin"]);
+  // The first pointer's release no longer ends the second pointer's drag; its own does.
+  pointer("pointerup", 2);
+  expect(count("commit")).toBe(2);
+  pointer("pointerup", 3);
+  expect([count("begin"), count("commit"), count("cancel")]).toEqual([3, 3, 0]);
+});

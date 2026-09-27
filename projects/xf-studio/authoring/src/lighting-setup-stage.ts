@@ -322,14 +322,21 @@ export const scatterQualityFor = (_textureSize: number): ScatterQuality => "high
 /**
  * A fingerprint of everything a shadow map depends on, so the maps are redrawn only when it changes: each visible shadow-casting
  * light (identity, placement, map size) and each visible caster (identity, placement, its bones' local poses and its morph weights).
- * The camera is not in it. Cheap: a few hundred bones per frame drawn.
+ * The camera is not in it. Every affine element of each matrix and every bone's rotation, position and scale go into a 64-bit hash
+ * (two 32-bit lanes), quantised to 1e-5, so opposite yaws or moves along different axes never collide (PREV-159). Cheap: a few hundred
+ * bones per frame drawn.
  */
 export function shadowState(scene: THREE.Scene): string {
   // Placements as this frame will draw them (the renderer updates the world matrices again; the cost is small).
   scene.updateMatrixWorld();
-  let lights = "", casters = 0, pose = 0;
+  let lights = "", casters = 0, a = 0x811c9dc5 | 0, b = 0x2545f491 | 0;
+  const word = (part: number) => {
+    a = Math.imul(a ^ part, 0x85ebca6b); a ^= a >>> 13;
+    b = Math.imul(b ^ part, 0xc2b2ae35) + 0x9e3779b9 | 0; b ^= b >>> 16;
+  };
+  const mix = (value: number) => { const q = Math.round(value * 1e5); word(q | 0); word((q / 4294967296) | 0); };
+  const affine = (e: ArrayLike<number>) => { for (let i = 0; i < 15; i++) if ((i & 3) !== 3) mix(e[i]!); };
   const seenSkeletons = new Set<THREE.Skeleton>();
-  const mix = (value: number, weight: number) => { pose = (pose + value * weight) % 1e9; };
   scene.traverseVisible(object => {
     const light = object as THREE.Light & { shadow?: THREE.LightShadow };
     if (light.isLight && light.castShadow && light.shadow) {
@@ -337,23 +344,26 @@ export function shadowState(scene: THREE.Scene): string {
       const t = (light as THREE.DirectionalLight).target?.matrixWorld.elements;
       lights += `${light.uuid}:${light.shadow.mapSize.x}:${e[12]!.toFixed(4)},${e[13]!.toFixed(4)},${e[14]!.toFixed(4)}` +
         (t ? `>${t[12]!.toFixed(4)},${t[13]!.toFixed(4)},${t[14]!.toFixed(4)};` : ";");
+      // A spot light's cone follows its rotation too.
+      affine(e);
       return;
     }
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || !mesh.castShadow) return;
     casters++;
-    const e = mesh.matrixWorld.elements;
-    for (let i = 0; i < 16; i += 5) mix(e[i]! + e[12]! + e[13]! + e[14]!, i + casters);
-    mesh.morphTargetInfluences?.forEach((w, i) => mix(w, i + 17));
+    word(mesh.id);
+    affine(mesh.matrixWorld.elements);
+    const weights = mesh.morphTargetInfluences;
+    if (weights) { word(weights.length); for (const weight of weights) mix(weight); }
     const skeleton = (mesh as THREE.SkinnedMesh).skeleton;
     if (skeleton && !seenSkeletons.has(skeleton)) {
       seenSkeletons.add(skeleton);
-      skeleton.bones.forEach((bone, i) => {
-        const q = bone.quaternion, p = bone.position;
-        mix(q.x + 2 * q.y + 3 * q.z + 5 * q.w + 7 * p.x + 11 * p.y + 13 * p.z, i + 31);
-      });
+      word(skeleton.bones.length);
+      for (const bone of skeleton.bones) {
+        const q = bone.quaternion, p = bone.position, k = bone.scale;
+        mix(q.x); mix(q.y); mix(q.z); mix(q.w); mix(p.x); mix(p.y); mix(p.z); mix(k.x); mix(k.y); mix(k.z);
+      }
     }
-    casters += mesh.id * 1e-6;
   });
-  return `${lights}|${casters}|${pose.toFixed(6)}`;
+  return `${lights}|${casters}|${(a >>> 0).toString(16)}${(b >>> 0).toString(16).padStart(8, "0")}`;
 }

@@ -22,7 +22,9 @@ export type PreviewWorkerReply =
   | { id: number; ok: true; webp?: Blob; timings?: unknown; heap?: number;
       /** A live frame, how long drawing it took on the worker, and (when measured) with the GPU waited for. */
       bitmap?: ImageBitmap; ms?: number; gpuMs?: number }
-  | { id: number; ok: false; error: string; lost?: boolean };
+  | { id: number; ok: false; error: string; lost?: boolean;
+      /** A `live` load a newer `live` or `live-stop` replaced before it finished: not a failure of that source (PREV-151). */
+      superseded?: boolean };
 
 const scope = self as unknown as { postMessage(message: PreviewWorkerReply, transfer?: Transferable[]): void; onmessage: ((event: MessageEvent<PreviewWorkerRequest>) => void) | null };
 const fetchFile = async (url: string) => {
@@ -49,7 +51,7 @@ async function liveMessage(message: Extract<PreviewWorkerRequest, { type: "live"
       dropLive();
       const serial = live.serial, drawer = ready();
       const loaded = await drawer.load(parsePreviewSource(message.source), file => `${message.fileBase}${file}?background=1`);
-      if (serial !== live.serial || drawer !== renderer) { drawer.release(loaded); throw Error("A newer turn replaced this one."); }
+      if (serial !== live.serial || drawer !== renderer) { drawer.release(loaded); throw Object.assign(Error("A newer turn replaced this one."), { superseded: true }); }
       live = { serial, loaded, present: drawer.present(loaded) };
       scope.postMessage({ id: message.id, ok: true });
       return;
@@ -60,7 +62,8 @@ async function liveMessage(message: Extract<PreviewWorkerRequest, { type: "live"
     if (message.measure) { renderer.finish(); gpuMs = performance.now() - at; }
     scope.postMessage({ id: message.id, ok: true, bitmap, ms, ...(gpuMs !== undefined ? { gpuMs } : {}) }, [bitmap]);
   } catch (error) {
-    scope.postMessage({ id: message.id, ok: false, error: (error as Error)?.message ?? String(error), lost: !!renderer?.contextLost });
+    scope.postMessage({ id: message.id, ok: false, error: (error as Error)?.message ?? String(error), lost: !!renderer?.contextLost,
+      ...((error as { superseded?: boolean })?.superseded ? { superseded: true } : {}) });
   }
 }
 scope.onmessage = event => {

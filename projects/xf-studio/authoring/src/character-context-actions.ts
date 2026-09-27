@@ -504,7 +504,8 @@ export class CharacterContextActions {
     if (!kind || !this.ports.previews || !this.ready()) return null;
     this.previewService ??= new ChoicePreviewService(this.ports.previews, () => this.publish());
     const fetch = this.fetch?.option === option ? this.fetch : null;
-    return this.previewService.update({ option, kind, request: this.detailRequest(), body: this.state.bodyGender, positions, selected, focus, spin,
+    return this.previewService.update({ option, kind, request: this.detailRequest(), body: this.state.bodyGender, catalogue: this.catalogue.panel?.identity ?? "",
+      positions, selected, focus, spin,
       ready: position => fetch?.states.get(position) === "r", busy: this.viewing !== null });
   }
   /** What choice previews have cost so far (measurement and diagnostics). */

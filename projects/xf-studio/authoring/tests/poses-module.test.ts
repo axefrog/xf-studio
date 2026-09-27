@@ -4,7 +4,7 @@
  * (revision guard, verification copy seeded from the person's), and the service (one-click apply through the motion port, favourites and
  * recent written behind, a stored pose restored or dropped, Still and the idle, framing).
  */
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -187,4 +187,68 @@ test("a stored pose plays again once the catalogue is ready, without joining Rec
   await settle();
   expect(setup.service.snapshot().catalogue).toMatchObject({ phase: "needs-setup", message: "Choose your game folder." });
   expect(setup.motion.calls).toEqual(["drop"]);
+});
+
+describe("pose preferences survive an early change and a host restart (CORE-112, CORE-114)", () => {
+  const stage: PoseStage = { bodyGender: () => null, wornTags: () => [], motion: () => null, frame: () => ({ available: true }), frameCapability: () => ({ available: true }),
+    subscribe: () => () => {} } as unknown as PoseStage;
+  const stored = withFavourite(defaultPosePreferences(), { id: "PhotoModePoses.kept", label: "Kept" }, true);
+
+  test("a change made before the document loads goes on top of the stored favourites, never over them", async () => {
+    let release!: () => void;
+    const loaded = new Promise<void>(resolve => { release = resolve; });
+    const saved: { revision: number; favourites: string[]; open: readonly string[] }[] = [];
+    const device: PoseLibraryDevice = { preferences: {
+      load: async () => { await loaded; return { schema: "xfs/pose-preferences-state-1", revision: 7, preferences: stored }; },
+      save: async (revision, preferences) => { saved.push({ revision, favourites: preferences.favourites.map(item => item.id), open: preferences.open }); return { ok: true, status: 200, data: { revision: revision + 1, preferences } }; },
+    } } as PoseLibraryDevice;
+    const service = new PoseLibraryActions(device, stage);
+    expect(await service.dispatch({ kind: "pose.openGroup", group: "idleCategory", open: true })).toEqual({ ok: true });
+    expect(saved).toEqual([]);
+    release();
+    await settle();
+    expect(saved).toEqual([{ revision: 7, favourites: ["PhotoModePoses.kept"], open: [FAVOURITES_GROUP, RECENT_GROUP, "idleCategory"] }]);
+    expect(service.snapshot().preferences.favourites.map(item => item.id)).toEqual(["PhotoModePoses.kept"]);
+  });
+
+  test("a 409 re-applies the change on the host's document and writes it once more", async () => {
+    const saved: number[] = [];
+    let hostRevision = 0;
+    const device: PoseLibraryDevice = { preferences: {
+      load: async () => ({ schema: "xfs/pose-preferences-state-1", revision: 5, preferences: defaultPosePreferences() }),
+      save: async (revision, preferences) => {
+        saved.push(revision);
+        if (revision !== hostRevision) return { ok: false, status: 409, data: { revision: hostRevision, preferences: stored } };
+        return { ok: true, status: 200, data: { revision: ++hostRevision, preferences } };
+      },
+    } } as PoseLibraryDevice;
+    const service = new PoseLibraryActions(device, stage);
+    await settle();
+    expect(await service.dispatch({ kind: "pose.openGroup", group: "idleCategory", open: true })).toEqual({ ok: true });
+    await settle();
+    expect(saved).toEqual([5, 0]);
+    expect(service.snapshot().preferences).toMatchObject({ favourites: [{ id: "PhotoModePoses.kept" }], open: [FAVOURITES_GROUP, RECENT_GROUP, "idleCategory"] });
+  });
+
+  test("the host store keeps its revision across a restart, refuses a document that isn't one, and reads a body within its limit", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "xfs-pose-prefs-"));
+    try {
+      const first = new PosePreferencesStore(dir);
+      expect(first.save(0, stored)).toMatchObject({ ok: true, state: { revision: 1 } });
+      expect(first.save(1, stored)).toMatchObject({ ok: true, state: { revision: 2 } });
+      // A new host process goes on from the file's revision: the page's next change (revision 2) is accepted.
+      const restarted = new PosePreferencesStore(dir);
+      expect(restarted.load().revision).toBe(2);
+      expect(restarted.save(2, defaultPosePreferences()).ok).toBe(true);
+      const handler = createPosePreferencesHandler(restarted);
+      const base = "http://127.0.0.1:4999/api/pose-preferences";
+      const post = (body: string) => handler(new Request(base, { method: "POST", headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1:4999" }, body }));
+      for (const preferences of [null, [], "x", { schema: "something-else", favourites: [] }]) {
+        const refused = await post(JSON.stringify({ revision: 3, preferences }));
+        expect(refused.status).toBe(400);
+      }
+      expect(restarted.load()).toMatchObject({ revision: 3, preferences: defaultPosePreferences() });
+      expect((await post(JSON.stringify({ revision: 3, preferences: stored, padding: "x".repeat(600 * 1024) }))).status).toBe(413);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });

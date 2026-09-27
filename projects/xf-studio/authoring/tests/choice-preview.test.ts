@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { applyColourMatrix, type ChoicePreviewSource, compositeChannels, isPreviewKey, parsePreviewSource, PREVIEW_STYLES, previewCamera, previewColourMatrix,
   previewKey, previewKeyInput, previewKindOf, previewSourceOf, type PreviewTokens, TURNTABLE, turntableYaw } from "../src/choice-preview";
 import { ChoicePreviewStore, manifestStamp } from "../src/choice-preview-host";
+import { createBrowserChoicePreviewDevice, OBJECT_URLS } from "../src/browser-choice-preview-device";
 import { createChoicePreviewHandler } from "../src/choice-preview-server";
-import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk } from "../src/choice-preview-service";
+import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk, PreviewHostError, PREVIEW_NOTICES, PreviewSuperseded } from "../src/choice-preview-service";
 import type { RenderComponent } from "../src/render-detail";
 import { DEFAULT_CHARACTER } from "../src/character-detail-request";
 
@@ -353,6 +354,234 @@ describe("the preview service's scheduling", () => {
     expect(log).toEqual([]);
     expect(service.row("o")!.spins.get(2)).toStartWith("/stored/");
     expect(service.stats.spinStored).toBe(1);
+  });
+});
+
+describe("the preview service's failures, cancellation and live turns (PREV-150..156)", () => {
+  const source = previewSourceOf(hairParts(), "hair")!;
+  const sourceAt = (position: number): ChoicePreviewSource => ({ ...source, parts: [{ ...source.parts[0]!, sha256: hex(200 + position) }] });
+  const positionOf = (drawn: ChoicePreviewSource) => Number.parseInt(drawn.parts[0]!.sha256, 16) - 200;
+  const settle = async (ms = 0) => { for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 0)); if (ms) await new Promise(r => setTimeout(r, ms)); };
+  const ask = (over: Partial<PreviewAsk> = {}): PreviewAsk => ({ option: "o", kind: "hair", request: DEFAULT_CHARACTER, body: "female", catalogue: "c1", positions: [2, 3],
+    selected: null, focus: null, ready: () => true, busy: false, ...over });
+  const quick = { firstMs: 20, maxMs: 40 };
+  const readyPort = (over: Partial<ChoicePreviewPort> = {}): ChoicePreviewPort => ({
+    async sources(_r, _o, _k, positions) { return positions.map(position => ({ position, state: "ready" as const, source: sourceAt(position) })); },
+    async subject() { return "subject"; }, async stored() { return null; },
+    async render(drawn, _key, frames) { return { url: `blob:${frames ? "spin" : "still"}-${positionOf(drawn)}` }; }, ...over });
+
+  test("a failing host is asked with a doubling wait, never in a loop; the item being derived fails at its third try, and the rows say so", async () => {
+    const asked: string[] = [];
+    let lookups = 0;
+    const port: ChoicePreviewPort = readyPort({ async sources(_r, _o, _k, positions, derive) {
+      asked.push(derive === null ? "lookup" : `derive ${derive}`);
+      if (derive === null && lookups++ === 0) return positions.map(position => ({ position, state: "unprepared" as const }));
+      throw new PreviewHostError("failed", 500);
+    } });
+    const service = new ChoicePreviewService(port, () => {}, undefined, { firstMs: 150, maxMs: 300 });
+    service.update(ask({ positions: [2] }));
+    await settle();
+    // One lookup, one derive that failed; the old service asked again at once, hundreds of times.
+    expect(asked).toEqual(["lookup", "derive 2"]);
+    await settle(700);
+    expect(asked.filter(line => line === "derive 2")).toHaveLength(3);
+    expect(asked.length).toBeLessThan(8);
+    expect(service.debug().rows[0]!.states).toEqual({ failed: 1 });
+    expect(service.row("o")!.notice).toBe(PREVIEW_NOTICES.retrying);
+    expect(service.row("o")!.busy).toBe(false);
+    service.dispose();
+  });
+
+  test("a host of another version stops every question until reload, and the row says what to do", async () => {
+    let asked = 0;
+    const service = new ChoicePreviewService(readyPort({ async sources() { asked++; throw new PreviewHostError("unsupported_version", 409); } }), () => {}, undefined, quick);
+    service.update(ask());
+    await settle(100);
+    service.update(ask());
+    await settle(50);
+    expect(asked).toBe(1);
+    expect(service.row("o")).toMatchObject({ notice: PREVIEW_NOTICES.version, busy: false });
+  });
+
+  test("lookups go on beside a derivation still waiting on the host; a derivation is abandoned when its choice leaves the row", async () => {
+    const asked: string[] = [];
+    const derivations: AbortSignal[] = [];
+    const port = readyPort({ async sources(_r, _o, _k, positions, derive, signal) {
+      asked.push(derive === null ? `lookup ${positions.join(",")}` : `derive ${derive}`);
+      if (derive !== null) { derivations.push(signal); return new Promise((_, reject) => signal.addEventListener("abort", () => reject(Error("aborted")))); }
+      return positions.map(position => ({ position, state: "unprepared" as const }));
+    } });
+    const service = new ChoicePreviewService(port, () => {}, undefined, quick);
+    service.update(ask({ positions: [2] }));
+    await settle();
+    expect(asked).toEqual(["lookup 2", "derive 2"]);
+    // The row scrolls: new choices are looked up while the derivation waits.
+    service.update(ask({ positions: [2, 5, 6] }));
+    await settle();
+    expect(asked).toContain("lookup 5,6");
+    expect(derivations.map(signal => signal.aborted)).toEqual([false]);
+    // Choice 2 leaves the row (a search): its derivation is abandoned, not counted, and the next is asked.
+    service.update(ask({ positions: [5, 6] }));
+    await settle();
+    expect(derivations.map(signal => signal.aborted)).toEqual([true, false]);
+    expect(asked.at(-1)).toBe("derive 5");
+  });
+
+  test("a derivation the host couldn't start (its lane stayed busy) isn't a try", async () => {
+    let derives = 0;
+    const port = readyPort({ async sources(_r, _o, _k, positions, derive) {
+      if (derive === null) return positions.map(position => ({ position, state: "unprepared" as const }));
+      return ++derives < 6 ? [{ position: derive, state: "unprepared" as const, busy: true }] : [{ position: derive, state: "ready" as const, source: sourceAt(derive) }];
+    } });
+    const service = new ChoicePreviewService(port, () => {}, undefined, { firstMs: 5, maxMs: 5 });
+    service.update(ask({ positions: [2] }));
+    for (let i = 0; i < 12 && !service.row("o")!.urls.size; i++) await settle(10);
+    expect(derives).toBe(6);
+    expect(service.row("o")!.urls.get(2)).toBe("blob:still-2");
+  });
+
+  test("a row shown for another body or catalogue starts again, releasing its pictures; other rows are drawn from only for the same ones (PREV-154)", async () => {
+    const released: string[] = [], drawnFor: string[] = [];
+    const port = readyPort({ async subject(body) { return `head-${body}`; }, release: url => { released.push(url); },
+      async render(drawn) { drawnFor.push(`p${positionOf(drawn)}`); return { url: `blob:${drawnFor.length}` }; } });
+    const service = new ChoicePreviewService(port, () => {});
+    service.update(ask({ positions: [2] }));
+    await settle();
+    expect(service.row("o")!.urls.get(2)).toBe("blob:1");
+    // A masculine V: position 2 may be another choice, and the picture was drawn over the feminine head.
+    service.update(ask({ positions: [2], body: "male" }));
+    expect(service.row("o")!.urls.size).toBe(0);
+    expect(released).toEqual(["blob:1"]);
+    await settle();
+    expect(service.row("o")!.urls.get(2)).toBe("blob:2");
+    // A mod added mid-session: the catalogue changed, positions moved.
+    service.update(ask({ positions: [2], body: "male", catalogue: "c2" }));
+    expect(service.row("o")!.urls.size).toBe(0);
+    expect(released).toEqual(["blob:1", "blob:2"]);
+  });
+
+  test("a subject head that couldn't load is asked again, and the choices waiting for it are drawn, not failed (PREV-155)", async () => {
+    let subjects = 0;
+    const service = new ChoicePreviewService(readyPort({ async subject() { if (++subjects === 1) throw Error("The preview head isn't ready."); return "subject"; } }),
+      () => {}, undefined, quick);
+    service.update(ask({ positions: [2] }));
+    for (let i = 0; i < 10 && !service.row("o")!.urls.size; i++) await settle(15);
+    expect(subjects).toBe(2);
+    expect(service.row("o")!.urls.get(2)).toBe("blob:still-2");
+    expect(service.stats.failed).toBe(0);
+  });
+
+  test("each row owns its live-turn wish: a row that wants none never stops another's, and nothing is published inside update (PREV-152)", async () => {
+    const log: string[] = [];
+    let changes = 0;
+    const bitmap = { close() {} } as unknown as ImageBitmap;
+    const port = readyPort({ live: { async start(drawn) { log.push(`start ${positionOf(drawn)}`); }, async frame() { return { bitmap }; }, stop() { log.push("stop"); } } });
+    const service = new ChoicePreviewService(port, () => { changes++; });
+    const hair = (over: Partial<PreviewAsk> = {}) => ask({ option: "hair", ...over }), part = (over: Partial<PreviewAsk> = {}) => ask({ option: "part", positions: [7], ...over });
+    service.update(part());
+    service.update(hair({ spin: 2 }));
+    await settle();
+    service.update(hair({ spin: 2 }));
+    expect(log).toEqual(["start 2"]);
+    // Both rows paint every frame; the part row wants no turn.
+    for (let frame = 0; frame < 10; frame++) {
+      const before = changes;
+      service.update(part()); service.update(hair({ spin: 2 }));
+      expect(changes).toBe(before);
+      await settle();
+    }
+    expect(log).toEqual(["start 2"]);
+    expect(service.row("hair")!.live?.position).toBe(2);
+    // The newest wish holds the worker's one slot; withdrawn, the older wish gets it back.
+    service.update(part({ spin: 7 }));
+    await settle();
+    service.update(part({ spin: 7 }));
+    service.update(hair({ spin: 2 }));
+    expect(log).toEqual(["start 2", "stop", "start 7"]);
+    service.update(part({ spin: null }));
+    service.update(hair({ spin: 2 }));
+    expect(log).toEqual(["start 2", "stop", "start 7", "stop", "start 2"]);
+  });
+
+  test("a live turn only superseded isn't a failure: the choice turns live again when wanted (PREV-151)", async () => {
+    const log: string[] = [];
+    const starts: { position: number; reject(error: unknown): void; resolve(): void }[] = [];
+    const port = readyPort({ live: {
+      start: drawn => new Promise<void>((resolve, reject) => { log.push(`start ${positionOf(drawn)}`); starts.push({ position: positionOf(drawn), resolve, reject }); }),
+      async frame() { return { bitmap: { close() {} } as unknown as ImageBitmap }; }, stop() { log.push("stop"); } } });
+    const service = new ChoicePreviewService(port, () => {});
+    service.update(ask({ positions: [2, 3], spin: 2 }));
+    await settle();
+    service.update(ask({ positions: [2, 3], spin: 3 }));
+    await settle();
+    service.update(ask({ positions: [2, 3], spin: 3 }));
+    // The pointer left 2 before its upload finished: the worker answers that it was replaced.
+    starts[0]!.reject(new PreviewSuperseded());
+    await settle();
+    expect(service.liveStats.failed).toBe(0);
+    service.update(ask({ positions: [2, 3], spin: 2 }));
+    expect(log.filter(line => line === "start 2")).toHaveLength(2);
+  });
+});
+
+describe("the browser preview device (PREV-156, PREV-158)", () => {
+  const source = previewSourceOf(hairParts(), "hair")!;
+  class FakeWorker {
+    onmessage: ((event: { data: unknown }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    posted: { id: number; type: string }[] = [];
+    terminated = false;
+    postMessage(message: { id: number; type: string }) { this.posted.push(message); }
+    terminate() { this.terminated = true; }
+    reply(data: object) { const last = this.posted.at(-1)!; this.onmessage?.({ data: { id: last.id, ...data } }); }
+  }
+  const webp = new Blob([new Uint8Array(16)], { type: "image/webp" });
+  function device(options: { keep?: boolean } = {}) {
+    const workers: FakeWorker[] = [], created: string[] = [], revoked: string[] = [];
+    let made = 0;
+    const port = createBrowserChoicePreviewDevice({
+      makeWorker: () => { const worker = new FakeWorker(); workers.push(worker); return worker as unknown as Worker; },
+      fetch: async () => new Response(null, { status: options.keep === false ? 500 : 200 }),
+      objectUrls: { create: () => { const url = `blob:${++made}`; created.push(url); return url; }, revoke: url => { revoked.push(url); } },
+    });
+    const render = async (key: string) => {
+      const drawing = port.render(source, key);
+      await new Promise(r => setTimeout(r, 0));
+      workers.at(-1)!.reply({ ok: true, webp });
+      return drawing;
+    };
+    return { port, workers, created, revoked, render };
+  }
+
+  test("a picture the host kept is shown from the host's URL; only one it couldn't keep takes an object URL, bounded and revoked", async () => {
+    const kept = device();
+    expect((await kept.render(hex(1))).url).toBe(`/api/preview-character/creator/previews/${hex(1)}`);
+    expect(kept.created).toEqual([]);
+    const lost = device({ keep: false });
+    const urls: string[] = [];
+    for (let i = 0; i < OBJECT_URLS + 2; i++) urls.push((await lost.render(hex(i))).url);
+    // The oldest are revoked past the bound; release and dispose revoke the rest.
+    expect(lost.revoked).toEqual([urls[0], urls[1]]);
+    lost.port.release!(urls[5]!);
+    expect(lost.revoked).toHaveLength(3);
+    lost.port.dispose!();
+    expect(new Set(lost.revoked)).toEqual(new Set(urls));
+  });
+
+  test("a worker that stops is dropped: its jobs fail, the next starts a new one, and a second stop leaves previews off", async () => {
+    const { port, workers, render } = device();
+    const waiting = port.render(source, hex(1));
+    await new Promise(r => setTimeout(r, 0));
+    workers[0]!.onerror!();
+    await expect(waiting).rejects.toThrow("stopped");
+    expect(workers[0]!.terminated).toBe(true);
+    // The next job starts a new worker, and it draws.
+    expect((await render(hex(2))).url).toContain(hex(2));
+    expect(workers).toHaveLength(2);
+    workers[1]!.onerror!();
+    // A second stop: jobs fail at once, no third worker.
+    await expect(port.render(source, hex(3))).rejects.toThrow();
+    expect(workers).toHaveLength(2);
   });
 });
 

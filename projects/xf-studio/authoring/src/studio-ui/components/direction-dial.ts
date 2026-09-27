@@ -17,8 +17,9 @@ import { ReadoutField } from "./readout-field";
  *   the height (a smooth turn around V at the same height).
  * - **Height scale:** ticks at the range's ends, its quarters and level, each labelled; the current height is marked in the light's
  *   colour, and a labelled tick it would overlap is hidden (`heightTicks`).
- * - **One transaction per gesture.** A drag is begin, edits, commit (Escape during it restores the start and cancels); a burst of key
- *   presses is one transaction until a short pause or focus leaves; a typed value is one begin-edit-commit step.
+ * - **One transaction per gesture.** A drag is begin, edits, commit (Escape during it restores the start and cancels; a lost pointer
+ *   capture or a second press ends it where it is, UI-138); a burst of key presses is one transaction until a short pause or focus
+ *   leaves; a typed value is one begin-edit-commit step.
  * - **Keyboard** (one tab stop, the dial): Left and Right turn the light by 5° (Page Up and Page Down by 15°), Up and Down raise and
  *   lower it by 5°; Alt with Left or Right turns it to the next 15° step; Home brings it to the front at its height. Enter types the angle exactly.
  * - **Resize.** The bar under the dial resizes it (drag down to enlarge, up to shrink; Up and Down arrows on the focused bar, Home and
@@ -222,22 +223,31 @@ export class DirectionDial {
     this.applySize();
     this.options.onResize?.(fitted, final);
   }
+  private resizing: (() => void) | null = null;
   private resizeDrag(event: PointerEvent) {
     if (event.button !== 0) return;
     event.preventDefault();
-    this.grip.setPointerCapture(event.pointerId);
+    this.resizing?.();
+    const pointer = event.pointerId;
+    try { this.grip.setPointerCapture(pointer); } catch { /* Ends on release or a new press. */ }
     const from = event.clientY, width = this.shownSize, aspect = VIEW.width / VIEW.height;
     this.grip.classList.add("dragging");
     // Drag down to enlarge: the drawing's height follows the pointer, its width with it.
-    const move = (e: PointerEvent) => this.resizeTo(width + (e.clientY - from) * aspect, false);
-    const up = () => {
+    const move = (e: PointerEvent) => { if (e.pointerId === pointer) this.resizeTo(width + (e.clientY - from) * aspect, false); };
+    const end = () => {
+      if (this.resizing !== end) return;
+      this.resizing = null;
       this.grip.removeEventListener("pointermove", move); this.grip.removeEventListener("pointerup", up); this.grip.removeEventListener("pointercancel", up);
+      this.grip.removeEventListener("lostpointercapture", up);
       this.grip.classList.remove("dragging");
       this.resizeTo(this.shownSize, true);
     };
+    const up = (e: PointerEvent) => { if (e.pointerId === pointer) end(); };
+    this.resizing = end;
     this.grip.addEventListener("pointermove", move);
     this.grip.addEventListener("pointerup", up);
     this.grip.addEventListener("pointercancel", up);
+    this.grip.addEventListener("lostpointercapture", up);
   }
   private resizeKey(event: KeyboardEvent) {
     const next = event.key === "ArrowDown" ? this.shownSize + RESIZE_STEP : event.key === "ArrowUp" ? this.shownSize - RESIZE_STEP
@@ -279,13 +289,19 @@ export class DirectionDial {
   }
   /** While a light moves: the other dots dim and the radius through it shows. */
   private focusLine(on: boolean) { this.art.classList.toggle("moving", on); }
+  /** The drag under way, ended by its release, a cancel, Escape, a lost pointer capture or a new press (UI-138). */
+  private dragging: ((commit: boolean) => void) | null = null;
   private drag(event: PointerEvent) {
     if (this.disabled || event.button !== 0) return;
     event.preventDefault();
     this.endBurst();
+    // A press while a drag is under way (another finger, or a release that never arrived) ends that drag where it is: one transaction
+    // per gesture, never two open at once.
+    this.dragging?.(true);
     // Focus without the keyboard ring: a pointer drag isn't keyboard focus (Shift or Alt held must not bring the ring).
     (this.dial.focus as (options?: { preventScroll?: boolean; focusVisible?: boolean }) => void)({ preventScroll: true, focusVisible: false });
-    this.dial.setPointerCapture(event.pointerId);
+    const pointer = event.pointerId;
+    try { this.dial.setPointerCapture(pointer); } catch { /* Not an active pointer: the drag still ends on release or a new press. */ }
     const at = (e: PointerEvent) => { const box = this.art.getBoundingClientRect();
       return dragDirection(VIEW.x + (e.clientX - box.left) / box.width * VIEW.width, VIEW.y + (e.clientY - box.top) / box.height * VIEW.height,
         this.start!, { shift: e.shiftKey, alt: e.altKey }, this.range); };
@@ -295,20 +311,28 @@ export class DirectionDial {
     t.begin?.();
     const edit = (e: PointerEvent) => { const next = at(e); this.paint(next); t.edit(next); };
     edit(event);
-    const move = (e: PointerEvent) => edit(e);
+    const mine = (e: PointerEvent) => e.pointerId === pointer;
+    const move = (e: PointerEvent) => { if (mine(e)) edit(e); };
     const finish = (commit: boolean) => {
+      if (this.dragging !== finish) return;
+      this.dragging = null;
       this.dial.removeEventListener("pointermove", move); this.dial.removeEventListener("pointerup", up);
-      this.dial.removeEventListener("pointercancel", cancel); this.dial.removeEventListener("keydown", escape, true);
+      this.dial.removeEventListener("pointercancel", cancel); this.dial.removeEventListener("lostpointercapture", lost);
+      this.dial.removeEventListener("keydown", escape, true);
       if (commit) t.commit?.();
       else { const back = this.start!; this.paint(back); t.edit(back); t.cancel?.(); }
       this.start = null;
       this.focusLine(false);
     };
-    const up = () => finish(true), cancel = () => finish(false);
+    this.dragging = finish;
+    const up = (e: PointerEvent) => { if (mine(e)) finish(true); }, cancel = (e: PointerEvent) => { if (mine(e)) finish(false); };
+    // The capture went elsewhere (the element was hidden, or another capture took it): the drag ends where it is.
+    const lost = (e: PointerEvent) => { if (mine(e)) finish(true); };
     const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); } };
     this.dial.addEventListener("pointermove", move);
     this.dial.addEventListener("pointerup", up);
     this.dial.addEventListener("pointercancel", cancel);
+    this.dial.addEventListener("lostpointercapture", lost);
     this.dial.addEventListener("keydown", escape, true);
   }
   /** Draw a direction on the handle, the radius, the height scale, the readouts and the value text. */

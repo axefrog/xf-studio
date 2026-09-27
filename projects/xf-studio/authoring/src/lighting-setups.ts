@@ -448,19 +448,30 @@ export function parseLightingSetup(value: unknown): LightingSetup | undefined {
   return { lights: lights as SetupLight[], focus: [...s.focus] as unknown as Vec3, environment: s.environment, backdrop: s.backdrop!,
     display: s.display!, exposure: s.exposure };
 }
-/** A stored library (the lights node's `setup` and `setups`), normalised, or undefined. */
+/**
+ * A stored library (the lights node's `setup` and `setups`), normalised, or undefined when it isn't one. A damaged setup (an out-of-range
+ * value after a later range change, say) is dropped, not the library, as `parseLayoutLibrary` does (PREV-161); a repeated id keeps the
+ * first. When the shown setup was dropped, its built-in base is shown instead (the one "Reset to" would give); a shown setup that
+ * names no setup at all still makes the whole value invalid.
+ */
 export function parseSetupLibrary(value: unknown): SetupLibrary | undefined {
   const v = value as Partial<SetupLibrary> | undefined;
-  if (!v || typeof v !== "object" || !Array.isArray(v.setups) || v.setups.length > LIGHTING_LIMITS.setups) return;
-  const setups: UserSetup[] = [];
-  for (const entry of v.setups as Partial<UserSetup>[]) {
+  if (!v || typeof v !== "object" || !Array.isArray(v.setups)) return;
+  const setups: UserSetup[] = [], ids = new Set<string>();
+  let droppedShown: BuiltInSetupId | null = null;
+  for (const entry of (v.setups as Partial<UserSetup>[]).slice(0, LIGHTING_LIMITS.setups)) {
     const setup = entry && typeof entry === "object" ? parseLightingSetup(entry.setup) : undefined;
-    if (!setup || typeof entry.id !== "string" || !USER_ID.test(entry.id) || !validSetupName(entry.name) || !isBuiltInSetup(entry.base)) return;
+    if (!setup || typeof entry.id !== "string" || !USER_ID.test(entry.id) || !validSetupName(entry.name) || !isBuiltInSetup(entry.base) || ids.has(entry.id)) {
+      if (entry && typeof entry === "object" && entry.id === v.setup && !ids.has(entry.id as string) && isBuiltInSetup(entry.base)) droppedShown = entry.base;
+      continue;
+    }
+    ids.add(entry.id);
     setups.push({ id: entry.id, name: entry.name.trim(), base: entry.base, setup });
   }
-  if (new Set(setups.map(setup => setup.id)).size !== setups.length) return;
   const library = { setup: v.setup as string, setups };
-  return setupExists(library, v.setup) ? library : undefined;
+  if (setupExists(library, v.setup)) return library;
+  // A shown setup that names nothing at all isn't a library (an edit naming an unknown setup is refused).
+  return droppedShown ? { setup: droppedShown, setups } : undefined;
 }
 
 // ----- Workspaces saved before setups -----

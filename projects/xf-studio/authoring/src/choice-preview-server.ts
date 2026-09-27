@@ -9,8 +9,9 @@ import { BodyTooLargeError, readBodyBytes, readBodyText } from "./request-body";
  * Host endpoint for choice previews (choice-previews-design.md §9), local-only like the other creator reads, shared by localhost and the
  * desktop:
  * - `POST /api/preview-character/creator/previews` `{request, option, kind, positions, derive?}` → each position's preview source
- *   (`xfs/choice-preview-sources-1`: ready with its source, none, or unprepared), deriving at most the one `derive` names (a choice
- *   prepared ahead and ready) in the host's background lane;
+ *   (`xfs/choice-preview-sources-1`: ready with its source, none, or unprepared, `busy` when the derivation didn't get the background
+ *   lane within a few seconds), deriving at most the one `derive` names (a choice prepared ahead and ready) in the host's background
+ *   lane; a request the page abandons stops waiting for the lane;
  * - `GET …/previews/<key>` → a stored channel image (WebP, content-addressed, cached by the browser);
  * - `POST …/previews/<key>` (`image/webp`, from the page's own origin) → keep an image the page's preview worker rendered.
  */
@@ -57,7 +58,7 @@ export function createChoicePreviewHandler(host: PreviewHost, options: { trusted
         || body.positions.length > MAX_POSITIONS || !body.positions.every(position) || (body.derive !== undefined && body.derive !== null && !position(body.derive)))
         return json({ code: "invalid", error: "Unknown request." }, 400);
       const items = await host.previewSources({ base: parseCharacterRequest(body.request), option: body.option, kind: body.kind as PreviewKind,
-        positions: body.positions as number[], derive: (body.derive as number | null | undefined) ?? null });
+        positions: body.positions as number[], derive: (body.derive as number | null | undefined) ?? null, signal: request.signal });
       return json({ schema: CHOICE_PREVIEW_SOURCES_SCHEMA, items });
     } catch (error) {
       if (error instanceof BodyTooLargeError) return json({ code: "too_large", error: "Request is too large." }, 413);

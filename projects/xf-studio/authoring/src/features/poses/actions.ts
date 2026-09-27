@@ -9,7 +9,8 @@
  *   once and plays it when its clip arrives (decoded on demand by the host, kept here for the session). A newer choice supersedes one still
  *   loading. The camera never moves (decision Q3); `pose.frame` frames the posed body.
  * - **Preferences**: favourites, recent and open groups live in the host's per-user document (preferences.ts), changed here at once and
- *   written behind (one write in flight, the newest next).
+ *   written behind (one write in flight, the newest next). Each change is kept until the host confirms it and is applied on top of
+ *   whatever document the host holds: the one that loads after it, or a newer one a 409 answers (then written once more, CORE-112).
  * - **Restore**: a pose the workspace stored is played again once the catalogue is ready, or dropped quietly when it can't be.
  */
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
@@ -104,8 +105,13 @@ export class PoseLibraryActions {
   private view: PoseCatalogueView;
   private preferences: PosePreferences = defaultPosePreferences();
   private preferencesRevision: number | null = null;
+  /**
+   * The person's preference changes the host hasn't confirmed yet, in order (CORE-112): applied to the host's document when it loads, and
+   * again to the newer one a 409 answers, so a change made before the load or after a host restart is never lost or written over others.
+   */
+  private pendingPreferences: ((prefs: PosePreferences) => PosePreferences)[] = [];
+  private loadingPreferences: Promise<void> | null = null;
   private saving = false;
-  private saveAgain = false;
   private showFiltered = false;
   private loadingFor: PoseBodyGender | null = null;
   private generation = 0;
@@ -190,7 +196,8 @@ export class PoseLibraryActions {
         return { ok: true };
       case "pose.favourite": {
         const entry = this.byId.get(action.id), known = this.preferences.favourites.find(item => item.id === action.id);
-        this.setPreferences(withFavourite(this.preferences, { id: action.id, label: entry?.label ?? known?.label ?? action.id }, action.on));
+        const ref = { id: action.id, label: entry?.label ?? known?.label ?? action.id };
+        this.setPreferences(prefs => withFavourite(prefs, ref, action.on));
         return { ok: true };
       }
       case "pose.frame": {
@@ -198,7 +205,7 @@ export class PoseLibraryActions {
         return framed.available ? { ok: true } : { ok: false, code: framed.code ?? "not_ready", message: framed.reason ?? "V can't be framed now." };
       }
       case "pose.showFiltered": this.showFiltered = action.shown; this.notify(); return { ok: true };
-      case "pose.openGroup": this.setPreferences(withOpen(this.preferences, action.group, action.open)); return { ok: true };
+      case "pose.openGroup": this.setPreferences(prefs => withOpen(prefs, action.group, action.open)); return { ok: true };
       case "pose.retry": {
         const gender = this.view.bodyGender;
         if (!gender || !this.device.catalogue) return { ok: false, code: "unavailable", message: UNAVAILABLE };
@@ -213,7 +220,7 @@ export class PoseLibraryActions {
   /** Apply a pose: shown at once, played when its clip arrives; `recent` records it (a restored pose isn't a new choice). */
   private async select(entry: PoseEntry, recent: boolean): Promise<PoseLibraryOutcome> {
     const motion = this.stage.motion()!;
-    if (recent) this.setPreferences(withRecent(this.preferences, { id: entry.id, label: entry.label }));
+    if (recent) { const ref = { id: entry.id, label: entry.label }; this.setPreferences(prefs => withRecent(prefs, ref)); }
     try {
       await motion.holdPose({ id: entry.id, label: entry.label, moves: entry.badges.includes("moves") }, this.sample(entry),
         { offset: [...entry.placement.offset] as [number, number, number], rotation: [...entry.placement.rotation] as [number, number, number] });
@@ -290,44 +297,63 @@ export class PoseLibraryActions {
     void this.select(entry, false).finally(() => { this.restoring = false; });
   }
 
-  private async loadPreferences() {
-    if (!this.device.preferences) return;
+  private loadPreferences(): Promise<void> {
+    if (!this.device.preferences) return Promise.resolve();
+    return this.loadingPreferences ??= this.readPreferences().finally(() => { this.loadingPreferences = null; });
+  }
+  private async readPreferences() {
     try {
-      const state = await this.device.preferences.load() as { revision?: unknown; preferences?: unknown } | null;
+      const state = await this.device.preferences!.load() as { revision?: unknown; preferences?: unknown } | null;
       if (state && Number.isInteger(state.revision)) {
         this.preferencesRevision = state.revision as number;
-        // A change made in the moment before the document arrived is the person's newest choice: it is written over it.
-        if (!this.saveAgain) this.preferences = parsePosePreferences(state.preferences);
-        else void this.save();
+        // Changes made before the document arrived go on top of it, never over it.
+        this.preferences = this.applyPending(parsePosePreferences(state.preferences));
         this.treeCache = null;
         this.notify();
+        if (this.pendingPreferences.length) void this.save();
       }
-    } catch { /* Favourites stay for this session; the next change tries again. */ }
+    } catch { /* Favourites stay for this session; the next change reads the document again. */ }
   }
-  private setPreferences(next: PosePreferences) {
-    this.preferences = next;
+  private applyPending(base: PosePreferences, also: readonly ((prefs: PosePreferences) => PosePreferences)[] = []): PosePreferences {
+    return [...also, ...this.pendingPreferences].reduce((prefs, change) => change(prefs), base);
+  }
+  private setPreferences(change: (prefs: PosePreferences) => PosePreferences) {
+    this.preferences = change(this.preferences);
+    this.pendingPreferences.push(change);
     this.treeCache = null;
     this.notify();
-    this.saveAgain = true;
     void this.save();
   }
   private async save() {
     const store = this.device.preferences;
-    if (!store || this.saving || this.preferencesRevision === null || !this.saveAgain) return;
-    this.saving = true; this.saveAgain = false;
+    if (!store || this.saving || !this.pendingPreferences.length) return;
+    // Not loaded yet (or the load failed): read it first; the load saves what is waiting.
+    if (this.preferencesRevision === null) { void this.loadPreferences(); return; }
+    this.saving = true;
+    const sent = this.pendingPreferences.splice(0);
     let failed = false;
     try {
-      const response = await store.save(this.preferencesRevision, this.preferences);
-      const data = response.data as { revision?: unknown; preferences?: unknown } | null;
-      if (data && Number.isInteger(data.revision)) this.preferencesRevision = data.revision as number;
-      // Another window saved first: its document is the newest, and this window shows it.
-      if (response.status === 409 && data) { this.preferences = parsePosePreferences(data.preferences); this.treeCache = null; this.notify(); }
-      else if (!response.ok) failed = true;
+      for (let attempt = 0; ; attempt++) {
+        const response = await store.save(this.preferencesRevision!, this.preferences);
+        const data = response.data as { revision?: unknown; preferences?: unknown } | null;
+        if (data && Number.isInteger(data.revision)) this.preferencesRevision = data.revision as number;
+        if (response.ok) break;
+        // Another window saved first, or the host restarted: its document is the newest, and this window's changes go on top of it,
+        // written once more.
+        if (response.status === 409 && data) {
+          this.preferences = this.applyPending(parsePosePreferences(data.preferences), sent);
+          this.treeCache = null;
+          this.notify();
+          if (attempt === 0) continue;
+        }
+        failed = true;
+        break;
+      }
     } catch { failed = true; } finally {
       this.saving = false;
       // A failed write is tried again with the next change, never in a loop.
-      if (failed) this.saveAgain = true;
-      else if (this.saveAgain) setTimeout(() => void this.save(), 0);
+      if (failed) this.pendingPreferences.unshift(...sent);
+      else if (this.pendingPreferences.length) setTimeout(() => void this.save(), 0);
     }
   }
 }
