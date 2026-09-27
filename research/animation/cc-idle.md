@@ -37,13 +37,16 @@ The close-up clip was the only one prepared until 27 September. `tools/prepare_b
 2. It lists every looping body clip in a state machine state, plus the looping clips the preview screens' switch plays directly. That gives the creator's close-up, full body and nails loops, gender selection, and the inventory's `UI_full_shot`; it leaves out the 53 held-weapon idles.
 3. It exports each body clip with `tools/anim-export` into `raw/body-<clip>.glb` and serves it as `public/assets/cc-idle-body-<clip>.glb` (the close-up keeps `cc-idle-body.glb`).
 4. It bakes the face clip the face graph loops with each where the face set has one: `bake_idle_face.py --clip ui_fullbody_shot` writes `cc-idle-face-ui_fullbody_shot.glb`. The inventory loops the close-up face after a one-shot pickup.
-5. It writes `public/assets/cc-idle-catalogue.json` (`idle-catalogue.ts`), and hashes and the catalogue to [the catalogue evidence](../../projects/xf-studio/authoring/evidence/idle-catalogue.json).
+5. It adds the close-up **with the eyes section open** (`closeup-eyes`, "Creator close-up, eyes section"): the close-up body clip, and a face baked as the section's showcase `ui_closeup_shot_eyes` once, then one pass of the close-up loop (`bake_idle_face.py --intro-clip ui_closeup_shot_eyes --intro-glb <raw> --name ui_closeup_shot_eyes_section`, written as `cc-idle-face-eyes-section.glb`). The showcase is blended in from the loop over 0.5 s and the loop back in over 0.5 s, linearly in track space before the solve, as the face graph's transitions blend [resource: 0.5 s transitions; linear track blending is a hypothesis]. The catalogue entry's `face.loopFrom` (4.5 s) tells the Studio to play the face once up to there and loop from there, so the showcase plays each time the idle starts or the entry is chosen, and never repeats inside the loop ([facial animation §6](../../knowledge/facial-animation.md#6-the-idles-upper-face)). The showcase is typed `Additive` but stores deltas (its envelope tracks add 0), so the bake adds it onto the reference tracks like the loop, and refuses an `Additive` clip whose envelopes hold absolute values. [Bake evidence](../../projects/xf-studio/authoring/evidence/idle-face-bake-eyes-section.json).
+6. It writes `public/assets/cc-idle-catalogue.json` (`idle-catalogue.ts`), and hashes and the catalogue to [the catalogue evidence](../../projects/xf-studio/authoring/evidence/idle-catalogue.json).
 
 Run from HQ (after the close-up's two steps above):
 
 ```powershell
 python projects/xf-studio/authoring/tools/prepare_body_idles.py --wolvenkit <WolvenKit.CLI.exe> --game <game folder> --anim-export projects/xf-studio/tools/anim-export/bin/Debug/net9.0/AnimExport.exe --addon D:/Dev/Cyberpunk-Blender-add-on
 ```
+
+To add only the eyes section to a catalogue prepared earlier (the intake's `raw/eyes-face.glb` or `raw/face-ui_closeup_shot_eyes.glb` already exported), run `python projects/xf-studio/authoring/tools/prepare_body_idles.py --eyes-section-only`.
 
 **In the Studio**, the Motion panel's **Body** field is Still or one of these idles (`motion.setIdleClip`). The clips share the body and face rigs' joint names, so switching only swaps the clips on the same rigs (`IdleAnimation.setClips`), with the phase carried over. An older preparation without a catalogue shows the close-up alone. The creator's idles stand V on the creator puppet's lifted feet (`puppet: "creator"` in the character request); the inventory's on her own ([§4](../../knowledge/body-animation.md#4-feet-states-and-the-idles)).
 

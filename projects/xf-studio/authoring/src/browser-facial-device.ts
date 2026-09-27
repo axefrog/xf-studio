@@ -11,7 +11,11 @@ const floats = (text: string) => {
   return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 };
 
+/** This page's id for its solves (the host lets pages take turns instead of replacing each other's, CORE-104). */
+const pageId = () => globalThis.crypto?.randomUUID?.() ?? `page-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+
 export function createBrowserFacialDevice(fetcher: (url: string, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init)): FacialDevicePort {
+  const client = pageId();
   const get = async <T>(url: string): Promise<T> => {
     const response = await fetcher(url, { cache: "no-store" });
     if (!response.ok) throw Error(`The face data answered ${response.status}.`);
@@ -21,7 +25,7 @@ export function createBrowserFacialDevice(fetcher: (url: string, init?: RequestI
     state: () => get<FacialHostState>(FACIAL_ENDPOINT),
     expressions: () => get<FacialStartPoints>(FACIAL_EXPRESSIONS_ENDPOINT),
     async solve(request: FacialSolveRequest): Promise<FacialSolved> {
-      const response = await fetcher(FACIAL_SOLVE_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
+      const response = await fetcher(FACIAL_SOLVE_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...request, client }) });
       const answer = await response.json() as FacialSolveAnswer;
       if (!answer.ok) return answer;
       return { ok: true, frames: answer.frames, ...(answer.rate ? { rate: answer.rate } : {}), pose: { q: floats(answer.q), t: floats(answer.t) },

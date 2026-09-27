@@ -30,6 +30,26 @@
         "evidence": "[resource] player_paperdoll.animgraph: looping SkAnim in state `closeup` of a state machine testing characterCreation_Eyes, characterCreation_Hair, characterCreation_Jaw, characterCreation_Lips, characterCreation_Nose"
       },
       {
+        "id": "closeup-eyes",
+        "label": "Creator close-up, eyes section",
+        "clip": "ui_closeup_shot",
+        "body": "cc-idle-body.glb",
+        "duration": 12.333,
+        "screen": "creator",
+        "state": "closeup (eyes one-shot)",
+        "flags": [
+          "characterCreation_Head",
+          "characterCreation_Eyes"
+        ],
+        "face": {
+          "clip": "ui_closeup_shot_eyes_section",
+          "file": "cc-idle-face-eyes-section.glb",
+          "loopFrom": 4.5
+        },
+        "puppet": "creator",
+        "evidence": "[resource] player_woman_paperdoll_sermo.animgraph plays ui_closeup_shot_eyes once while characterCreation_Eyes is set, then loops ui_closeup_shot (0.5 s blends); [source] entityPreviewGameController sets it for the UI_Eyes camera; blending in track space before the solve is a hypothesis"
+      },
+      {
         "id": "fullbody",
         "label": "Creator full body",
         "clip": "ui_fullbody_shot",
@@ -313,7 +333,8 @@
     "cc-idle-body-ui_expose_hand_loop.glb": "0ce51194fe2696d64ecb30d627f13f5bf5f1861511f12cd535e7042883af6492",
     "cc-idle-body.glb": "b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8",
     "cc-idle-body-ui_fullbody_shot.glb": "417f2667a966b1519c7a7134a33c03a676ef1b22f7c17878649992d3e18d0205",
-    "cc-idle-body-ui_gender_selection.glb": "22e1742badcc1af873869d33045edba4550c71ecc7bf908a63f291e150525870"
+    "cc-idle-body-ui_gender_selection.glb": "22e1742badcc1af873869d33045edba4550c71ecc7bf908a63f291e150525870",
+    "cc-idle-face-eyes-section.glb": "5fef621cef540abd5455a9506a64b5d53fb076907a545244b62ca863240002a1"
   },
   "sourceSha256": {
     "player_paperdoll.animgraph": "2ab093eafee97290f452b70dc07a5ebe287e88ac505da73546276e239a14d526",

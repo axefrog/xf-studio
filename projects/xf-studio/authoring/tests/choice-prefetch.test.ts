@@ -12,9 +12,9 @@ import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceMa
 import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/choice-prefetch";
 import { depotHash, refFromPath } from "../src/depot-path";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
-import { clearPrepared, evictPrepared, preparedSize } from "../src/prepared-files";
+import { clearPrepared, evictPrepared, PREPARED_FS_CONCURRENCY, preparedFsStats, preparedSize } from "../src/prepared-files";
 import { backgroundExtraction, foregroundExtraction, WolvenKitFetcher } from "../src/resolver-host";
-import { ResourceGraph } from "../src/resource-graph";
+import { ResourceGraph, stoppableGraph } from "../src/resource-graph";
 import { app, cr2w, fixtureInstallation, mesh, meshComponent } from "./resolver-fixtures";
 
 const roots: string[] = [];
@@ -26,7 +26,8 @@ const settle = async () => { for (let i = 0; i < 20; i++) await sleep(1); };
 // ---- The prefetcher over fakes ----
 
 const withChoice = (position: number): CharacterRequest => ({ ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "hair", choice: `c${position}` }] });
-function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; maxBatch: number; timeMs: number; bytes: number; unpolledMs: number }>; bytes?: () => number; now?: () => number } = {}) {
+function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; maxBatch: number; timeMs: number; bytes: number; unpolledMs: number }>; bytes?: () => number; now?: () => number;
+  settled?: () => Promise<void> } = {}) {
   const warmed: number[][] = [];
   let foreground: Promise<void> = Promise.resolve();
   const deps: PrefetchDeps = {
@@ -36,6 +37,7 @@ function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"];
     foregroundIdle: () => foreground,
     preparedBytes: async () => options.bytes?.() ?? 0,
     now: options.now,
+    settled: options.settled,
   };
   const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12, ...options.limits });
   return { service, warmed, hold: (until: Promise<void>) => { foreground = until; } };
@@ -123,6 +125,60 @@ describe("preparing a row's choices ahead", () => {
     expect(ask(heavy.service, [0, 1, 2, 3, 4, 5])).toMatchObject({ states: "rrrrnn", stopped: "disk" });
     // Spent for the session: another row doesn't start.
     expect(heavy.service.update({ base: DEFAULT_CHARACTER, option: "head/eyes", positions: [0], focus: null }).stopped).toBe("disk");
+  });
+
+  test("a stopped batch settles before the next starts, doesn't grow the next batch, and its pause isn't counted toward the time (PREV-120)", async () => {
+    // Like the host: a stopped batch answers at once while its reads let go in the background (`settled`).
+    let clock = 0, background: Promise<void> = Promise.resolve(), release!: () => void;
+    const sizes: number[] = [];
+    let running = 0, most = 0;
+    const { service } = prefetcher({ limits: { batch: 2, maxBatch: 8, timeMs: 60_000 }, now: () => clock, settled: () => background,
+      warm: (requests, signal) => {
+        sizes.push(requests.length); running++; most = Math.max(most, running);
+        background = new Promise(resolve => { release = () => { running--; resolve(); }; });
+        return new Promise((resolve, reject) => {
+          signal.addEventListener("abort", () => reject(Error("cancelled")));
+          // Batches after the first finish at once.
+          if (sizes.length > 1) { release(); resolve(requests.map(() => ({ ready: true }))); }
+        });
+      } });
+    ask(service, [0, 1, 2, 3, 4, 5]);
+    await settle();
+    expect(sizes).toEqual([2]);
+    // Stopped for a person's change, again and again: its choices are queued again, and nothing starts while it lets go.
+    for (let i = 0; i < 3; i++) { service.pause(); await settle(); }
+    expect(ask(service, [0, 1, 2, 3, 4, 5]).states).toBe("qqqqqq");
+    expect(sizes).toEqual([2]);
+    // Minutes pass while it lets go: not the job's own time.
+    clock += 5 * 60_000;
+    release();
+    await settle();
+    // The stopped batch didn't count: the next is the first size again, then doubling.
+    expect(sizes).toEqual([2, 2, 4]);
+    expect(most).toBe(1);
+    expect(ask(service, [0, 1, 2, 3, 4, 5])).toMatchObject({ states: "rrrrrr", stopped: null });
+  });
+
+  test("a new row's job waits for the replaced job's batch to settle (PREV-120)", async () => {
+    let background: Promise<void> = Promise.resolve(), release!: () => void;
+    const signals: AbortSignal[] = [];
+    const { service } = prefetcher({ settled: () => background, warm: (requests, signal) => {
+      signals.push(signal);
+      if (signals.length === 1) background = new Promise(resolve => { release = resolve; });
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(Error("cancelled")));
+        if (signals.length > 1) resolve(requests.map(() => ({ ready: true })));
+      });
+    } });
+    ask(service, [0, 1]);
+    await settle();
+    service.update({ base: DEFAULT_CHARACTER, option: "head/eyes", positions: [0], focus: null });
+    await settle();
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals).toHaveLength(1);
+    release();
+    await settle();
+    expect(signals).toHaveLength(2);
   });
 
   test("a failed batch marks its choices failed; a hint tries one again", async () => {
@@ -490,6 +546,26 @@ describe("the prepared game files", () => {
     expect(readdirSync(join(roots.resolver, "json"))).toEqual(["2-a-b.json.failed"]);
     expect(readdirSync(join(roots.resolver, "native"))).toEqual([]);
   });
+
+  test("every check of the prepared files together keeps at most a bounded number of file-system calls in flight; under budget nothing is listed (PREV-125)", async () => {
+    const root = temporary();
+    const roots = { exports: join(root, "exports"), resolver: join(root, "resolver"), store: join(root, "store"), manifests: join(root, "manifests") };
+    for (let i = 0; i < 40; i++) {
+      const folder = join(roots.exports, "resources", `r${i}`);
+      mkdirSync(folder, { recursive: true });
+      for (let j = 0; j < 5; j++) writeFileSync(join(folder, `f${j}.bin`), "x".repeat(10));
+    }
+    mkdirSync(join(roots.resolver, "json"), { recursive: true });
+    for (let i = 0; i < 60; i++) writeFileSync(join(roots.resolver, "json", `${i}.json`), "y".repeat(10));
+    preparedFsStats.peak = 0;
+    const [a, b, evicted] = await Promise.all([preparedSize(roots), preparedSize(roots), evictPrepared(roots, 1e9)]);
+    expect(a.bytes).toBe(40 * 5 * 10 + 60 * 10);
+    expect(b.bytes).toBe(a.bytes);
+    // Under budget: counted, nothing removed (and no entry listed: these folders have no entry.json, which listing would need).
+    expect(evicted).toEqual({ removed: 0, freed: 0, bytes: a.bytes });
+    expect(preparedFsStats.peak).toBeGreaterThan(1);
+    expect(preparedFsStats.peak).toBeLessThanOrEqual(PREPARED_FS_CONCURRENCY);
+  });
 });
 
 // ---- Lanes and read recording ----
@@ -538,6 +614,24 @@ describe("the fetcher's lanes and the graph's reads", () => {
     // A memoised model asked for again is recorded again.
     const again = await graph.recordReads(() => graph.mesh(refFromPath("base\\a.mesh")));
     expect([...again.reads]).toEqual([depotHash("base\\a.mesh")]);
+  });
+
+  test("a stopped batch's view of the graph asks for nothing further; reads already started finish for everyone and no model keeps the stop (PREV-120)", async () => {
+    const { graph, fetched } = fixtureInstallation([{ virtualPath: "archive/pc/content/base.archive", files: {
+      "base\\a.app": app([{ name: "a", components: [meshComponent("m", "base\\a.mesh")] }]),
+      "base\\a.mesh": mesh({ appearances: [{ name: "default", chunkMaterials: [] }], entries: [], chunks: 1 }) } }]);
+    const controller = new AbortController(), stopped = () => Error("stopped");
+    const view = stoppableGraph(graph, controller.signal, stopped);
+    const read = view.app(refFromPath("base\\a.app"));
+    controller.abort();
+    // The read in flight answers the stop to the stopped work; the next level is never asked for.
+    await expect(read).rejects.toThrow("stopped");
+    await expect(view.mesh(refFromPath("base\\a.mesh"))).rejects.toThrow("stopped");
+    expect(fetched.map(item => item.ref.path)).not.toContain("base\\a.mesh");
+    // Everyone else gets the finished read (memoised, not poisoned), and other members are the graph's own.
+    expect((await graph.app(refFromPath("base\\a.app")))?.appearances[0]?.name).toBe("a");
+    expect(view.exists(depotHash("base\\a.mesh"))).toBe(true);
+    view.trace = graph.trace;
   });
 });
 

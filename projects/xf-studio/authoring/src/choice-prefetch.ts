@@ -17,7 +17,10 @@
  *   no change is being prepared and the start of a batch, so a change that starts meanwhile always finds the batch to stop.
  * - **Settles before a person's change.** `idle` resolves once no batch is being prepared, so a person's own change and Clear start only
  *   after a stopped batch has let go of the shared preparation cache (PREV-102).
- * - **Bounded.** A job stops after `timeMs`, and prefetching stops for the session once it has added `bytes` of prepared files; either
+ * - **One preparation at a time.** A new batch starts only once a stopped one (this job's or a replaced job's) has settled
+ *   (`settled`), so repeated clicks never pile up background preparations; a stopped batch doesn't grow the next one (PREV-120).
+ * - **Bounded.** A job stops after `timeMs` of its own work (time spent waiting for a person's change or for a stopped batch isn't
+ *   counted), and prefetching stops for the session once it has added `bytes` of prepared files; either
  *   leaves the remaining choices "not prepared" (the panel says why), and a click still prepares them. "Clear prepared game files"
  *   starts the session's byte budget again (`resetBudget`, PREV-104). A job nobody has asked about for `unpolledMs` (the page closed or
  *   went away) is stopped, its batch in WolvenKit too (PREV-105); asking again starts it afresh.
@@ -62,6 +65,11 @@ export type PrefetchDeps = {
   warm(requests: readonly CharacterRequest[], signal: AbortSignal): Promise<readonly { ready: boolean }[]>;
   /** Resolves once no person's own change is being prepared. */
   foregroundIdle(): Promise<void>;
+  /**
+   * Resolves once every stopped batch has settled. `warm` answers a stopped batch at once, so a person's own change isn't held up by
+   * reads already in WolvenKit, while the batch lets go in the background; the next batch waits for that (PREV-120).
+   */
+  settled?(): Promise<void>;
   /** The prepared files' size now (prepared-files.ts). */
   preparedBytes(): Promise<number>;
   /** After a batch: keep the prepared files within their budget. */
@@ -92,7 +100,12 @@ export const PREFETCH_LIMITS: PrefetchLimits = { batch: 8, maxBatch: 32, timeMs:
 
 type Item = { position: number; state: ChoiceFetchState; request: CharacterRequest | null; key: string | null; order: number };
 type Job = { key: string; base: CharacterRequest; option: string; items: Map<number, Item>; controller: AbortController; startedAt: number;
-  stopped: PrefetchStop; running: boolean; serial: number; batches: number; polledAt: number };
+  stopped: PrefetchStop; running: boolean; serial: number;
+  /** Batches that ran to the end (a stopped batch doesn't grow the next one, PREV-120). */
+  batches: number;
+  polledAt: number;
+  /** Time the job spent waiting for a person's change or for a stopped batch to settle: not counted toward `timeMs` (PREV-120). */
+  pausedMs: number };
 
 export const requestKey = (request: CharacterRequest) => canonicalJson(request);
 /** A request without the choices of one option (`part/name`). */
@@ -128,7 +141,7 @@ export class ChoicePrefetcher {
     if (this.job?.key !== key) {
       this.cancel();
       this.job = { key, base, option: input.option, items: new Map(), controller: new AbortController(), startedAt: this.now(),
-        stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0, polledAt: this.now() };
+        stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0, polledAt: this.now(), pausedMs: 0 };
     }
     const job = this.job!;
     job.polledAt = this.now();
@@ -280,9 +293,17 @@ export class ChoicePrefetcher {
         if (this.startBytes === null) this.startBytes = await this.deps.preparedBytes();
         if (!live()) return;
         if (this.unpolled(job)) { this.stopUnpolled(job); return; }
-        await this.deps.foregroundIdle();
+        // A stopped batch (this job's, or the job this one replaced) settles before the next starts, so repeated clicks never pile up
+        // several preparations; then a person's own change comes first. Neither wait counts toward the job's time (PREV-120).
+        const waited = this.now();
+        await this.idle();
+        await this.deps.settled?.();
         if (!live()) return;
-        if (this.now() - job.startedAt > this.limits.timeMs) { job.stopped = "time"; break; }
+        await this.deps.foregroundIdle();
+        job.pausedMs += this.now() - waited;
+        if (!live()) return;
+        if (this.inflight) continue;
+        if (this.now() - job.startedAt - job.pausedMs > this.limits.timeMs) { job.stopped = "time"; break; }
         if (this.deps.needsSetup?.()) { job.stopped = "setup"; break; }
         const size = Math.min(this.limits.maxBatch ?? this.limits.batch, this.limits.batch * 2 ** job.batches);
         const batch = this.queued(job, "q").slice(0, size);
@@ -296,7 +317,8 @@ export class ChoicePrefetcher {
         const inflight = new Promise<void>(resolve => { settled = resolve; });
         this.inflight = inflight;
         for (const item of batch) item.state = "f";
-        this.stats.batches++; job.batches++;
+        this.stats.batches++;
+        const began = this.now();
         let outcomes: readonly { ready: boolean }[] | null = null;
         try { outcomes = await this.deps.warm(batch.map(item => item.request!), controller.signal); }
         catch (error) {
@@ -313,9 +335,12 @@ export class ChoicePrefetcher {
         if (!live()) return;
         // Stopped for a person's own change: queued again, unless that change prepared it meanwhile.
         if (!outcomes) {
+          // A stopped batch's time was a person's (it is prepared again later) and it doesn't grow the next batch.
+          if (controller.signal.aborted) job.pausedMs += this.now() - began;
           for (const item of batch) if (item.state === "f" && item.key !== this.foregroundKey) item.state = controller.signal.aborted ? "q" : "x";
           continue;
         }
+        job.batches++;
         batch.forEach((item, index) => { if (item.state === "f") item.state = outcomes![index]?.ready ? "r" : "x"; });
         this.stats.warmed += batch.length;
         await this.deps.afterBatch?.();

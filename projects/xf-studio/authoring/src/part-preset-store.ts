@@ -1,3 +1,4 @@
+import { BodyTooLargeError, readBodyText } from "./request-body";
 import { Database } from "bun:sqlite";
 import { isNewerData, type PartEnvelope } from "./platform/api";
 import type { PartRegistry } from "./platform/core/document";
@@ -96,6 +97,8 @@ export class PartPresetLibrary {
   }
 }
 
+/** Most bytes of one saved preset's request body. */
+export const PART_PRESET_BODY_BYTES = 2_000_000;
 /**
  * `GET <prefix>?feature=<id>` lists, `POST <prefix>` saves `{feature, name, part}`, `PATCH <prefix>/<id>` renames `{name, revision}`
  * and `DELETE <prefix>/<id>?revision=<n>` removes. Same-origin local requests only, as the collection library.
@@ -111,10 +114,14 @@ export async function partPresetRequest(request: Request, library: PartPresetLib
     if (request.method === "DELETE" && suffix) return json(library.delete(suffix.slice(1), Number(url.searchParams.get("revision"))));
     if (request.method !== "POST" && request.method !== "PATCH") return json({ error: "Method not allowed." }, 405);
     if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json") return json({ error: "Use the local studio to change presets." }, 403);
-    const text = await request.text();
-    if (text.length > 2_000_000) return json({ error: "That preset is too large to save." }, 413);
+    // Read within the limit, never whole first; JSON that isn't an object is refused plainly (CORE-106).
     let value: unknown;
-    try { value = JSON.parse(text); } catch { return json({ error: "Invalid JSON." }, 400); }
+    try { value = JSON.parse(await readBodyText(request, PART_PRESET_BODY_BYTES)); }
+    catch (error) {
+      if (error instanceof BodyTooLargeError) return json({ error: "That preset is too large to save." }, 413);
+      return json({ error: "Invalid JSON." }, 400);
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "Invalid JSON." }, 400);
     if (request.method === "POST" && !suffix) return json(library.save(value));
     if (request.method === "PATCH" && suffix) return json(library.rename(suffix.slice(1), value));
     return json({ error: "Method not allowed." }, 405);
