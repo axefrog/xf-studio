@@ -272,6 +272,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .slider-inline-row .control-label-text { flex: none; width: 2.2em; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; }
 .slider-inline-row .slider { flex: 1 1 auto; min-width: 60px; }
 .slider-reset.idle { visibility: hidden; }
+/* A pair side's short label keeps its column: the set state shows in the readout and reset, not with a mark after "L". */
+.slider-with-value.inline.set .control-label-text::after { content: none; }
 .slider-with-value.owner-text .readout-value { color: var(--text-muted); }
 .slider-with-value .control-note { margin-top: var(--sp-2); }
 .slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
