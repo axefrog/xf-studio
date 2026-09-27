@@ -397,7 +397,8 @@ export class ChoicePreviewService {
       else if (reply.state === "none") { item.state = "none"; row.none.add(item.position); }
       // The host's lane stayed busy: asked again shortly, not a try.
       else if (reply.busy) this.deriveAfter = this.now() + Math.min(BUSY_PAUSE_MS, this.retry.maxMs);
-      // Asked to derive and still unprepared: the host couldn't this time (stopped for a person, or the choice is no longer ready).
+      // Asked to derive and still unprepared: the host couldn't this time (degraded, failed, or the choice is no longer ready). One the host
+      // stopped for a person's change answers `busy` above, never a try (PREV-162).
       else tried();
       this.publish(row);
     }, error => {

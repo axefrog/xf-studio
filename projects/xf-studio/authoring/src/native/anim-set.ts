@@ -30,7 +30,7 @@ import { NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { Cursor } from "./red-values";
 
 /** Version of the decoder's output; part of the clip cache identity. */
-export const ANIM_DECODER_VERSION = 3;
+export const ANIM_DECODER_VERSION = 4;
 
 type Vec3 = readonly [number, number, number];
 type Quat = readonly [number, number, number, number];
@@ -93,6 +93,12 @@ export interface AnimClip extends AnimClipInfo {
 
 /** Most keys one clip may declare, and most clips a set may list (the largest vanilla sets are far below either). */
 const MAX_KEYS = 4_000_000, MAX_CLIPS = 100_000;
+/**
+ * A SIMD clip's bounds (NATIVE-67, NATIVE-69): most frames, and most keys its decoding may produce (every frame of every joint's three
+ * channels, and of every float track), each one an object the host keeps. The largest vanilla preview idle (`ui_gender_selection`, 470 frames
+ * of 71 joints) produces about 100,000; the bound is twenty times that.
+ */
+export const MAX_SIMD_FRAMES = 65_536, MAX_SIMD_OUTPUT_KEYS = 2_000_000;
 const CHANNELS: readonly KeyChannel[] = ["position", "rotation", "scale"];
 const NONE = 0xffffffff;
 
@@ -288,6 +294,18 @@ export function readAnimRig(bytes: Uint8Array, session = new DecodeSession()): A
     return { translation: t, rotation: r, scale: s };
   });
   for (const [i, parent] of parents.entries()) if (parent >= bones.length || parent < -1 || parent === i) throw new NativeMalformedError(`Bone ${i} names parent ${parent}.`);
+  // A longer cycle (NATIVE-68): following parents from any bone must reach a root within as many steps as there are bones.
+  const rooted = new Uint8Array(bones.length);
+  for (let i = 0; i < bones.length; i++) {
+    const path: number[] = [];
+    let at = i;
+    while (at >= 0 && !rooted[at]) {
+      if (path.length > bones.length) throw new NativeMalformedError(`Bone ${i}'s parents form a cycle.`);
+      path.push(at);
+      at = parents[at]!;
+    }
+    for (const bone of path) rooted[bone] = 1;
+  }
   const aPose = records.transforms(root.fields, "aPoseLS");
   return { bones, parents, reference, ...(aPose.length === bones.length ? { aPose } : {}), tracks: records.names(root.fields, "trackNames"),
     referenceTracks: records.floats(root.fields, "referenceTracks") };
@@ -441,7 +459,8 @@ function decodeSimdClip(records: Records, entry: ClipEntry, chunks: readonly num
   if (q > 16) throw new NativeMalformedError(`${name} quantises rotations to ${q} bits.`);
   if (evaluated % 4) throw new NativeMalformedError(`${name} evaluates ${evaluated} translations, not a multiple of four.`);
   const j4 = ceil(joints, 4), values = frames * j4 * 3;
-  if (frames * (j4 + evaluated + copied + tracks) > MAX_KEYS) throw new NativeMalformedError(`${name} declares ${frames} frames of ${joints} joints.`);
+  if (frames > MAX_SIMD_FRAMES || frames * (j4 + evaluated + copied + tracks) > MAX_KEYS || frames * (joints * CHANNELS.length + tracks) > MAX_SIMD_OUTPUT_KEYS)
+    throw new NativeMalformedError(`${name} declares ${frames} frames of ${joints} joints.`);
   const rotationBytes = q > 0 ? ceil(ceil(values, 4) * q / 8, 16) : frames * j4 * 16;
   const trackBytes = tracks === 0 ? 0 : trackConstant ? 4 : frames * ceil(tracks, 4) * 4;
   const need = rotationBytes + frames * evaluated * 12 + (scaleConstant ? 16 : values * 4) + trackBytes + copied * 14 + evaluated * 2;

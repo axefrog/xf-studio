@@ -47,10 +47,9 @@ oracleDescribe(missing.length === 0, `the creator catalogue oracle needs ${missi
       expect(facing.some(o => o.choices.some(c => c.off))).toBe(true);
       expect(facing.some(o => o.choices.some(c => c.swatch?.icon?.part))).toBe(true);
       expect(catalogue.options.every(o => o.choices.every(c => c.provenance.kind === "vanilla" || c.provenance.mod !== null))).toBe(true);
-      // The preview has a feminine head only; a masculine V's options say so (the preview's own projection, CORE-60).
+      // Both bodies have a core head in the preview (the masculine V plan, phase 1), so each draws its options (CORE-60's projection).
       const coverage = catalogueCoverage(catalogue), rendered = facing.filter(o => coverage.get(o.id)!.status === "rendered").length;
-      if (gender === "female") expect(rendered).toBeGreaterThan(0);
-      else expect(rendered).toBe(0);
+      expect(rendered).toBeGreaterThan(0);
       // The panel's first paint stays well under 1 MB (UI-59).
       expect(JSON.stringify(panelProjection(catalogue, coverage, "oracle").panel).length).toBeLessThan(1_000_000);
     }

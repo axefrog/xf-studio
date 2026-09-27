@@ -120,7 +120,8 @@ export type PreviewSourcesInput = { base: CharacterRequest; option: string; kind
 /**
  * Per position: `ready` with its source, `none` (the choice draws nothing for this detail), or `unprepared` (not prepared yet, or its
  * derivation failed this time). `busy`: the derivation didn't get the background lane within `PREVIEW_DERIVE_WAIT_MS` (a person's
- * change, a batch prepared ahead or another derivation held it), so the page asks again later without counting a try.
+ * change, a batch prepared ahead or another derivation held it) or a person's change stopped it (PREV-162), so the page asks again later
+ * without counting a try.
  */
 export type PreviewSourceItem = { position: number; state: "ready" | "none" | "unprepared"; source?: ChoicePreviewSource; busy?: true };
 /**
@@ -517,8 +518,8 @@ export class CharacterDetailHost {
     return items;
   }
   /**
-   * Plan and write a ready choice's record from the caches and keep its source (undefined: stopped, degraded or failed this time;
-   * `busy`: the background lane wasn't free within `PREVIEW_DERIVE_WAIT_MS`, or the page went away while waiting). Once started, a
+   * Plan and write a ready choice's record from the caches and keep its source (undefined: degraded or failed this time; `busy`: the
+   * background lane wasn't free within `PREVIEW_DERIVE_WAIT_MS`, the page went away while waiting, or a person's change stopped it). Once started, a
    * derivation finishes and is kept even if the page goes away (its source serves the next question).
    */
   private async derivePreview(request: CharacterRequest, kind: PreviewKind, route: CharacterRoute, key: string, stamp: string,
@@ -546,14 +547,16 @@ export class CharacterDetailHost {
     this.previewing = entry;
     try {
       const result = await work;
-      if (result.degraded) return undefined;
+      // Stopped for a person's change (PREV-162): the lane was taken, not a failed try; the page asks again shortly.
+      if (result.degraded) return controller.signal.aborted ? "busy" : undefined;
       const source = previewSourceOf(result.record.components, kind);
       // Kept only if the choice's manifest is still the one it was derived under (preparing ahead may have renewed it meanwhile).
       if (manifestStamp(this.manifests(route).dir, key) === stamp) this.previews.setSource(key, stamp, source);
       this.options.log?.(`Choice preview source derived in ${((Date.now() - started) / 1000).toFixed(2)} s (${source ? `${source.parts.length} part(s)` : "nothing drawn"}).`);
       return source;
     } catch (error) {
-      if (!controller.signal.aborted) this.options.log?.(`A choice preview's source couldn't be derived: ${(error as Error)?.message ?? error}`);
+      if (controller.signal.aborted) return "busy";
+      this.options.log?.(`A choice preview's source couldn't be derived: ${(error as Error)?.message ?? error}`);
       return undefined;
     } finally {
       if (this.previewing === entry) this.previewing = null;

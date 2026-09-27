@@ -41,6 +41,18 @@ export type PartPresetRestore = { feature: string; id: string; name: string; par
 export const PART_PRESET_NAME_LIMIT = 120;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** A set row's body, or null (logged as a warning, the row kept as it is) when it is damaged (CORE-116). */
+function setBody(set: SetRow): Record<string, unknown> | null {
+  try {
+    const body = JSON.parse(set.body) as unknown;
+    if (body && typeof body === "object" && !Array.isArray(body)) return body as Record<string, unknown>;
+    throw Error("not an object");
+  } catch (error) {
+    hostFailure("library", "part_preset_set_unreadable", "A saved set couldn't be read; it is kept as it is.", error, "warn");
+    return null;
+  }
+}
+
 export class PartPresetLibrary {
   private db: Database;
   constructor(path: string, private parts: PartRegistry, private newId: () => string = () => crypto.randomUUID()) {
@@ -122,14 +134,16 @@ export class PartPresetLibrary {
    * Delete a preset, guarded by its revision, and take it out of every set of its feature in the same step. The answer carries what
    * `restore` needs to put both back (the Undo a person gets right after deleting).
    */
-  delete(id: string, revision: unknown): { id: string; restore: PartPresetRestore } {
+  delete(id: string, revision: unknown): { id: string; restore?: PartPresetRestore } {
     return this.db.transaction(() => {
       this.current(id, revision);
       const row = this.db.query("SELECT feature, name, schema, body, created_at AS createdAt FROM part_presets WHERE id=?").get(id) as
         { feature: string; name: string; schema: string; body: string; createdAt: string };
       const memberships: { set: string; index: number }[] = [];
       for (const set of this.db.query("SELECT id, feature, name, revision, body, updated_at AS updatedAt FROM part_preset_sets WHERE feature=?").all(row.feature) as SetRow[]) {
-        const body = JSON.parse(set.body) as Record<string, unknown>;
+        // A damaged set is skipped and kept as it is (CORE-116): it never stops a delete.
+        const body = setBody(set);
+        if (!body) continue;
         const members = Array.isArray(body.members) ? body.members as unknown[] : [];
         const index = members.indexOf(id);
         if (index < 0) continue;
@@ -138,7 +152,10 @@ export class PartPresetLibrary {
         this.db.query("UPDATE part_preset_sets SET revision=?, body=?, updated_at=? WHERE id=?").run(set.revision + 1, JSON.stringify(body), new Date().toISOString(), set.id);
       }
       this.db.query("DELETE FROM part_presets WHERE id=?").run(id);
-      return { id, restore: { feature: row.feature, id, name: row.name, part: { schema: row.schema, body: JSON.parse(row.body) }, createdAt: row.createdAt, memberships } };
+      // A damaged preset is deleted all the same; only its Undo is lost.
+      let body: unknown;
+      try { body = JSON.parse(row.body); } catch { return { id }; }
+      return { id, restore: { feature: row.feature, id, name: row.name, part: { schema: row.schema, body }, createdAt: row.createdAt, memberships } };
     }).immediate();
   }
   /** Put a deleted preset back under its own ID, and back in the sets it was in (where they still exist), at its old places. */
@@ -156,8 +173,8 @@ export class PartPresetLibrary {
       for (const membership of input.memberships!) {
         const set = this.db.query("SELECT id, feature, name, revision, body, updated_at AS updatedAt FROM part_preset_sets WHERE id=? AND feature=?")
           .get(String(membership?.set ?? ""), feature) as SetRow | null;
-        if (!set) continue;
-        const body = JSON.parse(set.body) as Record<string, unknown>;
+        const body = set ? setBody(set) : null;
+        if (!set || !body) continue;
         const members = (Array.isArray(body.members) ? body.members as unknown[] : []).filter(member => member !== id);
         if (members.length >= PART_PRESET_SET_MEMBERS) continue;
         members.splice(Math.max(0, Math.min(members.length, Number(membership.index) || 0)), 0, id);

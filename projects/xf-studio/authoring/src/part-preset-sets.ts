@@ -54,11 +54,18 @@ export function setCollection(set: PartPresetSet, presets: readonly SetMemberPre
     presetSet: { table: set.table ?? "installed" } };
 }
 
-/** The latest Check or Build of one set, or the reason it failed, with the set's revision it was made from. */
+/**
+ * What a set's Check or Build was made from (PIPE-120): the set's revision and each member's revision (null when gone from the library),
+ * so fixing a listed expression makes the result stale just as changing the set does.
+ */
+export function setExportKey(set: PartPresetSet, presets: readonly SetMemberPreset[]): string {
+  return JSON.stringify([set.revision, setMembers(set, presets).map(member => [member.id, member.preset?.revision ?? null])]);
+}
+/** The latest Check or Build of one set, or the reason it failed, with the set's revision and the key (`setExportKey`) it was made from. */
 export type SetExportResult =
-  | { kind: "check"; result: PackageCheckResult; revision: number; missing: number }
-  | { kind: "build"; result: PackageBuildResult; revision: number; missing: number }
-  | { kind: "failed"; action: "check" | "build"; code: string; message: string; revision: number;
+  | { kind: "check"; result: PackageCheckResult; revision: number; key: string; missing: number }
+  | { kind: "build"; result: PackageBuildResult; revision: number; key: string; missing: number }
+  | { kind: "failed"; action: "check" | "build"; code: string; message: string; revision: number; key: string;
       /** When nothing could be packaged: each expression and why (the result then shows them with their next step). */
       omissions?: readonly ExportOmission[] };
 export type SetExportState = { busy: { id: string; action: "check" | "build" | "reveal" } | null; results: Readonly<Record<string, SetExportResult>> };

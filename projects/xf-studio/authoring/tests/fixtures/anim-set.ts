@@ -76,7 +76,7 @@ export function simdBlock(bits: number) {
 
 /** A set (depot rig path `rigPath`) with a clip keyed in a data chunk, a second clip keyed inline, a keyless clip, a SIMD clip and a record the generic reader refuses. */
 export function animSet(options: { chunkIndex?: number; counts?: Partial<ReturnType<typeof keyBlock>["counts"]>; channel3?: boolean; names?: readonly string[];
-  rigPath?: string; simdBits?: number; simdBlock?: Uint8Array } = {}) {
+  rigPath?: string; simdBits?: number; simdBlock?: Uint8Array; simdFrames?: number; simdJoints?: number } = {}) {
   const duration = 1;
   const block = keyBlock(duration);
   const counts = { ...block.counts, ...options.counts };
@@ -95,8 +95,8 @@ export function animSet(options: { chunkIndex?: number; counts?: Partial<ReturnT
     prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(block.bytes.length).bytes(block.bytes); })]);
   const bufferC = f.export("animAnimationBufferCompressed", [prop("duration", "Float", v.f32(0.5)), prop("numFrames", "Uint32", v.u32(2))]);
   const simdBits = options.simdBits ?? 16, simdBytes = options.simdBlock ?? simdBlock(simdBits);
-  const bufferD = f.export("animAnimationBufferSimd", [prop("duration", "Float", v.f32(duration)), prop("numFrames", "Uint32", v.u32(SIMD_FRAMES)),
-    prop("numJoints", "Uint16", v.u16(2)), prop("numTracks", "Uint16", v.u16(2)), prop("numTranslationsToCopy", "Uint16", v.u16(1)),
+  const bufferD = f.export("animAnimationBufferSimd", [prop("duration", "Float", v.f32(duration)), prop("numFrames", "Uint32", v.u32(options.simdFrames ?? SIMD_FRAMES)),
+    prop("numJoints", "Uint16", v.u16(options.simdJoints ?? 2)), prop("numTracks", "Uint16", v.u16(2)), prop("numTranslationsToCopy", "Uint16", v.u16(1)),
     prop("numTranslationsToEvalAlignedToSimd", "Uint16", v.u16(4)), prop("quantizationBits", "Uint16", v.u16(simdBits)),
     prop("isScaleConstant", "Bool", v.bool(true)), prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(simdBytes.length).bytes(simdBytes); })]);
   const animation = (name: string, buffer: number, extra: ReturnType<typeof prop>[] = []) => f.export("animAnimation",
@@ -138,9 +138,9 @@ function rebuildWithRootFirst(f: Cr2wBuilder): Uint8Array {
   return g.build();
 }
 
-export function rig(names: readonly string[] = ["Root", "Trajectory", "Hips"], options: { aPose?: boolean } = {}) {
+export function rig(names: readonly string[] = ["Root", "Trajectory", "Hips"], options: { aPose?: boolean; parents?: readonly number[] } = {}) {
   const f = new Cr2wBuilder();
-  const bones = [...names], parents = bones.map((_, i) => i === 0 ? -1 : 0);
+  const bones = [...names], parents = options.parents ?? bones.map((_, i) => i === 0 ? -1 : 0);
   // The A pose: each bone raised by 10 cm more than its reference, turned a quarter about Z (the scale left out: its default, 1).
   const aPose = options.aPose ? [prop("aPoseLS", "array:QsTransform", v.array(bones.map((_, i) => v.struct([
     prop("Translation", "Vector4", v.struct([prop("Z", "Float", v.f32(i + 0.1))])),

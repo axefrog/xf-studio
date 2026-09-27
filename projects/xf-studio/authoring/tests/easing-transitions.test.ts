@@ -181,3 +181,14 @@ test("through the Studio: transition.set is a platform action with no Undo step;
   const bare = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   expect(bare.app.capability({ kind: "transition.set", source: "expression", enabled: true }).available).toBe(false);
 });
+
+test("a weight blend goes on past its ends for a curve that overshoots, exact at 0 and 1, and its clamp decides what shows (CORE-117)", () => {
+  const free = weightBlend();
+  expect(free.mix({ jaw_mid_open: 0.2 }, { jaw_mid_open: 0.6 }, 1.25)).toEqual({ jaw_mid_open: 0.2 + (0.6 - 0.2) * 1.25 });
+  expect(free.mix({ jaw_mid_open: 0.2 }, { jaw_mid_open: 0.6 }, -0.25)).toEqual({ jaw_mid_open: 0.2 + (0.6 - 0.2) * -0.25 });
+  expect(free.mix({ jaw_mid_open: 0.2 }, { jaw_mid_open: 0.6 }, 1)).toEqual({ jaw_mid_open: 0.6 });
+  expect(free.mix({ jaw_mid_open: 0.2 }, { jaw_mid_open: 0.6 }, 0)).toEqual({ jaw_mid_open: 0.2 });
+  // The stored-weight clamp keeps a face within its range.
+  expect(weights.mix({ jaw_mid_open: 0.5 }, { jaw_mid_open: 0.8 }, 2)).toEqual({ jaw_mid_open: 1 });
+  expect(weights.mix({ jaw_mid_open: 0.5 }, { jaw_mid_open: 0.8 }, -0.5)).toEqual({ jaw_mid_open: storedWeight(0.5 + (0.8 - 0.5) * -0.5) });
+});
