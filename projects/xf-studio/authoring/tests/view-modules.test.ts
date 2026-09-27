@@ -72,7 +72,7 @@ test("the application resolves each tool's state and action; view.setTool edits 
   expect(app.capability({ kind: "view.setTool", tool: "camera.front", enabled: true })).toMatchObject({ available: false, code: "invalid_value" });
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true, view: "gone" })).toMatchObject({ available: false, code: "missing_target" });
   expect(app.capability({ kind: "view.undo" })).toMatchObject({ available: false });
-  expect(app.modules().map(module => module.id)).toEqual(["eye-makeup"]);
+  expect(app.modules().map(module => module.id)).toEqual(["eye-makeup", "expressions"]);
   expect(app.views()?.views.map(view => [view.id, view.panel, view.sceneKind])).toEqual([["main", "head", "character"]]);
 });
 

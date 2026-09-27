@@ -92,11 +92,15 @@ export function liveFeatureStates(look: Pick<Look, "parts"> | undefined, memory:
   model: DocumentModel): Record<string, LiveFeatureState> | undefined {
   const others = model.parts.features().filter(feature => feature !== model.live);
   if (!others.length) return undefined;
-  return Object.fromEntries(others.map(feature => {
+  // Sparse: a feature the look lacks and has no memory of adds nothing, so a workspace that never used a second feature reads
+  // exactly as it did while eye makeup was alone.
+  const states = others.flatMap(feature => {
     const part = look ? model.parts.part(look, feature) : undefined;
-    return [feature, { ...(part === undefined ? {} : { part: structuredClone(part) }),
-      ...(memory?.[feature] ? { editor: structuredClone(memory[feature].editor) } : {}) }];
-  }));
+    if (part === undefined && !memory?.[feature]) return [];
+    return [[feature, { ...(part === undefined ? {} : { part: structuredClone(part) }),
+      ...(memory?.[feature] ? { editor: structuredClone(memory[feature].editor) } : {}) }] as const];
+  });
+  return states.length ? Object.fromEntries(states) : undefined;
 }
 /**
  * `look` and its memory with the other live features' state written back: a part is set (or removed
@@ -105,13 +109,16 @@ export function liveFeatureStates(look: Pick<Look, "parts"> | undefined, memory:
  */
 export function withLiveFeatures(look: Look, memory: LookMemory, states: Readonly<Record<string, LiveFeatureState>> | undefined,
   model: DocumentModel): { parts: Look["parts"]; memory: LookMemory } {
-  if (!states) return { parts: look.parts, memory };
+  // Live states are sparse (`LiveFeatures.export`): a registered feature missing from them is blank, so a part Undo removed goes too.
+  const registered = model.parts.features().filter(feature => feature !== model.live);
+  if (!states && !registered.length) return { parts: look.parts, memory };
   const parts = { ...look.parts }, next = { ...memory };
-  for (const [feature, state] of Object.entries(states)) {
+  for (const feature of new Set([...registered, ...Object.keys(states ?? {})])) {
+    const state: LiveFeatureState = states?.[feature] ?? {};
     if (feature === model.live || !model.parts.feature(feature)) continue;
     if (state.part !== undefined) parts[feature] = model.parts.readPart(feature, model.parts.envelope(feature, state.part), false);
     else delete parts[feature];
-    if (state.part !== undefined || next[feature]) next[feature] = { ...next[feature], editor: structuredClone(state.editor) };
+    if ((state.part !== undefined || next[feature]) && "editor" in state) next[feature] = { ...next[feature], editor: structuredClone(state.editor) };
   }
   return { parts, memory: next };
 }

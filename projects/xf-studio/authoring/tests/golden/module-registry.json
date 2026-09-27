@@ -6,6 +6,13 @@
    "stage": "stable",
    "feature": "eye-makeup",
    "shownByDefault": true
+  },
+  {
+   "id": "expressions",
+   "group": "character",
+   "stage": "preview",
+   "feature": "expressions",
+   "shownByDefault": false
   }
  ],
  "tools": [

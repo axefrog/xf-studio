@@ -10,7 +10,8 @@
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
 import { EYE_MAKEUP, EYE_MAKEUP_ID, EYE_MAKEUP_REGION } from "../features/eye-makeup";
-import { CHARACTER_CONTEXT_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY,
+import { EXPRESSIONS } from "../features/expressions";
+import { CHARACTER_CONTEXT_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, PRESETS_FAMILY, QUALITY_FAMILY,
   SAVED_V_FAMILY, VIEWS_FAMILY } from "./system-families";
 import { STUDIO_MODULE_REGISTRATION } from "./modules";
 import type { DocumentModel } from "../collection-workspace";
@@ -24,10 +25,15 @@ export type { StudioOwnerActions, StudioOwnerId };
  * families (library requests, file workflows) route by owner too, outside the synchronous table.
  */
 export const STUDIO_OWNERS = [HISTORY_FAMILY, EYE_MAKEUP, COLLECTION_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY,
-  QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, VIEWS_FAMILY, LIBRARY_FAMILY, FILES_FAMILY] as const;
+  QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, VIEWS_FAMILY, LIBRARY_FAMILY, FILES_FAMILY, EXPRESSIONS, PRESETS_FAMILY] as const;
+/**
+ * Features the application binds through its generic handler (their spec's capability and apply over their live document, feature-module
+ * platform step 5): they need no bespoke handler, so they are not in `StudioOwnerActions`.
+ */
+type GenericFeatureIds = typeof EXPRESSIONS.id;
 
-// Compile-time: the list's IDs are exactly the owners StudioApplication binds handlers for.
-type ListedIds = (typeof STUDIO_OWNERS)[number]["id"];
+// Compile-time: the list's IDs, apart from the generically bound features, are exactly the owners StudioApplication binds handlers for.
+type ListedIds = Exclude<(typeof STUDIO_OWNERS)[number]["id"], GenericFeatureIds>;
 type BoundIds = StudioOwnerId | StudioRequestOwnerId;
 type Unlisted = { [K in BoundIds]: [Extract<ListedIds, K>] extends [never] ? K : never }[BoundIds];
 const exact: [ListedIds] extends [BoundIds] ? [Unlisted] extends [never] ? true : false : false = true;

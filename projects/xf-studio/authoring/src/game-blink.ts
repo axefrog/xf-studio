@@ -114,6 +114,8 @@ export class GameBlink {
   private elapsed = 0;
   private wake: { handle: unknown } | null = null;
   private shapeName: string | null = null;
+  /** While muted (a held expression owns the bones, preview-motion.ts) the blink keeps its settings and writes nothing. */
+  private muted = false;
   private readonly drivers = new Map<string, Driver>();
   /** Every rig node, parents first. */
   private readonly order: Driver[] = [];
@@ -278,9 +280,19 @@ export class GameBlink {
     for (let i = this.unmapped.length - 1; i >= 0; i--) if (targets.some(bone => bone.name === this.unmapped[i])) this.unmapped.splice(i, 1);
     this.onChange?.();
   }
+  /**
+   * Mute or unmute: muted, every setting still changes but no bone is written (a held expression's solve includes the blink);
+   * unmuting applies the current closure or Play blink again, and open and stopped leaves the bones as they are.
+   */
+  setMuted(muted: boolean) {
+    if (muted === this.muted) return;
+    this.muted = muted;
+    if (!muted) this.reapply();
+  }
   /** Stop for good: no wake-up fires and no frame is requested. */
   dispose() { this.clearWake(); this.onChange = undefined; }
   restore() {
+    if (this.muted) return;
     for (const b of this.bindings) {
       b.bone.position.copy(b.position); b.bone.quaternion.copy(b.rotation); b.bone.scale.copy(b.scale);
       b.bone.updateWorldMatrix(false, false);
@@ -305,6 +317,7 @@ export class GameBlink {
     else if (this.closureValue > 0) this.apply(this.closureChannels, this.closureValue);
   }
   private apply(channels: readonly Channel[], time: number) {
+    if (this.muted) return;
     for (const driver of this.order) driver.restLocal.decompose(driver.node.position, driver.node.quaternion, driver.node.scale);
     const { position, quaternion, unit } = this.sampled;
     for (const { driver, position: p, quaternion: q } of channels) {

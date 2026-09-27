@@ -146,6 +146,9 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   const expected = structuredClone(saved.state) as { wide: DockTree; compact: DockTree };
   locate(expected.wide, "layers")!.group.panels.push("history");
   locate(expected.compact, "layers")!.group.panels.push("history");
+  // The Expressions panel (a module hidden by default, which the shell parks) joins its default group too.
+  locate(expected.wide, "finish")!.group.panels.push("expressions.controls");
+  locate(expected.compact, "finish")!.group.panels.push("expressions.controls");
   // Panels closed by default (Help) stay closed until someone opens them.
   expected.wide.closed.push("help"); expected.compact.closed.push("help");
   expect(restored.state).toEqual(expected);

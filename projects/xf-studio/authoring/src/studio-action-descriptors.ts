@@ -9,6 +9,7 @@ import type { WolvenKitSetupAction } from "./wolvenkit-setup";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
 import type { ActionDescriptor as PlatformActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 import type { StudioFileAction } from "./studio-file-operations";
+import type { PartPresetRequest } from "./part-presets";
 import { CHARACTER_CONTEXT_DESCRIPTORS } from "./character-context";
 import { describe, enumerated, input, inputText, state, target } from "./action-descriptor-kit";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "./eye-makeup-descriptors";
@@ -109,6 +110,17 @@ export const ACTION_DESCRIPTORS = {
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],
   payload: PayloadSchema = {}, cancellable = false): RequestDescriptor => ({ scope: typeof scope === "string" ? [scope] : scope,
     effect, payload, async: true, cancellable });
+/**
+ * The `presets` family (part-presets.ts): a feature's part saved in the library under a name, for favourites and start points. Its rows
+ * live in their own table (part-preset-store.ts), which the released 0.1.0-alpha.1 never reads.
+ */
+export const PART_PRESET_DESCRIPTORS = {
+  "partPreset.list": request("workspace", "read", { feature: target("string") }),
+  "partPreset.save": request("workspace", "save", { feature: target("string"), name: inputText(1, 120), part: state("object") }),
+  "partPreset.rename": request("workspace", "save", { feature: target("string"), id: target("string"), name: inputText(1, 120),
+    revision: state("integer") }),
+  "partPreset.delete": request("workspace", "save", { feature: target("string"), id: target("string"), revision: state("integer") }),
+} satisfies Record<PartPresetRequest["kind"], RequestDescriptor>;
 export const REQUEST_DESCRIPTORS = {
   initialize: request("collection", "read"), refresh: request("collection", "read"),
   open: request("collection", "read", { id: target("string") }),

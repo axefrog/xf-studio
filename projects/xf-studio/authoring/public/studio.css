@@ -921,3 +921,24 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .result-details { margin-top: var(--sp-2); font-size: var(--fs-sm); }
 .result-details > summary { cursor: pointer; color: var(--text-muted, inherit); }
 .result-details[open] > .facts { margin: var(--sp-2) 0; }
+
+/* Expression drawer (features/expressions/view/drawer.ts): compact control rows, pairs with a link toggle, groups by region. */
+.expr-drawer { display: flex; flex-direction: column; gap: var(--sp-3); }
+.expr-status-line { display: flex; align-items: flex-start; gap: var(--sp-3); min-height: 2.6em; }
+.expr-status-line .expr-status { flex: 1; margin: 0; }
+.expr-bar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.expr-bar > .field { flex: 1; }
+.expr-tools .btn { flex: 1 1 auto; }
+.expr-group { border-top: 1px solid var(--line); padding: var(--sp-2) 0; }
+.expr-group > summary { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; font-size: var(--fs-sm); font-weight: 600; }
+.expr-group-title { flex: 1; }
+.expr-row { display: grid; grid-template-columns: minmax(0, 1fr) 4.6em auto; align-items: end; gap: var(--sp-3); padding: 1px 0; }
+.expr-row > .control { margin: 0; }
+.expr-row[hidden] { display: none; }
+.expr-row.set .control-label { color: var(--text); }
+.expr-number { height: 24px; padding: 0 4px; font: var(--fs-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
+.expr-note { grid-column: 1 / -1; color: var(--text-muted); font-size: var(--fs-xs); }
+.expr-pair { position: relative; padding-right: 0; }
+.expr-pair > .expr-link { font-size: var(--fs-xs); margin: 0 0 2px; }
+.expr-link.uneven::after { content: " · sides differ"; color: var(--text-muted); }
+.expr-footnote { margin-top: var(--sp-3); }

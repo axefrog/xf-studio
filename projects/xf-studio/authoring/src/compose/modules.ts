@@ -6,8 +6,9 @@
 import { moduleRegistrationIssues, type ModuleRegistration } from "../platform/api";
 import { PLATFORM_VIEW_TOOLS } from "../platform/core/view-tools";
 import { EYE_MAKEUP_MODULE, EYE_MAKEUP_SUMMARY, EYE_MAKEUP_VIEW_TOOLS } from "../features/eye-makeup";
+import { EXPRESSIONS_MODULE } from "../features/expressions";
 
-export const STUDIO_MODULES = [EYE_MAKEUP_MODULE] as const;
+export const STUDIO_MODULES = [EYE_MAKEUP_MODULE, EXPRESSIONS_MODULE] as const;
 
 export const STUDIO_MODULE_REGISTRATION: ModuleRegistration = Object.freeze({
   modules: STUDIO_MODULES,

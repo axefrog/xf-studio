@@ -99,7 +99,13 @@
   "character.redoClothing",
   "view.setTool",
   "view.undo",
-  "view.redo"
+  "view.redo",
+  "expression.setControl",
+  "expression.linkPair",
+  "expression.mirror",
+  "expression.reset",
+  "expression.startFrom",
+  "expression.setLabel"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -2608,6 +2614,127 @@
    "effect": "workspace",
    "undo": "none",
    "payload": {}
+  },
+  "expression.setControl": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "name": {
+     "type": "string",
+     "required": true,
+     "minLength": 1,
+     "maxLength": 96,
+     "from": "input"
+    },
+    "value": {
+     "type": "number",
+     "required": true,
+     "min": 0,
+     "max": 1,
+     "from": "input"
+    }
+   }
+  },
+  "expression.linkPair": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "pair": {
+     "type": "string",
+     "required": true,
+     "minLength": 1,
+     "maxLength": 96,
+     "from": "input"
+    },
+    "linked": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "expression.mirror": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "from": {
+     "type": "enum",
+     "required": true,
+     "values": [
+      "left",
+      "right"
+     ],
+     "from": "input"
+    }
+   }
+  },
+  "expression.reset": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "scope": {
+     "type": "enum",
+     "required": true,
+     "values": [
+      "all",
+      "group",
+      "control"
+     ],
+     "from": "input"
+    },
+    "target": {
+     "type": "string",
+     "required": false,
+     "maxLength": 96,
+     "from": "input"
+    }
+   }
+  },
+  "expression.startFrom": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "origin": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    },
+    "controls": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "expression.setLabel": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "label": {
+     "type": "string",
+     "required": true,
+     "maxLength": 64,
+     "from": "input"
+    }
+   }
   }
  },
  "registry": [
@@ -3514,6 +3641,60 @@
     "workspace"
    ],
    "undo": "none",
+   "async": false
+  },
+  {
+   "id": "expression.setControl",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.linkPair",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.mirror",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.reset",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.startFrom",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.setLabel",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
    "async": false
   },
   {

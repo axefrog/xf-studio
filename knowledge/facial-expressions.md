@@ -149,6 +149,15 @@ ArchiveXL's `animations:` entries accept `entity` (path or scope), `set`, `prior
 
 Nothing in this section has been tried end to end; the first in-game test decides it.
 
+### What the Studio's expression editor reads (phase 1)
+
+The [expression editor](../research/animation/expression-editor-design.md#phase-1-status) reads the facts above from the player's own files, the way the game resolves them:
+
+- **A clip's float tracks** sit in its `animAnimationBufferCompressed` data after the joint keys: 8 bytes per key, animated keys as `u16` normalised time, `u16` track, `f32` value, then constant keys as `u16` track, `u16` time, `f32` value; the data is at the clip's `dataAddress` in the set's `animationDataChunks` [source: WolvenKit `animAnimationBufferCompressed.ReadBuffer`, read and reimplemented]. Decoding the vanilla female set this way reproduces the table in §3 (`facial_happy`: upper lips apart 0.86, right sharp corner up 0.82) [offline].
+- **The installed expressions on the reference setup**: the winning table is the Mega Pack's (217 rows); V's photo-mode face rig and the pack's `resource.patch` of it list the animation sets by **hash only** (`ResourcePath` stored as `uint64` in the cooked file), so a reader must look them up by hash; every row's clip is found in an attached set (15 from the base game, 202 from the pack) [offline, 27 September].
+- **The rig's controls** come from the female head's skeleton (`trackNames`, `referenceTracks`) and its facial setup's `info.tracksMapping` (13 envelopes, 141 main poses, 86 overrides, 33 wrinkles) [resource].
+- **Solving** one pose with the pinned IO Suite solver takes about 0.7 ms after the setup compiles (about 0.2 s) [offline].
+
 ## Open questions
 
 Questions 1 and 2 have bridge commands ready (`face.rig.read` and `photo.expression.index`, offline only) and are on the runtime bridge's next [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2).

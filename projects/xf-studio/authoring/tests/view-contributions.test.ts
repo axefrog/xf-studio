@@ -37,17 +37,22 @@ const GRANDFATHERED = ["presets", "layers", "history", "library", "package", "he
   "edge", "warp", "character", "lighting", "motion", "quality", "activity", "help"];
 const area = { x: 0, y: 0, w: 1600, h: 900 };
 
+/** The catalogue of the shell and eye makeup alone (before the Expressions module's panel existed). */
+const BEFORE_EXPRESSIONS = viewCatalogue([SHELL_VIEW, EYE_MAKEUP_VIEW]);
+
 test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts and homes exactly", () => {
-  expect([...PANEL_IDS] as string[]).toEqual(GRANDFATHERED);
-  expect(defaultWide(STUDIO_CATALOGUE)).toEqual(BEFORE.wide());
-  expect(defaultCompact(STUDIO_CATALOGUE)).toEqual(BEFORE.compact());
+  // The Expressions module adds its one panel after Warp; everything that existed keeps its ID and place.
+  expect([...PANEL_IDS] as string[]).toEqual([...GRANDFATHERED.slice(0, 11), "expressions.controls", ...GRANDFATHERED.slice(11)]);
+  expect(defaultWide(BEFORE_EXPRESSIONS)).toEqual(BEFORE.wide());
+  expect(defaultCompact(BEFORE_EXPRESSIONS)).toEqual(BEFORE.compact());
+  expect(locate(defaultWide(STUDIO_CATALOGUE), "expressions.controls")!.group.id).toBe("g-inspect");
   expect(STUDIO_CATALOGUE.homes).toEqual({ help: ["finish", "layers"] });
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");
   // Eye makeup's view contributes its six panels; the shell the rest.
   expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["layers", "uv", "finish", "shape", "edge", "warp"]);
-  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup"]);
+  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "expressions"]);
 });
 
 test("a dock layout saved before step 5 restores unchanged", () => {
@@ -57,9 +62,12 @@ test("a dock layout saved before step 5 restores unchanged", () => {
   const layers = locate(wide, "layers")!.group; layers.panels = ["layers"];
   wide = { ...wide, floating: [{ id: "w-history", x: 900, y: 120, w: 320, h: 400, node: group(["history"], "history", "g-history") }] };
   const saved = JSON.parse(JSON.stringify(serializeDockState({ wide, compact: BEFORE.compact() })));
-  const restored = restoreDockPreference(saved, area, STUDIO_CATALOGUE);
+  const restored = restoreDockPreference(saved, area, BEFORE_EXPRESSIONS);
   expect(restored.recovered).toBe(true);
   expect(restored.state).toEqual(saved.state);
+  // With today's catalogue the only change is the Expressions panel joining its default group (hidden modules park it; view-modules).
+  const today = restoreDockPreference(saved, area, STUDIO_CATALOGUE);
+  expect(JSON.parse(JSON.stringify(today.state).replaceAll(',"expressions.controls"', ""))).toEqual(saved.state);
 });
 
 test("every contributed panel has a factory, and every action kind an activity source from a contribution", () => {
@@ -80,11 +88,11 @@ test("new features use <feature>.<panel> IDs; only the shell's and eye makeup's 
 
 test("a second feature's view slots into the shell's layouts, and a saved layout gains its panel", () => {
   const HAIR_VIEW: ViewContribution = { owner: "hair", activity: [{ pattern: /^hair\./, label: "Hair" }],
-    panels: [{ id: "hair.strands", title: "Strands", icon: "shape", description: "Hair strands.", order: 115, slot: "inspect" }] };
+    panels: [{ id: "hair.strands", title: "Strands", icon: "shape", description: "Hair strands.", order: 116, slot: "inspect" }] };
   const catalogue = viewCatalogue([...STUDIO_VIEWS, HAIR_VIEW]);
-  expect(catalogue.ids.slice(10, 13)).toEqual(["warp", "hair.strands", "character"]);
+  expect(catalogue.ids.slice(10, 14)).toEqual(["warp", "expressions.controls", "hair.strands", "character"]);
   expect(locate(defaultWide(catalogue), "hair.strands")!.group.panels).toEqual(
-    ["finish", "shape", "edge", "warp", "hair.strands", "character", "lighting", "motion", "quality"]);
+    ["finish", "shape", "edge", "warp", "expressions.controls", "hair.strands", "character", "lighting", "motion", "quality"]);
   expect(sourceIn("hair.setColour", catalogue)).toBe("Hair");
   // A layout saved before the feature existed keeps its arrangement; the new panel joins its default group.
   const saved = BEFORE.wide();
