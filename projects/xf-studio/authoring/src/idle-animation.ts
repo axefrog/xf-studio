@@ -27,6 +27,14 @@ export class IdleAnimation {
   private playbackPaused = false;
   private bodyContribution = true;
   private faceContribution = true;
+  /**
+   * The body clip is a photo-mode pose (pose-clip.ts), not one of the game's idles: the face composes over it by the motion rules
+   * (preview-motion.ts: the idle's face, or a held expression lent through `setFaceOverride`). `bodyMoves` is false for a held pose.
+   */
+  private posed = false;
+  private bodyMoves = true;
+  /** The face deltas to compose instead of the idle's face clip (a held expression over a pose), by bone name; null: the idle's own. */
+  private faceOverride: (() => ReadonlyMap<string, THREE.Matrix4> | null) | null = null;
   private readonly delta = new THREE.Matrix4();
   private readonly local = new THREE.Matrix4();
   private readonly faceDelta = new THREE.Matrix4();
@@ -238,10 +246,13 @@ export class IdleAnimation {
     }
   }
   /**
-   * Play other clips on the same rigs (another of the game's preview idles): a body clip keyed on the body rig's joint names, and a face
-   * clip on the face rig's (absent: the face keeps its clip). The phase carries over, wrapped into the new clips.
+   * Play other clips on the same rigs (another of the game's preview idles, or a photo-mode pose with `options.pose`): a body clip keyed on
+   * the body rig's joint names, and a face clip on the face rig's (absent: the face keeps its clip). The phase carries over, wrapped into
+   * the new clips.
    */
-  setClips(body: THREE.AnimationClip, face?: THREE.AnimationClip, faceLoopFrom?: number) {
+  setClips(body: THREE.AnimationClip, face?: THREE.AnimationClip, faceLoopFrom?: number, options: { pose?: boolean; moves?: boolean } = {}) {
+    // A photo-mode pose (pose-clip.ts) plays on the same rigs; a held one doesn't move by itself.
+    this.posed = !!options.pose; this.bodyMoves = options.moves ?? true;
     this.mixer.stopAllAction();
     this.mixer.uncacheClip(this.clip);
     this.clip = body;
@@ -257,6 +268,37 @@ export class IdleAnimation {
     }
     if (this.enabled) { this.resetDangles(); this.update(0); }
     this.onChange?.();
+  }
+  /** Whether the body clip is a photo-mode pose. */
+  get posing() { return this.posed; }
+  /**
+   * Whether playback changes the pose by itself: an idle always does; a held pose through the idle's face (on, and not replaced by a
+   * lent expression) or simulated hair, which keeps swinging and settling on it. A render-on-demand viewport draws continuously only
+   * while this holds.
+   */
+  get moving() { return this.bodyMoves || (this.faceContribution && !!this.facial && !this.faceOverride) || this.simulating(); }
+  /** Compose these face deltas instead of the idle's face clip (null: the idle's own again), and recompose at the held phase. */
+  setFaceOverride(source: (() => ReadonlyMap<string, THREE.Matrix4> | null) | null) {
+    if (source === this.faceOverride) return;
+    this.faceOverride = source;
+    if (this.enabled) this.update(0);
+    this.onChange?.();
+  }
+  /**
+   * The body clip's joints (the rig the clips drive) as a box over `phases` evenly spread phases of the body clip (one for a held pose),
+   * in the rig's space; the current phase is restored. For framing the posed body and keeping it inside the clip planes.
+   */
+  jointBounds(phases = 1): THREE.Box3 {
+    const box = new THREE.Box3(), point = new THREE.Vector3(), time = this.elapsed;
+    const count = this.bodyMoves ? Math.max(1, phases) : 1;
+    for (let i = 0; i < count; i++) {
+      this.mixer.setTime(this.clip.duration * i / count);
+      this.source.updateMatrixWorld(true);
+      this.source.traverse(object => { if (object instanceof THREE.Bone) box.expandByPoint(point.setFromMatrixPosition(object.matrixWorld)); });
+    }
+    this.mixer.setTime(time % this.clip.duration);
+    this.source.updateMatrixWorld(true);
+    return box;
   }
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;
@@ -303,14 +345,18 @@ export class IdleAnimation {
       this.poseAt(this.elapsed);
       if (this.dangles.size) this.dangles.rigid(this.liveDelta);
     }
-    if (!this.bodyContribution && !this.faceContribution) {
+    // A held expression lent over a pose (preview-motion.ts) replaces the idle's face clip.
+    const lent = this.faceOverride?.() ?? null;
+    if (!this.bodyContribution && !this.faceContribution && !lent) {
       this.restore();
       return;
     }
     for (const b of this.bindings) {
       this.delta.identity();
       if (this.bodyContribution) this.delta.multiplyMatrices(b.driver.matrixWorld,b.inverseDriverBind);
-      if (this.faceContribution && b.faceDriver && b.inverseFaceBind) {
+      const faceDelta = lent?.get(b.bone.name);
+      if (lent) { if (faceDelta) this.delta.multiply(faceDelta); }
+      else if (this.faceContribution && b.faceDriver && b.inverseFaceBind) {
         this.faceDelta.multiplyMatrices(b.faceDriver.matrixWorld,b.inverseFaceBind);
         this.delta.multiply(this.faceDelta);
       }

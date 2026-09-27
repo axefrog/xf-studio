@@ -233,11 +233,13 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 
 export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
-  const STILL = "still";
+  // The body source: Still (the bind pose), one of the game's own preview idles (the creator's close-up and full body, the inventory…), or
+  // the photo-mode pose chosen in Poses (its own pressed button while one is held; choosing another source leaves it).
+  const STILL = "still", POSE = "pose";
   // Mutually exclusive buttons, one per idle prepared on this computer (the list can change), wrapping onto more rows as needed. The
   // pressed button moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
   const source = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
+    if (value === POSE) return;
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
@@ -276,14 +278,18 @@ export function motionPanel(rt: StudioRuntime): PanelController {
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
       source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
-        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") }))]);
-      source.update(motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
-        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready." : "" });
+        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") })),
+        ...(motion?.pose ? [{ value: POSE, label: `Pose: ${motion.pose.label}`, title: "The photo-mode pose chosen in Poses. Choose Still or an idle to leave it." }] : [])]);
+      source.update(motion?.pose ? POSE : motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
+        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready."
+          : motion?.pose && motion.poseLoading ? `Loading ${motion.pose.label}; V keeps her current pose until it's ready.` : "" });
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason : motion.idle
+      setText(idleNote, !motion?.available ? unavailable.reason
+        : motion.pose ? `V holds ${motion.pose.label} from Poses${motion.pose.moves ? ", which moves" : ""}. ${motion.idleFace ? "Her face keeps the idle's movement" : "Her face holds still"} unless an expression is shown.`
+        : motion.idle
         ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
         : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });

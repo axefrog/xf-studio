@@ -58,7 +58,7 @@ test("workspace composer keeps pre-preview restoration safe and later uses typed
     camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } };
   const motion = { ...workspace.preview, available: true, blinkAvailable: true, blinkRepeatSeconds: 2.45, blink: .4, blinkPlaying: false,
     idle: false, idleTime: 4, idlePaused: false, idleBody: true, idleFace: false, idleClip: "closeup", idles: [], idleLoading: false,
-    physics: false, physicsAvailable: false, physicsParts: 0 };
+    physics: false, physicsAvailable: false, physicsParts: 0, pose: null, poseLoading: false };
   const composer = new WorkspaceComposer(workspace, {
     editor: () => document.export(), uvView: () => workspace.uvView,
     savedV: () => workspace.savedV, collections: () => workspace.collections,

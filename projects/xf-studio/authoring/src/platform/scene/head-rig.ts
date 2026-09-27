@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { extendSkin } from "../../skin";
 import type { SavedV } from "../../saved-v";
 import { IdleAnimation } from "../../idle-animation";
+import type { PoseClip } from "../../pose-clip";
 import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_ASSET, parseIdleCatalogue, type IdleCatalogue } from "../../idle-catalogue";
 import { activeEyeShape, GAME_BLINK_MISSING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../game-blink";
 import { composePreviewMotion } from "../../preview-motion";
@@ -25,7 +26,12 @@ export type RigMotionAssets = { idle?: IdleAnimation; idleError: string; blink?:
   /** The game's preview idles prepared on this computer (idle-catalogue.ts); the built-in close-up entry when no catalogue was prepared. */
   idles?: IdleCatalogue;
   /** Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there. */
-  selectIdle?(id: string): Promise<void> };
+  selectIdle?(id: string): Promise<void>;
+  /**
+   * Play a photo-mode pose's body clip on the idle's rigs (pose-clip.ts), keeping the idle's face clip; null plays the chosen idle's own
+   * clips again. It changes clips only: turning the rig on is the motion rules' (preview-motion.ts `poseChanged`).
+   */
+  selectPose?(pose: PoseClip | null): Promise<void> };
 /** The core eye as the motion loader may re-rig it (a rigid eye gets a gaze joint per side; the rig keeps the replacement). */
 export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Material; replace(next: THREE.SkinnedMesh): void };
 /**
@@ -40,6 +46,8 @@ export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody) =
  */
 export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") => {
   let idle: IdleAnimation | undefined, idleError = "";
+  // The first idle's clips, as loaded with the rig (so returning to it from a pose loads nothing).
+  let firstClips: { body: THREE.AnimationClip; face: THREE.AnimationClip } | undefined;
   // The catalogue of the game's preview idles, when one was prepared; else the close-up idle alone (an older preparation).
   let idles: IdleCatalogue = BUILT_IN_CATALOGUE;
   try {
@@ -102,6 +110,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
     idle = new IdleAnimation(motion.scene, clip, targets, binding.ancestry, { source: facial.scene, clip: faceClip,
       ...(first.face?.loopFrom !== undefined ? { loopFrom: first.face.loopFrom } : {}) });
+    firstClips = { body: clip, face: faceClip };
     if (!idle.bindings.length) throw Error("Idle rig has no matching bones");
   } catch (error) {
     idle = undefined; idleError = (error as Error).message;
@@ -119,6 +128,10 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
   }
   // Another idle: its body clip (and baked face) loaded once, then played on the same rigs (the clips share the rigs' joint names).
   const loaded = new Map<string, Promise<THREE.AnimationClip | undefined>>();
+  if (firstClips) {
+    loaded.set(`${first.body}|${first.clip}`, Promise.resolve(firstClips.body));
+    loaded.set(`${first.face?.file ?? "cc-idle-face.glb"}|${first.face?.clip ?? "ui_closeup_shot"}_face`, Promise.resolve(firstClips.face));
+  }
   const clipOf = (file: string, name: string) => {
     const key = `${file}|${name}`;
     let pending = loaded.get(key);
@@ -129,6 +142,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     }
     return pending;
   };
+  let idleId = first.id;
   const selectIdle = async (id: string) => {
     const entry = idles.idles.find(item => item.id === id);
     if (!idle || !entry) throw Error("That idle isn't one of the game's idles prepared on this computer.");
@@ -137,8 +151,14 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     const [body, face] = await Promise.all([clipOf(entry.body, entry.clip), faceRef ? clipOf(faceRef.file, `${faceRef.clip}_face`) : undefined]);
     if (!body) throw Error("That idle's motion couldn't be read from its prepared file.");
     idle.setClips(body, face, face ? faceRef?.loopFrom : undefined);
+    idleId = id;
   };
-  return { idle, idleError, blink, blinkError, idles, selectIdle };
+  const selectPose = async (pose: PoseClip | null) => {
+    if (!idle) throw Error("V's motion isn't prepared on this computer, so she can't hold a pose.");
+    if (pose) idle.setClips(pose.clip, undefined, undefined, { pose: true, moves: pose.moves });
+    else if (idle.posing) await selectIdle(idleId);
+  };
+  return { idle, idleError, blink, blinkError, idles, selectIdle, selectPose };
 };
 
 export type HeadRig = Awaited<ReturnType<typeof createHeadRig>>;

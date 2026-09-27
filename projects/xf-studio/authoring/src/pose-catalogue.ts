@@ -126,8 +126,9 @@ const number = (value: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 const bool = (value: unknown): boolean => value === true || value === 1 || (typeof value === "string" && /^(true|1|yes)$/i.test(value.trim()));
-/** A CName list without its empty entries (the schema's default `[""]` compiles to `None`). */
-const names = (value: unknown): string[] => Array.isArray(value) ? value.map(text).filter((item): item is string => !!item && item !== "None") : [];
+/** A CName list without its empty entries (the schema's default `[""]` compiles to `None`; some TweakXL files write `CName("None")`). */
+const names = (value: unknown): string[] => Array.isArray(value) ? value.map(text).map(item => item && /^CName\("(.*)"\)$/.exec(item)?.[1] || item)
+  .filter((item): item is string => !!item && item !== "None") : [];
 /** A Vector3 from the blob (`[x, y, z]`) or a TweakXL value (`{x, y, z}` or `[x, y, z]`). */
 function vector(value: unknown): [number, number, number] {
   if (Array.isArray(value)) return [number(value[0]), number(value[1]), number(value[2])];
@@ -301,15 +302,4 @@ export interface PoseCatalogueLoad {
 export type PoseCatalogueState =
   | { readonly schema: typeof POSE_STATE_SCHEMA; readonly phase: "needs-setup" | "preparing" | "failed"; readonly message: string }
   | { readonly schema: typeof POSE_STATE_SCHEMA; readonly phase: "ready"; readonly message: string; readonly catalogue: PoseCatalogue; readonly evidence: PoseCatalogueLoad["evidence"] };
-export interface PoseSample {
-  readonly schema: typeof POSE_SAMPLE_SCHEMA;
-  readonly id: string;
-  readonly clip: { readonly name: string; readonly set: string; readonly frames: number; readonly duration: number };
-  /** Seconds into the clip (the record's `animationTime`, clamped to the clip). */
-  readonly time: number;
-  readonly rig: string;
-  /** Game space (Z up), local to each joint's parent; a joint the clip doesn't key keeps the rig's reference, which is listed too. */
-  readonly joints: readonly { readonly bone: string; readonly parent: string | null; readonly translation: readonly number[]; readonly rotation: readonly number[];
-    readonly scale: readonly number[]; readonly keyed: boolean }[];
-  readonly tracks: Readonly<Record<string, number>>;
-}
+export type { PoseMotion, PoseSample } from "./pose-sample";

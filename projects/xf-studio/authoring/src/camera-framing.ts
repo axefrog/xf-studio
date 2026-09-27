@@ -44,6 +44,26 @@ export function bodyCameraDistance(fov: number, aspect: number): number {
   return Math.max(BODY_FRAME.halfHeight / half, BODY_FRAME.halfWidth / (half * Math.max(aspect, 1e-3))) * BODY_FRAME.margin + BODY_FRAME.halfDepth;
 }
 
+/** Padding around a posed skeleton's joints (m): the body's own radius beyond them, the skull above `Head`, the feet below the ankles. */
+export const POSED_PADDING = .2;
+/** A box of posed joint positions (rig space, metres). */
+export type JointBox = { readonly min: Point3; readonly max: Point3 };
+/**
+ * The whole-body view of a posed V (pose-library-design.md §5.3): the orbit target at the padded joints' centre, and the frontal distance
+ * that fits their height and width with the whole-body margin, like `bodyCameraDistance` for a standing V.
+ */
+export function posedBodyFrame(fov: number, aspect: number, box: JointBox): { target: Point3; distance: number } {
+  const half = Math.tan(fov * Math.PI / 360), pad = POSED_PADDING;
+  const hh = (box.max[1] - box.min[1]) / 2 + pad, hw = (box.max[0] - box.min[0]) / 2 + pad, hd = (box.max[2] - box.min[2]) / 2 + pad;
+  const target: Point3 = [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2];
+  return { target, distance: Math.max(hh / half, hw / (half * Math.max(aspect, 1e-3))) * BODY_FRAME.margin + hd };
+}
+/** A sphere enclosing a posed V (padded joints), for the orbit's reach and the clip planes. */
+export function posedBodySubject(box: JointBox): Subject {
+  const centre: Point3 = [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2];
+  return { centre, radius: Math.hypot(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]) / 2 + POSED_PADDING };
+}
+
 /**
  * The orbit distance at which every subject fits in the view around `target`, from any direction: a sphere about the target that
  * encloses them all, inside the narrower of the view's half angles (vertical, or horizontal in a tall pane), with the margin.

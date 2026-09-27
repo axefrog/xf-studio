@@ -65,10 +65,16 @@ import { switcherReach, type CcoOption, type CcoResource } from "./cco-model";
 import type { CharacterInput, ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
 import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
-import { clampedList, decalFamilySlot, DETAIL_SLOTS, isChoiceLabel, SLOT_WORDS } from "./render-detail";
+import { clampedList, decalFamilySlot, DETAIL_SLOTS, GARMENT_TAGS_MAX, isChoiceLabel, isVisualTag, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 import type { ClothingFailure, ResolvedClothing } from "./clothing-resolver";
+
+/** A garment's visual tags as the record carries them (valid CNames, unique, bounded); none: nothing. */
+const garmentTags = (tags: readonly string[]): { tags?: string[] } => {
+  const kept = [...new Set(tags.filter(isVisualTag))].slice(0, GARMENT_TAGS_MAX);
+  return kept.length ? { tags: kept } : {};
+};
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
@@ -127,7 +133,7 @@ export type PlannedComponent = {
   /** Body components: the morph targets the resolver applied (`<target>_<region>`); absent on head parts, which follow the facial shapes. */
   morphs?: string[];
   /** Garment components: the clothing area and item record that brought it, and its layer score. */
-  garment?: { area: string; item: string; layer: number | null };
+  garment?: { area: string; item: string; layer: number | null; tags?: string[] };
   /**
    * How the reader read this part's files, when that may differ from the game (resource-graph.ts `readerRuleNotes`): a value stored with
    * an older type, a watched property left out. The record's notes carry them.
@@ -639,7 +645,7 @@ export function planClothing(clothing: ResolvedClothing | ClothingFailure | null
     const entry = { option: garment.area, definition: garment.definition ?? garment.label } as ResolvedAppearance;
     const items = garment.components.map(component => planComponent("clothing", entry, component, defaults, identities))
       .filter((item): item is PlannedComponent => !!item)
-      .map(item => ({ ...item, garment: { area: garment.area, item: garment.item, layer: garment.layers[item.component] ?? null } }));
+      .map(item => ({ ...item, garment: { area: garment.area, item: garment.item, layer: garment.layers[item.component] ?? null, ...garmentTags(garment.tags) } }));
     if (items.length) { planned.push(...items); shown.push(garment.label); } else unshown.push(garment.label);
   }
   planned.sort((a, b) => (a.garment!.layer ?? 0) - (b.garment!.layer ?? 0));
