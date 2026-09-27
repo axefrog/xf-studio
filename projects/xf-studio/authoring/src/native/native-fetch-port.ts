@@ -42,7 +42,7 @@ import rttiDefaults from "./rtti-defaults.json";
 /** Root classes whose documents matched the reference JSON on every resolver field in the differential harness. */
 export const NATIVE_ROOTS: ReadonlySet<string> = new Set(["gameuiCharacterCustomizationInfoResource", "CMaterialInstance", "appearanceAppearanceResource",
   "CMesh", "MorphTargetMesh", "CBitmapTexture", "entEntityTemplate", "CMaterialTemplate", "CHairProfile", "CSkinProfile", "CGradient",
-  "Multilayer_Setup", "Multilayer_LayerTemplate"]);
+  "Multilayer_Setup", "Multilayer_LayerTemplate", "animRig", "animAnimGraph"]);
 
 /**
  * `JsonResource` payload classes whose documents matched WolvenKit's leaf for leaf in the differential harness, read when a caller asks

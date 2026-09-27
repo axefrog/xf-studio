@@ -347,6 +347,1464 @@
   "comparisonFunc": "TCF_None",
   "register": 0
  },
+ "animAnimFeatureEntry": {
+  "debugEnabled": 0,
+  "forceAllocate": 0
+ },
+ "animAnimGraph": {
+  "additionalAnimDatabases": [],
+  "animFeatures": [],
+  "hackAlwaysSample": 0,
+  "hasMixerSlot": 0,
+  "isPaused": 0,
+  "jsonFilesDirectory": "",
+  "oneFrameToggle": 0,
+  "staticCommandsRig": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Default"
+  },
+  "timeDeltaMultiplier": 1,
+  "useAnimCommands": 0,
+  "useAnimCommandsForCrowd": 0,
+  "useAnimStaticCommands": 0,
+  "useLunaticMode": 0
+ },
+ "animAnimMathExpressionVectorSocket": {
+  "expressionVarId": 0
+ },
+ "animAnimNodeSourceChannel_OrientationVector": {
+  "up": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 1,
+   "Z": 0
+  }
+ },
+ "animAnimNodeSourceChannel_WeightedQuat": {
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightLink": {
+   "$type": "animFloatLink",
+   "node": null
+  }
+ },
+ "animAnimNodeSourceChannel_WeightedVector": {
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightLink": {
+   "$type": "animFloatLink",
+   "node": null
+  }
+ },
+ "animAnimNode_AimConstraint": {
+  "areSourceChannelsResaved": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "forwardAxisLS": {
+   "$type": "Vector3",
+   "X": 1,
+   "Y": 0,
+   "Z": 0
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "targetTransform": {
+   "$type": "animTransformIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "upAxisLS": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 1,
+   "Z": 0
+  },
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightMode": "Static"
+ },
+ "animAnimNode_AimConstraint_ObjectUp": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "forwardAxisLS": {
+   "$type": "Vector3",
+   "X": 1,
+   "Y": 0,
+   "Z": 0
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "upAxisLS": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 1,
+   "Z": 0
+  },
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightMode": "Static"
+ },
+ "animAnimNode_BlendOverride": {
+  "blendMethod": null,
+  "blendTrackMode": "AGBT_Interpolate",
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "getDeltaMotionFromOverride": 0,
+  "id": 4294967295,
+  "overrideInputNode": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "postProcess": null,
+  "syncMethod": null,
+  "timeWarpingEnabled": 0,
+  "tracks": [],
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_Dangle": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_DirectConnConstraint": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "isSourceTransformResaved": 0,
+  "posZ": 0,
+  "poseInfoLogger": null,
+  "rotX": 0,
+  "rotY": 0,
+  "sourceTransformIndex": {
+   "$type": "animTransformIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightNode": {
+   "$type": "animFloatLink",
+   "node": null
+  }
+ },
+ "animAnimNode_Drag": {
+  "debugDrawingEnabled": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "overshootDetectionMaxSpeed": 4,
+  "overshootDetectionMinSpeed": 0.400000006,
+  "overshootDuration": 1,
+  "poseInfoLogger": null,
+  "stepsTargetSpeedMultiplier": 10000,
+  "timeBetweenSteps": 0.100000001,
+  "timeInStep": 0.100000001,
+  "useSteps": 0,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_FloatConstant": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "value": 0,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_FloatTrackDirectConnConstraint": {
+  "channel": "PosX",
+  "debug": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "mulFactor": 1,
+  "mulFactorNode": {
+   "$type": "animFloatLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightNode": {
+   "$type": "animFloatLink",
+   "node": null
+  }
+ },
+ "animAnimNode_Join": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_LODBegin": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_LODEnd": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_MathExpressionVector": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_OrientConstraint": {
+  "areSourceChannelsResaved": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "inputWeightedTransforms": [],
+  "poseInfoLogger": null,
+  "preprocessedWeights": [],
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightMode": "Static"
+ },
+ "animAnimNode_Output": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_ParentConstraint": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "interpolationType": "Slerp",
+  "offsetEulerRotationLS": {
+   "$type": "animVectorLink",
+   "node": null
+  },
+  "offsetTranslationLS": {
+   "$type": "animVectorLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "useBoneReferencePoseAsDefaultOffset": 0,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightNode": {
+   "$type": "animFloatLink",
+   "node": null
+  }
+ },
+ "animAnimNode_PointConstraint": {
+  "areSourceChannelsResaved": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "inputWeightedTransforms": [],
+  "poseInfoLogger": null,
+  "preprocessedWeights": [],
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weight": 1,
+  "weightFloatTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "weightMode": "Static"
+ },
+ "animAnimNode_PointConstraint_WeightedTransform": {
+  "weight": 1
+ },
+ "animAnimNode_PoseLsToMs": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_PoseMsToLs": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_ReferencePoseTerminator": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 1
+ },
+ "animAnimNode_Root": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "outputNode": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_SetBoneTransform": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_SharedMetaPose": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0,
+  "weightLink": {
+   "$type": "animFloatLink",
+   "node": null
+  }
+ },
+ "animAnimNode_SimpleBounce": {
+  "areChannelsResaved": 0,
+  "debug": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "delay": 0,
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "multiplier": 1,
+  "negativeMultiplier": 1,
+  "offset": 0,
+  "outputDriverTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "poseInfoLogger": null,
+  "trackOutputs": [],
+  "transformOutputs": [],
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_SimpleSpline": {
+  "areSourceChannelsResaved": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "defaultProgress": 0.5,
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "progressMode": "Static",
+  "progressTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_StackTracksExtender": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_StackTracksShrinker": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_StackTransformsExtender": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_StackTransformsShrinker": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_StaticSwitch": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "motionProvider": null,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_TranslationLimit": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "limitOnXAxis": {
+   "$type": "animFloatClamp",
+   "max": 1,
+   "min": -1,
+   "useMax": 0,
+   "useMin": 0
+  },
+  "limitOnZAxis": {
+   "$type": "animFloatClamp",
+   "max": 1,
+   "min": -1,
+   "useMax": 0,
+   "useMin": 0
+  },
+  "parentTransform": {
+   "$type": "animTransformIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_TwistConstraint": {
+  "debug": 0,
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "frontAxis": "X",
+  "id": 4294967295,
+  "inputLink": {
+   "$type": "animPoseLink",
+   "node": null
+  },
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_VectorConstant": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
+ "animAnimNode_VectorInput": {
+  "debugName": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "id": 4294967295,
+  "poseInfoLogger": null,
+  "visAxes": 0,
+  "visMask": null,
+  "visNames": 0,
+  "visPostPose": 0,
+  "visPostPoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visPrePose": 0,
+  "visPrePoseColor": {
+   "$type": "Color",
+   "Alpha": 0,
+   "Blue": 0,
+   "Green": 0,
+   "Red": 0
+  },
+  "visRigPartMask": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  },
+  "visWhenActive": 0
+ },
  "animAnimSetup": {
   "cinematics": [],
   "gameplay": []
@@ -354,6 +1812,292 @@
  "animAnimSetupEntry": {
   "priority": 128,
   "variableNames": []
+ },
+ "animAnimVariableBool": {
+  "default": 0,
+  "enableDebug": 0
+ },
+ "animAnimVariableContainer": {
+  "boolVariables": [],
+  "floatVariables": [],
+  "intVariables": [],
+  "quaternionVariables": [],
+  "transformVariables": [],
+  "vectorVariables": []
+ },
+ "animCollisionRoundedShape": {
+  "drawAxis": 1,
+  "xBoxExtent": 0,
+  "yBoxExtent": 0,
+  "zBoxExtent": 0
+ },
+ "animDangleConstraint_SimulationDyng": {
+  "HACK_checkDangleTeleport": 0,
+  "alpha": 1,
+  "collisionRoundedShapes": [],
+  "dangleAltersTransformsOfItsChildren": 0,
+  "debugDrawingEnabled": 0,
+  "drawDebugAxis": 1,
+  "drawDebugCollisionCapsule": 1,
+  "drawDebugCollisionShapes": 1,
+  "drawDebugConstraint": 1,
+  "drawDebugText": 1,
+  "jsonCollisionShapes": {
+   "DepotPath": {
+    "$type": "ResourcePath",
+    "$storage": "uint64",
+    "$value": "0"
+   },
+   "Flags": "Default"
+  },
+  "jsonCollisionShapesLoadedSuccessfully": 1,
+  "parentRotationAltersTransformsOfDangleAndItsChildren": 0,
+  "parentRotationAltersTransformsOfNonDanglesAndItsChildren": 0,
+  "rotateParentToLookAtDangle": 1,
+  "solverIterations": 1,
+  "substepTime": 0.00999999978
+ },
+ "animDyngConstraintCone": {
+  "collisionCapsuleHeightExtent": 0,
+  "collisionCapsuleRadius": 0,
+  "coneTransformLS": {
+   "$type": "QsTransform",
+   "Rotation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+   },
+   "Scale": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 1,
+    "Y": 1,
+    "Z": 1
+   },
+   "Translation": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   }
+  },
+  "constraintType": "Cone",
+  "halfOfMaxApertureAngle": 45,
+  "isDebugEnabled": 1,
+  "projectionType": "ShortestPathRotational"
+ },
+ "animDyngConstraintEllipsoid": {
+  "constraintRadius": 1,
+  "constraintScale1": 1,
+  "constraintScale2": 1,
+  "ellipsoidTransformLS": {
+   "$type": "QsTransform",
+   "Rotation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+   },
+   "Scale": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 1,
+    "Y": 1,
+    "Z": 1
+   },
+   "Translation": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   }
+  }
+ },
+ "animDyngConstraintLink": {
+  "isDebugEnabled": 1,
+  "lengthLowerBoundRatioPercentage": 100,
+  "lengthUpperBoundRatioPercentage": 100,
+  "linkType": "KeepFixedDistance",
+  "lookAtAxis": {
+   "$type": "Vector3",
+   "X": 1,
+   "Y": 0,
+   "Z": 0
+  }
+ },
+ "animDyngParticle": {
+  "collisionCapsuleAxisLS": {
+   "$type": "Vector3",
+   "X": 0.5,
+   "Y": 0,
+   "Z": 0
+  },
+  "collisionCapsuleHeightExtent": 0,
+  "collisionCapsuleRadius": 0,
+  "damping": 1,
+  "isDebugEnabled": 1,
+  "isFree": 1,
+  "mass": 1,
+  "projectionType": "ShortestPath",
+  "pullForceFactor": 0
+ },
+ "animDyngParticlesContainer": {
+  "externalForceWS": {
+   "$type": "Vector3",
+   "X": 0,
+   "Y": 0,
+   "Z": 0
+  },
+  "externalForceWsLink": {
+   "$type": "animVectorLink",
+   "node": null
+  },
+  "gravityWS": 9.81000042
+ },
+ "animFloatClamp": {
+  "max": 1,
+  "min": -1,
+  "useMax": 0,
+  "useMin": 0
+ },
+ "animFloatTrackInfo": {
+  "referenceValue": 0
+ },
+ "animMathExpressionNodeData": {
+  "floatSockets": [],
+  "quaternionSockets": []
+ },
+ "animRig": {
+  "aPoseLS": [],
+  "aPoseMS": [],
+  "distanceCategoryToLodMap": [],
+  "ikSetups": [],
+  "levelOfDetailStartIndices": [],
+  "parts": [],
+  "ragdollDesc": [],
+  "ragdollNames": [],
+  "referencePoseMS": [],
+  "referenceTracks": [],
+  "retargets": [],
+  "rigExtraTracks": [],
+  "skipRigValidation": 0,
+  "tags": {
+   "$type": "redTagList",
+   "tags": []
+  },
+  "trackNames": []
+ },
+ "animSetBoneTransformEntry": {
+  "offset": {
+   "$type": "QsTransform",
+   "Rotation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+   },
+   "Scale": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 1,
+    "Y": 1,
+    "Z": 1
+   },
+   "Translation": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   }
+  },
+  "offsetSpaceBone": {
+   "$type": "animTransformIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "offsetToReference": 0,
+  "setMethod": "WholeTransform",
+  "snapToReference": 0,
+  "sourceBone": {
+   "$type": "animTransformIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  }
+ },
+ "animSimpleBounceTrackOutput": {
+  "multiplier": 1
+ },
+ "animSimpleBounceTransformOutput": {
+  "channelEntries": [],
+  "multiplier": 1,
+  "parentTransform": {
+   "$type": "animTransformIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "targetTransformChannel": "PosX"
+ },
+ "animTransformIndex": {
+  "name": {
+   "$type": "CName",
+   "$storage": "string",
+   "$value": "None"
+  }
+ },
+ "animTransformInfo": {
+  "referenceTransformLs": {
+   "$type": "QsTransform",
+   "Rotation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+   },
+   "Scale": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 1,
+    "Y": 1,
+    "Z": 1
+   },
+   "Translation": {
+    "$type": "Vector4",
+    "W": 1,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+   }
+  }
+ },
+ "animTwistOutput": {
+  "negativeScale": 1,
+  "outputAngleTrack": {
+   "$type": "animNamedTrackIndex",
+   "name": {
+    "$type": "CName",
+    "$storage": "string",
+    "$value": "None"
+   }
+  },
+  "positiveScale": 1,
+  "twistAxis": "X"
  },
  "appearanceAppearanceDefinition": {
   "censorFlags": 0,

@@ -18,6 +18,11 @@
 import { asArray, cname, HandleScope, isObject, type Json, type JsonObject } from "./red-json";
 
 export const DANGLE_SPEC = "xfs/dangle-spec-1";
+/**
+ * The compiler's revision: part of the host's cache key for compiled specs (dangle-host.ts), with the format, limits and ranges. Bump it
+ * whenever `compileDangleSpec` gives another spec, notes or refusal for the same rig and graph.
+ */
+export const DANGLE_COMPILER = 1;
 /** Bounds on what a spec may hold (a graph is data from a mod as much as from the game). */
 export const DANGLE_LIMITS = Object.freeze({ joints: 512, particles: 256, constraints: 2048, shapes: 64, notes: 16,
   /** Entries the constraint walk may visit, groups and empty entries included (the vanilla `hh_033` graph visits 65). */

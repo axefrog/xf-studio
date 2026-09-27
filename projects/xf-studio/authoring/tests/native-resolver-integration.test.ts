@@ -52,14 +52,14 @@ function meshBytes(): Uint8Array {
 }
 function resource(className: string, props = [prop("sampleCount", "Uint16", v.u16(16))]) { const file = new Cr2wBuilder(); file.export(className, props); return file.build(); }
 
-/** A game folder (direct route) with one archive: a hair profile and a mesh the native reader reads, a rig it doesn't, a damaged material. */
+/** A game folder (direct route) with one archive: a hair profile and a mesh the native reader reads, a layer mask it doesn't, a damaged material. */
 function gameFolder() {
   const root = temporary(), game = join(root, "game");
   const archive = join(game, "archive", "pc", "content", "basegame_9_fixture.archive");
   put(archive, syntheticArchive([
     { path: "base\\fixture\\a.hp", segments: [{ bytes: resource("CHairProfile") }] },
     { path: "base\\fixture\\m.mesh", segments: [{ bytes: meshBytes(), compress: true }] },
-    { path: "base\\fixture\\r.rig", segments: [{ bytes: resource("animRig", []) }] },
+    { path: "base\\fixture\\m.mlmask", segments: [{ bytes: resource("Multilayer_Mask", []) }] },
     { path: "base\\fixture\\broken.mi", segments: [{ bytes: new Uint8Array([1, 2, 3]) }] },
   ], { names: true }));
   put(join(game, "bin", "x64", "Cyberpunk2077.exe"), "game");
@@ -76,7 +76,7 @@ function fakeWolvenKit(fetcher: { wolvenKit: object }): { launches: () => number
     launches++;
     if (args[0] === "uncook") {
       const out = args[args.indexOf("-o") + 1]!, pattern = new RegExp(args[args.indexOf("-r") + 1]!.replace("(?i)", ""), "i");
-      for (const path of ["base\\fixture\\r.rig", "base\\fixture\\broken.mi", "base\\fixture\\a.hp"]) if (pattern.test(path)) {
+      for (const path of ["base\\fixture\\m.mlmask", "base\\fixture\\broken.mi", "base\\fixture\\a.hp"]) if (pattern.test(path)) {
         const file = join(out, ...path.split("\\"));
         put(file, "raw"); put(`${file}.json`, JSON.stringify({ Header: {}, Data: { RootChunk: { $type: "wolvenkit", path } } }));
       }
@@ -100,8 +100,8 @@ test("a route with a native decoder reads natively first; WolvenKit answers only
     expect(hair!.root).toMatchObject({ $type: "CHairProfile", sampleCount: 16 });
     expect(wk.launches()).toBe(0);
     // Not a verified class, and damaged bytes: WolvenKit reads both, in one launch.
-    const [rig, broken] = await Promise.all([graph.load(refFromPath("base\\fixture\\r.rig"), "rig"), graph.load(refFromPath("base\\fixture\\broken.mi"), "mi")]);
-    expect(rig!.root).toEqual({ $type: "wolvenkit", path: "base\\fixture\\r.rig" });
+    const [mask, broken] = await Promise.all([graph.load(refFromPath("base\\fixture\\m.mlmask"), "mlmask"), graph.load(refFromPath("base\\fixture\\broken.mi"), "mi")]);
+    expect(mask!.root).toEqual({ $type: "wolvenkit", path: "base\\fixture\\m.mlmask" });
     expect(broken!.root).toEqual({ $type: "wolvenkit", path: "base\\fixture\\broken.mi" });
     expect(wk.launches()).toBe(1);
     expect(fetcher.nativeStats).toMatchObject({ native: 1, fallback: 2 });
@@ -127,11 +127,11 @@ test("which resources a later session answers without WolvenKit is keyed by arch
   const setup = gameFolder();
   const first = openInstallation({ ...setup.options, native: route("reader-1") });
   fakeWolvenKit(first.fetcher);
-  const archive = first.plan.archives[0]!, hp = refFromPath("base\\fixture\\a.hp").hash, rig = refFromPath("base\\fixture\\r.rig").hash;
+  const archive = first.plan.archives[0]!, hp = refFromPath("base\\fixture\\a.hp").hash, mask = refFromPath("base\\fixture\\m.mlmask").hash;
   await first.graph.load(refFromPath("base\\fixture\\a.hp"), "hp");
-  await first.graph.load(refFromPath("base\\fixture\\r.rig"), "rig");
+  await first.graph.load(refFromPath("base\\fixture\\m.mlmask"), "mlmask");
   expect(first.fetcher.isCached(archive, hp)).toBe(true);
-  expect(first.fetcher.isCached(archive, rig)).toBe(true);
+  expect(first.fetcher.isCached(archive, mask)).toBe(true);
   expect(first.fetcher.wolvenKit.isCached(archive, hp)).toBe(false);
   await Bun.sleep(20);
 
@@ -141,7 +141,7 @@ test("which resources a later session answers without WolvenKit is keyed by arch
   // Another reader identity doesn't reuse the first reader's answers (WolvenKit's own cache still counts).
   const other = installationView({ ...first, native: route("reader-2") }, setup.options);
   expect(other.fetcher.isCached(archive, hp)).toBe(false);
-  expect(other.fetcher.isCached(archive, rig)).toBe(true);
+  expect(other.fetcher.isCached(archive, mask)).toBe(true);
   // Without a native decoder, nothing native counts.
   const plain = installationView({ ...first, native: null }, setup.options);
   expect(plain.fetcher.native).toBeNull();
@@ -193,11 +193,11 @@ test("an array record's elements past its count are read only while each uses by
 
 test("a request may widen the decoder's root classes for itself (the clothing preset through the route's decoder)", async () => {
   const setup = gameFolder(), decoder = route().decoder!;
-  const rig = { archivePath: setup.archive, hash: refFromPath("base\\fixture\\r.rig").hash, needName: false };
-  expect(await decoder.decode(rig)).toMatchObject({ ok: false, kind: "not-verified" });
-  expect(await decoder.decode({ ...rig, roots: ["animRig"] })).toMatchObject({ ok: true, root: "animRig" });
+  const mask = { archivePath: setup.archive, hash: refFromPath("base\\fixture\\m.mlmask").hash, needName: false };
+  expect(await decoder.decode(mask)).toMatchObject({ ok: false, kind: "not-verified" });
+  expect(await decoder.decode({ ...mask, roots: ["Multilayer_Mask"] })).toMatchObject({ ok: true, root: "Multilayer_Mask" });
   // Only for that request.
-  expect(await decoder.decode(rig)).toMatchObject({ ok: false, kind: "not-verified" });
+  expect(await decoder.decode(mask)).toMatchObject({ ok: false, kind: "not-verified" });
 });
 
 test("every native failure kind falls back to WolvenKit per resource; only kinds that may not repeat keep a failed read retryable", async () => {
@@ -218,7 +218,7 @@ test("every native failure kind falls back to WolvenKit per resource; only kinds
 
 test("each fallback is logged by kind (bounded), a reader bug as a failure; expected kinds are only counted", async () => {
   const setup = gameFolder(), diagnostics = hostDiagnosticsAt(join(setup.root, "data"));
-  const answers = new Map<string, NativeFailureKind>([["base\\fixture\\a.hp", "internal"], ["base\\fixture\\m.mesh", "over-budget"], ["base\\fixture\\r.rig", "not-indexed"]]);
+  const answers = new Map<string, NativeFailureKind>([["base\\fixture\\a.hp", "internal"], ["base\\fixture\\m.mesh", "over-budget"], ["base\\fixture\\m.mlmask", "not-indexed"]]);
   const decoder: NativeDecoder = { identity: "stub", close() {}, decode: async request => {
     const kind = [...answers].find(([path]) => refFromPath(path).hash === request.hash)?.[1] ?? "unavailable";
     return { ok: false, kind, message: `${kind} here`, ...(kind === "internal" ? { stack: "TypeError: x\n    at f" } : {}) };
