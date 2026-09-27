@@ -35,6 +35,7 @@ test("projected tangents cross eye holes while actual surface controls keep head
       return !(u>.28&&u<.65&&v>.25&&v<.7);}));
     plate.geometry=grid;
     expect(new SurfaceMap(grid).anchor({u:.5,v:.4})).toBeUndefined();
+    expect(new SurfaceMap(grid,{bridgeHoles:true}).bridged).toBe(false);
     head.position.z = -.02; eyes.position.z = .02;
     scene.add(plate, head, eyes); scene.updateMatrixWorld(true);
     const layer = initialRecipe().layers[0];
@@ -136,7 +137,8 @@ test("projected tangents cross eye holes while actual surface controls keep head
     expect(checkpoints).toBe(2);
     emit("pointerup",handle.screen.x+5,handle.screen.y);
     expect(controls.enabled).toBe(true);expect(canvas.captures.size).toBe(0);
-    // Actual knots still stop at that hole even after the eye moves away.
+    // Actual knots still stop at this hole even after the eye moves away: its boundary pinches at a vertex, so it is
+    // not bridged (surface-eye-drag.test.ts covers a clean opening, which knots do cross).
     Object.assign(layer,structuredClone(original));eyes.position.x=5;eyes.updateMatrixWorld();frame();
     const point=editor.diagnostics().handles.find(h=>h.kind==="point"&&h.index===0&&!h.mirror)!;
     emit("pointerdown",point.screen.x,point.screen.y);
