@@ -144,6 +144,11 @@ export type StudioPresentationPort<Slot> = {
     titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
     /** Turn a view's tool on or off (`view.setTool` through the registry). */
     setTool(view: ViewId | undefined, tool: string, enabled: boolean): StudioDispatchResult;
+    /**
+     * The tools this presentation no longer offers (a hidden module's, research tools while they are hidden): their state is kept
+     * and no device acts on them until they are offered again (UI-102). Tool IDs only; the application never learns why.
+     */
+    withdraw(tools: readonly string[]): void;
   };
   /** The registered feature modules, in catalogue order (feature-module platform §4). */
   features(): readonly FeatureInfo[];
@@ -334,6 +339,7 @@ export function createStudioPresentation<Slot>(sources: {
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
     titles: () => a.viewTitles(),
     setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
+    withdraw: (tools: readonly string[]) => a.withdrawViewTools(tools),
   });
   const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {
     snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),

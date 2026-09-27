@@ -516,24 +516,35 @@ export class StudioApplication {
   viewSummaries(view: string | undefined, filter: Pick<ViewToolFilter, "modules">): ViewSummaryContribution[] {
     return structuredClone(this.services.viewActions?.summaries(view, filter) ?? []);
   }
+  /**
+   * A tool's current state and the action it dispatches on a view, from the action kind it names (`dispatches`), never its ID: any
+   * tool naming the same action resolves the same way.
+   */
   private resolveTool(view: string, tool: ViewToolContribution): ViewToolEntry {
     const entry = (action: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry =>
       ({ ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra });
-    // A module's toggle lives in the view's tools node.
-    if (tool.state === "tools") {
-      const on = this.services.viewActions!.toolOn(view, tool.id);
-      return entry({ kind: "view.setTool", view, tool: tool.id, enabled: !on }, { on });
+    switch (tool.dispatches) {
+      // A toggle held in the view's tools node.
+      case "view.setTool": {
+        const on = this.services.viewActions!.toolOn(view, tool.id);
+        return entry({ kind: "view.setTool", view, tool: tool.id, enabled: !on }, { on });
+      }
+      // The subject's motion: play the idle, then pause and resume it; hidden where the head has no idle.
+      case "motion.setIdle": {
+        const motion = this.services.motion?.snapshot();
+        const playing = !!motion?.idle && !motion.idlePaused;
+        return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
+          { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
+      }
+      // A command on the view (a camera framing): the action it names, on this view.
+      default: return entry({ kind: tool.dispatches, view } as StudioAction);
     }
-    // The character's motion: play, pause and resume the idle; hidden where the head has no idle.
-    if (tool.id === "motion.idle") {
-      const motion = this.services.motion?.snapshot();
-      const playing = !!motion?.idle && !motion.idlePaused;
-      return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
-        { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
-    }
-    // The camera's framing commands: the tool's ID is the action it dispatches on this view.
-    return entry({ kind: tool.id, view } as StudioAction);
   }
+  /**
+   * Withdraw the tools the presentation no longer offers (UI-102; `ViewActions.withdraw`): their state is kept, and no device acts
+   * on them until they are offered again. Given tool IDs, never module visibility (design §6.3 rule 6).
+   */
+  withdrawViewTools(tools: readonly string[]) { this.services.viewActions?.withdraw(tools); }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
@@ -716,7 +727,9 @@ export class StudioApplication {
         dispatch: action => app.services.savedV!.dispatch(action),
       },
       views: {
-        capability: action => app.services.viewActions?.capability(action) ?? missing("Views are still loading."),
+        // A tool's state reaches the 3D view only once it is ready: before that a toggle would show nowhere and not be saved (UI-106).
+        capability: action => action.kind === "view.setTool" && !app.services.preview ? missing("The 3D view is still loading.")
+          : app.services.viewActions?.capability(action) ?? missing("Views are still loading."),
         dispatch: action => app.services.viewActions!.dispatch(action),
       },
       // Before the 3D preview is ready there is no context yet: a creator change is refused as `not_ready` (CORE-64).

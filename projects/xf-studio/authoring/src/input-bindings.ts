@@ -151,6 +151,11 @@ export const MODIFIER_SUMMARIES: Readonly<Record<ViewportScope, Partial<Record<M
   head: { shift: "shape tools", ctrl: "pan", alt: "orbit over makeup" },
   uv: { shift: "shape tools", ctrl: "pan" },
 };
+/** The "Hold …" hints of a viewport that offers no editing tool (its module is hidden, UI-102): camera input only. */
+export const CAMERA_MODIFIER_SUMMARIES: Readonly<Record<ViewportScope, Partial<Record<ModifierKey, string>>>> = {
+  head: { ctrl: "pan" },
+  uv: { ctrl: "pan" },
+};
 
 /** CSS keyword each cursor falls back to; custom SVG cursors live in studio.css under `[data-cursor]`. */
 export const CURSOR_FALLBACK: Readonly<Record<CursorKind, string>> = {
@@ -315,6 +320,11 @@ export type ViewportInputContext = Readonly<{
   gesture?: GestureKind;
   modifiers: HeldModifiers;
   blocked?: BlockReason;
+  /**
+   * False when the viewport offers no editing tool (UI-102): the hints list camera input only, and nothing that is reserved for
+   * editing ("Shift: shape tools", Shift doing nothing off makeup). Absent means it does.
+   */
+  editing?: boolean;
 }>;
 export type HintItem = Readonly<{ input: string; label: string; ids: readonly string[] }>;
 export type ViewportHints = Readonly<{
@@ -351,8 +361,11 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
     return { scope, heading: gesture.label, items, hold: [], more: [], tone: "gesture" };
   }
   const mods = inside ? modifierKey(context.modifiers) : "";
+  const editing = context.editing !== false;
   const items = mergeItems(STRIP_INPUTS.flatMap(input => {
     const binding = pointerBinding(scope, input, target, mods);
+    // Without an editing tool, inputs reserved for editing (they do nothing here) aren't worth a hint.
+    if (!editing && binding?.effect === "none") return [];
     return binding && binding.strip !== false ? [{ input: pointerInputLabel(input), label: binding.label, ids: [binding.id] }] : [];
   }));
   const heading = inside ? TARGET_LABELS[scope][target] : scope === "head" ? "3D view" : "UV map";
@@ -363,7 +376,7 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
       items: items.length ? [...items, ...(armed ? [keyItem("gesture.cancel")] : [])] : [{ input: "", label: "no action here", ids: [] }],
       hold: [], more: [] };
   }
-  const summaries = MODIFIER_SUMMARIES[scope];
+  const summaries = (editing ? MODIFIER_SUMMARIES : CAMERA_MODIFIER_SUMMARIES)[scope];
   const hold = HOLD_ORDER.filter(key => summaries[key]).map(key =>
     ({ input: modifierLabel(key), label: summaries[key]!, ids: POINTER_BINDINGS.filter(binding => binding.scope === scope &&
       binding.mods !== ANY && binding.mods.includes(key)).map(binding => binding.id) }));
