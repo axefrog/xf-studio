@@ -100,6 +100,10 @@ By Hans-Kristian Arntzen. [GitHub](https://github.com/HansKristian-Work/dxil-spi
 
 By Blackboard Technologies Inc. and contributors. [Electrobun](https://github.com/blackboardsh/electrobun), [Hutch](https://github.com/blackboardsh/hutch). Electrobun's documentation shaped XF Studio's desktop packaging, update, shutdown and uninstall design, and it is the framework for our desktop packaging trial. Electrobun is MIT-licensed and its notice must accompany any distributed build, together with the notices of its bundled dependencies.
 
+### glTF 2.0 Specification
+
+By the Khronos Group. [Specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html). XF Studio's native mesh reader writes the preview's GLB files to it, and its rule that an accessor holds at least one element is why the reader leaves a chunk without vertices or triangles to WolvenKit.
+
 ### Inno Setup
 
 By Jordan Russell and Martijn Laan. [Website](https://jrsoftware.org/isinfo.php), [source](https://github.com/jrsoftware/issrc). XF Studio's downloadable Windows setup is one Inno Setup program that carries Electrobun's setup and runs it. The setup runtime it redistributes is under the Inno Setup License, whose notice ships with the app's third-party notices.
@@ -114,7 +118,7 @@ By the Khronos Group. [Specification 1.3](https://registry.khronos.org/DataForma
 
 ### LZ4
 
-By the LZ4 authors and contributors. [Block format specification](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md). The specification let us write the independent decompression in XF Studio's save reader.
+By the LZ4 authors and contributors. [Block format specification](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md). The specification let us write the independent decompression in XF Studio's save reader, and its length encoding bounds how far a block can expand, which the reader checks before it allocates anything.
 
 ### Mermaid CLI
 

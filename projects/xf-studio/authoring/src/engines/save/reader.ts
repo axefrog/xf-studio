@@ -43,7 +43,9 @@ export class Reader {
   text() {
     const n = this.vlq();
     if (Math.abs(n) > 65536) throw Error("Save string too long");
-    return new TextDecoder(n > 0 ? "utf-16le" : "utf-8", { fatal: true }).decode(this.take(Math.abs(n) * (n > 0 ? 2 : 1)));
+    const bytes = this.take(Math.abs(n) * (n > 0 ? 2 : 1));
+    // A string that doesn't decode is bad save data like any other, not a decoder failure (SAVE-09).
+    try { return new TextDecoder(n > 0 ? "utf-16le" : "utf-8", { fatal: true }).decode(bytes); } catch { throw Error("Invalid save string"); }
   }
   count(max = 4096) {
     const n = this.u32();

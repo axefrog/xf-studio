@@ -11,7 +11,7 @@
  * Mod data is shown generically: script classes grouped by their namespace, from the save's own type information. Nothing here
  * interprets one mod's data, and nothing writes. Work is done lazily per node and cached.
  */
-import { decodeChunk, detectSavePackage, packageNames, type PackageFrame, type PackageValue } from "../../engines/red-object/package";
+import { decodeChunk, detectSavePackage, nameBudget, packageNames, type PackageFrame, type PackageValue } from "../../engines/red-object/package";
 import { decodePersistencyEntry, readPersistencyIndex, type PersistDecode, type PersistencyIndex, type PersistValue } from "../../engines/red-object/persistency";
 import { fnv1a64, hashText } from "../../engines/red-object/hash";
 import { readTypeDatabase, type TypeDatabase } from "../../engines/red-object/type-database";
@@ -85,7 +85,9 @@ export type EntryRow = { readonly index: number; readonly id: string; readonly t
 export type NodeInspection =
   | { readonly kind: "package"; readonly node: NodeHeader; readonly variant: string; readonly trailing: number; readonly objects: readonly PackageObjectRow[];
       readonly decoded: number; readonly partial: number; readonly failed: number }
-  | { readonly kind: "persistency"; readonly node: NodeHeader; readonly entries: number; readonly filled: number; readonly walked: number;
+  | { readonly kind: "persistency"; readonly node: NodeHeader; readonly entries: number; readonly filled: number;
+      /** Whether every entry has been walked; until then `walked`, `notWalked` and `classes` count the entries walked so far. */
+      readonly complete: boolean; readonly walked: number;
       readonly notWalked: readonly { readonly reason: string; readonly count: number }[]; readonly classes: readonly { readonly type: string; readonly count: number }[] }
   | { readonly kind: "type-database"; readonly node: NodeHeader; readonly version: number; readonly types: number; readonly typesNamed: number;
       readonly properties: number; readonly propertiesNamed: number; readonly rows: readonly { readonly name: string; readonly kind: string; readonly size: number }[] }
@@ -101,8 +103,13 @@ export type EntryPage = { readonly rows: readonly EntryRow[]; readonly total: nu
 
 export type ExplorerNames = { readonly engine?: EngineTypes | null; readonly scripts?: readonly string[] | null };
 
-/** Bounds on what one inspection returns (the view shows the rest as "N more"). */
-const MAX_CHILDREN = 400, MAX_DEPTH = 24, HEX_BYTES = 512;
+/**
+ * Bounds on what one inspection returns (the view shows the rest as "N more"): children per field, nesting, and fields in all (SAVE-03:
+ * per-level caps alone let nested arrays multiply).
+ */
+const MAX_CHILDREN = 400, MAX_DEPTH = 24, MAX_FIELDS = 5_000, HEX_BYTES = 512;
+/** Decoded world-object entries kept (their decoded values in all, and how many), and decoded values per step of the walk. */
+const ENTRY_CACHE_VALUES = 200_000, ENTRY_CACHE_ENTRIES = 4096, WALK_STEP_VALUES = 50_000;
 const number = (value: number) => value.toLocaleString("en-US");
 const percent = (part: number, whole: number) => whole ? `${(Math.floor(part / whole * 1000) / 10).toFixed(1)} %` : "0 %";
 
@@ -125,20 +132,26 @@ export type SaveExplorer = ReturnType<typeof openExplorer>;
 export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
   const save: SaveImage = openSave(bytes);
   const node = (id: number) => save.nodes[id];
+  /** A node's bytes for a hex preview, or none when its extent lies outside the save's data (a damaged table; SAVE-09). */
+  const bytesOf = (read: () => Uint8Array) => { try { return read(); } catch { return new Uint8Array(0); } };
   let database: TypeDatabase | null = null;
   const schema = save.find("TypeDatabase_v2")[0];
   let databaseError: string | null = null;
   try { database = schema ? readTypeDatabase(save.data(schema.id)) : null; } catch (error) { databaseError = error instanceof Error ? error.message : "unreadable"; }
   const persistencyNode = save.find("PersistencySystem2")[0];
   // Packages are recognised by structure: a leaf node whose data after its ID is a package frame.
+  // Every package's names share one budget (SAVE-01): a frame decodes a name when a chunk or value uses it, and the oracle reads each
+  // package's names once, one at a time, without the frames keeping them.
+  const nameBytes = nameBudget();
   const packages = new Map<number, { frame: PackageFrame; trailing: number }>();
   for (const n of save.nodes) {
     if (n.children.length || n.id === schema?.id || n.id === persistencyNode?.id || n.size < 32) continue;
-    try { const found = detectSavePackage(save.data(n.id).subarray(4)); if (found) packages.set(n.id, found); } catch { /* not a package */ }
+    try { const found = detectSavePackage(save.data(n.id).subarray(4), { names: nameBytes }); if (found) packages.set(n.id, found); } catch { /* not a package */ }
   }
+  function* spelledNames() { for (const entry of packages.values()) yield* packageNames(entry.frame); }
   const oracle: TypeOracle = createTypeOracle({ database, engine: names.engine ?? null, names: [
     ...(names.scripts ? [{ source: "scripts" as const, names: names.scripts }] : []),
-    { source: "package" as const, names: [...packages.values()].flatMap(entry => packageNames(entry.frame)) }] });
+    { source: "package" as const, names: spelledNames() }] });
   const scriptsKnown = !!names.scripts?.length;
 
   const encodingOf = (n: SaveNode): NodeEncoding => n.id === schema?.id ? "type-database" : n.id === persistencyNode?.id ? "persistency"
@@ -180,28 +193,49 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
     catch (error) { persistencyError = error instanceof Error ? error.message : "unreadable"; persistency = null; }
     return persistency;
   };
+  // Decoded entries kept for the entry list and the inspector, bounded by count and by what they decoded to (SAVE-02); the oldest go first.
   const entryCache = new Map<number, PersistDecode>();
+  let cachedValues = 0;
   const entryDecode = (index: number): PersistDecode | null => {
     const p = persistencyIndex(), entry = p?.index.entries[index];
     if (!p || !entry || entry.start < 0) return null;
     let found = entryCache.get(index);
-    if (!found) { found = decodePersistencyEntry(p.body, entry, oracle); if (entryCache.size < 4096) entryCache.set(index, found); }
+    if (!found) {
+      found = decodePersistencyEntry(p.body, entry, oracle);
+      entryCache.set(index, found);
+      cachedValues += found.values;
+      for (const [oldest, dropped] of entryCache) {
+        if (entryCache.size <= 1 || (cachedValues <= ENTRY_CACHE_VALUES && entryCache.size <= ENTRY_CACHE_ENTRIES)) break;
+        entryCache.delete(oldest);
+        cachedValues -= dropped.values;
+      }
+    }
     return found;
   };
-  let persistencyStats: { walked: number; notWalked: Map<string, number>; classes: Map<string, number> } | undefined;
-  const persistencyWalk = () => {
-    if (persistencyStats) return persistencyStats;
-    const p = persistencyIndex();
-    const stats = { walked: 0, notWalked: new Map<string, number>(), classes: new Map<string, number>() };
-    for (const entry of p?.index.entries ?? []) {
+  // The walk that settles the world objects' status runs in steps of about `WALK_STEP_VALUES` decoded values (SAVE-06), so the service can
+  // yield to the page between them; `persistencyStats` is set once every entry has been walked.
+  type WalkStats = { walked: number; notWalked: Map<string, number>; classes: Map<string, number> };
+  let persistencyStats: WalkStats | undefined;
+  let walking: { next: number; stats: WalkStats } | undefined;
+  const walkStep = (budget: number): boolean => {
+    if (persistencyStats) return true;
+    const p = persistencyIndex(), entries = p?.index.entries ?? [];
+    const walk = walking ??= { next: 0, stats: { walked: 0, notWalked: new Map(), classes: new Map() } };
+    const stats = walk.stats;
+    for (let spent = 0; walk.next < entries.length && spent < budget;) {
+      const entry = entries[walk.next++]!;
       if (entry.start < 0) continue;
       const type = typeName(entry.classHash);
       stats.classes.set(type, (stats.classes.get(type) ?? 0) + 1);
       const result = decodePersistencyEntry(p!.body, entry, oracle);
+      spent += result.values + 1;
       if (result.ok) stats.walked++;
       else { const reason = result.reason.replace(/[0-9a-f]{12,}/g, "…").replace(/^\d+ elements/, "too many elements"); stats.notWalked.set(reason, (stats.notWalked.get(reason) ?? 0) + 1); }
     }
-    return (persistencyStats = stats);
+    if (walk.next < entries.length) return false;
+    persistencyStats = stats;
+    walking = undefined;
+    return true;
   };
   const typeName = (hash: bigint) => oracle.name(hash)?.name ?? `#${hashText(hash)}`;
 
@@ -236,22 +270,36 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
   /** Nodes whose decode status isn't known yet, cheapest first. */
   const pending = () => tree().filter(row => row.status === "checking").sort((a, b) => a.size - b.size).map(row => row.id);
   /** Work out one node's decode status (decode its package objects, or walk the world objects); the tree shows it afterwards. */
-  const check = (id: number) => {
+  const check = (id: number) => { while (!checkStep(id)) { /* to the end */ } };
+  /**
+   * One bounded step of `check`: a package's objects at once, the world objects `WALK_STEP_VALUES` decoded values at a time. True once
+   * the node's status is known (the tree shows it from then on).
+   */
+  const checkStep = (id: number): boolean => {
     const n = node(id);
-    if (!n) return;
+    if (!n) return true;
     if (packages.has(id)) packageRows(id);
-    else if (id === persistencyNode?.id) persistencyWalk();
+    else if (id === persistencyNode?.id && !walkStep(WALK_STEP_VALUES)) return false;
     treeRows = undefined;
+    return true;
   };
 
   // ---- Values to inspector fields ----
-  const packageField = (frame: PackageFrame, name: string, value: PackageValue, depth: number, nodeId: number, type?: string): InspectField => {
+  /**
+   * A field's children within the inspection's budget (`MAX_FIELDS` in all): each level takes its share before its children do, so an
+   * inspection never builds more than the budget however its arrays nest; what is left out is counted in `more`.
+   */
+  type FieldBudget = { left: number };
+  const childrenOf = <T>(items: readonly T[], depth: number, budget: FieldBudget, build: (item: T, index: number) => InspectField) => {
+    const count = depth >= MAX_DEPTH ? 0 : Math.min(items.length, MAX_CHILDREN, Math.max(0, budget.left));
+    budget.left -= count;
+    return { children: items.slice(0, count).map(build), ...(items.length > count ? { more: items.length - count } : {}) };
+  };
+  const packageField = (frame: PackageFrame, name: string, value: PackageValue, depth: number, nodeId: number, budget: FieldBudget, type?: string): InspectField => {
     if (value === null) return { name, ...(type ? { type } : {}), value: "Not read", opaque: true };
     if (Array.isArray(value)) {
-      const shown = value.slice(0, MAX_CHILDREN);
       return { name, ...(type ? { type } : {}), value: `${number(value.length)} item${value.length === 1 ? "" : "s"}`,
-        children: depth >= MAX_DEPTH ? [] : shown.map((item, i) => packageField(frame, `[${i}]`, item, depth + 1, nodeId, type?.startsWith("array:") ? type.slice(6) : undefined)),
-        ...(value.length > shown.length ? { more: value.length - shown.length } : {}) };
+        ...childrenOf(value, depth, budget, (item, i) => packageField(frame, `[${i}]`, item, depth + 1, nodeId, budget, type?.startsWith("array:") ? type.slice(6) : undefined)) };
     }
     if (typeof value === "object") {
       if ("$handle" in value) {
@@ -260,30 +308,26 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
           ...(target ? { link: { node: nodeId, kind: "chunk" as const, index: value.$handle } } : {}) };
       }
       if ("$opaque" in value) return { name, type: value.$opaque, value: `${number(value.bytes)} bytes, not read`, opaque: true };
-      const entries = Object.entries(value.fields);
-      return { name, type: type ?? value.$type, children: depth >= MAX_DEPTH ? [] : entries.slice(0, MAX_CHILDREN).map(([key, inner]) => packageField(frame, key, inner, depth + 1, nodeId, value.types?.[key])),
-        ...(entries.length > MAX_CHILDREN ? { more: entries.length - MAX_CHILDREN } : {}) };
+      return { name, type: type ?? value.$type,
+        ...childrenOf(Object.entries(value.fields), depth, budget, ([key, inner]) => packageField(frame, key, inner, depth + 1, nodeId, budget, value.types?.[key])) };
     }
     return { name, ...(type ? { type } : {}), value: String(value) };
   };
-  const persistField = (name: string, named: TypeSourceId | "unnamed", type: string, value: PersistValue, depth: number): InspectField => {
+  const persistField = (name: string, named: TypeSourceId | "unnamed", type: string, value: PersistValue, depth: number, budget: FieldBudget): InspectField => {
     if (Array.isArray(value)) {
-      const shown = value.slice(0, MAX_CHILDREN);
       return { name, named, type, value: `${number(value.length)} item${value.length === 1 ? "" : "s"}`,
-        children: depth >= MAX_DEPTH ? [] : shown.map((item, i) => persistField(`[${i}]`, named, type.startsWith("array:") ? type.slice(6) : "", item, depth + 1)),
-        ...(value.length > shown.length ? { more: value.length - shown.length } : {}) };
+        ...childrenOf(value, depth, budget, (item, i) => persistField(`[${i}]`, named, type.startsWith("array:") ? type.slice(6) : "", item, depth + 1, budget)) };
     }
     if (typeof value === "object") {
       if ("$hash" in value) return { name, named, type, value: value.name ?? `#${value.$hash}` };
       if ("$opaque" in value) return { name, named, type, value: `${number(value.bytes)} bytes, not read`, opaque: true };
-      return { name, named, type: typeName(value.$class), children: depth >= MAX_DEPTH ? [] : value.props.slice(0, MAX_CHILDREN).map(prop => propField(prop, depth + 1)),
-        ...(value.props.length > MAX_CHILDREN ? { more: value.props.length - MAX_CHILDREN } : {}) };
+      return { name, named, type: typeName(value.$class), ...childrenOf(value.props, depth, budget, prop => propField(prop, depth + 1, budget)) };
     }
     return { name, named, type, value: String(value) };
   };
-  const propField = (prop: { nameHash: bigint; typeHash: bigint; value: PersistValue }, depth: number): InspectField => {
+  const propField = (prop: { nameHash: bigint; typeHash: bigint; value: PersistValue }, depth: number, budget: FieldBudget): InspectField => {
     const answer = oracle.name(prop.nameHash);
-    return persistField(answer?.name ?? `#${hashText(prop.nameHash)}`, answer?.source ?? "unnamed", oracle.type(prop.typeHash)?.name ?? `#${hashText(prop.typeHash)}`, prop.value, depth);
+    return persistField(answer?.name ?? `#${hashText(prop.nameHash)}`, answer?.source ?? "unnamed", oracle.type(prop.typeHash)?.name ?? `#${hashText(prop.typeHash)}`, prop.value, depth, budget);
   };
 
   return {
@@ -298,6 +342,9 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
     tree,
     pending,
     check,
+    checkStep,
+    /** The decoded world-object entries kept, and the values they decoded to (bounded; for tests and diagnostics). */
+    cacheStats: () => ({ entries: entryCache.size, values: cachedValues }),
     node(id: number): NodeInspection | undefined {
       const n = node(id);
       if (!n) return undefined;
@@ -310,7 +357,7 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
           objects: rows.rows, decoded: rows.decoded, partial: rows.partial, failed: rows.failed };
       }
       if (encoding === "type-database") {
-        if (!database) return { kind: "failed", node: head, hex: hexPreview(save.body(id)), note: `The save's type database couldn't be read: ${databaseError}.` };
+        if (!database) return { kind: "failed", node: head, hex: hexPreview(bytesOf(() => save.body(id))), note: `The save's type database couldn't be read: ${databaseError}.` };
         return { kind: "type-database", node: head, version: database.version, types: database.types.length, typesNamed: oracle.stats.typesNamed,
           properties: database.properties.length, propertiesNamed: oracle.stats.propertiesNamed,
           rows: database.types.map(type => ({ name: oracle.type(type.hash)?.name ?? `#${hashText(type.hash)}`, kind: type.kind, size: type.size }))
@@ -318,14 +365,16 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
       }
       if (encoding === "persistency") {
         const p = persistencyIndex();
-        if (!p) return { kind: "failed", node: head, hex: hexPreview(save.body(id)), note: `The world-object index couldn't be read: ${persistencyError}.` };
-        const known = !!persistencyStats, walk = persistencyWalk();
-        if (!known) treeRows = undefined;
-        return { kind: "persistency", node: head, entries: p.index.entries.length, filled: p.index.filled, walked: walk.walked,
+        if (!p) return { kind: "failed", node: head, hex: hexPreview(bytesOf(() => save.body(id))), note: `The world-object index couldn't be read: ${persistencyError}.` };
+        // One bounded step of the walk at most (SAVE-06): until the service's steps finish it, the statistics so far.
+        const known = !!persistencyStats, complete = walkStep(WALK_STEP_VALUES);
+        if (!known && complete) treeRows = undefined;
+        const walk = persistencyStats ?? walking!.stats;
+        return { kind: "persistency", node: head, entries: p.index.entries.length, filled: p.index.filled, complete, walked: walk.walked,
           notWalked: [...walk.notWalked].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
           classes: [...walk.classes].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count || a.type.localeCompare(b.type)) };
       }
-      return { kind: "bespoke", node: head, hex: hexPreview(save.data(id).subarray(4)),
+      return { kind: "bespoke", node: head, hex: hexPreview(bytesOf(() => save.data(id).subarray(4))),
         note: "This node has a layout of its own that the explorer doesn't read yet, so it's shown as bytes. It's kept exactly as the game wrote it." };
     },
     /** A page of persistency entries, optionally only those whose class name contains `filter`. */
@@ -348,9 +397,10 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
         if (!entry || !chunk) return undefined;
         try {
           const { object, skipped } = decodeChunk(entry.frame, ref.index, oracle, { opaque: true, fieldTypes: true });
-          const field = packageField(entry.frame, chunk.type, object, 0, ref.node);
+          const field = packageField(entry.frame, chunk.type, object, 0, ref.node, { left: MAX_FIELDS });
           return { ref, title: chunk.type, subtitle: `Object ${ref.index} of ${node(ref.node)?.name}`, status: skipped.length ? "partial" : "decoded",
-            fields: field.children ?? [], notes: skipped.length ? [`${skipped.length} value${skipped.length === 1 ? " isn't" : "s aren't"} read (a fixed array, node reference or data buffer); ${skipped.length === 1 ? "it's" : "they're"} kept as bytes.`] : [] };
+            fields: field.children ?? [], notes: [...(skipped.length ? [`${skipped.length} value${skipped.length === 1 ? " isn't" : "s aren't"} read (a fixed array, node reference or data buffer); ${skipped.length === 1 ? "it's" : "they're"} kept as bytes.`] : []),
+              ...(field.more ? [`${number(field.more)} more fields aren't shown.`] : [])] };
         } catch (error) {
           return { ref, title: chunk.type, subtitle: `Object ${ref.index} of ${node(ref.node)?.name}`, status: "raw", fields: [],
             notes: [`This object couldn't be read: ${error instanceof Error ? error.message : "unknown layout"}`], hex: hexPreview(entry.frame.bytes.subarray(chunk.start, chunk.end)) };
@@ -360,10 +410,12 @@ export function openExplorer(bytes: Uint8Array, names: ExplorerNames = {}) {
       const result = entryDecode(ref.index);
       if (!entry || !result) return undefined;
       const title = typeName(entry.classHash), subtitle = `World object ${hashText(entry.id)}, ${number(entry.size)} bytes`;
-      const fields = (result.ok ? result.object : result.partial).props.slice(0, MAX_CHILDREN).map(prop => propField(prop, 0));
-      if (result.ok) return { ref, title, subtitle, status: "decoded", fields, notes: [] };
+      const budget: FieldBudget = { left: MAX_FIELDS }, props = (result.ok ? result.object : result.partial).props;
+      const { children: fields, more } = childrenOf(props, 0, budget, prop => propField(prop, 0, budget));
+      const left = more ? [`${number(more)} more fields aren't shown.`] : [];
+      if (result.ok) return { ref, title, subtitle, status: "decoded", fields, notes: left };
       return { ref, title, subtitle, status: fields.length ? "partial" : "raw", fields,
-        notes: [`The rest of this entry isn't read (${result.reason}); it's kept exactly as the game wrote it.`], hex: hexPreview(result.raw) };
+        notes: [`The rest of this entry isn't read (${result.reason}); it's kept exactly as the game wrote it.`, ...left], hex: hexPreview(result.raw) };
     },
     /**
      * Mod data, generically: every namespaced script class in the save's packages (redscript modules: `EquipmentEx.OutfitState`) and
