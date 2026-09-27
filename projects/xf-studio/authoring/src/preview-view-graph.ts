@@ -11,7 +11,7 @@
 import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "./platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
 import type { CameraState, PreviewState } from "./workspace-state";
-import { LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
+import { LIGHTING_PRESETS, readCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
 
@@ -83,8 +83,8 @@ const lights: NodeCodec = { kinds: [...LIGHTING_PRESETS], parse: state => {
   const s = state as Partial<LightsState>;
   if (!inRange(s.exposure, STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) ||
     !inRange(s.lightAngle, STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) || !validStudioLights(s.studioLights) ||
-    !validCreatorLighting(s.creatorLighting)) return;
-  return { exposure: s.exposure, lightAngle: s.lightAngle, studioLights: { ...s.studioLights }, creatorLighting: { ...s.creatorLighting } };
+    !readCreatorLighting(s.creatorLighting)) return;
+  return { exposure: s.exposure, lightAngle: s.lightAngle, studioLights: { ...s.studioLights }, creatorLighting: readCreatorLighting(s.creatorLighting)! };
 } };
 const display: NodeCodec = { parse: state => {
   const s = state as Partial<DisplayState>;

@@ -260,7 +260,15 @@ async function start(host: StudioHost, root: HTMLElement) {
       features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence() }) : null,
     xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null,
     // Developer captures: put the playing or paused idle at a motion time (the dangles re-simulate to it deterministically).
-    xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; } });
+    xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
+    // Creator rig evidence for calibration captures (tools/creator-light-look.ts): its lights, one alone, and the frame cost.
+    xfStudioCreatorRig: {
+      lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
+      solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
+      trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
+      frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
+      shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
+    } });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);
@@ -324,6 +332,7 @@ async function start(host: StudioHost, root: HTMLElement) {
           } }] : [],
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
+        quality: previewDevice.coordinator.quality,
         attach: services => core.app.attach(services),
         persist, changed: () => statusSource.changed(),
       });
