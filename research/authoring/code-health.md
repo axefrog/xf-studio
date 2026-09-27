@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `9f71a56` | 2026-09-27 | Save Explorer (container, type oracle, package and persistency readers, host listing) and the native mesh reader | **2 High**, 4 Medium, 9 Low (SAVE-01..09, NATIVE-58..63). LZ4 and chunk bounds, the tree builder, package strictness, host listing privacy and path rules, and the mesh reader's pre-allocation bounds are sound |
 | `9f71a56` | 2026-09-27 | Host responsiveness (scheduling, prefetch, prepared files, part pool, camera settle), expression editor (facial rig, solver host, part presets), deformation rig | 0 High, 5 Medium, 11 Low (PREV-120..126, CORE-99..107, UI-108). Manifest atomicity, prefetch gating, solver process safety (no shell, bounded stderr), part_presets migration and alpha.1 compatibility, face driver and part pool refcounting are sound |
 | `635b0d7` | 2026-09-27 | View graph P1+P2 (graph service, View and lighting history, module registry, parked layouts, derived tools, collapse, Panels flyout) | 0 High, 2 Medium, 8 Low (UI-102..106, CORE-94..98, plus three unnumbered Lows). Graph invariants, byte-stable workspace, history scope, factory layout round trip, derived tools, boundary rules 3–7 and collapse accessibility are sound. CORE-94 becomes High at P4. UI-102, UI-106, CORE-94..98 and the three Lows fixed in claude/cleanup-view-graph (see below); UI-103..105 in claude/fix-dock-collapse |
 | `024d960` | 2026-09-27 | Bridge batch 3 (cc.open, time in the creator, cc.apply value matching, game.options.read and the CET answer path, full-body preset, cc.page) | 0 High, 2 Medium, 7 Low (RB-42..50). Write gates, packaging split, the menu-event route, OptionsExchange bounds and the natives are sound. Rebuild the packages before staging (RB-50) |
@@ -74,6 +75,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| SAVE-01 | High | Save Explorer | Package name entries may all point at the same bytes and every leaf package's names are decoded up front and kept: 8 crafted 256 KB packages cost 418 MB on the main thread (`engines/red-object/package.ts:99-112`, `explorer.ts:135-141`; reproduced) | Open |
+| SAVE-02 | High | Save Explorer | The world-object walker has no value cap (the package decoder's `MAX_VALUES` doesn't apply) and `entryCache` holds up to 4,096 entries unbounded by bytes: an 8 MB entry cost 231 MB, a compressible 100 MB one would need GBs (`persistency.ts:233-236`, `explorer.ts:192-205`; reproduced) | Open |
+| SAVE-03 | Med | Save Explorer | Inspector caps are per level only and `fieldView` builds every node up front, so nested arrays can hang the page (`explorer.ts:105,248-287`, `view/panel.ts:185-195`) | Open |
+| SAVE-04 | Med | Save Explorer | Repeated script-bundle name offsets decode again each time: an 8 MB bundle could take ~2.6 GB in the host (`script-bundle.ts:421-427`; reproduced) | Open |
+| NATIVE-58 | Med | Native reader | The mesh output estimate is a third of the real peak and chunks may share one vertex range: at the 512 MB cap about 1.5 GB in the server (`mesh-glb.ts:292-294,380,422`; reproduced) | Open |
+| NATIVE-59 | Med | Native reader | Targets × chunks isn't budgeted and chunk starts are re-summed quadratically: 1024×1024 gives ~100 MB of empty accessors (`mesh-glb.ts:441-457`, `morph-blob.ts:134-135`; reproduced) | Open |
 | PREV-120 | Med | Host scheduling | Stopped prefetch batches keep running (the resolve isn't given the stop), new batches start without awaiting them, and stopped batches still double the batch size: repeated clicks pile up several background preparations (`choice-prefetch.ts:312-338`, `character-detail-host.ts:410-424`; reproduced) | Open |
 | PREV-125 | Med | Host scheduling | Prepared-files clean-up stats every file with unbounded `Promise.all` (N folders × 16 in flight) after each change and batch, flooding the I/O pool (`prepared-files.ts:59-91`) | Open |
 | CORE-99 | Med | Expressions | A synchronous `Bun.spawn` throw (Python missing) escapes `startSolver`: the panel says "Starting the facial solver…" forever and installed expressions read as unreadable (`facial-host.ts:272,288`; reproduced) | Open |
@@ -427,6 +434,10 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **PREV-126:** the part pool counts parts and texels, not geometry or bone textures; eviction can dispose geometry a pending load shares.
   - **CORE-101:** the solver restart budget never resets, and `state()` reports ready for an exited process. **CORE-103:** start-point cache keyed by a per-run fingerprint serves stale expressions after an in-place mod update. **CORE-104:** two pages supersede each other's solves. **CORE-105:** the tools-folder solver location can never pass the git-based pin check. **CORE-106:** two endpoints read the whole body before checking its size; JSON `null` answers `failed`. **CORE-107:** a masculine V gets a skeleton-mismatch message instead of "comes later".
   - **UI-108:** the expression drawer's ad hoc controls (components now on claude/ui-components; `summary` contains a button).
+
+- **SAVE-05..09, NATIVE-60..63** (review at `9f71a56`), Open:
+  - **SAVE-05:** the expanded buffer (up to 256 MB) is allocated from declared sizes before any chunk is checked. **SAVE-06:** the world-object walk is one synchronous 649 ms step on the main thread (reproduced). **SAVE-07:** a junctioned Saved Games folder reads as not found (reproduced). **SAVE-08:** "Open a save file" reads the whole file before the 128 MB check. **SAVE-09:** no hostile-input or mutation tests for the save engines.
+  - **NATIVE-60:** `has()` ignores the morph's `baseKey` while `cached()` checks it. **NATIVE-61:** mesh (and texture) cache identity omits the resource reader's version and type-data hash. **NATIVE-62:** the joint count can exceed `maxBones`. **NATIVE-63:** a zero-vertex LOD 1 chunk writes invalid glTF.
 
 ## New subsystems since last review
 
