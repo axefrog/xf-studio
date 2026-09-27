@@ -85,6 +85,8 @@ This agrees with the puppets:
 - With the inventory idle, or Still (the bind pose, where the flat mesh stands flat), the feet follow the footwear.
 - Footwear always lifts them.
 
+**When a mod masks the lifted feet out.** The lifted-feet choice follows the skin tone (link `skin color`): each skin tone has its own definition in `l0_000_base__full.app`, which draws the body component's chunks 5–7 (the lower shins and feet) through a parts override on `t0_000_pwa_base__full.ent` [resource: vanilla 2.31, `basegame_1_engine` and `basegame_4_appearance`]. On the reference profile two mods ship their own copy of that `.app` (a UV texture framework, which wins, and a toggleable-feet mod) in which the **first** skin tone's plain definition (`l0_000_pwa_base__01_ca_pale`) sets that override's chunk mask to `0`, while its tone variants (`…_00_warm_ivory` and the rest) keep vanilla's mask [resource: read natively from each archive]. A parts override's chunk mask only hides (ArchiveXL ANDs it; the Modding Docs' `.app` page: "You can't un-hide something via partsOverrides") [source] [wiki], and the garment feet components those copies add hide their own chunks unless a worn item's tag rule shows them. So a barefoot V on the first skin tone, which is the creator's default choice, stands without lower shins in the creator on that profile [source + resource; runtime untested: test ask 5]. The Studio draws the same, and the Character panel says so: "Feet not shown: your installed game files hide this part for this choice, as the game would."
+
 **Before this:** a barefoot V wore flat feet under the close-up clip, so her heels sank through the floor and her toes bent: the crushed feet of the report [offline].
 
 ## 5. The nails' skin
@@ -106,6 +108,7 @@ Batch with the next session. Record the game version, ArchiveXL, and the body, U
 2. **Helper joints.** Photo mode, arms raised and a kneeling pose: close-ups of a shoulder, the torso's side under the ribs and a knee, against the Studio (when poses can play there).
 3. **Creator feet.** Creator, body page, full-body view, barefoot: the feet must stand flat (the lifted mesh under the creator's clip), as the Studio's Creator full body entry shows them.
 4. **Nails.** Creator nails section with long nails: each nail must sit on its fingertip through the hand loop.
+5. **Feet on the first skin tone** (profile with the UV texture framework). Creator, body page, full-body view, barefoot: choose the first skin tone, then the second. Expected from the files: lower shins and feet missing on the first, present on the second. If the first shows feet in game, the engine keeps a cooked component's own chunk mask against a part-scoped override (the `.app`'s cooked components keep vanilla's mask), and the resolver's rule R7 must apply part-scoped overrides only to the part's own components.
 
 ## Related pages
 
