@@ -72,11 +72,11 @@ describe("maker groups in the projection", () => {
     const { panel } = panelProjection(catalogue(), new Map(), "t");
     const hair = panel.options.find(option => option.name === "hair_color")!;
     expect(OWN_GROUP_MIN_CHOICES).toBe(2);
-    expect(hair.pooled.map(index => panel.groups[index]!.label).sort()).toEqual(["Alpha Pack One", "Alpha Pack Two", "Zeta Hair Colours"]);
+    expect(panel.pools[hair.pool]!.map(index => panel.groups[index]!.label).sort()).toEqual(["Alpha Pack One", "Alpha Pack Two", "Zeta Hair Colours"]);
     // Headings: the base game, XF Studio (never pooled) and Other mods.
     expect(hair.groups).toBe(3);
     // The single-mod row isn't grouped at all.
-    expect(panel.options.find(option => option.name === "brow_color")!).toMatchObject({ groups: 1, pooled: [] });
+    expect(panel.options.find(option => option.name === "brow_color")!).toMatchObject({ groups: 1, pool: -1 });
     expect(readCcPanel(JSON.parse(JSON.stringify(panel)))).toEqual(panel);
     // A lone small group keeps its own heading; the base game and XF Studio are never pooled.
     const groups: CcChoiceGroup[] = [BASE_GAME_GROUP, XF_GROUP, { label: "A", kind: "mod" }, { label: "B", kind: "author" }, { label: "C", kind: "mod" }];
@@ -86,8 +86,10 @@ describe("maker groups in the projection", () => {
     expect([OTHER_MODS_INDEX, 3, 0, 1].sort(compareGroups(groups))).toEqual([0, 1, 3, OTHER_MODS_INDEX]);
     // A host from before pooling sends none: nothing pooled; a pooled base game is refused.
     const wire = JSON.parse(JSON.stringify(panel));
-    expect(readCcPanel({ ...wire, options: wire.options.map(({ pooled: _pooled, ...option }: { pooled: number[] }) => option) }).options.every(option => !option.pooled.length)).toBe(true);
-    expect(() => readCcPanel({ ...wire, options: wire.options.map((option: object) => ({ ...option, pooled: [0] })) })).toThrow();
+    const { pools: _pools, ...older } = wire;
+    expect(readCcPanel({ ...older, options: wire.options.map(({ pool: _pool, ...option }: { pool: number }) => option) }).options.every(option => option.pool === -1)).toBe(true);
+    expect(() => readCcPanel({ ...wire, pools: [[0]] })).toThrow();
+    expect(() => readCcPanel({ ...wire, options: wire.options.map((option: object) => ({ ...option, pool: 5 })) })).toThrow();
   });
 
   test("an XF resource is known by its file name alone", () => {

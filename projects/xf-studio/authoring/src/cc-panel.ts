@@ -22,7 +22,8 @@
  *   resource is named with the `xfs_` prefix every generated resource carries: projects/xf-studio/data/naming.md); every other mod goes
  *   under its author as its mod manager records it (`ModMaker`, mod-makers.ts), else under its own name. Mods by one author share a
  *   group. Most installed mods record no author, so a row would otherwise hold a heading per mod with one choice under it: groups with
- *   fewer than `OWN_GROUP_MIN_CHOICES` of an option's choices are pooled into one "Other mods" group for that option (`pooled`), when
+ *   fewer than `OWN_GROUP_MIN_CHOICES` of an option's choices are pooled into one "Other mods" group for that option (`pool`, an index
+ *   into the panel's `pools`, since the options of one family pool the same makers and a list per option would double the size), when
  *   at least two are (one heading folded into another saves nothing); the base game's and XF Studio's groups are never pooled. Each
  *   option says how many headings its choices show under (`groups`, the pool counting as one), so a row with one maker isn't grouped.
  *
@@ -65,15 +66,15 @@ export interface CcPanelOption {
   readonly coverage: readonly [RenderStatus, number];
   /** How many headings its offered choices show under: the panel's `groups` they come from, "Other mods" counting once (grouped when more than one). */
   readonly groups: number;
-  /** The panel's `groups` too small to head choices of their own in this option: shown together under "Other mods" (none: nothing pooled). */
-  readonly pooled: readonly number[];
+  /** Its entry in the panel's `pools` (the `groups` shown together under "Other mods"), or -1 when nothing is pooled. */
+  readonly pool: number;
 }
 /** Who a group of choices comes from: the base game, XF Studio, an author as recorded, or a mod with no author recorded (by its name). */
 export type CcChoiceGroupKind = "game" | "xf" | "author" | "mod";
 export interface CcChoiceGroup { readonly label: string; readonly kind: CcChoiceGroupKind }
 export const BASE_GAME_GROUP: CcChoiceGroup = Object.freeze({ label: "Base game", kind: "game" });
 export const XF_GROUP: CcChoiceGroup = Object.freeze({ label: "Made with XF Studio", kind: "xf" });
-/** The heading an option's pooled groups share (`CcPanelOption.pooled`); not one of the panel's `groups`, and always shown last. */
+/** The heading an option's pooled groups share (`CcPanelOption.pool`); not one of the panel's `groups`, and always shown last. */
 export const OTHER_MODS_GROUP: Readonly<{ label: string; kind: "other" }> = Object.freeze({ label: "Other mods", kind: "other" });
 /**
  * The fewest of an option's choices a maker needs for a heading of its own there; a smaller group joins "Other mods" (with at least one
@@ -115,6 +116,8 @@ export interface CcPanel {
   readonly groups: readonly CcChoiceGroup[];
   /** Each mod's group, by `mods` index. */
   readonly modGroups: readonly number[];
+  /** The distinct sets of `groups` options pool under "Other mods" (`CcPanelOption.pool`). */
+  readonly pools: readonly (readonly number[])[];
   readonly notes: readonly string[];
   readonly options: readonly CcPanelOption[];
   readonly sections: readonly CcPanelSection[];
@@ -205,8 +208,15 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
     const counts = new Map<number, number>();
     for (const choice of option.choices) if (offeredChoice(choice)) { const group = groupOf(choice.provenance); counts.set(group, (counts.get(group) ?? 0) + 1); }
     const pooled = pooledGroups(counts, groups);
-    return { groups: counts.size - pooled.length + (pooled.length ? 1 : 0), pooled };
+    let pool = -1;
+    if (pooled.length) {
+      const key = pooled.join(",");
+      pool = poolAt.get(key) ?? -1;
+      if (pool < 0) { pool = pools.length; poolAt.set(key, pool); pools.push(pooled); }
+    }
+    return { groups: counts.size - pooled.length + (pooled.length ? 1 : 0), pool };
   };
+  const pools: number[][] = [], poolAt = new Map<string, number>();
   const options: CcPanelOption[] = [], at = new Map<string, number>();
   const add = (option: CcOption) => {
     const known = at.get(option.id);
@@ -230,7 +240,7 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
       options: row.options.flatMap(id => { const option = index.byOptionId(id); return option ? [add(option)] : []; }) })) }));
   const choices = catalogue.options.reduce((n, option) => n + option.choices.length, 0);
   return { mods, panel: { schema: CC_PANEL_SCHEMA, bodyGender: catalogue.bodyGender, identity, language: catalogue.language,
-    mods: [...mods.keys()], groups, modGroups, notes: [...notes.keys()], options, sections,
+    mods: [...mods.keys()], groups, modGroups, pools, notes: [...notes.keys()], options, sections,
     counts: { options: options.length, choices, modChoices: catalogue.counts.modChoices } } };
 }
 
@@ -341,6 +351,9 @@ export function readCcPanel(value: unknown): CcPanel {
   const groups = panel.groups.map(group => ({ label: str(group?.label, "group"), kind: GROUP_KINDS.has(group?.kind) ? group.kind : fail("group kind") }));
   if (!Array.isArray(panel.modGroups) || panel.modGroups.length !== mods.length) fail("mod groups");
   const modGroups = panel.modGroups.map(at => int(at, "mod group", groups.length - 1) < 0 ? fail("mod group") : at);
+  // A pool never holds the base game (group 0); a host built before pooling sends none.
+  const pools = panel.pools === undefined ? [] : Array.isArray(panel.pools) && panel.pools.length <= 20_000 ? panel.pools.map(pool => Array.isArray(pool)
+    ? pool.slice(0, groups.length).map(at => int(at, "pooled", groups.length - 1) < 1 ? fail("pooled") : at) : fail("pool")) : fail("pools");
   if (!Array.isArray(panel.options) || panel.options.length > 20_000) fail("options");
   const options = panel.options.map(option => {
     if (!option || !PARTS.has(option.part) || !TYPES.has(option.type) || !Array.isArray(option.coverage) || !STATUS.has(option.coverage[0])) fail("an option");
@@ -352,14 +365,14 @@ export function readCcPanel(value: unknown): CcPanel {
       coverage: [option.coverage[0], int(option.coverage[1], "coverage", notes.length - 1)] as const,
       groups: Math.max(0, int(option.groups, "groups", groups.length)),
       // A host built before pooling sends none: nothing pooled.
-      pooled: Array.isArray(option.pooled) ? option.pooled.slice(0, groups.length).map(at => int(at, "pooled", groups.length - 1) < 1 ? fail("pooled") : at) : [] } satisfies CcPanelOption;
+      pool: option.pool === undefined ? -1 : int(option.pool, "pool", pools.length - 1) } satisfies CcPanelOption;
   });
   if (!Array.isArray(panel.sections)) fail("sections");
   const sections = panel.sections.map(section => ({ id: str(section?.id, "section"), label: str(section?.label, "section label"), makeup: section.makeup === true,
     rows: Array.isArray(section.rows) ? section.rows.map(row => ({ slot: str(row?.slot, "slot"), part: PARTS.has(row?.part) ? row.part : fail("row part"),
       options: Array.isArray(row.options) ? (row.options as unknown[]).map(i => int(i, "row option", options.length - 1)) : fail("row options") })) : fail("rows") }));
   return { schema: CC_PANEL_SCHEMA, bodyGender: panel.bodyGender, identity: str(panel.identity, "identity"), language: panel.language === null ? null : str(panel.language, "language"),
-    mods, groups, modGroups, notes, options, sections, counts: { options: options.length, choices: Number(panel.counts?.choices) || 0, modChoices: Number(panel.counts?.modChoices) || 0 } };
+    mods, groups, modGroups, pools, notes, options, sections, counts: { options: options.length, choices: Number(panel.counts?.choices) || 0, modChoices: Number(panel.counts?.modChoices) || 0 } };
 }
 
 export function readChoicePage(value: unknown, mods: number): CcChoicePage {

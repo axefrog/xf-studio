@@ -23,7 +23,7 @@ function vanillaPanel(): CcPanel {
   const options: CcPanelOption[] = [];
   const option = (name: string, link: string | null = null, mod = -1): number => {
     options.push({ id: `head/${name}`, part: "head", name, label: name, type: "appearance", grid: false, count: 3, off: null, defaultChoice: null, mod,
-      link: link ? { key: link, controller: true } : null, dependsOn: [], coverage: ["rendered", 0], groups: 1, pooled: [] });
+      link: link ? { key: link, controller: true } : null, dependsOn: [], coverage: ["rendered", 0], groups: 1, pool: -1 });
     return options.length - 1;
   };
   const row = (slot: string, ...names: [string, (string | null)?, number?][]) => ({ slot, part: "head" as const, options: names.map(([name, link, mod]) => option(name, link ?? null, mod ?? -1)) });
@@ -43,7 +43,7 @@ function vanillaPanel(): CcPanel {
       row("makeupLips_type", ["makeupLips_type"]), row("makeupCheeks", ["makeupCheeks"]), row("makeupPimples", ["makeupPimples"])),
   ];
   return { schema: "xfs/cc-panel-5", bodyGender: "female", identity: "vanilla", language: null, mods: ["Hair parts", "Lashes", "XF Eye Artistry"],
-    groups: [{ label: "Base game", kind: "game" }], modGroups: [0, 0, 0], notes: [""], options, sections, counts: { options: options.length, choices: 0, modChoices: 0 } };
+    groups: [{ label: "Base game", kind: "game" }], modGroups: [0, 0, 0], pools: [], notes: [""], options, sections, counts: { options: options.length, choices: 0, modChoices: 0 } };
 }
 
 describe("the Character panel's hierarchy", () => {

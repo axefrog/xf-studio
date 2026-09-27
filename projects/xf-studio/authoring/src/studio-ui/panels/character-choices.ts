@@ -51,7 +51,7 @@ export type ChoiceListInput = {
   preparing?: boolean;
   /** Who made each choice (the panel's `groups` and `modGroups`): shown grouped by maker; null or absent for a row with one maker. */
   groups?: { readonly list: readonly CcChoiceGroup[]; readonly modGroups: readonly number[];
-    /** The option's groups shown together under "Other mods" (cc-panel.ts `CcPanelOption.pooled`). */
+    /** The option's groups shown together under "Other mods" (cc-panel.ts `CcPanel.pools` at the option's `pool`). */
     readonly pooled?: readonly number[] } | null;
 };
 type Group = { index: number; key: string; head: HTMLButtonElement; count: HTMLElement; body: HTMLElement; element: HTMLElement; entries: Entry[]; open: boolean;
