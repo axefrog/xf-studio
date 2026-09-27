@@ -114,6 +114,9 @@ export class CreatorSwatches {
     }
     this.stats.ms += performance.now() - began;
     this.saveCache();
+    // Every family is worked out: the decoded texture mips and template reads served only the work (14 MB on the reference
+    // installation's 450 mips), so they go now instead of staying for the session (DESK-08).
+    if (!this.queue.length) { this.textures.clear(); this.templates.identities.clear(); this.templates.defaults.clear(); }
     this.options.log?.(`Creator swatches (${this.options.gender}): ${this.done.size} of ${this.plan.targets.size} in ${(this.stats.ms / 1000).toFixed(1)} s ` +
       `(${this.stats.fromCache} from the cache, ${this.stats.derived} derived; resolving ${(this.stats.resolveMs / 1000).toFixed(1)} s, reading ` +
       `${(this.stats.readMs / 1000).toFixed(1)} s, ${this.stats.textures} texture mips in ${(this.stats.textureMs / 1000).toFixed(1)} s).`);

@@ -87,7 +87,7 @@ Every size and count in an archive or resource is chosen by the file, so the rea
 | Bytes decoded to names and parsed buffers, plus 4 per string-pool entry (the terminator index) | 15.6 MiB (16.8 MiB with the index) | 64 MiB |
 | Values decoded | 0.6 M in the resolver cache; 33.2 M in the largest world mesh | 8 M |
 | JSON values written | 1.3 M in the resolver cache (33.2 M in that mesh); at most 0.97 per decoded value beyond 2^20 | 16 M, and at most 8 per decoded value beyond 2^20 |
-| Nesting (decode, derive, write) | 11 | 128 |
+| Nesting (decode, derive, write) | 844 (the vanilla body deformation graphs: one chain of handles; 11 elsewhere) | 2,048: a handle chain, the deepest frames per level, overflows the stack near 5,400 levels in the main thread and in a worker alike (PIPE-114) |
 | One name or import path | 159 bytes | 1 KiB |
 | Names decoded (distinct pool entries and package names; ~150 bytes of memory each) | 313,846 in one mesh (twice that through the port, which also reads the root class under the same budget) | 2 M |
 | CR2W string pool | 2.7 MiB in any class (a `JsonResource`); 0.42 MiB in verified classes | 16 MiB |

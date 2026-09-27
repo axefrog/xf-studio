@@ -26,9 +26,13 @@
  *
  * A mod with a Nexus Mods mod and file ID is **re-downloadable**; one with only a mod ID or a page is **findable**; anything else is
  * **local only**, and only a small local-only mod may be offered, unticked, for inclusion (`MOD_FILE_LIMIT`). Host-only (reads files).
+ *
+ * **XF Studio's own builds are known by their install receipts (PIPE-116).** A mod whose every located archive is a file XF Studio
+ * placed itself (its receipt names the folder, the file, its size and SHA-256: mod-install-transport.ts) is **built by XF Studio**:
+ * the person's own designs, built again from their library, so it is never called a mod of unknown origin nor offered as files.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { LocalSettings } from "../local-settings";
 import { describeMo2Instance, parseQSettingsIni } from "../mo2-instance";
 import { attributeVortexFile } from "../vortex-deployment";
@@ -46,10 +50,14 @@ export const HASH_BUDGET_MS = 10_000;
 /** The game folder's provider name in source discovery, and the base game's entry. */
 const GAME = "Installed game", BASE_GAME = "\u0000base-game", GAME_FILE = "\u0000game-file\u0000", VORTEX_MOD = "\u0000vortex\u0000";
 
-export type ModStatus = "re-downloadable" | "findable" | "local-only" | "base-game";
+export type ModStatus = "re-downloadable" | "findable" | "local-only" | "base-game" | "built-by-xf-studio";
 export type ModSource = { site: "nexusmods"; modId: string | null; fileId: string | null; url: string | null; installationFile: string | null }
   | { site: "other"; url: string | null; repository: string | null; installationFile: string | null }
-  | { site: "vortex"; staging: string; modId: string | null };
+  | { site: "vortex"; staging: string; modId: string | null }
+  /** Built and placed by XF Studio (its install receipt): the build's ID and when it was placed. */
+  | { site: "xf-studio"; build: string; installedAt: string };
+/** A build XF Studio placed, from its install receipt: the folder the files went into and each file's name, size and SHA-256. */
+export type OwnInstall = { folder: string; files: readonly { name: string; bytes: number; sha256: string }[]; build: string; installedAt: string };
 export type InvolvedArchive = { name: string; group: string | null; bytes: number | null; sha256: string | null; modified: string | null;
   /** How many of the V's resources it supplied, and how many it lost to another archive. */
   won: number; lost: number;
@@ -63,6 +71,8 @@ export type IdentityOptions = {
   /** Called as archives are hashed: how many are done of how many need it. */
   progress?: (done: number, total: number) => void;
   now?: () => number;
+  /** XF Studio's own installs (`readOwnInstalls`), so its builds are recognised (PIPE-116). */
+  ownInstalls?: readonly OwnInstall[];
 };
 export type InvolvedMod = { name: string; kind: "mo2-mod" | "mo2-overwrite" | "vortex-mod" | "game-folder" | "manual" | "base-game" | "unknown";
   version: string | null; source: ModSource | null; status: ModStatus; archives: InvolvedArchive[] };
@@ -170,14 +180,58 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
     const source = meta ? metaSource(meta) : staging ? vortexSource(staging, identity) : null;
     const status: ModStatus = kind === "base-game" ? "base-game"
       : source?.site === "nexusmods" && source.modId && source.fileId ? "re-downloadable"
-      : source && (source.site === "vortex" ? source.modId : source.site === "nexusmods" ? source.modId || source.url : source.url || source.repository) ? "findable"
+      : source && (source.site === "vortex" ? source.modId : source.site === "nexusmods" ? source.modId || source.url : source.site === "other" && (source.url || source.repository)) ? "findable"
       : "local-only";
     mods.push({ name: kind === "base-game" ? "Cyberpunk 2077 (the game's own files)" : kind === "game-folder" ? `${name.slice(GAME_FILE.length)} (in the game folder)`
       : kind === "vortex-mod" ? identity?.name ?? name : name, kind,
       version: meta?.get("version") || identity?.version || null, source, status, archives });
   }
   await fingerprint(stamps, { ...options, now }, started);
+  for (const mod of mods) {
+    const own = ownInstallOf(mod, options.ownInstalls ?? []);
+    if (own) { mod.source = { site: "xf-studio", build: own.build, installedAt: own.installedAt }; mod.status = "built-by-xf-studio"; }
+  }
   return mods;
+}
+
+const samePath = (a: string, b: string) => process.platform === "win32" ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b);
+/**
+ * The install that placed every located archive of a mod: each is in the receipt's folder under the receipt's file name, with the size
+ * the receipt records and, when it was hashed, the same SHA-256 (a file edited or replaced since is not XF Studio's any more).
+ */
+export function ownInstallOf(mod: Pick<InvolvedMod, "kind" | "archives">, installs: readonly OwnInstall[]): OwnInstall | null {
+  if (mod.kind === "base-game" || !installs.length) return null;
+  const located = mod.archives.filter(archive => archive.path);
+  if (!located.length || located.length !== mod.archives.length) return null;
+  for (const install of installs) {
+    const matches = located.every(archive => samePath(dirname(archive.path!), install.folder) && install.files.some(file =>
+      file.name.toLowerCase() === archive.name.toLowerCase() && file.bytes === archive.bytes && (archive.sha256 === null || archive.sha256 === file.sha256)));
+    if (matches) return install;
+  }
+  return null;
+}
+
+/**
+ * XF Studio's install receipts in these folders (the per-user one and a host's earlier one; mod-install-transport.ts
+ * `xfs/install-receipt-1`), read for recognising its own builds. A receipt that can't be read, or isn't one, is passed over.
+ */
+export function readOwnInstalls(folders: readonly string[]): OwnInstall[] {
+  const out: OwnInstall[] = [];
+  for (const folder of new Set(folders.map(item => resolve(item)))) {
+    let names: string[] = [];
+    try { names = readdirSync(folder).filter(name => /^[a-f0-9]{24}\.json$/.test(name)); } catch { continue; }
+    for (const name of names.slice(0, 256)) {
+      try {
+        const receipt = JSON.parse(readFileSync(join(folder, name), "utf8")) as { schema?: unknown; target?: unknown; candidateId?: unknown; installedAt?: unknown;
+          files?: { path?: unknown; bytes?: unknown; sha256?: unknown }[] };
+        if (receipt.schema !== "xfs/install-receipt-1" || typeof receipt.target !== "string" || typeof receipt.candidateId !== "string" || !Array.isArray(receipt.files)) continue;
+        const files = receipt.files.flatMap(file => typeof file?.path === "string" && typeof file.bytes === "number" && typeof file.sha256 === "string"
+          ? [{ name: basename(file.path), bytes: file.bytes, sha256: file.sha256 }] : []);
+        if (files.length) out.push({ folder: receipt.target, files, build: receipt.candidateId, installedAt: typeof receipt.installedAt === "string" ? receipt.installedAt : "" });
+      } catch { /* Not a receipt we can read. */ }
+    }
+  }
+  return out;
 }
 
 /**

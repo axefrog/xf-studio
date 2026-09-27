@@ -14,7 +14,7 @@ import { TraceWindow } from "../src/diagnostics/trace-window";
 import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
 import { hideProfileName, resolutionResources } from "../src/diagnostics/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
-import { hashingSettled, involvedMods } from "../src/diagnostics/mod-identity";
+import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/mod-identity";
 import type { ReportManifest } from "../src/diagnostics/report";
 import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
 import type { ResolvedCharacter } from "../src/character-resolver";
@@ -431,6 +431,35 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
     const found = await involvedMods([{ archive: "vortexed.archive", provider: "Vortexed Mod-1-0", group: "mod", alternatives: [] }], onMo2, none);
     expect(found.map(mod => [mod.name, mod.kind, mod.version, mod.status])).toEqual([["Vortexed Mod-1-0", "mo2-mod", "3.0", "re-downloadable"]]);
     expect(found[0]!.archives[0]!.path).toBe(join(mo2, "mods", "Vortexed Mod-1-0", "archive", "pc", "mod", "vortexed.archive"));
+  });
+
+  test("a mod XF Studio built and placed is named as its own by its install receipt, never as a mod of unknown origin (PIPE-116)", async () => {
+    const mo2 = join(root, "own-mo2"), folder = join(mo2, "mods", "XF Eye Artistry", "archive", "pc", "mod"), receipts = join(root, "own-receipts");
+    mkdirSync(folder, { recursive: true }); mkdirSync(join(mo2, "profiles", "Default"), { recursive: true }); mkdirSync(receipts, { recursive: true });
+    const files = [["xfs_eye_artistry.archive", "built archive bytes"], ["xfs_eye_artistry.archive.xl", "built xl"]] as const;
+    for (const [name, text] of files) writeFileSync(join(folder, name), text);
+    const sha = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    const receipt = { schema: "xfs/install-receipt-1", targetId: "a".repeat(24), route: "mo2", target: folder, candidateId: "build-01", namespace: "xfs_eye_artistry",
+      installedAt: "2026-09-28T10:00:00.000Z", rollback: null,
+      files: files.map(([name, text]) => ({ path: `archive/pc/mod/${name}`, sha256: sha(text), bytes: Buffer.byteLength(text) })) };
+    writeFileSync(join(receipts, `${"a".repeat(24)}.json`), JSON.stringify(receipt));
+    // Not a receipt: passed over.
+    writeFileSync(join(receipts, `${"b".repeat(24)}.json`), "{ damaged");
+    const onMo2: LocalSettings = { ...settings, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Default" };
+    const involved = [{ archive: "xfs_eye_artistry.archive", provider: "XF Eye Artistry", group: "mod", alternatives: [] }];
+    const own = readOwnInstalls([receipts, receipts]);
+    expect(own).toEqual([{ folder, build: "build-01", installedAt: "2026-09-28T10:00:00.000Z",
+      files: files.map(([name, text]) => ({ name, bytes: Buffer.byteLength(text), sha256: sha(text) })) }]);
+    const found = await involvedMods(involved, onMo2, none, { ownInstalls: own });
+    expect(found.map(mod => [mod.name, mod.kind, mod.status, mod.source])).toEqual([["XF Eye Artistry", "mo2-mod", "built-by-xf-studio",
+      { site: "xf-studio", build: "build-01", installedAt: "2026-09-28T10:00:00.000Z" }]]);
+    // Without its receipt it is a mod of unknown origin, as before.
+    expect((await involvedMods(involved, onMo2, none))[0]!.status).toBe("local-only");
+    // A file changed since XF Studio placed it is not XF Studio's any more.
+    writeFileSync(join(folder, "xfs_eye_artistry.archive"), "edited by hand, same length");
+    expect((await involvedMods(involved, onMo2, none, { ownInstalls: own }))[0]!.status).toBe("local-only");
+    writeFileSync(join(folder, "xfs_eye_artistry.archive"), "built archive bytez");
+    expect((await involvedMods(involved, onMo2, none, { ownInstalls: own }))[0]!.status).toBe("local-only");
   });
 
   test("a hash still running when the budget ends stops there, and is finished in the background (DIAG-24)", async () => {

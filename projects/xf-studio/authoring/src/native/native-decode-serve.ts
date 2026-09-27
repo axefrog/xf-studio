@@ -10,7 +10,7 @@ import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { decodeGeometryFromPool } from "./mesh-decode";
 import { decodeFromPool, type NativeDecodeOptions, type WorkerAnimMessage, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerGeometryMessage, type WorkerInit,
-  type WorkerReply, type WorkerTextureMessage } from "./native-decode";
+  type WorkerReply, type WorkerTextureMessage, type WorkerTrimMessage } from "./native-decode";
 import { decodeTextureFromPool } from "./texture-decode";
 import { decodeAnimFromPool } from "./anim-decode";
 
@@ -35,7 +35,15 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
   };
   const reply = (message: WorkerReply, transfer?: Transferable[]) => transfer ? scope.postMessage(message, transfer) : scope.postMessage(message);
   scope.addEventListener("message", event => {
-    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage;
+    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage
+      | WorkerTrimMessage;
+    if (message.type === "trim") {
+      // The queue has drained: let go of the archive indexes read (re-read in milliseconds when next needed) and collect what the last
+      // textures, meshes and documents left behind now, not when the worker exits a minute later (DESK-08).
+      state?.pool.close();
+      (globalThis as { Bun?: { gc?: (force: boolean) => void } }).Bun?.gc?.(true);
+      return;
+    }
     if (message.type === "close") {
       // Idle: release the library (so a game update can replace it) and exit (NATIVE-42).
       const current = state;

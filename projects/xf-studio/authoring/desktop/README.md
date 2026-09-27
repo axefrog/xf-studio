@@ -113,7 +113,7 @@ The first installed-app run since 25 September, about 800 commits later: `main` 
 
 **Fixed in this checkpoint.** A disposable trial identity couldn't finish `build:canary`: `release.ts` named Electrobun's setup ZIP and the single setup after the real app (`XFStudio`) while Electrobun names them after the trial (`XFStudioUITrial`), so `single-installer.ts` stopped. `release.ts` now derives the name from the Electrobun config, which also keeps a trial's setup out of the browser Studio's **Install from your build** (`tests/build-installer.test.ts`). The smoke report now carries the page's startup times (first paint, editor ready, 3D preview ready, V drawn), so every diagnostics log records them (`smokeMessage`, `tests/server.test.ts`).
 
-**Open, in the [code-health ledger](../../../../research/authoring/code-health.md):** DESK-02..06, DESK-08, DESK-09, PIPE-114..116 and CORE-115 (DESK-07 is the startup-times fix above).
+**Open, in the [code-health ledger](../../../../research/authoring/code-health.md):** DESK-02..06 and DESK-09 (DESK-07 is the startup-times fix above; DESK-08, PIPE-114..116 and CORE-115 were fixed in `claude/desktop-cleanup`).
 
 ### Community first run, 25 September
 

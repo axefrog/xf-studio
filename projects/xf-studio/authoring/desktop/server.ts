@@ -245,6 +245,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     wolvenKit: () => { const state = wolvenKit.snapshot(); return { version: state.version, source: state.source, phase: state.phase }; },
     roots: () => [{ label: "<data>", path: dataRoot }, { label: "<build-tools>", path: toolsRoot }],
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    // XF Studio's own builds are named as such in a report (PIPE-116): the receipts folder below and the app's earlier one.
+    installReceipts: () => [resolve(hostOptions.installReceipts ?? installReceiptsRoot(dataRoot)), installReceiptsRoot(dataRoot)],
     openExternal: hostOptions.openExternal,
   });
   // "Add to my mod manager" (UI-82): a verified build into the MO2 profile or game folder Settings names, only after the person

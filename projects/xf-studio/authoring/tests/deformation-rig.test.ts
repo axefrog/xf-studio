@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { compileDeformationRig, DEFORMATION_LIMITS, DeformationRigError, evaluateDeformationRig, identity, multiply, parseDeformationProgram, programWork, twistAngle,
   type DeformationOp, type DeformationProgram, type Mat4 } from "../src/deformation-rig";
 import type { JsonObject } from "../src/red-json";
-import { animatedComponents } from "../src/deformation-rig-host";
+import { animatedComponents, logRigRefusalOnce, puppetDeformationRigs } from "../src/deformation-rig-host";
 
 // ---- a tiny rig and graph in the resolver's JSON shape ----
 const cn = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
@@ -195,4 +195,38 @@ test("the player entity's secondary rigs are the animated components bound to an
   const found = animatedComponents(entity as never);
   expect(found.map(item => [item.name, item.bindsTo])).toEqual([["root", "AnimationControllerComponent"], ["deformations", "root"], ["loose", ""]]);
   expect(found[1]!.rig).toBe("base\d.rig");
+});
+
+test("PIPE-115: a rig that isn't evaluated yet is logged once per rig and graph file, and noted plainly every time", async () => {
+  const ref = (path: string) => ({ DepotPath: { $type: "ResourcePath", $storage: "string", $value: path }, Flags: "Default" });
+  const component = (name: string, bind: string, rigPath: string, graphPath: string) => ({ $type: "entAnimatedComponent", name: cn(name), rig: ref(rigPath), graph: ref(graphPath),
+    controlBinding: { HandleId: `b${name}`, Data: { $type: "entAnimationControlBinding", bindName: cn(bind) } } });
+  const entity = { $type: "entEntityTemplate", components: [component("root", "AnimationControllerComponent", "base\woman_base.rig", "base\paperdoll.animgraph"),
+    component("breasts", "root", "base\pipe115_breasts.rig", "base\pipe115_breasts.animgraph")] };
+  const branching = graph([]) as any;
+  let node = branching.rootNode.Data.nodes[0].Data.node.node;
+  while (node.Data.inputLink.node.Data.$type !== "animAnimNode_ReferencePoseTerminator") node = node.Data.inputLink.node;
+  node.Data.inputLink.node = { HandleId: "x", Data: { $type: "animAnimNode_StaticSwitch" } };
+  const fakeGraph = (graphSha: string) => ({
+    load: async (depot: { hash: string; path: string | null }, extension: string) => ({ ref: depot,
+      root: extension === "ent" ? entity : extension === "rig" ? rig() : branching,
+      provenance: { extractedSha256: extension === "animgraph" ? graphSha : "rig", archive: "basegame.archive" } }),
+    patchesFor: () => [],
+    named: (depot: unknown) => depot,
+  }) as never;
+  const lines: string[] = [];
+  const log = (line: string) => { lines.push(line); };
+  const first = await puppetDeformationRigs(fakeGraph("build-a"), "female", log);
+  const again = await puppetDeformationRigs(fakeGraph("build-a"), "female", log);
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("breasts rig: the graph branches at StaticSwitch");
+  // The note the person sees is there every time.
+  for (const found of [first, again]) expect(found.notes.some(note => note.includes("breasts rig isn't evaluated yet"))).toBe(true);
+  // Another game build (or a mod's graph) is logged once more.
+  await puppetDeformationRigs(fakeGraph("build-b"), "female", log);
+  expect(lines).toHaveLength(2);
+  // The helper itself: a key is logged once, and nothing without a log.
+  expect(logRigRefusalOnce("pipe115-key", "x", undefined)).toBe(false);
+  expect(logRigRefusalOnce("pipe115-key", "x", log)).toBe(true);
+  expect(logRigRefusalOnce("pipe115-key", "x", log)).toBe(false);
 });

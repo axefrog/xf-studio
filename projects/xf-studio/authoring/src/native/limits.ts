@@ -55,7 +55,10 @@ export interface NativeLimits {
  * verified resource 32.8 MiB → 128 MiB; verified body 31.8 MiB → 128 MiB; any buffer in any archive 85.3 MiB (largest parsed
  * buffer 11.1 MiB) → 128 MiB; decoded names and parsed buffers 15.6 MiB → 64 MiB; values 0.6 M in the resources the resolver
  * reads → 8 M (a few large world meshes of 33 M fall back to WolvenKit, which keeps one decode's memory near 1 GB at worst);
- * JSON values 1.3 M → 16 M, and at most 8 per decoded value past 2^20 (measured 0.97); nesting 11 → 128; name 159 bytes → 1 KiB;
+ * JSON values 1.3 M → 16 M, and at most 8 per decoded value past 2^20 (measured 0.97); nesting 844 (the vanilla body
+ * deformation graphs, `woman_base_deformations.animgraph` and the man's 840: one constraint chain of handles) → 2,048, well inside
+ * the call stack (a handle chain, the deepest frames per level, overflows near 5,400 levels in the main thread and in a worker alike,
+ * cold or warm; PIPE-114), so a hostile file still meets a typed refusal, never a stack overflow; name 159 bytes → 1 KiB;
  * names 314 K (one mesh) → 2 M; string pool 2.7 MiB (any class; bodies under 1 MiB hold smaller ones) → 16 MiB; name list 0.37 MiB → 16 MiB; one archive index
  * 28.6 MiB → 128 MiB; all 1,157 archive indexes together 96.2 MiB → 512 MiB pooled. Details:
  * research/backlog/native-archive-reader.md#budgets.
@@ -69,7 +72,7 @@ export const DEFAULT_LIMITS: NativeLimits = Object.freeze({
   maxJsonNodes: 16_000_000,
   maxJsonNodesPerValue: 8,
   jsonNodesAllowance: 2 ** 20,
-  maxDepth: 128,
+  maxDepth: 2048,
   maxNameBytes: 1024,
   maxNames: 2_000_000,
   maxStringPoolBytes: 16 * 2 ** 20,
