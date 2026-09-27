@@ -1,6 +1,7 @@
 import type { CollectionRequest } from "./collection-service";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
+import type { DesktopAppAction } from "./desktop-app";
 import type { ModInstallAction } from "./mod-install-actions";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
 import type { PreviewAction } from "./preview-preparation";
@@ -19,7 +20,7 @@ export type ActionScope = StudioTarget["kind"] | "file" | "host";
 export type { PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 export type ActionDescriptor = PlatformActionDescriptor<ActionScope>;
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
-  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal"; async: true;
+  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal" | "launch"; async: true;
   cancellable: boolean };
 
 const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
@@ -129,6 +130,18 @@ export const DETECTION_DESCRIPTORS = {
   "detect.mo2Instances": request("host", "read"),
   "detect.frameworkVersions": request("host", "read"),
 } satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
+
+/**
+ * "Get the desktop app" on localhost (`StudioPresentationPort.desktopApp`; the desktop app has none). `refresh` reads whether the
+ * app is installed, whether this checkout built a setup program and whether a release exists. `install` is the person's consent
+ * to run the setup they were shown, named by its `installer` ID (the host refuses one that changed); `open` starts the installed
+ * app. The host decides every path; none changes a recipe, the library or Undo.
+ */
+export const DESKTOP_APP_DESCRIPTORS = {
+  "desktopApp.refresh": request("host", "read"),
+  "desktopApp.install": request("host", "launch", { installer: target("string") }),
+  "desktopApp.open": request("host", "launch"),
+} satisfies Record<DesktopAppAction["kind"], RequestDescriptor>;
 
 /**
  * "Add to my mod manager" after Build (UI-82; `StudioPresentationPort.modInstall`). `review` reads the host's plan; `apply` is the
