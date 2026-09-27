@@ -1,7 +1,7 @@
 // The Poses panel over the light DOM harness and the real service with a fake host and motion: groups open and close, one click applies a
 // pose, the star keeps a favourite, the tree is a keyboard tree (Down from search, arrows, Right opens, Enter applies, F stars), a greyed
 // pose says why, the outfit
-// note offers Show them, and a needs-setup catalogue offers Game & tools. It reaches the service only through its module context.
+// note offers Show them, and a needs-setup catalogue offers Settings › Game. It reaches the service only through its module context.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { PoseLibraryActions, poseLibraryFacade, type PoseLibraryDevice, type PoseLibraryFacade, type PoseMotionPort, type PoseStage,
   defaultPosePreferences } from "../src/features/poses";
@@ -26,7 +26,7 @@ function harness(options: { phase?: string; worn?: string[] } = {}) {
     frameCapability: () => ({ available: true }), subscribe: () => () => {} };
   const device: PoseLibraryDevice = {
     catalogue: async request => request.method === "GET" && request.query.pose ? { ok: true, status: 200, data: { schema: "xfs/pose-sample-1", id: request.query.pose } }
-      : { ok: true, status: 200, data: options.phase === "needs-setup" ? { schema: "xfs/pose-catalogue-state-1", phase: "needs-setup", message: "Poses come from your game. Choose your game folder in Game & tools." }
+      : { ok: true, status: 200, data: options.phase === "needs-setup" ? { schema: "xfs/pose-catalogue-state-1", phase: "needs-setup", message: "Poses come from your game. Choose your game folder in Settings › Game." }
         : { schema: "xfs/pose-catalogue-state-1", phase: "ready", message: "", catalogue: CATALOGUE } },
     preferences: { load: async () => ({ revision: 0, preferences: defaultPosePreferences() }), save: async (revision, preferences) => ({ ok: true, status: 200, data: { revision: revision + 1, preferences } }) },
     wait: () => Promise.resolve(),
@@ -38,7 +38,7 @@ function harness(options: { phase?: string; worn?: string[] } = {}) {
     facade,
     dispatch: async action => { const outcome = await facade.dispatch(action as never); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: () => undefined as never, announce: () => {}, record: () => undefined as never },
-    anchors: { register: () => () => {} }, reveal: panelId => { revealed.push(panelId); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
+    anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { revealed.push(`settings:${section}`); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
   };
   panel = posesPanel(ctx);
   facade.subscribe(() => panel.update(undefined as never));
@@ -122,11 +122,11 @@ describe("Poses panel", () => {
     expect(outfit.textContent).toContain("Hide them");
   });
 
-  test("without a game folder it says so and offers Game & tools", async () => {
+  test("without a game folder it says so and offers Settings › Game", async () => {
     const { root, revealed } = harness({ phase: "needs-setup" });
     await settle();
     expect(root.querySelector(".poses-state")?.textContent).toContain("Poses come from your game");
     click(root.querySelector(".poses-state")!.querySelector("button")!);
-    expect(revealed).toEqual(["package"]);
+    expect(revealed).toEqual(["settings:game"]);
   });
 });

@@ -97,7 +97,7 @@ export function posesPanel(ctx: Ctx): PanelController {
       if (sKey !== stateKey) {
         stateKey = sKey;
         state.replaceChildren(...(catalogue.phase === "needs-setup" ? [emptyState("Poses come from your game", catalogue.message,
-          button({ label: "Open Game & tools", icon: "settings", onClick: () => ctx.reveal("package", true) }))]
+          button({ label: "Open Settings › Game", icon: "settings", onClick: () => ctx.openSettings("game") }))]
           : catalogue.phase === "failed" ? [emptyState("The poses couldn't be read", catalogue.message,
             button({ label: "Try again", icon: "refresh", onClick: () => { void ctx.dispatch({ kind: "pose.retry" }); } }))]
             : catalogue.phase === "ready" ? [] : [note(catalogue.message, "info")]));
