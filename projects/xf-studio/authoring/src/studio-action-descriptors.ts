@@ -104,6 +104,8 @@ export const ACTION_DESCRIPTORS = {
     enabled: input("boolean") }),
   "view.undo": desc("workspace", "workspace", "none"),
   "view.redo": desc("workspace", "workspace", "none"),
+  // A released slider: the next light or display change starts a new View and lighting step (CORE-95).
+  "view.endEdit": desc("workspace", "workspace", "none"),
 } satisfies Record<StudioAction["kind"], ActionDescriptor>;
 
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],

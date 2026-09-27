@@ -118,6 +118,22 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   rt.dock = dock;
   /**
+   * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden.
+   * Each keeps its on/off state, and no device acts on it (Surface controls neither draws nor edits) until it is offered again. The
+   * application gets tool IDs only, never which modules show (design §6.3 rule 6). Recomputed only when the filter changes (the
+   * registered tools are fixed for the session), so a paint costs one comparison.
+   */
+  let withdrawnKey = "";
+  const withdrawUnoffered = () => {
+    const filter = rt.toolFilter(), key = JSON.stringify(filter);
+    if (key === withdrawnKey) return;
+    withdrawnKey = key;
+    const all = port.views.tools(undefined, { modules: modules.map(module => module.id), research: true });
+    const offered = new Set(port.views.tools(undefined, filter).map(tool => tool.id));
+    port.views.withdraw(all.map(tool => tool.id).filter(id => !offered.has(id)));
+  };
+  withdrawUnoffered();
+  /**
    * Show or hide a module (design §4.3): its panels leave the dock with their places parked, or come back where they were; its view
    * tools and crumb follow at once because they are derived. An open gesture or form edit is finished first. Its data and exports
    * are untouched, and its actions stay dispatchable.
@@ -131,6 +147,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (control) port.authoring.controlCommit(control.id);
     }
     if (!setPreference(port, feedback, { kind: "modules.set", module: id, shown }, `${module.label} ${shown ? "shown" : "hidden"}`)) return;
+    withdrawUnoffered();
     const ids = panelsOf(module);
     if (shown) dock.addPanels(ids.map(panel => specOf(byId.get(panel)!)));
     else dock.removePanels(ids);
@@ -155,6 +172,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   const paint = () => {
     queued = false;
+    // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
+    withdrawUnoffered();
     const frame = new Frame(port);
     // Editor adapters report limits and rejected gestures; show each once.
     const message = frame.status.message;

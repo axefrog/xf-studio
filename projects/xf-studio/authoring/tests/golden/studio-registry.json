@@ -99,7 +99,8 @@
   "character.redoClothing",
   "view.setTool",
   "view.undo",
-  "view.redo"
+  "view.redo",
+  "view.endEdit"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -2608,6 +2609,14 @@
    "effect": "workspace",
    "undo": "none",
    "payload": {}
+  },
+  "view.endEdit": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
   }
  },
  "registry": [
@@ -3509,6 +3518,15 @@
   },
   {
    "id": "view.redo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.endEdit",
    "family": "action",
    "scope": [
     "workspace"

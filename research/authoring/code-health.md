@@ -29,7 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
-| `635b0d7` | 2026-09-27 | View graph P1+P2 (graph service, View and lighting history, module registry, parked layouts, derived tools, collapse, Panels flyout) | 0 High, 2 Medium, 8 Low (UI-102..106, CORE-94..98, plus three unnumbered Lows). Graph invariants, byte-stable workspace, history scope, factory layout round trip, derived tools, boundary rules 3–7 and collapse accessibility are sound. CORE-94 becomes High at P4 |
+| `635b0d7` | 2026-09-27 | View graph P1+P2 (graph service, View and lighting history, module registry, parked layouts, derived tools, collapse, Panels flyout) | 0 High, 2 Medium, 8 Low (UI-102..106, CORE-94..98, plus three unnumbered Lows). Graph invariants, byte-stable workspace, history scope, factory layout round trip, derived tools, boundary rules 3–7 and collapse accessibility are sound. CORE-94 becomes High at P4. UI-102, UI-106, CORE-94..98 and the three Lows fixed in claude/cleanup-view-graph (see below); UI-103..105 in claude/fix-dock-collapse |
 | `024d960` | 2026-09-27 | Bridge batch 3 (cc.open, time in the creator, cc.apply value matching, game.options.read and the CET answer path, full-body preset, cc.page) | 0 High, 2 Medium, 7 Low (RB-42..50). Write gates, packaging split, the menu-event route, OptionsExchange bounds and the natives are sound. Rebuild the packages before staging (RB-50) |
 | `15941da`, `26d0dea` | 2026-09-27 | Native texture decoder (BCn, xbm, texture worker, export split) and the framework arm fix (substitution check, garment-data repair) | 0 High, 0 Medium, 9 Low (NATIVE-54..57, PIPE-107..109, plus two latent parts of PIPE-109). Header bounds, worker lifecycle, cache identity, colour flags, BC4 rounding, flips and the layering are sound |
 | `17d2585` | 2026-09-27 | Native catalogue merge (creator texts read natively, WolvenKit optional until export, Oodle release, degraded rule, R12) | 0 High, 2 Medium, 6 Low (NATIVE-46..53). Oodle lifecycle, payload gate, language keys, retry rules, the degraded rule, R12 and the boundary are sound. Fixed in claude/cleanup-native-catalogue |
@@ -73,7 +73,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
-| UI-102 | Med | Presentation | Hiding a module removes its tool controls but leaves an active tool on (Surface controls keeps drawing and editing, hints still point at parked panels) (`studio-ui/app.ts:125`, `input-hints.ts:71`) | Open |
+| UI-102 | Med | Presentation | Hiding a module removes its tool controls but leaves an active tool on (Surface controls keeps drawing and editing, hints still point at parked panels) (`studio-ui/app.ts:125`, `input-hints.ts:71`) | **Fixed** (claude/cleanup-view-graph, 27 Sep; see below) |
 | UI-103 | Med | Presentation | `reveal()` activates a panel's tab but never expands a collapsed group, so Show panel, the flyout's Views entries and Help reveals look like they do nothing (`dock/dock-view.ts:409`; reproduced) | Fixed in claude/fix-dock-collapse (see below) |
 | UI-107 | Med | Presentation | Collapsed groups fold inconsistently: in a stack a collapsed header is a short strip of tabs instead of spanning its column, and a column of stacked groups all collapsed never becomes a vertical strip as a one-group column does (`dock/dock-view.ts` `renderNode`, `studio.css`; maintainer screenshot) | Fixed in claude/fix-dock-collapse (see below) |
 | PREV-110 | Med | Preview rig | Hair dangle chains are bound bone by bone to the nearest body segment, so a strand root follows `Head` and its tip a shoulder; a head turn shears the hair (measured on `hh_033`: 26 bones on `Head`, 9 on `Neck1`, 7 on the right shoulder). Fix: bind each chain to its own rig parent (hair physics plan P1, after claude/body-fidelity) | Open |
@@ -411,8 +411,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **RB-49:** no offline or card coverage of `cc.open`'s refusals or of the kill switch during `cc.open`.
   - **RB-50:** the checked-in build and `dist/` zips are batch 2 under the same version; rebuild (and bump the version) before staging.
 
-- **UI-104, UI-106, CORE-94..98** (view graph review at `635b0d7`), Open:
+- **UI-104 (rest)** (view graph review at `635b0d7`), Open:
   - **UI-104 (rest):** a member of a floating composite that is parked returns to its factory home, not into its composite (the three-way share and the collapsed flag are fixed in claude/fix-dock-collapse).
+- **UI-106, CORE-94..98 and three unnumbered Lows** (view graph review at `635b0d7`), **Fixed** (claude/cleanup-view-graph, 27 Sep; see below):
   - **UI-106:** `view.setTool` doesn't check head readiness; a toggle made before the head loads isn't saved.
   - **CORE-94:** Undo/Redo replays a views array whose nodes an unrecorded structure edit removed: `state()` throws and a reload loses all views (reproduced; High once P4 adds real structure edits).
   - **CORE-95:** history coalescing is time-only and `seal()` is never called: two drags within 1 s merge, a paused drag splits (reproduced).
@@ -452,6 +453,19 @@ UI-107, UI-103, UI-105 and part of UI-104: the collapse feature of the view grap
 - **UI-103 (Med):** every reveal goes through `revealPanel`, which expands a collapsed group holding the panel; so do the Show tab submenu and a tab click on a collapsed group.
 - **UI-105 (Low):** `setMaximized` expands a collapsed group it maximizes. The last expanded docked group offers no collapse (`lastExpandedDocked`), and a layout with every docked group collapsed (saved earlier, or left so by parking) expands the docked group with the largest share (`keepDockExpanded`), so the dock is never blank.
 - **UI-104 (Low, part):** a parked group comes back at its share of the split it rejoins, the siblings giving up theirs (`insertNode`'s whole-split share), so `[.3,.3,.4]` comes back exactly; a floating group comes back collapsed if it was. Composite members still return to their factory home (open).
+
+## Fixed in claude/cleanup-view-graph
+
+UI-102, UI-106, CORE-94..98 and the three unnumbered Lows of the view graph P1+P2 review. Tests: `tests/view-graph.test.ts` (history, codecs, persistence, reserved IDs, kept kinds, camera jumps), `tests/view-modules.test.ts` (registry completeness, tool resolution, readiness, withdrawn tools, `view.endEdit`) and `tests/input-bindings.test.ts` (hints without an editing tool); each new case failed before its fix. [View graph design §6.5](view-graph-design.md#65-phase-status).
+
+- **UI-102 (Med):** tools the presentation doesn't offer are withdrawn, not just hidden. `studio-ui/app.ts` passes `port.views.withdraw(ids)` the tools of hidden modules (and research tools while hidden) whenever the filter changes; the graph keeps each view's choice (saved, in force again once offered) and `PreviewActions` applies `ViewGraph.activeTools`, so Surface controls stops drawing and editing. Tool IDs only reach the application, never module visibility (rule 6 holds). The hint strip follows the view tool marked `editing`: a 3D view without one hints camera input only (`CAMERA_MODIFIER_SUMMARIES`), with no note pointing at Layers or Surface controls.
+- **UI-106 (Low):** `view.setTool` is refused `not_ready` ("The 3D view is still loading.") until the preview is attached, so no toggle is made that nothing shows or saves.
+- **CORE-94 (Low; High at P4):** every structure edit records a step (default names: New view, Close view, Link/Unlink *slot*); one made without recording (a restore) clears the history; and a replay is checked as a whole before it applies (main view present, unique IDs, every reference resolves to its slot, camera and rig fit), dropping a failing step and the older steps behind it.
+- **CORE-95 (Low):** coalescing is by edit, not time: a run of same-key edits is one step until it is sealed by `view.endEdit` (the Camera & light sliders send it on release or at the end of a keyboard burst), a different edit, Undo or Redo. `COALESCE_MS` is gone.
+- **CORE-96 (Low):** the node codecs and `parseWorkspace` share one set of ranges (`EYE_SHAPE_RANGE`, `validCameraPose`, the studio exposure and key-angle ranges in `preview-view-graph.ts`); the eye shape is rounded to its index in both.
+- **CORE-97 (Low):** a main view whose tools node holds anything but the mirrored Surface controls and Plate wireframe is not the default graph, so it is stored; on read the legacy fields still win for those two and every other tool is kept.
+- **CORE-98 (Low):** `uv`, `surface` and `head` (the viewport port's alias for the main view) are reserved view IDs (`RESERVED_VIEW_IDS`).
+- **Lows:** each view tool names the action it dispatches (`ViewToolContribution.dispatches`; completeness checks it) and `resolveTool` switches on that action, not on `motion.idle`. `parseViewGraph` keeps views and nodes of unknown kinds (`KeptView`: a newer build's view kind, or a 3D view over an unknown scene, camera or rig kind) and writes them back unchanged, in their stored place, with the nodes they reference; only damage or an unshowable main view falls back to the default graph. A camera jump that left the camera where it was records nothing and leaves no Back step.
 
 ## Fixed in claude/fix-ci-linux
 
