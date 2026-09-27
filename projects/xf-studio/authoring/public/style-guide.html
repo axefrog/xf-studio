@@ -452,6 +452,16 @@ span.category { border-color: transparent; background: transparent; padding-left
 .install-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); min-height: 24px; }
 .install-status { margin: 0; flex: 1 1 240px; font-size: var(--fs-sm); }
 .install-status.warning { color: var(--warning); }
+/* "Get the desktop app" (localhost only): what was found and the one next step. */
+.desktop-app-lead { margin: 0 0 var(--sp-4); }
+.desktop-app-detail { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.desktop-app-detail p { margin: 0; }
+.desktop-app-detail > .btn { justify-self: start; }
+.desktop-app-sheet h2:focus { outline: none; }
+.desktop-app-file { display: flex; align-items: flex-start; gap: var(--sp-3); overflow-wrap: anywhere; }
+.desktop-app-build { display: grid; gap: var(--sp-3); }
+.desktop-app-command { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); }
+.desktop-app-command code { flex: 1; min-width: 0; font-size: var(--fs-sm); }
 /* Game & tools: one form saved as it changes (UI-83). */
 .setup-section > .control, .setup-section > .row, .setup-section .setup-mo2, .setup-section .setup-direct { margin-top: var(--sp-4); }
 .setup-status { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); padding: var(--sp-3) var(--sp-4); border-left: 2px solid var(--line-strong); background: var(--bg-raised); }

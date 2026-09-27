@@ -10,6 +10,7 @@ import { renderHelp } from "./render";
 import type { Tour } from "./types";
 import type { TourRecord } from "../../ui-preferences";
 import { openReportDialog } from "../diagnostics/report-dialog";
+import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./desktop-app-sheet";
 
 export type HelpGuidance = { tours(): readonly Tour[]; status(tourId: string): TourRecord | undefined; start(tourId: string): boolean };
 const STATUS: Record<TourRecord, [string, "success" | "neutral"]> = {
@@ -33,7 +34,15 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   const about = rt.port.about.capability().available ? h("li", {},
     h("button", { class: "link-button help-about", type: "button", text: "About XF Studio", onclick: () => rt.port.about.open() }),
     h("small", { class: "muted", text: "Version, licences, updates and where your library is kept." })) : null;
-  const links = h("ul", { class: "help-links" }, about, h("li", {},
+  // The desktop app, only where the host offers it (localhost; the desktop app has About instead): open it, or how to get it.
+  const desktop = rt.port.desktopApp.offered() ? (() => {
+    const label = h("button", { class: "link-button help-desktop-app", type: "button",
+      onclick: () => { if (desktopAppEntry(rt.port.desktopApp.snapshot()).opens) void openDesktopApp(rt); else openDesktopAppSheet(rt); } });
+    const detail = h("small", { class: "muted" });
+    return { element: h("li", {}, label, detail), render() { const entry = desktopAppEntry(rt.port.desktopApp.snapshot()); setText(label, entry.label); setText(detail, entry.detail); } };
+  })() : null;
+  desktop?.render();
+  const links = h("ul", { class: "help-links" }, about, desktop?.element ?? null, h("li", {},
     h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
     h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
     h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),
@@ -90,7 +99,15 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   let rendered = false;
   return {
     spec: { id: "help", ...PANEL_META.help, element },
-    update(_frame: Frame) { if (!rendered) { rendered = true; render(); } else renderTours(search.value.trim()); },
+    update(_frame: Frame) {
+      if (!rendered) {
+        rendered = true; render();
+        // Whether the desktop app is installed, looked up once the panel is first shown (the sheet looks again when opened).
+        const app = rt.port.desktopApp;
+        if (app.offered() && !app.snapshot().status && app.capability({ kind: "desktopApp.refresh" }).available) void app.dispatch({ kind: "desktopApp.refresh" });
+      } else renderTours(search.value.trim());
+      desktop?.render();
+    },
     focusSearch() { if (!rendered) { rendered = true; render(); } search.focus(); search.select(); },
   };
 }

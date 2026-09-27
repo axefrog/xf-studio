@@ -16,6 +16,7 @@ import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
 import { ModInstallActions } from "./mod-install-actions";
+import { DesktopAppActions, type DesktopAppState } from "./desktop-app";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
 import type { ProjectLink } from "./project-links";
 import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnapshot } from "./diagnostics/actions";
@@ -172,6 +173,13 @@ export type StudioPresentationPort<Slot> = {
   readonly previewSetup: Pick<PreviewSetupActions, "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<PreviewSetupSnapshot>;
   };
+  /**
+   * "Get the desktop app" on localhost: whether it is installed, the setup this checkout built, and opening either with the
+   * person's consent. `offered()` is false in the desktop app itself, where a presentation shows nothing about it.
+   */
+  readonly desktopApp: Pick<DesktopAppActions, "offered" | "capability" | "dispatch" | "descriptors"> & {
+    snapshot(): ReadonlyDeep<DesktopAppState>;
+  };
   /** XF Studio's public pages (knowledge pages, issue tracker) for the Help view. */
   readonly links: ProjectLinkPort;
   /** The host's About view, where it has one. */
@@ -190,6 +198,7 @@ export type StudioPresentationPort<Slot> = {
     installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
     modInstall: ReturnType<ModInstallActions["snapshot"]>;
     previewSetup: PreviewSetupSnapshot;
+    desktopApp: DesktopAppState;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -217,6 +226,8 @@ export function createStudioPresentation<Slot>(sources: {
   modInstall?: ModInstallActions;
   /** Optional for fixtures; without it the port reports a head that needs no setup. */
   previewSetup?: PreviewSetupActions;
+  /** The localhost host's desktop-app offer; without it (the desktop app, fixtures) nothing about the desktop app is offered. */
+  desktopApp?: DesktopAppActions;
   /** Optional for fixtures; without it the Help view says the page can't be opened here. */
   links?: ProjectLinkPort;
   /** The host's About view; without it About is refused as not part of this host. */
@@ -352,6 +363,10 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => install.snapshot(), capability: action => install.capability(action),
     dispatch: action => install.dispatch(action), descriptors: () => install.descriptors(),
   };
+  const desktopSource = sources.desktopApp ?? new DesktopAppActions(null);
+  const desktopApp: StudioPresentationPort<Slot>["desktopApp"] = Object.freeze({
+    offered: () => desktopSource.offered(), snapshot: () => desktopSource.snapshot(), capability: (action: Parameters<DesktopAppActions["capability"]>[0]) => desktopSource.capability(action),
+    dispatch: (action: Parameters<DesktopAppActions["dispatch"]>[0]) => desktopSource.dispatch(action), descriptors: () => desktopSource.descriptors() });
   const setup = sources.previewSetup;
   const previewSetup: StudioPresentationPort<Slot>["previewSetup"] = setup ? {
     snapshot: () => setup.snapshot(), capability: action => setup.capability(action),
@@ -387,18 +402,20 @@ export function createStudioPresentation<Slot>(sources: {
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, views, features: () => infos, feature, localSetup: Object.freeze(localSetup),
-    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup),
+    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp,
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
-      installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot() }),
+      installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot(),
+      desktopApp: desktopApp.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
         ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
         ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
         ...(sources.modInstall ? [sources.modInstall.subscribe(listener)] : []),
+        ...(sources.desktopApp ? [sources.desktopApp.subscribe(listener)] : []),
         ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },

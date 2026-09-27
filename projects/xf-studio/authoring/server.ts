@@ -15,6 +15,7 @@ import { eyePlateReadiness } from "./src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
+import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
 import type { LocalSettings } from "./src/local-settings";
@@ -58,6 +59,12 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
   const settings = localSettings.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
 } });
+// "Get the desktop app" (localhost only): whether it is installed, the setup this checkout built, and the site's release status.
+// Starts that setup or the app only on the person's confirmed click; a test copy or a verification workspace never starts anything.
+const detectDesktop = () => detectDesktopApp(createDesktopAppHostPort(), { desktopRoot: resolve(import.meta.dir, "desktop"),
+  siteConfig: resolve(import.meta.dir, "..", "site", "site.config.json") });
+const desktopAppRequest = createDesktopAppHandler({ detect: detectDesktop, readOnly: state.isolated ? DESKTOP_APP_READ_ONLY_TEST_SERVER : undefined });
+const verificationDesktopAppRequest = createDesktopAppHandler({ detect: detectDesktop, readOnly: DESKTOP_APP_READ_ONLY_VERIFICATION });
 // Mod export: the shared package host service with localhost's adapter; each exporting feature's host prerequisites
 // are bound here by ID (eye makeup: the built-in eye plate). Settings are read for every request.
 // Unreadable settings: Check plans with the defaults and Build answers a plain JSON refusal, as on desktop (PIPE-94).
@@ -148,6 +155,8 @@ const server = Bun.serve({
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/verification/local-settings") return verificationSettingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
+    if (url.pathname === "/api/desktop-app") return desktopAppRequest(request);
+    if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
