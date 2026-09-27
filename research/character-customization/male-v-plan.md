@@ -119,7 +119,7 @@ Audit of `projects/xf-studio/authoring` at `4193fcb` (26 September 2026). Line n
 | `src/character-detail-request.ts` 34, 89, 110 | `DEFAULT_CHARACTER` is feminine; `characterRequestFor` shows the feminine default for a masculine save | Default by the shown body; keep the version gate for older hosts |
 | `src/character-follow.ts` 25 | Face shape follows only a feminine view | Follow either |
 | `src/platform/scene/head-rig.ts` 221–224 | `applySavedV` throws for a masculine save | Load the masculine core; the checks below it are generic |
-| `src/saved-appearance-actions.ts` 47, `src/lighting-preset-stage.ts` 46 | Clearing a save returns to the feminine rig | Follow the context's default body |
+| `src/saved-appearance-actions.ts` 47, `src/lighting-setup-stage.ts` (`setBodySex`) | Clearing a save returns to the feminine rig | Follow the context's default body |
 | `src/studio-ui/panels/character.ts` 73, 324 | **Default V** is always the feminine default | Offer both (the action already takes `bodyGender`) |
 | `src/cc-render-coverage.ts` 64, 73, 96, 104, 112 | Every masculine option reads "not drawn" | Drop the masculine branches as parts land |
 | `src/character-detail-plan.ts` 299 | Feet state names `flat_feet`/`lifted_feet` | Harmless for a masculine V (no such group, so nothing is added) but should be documented |

@@ -395,6 +395,10 @@ Thomas Deliot and Laurent Belcour, [anisotropic-grid glint paper](https://arxiv.
 
 Jakob, Hašan, Yan, Lawrence, Ramamoorthi and Marschner, [Discrete Stochastic Microfacet Models](https://research.cs.cornell.edu/stochastic-sg14/). Framed the aliasing and temporal-coherence problem of tiny normal-mapped glitter.
 
+### Castaño (2013)
+
+Ignacio Castaño (Thekla), ["Shadow Mapping Summary – Part 1"](http://the-witness.net/news/2013/09/shadow-mapping-summary-part-1/), and its filter as Matt Pettineo presents it in his [Shadows sample](https://github.com/TheRealMJP/Shadows) (MIT licence). Its optimized PCF, a tent filter built from a few hardware-filtered comparison taps whose positions and weights follow the receiver inside its texel, is the Studio's soft-shadow filter; the shader implements the published tap formulas.
+
 ### Karis (2013)
 
 Brian Karis (Epic Games), "Real Shading in Unreal Engine 4" (SIGGRAPH 2013 course notes). Its spherical-Gaussian approximation of Schlick's Fresnel let us recognise the Fresnel term of the game's eye lighting when reading the compiled light program.
