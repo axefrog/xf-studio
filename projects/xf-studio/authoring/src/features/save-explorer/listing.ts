@@ -24,7 +24,13 @@ export type SaveListing = {
   readonly screenshot: boolean;
   readonly modded: boolean | null;
 };
-export type SaveListingResult = { readonly available: boolean; readonly saves: readonly SaveListing[]; readonly reason?: string };
+/** Where the saves were looked for: the folder chosen in Settings, the detected Saved Games folder, or a developer's override. */
+export const SAVES_FOLDER_SOURCES = ["chosen", "detected", "developer"] as const;
+export type SavesFolderSource = typeof SAVES_FOLDER_SOURCES[number];
+/** The folder a listing read, as a person would name it (the detected folder is described, never its path). */
+export type SavesFolder = { readonly source: SavesFolderSource; readonly display: string };
+export type SaveListingResult = { readonly available: boolean; readonly saves: readonly SaveListing[]; readonly reason?: string;
+  readonly folder?: SavesFolder };
 /** Candidate names for a save's hashes: the engine's shipped type list and the installed scripts' names. */
 export type SaveTypeNames = {
   readonly engine: EngineTypes & { readonly enums: readonly string[]; readonly bitfields: readonly string[]; readonly classes: readonly string[]; readonly properties: readonly string[] };
@@ -40,6 +46,7 @@ const names = (value: unknown, max: number) => Array.isArray(value) && value.len
 export function parseSaveListing(value: unknown): SaveListingResult {
   const v = value as SaveListingResult;
   if (!v || typeof v.available !== "boolean" || !Array.isArray(v.saves) || v.saves.length > 100_000 || !(v.reason === undefined || text(v.reason, 1000)) ||
+    !(v.folder === undefined || (v.folder && (SAVES_FOLDER_SOURCES as readonly string[]).includes(v.folder.source) && text(v.folder.display, 1024))) ||
     !v.saves.every(save => save && text(save.folder, 128) && (SAVE_KINDS as readonly string[]).includes(save.kind) && text(save.savedAt, 40) &&
       nullableText(save.location, 128) && nullableNumber(save.level) && nullableText(save.lifePath, 32) && nullableText(save.gameVersion, 16) &&
       nullableNumber(save.saveVersion) && typeof save.bytes === "number" && typeof save.screenshot === "boolean" &&
@@ -47,7 +54,8 @@ export function parseSaveListing(value: unknown): SaveListingResult {
     throw Error("The saves list couldn't be read.");
   return { available: v.available, saves: v.saves.map(save => ({ folder: save.folder, kind: save.kind, savedAt: save.savedAt, location: save.location,
     level: save.level, lifePath: save.lifePath, gameVersion: save.gameVersion, saveVersion: save.saveVersion, bytes: save.bytes, screenshot: save.screenshot,
-    modded: save.modded })), ...(v.reason ? { reason: v.reason } : {}) };
+    modded: save.modded })), ...(v.reason ? { reason: v.reason } : {}),
+    ...(v.folder ? { folder: { source: v.folder.source, display: v.folder.display } } : {}) };
 }
 
 /** A names response, validated; throws on anything else. */

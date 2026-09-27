@@ -1,6 +1,6 @@
 // The UI/UX review fixes (UI-80..97) over the light DOM harness (light-dom.ts): ordinary refusals fade, unavailable actions stay
-// focusable and say why, a Build offers "Add to my mod manager" with a reviewed plan and "Show in folder", Game & tools offers what
-// XF Studio found and saves each choice at once, and the failure card offers a report instead of a log path.
+// focusable and say why, a Build offers "Add to my mod manager" with a reviewed plan and "Show in folder", Settings offers what
+// XF Studio found and saves each choice at once (the saves folder too), and the failure card offers a report instead of a log path.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { InstallDetectionActions } from "../src/install-detection-actions";
 import { LocalSetupActions, type LocalSetupTransport } from "../src/local-setup-actions";
@@ -67,7 +67,9 @@ const PLAN = (over: Partial<ModInstallPlan> = {}): ModInstallPlan => ({ schema: 
     "Add “XF Eye Artistry” to the profile “Main”, switched on. At the bottom of the \"Looks\" section, where Mod Organizer puts newly installed mods.",
     "Nothing else in your mod list changes."], ...over });
 const VIEW = (fields: Record<string, unknown> = {}) => ({ revision: 1, source: "primary", overridden: [],
-  fields: { gameRoot: null, launchRoute: "mo2", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null, eyePlateHead: "installed", ...fields },
+  fields: { gameRoot: null, launchRoute: "mo2", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null, eyePlateHead: "installed",
+    savesDirectory: null, ...fields },
+  saves: { source: "detected", detected: { display: "Saved Games\\CD Projekt Red\\Cyberpunk 2077", found: true }, chosenFound: null },
   readiness: { build: { ready: false, issues: [{ code: "game_root_unset", reason: "Choose your Cyberpunk 2077 folder." }], limits: [] },
     sourceDiscovery: { ready: false, issues: [], limits: [] } },
   eyePlateHead: { label: "Eye plate head", options: [{ value: "installed", label: "The head your game loads" }, { value: "base-game", label: "The unmodified head" }] } });
@@ -79,17 +81,27 @@ const BUILD = { kind: "packageBuild", freshness: "current", result: { schema: "x
     package: "C:\\Data\\package-candidates\\c1", manifest: "C:\\Data\\package-candidates\\c1\\manifest.json",
     archiveSha256: "b".repeat(64), xlSha256: "c".repeat(64), verifiedUnpackedFiles: 3, installed: false, gameRenderingVerified: false }] } };
 
-async function packageHarness(options: { plan?: ModInstallPlan; files?: Record<string, unknown>; picker?: boolean; view?: ReturnType<typeof VIEW> } = {}) {
+type HarnessOptions = { plan?: ModInstallPlan; files?: Record<string, unknown>; picker?: boolean; view?: ReturnType<typeof VIEW>;
+  /** The host's answer to a save, in place of accepting it (a refused saves folder). */
+  refuse?: (fields: Record<string, unknown>) => { code: string; error: string } | null };
+async function packageHarness(options: HarnessOptions = {}) {
+  const { packagePanel } = await import("../src/studio-ui/panels/collection");
+  return panelHarness(options, rt => packagePanel(rt as never));
+}
+async function panelHarness<P extends { spec: { element: HTMLElement }; update(frame: never): void }>(options: HarnessOptions, make: (rt: unknown) => P) {
   const { Feedback } = await import("../src/studio-ui/feedback");
   const { Frame } = await import("../src/studio-ui/runtime");
-  const { packagePanel } = await import("../src/studio-ui/panels/collection");
-  const saved: unknown[] = [], sentInstall: unknown[] = [];
+  const saved: unknown[] = [], sentInstall: unknown[] = [], opened: (string | undefined)[] = [];
   let view = options.view ?? VIEW();
   const transport: LocalSetupTransport = async (method, body) => {
-    if (method === "PATCH") { saved.push((body as { fields: Record<string, unknown> }).fields); view = { ...view, fields: { ...view.fields, ...(body as { fields: object }).fields } }; }
+    if (method === "PATCH") {
+      const fields = (body as { fields: Record<string, unknown> }).fields, refusal = options.refuse?.(fields);
+      if (refusal) return { ok: false, status: 400, data: refusal };
+      saved.push(fields); view = { ...view, fields: { ...view.fields, ...fields } };
+    }
     return { ok: true, status: 200, data: view as never };
   };
-  const setup = new LocalSetupActions(transport, options.picker ? async () => "E:\\Games\\Cyberpunk 2077" : null);
+  const setup = new LocalSetupActions(transport, options.picker ? async field => field === "savesDirectory" ? "E:\\Saves" : "E:\\Games\\Cyberpunk 2077" : null);
   await setup.dispatch({ kind: "setup.refresh" });
   const detection = new InstallDetectionActions(async target => ({ ok: true, status: 200, data: (target === "games"
     ? { schema: "xfs/game-install-detection-1", supported: true, rejected: [], unsupported: [], issues: [], limitations: [],
@@ -113,19 +125,29 @@ async function packageHarness(options: { plan?: ModInstallPlan; files?: Record<s
     localSetup: { snapshot: () => setup.snapshot(), capability: (a: never) => setup.capability(a), dispatch: (a: never) => setup.dispatch(a) },
     installDetection: { snapshot: () => detection.snapshot(), capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a) },
     modInstall: { snapshot: () => install.snapshot(), capability: (a: never) => install.capability(a), dispatch: (a: never) => install.dispatch(a) },
-    diagnostics: { expected: (code?: string) => code === "package_build_unavailable", capability: () => ({ available: true }) },
+    diagnostics: { expected: (code?: string) => code === "package_build_unavailable", capability: () => ({ available: true }), snapshot: () => ({ mode: null }),
+      dispatch: async () => ({ ok: true, message: "" }) },
     preferences: { snapshot: () => ({ researchTools: false }) },
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
   for (const service of [setup, detection, install]) service.subscribe(() => { for (const listener of listeners) listener(); });
   const feedback = new Feedback();
   const rt = { port, feedback, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: () => true,
-    changed: () => paint(), report: () => true };
-  const panel = packagePanel(rt as never);
+    changed: () => paint(), report: () => true, settings: { open: (section?: string) => { opened.push(section); } } };
+  const panel = make(rt);
   lightDocument.body.append(panel.spec.element as never);
   const paint = () => panel.update(new Frame(port as never) as never);
   paint();
-  return { panel, root: panel.spec.element as unknown as LightElement, paint, saved, sentInstall, setup, detection, feedback };
+  return { panel, root: panel.spec.element as unknown as LightElement, paint, saved, sentInstall, setup, detection, feedback, opened };
+}
+/** The Settings panel over the same services, with appearance preferences kept in memory. */
+async function settingsHarness(options: HarnessOptions = {}) {
+  const { settingsPanel } = await import("../src/studio-ui/panels/settings");
+  let theme: "system" | "light" | "dark" = "system", hints = true, research = false;
+  const appearance = { theme: () => theme, setTheme: (next: typeof theme) => { theme = next; }, hints: () => hints, setHints: (on: boolean) => { hints = on; },
+    research: () => research, setResearch: (on: boolean) => { research = on; }, openReference: () => {} };
+  const h = await panelHarness(options, rt => settingsPanel(rt as never, { appearance } as never));
+  return { ...h, appearance: () => ({ theme, hints, research }) };
 }
 
 describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => {
@@ -177,13 +199,13 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   });
 
   test("a blocked plan says why, offers the one next step, and can't be accepted", async () => {
-    const h = await packageHarness({ plan: PLAN({ blocked: "Choose your Mod Organizer 2 instance and profile in Game & tools first.", next: "setup" }) });
+    const h = await packageHarness({ plan: PLAN({ blocked: "Choose your Mod Organizer 2 instance and profile in Settings › Game first.", next: "setup" }) });
     buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
     expect(await until(() => !!openSheet()?.querySelector(".install-status")?.textContent, h.paint)).toBe(true);
     const sheet = openSheet()!;
-    expect(text(sheet.querySelector(".install-status")!)).toBe("Choose your Mod Organizer 2 instance and profile in Game & tools first.");
+    expect(text(sheet.querySelector(".install-status")!)).toBe("Choose your Mod Organizer 2 instance and profile in Settings › Game first.");
     // The plan names its next step (UI-99): the sheet never guesses it from the words.
-    expect(buttonNamed(sheet, "Open Game & tools")!.hidden).toBe(false);
+    expect(buttonNamed(sheet, "Open Settings")!.hidden).toBe(false);
     expect(buttonNamed(sheet, "Check again")!.hidden).toBe(true);
     expect(buttonNamed(sheet, "Rename the mod")!.hidden).toBe(true);
     const consent = buttonNamed(sheet, "Add to Mod Organizer 2")!;
@@ -202,7 +224,7 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
       buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
       expect(await until(() => !!openSheet()?.querySelector(".install-status")?.textContent, h.paint)).toBe(true);
       const sheet = openSheet()!;
-      for (const name of ["Open Game & tools", "Check again", "Rename the mod"]) expect(buttonNamed(sheet, name)!.hidden).toBe(name !== shown);
+      for (const name of ["Open Settings", "Check again", "Rename the mod"]) expect(buttonNamed(sheet, name)!.hidden).toBe(name !== shown);
       buttonNamed(sheet, "Close")!.click();
       h.panel.spec.element.remove();
     }
@@ -221,18 +243,17 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   });
 });
 
-describe("Game & tools: one form, what XF Studio found, saved as chosen (UI-83, UI-03)", () => {
+describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-03, UI-109)", () => {
   test("detected folders and profiles are choices, and choosing one saves it", async () => {
-    const h = await packageHarness();
-    const section = h.root.querySelector(".setup-section")!;
-    section.open = true;
-    section.dispatchEvent(lightEvent("toggle"));
+    const h = await settingsHarness();
+    const game = h.root.querySelector("[data-settings-section=game]")!;
+    h.panel.spec.visibility?.(true);
     await settle(); h.paint();
-    const selects = section.querySelectorAll("select");
-    const game = selects.find(select => select.options.some(option => option.getAttribute("value") === "D:\\Steam\\Cyberpunk 2077"))!;
-    expect(game.options.map(option => text(option))).toEqual(["D:\\Steam\\Cyberpunk 2077 (Steam)", "Another folder…", "Not chosen yet"]);
-    game.value = "D:\\Steam\\Cyberpunk 2077";
-    game.dispatchEvent(lightEvent("change"));
+    const selects = game.querySelectorAll("select");
+    const folder = selects.find(select => select.options.some(option => option.getAttribute("value") === "D:\\Steam\\Cyberpunk 2077"))!;
+    expect(folder.options.map(option => text(option))).toEqual(["D:\\Steam\\Cyberpunk 2077 (Steam)", "Another folder…", "Not chosen yet"]);
+    folder.value = "D:\\Steam\\Cyberpunk 2077";
+    folder.dispatchEvent(lightEvent("change"));
     await settle(); h.paint();
     expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Steam\\Cyberpunk 2077" });
     const mo2 = selects.find(select => select.options.some(option => option.getAttribute("value") === "D:\\MO2"))!;
@@ -240,24 +261,89 @@ describe("Game & tools: one form, what XF Studio found, saved as chosen (UI-83, 
     mo2.dispatchEvent(lightEvent("change"));
     await settle(); h.paint();
     expect(h.saved.at(-1)).toMatchObject({ mo2Root: "D:\\MO2" });
-    const profile = section.querySelectorAll("select").find(select => select.options.some(option => text(option) === "Main (last used)"))!;
+    const profile = game.querySelectorAll("select").find(select => select.options.some(option => text(option) === "Main (last used)"))!;
     expect(profile.options.map(option => text(option))).toEqual(["Choose a profile", "Main (last used)", "Testing"]);
     // No native picker on this host: no Browse… to press.
-    expect(buttons(section).filter(button => text(button) === "Browse…").every(button => button.hidden)).toBe(true);
+    expect(buttons(game).filter(button => text(button) === "Browse…").every(button => button.hidden)).toBe(true);
     // One plain line says what is missing.
-    expect(text(section.querySelector(".setup-status")!)).toBe("To build your mod files: Choose your Cyberpunk 2077 folder.");
+    expect(text(game.querySelector(".setup-status")!)).toBe("To build your mod files: Choose your Cyberpunk 2077 folder.");
+    // The groups are plain, in order.
+    expect(h.root.querySelectorAll("[data-settings-section]").map(section => section.getAttribute("data-settings-section")))
+      .toEqual(["game", "saves", "tools", "appearance", "privacy"]);
     h.panel.spec.element.remove();
   });
 
   test("with the desktop's folder picker, Browse… chooses and saves a folder", async () => {
-    const h = await packageHarness({ picker: true });
-    const section = h.root.querySelector(".setup-section")!;
-    const browse = buttons(section).find(button => text(button) === "Browse…" && !button.hidden)!;
+    const h = await settingsHarness({ picker: true });
+    const game = h.root.querySelector("[data-settings-section=game]")!;
+    const browse = buttons(game).find(button => text(button) === "Browse…" && !button.hidden)!;
     expect(browse).toBeTruthy();
     browse.click();
     await settle();
     expect(h.saved.at(-1)).toMatchObject({ gameRoot: "E:\\Games\\Cyberpunk 2077" });
     h.panel.spec.element.remove();
+  });
+
+  test("the saves folder is detected by default and described without a profile path; another folder is typed, checked and saved", async () => {
+    const refusal = { code: "saves_folder_missing", error: "XF Studio can't find that folder. Check how it's typed, or copy the folder's address from File Explorer's address bar." };
+    const h = await settingsHarness({ refuse: fields => fields.savesDirectory === "D:\\Nowhere" ? refusal : null });
+    const saves = h.root.querySelector("[data-settings-section=saves]")!;
+    expect(text(saves.querySelector(".saves-current")!)).toBe("Detected: Saved Games\\CD Projekt Red\\Cyberpunk 2077");
+    expect(buttonNamed(saves, "Use the detected folder")!.hidden).toBe(true);
+    // Localhost has no folder picker: "Choose another folder…" opens the text box with plain guidance.
+    const typed = saves.querySelector(".setup-typed-block")!;
+    expect(typed.hidden).toBe(true);
+    buttonNamed(saves, "Choose another folder…")!.click();
+    await settle(); h.paint();
+    expect(typed.hidden).toBe(false);
+    expect(text(typed)).toContain("copy its address bar");
+    const input = typed.querySelector("input")!;
+    input.value = "D:\\Nowhere";
+    buttonNamed(saves, "Use this folder")!.click();
+    await settle(); h.paint();
+    // The host's refusal is said beside the field, and nothing was saved.
+    const problem = saves.querySelector(".note.warning")!;
+    expect(problem.hidden).toBe(false);
+    expect(text(problem)).toBe(refusal.error);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(h.saved).toEqual([]);
+    input.value = "D:\\Games\\Saves";
+    input.dispatchEvent(lightEvent("input"));
+    buttonNamed(saves, "Use this folder")!.click();
+    await settle(); h.paint();
+    expect(h.saved.at(-1)).toMatchObject({ savesDirectory: "D:\\Games\\Saves" });
+    expect(typed.hidden).toBe(true);
+    expect(text(saves.querySelector(".saves-current")!)).toBe("Your folder: D:\\Games\\Saves");
+    // "Use the detected folder" goes back to the default.
+    buttonNamed(saves, "Use the detected folder")!.click();
+    await settle(); h.paint();
+    expect(h.saved.at(-1)).toMatchObject({ savesDirectory: null });
+    expect(text(saves.querySelector(".saves-current")!)).toBe("Detected: Saved Games\\CD Projekt Red\\Cyberpunk 2077");
+    h.panel.spec.element.remove();
+  });
+
+  test("the desktop's folder picker chooses the saves folder at once", async () => {
+    const h = await settingsHarness({ picker: true });
+    const saves = h.root.querySelector("[data-settings-section=saves]")!;
+    buttonNamed(saves, "Choose another folder…")!.click();
+    await settle(); h.paint();
+    expect(h.saved.at(-1)).toMatchObject({ savesDirectory: "E:\\Saves" });
+    expect(saves.querySelector(".setup-typed-block")!.hidden).toBe(true);
+    h.panel.spec.element.remove();
+  });
+
+  test("appearance is set here too, and Mod package points to Settings instead of holding the form", async () => {
+    const h = await settingsHarness();
+    const appearance = h.root.querySelector("[data-settings-section=appearance]")!;
+    buttonNamed(appearance, "Dark")!.click();
+    expect(h.appearance().theme).toBe("dark");
+    h.panel.spec.element.remove();
+    const pkg = await packageHarness();
+    expect(pkg.root.querySelector("[data-settings-section]")).toBeNull();
+    expect(text(pkg.root)).toContain("To build your mod files: Choose your Cyberpunk 2077 folder.");
+    buttonNamed(pkg.root, "Open Settings")!.click();
+    expect(pkg.opened).toEqual(["game"]);
+    pkg.panel.spec.element.remove();
   });
 });
 

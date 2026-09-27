@@ -6,11 +6,14 @@
  *
  * Long work yields between steps (`yieldToHost`): the container opens in one step, then each package and the world-object stream are
  * checked one at a time so the tree's decode status fills in without holding the page.
+ *
+ * A listing that fails is tried again after a short wait (`retryDelays`), saying "Reconnecting…" meanwhile: the host may be restarting.
+ * Only when every try fails is the failure shown, in plain words (UI-109). Refresh during the waits tries again at once.
  */
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import { openExplorer, type EntryPage, type ModDataView, type NodeInspection, type ObjectInspection, type ObjectRef, type SaveExplorer, type SaveSummary,
   type TreeRow } from "./explorer";
-import { parseSaveListing, parseSaveTypeNames, type SaveListing, type SaveTypeNames } from "./listing";
+import { parseSaveListing, parseSaveTypeNames, type SaveListing, type SavesFolder, type SaveTypeNames } from "./listing";
 
 /**
  * The host device: the saves listing, a save's bytes, the file picker, name sources and screenshots. The listing and names arrive
@@ -24,6 +27,8 @@ export type SaveExplorerDevice = {
   names(): Promise<unknown>;
   /** Where the view can load a listed save's screenshot from, or null. */
   thumbnail(folder: string): string | null;
+  /** Calls the listener when the saves folder chosen in Settings changes (the list is read again); returns how to stop. */
+  locationChanged?(listener: () => void): () => void;
 };
 
 export type SaveExplorerView = "nodes" | "mods";
@@ -39,7 +44,11 @@ export type SaveExplorerOutcome = { ok: true; message?: string } | { ok: false; 
 
 type Phase = "idle" | "loading" | "ready" | "failed";
 export type SaveExplorerState = {
-  readonly listing: { readonly phase: Phase; readonly available: boolean; readonly saves: readonly SaveListing[]; readonly message?: string };
+  readonly listing: { readonly phase: Phase; readonly available: boolean; readonly saves: readonly SaveListing[]; readonly message?: string;
+    /** The folder the last listing read, as a person would name it. */
+    readonly folder?: SavesFolder;
+    /** A try failed and another follows shortly (the host may be restarting). */
+    readonly reconnecting?: boolean };
   readonly names: { readonly phase: Phase; readonly scripts: boolean; readonly message?: string };
   readonly open: { readonly phase: "none" | "loading" | "ready" | "failed"; readonly source?: { readonly kind: "listed"; readonly folder: string } |
     { readonly kind: "file"; readonly name: string }; readonly message?: string; readonly summary?: SaveSummary; readonly checking: boolean };
@@ -61,6 +70,8 @@ export const SAVE_EXPLORER_DESCRIPTORS = Object.freeze({
 
 /** Largest save the explorer opens (saves are 1–10 MB). */
 export const MAX_SAVE_BYTES = 128 * 1024 * 1024;
+/** The waits before each further try of a failed listing: six tries over about fifteen seconds, enough for the host to restart and rebuild. */
+export const LISTING_RETRY_DELAYS: readonly number[] = [500, 1000, 2000, 4000, 8000];
 const initial = (): SaveExplorerState => ({ listing: { phase: "idle", available: false, saves: [] }, names: { phase: "idle", scripts: false },
   open: { phase: "none", checking: false }, selection: { node: null, object: null, view: "nodes" }, revision: 0 });
 
@@ -72,9 +83,19 @@ export class SaveExplorerActions {
   private namesRequest: Promise<SaveTypeNames | null> | null = null;
   /** Bumped by every open and close, so a slower earlier open never publishes over a later one. */
   private generation = 0;
+  /** Bumped by every listing, so a try still waiting to repeat stops once a newer one starts. */
+  private listGeneration = 0;
+  private readonly retryDelays: readonly number[];
+  private readonly wait: (ms: number) => Promise<void>;
 
   constructor(private readonly device: SaveExplorerDevice | null,
-    private readonly yieldToHost: () => Promise<void> = () => new Promise(done => setTimeout(done, 0))) {}
+    private readonly yieldToHost: () => Promise<void> = () => new Promise(done => setTimeout(done, 0)),
+    options: { retryDelays?: readonly number[]; wait?: (ms: number) => Promise<void> } = {}) {
+    this.retryDelays = options.retryDelays ?? LISTING_RETRY_DELAYS;
+    this.wait = options.wait ?? (ms => new Promise(done => setTimeout(done, ms)));
+    // A saves folder chosen in Settings: a list already read is read again from the new folder.
+    device?.locationChanged?.(() => { if (this.state.listing.phase !== "idle") void this.refresh(); });
+  }
 
   descriptors() { return structuredClone(SAVE_EXPLORER_DESCRIPTORS); }
   snapshot(): SaveExplorerState { return structuredClone(this.state); }
@@ -90,7 +111,8 @@ export class SaveExplorerActions {
     switch (action.kind) {
       case "saves.refresh":
         if (!this.device) return refusal("unavailable", "Listing saves isn't available here.");
-        return this.state.listing.phase === "loading" ? refusal("busy", "Your saves are being listed.") : { available: true };
+        // While a failed try waits to repeat, Refresh tries again at once.
+        return this.state.listing.phase === "loading" && !this.state.listing.reconnecting ? refusal("busy", "Your saves are being listed.") : { available: true };
       case "saves.open":
         if (!this.device) return refusal("unavailable", "Opening saves isn't available here.");
         if (typeof action.folder !== "string" || !this.state.listing.saves.some(save => save.folder === action.folder))
@@ -162,16 +184,28 @@ export class SaveExplorerActions {
   }
 
   private async refresh(): Promise<SaveExplorerOutcome> {
-    this.publish({ listing: { ...this.state.listing, phase: "loading" } });
-    try {
-      const result = parseSaveListing(await this.device!.list());
-      this.publish({ listing: { phase: "ready", available: result.available, saves: result.saves, ...(result.reason ? { message: result.reason } : {}) } });
-      return { ok: true };
-    } catch {
-      const message = "Your saves couldn't be listed. Check that XF Studio is still running, then choose Refresh.";
-      this.publish({ listing: { ...this.state.listing, phase: "failed", message } });
-      return { ok: false, code: "unavailable", message };
+    const generation = ++this.listGeneration;
+    this.publish({ listing: { ...this.state.listing, phase: "loading", reconnecting: false } });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const result = parseSaveListing(await this.device!.list());
+        if (generation !== this.listGeneration) return { ok: true };
+        this.publish({ listing: { phase: "ready", available: result.available, saves: result.saves, ...(result.reason ? { message: result.reason } : {}),
+          ...(result.folder ? { folder: result.folder } : {}) } });
+        return { ok: true };
+      } catch {
+        if (generation !== this.listGeneration) return { ok: true };
+        const delay = this.retryDelays[attempt];
+        if (delay === undefined) break;
+        // Most often the host is restarting: say so, and try again shortly.
+        this.publish({ listing: { ...this.state.listing, phase: "loading", reconnecting: true } });
+        await this.wait(delay);
+        if (generation !== this.listGeneration) return { ok: true };
+      }
     }
+    const message = "XF Studio couldn't list your saves just now. Choose Refresh to try again.";
+    this.publish({ listing: { ...this.state.listing, phase: "failed", reconnecting: false, message } });
+    return { ok: false, code: "unavailable", message };
   }
 
   /** The name sources, fetched once; without them the save still opens, with hashes where names would be. */

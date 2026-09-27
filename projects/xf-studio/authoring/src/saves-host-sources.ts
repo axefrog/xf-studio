@@ -6,8 +6,10 @@
  *
  * The game's saves live in `<Saved Games>\CD Projekt Red\Cyberpunk 2077`, where Saved Games is the Windows known folder
  * `FOLDERID_SavedGames` ({4C5C32FF-BB9D-43b0-B5B4-2D72E54EAAA4}). A redirected folder is read from the user's shell folders in the
- * registry (a `REG_EXPAND_SZ` with `%USERPROFILE%`-style variables), else it is `%USERPROFILE%\Saved Games`. No user path is stored:
- * the host resolves it per request, and `XFS_SAVES_DIR` (localhost only) points an isolated server at another folder.
+ * registry (a `REG_EXPAND_SZ` with `%USERPROFILE%`-style variables), else it is `%USERPROFILE%\Saved Games`. No detected path is
+ * stored or sent: the host resolves it per request and describes it only as `Saved Games\CD Projekt Red\Cyberpunk 2077`. A folder the
+ * person chose in Settings › Saves (`savesDirectory`) replaces it, and `XFS_SAVES_DIR` (localhost only) points an isolated server at
+ * another folder over both.
  *
  * Script names follow the game's own resolution, not a mod's name: redscript writes the modded bundle as
  * `r6/cache/final.redscripts.modded` beside the game's `final.redscripts` [source: redscript `scc` at 3ca666c]; under MO2 the winning
@@ -17,6 +19,7 @@
 import { join, win32 } from "node:path";
 import { readFileSync } from "node:fs";
 import type { LocalSettings } from "./local-settings";
+import type { SavesFolderProbe } from "./local-settings-server";
 import { parseMo2Modlist } from "./mo2-instance";
 import { readConfiguredMo2Instance, createWindowsDetectionHost } from "./install-detection-host";
 import { engineTypes } from "./native/rtti-type-source";
@@ -55,6 +58,29 @@ export async function cyberpunkSavesFolder(host: { platform: string; env(name: s
   return savedGames ? win32.join(savedGames, "CD Projekt Red", "Cyberpunk 2077") : null;
 }
 
+/** How the detected saves folder is shown: the Windows Saved Games folder, never the path that holds the person's profile. */
+export const SAVES_FOLDER_DISPLAY = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";
+/** Where saves are read from and how to say so (structurally `SavesRoot` of features/save-explorer/host/saves-server.ts). */
+export type SavesLocation = { path: string | null; source: "chosen" | "detected" | "developer"; display: string };
+type DetectionHost = Parameters<typeof cyberpunkSavesFolder>[0];
+
+/** The saves folder in effect: the developer override, else the folder chosen in Settings, else the detected one. */
+export async function savesLocation(host: DetectionHost, settings: Pick<LocalSettings, "savesDirectory"> | null, override?: string): Promise<SavesLocation> {
+  if (override) return { path: override, source: "developer", display: "the folder XFS_SAVES_DIR names" };
+  if (settings?.savesDirectory) return { path: settings.savesDirectory, source: "chosen", display: settings.savesDirectory };
+  return { path: await cyberpunkSavesFolder(host), source: "detected", display: SAVES_FOLDER_DISPLAY };
+}
+
+/** The settings view's saves folder detection (`createLocalSettingsHandler`): the detected folder, described. */
+export function savesFolderProbe(options: { env?: NodeJS.ProcessEnv; allowOverride: boolean }): SavesFolderProbe {
+  const env = options.env ?? process.env;
+  const host = createWindowsDetectionHost(env);
+  return {
+    detected: async () => { const path = await cyberpunkSavesFolder(host); return path ? { path, display: SAVES_FOLDER_DISPLAY } : null; },
+    developerOverride: () => options.allowOverride && !!env.XFS_SAVES_DIR,
+  };
+}
+
 const BUNDLES = [join("r6", "cache", "final.redscripts.modded"), join("r6", "cache", "final.redscripts")];
 
 /** The folders that can provide a game file, highest priority first: MO2's overwrite and enabled mods (when that is the route), then the game. */
@@ -84,13 +110,18 @@ export function scriptBundleCandidates(providers: readonly string[], exists: (pa
 }
 
 /** The saves handler's sources (structurally `SavesHostSources` of features/save-explorer/host/saves-server.ts). */
-export type SavesSources = { root(): Promise<string | null>; scriptBundles(): readonly string[]; engine(): EngineTypes };
+export type SavesSources = { root(): Promise<SavesLocation>; scriptBundles(): readonly string[]; engine(): EngineTypes };
 
+/**
+ * @param settings the settings the saves folder and scripts come from: the host's, or a verification workspace's own copy (UI-98), so
+ *   a folder chosen while testing is read only by that workspace.
+ */
 export function savesHostSources(options: { settings(): LocalSettings; env?: NodeJS.ProcessEnv; allowOverride: boolean; exists(path: string): boolean }): SavesSources {
   const env = options.env ?? process.env;
   const host = createWindowsDetectionHost(env);
+  const saved = () => { try { return options.settings(); } catch { return null; } };
   return {
-    root: () => cyberpunkSavesFolder(host, options.allowOverride ? env.XFS_SAVES_DIR || undefined : undefined),
+    root: () => savesLocation(host, saved(), options.allowOverride ? env.XFS_SAVES_DIR || undefined : undefined),
     scriptBundles: () => { try { return scriptBundleCandidates(gameFileProviders(options.settings()), options.exists); } catch { return []; } },
     engine: () => engineTypes(),
   };

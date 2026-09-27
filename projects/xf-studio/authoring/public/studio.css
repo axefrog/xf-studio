@@ -502,6 +502,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .setup-status.warning { border-color: var(--warning); } .setup-status.ready { border-color: var(--success); }
 .setup-typed { margin-top: var(--sp-2); } .setup-typed .field { flex: 1; min-width: 0; }
 .setup-typed[hidden], .setup-section .select-wrap[hidden] { display: none; }
+/* Settings (UI-109): plain groups, each a section; the setup form's parts sit inside them. A long chosen path wraps. */
+.settings-panel .section + .section { margin-top: var(--sp-5); }
+.settings-panel .setup-status { overflow-wrap: anywhere; }
+.settings-panel .section > .control, .settings-panel .section > .row { margin-top: var(--sp-4); }
+.setup-saves > .note, .setup-typed-block { margin-top: var(--sp-3); }
+.setup-typed-block > .note { margin: var(--sp-2) 0 0; }
 .result-card { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-strong); background: var(--bg-raised); border-radius: 0 var(--bevel) 0 0; }
 .result-card.ok { border-left: 3px solid var(--success); }
 .result-card.stale { border-left: 3px solid var(--warning); }

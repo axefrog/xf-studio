@@ -1,6 +1,6 @@
 /**
  * The shell's own view contribution: the platform's panels (collection and library, History, the 3D
- * head, the character and preview inspectors, Activity, Help) and the activity sources of the system
+ * head, the character and preview inspectors, Activity, Settings, Help) and the activity sources of the system
  * families (history, collection, camera and preview, motion, quality, saved V, 3D preview setup).
  */
 import type { ViewContribution } from "./contribution";
@@ -29,6 +29,9 @@ export const SHELL_VIEW = {
       description: "Resolution of generated preview textures, readiness and resource use." },
     { id: "activity", title: "Activity", icon: "activity", order: 160, slot: "closed",
       description: "Session log of results, warnings and errors." },
+    // Settings has no home among the docked groups: it opens floating, and where it was once placed (UI-109).
+    { id: "settings", title: "Settings", icon: "settings", order: 165, slot: "closed",
+      description: "Your game and mod manager, where your saves are, WolvenKit, appearance and diagnostics." },
     // Help reads beside the inspectors rather than covering the head or the collection.
     { id: "help", title: "Help", icon: "help", order: 170, slot: "closed", opensBeside: ["finish", "layers"],
       description: "Guided tours, answers to common questions and every keyboard and mouse shortcut." },
@@ -38,7 +41,7 @@ export const SHELL_VIEW = {
     { pattern: /^preset\./, label: "Presets" }, { pattern: /^camera\./, label: "Camera" }, { pattern: /^preview\./, label: "Preview" },
     { pattern: /^motion\./, label: "Motion" }, { pattern: /^quality\./, label: "Preview quality" },
     { pattern: /^collection\./, label: "Library" }, { pattern: /^package\./, label: "Mod package" }, { pattern: /^savedV\./, label: "Saved V" }, { pattern: /^character\./, label: "Character" },
-    { pattern: /^previewSetup\./, label: "3D preview" },
+    { pattern: /^previewSetup\./, label: "3D preview" }, { pattern: /^setup\./, label: "Settings" },
     { pattern: /^view\.(undo|redo)$/, label: "View and lighting" }, { pattern: /^view\./, label: "View" },
   ],
 } as const satisfies ViewContribution;

@@ -15,7 +15,7 @@ import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
-import { gameSetupSection } from "./game-setup";
+import { setupStatus } from "./game-setup";
 import { openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
@@ -23,8 +23,8 @@ import { PANEL_META } from "../panel-meta";
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
   commands?(): Command[];
-  /** Mod package only: open Game & tools, find the game and mod manager, and put focus on the first thing to choose. */
-  showSetup?(): void };
+  /** Bring one part of the panel into view and focus it (Settings: a group, `settings-sections.ts`). */
+  show?(section?: string): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Library facts derived only from the draft summary and saved list; nothing is guessed. */
@@ -261,9 +261,11 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // Game & tools: the one setup form, saved as each choice is made (UI-83, UI-03).
-  const setup = gameSetupSection(rt);
-  const showSetup = () => { rt.dock.reveal("package", false); setup.show(); };
+  // The game and mod manager are chosen in Settings (UI-109); here, one line says whether Build and Add are ready, with the way there.
+  const showSetup = () => rt.settings.open("game");
+  const setupLine = h("p", { class: "setup-status", role: "status" });
+  const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },
+    setupLine, h("div", { class: "row wrap gap-s" }, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check mod export", icon: "check", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
@@ -348,20 +350,20 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       "Your collection and library are never changed."] },
       mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
-    setup.element,
+    setup,
     section({ title: "What can be packaged", help: ["Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole.",
       "Experimental finishes are built from the game's own decal materials, but they may look different in game: nobody has checked them there yet.",
       "Check decides; this list is a guide."] }, finishList));
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
-    showSetup: () => setup.show(),
     update(frame) {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
       applyCapability(build, buildCapability());
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
-      setup.update(frame);
+      const line = setupStatus(frame);
+      setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? `${library.progress!.message} A started build can't be cancelled, and closing XF Studio doesn't stop it.` : "");
