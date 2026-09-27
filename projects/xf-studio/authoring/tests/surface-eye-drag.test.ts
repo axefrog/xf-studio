@@ -36,17 +36,20 @@ test("interior UV holes are bridged on their plane; islands, outer edges and pin
   const map = new SurfaceMap(plate, { bridgeHoles: true }), unbridged = new SurfaceMap(plate);
   expect(map.bridged).toBe(true);
   const centre = UV_OF(0, 0), above = UV_OF(0, 0.006), below = UV_OF(0, -0.006);
-  expect(unbridged.anchor(centre)).toBeUndefined();
-  expect(map.anchor(centre)?.bridge).toBe(true);
+  expect(unbridged.anchor(centre, true)).toBeUndefined();
+  expect(map.anchor(centre)).toBeUndefined();
+  expect(map.anchor(centre, true)?.bridge).toBe(true);
   // Plate triangles keep priority on the rim; a bridge never replaces a painted-surface anchor.
-  expect(map.anchor(UV_OF(0, 0.004))?.bridge).toBeUndefined();
-  expect(map.anchor(above)?.bridge).toBeUndefined();
+  expect(map.anchor(UV_OF(0, 0.004), true)?.bridge).toBeUndefined();
+  expect(map.anchor(above, true)?.bridge).toBeUndefined();
   // Drags step from the lid onto the bridge and off it onto the other lid (continuity still limits one step's length).
+  // Only when asked: outlines and every other plate lookup keep to the plate.
   for (const [a, b] of [[UV_OF(0, 0.0045), UV_OF(0, 0.003)], [UV_OF(0.001, 0.0008), UV_OF(0.001, -0.0008)], [UV_OF(0, -0.003), UV_OF(0, -0.0045)]]) {
-    expect(unbridged.continuous(a, b)).toBe(false);
-    expect(map.continuous(a, b)).toBe(true);
+    expect(unbridged.continuous(a, b, true)).toBe(false);
+    expect(map.continuous(a, b)).toBe(false);
+    expect(map.continuous(a, b, true)).toBe(true);
   }
-  expect(map.continuous(above, below)).toBe(false);
+  expect(map.continuous(above, below, true)).toBe(false);
   // The membrane follows the posed rim: a ray through the opening lands on it with the matching UV.
   const vertex = (i: number) => new THREE.Vector3().fromBufferAttribute(plate.getAttribute("position"), i);
   const hit = map.rayBridge(new THREE.Ray(new THREE.Vector3(0.002, -0.001, 1), new THREE.Vector3(0, 0, -1)), vertex)!;
@@ -117,8 +120,8 @@ test("a lid-margin point drawn over the eye can be grabbed and dragged across th
     // The rim is rolled back steeply, so the handle, lifted along its normal, is drawn over the opening with no plate
     // beneath it. It is visible (in front of the eye within the pick allowance) and must be pickable where it is drawn.
     const start = point();
-    expect(start.bridge).toBe(false);
     expect(start.selectable).toBe(true);
+    expect(start.bridge).toBe(false);
     expect(editor.hitAt(start.screen.x, start.screen.y)).toMatchObject({ hit: { kind: "point", index: 0 } });
     expect(emit("pointerdown", [start.screen.x, start.screen.y]).defaultPrevented).toBe(true);
     expect(editor.diagnostics().gesture).toBe("handle");
@@ -145,11 +148,12 @@ test("a lid-margin point drawn over the eye can be grabbed and dragged across th
     expect(inside.bridge).toBe(true);
     expect(inside.shown).toBe(true);
     expect(inside.selectable).toBe(true);
-    expect(editor.diagnostics().bridgeSegments).toBeGreaterThan(0);
-    // Its tangents hang off the bridge too; the eyeball in front of it does not hide them.
-    const tangents = editor.diagnostics().handles.filter((h) => h.kind === "tangent");
-    expect(tangents.length).toBe(2);
-    expect(tangents.every((h) => h.parentVisible && h.selectable)).toBe(true);
+    // The outline never runs through the opening (nothing is painted there, and the thin UV slit would stretch it across
+    // the eye), and tangents need a plate triangle under their parent: on the bridge they stay with the UV pane.
+    expect(editor.diagnostics().segments).toBeGreaterThan(0);
+    expect(editor.diagnostics().handles.filter((h) => h.kind === "tangent")).toEqual([]);
+    expect(editor.diagnostics().unmappedTangents).toBe(2);
+    expect(messages.at(-1)).toContain("edit them in the UV pane");
     emit("pointerdown", [inside.screen.x, inside.screen.y]);
     sweep(at(0, 0.006));
     emit("pointerup", at(0, 0.006));

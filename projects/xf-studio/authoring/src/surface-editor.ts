@@ -110,11 +110,6 @@ export function createSurfaceEditor(
     );
   };
   const points = new THREE.Points(pointGeometry, pointMaterial);
-  // Outline stretches over the eye opening lie on its bridge, just behind the eyeball: drawn without depth, gated by the head.
-  const bridgeLineGeometry = new THREE.BufferGeometry();
-  bridgeLineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(maxSegments * 2 * 3), 3)
-    .setUsage(THREE.DynamicDrawUsage));
-  bridgeLineGeometry.setDrawRange(0, 0);
   const tangentGeometry = pointGeometry.clone(), tangentLineGeometry = new THREE.BufferGeometry();
   tangentLineGeometry.setAttribute("position",new THREE.Float32BufferAttribute(new Float32Array(4*2*3),3).setUsage(THREE.DynamicDrawUsage));
   tangentGeometry.setDrawRange(0,0);tangentLineGeometry.setDrawRange(0,0);
@@ -133,20 +128,17 @@ export function createSurfaceEditor(
       depthWrite: false,
     }),
   );
-  const bridgeLines = new THREE.LineSegments(bridgeLineGeometry, new THREE.LineBasicMaterial({
-    color: 0xb9d0c2, transparent: true, opacity: 0.65, depthTest: false, depthWrite: false }));
-  points.frustumCulled = lines.frustumCulled = bridgeLines.frustumCulled = false;
+  points.frustumCulled = lines.frustumCulled = false;
   tangentPoints.frustumCulled=tangentLines.frustumCulled=false;
   // Editor guides draw after the transparent makeup and detail cards (10–101).
   // Keep opaque head/eye depth occlusion, so far-side handles cannot show through
   // the face. This changes draw order, not their barycentric surface anchors.
   points.renderOrder = 1001;
   lines.renderOrder = 1000;
-  bridgeLines.renderOrder = 1000;
   // Tangents are projected vector UI, visible only when their real parent knot
   // faces the camera and is not hidden by the head/eyes. Endpoints may cross an eye hole.
   tangentPoints.renderOrder=1003;tangentLines.renderOrder=1002;
-  group.add(points, lines, bridgeLines, tangentPoints,tangentLines);
+  group.add(points, lines, tangentPoints,tangentLines);
   let enabled = true,
     signature = "",
     handles: Handle[] = [],
@@ -244,7 +236,9 @@ export function createSurfaceEditor(
       side?: Handle["side"],
       parent?:UV,
     ) {
-      const anchor = map.anchor(parent ?? uv);
+      // A control inside an eye opening sits on its bridge. A tangent's parent frame needs a real plate triangle: the slit
+      // is so thin in UV that a bridge would stretch the arm across the eye, so such tangents stay with the UV pane.
+      const anchor = parent ? map.anchor(parent) : map.anchor(uv, true);
       if (anchor)
         handles.push({
           kind,
@@ -305,6 +299,7 @@ export function createSurfaceEditor(
     if (warningKey && warningKey !== tangentWarningKey)
       hooks.message("Some Bézier parent points have no eye-plate anchor · edit them in the UV pane");
     tangentWarningKey = warningKey;
+    lineGeometry.setDrawRange(0, segments.length * 2);
   }
   function update() {
     if (drag && !validDrag()) stop();
@@ -333,7 +328,7 @@ export function createSurfaceEditor(
         const key=`${h.index}:${h.mirror}`;
         let parent=parentFrames.get(key);
         if(!parent){const frame=tangentFrame(plate.geometry,h.anchor,h.projected.parent,vertex);
-          parent={frame,visible:!!frame&&parentVisible(frame,!!h.anchor.bridge)};parentFrames.set(key,parent);}
+          parent={frame,visible:!!frame&&parentVisible(frame)};parentFrames.set(key,parent);}
         const {frame}=parent;
         h.projected.frame=frame;
         h.projected.visible=h.shown=parent.visible;
@@ -377,25 +372,14 @@ export function createSurfaceEditor(
     tangentLineGeometry.setDrawRange(0,tangentLineCount*2);tangentLinesPosition.needsUpdate=true;
     for(const geometry of [pointGeometry,tangentGeometry])
       for(const name of ["position","color"])geometry.getAttribute(name).needsUpdate=true;
-    const p = lineGeometry.getAttribute("position"), q = bridgeLineGeometry.getAttribute("position");
-    let surfaceLines = 0, bridgeLineCount = 0;
-    for (const [a, b] of segments) {
-      if (a.bridge || b.bridge) {
-        const from = anchorPosition(a, vertex, a.bridge ? 0 : 0.00055), to = anchorPosition(b, vertex, b.bridge ? 0 : 0.00055);
-        if (!overlayVisible(from) || !overlayVisible(to)) continue;
-        q.setXYZ(bridgeLineCount * 2, from.x, from.y, from.z);
-        q.setXYZ(bridgeLineCount++ * 2 + 1, to.x, to.y, to.z);
-      } else {
-        [a, b].forEach((anchor, k) => {
-          const v = anchorPosition(anchor, vertex, 0.00055);
-          p.setXYZ(surfaceLines * 2 + k, v.x, v.y, v.z);
-        });
-        surfaceLines++;
-      }
-    }
-    lineGeometry.setDrawRange(0, surfaceLines * 2);
-    bridgeLineGeometry.setDrawRange(0, bridgeLineCount * 2);
-    p.needsUpdate = q.needsUpdate = true;
+    const p = lineGeometry.getAttribute("position");
+    segments.forEach((pair, i) =>
+      pair.forEach((a, k) => {
+        const v = anchorPosition(a, vertex, 0.00055);
+        p.setXYZ(i * 2 + k, v.x, v.y, v.z);
+      }),
+    );
+    p.needsUpdate = true;
   }
   const offFrame = viewer.onFrame(update);
   function setRay(x: number, y: number) {
@@ -414,17 +398,13 @@ export function createSurfaceEditor(
     mouse.set(projected.x,projected.y);ray.setFromCamera(mouse,camera);
     return true;
   }
-  /**
-   * A parent on a bridge spans the eye opening just behind the eyeball, on a membrane with no outside: only the head can
-   * hide it. A parent on the plate must face the camera and be clear of the head and the eyes.
-   */
-  function parentVisible(frame:TangentFrame,bridge=false) {
+  function parentVisible(frame:TangentFrame) {
     if(!rayTo(frame.origin))return false;
-    if(!bridge&&frame.normal.dot(ray.ray.direction)>=-1e-4)return false;
+    if(frame.normal.dot(ray.ray.direction)>=-1e-4)return false;
     const limit=ray.ray.origin.distanceTo(frame.origin)-.001;
-    return !headVisibility.occluded(ray.ray,limit)&&(bridge||!eyeVisibility.occluded(ray.ray,limit));
+    return !headVisibility.occluded(ray.ray,limit)&&!eyeVisibility.occluded(ray.ray,limit);
   }
-  /** Guides on a bridge draw without depth; they show wherever the head does not hide them (the eyeball never does). */
+  /** Controls on a bridge draw without depth; they show wherever the head does not hide them (the eyeball never does). */
   function overlayVisible(world:THREE.Vector3) {
     return rayTo(world)&&!headVisibility.occluded(ray.ray,ray.ray.origin.distanceTo(world)-.001);
   }
@@ -443,7 +423,7 @@ export function createSurfaceEditor(
   function projectedHit(h:Handle,x:number,y:number) {
     if(!h.projected)return;
     const frame=tangentFrame(plate.geometry,h.anchor,h.projected.parent,plateVertex);
-    if(!frame||!parentVisible(frame,!!h.anchor.bridge)){hitRejection={reason:"tangent-parent-hidden-or-singular"};return;}
+    if(!frame||!parentVisible(frame)){hitRejection={reason:"tangent-parent-hidden-or-singular"};return;}
     setRay(x,y);
     const uv=tangentRayUV(frame,ray.ray);
     hitRejection=uv ? undefined : {reason:"tangent-plane-grazing"};
@@ -666,7 +646,7 @@ export function createSurfaceEditor(
         e.preventDefault(); e.stopImmediatePropagation();
         if (!validShape(shapeDrag)) { stopShape(); return; }
         const uv = hit(e.clientX, e.clientY, true), state = shapeDrag;
-        if (!uv || !map.continuous(state.last, uv)) {
+        if (!uv || !map.continuous(state.last, uv, true)) {
           hooks.message("Drag paused at the surface edge; return to the shape or Esc to cancel");
           return;
         }
@@ -695,7 +675,7 @@ export function createSurfaceEditor(
       if (!validDrag()) { stop(); return; }
       let uv = drag.handle.projected ? projectedHit(drag.handle,e.clientX,e.clientY) : hit(e.clientX, e.clientY, true);
       if(uv&&drag.grabOffset)uv={u:uv.u-drag.grabOffset.u,v:uv.v-drag.grabOffset.v};
-      if (!uv || (!drag.handle.projected&&!map.continuous(drag.last, uv))) {
+      if (!uv || (!drag.handle.projected&&!map.continuous(drag.last, uv, true))) {
         lastDragRejection = { ...(uv ? {reason:"uv-discontinuity"} : hitRejection ?? {reason:"no-hit"}),
           x:e.clientX,y:e.clientY,uv,from:{...drag.last} };
         hooks.message(
@@ -820,10 +800,9 @@ export function createSurfaceEditor(
     viewer.cameraInput?.setTargetResolver(undefined);
     if (typeof offFrame === "function") offFrame();
     scene.remove(group);
-    pointGeometry.dispose(); lineGeometry.dispose(); bridgeLineGeometry.dispose(); tangentGeometry.dispose(); tangentLineGeometry.dispose();
+    pointGeometry.dispose(); lineGeometry.dispose(); tangentGeometry.dispose(); tangentLineGeometry.dispose();
     pointMaterial.dispose(); tangentMaterial.dispose();
-    (lines.material as THREE.Material).dispose(); (bridgeLines.material as THREE.Material).dispose();
-    (tangentLines.material as THREE.Material).dispose();
+    (lines.material as THREE.Material).dispose(); (tangentLines.material as THREE.Material).dispose();
   }
   publishInput();
   return {
@@ -856,7 +835,6 @@ export function createSurfaceEditor(
       selectedField: hooks.selectedField(),
       segments: segments.length,
       bridged: map.bridged,
-      bridgeSegments: bridgeLineGeometry.drawRange.count / 2,
       capacity: { handles: maxHandles, segments: maxSegments },
       overlay: { points: points.renderOrder, lines: lines.renderOrder,
         depthTest: pointMaterial.depthTest, depthWrite: pointMaterial.depthWrite,

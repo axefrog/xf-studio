@@ -109,8 +109,9 @@ export class SurfaceMap {
   /** Every bridge triangle, zero-area UV ones included, so the 3D membrane has no gaps. */
   private bridgeTriangles: { indices: Anchor["indices"]; uv: number[] }[] = [];
   /**
-   * With `bridgeHoles`, interior UV holes (the eye openings) are bridged: anchors and continuity cross them, and
-   * `rayBridge` finds them in 3D. Plate triangles always win where a bridge shares their edge.
+   * With `bridgeHoles`, interior UV holes (the eye openings) are bridged: `anchor` and `continuous` cross them when asked
+   * (`across`), and `rayBridge` finds them in 3D. Plate triangles always win where a bridge shares their edge. A bridge is
+   * for drags and control positions only: the slit is so thin in UV that a small UV step across it spans the whole opening.
    */
   constructor(geometry: THREE.BufferGeometry, options: { bridgeHoles?: boolean } = {}) {
     const uv = geometry.getAttribute("uv");
@@ -162,17 +163,20 @@ export class SurfaceMap {
     // winner. The hierarchy filters candidates; it never changes narrow tests.
     return result.sort((a, b) => a - b);
   }
-  anchor({ u, v }: UV): Anchor | undefined {
+  /** The plate triangle at a UV; with `across`, a bridge where no plate triangle is. */
+  anchor({ u, v }: UV, across = false): Anchor | undefined {
     if (!Number.isFinite(u) || !Number.isFinite(v)) return;
     for (const i of this.candidates({ minU: u, maxU: u, minV: v, maxV: v })) {
       const { indices, uv: p, den, bridge } = this.triangles[i];
+      if (bridge && !across) continue;
       const a = ((p[3] - p[5]) * (u - p[4]) + (p[4] - p[2]) * (v - p[5])) / den;
       const b = ((p[5] - p[1]) * (u - p[4]) + (p[0] - p[4]) * (v - p[5])) / den,
         c = 1 - a - b;
       if (Math.min(a, b, c) >= -1e-6) return { indices, weights: [a, b, c], ...(bridge ? { bridge } : {}) };
     }
   }
-  continuous(a: UV, b: UV) {
+  /** Whether plate triangles (with `across`, bridges too) cover the whole UV segment from a to b. */
+  continuous(a: UV, b: UV, across = false) {
     if (![a.u, a.v, b.u, b.v].every(Number.isFinite)) return false;
     const distance = Math.hypot(a.u - b.u, a.v - b.v);
     if (distance > 0.06) return false;
@@ -181,7 +185,8 @@ export class SurfaceMap {
     const intervals: [number, number][] = [];
     for (const i of this.candidates({ minU: Math.min(a.u, b.u), maxU: Math.max(a.u, b.u),
       minV: Math.min(a.v, b.v), maxV: Math.max(a.v, b.v) })) {
-      const { uv: p, den } = this.triangles[i];
+      const { uv: p, den, bridge } = this.triangles[i];
+      if (bridge && !across) continue;
       const weights = ({ u, v }: UV) => {
         const x =
           ((p[3] - p[5]) * (u - p[4]) + (p[4] - p[2]) * (v - p[5])) / den;
