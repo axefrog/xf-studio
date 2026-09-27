@@ -32,43 +32,35 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[sour
 ## 2. Boundaries: what lives where
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph Studio["XF Studio (outside the game)"]
-    App["Studio app<br/>typed actions, capabilities"]
-    Link["Link client<br/>catalogue, command API"]
-    MCP["MCP, CLI, sessions<br/>(development)"]
+    direction LR
+    App["Studio app<br/>typed actions, capabilities"] --> Link["Link client<br/>catalogue, command API"]
+    MCP["MCP, CLI, sessions<br/>(development)"] --> Link
     Inst["Install host<br/>consented plans"]
   end
   subgraph Core["XF Core (one mod)"]
-    Pipe["Link: named pipe, token,<br/>kill switch, write gate, audit"]
-    Host["Plugin host: manifests,<br/>checks, script gating"]
+    direction LR
+    Pipe["Link: named pipe, token,<br/>kill switch, write gate, audit"] --> Host["Plugin host: manifests,<br/>checks, script gating"]
     Svc["Services: store, settings guard,<br/>sequencer, save lock, events"]
-    CoreRs["Core redscript API"]
     Ovl["CET overlay framework<br/>and component kit"]
+    CoreRs["Core redscript API<br/>phases, save lock"]
   end
   subgraph Plugins["XF plugins (one mod each)"]
+    direction LR
     PM["XF Photo Mode"]
     LI["XF Lighting"]
-    LAB["XF Lab (test profile only)"]
+    LAB["XF Lab<br/>(test profile only)"]
   end
-  Game["Cyberpunk 2077 with RED4ext,<br/>redscript, CET, Codeware"]
-  App --> Link
-  MCP --> Link
+  Game["Cyberpunk 2077 with RED4ext, redscript, CET, Codeware"]
   Link -- "protocol 1 over the pipe" --> Pipe
   Inst -. "installs and updates files" .-> Core
   Inst -. "installs and updates files" .-> Plugins
-  Pipe --> Host
-  Host --> PM
-  Host --> LI
-  Host --> LAB
-  PM --> Svc
-  LI --> Svc
-  PM --> Ovl
-  LI --> Ovl
-  Svc --> CoreRs
+  Host -- "accepts, gates, dispatches" --> Plugins
+  Plugins -- "use services" --> Svc
+  Plugins -- "register panels" --> Ovl
+  Plugins -- "own redscript, CET, data" --> Game
   CoreRs --> Game
-  PM --> Game
-  LI --> Game
 ```
 
 ### 2.1 XF Core
@@ -198,9 +190,9 @@ A manifest is the registration because it can be read **before** script compilat
 
 ```mermaid
 flowchart TD
-  A["Game starts: RED4ext loads XFCore.dll"] --> B["Scan red4ext/plugins/*/xf-plugin.json"]
+  A["Game starts: RED4ext loads XFCore.dll"] --> B["Scan each plugin folder<br/>for xf-plugin.json"]
   B --> C{"Manifest valid,<br/>id unique?"}
-  C -- no --> R["Refused: plain reason in the<br/>report, overlay and Studio"]
+  C -- no --> R["Refused with a plain reason<br/>(report, overlay, Studio)"]
   C -- yes --> D{"core_api range and<br/>capabilities met?"}
   D -- no --> R
   D -- yes --> E{"Required frameworks<br/>present and new enough?"}
@@ -210,11 +202,11 @@ flowchart TD
   F -- no --> G["Add the plugin's scripts<br/>(scripts->Add)"]
   G --> H["redscript compiles everything"]
   H --> I{"Core script layer<br/>announced itself?"}
-  I -- "no: compile failed" --> Q["Record the failure; next launch<br/>holds back plugins changed since<br/>the last good compile"]
+  I -- "no: compile failed" --> Q["Record the failure;<br/>hold back next launch"]
   I -- yes --> J["Record the last good set"]
   J --> K{"Entry class and native part<br/>check out (RTTI, runtime)?"}
   K -- no --> R
-  K -- yes --> L["Register commands, capabilities<br/>and restore hooks: plugin active"]
+  K -- yes --> L["Register commands and<br/>restore hooks: active"]
 ```
 
 - **Everything before compilation happens in XF Core's `Main(Load)`,** so a refused plugin's scripts are never compiled. Its data files (tweaks, archives) still load, since TweakXL and ArchiveXL read them independently, so plugin data must be harmless alone. The manifest rules and the packaging test enforce this.
@@ -522,7 +514,7 @@ C1–C5 need no game: about 15–20 agent-days that can run as two or three para
 
 | Date | Tool | Observations | Limits |
 |---|---|---|---|
-| (pending) | Mermaid CLI 11.17 with Chrome | | |
+| 27 September 2026 | Mermaid CLI 11.17.0 with the installed Chrome; all three rendered to temporary PNGs at 800 px and 1600 px width requests and inspected at normal and enlarged size | **Boundaries:** the first left-to-right draft tangled plugin edges through the core box, so it was redrawn top to bottom with edges between subgraphs. Studio, core and plugins now read as three boxes; the protocol arrow enters XF Core at its link node; the dashed install arrows reach both XF Core and the plugins; the plugins point to the services, the overlay and the game, and the core redscript points to the game. **Gating:** every refusal branch ends at one Refused box, and the compile-failure branch ends separately at the hold-back record; yes/no labels sit on the right edges. Two labels that wrapped mid-phrase were shortened. **Distribution:** the archives feed both the Studio install host and the Nexus pages, and only the Studio route passes a consent-gated plan into MO2, Vortex and manual installs. | The protocol arrow brushes the "XF Core (one mod)" title in the boundaries diagram, but both stay readable. The gating diagram is tall at every width, and Mermaid kept the gating and distribution diagrams near their intrinsic width. The renders contain no private data and are not committed. |
 
 ## Related
 
