@@ -2,7 +2,7 @@
  * Host adapter for choice previews (choice-previews-design.md §6.2–6.4): the store of rendered channel images and the index of preview
  * sources, both in the host's private derived cache (never committed, published or packaged).
  *
- * - **Store.** `<root>/images/<key>.webp`, content-addressed by the preview key (choice-preview.ts). Only WebP files within
+ * - **Store.** `<root>/images/<key>.webp`, content-addressed by the preview key (choice-preview.ts): stills and turntable strips alike. Only WebP files within
  *   `PREVIEW_IMAGE_MAX_BYTES` are kept. "Clear prepared game files" removes them with the rest.
  * - **Source index.** A prepared choice's source (the parts its record draws for the row's detail), by the choice's manifest name
  *   (choice-manifest.ts `choiceKey`), stamped with that manifest's size and time: a choice prepared again (a mod updated, another archive
@@ -13,8 +13,8 @@ import { join } from "node:path";
 import { type ChoicePreviewSource, isPreviewKey, parsePreviewSource } from "./choice-preview";
 import { writeFileAtomic } from "./derived-cache";
 
-/** The largest preview image kept (a 256² channel image is a few kilobytes). */
-export const PREVIEW_IMAGE_MAX_BYTES = 256 * 1024;
+/** The largest preview image kept (a 256² channel image is a few kilobytes; a 24-frame turntable strip a few hundred). */
+export const PREVIEW_IMAGE_MAX_BYTES = 1024 * 1024;
 const isWebp = (bytes: Uint8Array) => bytes.byteLength >= 16 && String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" && String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP";
 const MANIFEST_KEY = /^[a-f0-9]{40}$/;
 

@@ -870,7 +870,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* Choice previews (components/choice-preview.ts): tiles in a grid of three sizes; the tile keeps its size whatever its picture's state. */
 .choices.previews { --pv-size: 88px; }
 .choices.previews[data-size="s"] { --pv-size: 56px; } .choices.previews[data-size="l"] { --pv-size: 132px; }
-.choices.previews, .choices.previews .cc-maker-items, .choices.previews .choice-group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--pv-size), 1fr)); gap: var(--sp-2); }
+.choices.previews, .choices.previews .cc-maker-items, .choices.previews .choice-group-items { display: grid; grid-template-columns: var(--pv-columns, repeat(auto-fill, minmax(var(--pv-size), 1fr))); gap: var(--sp-2); }
 .choices.previews.grouped { grid-template-columns: minmax(0, 1fr); }
 .choices.previews .cc-maker, .choices.previews .cc-maker-head { grid-column: 1 / -1; }
 .choice.preview-choice { padding: 3px; min-width: 0; align-items: stretch; justify-content: flex-start; contain-intrinsic-size: auto calc(var(--pv-size) + 20px); content-visibility: auto; }
@@ -892,8 +892,59 @@ span.category { border-color: transparent; background: transparent; padding-left
 .pv-label { overflow: hidden; font-size: var(--fs-2xs); line-height: 1.35; color: var(--text-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .choice.preview-choice[aria-selected="true"] .pv-label, .choice.preview-choice:hover .pv-label { color: var(--text); }
 .choices.previews[data-size="s"] .pv-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+/* The list and details texts (components/choice-preview.ts `setMeta`) show only in those layouts. */
+.pv-text { display: contents; }
+.pv-meta, .pv-state { display: none; }
+/* List and details: 32 px rows (thumbnail, label, source where no heading says it; details adds the prepared state until ready) (§7.1). */
+.choices.previews[data-layout="list"], .choices.previews[data-layout="details"] { --pv-columns: minmax(0, 1fr); gap: 2px; }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) { --pv-size: 28px; }
+.choices.previews[data-layout="list"] .cc-maker-items, .choices.previews[data-layout="details"] .cc-maker-items { gap: 2px; }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .choice.preview-choice { padding: 2px; contain-intrinsic-size: auto calc(var(--pv-size) + 4px); }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-tile { flex-direction: row; align-items: center; gap: var(--sp-3); }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-frame { flex: none; width: var(--pv-size); }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-text { display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; flex: 1; }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-label { flex: 1 1 auto; font-size: var(--fs-sm); color: var(--text); }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) :is(.pv-meta, .pv-state) { display: block; flex: 0 1 auto; max-width: 45%; }
+.choices.previews[data-layout="list"] .pv-state { display: none; }
+.pv-meta, .pv-state { overflow: hidden; font-size: var(--fs-2xs); line-height: 1.35; color: var(--text-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.pv-state:empty { display: none !important; }
+/* Group headings stay in view while their choices scroll past (§7.3). */
+.choices.previews .cc-maker-head { position: sticky; top: 0; z-index: 1; background: var(--bg-panel); }
+/* The details layout's large picture never scrolls away (UI-136): below 440 px a compact block (picture at most 140 px or 40 % of the
+   window's height, name and source beside it) kept at the top while the list scrolls beneath, with the maker headings sticking under it;
+   from 440 px a 180 px picture kept at the top of a column beside the list. */
+.cc-choice-list[data-layout="details"] { container-type: inline-size; --pv-stage: min(140px, 40vh); }
+.cc-choice-list[data-layout="details"] .cc-choice-body { display: grid; grid-template-columns: minmax(0, 1fr); }
+.pv-stage { position: sticky; top: 0; z-index: 2; padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--cc-indent); background: var(--bg-panel);
+  border-bottom: 1px solid var(--line-soft); }
+.pv-stage .pv-tile { flex-direction: row; align-items: center; gap: var(--sp-3); }
+.pv-stage .pv-frame { flex: none; width: var(--pv-stage); }
+.pv-stage .pv-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pv-stage .pv-label { font-size: var(--fs-md); color: var(--text); }
+.pv-stage .pv-meta { display: block; }
+.cc-choice-list[data-layout="details"] .choices.previews .cc-maker-head { top: calc(var(--pv-stage) + 2 * var(--sp-2) + 1px); }
+@container (min-width: 440px) {
+  .cc-choice-list[data-layout="details"] { --pv-stage: 180px; }
+  .cc-choice-list[data-layout="details"] .cc-choice-body { grid-template-columns: calc(var(--pv-stage) + var(--cc-indent) + var(--sp-3)) minmax(0, 1fr); align-items: start; }
+  .pv-stage { padding-right: var(--sp-3); border-bottom: 0; }
+  .pv-stage .pv-tile { flex-direction: column; align-items: stretch; }
+  .cc-choice-list[data-layout="details"] .cc-choices { padding-left: 0; }
+  .cc-choice-list[data-layout="details"] .choices.previews .cc-maker-head { top: 0; }
+}
+/* The turntable (components/choice-preview.ts PreviewSpin): the strip's frame under the angle and the next one blended over the still;
+   one colour matrix on the layer, which clips the strip to the frame. */
+.pv-frame[data-spinnable] { cursor: grab; touch-action: pan-y; }
+.pv-frame[data-spinnable]:active { cursor: grabbing; }
+.pv-spin { position: absolute; inset: 0; overflow: hidden; filter: url(#xfs-pv-light); pointer-events: none; }
+:root[data-theme="dark"] .pv-spin { filter: url(#xfs-pv-dark); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv-spin { filter: url(#xfs-pv-dark); } }
+.pane[style*="color-scheme:dark"] .pv-spin { filter: url(#xfs-pv-dark); }
+.pane[style*="color-scheme:light"] .pv-spin { filter: url(#xfs-pv-light); }
+.pv-spin[hidden] { display: none; }
+.pv-strip { position: absolute; top: 0; left: 0; height: 100%; max-width: none; will-change: transform; }
+.pv-frame[data-spin] .pv-image { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { .pv-image { transition: none; } }
-@media (forced-colors: active) { .pv-image { filter: none; } .pv-frame { outline: 1px solid CanvasText; } }
+@media (forced-colors: active) { .pv-image, .pv-spin { filter: none; } .pv-frame { outline: 1px solid CanvasText; } }
 @supports (corner-shape: bevel) { .pv-frame { corner-shape: bevel; } }
 /* A swatch derived from what wins for the choice: one colour, a root-to-tip gradient, or the game's icon cut from a sheet (cc-swatch.ts, cc-icons.ts). */
 .choice.swatch-choice .swatch, .cc-row-swatch { background-color: var(--swatch); background-image: var(--swatch-image, none); background-size: var(--swatch-size, auto);
@@ -911,7 +962,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-maker-head { width: 100%; min-height: 20px; }
 .cc-maker-head[data-chosen][aria-expanded="false"] .cc-maker-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--sp-2);
   border-radius: 50%; background: var(--signal); vertical-align: middle; }
-.cc-choice-tools { display: flex; justify-content: flex-end; padding: var(--sp-2) var(--sp-3) 0 var(--cc-indent); }
+.cc-choice-tools { display: flex; justify-content: flex-end; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3) 0 var(--cc-indent); }
 .cc-choices-status { margin: 0 var(--sp-3) var(--sp-3) var(--cc-indent); }
 .cc-row-swatch { width: 12px; height: 12px; }
 /* Swatch card (components/swatch-card.ts): a larger look at the swatch under the pointer or focus, floating beside it (never moves the layout,

@@ -55,8 +55,8 @@ export function createBrowserChoicePreviewDevice(options: { fetch?: Fetch; worke
       const response = await fetcher(url, { method: "HEAD" }).catch(() => null);
       return response?.ok ? url : null;
     },
-    async render(source: ChoicePreviewSource, key: string) {
-      const reply = await post({ type: "render", source, fileBase: CHARACTER_DETAIL_ASSETS });
+    async render(source: ChoicePreviewSource, key: string, frames = 1) {
+      const reply = await post({ type: "render", source, fileBase: CHARACTER_DETAIL_ASSETS, ...(frames > 1 ? { frames } : {}) });
       if (!reply.ok || !reply.webp) throw Error(reply.ok ? "The preview worker drew nothing." : reply.error);
       // Kept on the host for later sessions; shown from memory now either way.
       void fetcher(`${CHOICE_PREVIEW_ENDPOINT}/${key}`, { method: "POST", headers: { "Content-Type": "image/webp" }, body: reply.webp }).catch(() => {});

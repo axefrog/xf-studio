@@ -305,7 +305,7 @@ export function createStudioPresentation<Slot>(sources: {
     characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSwatches: option => a.characterSwatches(option),
     characterSearch: query => a.characterSearch(query),
     characterPrefetch: (option, positions, focus) => a.characterPrefetch(option, positions, focus), characterStopPrefetch: option => a.characterStopPrefetch(option),
-    characterPreviews: (option, positions, selected, focus) => a.characterPreviews(option, positions, selected, focus),
+    characterPreviews: (option, positions, selected, focus, spin) => a.characterPreviews(option, positions, selected, focus, spin),
   };
   const fallback = () => a.snapshot().document;
   const editor: EyeMakeupView = e ? {

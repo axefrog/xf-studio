@@ -1,14 +1,16 @@
 /**
  * The preview worker (choice-previews-design.md §6.1): one WebGL 2 context on an OffscreenCanvas, off the main thread, drawing one
  * preview source at a time (choice-preview-render.ts). Messages: `subject` loads the head every preview is drawn over; `render` draws
- * a source and answers its WebP and timings. A lost context fails the job with `lost`, and the next job makes a new context once.
+ * a source (or, with `frames`, its turntable strip) and answers its WebP and timings. A lost context fails the job with `lost`, and the next job makes a new context once.
  */
 import { parsePreviewSource } from "./choice-preview";
 import { PreviewRenderer, type PreviewSubject } from "./choice-preview-render";
 
 export type PreviewWorkerRequest =
   | { type: "subject"; id: number; url: string; head: string; eyes: string | null }
-  | { type: "render"; id: number; source: unknown; fileBase: string };
+  | { type: "render"; id: number; source: unknown; fileBase: string;
+      /** Draw the turntable strip of this many frames instead of the still (choice-preview.ts `TURNTABLE`). */
+      frames?: number };
 export type PreviewWorkerReply =
   | { id: number; ok: true; webp?: Blob; timings?: unknown; heap?: number }
   | { id: number; ok: false; error: string; lost?: boolean };
@@ -40,7 +42,7 @@ scope.onmessage = event => {
         return;
       }
       const source = parsePreviewSource(message.source);
-      const result = await ready().render(source, { urlOf: file => `${message.fileBase}${file}?background=1` });
+      const result = await ready().render(source, { urlOf: file => `${message.fileBase}${file}?background=1`, frames: message.frames ?? 1 });
       const heap = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
       scope.postMessage({ id: message.id, ok: true, webp: result.webp, timings: result.timings, ...(heap ? { heap } : {}) });
     } catch (error) {

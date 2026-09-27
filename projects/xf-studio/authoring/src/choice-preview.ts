@@ -12,6 +12,9 @@
  *   (unpremultiplied). The page colours them with one SVG colour matrix per theme (`previewColourMatrix`), equal to the script composite
  *   (`compositeChannels`).
  * - **The camera** is one per row, from the subject head's bounds: the same frame for every choice, so length and volume compare.
+ * - **The turntable** (design §7.1, phase 2) is the same picture at `TURNTABLE.frames` yaws, one full turn, drawn on request for the choice
+ *   under the pointer or shown large and stored as one strip (frames side by side, frame 0 = the still). Its key is the still's key input
+ *   plus the turntable's own style, so the still's key is unchanged.
  */
 import { type RenderComponent } from "./render-detail";
 import { renderTemplate } from "./render-templates";
@@ -35,6 +38,14 @@ export const PREVIEW_STYLES: Readonly<Record<PreviewKind, PreviewStyle>> = Objec
   hair: Object.freeze({ producer: "flat-render", version: 4, size: 256, supersample: 2, msaa: 4, yaw: -28, elevation: 8, fov: 18, drop: 0.04, extent: 1.78,
     light: Object.freeze([-0.45, 0.6, 0.66]) as readonly [number, number, number], range: Object.freeze([0.18, 1]) as readonly [number, number] }),
 });
+/**
+ * The turntable strip: `frames` pictures one full turn apart (frame k at the style's yaw + k × 360° / frames, so frame 0 is the still),
+ * side by side in one WebP (frames × size wide). 24 frames is 15° a step, smooth enough to blend between at a slow spin; the strip
+ * stays within WebP's 16383-pixel side at the 256 px size.
+ */
+export const TURNTABLE = Object.freeze({ version: 1, frames: 24, quality: 0.9 });
+/** The yaw offset (degrees) of turntable frame `k`. */
+export const turntableYaw = (k: number, frames: number = TURNTABLE.frames) => (k * 360) / frames;
 /** The preview kind of an option, from the preview detail it draws (null: no preview yet; phase 1 draws the hair). */
 export function previewKindOf(detail: string | null | undefined): PreviewKind | null {
   return detail === "hair" ? "hair" : null;
@@ -93,9 +104,11 @@ export function parsePreviewSource(value: unknown): ChoicePreviewSource {
   }) };
 }
 
+/** A still (one picture) or the turntable strip of the same source. */
+export type PreviewVariant = "still" | "turntable";
 /** What a key covers: the schema, the producer and its style, the subject head's identity and each part's resolved identity. */
-export function previewKeyInput(source: ChoicePreviewSource, subject: string) {
-  return { schema: CHOICE_PREVIEW_SCHEMA, kind: source.kind, style: PREVIEW_STYLES[source.kind], subject,
+export function previewKeyInput(source: ChoicePreviewSource, subject: string, variant: PreviewVariant = "still") {
+  return { schema: CHOICE_PREVIEW_SCHEMA, kind: source.kind, style: PREVIEW_STYLES[source.kind], subject, ...(variant === "turntable" ? { turntable: TURNTABLE } : {}),
     parts: source.parts.map(part => ({ geometry: [part.depotHash, part.archive, part.sha256], chunks: part.chunks.map(chunk => [chunk.chunk,
       chunk.coverage ? [chunk.coverage.depotPath.toLowerCase(), chunk.coverage.sha256, chunk.coverage.channel, chunk.coverage.cutoff, chunk.coverage.dither] : null]) })) };
 }
@@ -106,8 +119,8 @@ export function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 /** The preview key (lowercase hex SHA-256), with the platform's digest (browser, worker and Bun alike). */
-export async function previewKey(source: ChoicePreviewSource, subject: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(previewKeyInput(source, subject))));
+export async function previewKey(source: ChoicePreviewSource, subject: string, variant: PreviewVariant = "still"): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(previewKeyInput(source, subject, variant))));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 export const isPreviewKey = (value: unknown): value is string => typeof value === "string" && SHA.test(value);
@@ -169,13 +182,13 @@ export function perspective(fov: number, near: number, far: number): Float32Arra
 }
 /**
  * The row's camera from the subject head's bounds and its eyes' bounds (which way the face looks, from the data: the eyes sit in front of
- * the head's centre). Y is up, as the exported geometry is.
+ * the head's centre). Y is up, as the exported geometry is. `turn` adds degrees of yaw about the head's vertical axis (a turntable frame).
  */
-export function previewCamera(head: Bounds, eyes: Bounds | null, style: PreviewStyle): { view: Float32Array; projection: Float32Array; eye: Vec3; target: Vec3 } {
+export function previewCamera(head: Bounds, eyes: Bounds | null, style: PreviewStyle, turn = 0): { view: Float32Array; projection: Float32Array; eye: Vec3; target: Vec3 } {
   const c = centre(head), height = head.max[1] - head.min[1];
   const toEyes = eyes ? sub(centre(eyes), c) : [0, 0, 1] as Vec3;
   const front = norm([toEyes[0], 0, toEyes[2]].some(Boolean) ? [toEyes[0], 0, toEyes[2]] : [0, 0, 1]);
-  const yaw = (style.yaw * Math.PI) / 180, elevation = (style.elevation * Math.PI) / 180;
+  const yaw = ((style.yaw + turn) * Math.PI) / 180, elevation = (style.elevation * Math.PI) / 180;
   const turned: Vec3 = [front[0] * Math.cos(yaw) + front[2] * Math.sin(yaw), 0, -front[0] * Math.sin(yaw) + front[2] * Math.cos(yaw)];
   const direction: Vec3 = [turned[0] * Math.cos(elevation), Math.sin(elevation), turned[2] * Math.cos(elevation)];
   const target: Vec3 = [c[0], c[1] - style.drop * height, c[2]];

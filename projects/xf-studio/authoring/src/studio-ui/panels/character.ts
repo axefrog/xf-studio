@@ -38,7 +38,7 @@
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
 import { applyCapability, button, note, section, Segmented, SelectField, Toggle } from "../controls";
-import type { ChoiceSize } from "../../ui-preferences";
+import type { ChoiceLayout, ChoiceSize } from "../../ui-preferences";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
 import { ChoiceList, propertyList, SearchField } from "../components";
@@ -252,8 +252,11 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     open: boolean; query: string;
     /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
     prefetching: string | null; positions: number[]; loaded: number;
-    /** A shape row's picture size (Small, Medium, Large), shown above its pictures; and the choice under the pointer or focus (pictured first). */
-    sizes: Segmented<ChoiceSize>; tools: HTMLElement; hint: number | null };
+    /**
+     * A shape row's picture layout (Grid, List, Details) and grid size (Small, Medium, Large), shown above its pictures; the choice under
+     * the pointer or focus (pictured first); and the choice whose turntable the list wants (hovered in L, shown large in details).
+     */
+    layouts: Segmented<ChoiceLayout>; sizes: Segmented<ChoiceSize>; tools: HTMLElement; hint: number | null; spin: number | null };
   type Heading = { toggles: HeadingToggle[]; help: HTMLButtonElement | null; expander: HTMLButtonElement; count: HTMLElement; expandAll: ExpandAll | null };
   /** `fold`: its key in the `folded` UI preference; `body`: what folding hides (everything under the heading). */
   /** `rows`: every row in it, its sections' included (what Expand all, a search count and its showing go by); `own`: its own rows. */
@@ -393,14 +396,23 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
             // Its picture is drawn next too (after the V's own choice).
             controls.hint = choice.position;
             askPictures(controls);
+          }, position => {
+            // The turntable the list wants now (only that choice's strip is drawn).
+            controls.spin = position;
+            askPictures(controls);
           }),
           open: rowOpen(view), query: "",
           prefetching: null, positions: [], loaded: -1,
+          layouts: new Segmented<ChoiceLayout>({ label: "Picture layout", showLabel: false, compact: true,
+            options: [{ value: "grid", label: "Grid", title: "Pictures in a grid" }, { value: "list", label: "List", title: "A list with small pictures and where each comes from" },
+              { value: "details", label: "Details", title: "A list with details and a large picture that turns" }],
+            onSelect: layout => setPictureLayout(controls, layout) }),
           sizes: new Segmented<ChoiceSize>({ label: "Picture size", showLabel: false, compact: true,
-            options: [{ value: "s", label: "S", title: "Small pictures" }, { value: "m", label: "M", title: "Medium pictures" }, { value: "l", label: "L", title: "Large pictures" }],
+            options: [{ value: "s", label: "S", title: "Small pictures" }, { value: "m", label: "M", title: "Medium pictures" }, { value: "l", label: "L", title: "Large pictures that turn" }],
             onSelect: size => setPictureSize(controls, size) }),
-          tools: h("div", { class: "cc-choice-tools", hidden: true }), hint: null };
-        controls.tools.append(controls.sizes.element);
+          tools: h("div", { class: "cc-choice-tools", hidden: true }), hint: null, spin: null };
+        // The layout keeps its place at the right; S, M and L (grid only) sit before it.
+        controls.tools.append(controls.sizes.element, controls.layouts.element);
         // A row the person opens shows the V's choice (its group opens and it comes into view once loaded); a row opened by Expand all
         // or restored open on a reload doesn't move the view.
         main.addEventListener("click", () => { toggle(controls); if (controls.open) controls.list.revealChosenNext(); });
@@ -459,14 +471,33 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     if (preferences?.capability(action).available) preferences.dispatch(action);
     rt.changed();
   }
-  /** Ask for an open shape row's pictures (the V's choice and the hovered one first, then the choices in view order). */
+  /**
+   * A shape row's picture layout for its kind: its own override, else the panel-wide default, else Grid (choice-previews-design.md §7.1).
+   * Remembered in the UI preferences, never Undo.
+   */
+  const pictureLayout = (option: CcPanelOption): ChoiceLayout => {
+    const snapshot = (port.preferences as Port["preferences"] | undefined)?.snapshot?.();
+    return (option.preview && snapshot?.choiceLayouts?.[option.preview]) || snapshot?.choiceLayout || "grid";
+  };
+  function setPictureLayout(controls: RowControls, layout: ChoiceLayout) {
+    const option = current(controls);
+    if (!option?.preview) return;
+    dispatchLayout({ kind: "choiceLayout.set", type: option.preview, layout });
+  }
+  /** Change a layout preference (per type, or `type: null` for every picture row) and show it at once. */
+  function dispatchLayout(action: { kind: "choiceLayout.set"; type: string | null; layout: ChoiceLayout }) {
+    const preferences = port.preferences as Port["preferences"] | undefined;
+    if (preferences?.capability(action).available) preferences.dispatch(action);
+    rt.changed();
+  }
+  /** Ask for an open shape row's pictures (the V's choice and the hovered one first, then the choices in view order), and the wanted turntable. */
   function askPictures(controls: RowControls) {
     const option = current(controls);
     if (!option?.preview || !controls.open) return null;
     const positions = controls.positions.length ? controls.positions
       : (port.authoring.characterChoices(option.id, Number.MAX_SAFE_INTEGER, controls.query)?.choices ?? []).map(choice => choice.position);
     const value = port.authoring.characterView()?.values[option.id];
-    return port.authoring.characterPreviews(option.id, positions, value?.position ?? null, controls.hint);
+    return port.authoring.characterPreviews(option.id, positions, value?.position ?? null, controls.hint, controls.spin);
   }
   /** Stop preparing a row's choices ahead (it closed, or shows another option or a search). */
   function stopPrefetch(controls: RowControls) {
@@ -574,7 +605,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       controls.list.update({ option: option.id, query: controls.query, label: option.label, grid: option.grid, choices: loaded?.choices ?? [],
         selected: value?.position ?? null, mods: creator.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null,
         swatches: option.grid ? rowSwatches : null, preparing: !!details?.updating,
-        previews: option.preview ? { size: pictureSize(option), row: askPictures(controls) } : null,
+        previews: option.preview ? { size: pictureSize(option), layout: pictureLayout(option), row: askPictures(controls) } : null,
         groups: option.groups > 1 ? { list: creator.groups, modGroups: creator.modGroups, pooled: creator.pools[option.pool] ?? [] } : null });
       if (ahead && (loaded?.choices.length ?? 0) !== controls.loaded) {
         controls.loaded = loaded?.choices.length ?? 0;
@@ -582,7 +613,13 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         prefetchRow(controls, option);
         askPictures(controls);
       }
-      if (option.preview) controls.sizes.update(pictureSize(option));
+      if (option.preview) {
+        const layout = pictureLayout(option);
+        controls.layouts.update(layout);
+        controls.sizes.update(pictureSize(option));
+        // S, M and L size the grid only.
+        controls.sizes.element.hidden = layout !== "grid";
+      }
     }
     // A section shows while it has a row to show, or controls of its own (not while a search finds nothing in it); a group while a section does.
     for (const group of built!.groups) {
@@ -657,8 +694,14 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     const reveal = () => { if (typeof rt.dock?.reveal === "function") rt.dock.reveal("character", false); };
     const ready = () => sections.length ? { available: true } : { available: false, reason: "The creator options are still being read from your game." };
     const every = groups.flatMap(group => [group.fold, ...group.sections.map(section => section.fold)]);
+    const layoutNames: Record<ChoiceLayout, string> = { grid: "a grid", list: "a list", details: "details with a large picture" };
     return [
-      { id: "character.fold.openAll", title: "Open every Character section", group: "Character", icon: "expandAll", keywords: "expand unfold sections headings",
+      ...(["grid", "list", "details"] as const).map(layout => ({ id: `character.pictures.${layout}`, title: `Show every row's pictures as ${layoutNames[layout]}`,
+        group: "Character", icon: "layout" as const, keywords: "choice pictures previews layout grid list details hairstyles",
+        capability: () => ({ available: true }),
+        run: () => { reveal(); dispatchLayout({ kind: "choiceLayout.set", type: null, layout }); } })),
+      { id: "character.fold.openAll", title: "Open every Character section",
+ group: "Character", icon: "expandAll", keywords: "expand unfold sections headings",
         capability: () => groups.length ? { available: true } : { available: false, reason: "The Character panel has no sections yet." },
         run: () => { reveal(); setFolds(every.filter(key => folded.has(key)), false); } },
       { id: "character.fold.closeAll", title: "Fold every Character section", group: "Character", icon: "collapseAll", keywords: "collapse fold sections headings",

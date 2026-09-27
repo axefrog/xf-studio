@@ -31,6 +31,12 @@ export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePrefer
    * (choice-preview.ts `PreviewKind`, e.g. `hair`); absent: the type's default. Presentation state, never Undo.
    */
   choiceSizes?: Record<string, ChoiceSize>;
+  /**
+   * How choice pictures are laid out (choice-previews-design.md §7.1: `grid`, `list`, `details`): the panel-wide default, and an override
+   * per feature type by picture kind; absent: grid. Setting the panel default clears the overrides, so it shows everywhere at once.
+   * Presentation state, never Undo.
+   */
+  choiceLayout?: ChoiceLayout; choiceLayouts?: Record<string, ChoiceLayout>;
   /** The easing curve chosen per multi-control operation (easing.ts; e.g. `expression-intensity`). Presentation state, never Undo. */
   easings?: Record<string, EasingId>;
   /**
@@ -39,6 +45,7 @@ export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePrefer
    */
   controlSizes?: Record<string, number> };
 export type ChoiceSize = "s" | "m" | "l";
+export type ChoiceLayout = "grid" | "list" | "details";
 /**
  * Where a scroll container was (scroll-anchor.ts): `key` is the view key of the element at its top edge and `offset` how many pixels
  * of it were scrolled past that edge; `near` the elements before it (nearest first, each with its own offset), tried in turn when it
@@ -54,6 +61,8 @@ export type UIPreferenceAction =
   | { kind: "expanded.set"; keys: readonly string[]; expanded: boolean }
   | { kind: "scroll.set"; key: string; anchor?: ScrollAnchor }
   | { kind: "choiceSize.set"; type: string; size: ChoiceSize }
+  /** `type` null: the panel-wide default (clearing every type's override). */
+  | { kind: "choiceLayout.set"; type: string | null; layout: ChoiceLayout }
   | { kind: "easing.set"; scope: string; easing: EasingId }
   | { kind: "controlSize.set"; control: string; size: number }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord }
@@ -78,6 +87,7 @@ const MAX_OFFSET = 1_000_000;
 const MAX_CHOICE_TYPES = 32;
 const choiceType = (value: unknown): value is string => typeof value === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(value);
 const choiceSize = (value: unknown): value is ChoiceSize => value === "s" || value === "m" || value === "l";
+const choiceLayout = (value: unknown): value is ChoiceLayout => value === "grid" || value === "list" || value === "details";
 /** A kept control size: whole CSS pixels in a sane range (the control clamps it to what fits). */
 const controlSize = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 40 && (value as number) <= 4000;
 /**
@@ -230,6 +240,11 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       const sizes = Object.entries(candidate.choiceSizes).filter(([type, size]) => choiceType(type) && choiceSize(size)).slice(0, MAX_CHOICE_TYPES);
       if (sizes.length) result.choiceSizes = Object.fromEntries(sizes) as Record<string, ChoiceSize>;
     }
+    if (choiceLayout(candidate.choiceLayout)) result.choiceLayout = candidate.choiceLayout;
+    if (candidate.choiceLayouts && typeof candidate.choiceLayouts === "object" && !Array.isArray(candidate.choiceLayouts)) {
+      const layouts = Object.entries(candidate.choiceLayouts).filter(([type, layout]) => choiceType(type) && choiceLayout(layout)).slice(0, MAX_CHOICE_TYPES);
+      if (layouts.length) result.choiceLayouts = Object.fromEntries(layouts) as Record<string, ChoiceLayout>;
+    }
     if (candidate.controlSizes && typeof candidate.controlSizes === "object" && !Array.isArray(candidate.controlSizes)) {
       const sizes = Object.entries(candidate.controlSizes).filter(([control, size]) => choiceType(control) && controlSize(size)).slice(0, MAX_CHOICE_TYPES);
       if (sizes.length) result.controlSizes = Object.fromEntries(sizes) as Record<string, number>;
@@ -278,6 +293,11 @@ export class UIPreferenceActions {
       if (!Object.hasOwn(this.value.choiceSizes ?? {}, action.type) && Object.keys(this.value.choiceSizes ?? {}).length >= MAX_CHOICE_TYPES)
         return { available: false, reason: "Too many picture sizes are remembered already." };
     }
+    if (action.kind === "choiceLayout.set") {
+      if ((action.type !== null && !choiceType(action.type)) || !choiceLayout(action.layout)) return { available: false, reason: "Choose Grid, List or Details." };
+      if (action.type !== null && !Object.hasOwn(this.value.choiceLayouts ?? {}, action.type) && Object.keys(this.value.choiceLayouts ?? {}).length >= MAX_CHOICE_TYPES)
+        return { available: false, reason: "Too many picture layouts are remembered already." };
+    }
     if (action.kind === "controlSize.set") {
       if (!choiceType(action.control) || !controlSize(action.size)) return { available: false, reason: "Choose a control and a size in whole pixels." };
       if (!Object.hasOwn(this.value.controlSizes ?? {}, action.control) && Object.keys(this.value.controlSizes ?? {}).length >= MAX_CHOICE_TYPES)
@@ -308,6 +328,10 @@ export class UIPreferenceActions {
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };
     else if (action.kind === "modules.set") this.value.modules = { ...this.value.modules, [action.module]: action.shown };
     else if (action.kind === "choiceSize.set") this.value.choiceSizes = { ...this.value.choiceSizes, [action.type]: action.size };
+    else if (action.kind === "choiceLayout.set") {
+      if (action.type === null) { this.value.choiceLayout = action.layout; delete this.value.choiceLayouts; }
+      else this.value.choiceLayouts = { ...this.value.choiceLayouts, [action.type]: action.layout };
+    }
     else if (action.kind === "easing.set") this.value.easings = { ...this.value.easings, [action.scope]: action.easing };
     else if (action.kind === "controlSize.set") this.value.controlSizes = { ...this.value.controlSizes, [action.control]: action.size };
     else if (action.kind === "expanded.set") {

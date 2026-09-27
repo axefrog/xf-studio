@@ -35,6 +35,17 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     // R = f·l and G = (1 − f)·l with f ≈ ½: equal within rounding.
     expect(Math.abs(r - g)).toBeLessThan(4);
   });
+  test("the turntable strip: frames side by side, frame 0 is the still, and from behind the subject hides the feature", () => {
+    const strip = probe.strip!;
+    expect(strip.width).toBe(24 * 256);
+    expect(strip.height).toBe(256);
+    expect(strip.frame0Diff).toBeLessThanOrEqual(1);
+    const [, g, b, a] = strip.behind as [number, number, number, number];
+    expect(a).toBeGreaterThan(252);
+    expect(b).toBeLessThan(8);
+    expect(g).toBeGreaterThan(0.18 * 255);
+    expect(strip.webpBytes).toBeGreaterThan(40);
+  });
   test("a chunk not in the source draws nothing, and the ground is empty", () => {
     expect(probe.unlisted[3]).toBe(0);
     expect(probe.ground[3]).toBe(0);

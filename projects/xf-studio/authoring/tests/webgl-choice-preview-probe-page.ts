@@ -8,12 +8,17 @@
  * no dither), and 2 sits below the head but is not in the source, so it must not draw.
  */
 import { GlbWriter } from "../src/glb";
-import { PREVIEW_STYLES, previewCamera, type ChoicePreviewSource } from "../src/choice-preview";
+import { PREVIEW_STYLES, previewCamera, type ChoicePreviewSource, TURNTABLE, turntableYaw } from "../src/choice-preview";
 import { PreviewRenderer } from "../src/choice-preview-render";
 
 export type PreviewProbe = { ok: boolean; failure?: string; size: number; webpBytes: number;
   /** Mean channels (0–255) inside each region: full-coverage half, half-coverage half, the unlisted chunk's place, and empty ground. */
-  full: number[]; half: number[]; unlisted: number[]; ground: number[]; timings?: unknown };
+  full: number[]; half: number[]; unlisted: number[]; ground: number[]; timings?: unknown;
+  /**
+   * The turntable strip of the same source: its size, the largest channel difference between its frame 0 and the still, and the mean
+   * channels at the full-coverage point seen from behind (frame frames/2), where the subject now hides the feature.
+   */
+  strip?: { width: number; height: number; webpBytes: number; frame0Diff: number; behind: number[]; timings: unknown } };
 (window as unknown as { probe?: PreviewProbe }).probe = undefined;
 
 type Quad = { name: string; x: [number, number]; y: [number, number]; z: number };
@@ -53,9 +58,10 @@ async function run(): Promise<PreviewProbe> {
     depotHash: "1", archive: null, chunks: [{ chunk: 0, coverage: coverage(2) }, { chunk: 1, coverage: coverage(3) }] }] };
   const result = await renderer.render(source, { urlOf: file => file, keepPixels: true });
   const style = PREVIEW_STYLES.hair, size = result.width, pixels = result.pixels!;
-  const camera = previewCamera({ min: [-0.1, 1.5, 0], max: [0.1, 1.8, 0] }, { min: [-0.04, 1.69, 0.01], max: [0.04, 1.71, 0.01] }, style);
-  const project = (p: [number, number, number]) => {
-    const v = camera.view, m = camera.projection;
+  const cameraAt = (turn: number) => previewCamera({ min: [-0.1, 1.5, 0], max: [0.1, 1.8, 0] }, { min: [-0.04, 1.69, 0.01], max: [0.04, 1.71, 0.01] }, style, turn);
+  const camera = cameraAt(0);
+  const project = (p: [number, number, number], at = camera) => {
+    const v = at.view, m = at.projection;
     const e = [0, 1, 2, 3].map(r => v[r]! * p[0] + v[4 + r]! * p[1] + v[8 + r]! * p[2] + v[12 + r]!);
     const c = [0, 1, 2, 3].map(r => m[r]! * e[0]! + m[4 + r]! * e[1]! + m[8 + r]! * e[2]! + m[12 + r]! * e[3]!);
     return [((c[0]! / c[3]! + 1) / 2) * size, ((1 - c[1]! / c[3]!) / 2) * size];
@@ -70,8 +76,20 @@ async function run(): Promise<PreviewProbe> {
     }
     return sum.map(value => value / n);
   };
+  const strip = await renderer.render(source, { urlOf: file => file, keepPixels: true, frames: TURNTABLE.frames });
+  const width = strip.width, sp = strip.pixels!;
+  let frame0Diff = 0;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size * 4; x++) frame0Diff = Math.max(frame0Diff, Math.abs(sp[y * width * 4 + x]! - pixels[y * size * 4 + x]!));
+  const back = TURNTABLE.frames / 2, [bx, by] = project([-0.05, 1.65, 0.02], cameraAt(turntableYaw(back)));
+  const behind = [0, 0, 0, 0];
+  let n = 0;
+  for (let y = Math.round(by!) - 3; y <= Math.round(by!) + 3; y++) for (let x = Math.round(bx!) - 3; x <= Math.round(bx!) + 3; x++) {
+    for (let k = 0; k < 4; k++) behind[k]! += sp[(y * width + back * size + x) * 4 + k]!;
+    n++;
+  }
   return { ok: true, size, webpBytes: result.webp.size, full: mean([-0.05, 1.65, 0.02]), half: mean([0.05, 1.65, 0.02]), unlisted: mean([0, 1.38, 0.02]),
-    ground: mean([0.2, 1.4, 0]), timings: result.timings };
+    ground: mean([0.2, 1.4, 0]), timings: result.timings,
+    strip: { width, height: strip.height, webpBytes: strip.webp.size, frame0Diff, behind: behind.map(v => v / n), timings: strip.timings } };
 }
 run().then(probe => { (window as unknown as { probe?: PreviewProbe }).probe = probe; },
   error => { (window as unknown as { probe?: PreviewProbe }).probe = { ok: false, failure: String((error as Error)?.stack ?? error), size: 0, webpBytes: 0, full: [], half: [], unlisted: [], ground: [] }; });
