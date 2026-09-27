@@ -16,10 +16,10 @@ export type MotionPose = { readonly id: string; readonly label: string; readonly
  */
 export const IDLE_UNAVAILABLE = "The character creator's idle couldn't be prepared from your game files, so your V holds still. Everything else works.";
 /** Why hair physics can't be turned on, in plain words (hair-physics-plan.md §3.6). */
-export const PHYSICS_NO_DANGLES = "Your V's hair doesn't move on its own: this hairstyle has no physics in the game.";
-export const PHYSICS_UNSUPPORTED = "Your V's hair has physics XF Studio can't run yet, so it hangs still.";
-export const PHYSICS_NO_RIG = "Hair physics needs your V's idle, which couldn't be prepared from your game files.";
-export const PHYSICS_WAITING = "Hair physics can be turned on once your V's hair has loaded.";
+export const PHYSICS_NO_DANGLES = "This hairstyle has no physics in the game.";
+export const PHYSICS_UNSUPPORTED = "This hairstyle's physics can't run here yet.";
+export const PHYSICS_NO_RIG = "Needs the idle, which couldn't be prepared.";
+export const PHYSICS_WAITING = "Available once your V's hair has loaded.";
 export { IDLE_MASCULINE };
 
 /** One of the game's preview idles as the Motion controls offer it. */

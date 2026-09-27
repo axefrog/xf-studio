@@ -222,17 +222,12 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   const rigMotion = composePreviewMotion(idle, blink, face);
   /**
    * The idle's head displacement at phase zero, where stored cameras are measured from (neutral space), or zero while the idle is
-   * off. Always derived at phase zero so restoring a paused or nonzero phase never adds a different offset.
+   * off. Always derived at phase zero so restoring a paused or nonzero phase never adds a different offset. Measured without seeking, so
+   * framing never restarts the hair simulation (PREV-133).
    */
   function idleOffset(out: THREE.Vector3): THREE.Vector3 {
     out.set(0, 0, 0);
-    if (!idle?.enabled) return out;
-    const time = idle.time;
-    idle.seek(0);
-    const anchor = idle.bindings.find(b => b.bone.name === "Head");
-    if (anchor) out.setFromMatrixPosition(anchor.bone.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(anchor.worldBind));
-    idle.seek(time);
-    return out;
+    return idle ? idle.offsetAt("Head", 0, out) : out;
   }
   // Every mesh with facial morph targets follows the character-creator morph choices. The eye
   // component carries its own `eyes` targets (a separate morph resource in the game), paired with

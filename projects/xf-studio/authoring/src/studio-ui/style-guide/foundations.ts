@@ -1,6 +1,6 @@
 import { iconNames } from "../icons";
 import { contrastTable } from "./contrast";
-import { badge, btn, chip, code, i, pattern, section } from "./kit";
+import { badge, btn, chip, code, helpTip, i, note, pattern, section, slider } from "./kit";
 
 const tokens: [string, string, string][] = [
   ["--bg-app", "Application background behind panels", "surface"], ["--bg-panel", "Panel and header surface", "surface"],
@@ -56,6 +56,16 @@ export function foundations(css: string) {
       what: "Three families: Bahnschrift SemiCondensed (display — tabs, eyebrows, badges, brand; uppercase, tracked), Segoe UI Variable (UI text) and Cascadia Mono (numbers, hashes, paths). All are Windows system fonts; nothing is downloaded.",
       when: "Display face only for short labels in capitals; never for sentences. Mono for any value a user compares across rows.",
       adapt: "Fallback stacks keep proportions on other systems (DIN Alternate / Roboto Condensed / system-ui / ui-monospace)." }),
+    pattern({ id: "f-copy", title: "Copy and wording", status: "rule", wide: true,
+      specimen: `<div class="row wrap gap-m align-start">
+        <div class="stack-s" style="max-width:300px"><span class="muted small">Before</span>${slider("Point blend", .1, "0.05% UV")}
+          ${note("Point strength blends pigment across the shape. More blend softens differences between nearby points; a zero point may retain some pigment. Edge softness controls the outline separately.")}</div>
+        <div class="stack-s" style="max-width:300px"><span class="muted small">After</span><div class="control"><div class="control-line"><label class="control-label"><span>Point blend</span><output class="readout">0.05% UV</output></label>${helpTip("Point blend", "How far pigment blends between neighbouring points. More blend softens the differences.")}</div><input class="slider" type="range" min="0" max="1" step=".01" value=".1" style="--fill:10%" aria-label="Point blend"></div>
+          ${btn("Coming soon", { small: true, unavailable: "Coming soon: hair that moves with your V's head." })}</div></div>`,
+      what: `Plain, calm, second person ("your V", "your game files"): what happens and what to do, never how it is implemented. Use the exact names on the controls, one name per thing (3D view, UV map, version, Settings › Game), and no developer words (host, server, SQLite, budget, provisional, LUT, "a Studio choice"). Limits: titles 1–3 words; labels 1–4; buttons 1–3, verb first, "…" when a choice follows; a status line one line (about 70 characters); an inline note one sentence (about 100); a help tip at most two short paragraphs (300 characters); a reason one sentence (about 90); a toast one or two sentences with its recovery button. The full rules and the audit are in research/authoring/ui-copy-and-layout-review.md.`,
+      when: "Where text goes: what something is or how it works → a help tip on its label or heading; what the person can do now → an inline note on a reserved line or the status line, with the button; a changing state → the status line or the control's own label; a set of facts → a structured display (property list, chips); why a control is unavailable → its reason tip; an outcome → a toast; a designed but unbuilt feature → a disabled control with \"Coming soon: <what it will let you do>\" (no empty sections).",
+      combine: "Honesty stays, briefly: \"not yet checked in game\" is one clause, once per place. Say a state in one place only.",
+      avoid: "Repeating a label in the note under it, explaining what a visible control obviously does, naming a control that doesn't exist, a paragraph under a control, and text that moves the layout when it appears." }),
     pattern({ id: "f-space", title: "Spacing, sizing and density", status: "implemented",
       specimen: `<div class="space-scale">${[2, 4, 6, 8, 12, 16, 20, 28].map(size => `<span style="--size:${size}px"><i></i>${size}</span>`).join("")}</div>
         <p class="note">Controls 28 px (24 px small) · rows 32 px · tabs 32 px · header 44 px · status 26 px.</p>`,

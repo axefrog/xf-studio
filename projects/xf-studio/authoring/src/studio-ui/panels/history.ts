@@ -21,10 +21,11 @@ export function historyPanel(rt: StudioRuntime): PanelController {
   const undo = button({ label: "Undo", icon: "undo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.undo" }); } });
   const redo = button({ label: "Redo", icon: "redo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.redo" }); } });
   const trimmed = h("p", { class: "note info history-trimmed" }, icon("info"),
-    h("span", { text: `${HISTORY_TRIMMED_NOTE}. Only the latest changes are kept for each preset.` }));
+    h("span", { text: `${HISTORY_TRIMMED_NOTE}: only the latest are kept.` }));
   const list = h("ol", { class: "history-list", "aria-label": "Changes to this preset, oldest first" });
-  const empty = emptyState("No changes yet", "Your edits to this preset appear here, oldest first. Click any step to go back to it.");
-  const noPreset = emptyState("No preset selected", "History belongs to a preset. Select or add a preset to see its changes.");
+  // The heading already says "No changes yet" or "No preset", so the empty states say what comes next instead of repeating it.
+  const empty = emptyState("Your edits appear here", "Oldest first. Click any step to go back to it.");
+  const noPreset = emptyState("Select a preset", "History belongs to a preset: select or add one to see its changes.");
   // How the list works, in a help tip beside its heading (help-tip.ts).
   const help = helpTip("history", `Click a step to go back to it. Steps after it stay listed, dimmed, until you make a new change, so you can go forward again. ${keys.undo} and ${keys.redo} move one step at a time.`);
   const element = h("div", { class: "panel-content history-panel" },

@@ -83,6 +83,11 @@ export class DangleSolver {
   /** The substeps the last frame ran and their length (0 substeps when its time-dilation ratio stopped the simulation). */
   lastSteps = 0;
   lastH = 0;
+  /**
+   * How many frames ended with a particle no longer finite and were reset to the input pose (PREV-130). The spec's ranges keep the
+   * vanilla and inspected sets far from it; this is the backstop, so a part never vanishes while physics is on.
+   */
+  unstable = 0;
 
   constructor(readonly spec: DangleSpec, options: DangleSolverOptions = {}) {
     const sim = spec.simulation;
@@ -115,6 +120,27 @@ export class DangleSolver {
 
   /** The game's reset mode (mode 2): the next frame puts every particle on its input pose with zero velocity. */
   requestReset() { this.needsReset = true; }
+
+  /** Everything a later frame reads, so `loadState` resumes bit for bit (a seek's checkpoint, PREV-133). */
+  saveState(): Float64Array {
+    const arrays = this.stateArrays(), size = arrays.reduce((n, a) => n + a.length, 0);
+    const state = new Float64Array(size + 6);
+    let o = 0;
+    for (const a of arrays) { state.set(a, o); o += a.length; }
+    state.set([this.accumulator, this.lastDt, this.smoothed, this.needsReset ? 1 : 0, this.lastSteps, this.lastH], o);
+    return state;
+  }
+  loadState(state: Float64Array) {
+    const arrays = this.stateArrays();
+    let o = 0;
+    for (const a of arrays) { a.set(state.subarray(o, o + a.length)); o += a.length; }
+    if (state.length !== o + 6) throw Error("That dangle state belongs to another simulation.");
+    [this.accumulator, this.lastDt, this.smoothed] = [state[o]!, state[o + 1]!, state[o + 2]!];
+    this.needsReset = state[o + 3] === 1; this.lastSteps = state[o + 4]!; this.lastH = state[o + 5]!;
+  }
+  private stateArrays(): Float64Array[] {
+    return [this.x, this.v, this.xPrev, this.prev, this.cur, this.out, this.shapePrev, this.shapeCur, this.gravityPrev, this.gravityCur, this.externalPrev, this.externalCur];
+  }
 
   /**
    * One frame (§5.1 Update and Evaluate): `realDt` drives the substep count, `gameDt / realDt` the substep length. `pose` holds every rig
@@ -149,7 +175,15 @@ export class DangleSolver {
       }
     }
     if (resetFrame) this.reset(pose, false);
+    if (!this.finite()) { this.unstable++; this.reset(pose, true); this.accumulator = 0; }
     this.output(pose);
+  }
+  private finite(): boolean {
+    const x = this.x, v = this.v;
+    // A sum is finite only when every term is (NaN and ±Infinity propagate), one branch per frame.
+    let sum = 0;
+    for (let i = 0; i < x.length; i++) sum += x[i]! * 0 + v[i]! * 0;
+    return sum === 0;
   }
 
   /** Every particle's position (model space, 3 per particle); read only. */

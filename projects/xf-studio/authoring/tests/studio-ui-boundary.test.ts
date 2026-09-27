@@ -28,6 +28,8 @@ const views = readdirSync(join(root, "features")).map(id => join(root, "features
 const CORE_VALUES = new Map<string, readonly string[]>([
   ["context-menu", ["allowsNativeTextMenu"]],
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
+  // Saved layouts' pure reads: the library as shown (the first layout when none is stored), names and the automatic size switch.
+  ["layout-library", ["activeLayout", "autoSwitchTarget", "layoutLibraryOf", "layoutNameProblem", "MAX_LAYOUT_NAME", "nextLayoutName"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
   // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
   ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
@@ -51,6 +53,8 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/panels/viewports", ["contextMenuGate", "keyDescription"]],
   ["studio-ui/views/contribution", ["panelMeta"]],
   ["studio-ui/views/feature-view", ["featureView", "moduleView"]],
+  // The Coming soon catalogue (ui-copy-and-layout-review.md §6): pure data, so a feature view can show a decided feature's placeholder.
+  ["studio-ui/coming-soon", ["COMING_SOON"]],
 ]);
 /** Where a presentation module lives: the shell (all of studio-ui is its own) or a feature's view (only its folder). */
 type Scope = { own: readonly string[]; allow: ReadonlyMap<string, readonly string[]> };

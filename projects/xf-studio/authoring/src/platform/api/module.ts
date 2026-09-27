@@ -68,6 +68,22 @@ export type ViewToolContribution = {
 /** A module's crumb in a view (design §3.9): "Preset › Layer" is the platform's preset then eye makeup's summary. */
 export type ViewSummaryContribution = { readonly module: ModuleId; readonly scenes: readonly SceneKind[] };
 
+/**
+ * A module on the roadmap with an agreed design but nothing built (ui-copy-and-layout-review.md §6): the Modules menu lists it as
+ * Planned, with its one "Coming soon" line, and it can never be shown. Its `id` is the ID its live module will have: once a module
+ * with that ID registers, `plannedModules` drops the entry, and `tests/coming-soon.test.ts` fails until the entry is deleted.
+ */
+export type PlannedModule = {
+  readonly id: ModuleId;
+  readonly label: string;
+  readonly icon: string;
+  readonly group: ModuleGroup;
+  /** What it will let the person do, in one plain line (shown as "Coming soon: …"). */
+  readonly comingSoon: string;
+  /** The design or brief it follows (a repository path), for the record. */
+  readonly design: string;
+};
+
 /** What a composition registers about modules: their manifests and every view tool (the platform's and each module's). */
 export type ModuleRegistration = {
   readonly modules: readonly StudioModule[];
@@ -75,7 +91,15 @@ export type ModuleRegistration = {
   readonly summaries: readonly ViewSummaryContribution[];
   /** The scene kinds views can show (`character`, and module-registered kinds later). */
   readonly scenes: readonly SceneKind[];
+  /** Modules with an agreed design, not built yet: listed as Planned, never shown. */
+  readonly planned?: readonly PlannedModule[];
 };
+
+/** The planned modules still to come: those whose live module hasn't registered, in listed order. Pure. */
+export function plannedModules(registration: Pick<ModuleRegistration, "modules" | "planned">): PlannedModule[] {
+  const live = new Set(registration.modules.map(module => module.id));
+  return (registration.planned ?? []).filter(module => !live.has(module.id));
+}
 
 /** Which modules show, and whether research tools do: presentation state the derivation is given, never reads (design §4.2). */
 export type ViewToolFilter = { readonly modules: readonly ModuleId[]; readonly research: boolean };

@@ -6,5 +6,5 @@ import type { StudioModule } from "../../platform/api";
 
 export const EXPRESSIONS_MODULE: StudioModule = Object.freeze({
   id: "expressions", label: "Expressions", icon: "face", group: "character", stage: "preview", feature: "expressions", shownByDefault: false,
-  description: "V's facial expression: the face's own controls, start from any installed photo-mode expression, a live solved preview.",
+  description: "Pose V's face with the game's own face controls, or start from a photo-mode expression.",
 });

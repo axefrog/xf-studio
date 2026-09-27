@@ -189,10 +189,16 @@ describe("the choice list grouped by maker", () => {
     expect(body.hidden).toBe(true);
     expect(alice.hasAttribute("data-chosen")).toBe(true);
     expect(alice.getAttribute("aria-description")).toBe("Your choice is in this group");
-    // The fold is kept across paints and the list's rebuilds for the same option.
+    // A fold is kept across the list's rebuilds for the same option, except that the group holding the V's choice opens again when the
+    // row is shown anew: the choice is never hidden (show the options, don't hide them).
+    const zeta = heads(element)[3]!;
+    zeta.click();
     view.update(input(choices, 3, { query: "c" }));
     view.update(input(choices, 3));
+    expect(heads(element)[3]!.getAttribute("aria-expanded")).toBe("false");
     const again = heads(element)[2]!;
+    expect(again.getAttribute("aria-expanded")).toBe("true");
+    again.click();
     expect(again.getAttribute("aria-expanded")).toBe("false");
     again.focus();
     key(again, "ArrowRight");

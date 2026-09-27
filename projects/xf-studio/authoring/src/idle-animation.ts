@@ -7,6 +7,8 @@ const GAME_FROM_GLTF = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0,
 const GLTF_FROM_GAME = GAME_FROM_GLTF.clone().invert();
 /** A V joint at its bind pose; also marks a binding to a dangle driver (never written). */
 const IDENTITY = new THREE.Matrix4();
+/** The most dangle checkpoints kept for one loop of the idle (each a few kilobytes a simulated part). */
+const CHECKPOINTS_PER_LOOP = 32;
 
 /** Compose decoded body motion and an offline-solved facial clip in world bind space. */
 export class IdleAnimation {
@@ -222,6 +224,8 @@ export class IdleAnimation {
     }
     this.solveRigs();
     this.danglesNeedRigs = [...this.rigDrivers].some(name => this.dangleNames.has(name));
+    // The dangles' base joints may follow the rigs: their run from the loop start is another one now.
+    this.dropCheckpoints();
     if (this.enabled) this.update(0);
     this.onChange?.();
   }
@@ -253,6 +257,7 @@ export class IdleAnimation {
   setClips(body: THREE.AnimationClip, face?: THREE.AnimationClip, faceLoopFrom?: number, options: { pose?: boolean; moves?: boolean } = {}) {
     // A photo-mode pose (pose-clip.ts) plays on the same rigs; a held one doesn't move by itself.
     this.posed = !!options.pose; this.bodyMoves = options.moves ?? true;
+    this.dropCheckpoints();
     this.mixer.stopAllAction();
     this.mixer.uncacheClip(this.clip);
     this.clip = body;
@@ -303,6 +308,7 @@ export class IdleAnimation {
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;
     this.enabled = enabled; this.elapsed = 0; this.faceStart = 0; this.playbackPaused = false;
+    this.dropCheckpoints();
     if (enabled) { this.resetDangles(); this.update(0); }
     else { this.restore(); this.stillDangles(); }
     this.onChange?.();
@@ -314,6 +320,7 @@ export class IdleAnimation {
     this.onChange?.();
   }
   setContributions({ body, face }: { body?: boolean; face?: boolean }) {
+    if (body !== undefined && body !== this.bodyContribution) this.dropCheckpoints();
     if (body !== undefined) this.bodyContribution = body;
     if (face !== undefined) this.faceContribution = face;
     // Recompose at the held phase, including when paused, so a muted source
@@ -327,8 +334,14 @@ export class IdleAnimation {
       b.bone.updateWorldMatrix(false,false);
     }
   }
+  /**
+   * Go to a motion time as if played from motion zero: a face's one-shot showcase counts from zero too (as when the idle is turned on), so
+   * the pose at a sought time never depends on when its clips were chosen (PREV-134). Choosing clips during playback still starts the
+   * showcase at that moment (`setClips`).
+   */
   seek(seconds: number) {
     this.elapsed = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    this.faceStart = 0;
     this.resetDangles();
     this.update(0);
     this.onChange?.();
@@ -352,20 +365,43 @@ export class IdleAnimation {
       return;
     }
     for (const b of this.bindings) {
-      this.delta.identity();
-      if (this.bodyContribution) this.delta.multiplyMatrices(b.driver.matrixWorld,b.inverseDriverBind);
-      const faceDelta = lent?.get(b.bone.name);
-      if (lent) { if (faceDelta) this.delta.multiply(faceDelta); }
-      else if (this.faceContribution && b.faceDriver && b.inverseFaceBind) {
-        this.faceDelta.multiplyMatrices(b.faceDriver.matrixWorld,b.inverseFaceBind);
-        this.delta.multiply(this.faceDelta);
-      }
-      this.delta.multiply(b.worldBind);
+      this.composeWorld(b, lent, this.delta);
       this.local.copy(b.bone.parent!.matrixWorld).invert().multiply(this.delta);
       this.local.decompose(b.bone.position,b.bone.quaternion,b.bone.scale);
       b.bone.updateWorldMatrix(false,false);
     }
   }
+  /** A bound bone's world matrix from the drivers' current pose: body delta, then the face's (or a lent expression's), then its bind. */
+  private composeWorld(b: IdleAnimation["bindings"][number], lent: ReadonlyMap<string, THREE.Matrix4> | null, into: THREE.Matrix4): THREE.Matrix4 {
+    into.identity();
+    if (this.bodyContribution) into.multiplyMatrices(b.driver.matrixWorld,b.inverseDriverBind);
+    const faceDelta = lent?.get(b.bone.name);
+    if (lent) { if (faceDelta) into.multiply(faceDelta); }
+    else if (this.faceContribution && b.faceDriver && b.inverseFaceBind) {
+      this.faceDelta.multiplyMatrices(b.faceDriver.matrixWorld,b.inverseFaceBind);
+      into.multiply(this.faceDelta);
+    }
+    return into.multiply(b.worldBind);
+  }
+  /**
+   * A bound bone's world displacement from its bind pose at a motion time (zero while the idle is off or nothing binds the bone), measured
+   * without moving anything: no bone, clock or simulation changes (PREV-133). Framing the camera used to seek to 0 and back for this,
+   * which restarted the hair simulation (a 72 mm tip jump) and re-simulated up to a whole loop.
+   */
+  offsetAt(name: string, time: number, out = new THREE.Vector3()): THREE.Vector3 {
+    out.set(0, 0, 0);
+    const b = this.enabled ? this.bindings.find(binding => binding.bone.name === name) : undefined;
+    if (!b) return out;
+    const lent = this.faceOverride?.() ?? null;
+    if (!this.bodyContribution && !this.faceContribution && !lent) return out;
+    this.poseAt(time);
+    out.setFromMatrixPosition(this.composeWorld(b, lent, this.offsetMatrix)).sub(this.offsetBind.setFromMatrixPosition(b.worldBind));
+    // Back to the pose `update` left: the last game frame's with physics on, else the motion clock's.
+    this.poseAt(this.simulating() ? this.simTime : this.elapsed);
+    return out;
+  }
+  private readonly offsetMatrix = new THREE.Matrix4();
+  private readonly offsetBind = new THREE.Vector3();
   /** The body (and the rig-solved joints, when a dangle's base joints need them) at a motion time. */
   private poseBody(time: number) {
     this.mixer.setTime(time % this.clip.duration);
@@ -388,6 +424,11 @@ export class IdleAnimation {
       this.simTime += DANGLE_FRAME;
       this.poseBody(this.simTime);
       this.dangles.step(this.liveDelta, DANGLE_FRAME);
+      if (this.cleanRun === null || !this.checkpoints) continue;
+      this.runFrame++;
+      if (this.simTime >= this.cleanRun + this.clip.duration - 1e-9) this.cleanRun = null;
+      else if (this.runFrame % this.checkpoints.every === 0 && !this.checkpoints.frames.has(this.runFrame))
+        this.checkpoints.frames.set(this.runFrame, { simTime: this.simTime, state: this.dangles.snapshot() });
     }
   }
   private simulating() { return this.physics && this.dangles.simulated; }
@@ -400,12 +441,40 @@ export class IdleAnimation {
     if (!this.dangles.size) return;
     if (!this.enabled) { this.stillDangles(); return; }
     if (!this.simulating()) return;
-    const duration = this.clip.duration;
-    this.simTime = duration > 0 ? this.elapsed - (this.elapsed % duration) : 0;
-    this.poseBody(this.simTime);
-    this.dangles.settle(this.liveDelta);
+    const duration = this.clip.duration, loopStart = duration > 0 ? this.elapsed - (this.elapsed % duration) : 0;
+    // Resume from the latest checkpoint of this loop's run at or before the motion time; else settle at the loop start.
+    if (this.checkpoints?.loopStart !== loopStart)
+      this.checkpoints = { loopStart, every: Math.max(60, Math.ceil(duration / DANGLE_FRAME / CHECKPOINTS_PER_LOOP)), frames: new Map() };
+    let from: { frame: number; simTime: number; state: (Float64Array | null)[] } | null = null;
+    for (const [frame, checkpoint] of this.checkpoints.frames)
+      if (checkpoint.simTime <= this.elapsed + 1e-9 && (!from || frame > from.frame)) from = { frame, ...checkpoint };
+    if (from) {
+      this.simTime = from.simTime;
+      this.poseBody(this.simTime);
+      this.dangles.restore(from.state, this.liveDelta);
+      this.runFrame = from.frame;
+    } else {
+      this.simTime = loopStart;
+      this.poseBody(this.simTime);
+      this.dangles.settle(this.liveDelta);
+      this.runFrame = 0;
+      this.checkpoints.frames.set(0, { simTime: this.simTime, state: this.dangles.snapshot() });
+    }
+    this.cleanRun = loopStart;
     this.runFrames();
   }
+  /**
+   * Checkpoints of the dangles' run from the current loop's start (PREV-133): the state at a motion time depends only on that time (the
+   * run is settled at the loop start, then stepped), so a seek resumes from the latest checkpoint at or before it instead of simulating
+   * from the loop start again; posing the body for every frame dominated that cost (56 ms for a 20 s clip, about 1.4 s at the 600 s
+   * cap). One every `every` game frames (at most `CHECKPOINTS_PER_LOOP` a loop), recorded while a run from a loop start is uninterrupted
+   * (`cleanRun`: seeks, and playback until the loop's end; past the seam playback carries on without a reset, so it no longer matches a
+   * seek). Anything that changes the dangles' input drops them.
+   */
+  private checkpoints: { loopStart: number; every: number; frames: Map<number, { simTime: number; state: (Float64Array | null)[] }> } | null = null;
+  private cleanRun: number | null = null;
+  private runFrame = 0;
+  private dropCheckpoints() { this.checkpoints = null; this.cleanRun = null; }
   /** With the idle off and physics on, the dangles settle on V's bind pose; only their chain joints move. */
   private stillDangles() {
     if (this.enabled || !this.dangles.size) return;
@@ -448,6 +517,7 @@ export class IdleAnimation {
     for (const bone of rebind) delete bone.userData.xfsDangle;
     for (const part of parts) for (const bone of part.bones) bone.userData.xfsDangle = part.key;
     this.dangles.set(parts);
+    this.dropCheckpoints();
     this.dangleNames = new Set(parts.flatMap(part => part.spec.joints.map(joint => joint.name)));
     this.danglesNeedRigs = [...this.rigDrivers].some(name => this.dangleNames.has(name));
     for (let i = this.unmapped.length - 1; i >= 0; i--) if (rebind.some(bone => bone.name === this.unmapped[i])) this.unmapped.splice(i, 1);
@@ -459,6 +529,7 @@ export class IdleAnimation {
   setPhysics(enabled: boolean) {
     if (enabled === this.physics) return;
     this.physics = enabled;
+    this.dropCheckpoints();
     if (this.enabled) { this.resetDangles(); this.update(0); } else this.stillDangles();
     this.onChange?.();
   }

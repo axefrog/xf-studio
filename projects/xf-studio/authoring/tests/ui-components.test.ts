@@ -242,10 +242,11 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   folder.update({ chosen: null, detected: "%USERPROFILE%\Saves" });
   const el = folder.element as unknown as LightElement;
   const using = el.querySelector(".folder-using")!, note = el.querySelector(".folder-note")!, typed = el.querySelector(".folder-typed")!;
-  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", false, true]);
+  // The note line takes no room until the text box opens (then it is reserved, so a refusal of what was typed moves nothing).
+  expect([using.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Detected: %USERPROFILE%\Saves", true, true]);
   const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose another folder…")!;
   choose.click(); await Promise.resolve();
-  expect(typed.hidden).toBe(false);
+  expect([typed.hidden, note.hidden]).toEqual([false, false]);
   folder.input.value = "D:\Elsewhere"; key(folder.input, "Enter");
   await new Promise(resolve => setTimeout(resolve, 0));
   expect([note.textContent, note.classList.contains("empty"), typed.hidden]).toEqual(["That folder has no saves in it.", false, false]);
@@ -292,4 +293,165 @@ test("swatch card: shows the true colour after the pointer rests, follows to the
   expect([mark.classList.contains("off"), mark.getAttribute("aria-hidden")]).toEqual([true, "true"]);
   setContrastMark(mark, true);
   expect([mark.classList.contains("off"), mark.getAttribute("aria-hidden"), mark.getAttribute("title")]).toEqual([false, null, CONTRAST_WORDS.markTip]);
+});
+
+test("folder setting: several found folders are all shown as choices with where they were found; pressing one saves it; an optional folder can be cleared", async () => {
+  const { FolderSetting } = await lib();
+  const selected: string[] = []; let cleared = 0;
+  const folder = new FolderSetting({ label: "Cyberpunk 2077 folder", onChoose: async () => ({ ok: true as const }),
+    onSelect: async path => { selected.push(path); return { ok: true as const }; }, onClear: async () => { cleared++; return { ok: true as const }; } });
+  const found = [{ path: "D:\Steam\Cyberpunk 2077", source: "Steam" }, { path: "E:\GOG\Cyberpunk 2077", source: "GOG, Mod Organizer 2" }];
+  folder.update({ chosen: "E:\GOG\Cyberpunk 2077", found });
+  const el = folder.element as unknown as LightElement;
+  const choices = () => Array.from(el.querySelectorAll(".folder-choice"));
+  expect(choices().map(choice => [choice.querySelector(".folder-choice-path")!.textContent, choice.querySelector(".folder-choice-source")!.textContent,
+    choice.getAttribute("aria-pressed")])).toEqual([["D:\Steam\Cyberpunk 2077", "Steam", "false"], ["E:\GOG\Cyberpunk 2077", "GOG, Mod Organizer 2", "true"]]);
+  // The pressed choice says what is in use, so the "Using" line is quiet.
+  expect(el.querySelector(".folder-using")!.hidden).toBe(true);
+  choices()[1]!.click(); await Promise.resolve();
+  expect(selected).toEqual([]);
+  choices()[0]!.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(selected).toEqual(["D:\Steam\Cyberpunk 2077"]);
+  // A chosen folder that isn't among those found is listed first.
+  folder.update({ chosen: "F:\Elsewhere", found });
+  expect(choices().map(choice => choice.querySelector(".folder-choice-path")!.textContent)).toEqual(["F:\Elsewhere", "D:\Steam\Cyberpunk 2077", "E:\GOG\Cyberpunk 2077"]);
+  const clear = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Don't use a folder")!;
+  expect(clear.hidden).toBe(false);
+  clear.click(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(cleared).toBe(1);
+  folder.update({ chosen: null, found: [] });
+  expect([clear.hidden, el.querySelector(".folder-using")!.textContent]).toEqual([true, "Not chosen yet"]);
+});
+
+test("choice list: every choice shown in the Character look; arrows move focus without choosing, a click chooses; unavailable choices keep their reason; tiles carry an accessible name", async () => {
+  const { ChoiceList } = await lib();
+  const chosen: string[] = [];
+  const list = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => chosen.push(value),
+    options: [{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "inventory", label: "Inventory" }] });
+  const el = list.element as unknown as LightElement;
+  const items = () => Array.from(el.querySelectorAll(".choice"));
+  expect(el.querySelector(".choices")!.classList.contains("chips")).toBe(true);
+  list.update("closeup");
+  expect(items().map(item => [item.getAttribute("role"), item.getAttribute("aria-selected"), item.tabIndex])).toEqual([["option", "false", -1], ["option", "true", 0], ["option", "false", -1]]);
+  // An unchanged list rebuilds nothing.
+  const before = items()[0];
+  list.setOptions([{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "inventory", label: "Inventory" }]);
+  expect(items()[0]).toBe(before);
+  items()[1]!.focus();
+  key(el.querySelector(".choices") as unknown as HTMLElement, "ArrowRight");
+  expect(chosen).toEqual([]);
+  items()[2]!.click();
+  expect(chosen).toEqual(["inventory"]);
+  list.update("still", value => value === "inventory" ? { available: false, reason: "That idle isn't prepared." } : { available: true });
+  expect([items()[2]!.getAttribute("aria-disabled"), items()[2]!.getAttribute("data-reason")]).toEqual(["true", "That idle isn't prepared."]);
+  items()[2]!.click();
+  expect(chosen).toEqual(["inventory"]);
+  list.update("still", undefined, { disabled: true, reason: "Your V's motion appears once the 3D preview is ready." });
+  expect(el.querySelector(".control-note")!.textContent).toBe("Your V's motion appears once the 3D preview is ready.");
+  const tiles = new ChoiceList<string>({ label: "Eye shape", layout: "tiles", onSelect: () => {}, options: [{ value: "0", label: "1", name: "Eye shape 1" }] });
+  const tile = (tiles.element as unknown as LightElement).querySelector(".choice")!;
+  expect([tile.getAttribute("aria-label"), tile.textContent]).toEqual(["Eye shape 1", "1"]);
+});
+
+test("bipolar slider: the readout names the direction, drags snap to the centre, Enter types an exact value, Delete returns to the centre, mixed until edited", async () => {
+  const { BipolarSlider } = await lib();
+  const { calls, t } = log();
+  const control = new BipolarSlider({ label: "Look sideways", min: -100, max: 100, step: 1, unit: "%", ends: { negative: "Left", positive: "Right" }, transaction: t });
+  document.body.append(control.element);
+  const readout = control.element.querySelector<HTMLElement>(".readout-value")!, field = control.element.querySelector<HTMLInputElement>(".readout-input")!;
+  const track = control.element.querySelector<HTMLElement>(".bipolar-track")! as unknown as LightElement;
+  control.update(20);
+  expect([readout.textContent, control.input.getAttribute("aria-valuetext"), control.element.classList.contains("set"), control.resetButton!.classList.contains("idle")])
+    .toEqual(["20 % right", "20 % right", true, false]);
+  expect([track.style.values.get("--zero"), track.style.values.get("--lo"), track.style.values.get("--hi")]).toEqual(["0.5", "0.5", "0.6"]);
+  expect(Array.from((control.element.querySelector(".bipolar-ends")! as unknown as LightElement).children).map(e => e.textContent)).toEqual(["Left", "Right"]);
+  control.update(-35);
+  expect([readout.textContent, track.style.values.get("--lo"), track.style.values.get("--hi")]).toEqual(["35 % left", "0.325", "0.5"]);
+  control.update(0);
+  expect([readout.textContent, control.element.classList.contains("set"), control.resetButton!.classList.contains("idle")]).toEqual(["0", false, true]);
+  // A pointer drag near the centre records exactly 0; a keyboard step stays exact.
+  fire(control.input, "pointerdown");
+  control.input.value = "2"; fire(control.input, "input");
+  expect(calls).toEqual(["begin", "edit 0"]);
+  fire(control.input, "pointerup"); fire(control.input, "change");
+  calls.length = 0;
+  control.input.value = "2"; fire(control.input, "input"); fire(control.input, "blur");
+  expect(calls).toEqual(["begin", "edit 2", "commit"]);
+  calls.length = 0;
+  // Enter types in the readout's place: "30 left" is -30, one step; Escape changes nothing; focus returns to the slider.
+  control.update(2);
+  key(control.input, "Enter");
+  expect([field.hidden, readout.hidden, field.value, document.activeElement === (field as unknown)]).toEqual([false, true, "2", true]);
+  field.value = "30 left"; key(field, "Enter");
+  expect([calls, field.hidden, document.activeElement === (control.input as unknown)]).toEqual([["begin", "edit -30", "commit"], true, true]);
+  calls.length = 0;
+  control.update(-30);
+  readout.click(); field.value = "90"; key(field, "Escape");
+  expect([calls, readout.textContent]).toEqual([[], "30 % left"]);
+  field.hidden = true;
+  readout.click(); field.value = "250"; key(field, "Enter");
+  expect(calls).toEqual(["begin", "edit 100", "commit"]);
+  calls.length = 0;
+  // Delete (and the reset) return to the centre as one step.
+  control.update(100);
+  key(control.input, "Delete");
+  expect(calls).toEqual(["begin", "edit 0", "commit"]);
+  calls.length = 0;
+  // Mixed: the readout says so, the value text keeps the net value, nothing is edited until the person moves it.
+  control.update(10, { mixed: true });
+  expect([readout.textContent, control.input.getAttribute("aria-valuetext"), control.element.classList.contains("mixed"), control.element.classList.contains("set"), calls])
+    .toEqual(["Mixed", "Mixed: 10 % right", true, true, []]);
+  control.resetButton!.click();
+  expect(calls).toEqual(["begin", "edit 0", "commit"]);
+  // Disabled: the range is disabled, the readout can't be edited and the reset stays out of sight.
+  control.update(40, { disabled: true, reason: "Your V's face isn't read yet." });
+  readout.click();
+  expect([control.input.disabled, control.input.title, field.hidden, control.resetButton!.classList.contains("idle")]).toEqual([true, "Your V's face isn't read yet.", true, true]);
+});
+
+test("icon button: a mode toggle carries its pressed state and the mode class; tree view: maxRows fits the frame to its visible items", async () => {
+  const { iconButton, TreeView } = await lib();
+  const mirror = iconButton({ label: "Mirror sides: Brows", icon: "mirror", mode: true, pressed: true });
+  expect([mirror.classList.contains("mode"), mirror.getAttribute("aria-pressed")]).toEqual([true, "true"]);
+  expect(iconButton({ label: "Hide Petal wash", icon: "eye", pressed: true }).classList.contains("mode")).toBe(false);
+  const expanded = new Set<string>();
+  const groups = [{ id: "a", label: "Saved", rows: [{ id: "a1", label: "Smirk" }, { id: "a2", label: "Calm" }] }, { id: "b", label: "Natural", rows: Array.from({ length: 12 }, (_, i) => ({ id: `b${i}`, label: `Sample ${i}` })) }];
+  const tree = new TreeView({ label: "Start from", maxRows: 6, minRows: 3, onActivate: () => {}, onToggle: () => {} });
+  const height = () => (tree.element as unknown as { style: { height?: string } }).style.height;
+  tree.update({ groups, expanded });
+  expect(height()).toBe(`${3 * 28 + 2}px`);
+  tree.update({ groups, expanded: new Set(["a"]) });
+  expect(height()).toBe(`${4 * 28 + 2}px`);
+  tree.update({ groups, expanded: new Set(["a", "b"]) });
+  expect(height()).toBe(`${6 * 28 + 2}px`);
+  const free = new TreeView({ label: "Owner sized", onActivate: () => {}, onToggle: () => {} });
+  free.update({ groups, expanded });
+  expect((free.element as unknown as { style: { height?: string } }).style.height).toBeUndefined();
+});
+
+test("choice list with swatches: the swatch card shows a choice's colour and name, its item has no tooltip, and the contrast marker follows `enhanced`", async () => {
+  const { ChoiceList, swatchCard, attachSwatchCard, choiceItem } = await lib();
+  const list = new ChoiceList({ label: "Colour", onSelect: () => {}, swatchCard: true, options: [{ value: "a", label: "Auburn", title: "From a pack", swatch: "#3e2117" }, { value: "b", label: "Plain" }] });
+  document.body.append(list.element);
+  const [auburn, plain] = list.list.querySelectorAll(".choice") as unknown as HTMLElement[];
+  expect(auburn!.getAttribute("title")).toBeNull();
+  (auburn as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  const card = swatchCard().element;
+  expect([card.hidden, (card.querySelector(".swatch-card-name") as unknown as HTMLElement).textContent]).toEqual([false, "Auburn"]);
+  // A choice without a swatch shows no card.
+  (plain as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  expect(card.hidden).toBe(true);
+  const mark = list.element.querySelector(".contrast-mark") as unknown as HTMLElement;
+  expect(mark.classList.contains("off")).toBe(true);
+  list.update("a", undefined, { enhanced: true });
+  expect(mark.classList.contains("off")).toBe(false);
+  // Any list of choice items: a swatch item takes no tooltip; attachSwatchCard asks the owner for the sample.
+  const host = document.createElement("div");
+  const item = choiceItem({ label: "Cold white", title: "Cold white · From a pack", swatch: true, content: Object.assign(document.createElement("span"), { className: "swatch" }) });
+  host.append(item); document.body.append(host);
+  expect(item.getAttribute("title")).toBeNull();
+  const detach = attachSwatchCard(host, () => ({ colours: ["#8d513e"], label: "Cold white", source: "From a pack", enhanced: true }));
+  (item as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  expect([card.hidden, (card.querySelector(".swatch-card-note") as unknown as HTMLElement).hidden]).toEqual([false, false]);
+  detach();
 });

@@ -157,10 +157,13 @@ function compile(type: string): Decoder {
       return out;
     };
   }
-  if ((match = /^static:\d+,(.+)$/.exec(type)) || (match = /^\[\d+\](.+)$/.exec(type))) {
-    const inner = decoderFor(match[1]!);
+  if ((match = /^static:(\d+),(.+)$/.exec(type)) || (match = /^\[(\d+)\](.+)$/.exec(type))) {
+    // A fixed array stores how many of its N elements are written; more than N is refused (NATIVE-65: a vertex layout's `static:32`
+    // elements took thousands from the file).
+    const size = Number(match[1]), inner = decoderFor(match[2]!);
     return (ctx, cursor, owner) => {
       const count = cursor.count(type);
+      if (count > size) throw new NativeMalformedError(`${type}: ${count} elements stored where it holds ${size}.`);
       ctx.session.nodes(count);
       const out: unknown[] = new Array(count);
       for (let i = 0; i < count; i++) out[i] = inner(ctx, cursor, owner);
