@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `9f71a56` | 2026-09-27 | Host responsiveness (scheduling, prefetch, prepared files, part pool, camera settle), expression editor (facial rig, solver host, part presets), deformation rig | 0 High, 5 Medium, 11 Low (PREV-120..126, CORE-99..107, UI-108). Manifest atomicity, prefetch gating, solver process safety (no shell, bounded stderr), part_presets migration and alpha.1 compatibility, face driver and part pool refcounting are sound |
 | `635b0d7` | 2026-09-27 | View graph P1+P2 (graph service, View and lighting history, module registry, parked layouts, derived tools, collapse, Panels flyout) | 0 High, 2 Medium, 8 Low (UI-102..106, CORE-94..98, plus three unnumbered Lows). Graph invariants, byte-stable workspace, history scope, factory layout round trip, derived tools, boundary rules 3–7 and collapse accessibility are sound. CORE-94 becomes High at P4. UI-102, UI-106, CORE-94..98 and the three Lows fixed in claude/cleanup-view-graph (see below); UI-103..105 in claude/fix-dock-collapse |
 | `024d960` | 2026-09-27 | Bridge batch 3 (cc.open, time in the creator, cc.apply value matching, game.options.read and the CET answer path, full-body preset, cc.page) | 0 High, 2 Medium, 7 Low (RB-42..50). Write gates, packaging split, the menu-event route, OptionsExchange bounds and the natives are sound. Rebuild the packages before staging (RB-50) |
 | `15941da`, `26d0dea` | 2026-09-27 | Native texture decoder (BCn, xbm, texture worker, export split) and the framework arm fix (substitution check, garment-data repair) | 0 High, 0 Medium, 9 Low (NATIVE-54..57, PIPE-107..109, plus two latent parts of PIPE-109). Header bounds, worker lifecycle, cache identity, colour flags, BC4 rounding, flips and the layering are sound |
@@ -73,6 +74,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| PREV-120 | Med | Host scheduling | Stopped prefetch batches keep running (the resolve isn't given the stop), new batches start without awaiting them, and stopped batches still double the batch size: repeated clicks pile up several background preparations (`choice-prefetch.ts:312-338`, `character-detail-host.ts:410-424`; reproduced) | Open |
+| PREV-125 | Med | Host scheduling | Prepared-files clean-up stats every file with unbounded `Promise.all` (N folders × 16 in flight) after each change and batch, flooding the I/O pool (`prepared-files.ts:59-91`) | Open |
+| CORE-99 | Med | Expressions | A synchronous `Bun.spawn` throw (Python missing) escapes `startSolver`: the panel says "Starting the facial solver…" forever and installed expressions read as unreadable (`facial-host.ts:272,288`; reproduced) | Open |
+| CORE-100 | Med | Expressions | Solves have no timeout and unparseable lines are skipped, so one lost answer blocks every later solve until restart (`facial-host.ts:93,111-118,378-384`) | Open |
+| CORE-102 | Med | Expressions | The facial cache (tens of MB per animation set, per archive identity) grows without bound, isn't covered by Clear prepared game files, and crash temp folders are never swept (`facial-host.ts:206,311,333`) | Open |
 | PREV-119 | Med | Preview render loop | After a small rotate or pan the camera stopped early and finished settling only when an unrelated frame came (the pointer over a panel): the on-demand loop stopped once the orbit controls' damped steps fell under their own 1 mm change threshold | **Fixed** (claude/perf-incremental, 27 Sep; see below) |
 | PREV-118 | High | Host / preview | Character changes took seconds (Reset all 27.8 s) with a Character row open: work prepared ahead blocked the host's event loop for up to 26.6 s (synchronous manifest checks, a `reg` launch every 3 s, an unbounded size walk), and the log timed only the preparation. The page's reuse (PREV-68) was not the cause | **Fixed** (claude/perf-incremental, 27 Sep; see below) |
 | PREV-114 | Med | Rendering | The orbit distance had a fixed clamp (0.1–5, `MIN/MAX_CAMERA_DISTANCE`): at 15° in a pane about 3:4 the wheel couldn't zoom out to V's whole body (it needs about 11), Whole body was silently clamped, and the close limit ignored where the head's surface was | **Fixed** (claude/camera-zoom, 27 Sep; see below) |
@@ -415,6 +421,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **CORE-97:** `isDefaultViewGraph` compares structure only and only surface/wire mirror into `preview`, so other main-view tool state is dropped on save (latent).
   - **CORE-98:** `validViewId` accepts `uv` and `surface`, which gestures reserve (reproduced).
   - Unnumbered: `resolveTool` special-cases `motion.idle` and view tool contributions can't name the action they dispatch (a new singleton assumption); `parseViewGraph` rejects the whole graph over one unknown kind (a newer build's views get erased); `cameraJump` records a Back step when the camera didn't move.
+
+- **PREV-121..124, PREV-126, CORE-101, CORE-103..107, UI-108** (review at `9f71a56`), Open:
+  - **PREV-121:** a rig at the bounds costs 287 ms per evaluation (reproduced). **PREV-122:** huge finite numbers produce NaN poses (reproduced). **PREV-123:** the compiler emits programs the parser refuses (reproduced). **PREV-124:** the parser doesn't enforce the ordering it claims (reproduced; host-only reach).
+  - **PREV-126:** the part pool counts parts and texels, not geometry or bone textures; eviction can dispose geometry a pending load shares.
+  - **CORE-101:** the solver restart budget never resets, and `state()` reports ready for an exited process. **CORE-103:** start-point cache keyed by a per-run fingerprint serves stale expressions after an in-place mod update. **CORE-104:** two pages supersede each other's solves. **CORE-105:** the tools-folder solver location can never pass the git-based pin check. **CORE-106:** two endpoints read the whole body before checking its size; JSON `null` answers `failed`. **CORE-107:** a masculine V gets a skeleton-mismatch message instead of "comes later".
+  - **UI-108:** the expression drawer's ad hoc controls (components now on claude/ui-components; `summary` contains a button).
 
 ## New subsystems since last review
 
