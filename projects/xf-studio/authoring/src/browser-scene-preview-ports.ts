@@ -13,7 +13,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
   setSurfaceControls(enabled: boolean): void;
 }): { savedAppearance: SavedAppearancePort; preview: PreviewPort; motion: MotionPort } {
   return {
-    savedAppearance: { apply: savedV => scene.applySavedV(savedV), clear: () => { scene.setFaceMorphs([]); },
+    savedAppearance: { apply: savedV => scene.applySavedV(savedV), clear: () => { scene.setFaceMorphs([]); scene.lighting.setBodySex(scene.body); },
       setBodySex: sex => scene.lighting.setBodySex(sex) },
     preview: {
       cameraState: scene.cameraState, front: scene.front, setFov: scene.setFov,

@@ -3,10 +3,11 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { extendSkin } from "../../skin";
 import type { SavedV } from "../../save-reader";
 import { IdleAnimation } from "../../idle-animation";
-import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "../../game-blink";
+import { activeEyeShape, GAME_BLINK_MISSING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../game-blink";
 import { composePreviewMotion } from "../../preview-motion";
 import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../eye-material";
 import type { LoadedCoreDetail } from "../../core-detail-loader";
+import type { CoreBody } from "../../render-detail";
 import { morphTargetNames } from "../../head-skin-placement";
 import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "../../face-morphs";
 
@@ -21,13 +22,20 @@ import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMo
 export type RigMotionAssets = { idle?: IdleAnimation; idleError: string; blink?: GameBlink; blinkError: string };
 /** The core eye as the motion loader may re-rig it (a rigid eye gets a gaze joint per side; the rig keeps the replacement). */
 export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Material; replace(next: THREE.SkinnedMesh): void };
-/** Loads the rig's motion onto the scene's bones. The default reads the game idle and blink assets; probes inject their own. */
-export type MotionLoader = (scene: THREE.Scene, eye: CoreEye) => Promise<RigMotionAssets>;
+/**
+ * Loads the rig's motion onto the scene's bones for a core head's body. The default reads the game idle and blink assets; probes inject
+ * their own.
+ */
+export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody) => Promise<RigMotionAssets>;
 
-/** The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. */
-export const loadGameMotion: MotionLoader = async (scene, eye) => {
+/**
+ * The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. The prepared idle is the feminine
+ * V's, so a masculine head holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
+ */
+export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") => {
   let idle: IdleAnimation | undefined, idleError = "";
   try {
+    if (body !== "female") throw Error(IDLE_MASCULINE);
     const [motion, facial, binding] = await Promise.all([
       new GLTFLoader().loadAsync("/assets/cc-idle-body.glb"),
       new GLTFLoader().loadAsync("/assets/cc-idle-face.glb"),
@@ -146,7 +154,7 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
   const motion = await (options.loadMotion ?? loadGameMotion)(scene, { get mesh() { return eyes; }, material: eyeMat,
-    replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; } });
+    replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; } }, core.body);
   const { idle, blink } = motion;
   const finalEyes = eyes;
   // One owner of the rig's bones at a time: the idle while enabled, otherwise the blink (preview-motion.ts).
@@ -221,10 +229,6 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
       eyeSource: core.record.geometry.morphs?.find(entry => entry.node === core.record.geometry.nodes.eyes)?.depotPath ?? null };
   }
   function applySavedV(v: SavedV) {
-    if (v.isMale)
-      throw Error(
-        "This study currently contains a female head. Male head assets are still needed.",
-      );
     // The third-person head consumes `TPP`; `character_customization` (the creator puppet) can list fewer
     // morph regions (a new-game save stores only eyes and nose there, all five in TPP) [resource].
     const group =
@@ -232,6 +236,9 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
       v.groups.head.find((g) => g.name === "character_customization");
     if (!group)
       throw Error("No supported facial morph group found.");
+    // A V of the other body is drawn on that body's own core head: the head attachment loads it (browser-head-attachment.ts),
+    // so this head applies nothing of it.
+    if (v.isMale !== (core.body === "male")) return { applied: [], appearanceReferences: group.appearances.length };
     // A V whose every face region is the base shape stores no morphs; that is the base head.
     const names = group.morphs.map((m) => `${m.target}_${m.region}`);
     // The head and its surfaces must carry every saved target (the surfaces are head cuts with all of the head's targets).

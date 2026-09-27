@@ -1,7 +1,7 @@
 import type { ViewId } from "./platform/api/view-graph";
 import type { PreviewState } from "./workspace-state";
 import { refusal, type Capability } from "./platform/api";
-import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING } from "./game-blink-messages";
+import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
 import { pageFailure } from "./diagnostics/page-sink";
 
 /**
@@ -9,6 +9,7 @@ import { pageFailure } from "./diagnostics/page-sink";
  * problem report can show it; a person never sees it.
  */
 export const IDLE_UNAVAILABLE = "The character creator's idle couldn't be prepared from your game files, so your V holds still. Everything else works.";
+export { IDLE_MASCULINE };
 
 export type MotionState = Pick<PreviewState,
   "idle" | "idleTime" | "idlePaused" | "idleBody" | "idleFace" | "blink" | "blinkPlaying"> &
@@ -40,10 +41,11 @@ export class MotionActions {
   private listeners = new Set<() => void>();
   constructor(private initial: PreviewState, private port: MotionPort) {
     this.blink = initial.blink; this.blinkPlaying = initial.blinkPlaying;
-    if (!port.available && port.error) pageFailure("preview", "idle_unavailable", IDLE_UNAVAILABLE, Error(port.error), { level: "warn" });
+    if (!port.available && port.error && port.error !== IDLE_MASCULINE)
+      pageFailure("preview", "idle_unavailable", IDLE_UNAVAILABLE, Error(port.error), { level: "warn" });
   }
   /** The plain reason the idle is off, or undefined while it is available. */
-  private idleError() { return this.port.available ? undefined : IDLE_UNAVAILABLE; }
+  private idleError() { return this.port.available ? undefined : this.port.error === IDLE_MASCULINE ? IDLE_MASCULINE : IDLE_UNAVAILABLE; }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private notify() { for (const listener of this.listeners) listener(); }
   snapshot(): Readonly<MotionState> {
@@ -65,7 +67,7 @@ export class MotionActions {
       return refusal("invalid_value", "Eyelid closure must be between 0 and 1.");
     if ((action.kind === "motion.setIdle" && action.enabled || action.kind === "motion.setPaused" ||
       action.kind === "motion.setContributions") && !this.port.available)
-      return refusal("asset_unavailable", IDLE_UNAVAILABLE);
+      return refusal("asset_unavailable", this.idleError()!);
     if (action.kind === "motion.setPaused" && !this.snapshot().idle)
       return refusal("invalid_value", "Enable the game idle before pausing it.");
     const blinking = action.kind === "motion.setBlink" || action.kind === "motion.playBlink";

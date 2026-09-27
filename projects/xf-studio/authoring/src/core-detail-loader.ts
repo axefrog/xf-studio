@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { HeadLoadError } from "./head-load-error";
 import { restoreFirstWeights } from "./skin";
-import { CORE_DETAIL_URL, CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, parseCoreDetail, type CoreDetail,
+import { CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, coreAssetName, coreDetailUrl, parseCoreDetail, type CoreBody, type CoreDetail,
   type CoreTextureSlot, type RenderResource } from "./render-detail";
 
 /**
@@ -14,6 +14,8 @@ import { CORE_DETAIL_URL, CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, parseCoreDeta
  */
 export type LoadedCoreDetail = {
   record: CoreDetail;
+  /** Whose head this is: the feminine or the masculine V's core (each prepared from the player's game files). */
+  body: CoreBody;
   gltf: GLTF;
   meshes: THREE.Mesh[];
   head: THREE.SkinnedMesh;
@@ -32,10 +34,10 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The host's record for the derived preview; there is no other source of the core head. */
-export async function readCoreDetail(fetcher: CoreDetailFetch = fetch): Promise<CoreDetail> {
+/** The host's record for a body's derived preview; there is no other source of the core head. */
+export async function readCoreDetail(fetcher: CoreDetailFetch = fetch, body: CoreBody = "female"): Promise<CoreDetail> {
   let response: Response;
-  try { response = await fetcher(CORE_DETAIL_URL); }
+  try { response = await fetcher(coreDetailUrl(body)); }
   catch (error) { throw new HeadLoadError("preview_unreachable", "The 3D preview record could not be read.", { cause: error }); }
   if (response.status === 404) throw new HeadLoadError("preview_unreachable", "The 3D preview hasn't been prepared from your game files yet.");
   if (!response.ok) throw new HeadLoadError("preview_unreachable", "The 3D preview record could not be read.");
@@ -43,9 +45,9 @@ export async function readCoreDetail(fetcher: CoreDetailFetch = fetch): Promise<
   catch (error) { throw new HeadLoadError("preview_damaged", "The 3D preview record is damaged.", { cause: error }); }
 }
 
-async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch): Promise<ArrayBuffer> {
+async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch, body: CoreBody): Promise<ArrayBuffer> {
   let response: Response;
-  try { response = await fetcher(`/assets/${resource.file}`); }
+  try { response = await fetcher(`/assets/${coreAssetName(body, resource.file)}`); }
   catch (error) { throw new HeadLoadError("preview_unreachable", `${resource.file} could not be fetched.`, { cause: error }); }
   if (!response.ok) throw new HeadLoadError("preview_unreachable", `${resource.file} is unavailable.`);
   const bytes = await response.arrayBuffer();
@@ -53,12 +55,12 @@ async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch)
   return bytes;
 }
 
-export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: CoreDetailFetch = fetch): Promise<LoadedCoreDetail> {
-  const record = await readCoreDetail(fetcher);
+export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: CoreDetailFetch = fetch, body: CoreBody = "female"): Promise<LoadedCoreDetail> {
+  const record = await readCoreDetail(fetcher, body);
   const textures: Partial<Record<CoreTextureSlot, THREE.Texture>> = {};
   let gltf: GLTF | undefined;
   try {
-    const data = await resourceBytes(record.geometry, fetcher);
+    const data = await resourceBytes(record.geometry, fetcher, body);
     const weights = restoreFirstWeights(data);
     gltf = await new GLTFLoader().parseAsync(data, "/assets/");
     const meshes: THREE.Mesh[] = [];
@@ -80,7 +82,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
     }
     const loader = new THREE.TextureLoader();
     await Promise.all(CORE_TEXTURE_SLOTS.map(async slot => {
-      const bytes = await resourceBytes(record.textures[slot], fetcher);
+      const bytes = await resourceBytes(record.textures[slot], fetcher, body);
       const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
       try {
         const texture = await loader.loadAsync(url);
@@ -91,7 +93,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
         textures[slot] = texture;
       } finally { URL.revokeObjectURL(url); }
     }));
-    return { record, gltf, meshes, head, surfaces: surfaces as Map<string, THREE.SkinnedMesh>, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
+    return { record, body, gltf, meshes, head, surfaces: surfaces as Map<string, THREE.SkinnedMesh>, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
   } catch (error) {
     for (const texture of Object.values(textures)) texture?.dispose();
     gltf?.scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });

@@ -21,7 +21,7 @@ import type { LocalSettings } from "./src/local-settings";
 import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview-core-host";
 import { createPreviewCoreHandler } from "./src/preview-core-server";
-import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
+import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
 import { CharacterDetailHost } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
@@ -122,7 +122,8 @@ const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   testHook: process.env.XFS_DIAGNOSTICS_TEST_HOOK === "1",
 });
-const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
+// Both bodies' core files (the masculine core under `pma/`), named with forward slashes on every OS.
+const coreFiles = new Set<string>(PREVIEW_CORE_ASSET_NAMES);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 /** Retired piercing intake payloads (vanilla and PRC manifests and their files), never served. */
@@ -186,9 +187,9 @@ const server = Bun.serve({
     // The retired piercing intakes' payloads may still sit in an old checkout's ignored public/assets; piercings come only from the
     // resolver now, so nothing serves them (UI-50).
     if (assetName !== null && RETIRED_ASSET_DIRS.test(assetName)) return new Response("Not found", { status: 404 });
-    if (!research && assetName !== null && coreFiles.has(assetName)) {
+    if (!research && assetName !== null && coreFiles.has(assetName.replaceAll(sep, "/"))) {
       // The core preview has one source: the derivation from the player's own game files.
-      const derived = previewCore.assetPath(assetName);
+      const derived = previewCore.assetPath(assetName.replaceAll(sep, "/"));
       if (!derived) return new Response("Not found", { status: 404 });
       file = Bun.file(derived);
     }

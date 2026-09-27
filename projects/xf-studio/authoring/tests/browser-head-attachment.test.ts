@@ -13,10 +13,11 @@ type Listener = () => void;
 const noop = () => {};
 
 /** A loaded scene: a canvas in the head host, a camera-controls event target, and a dispose that removes the canvas. */
-function fakeScene(host: { canvases: number }, log: string[]) {
+function fakeScene(host: { canvases: number }, log: string[], body: "female" | "male" = "female") {
   host.canvases++;
   const controls = new Set<Listener>();
   const known: Record<string, unknown> = {
+    body,
     evidence: { idle: { available: false, error: "No idle in this test." } },
     hair: [], details: {}, piercingStyles: [], idle: undefined,
     eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" }] }),
@@ -39,15 +40,17 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
   const log: string[] = [];
   const host = { canvases: 0, clientWidth: 600, clientHeight: 400, contains: () => false };
   const scenes: ReturnType<typeof fakeScene>[] = [];
+  const bodies: string[] = [];
   let loads = 0, presents = 0, persisted = 0;
   const viewport = createBrowserViewportDevice({ region: EYE_REGION,
     headHost: host as unknown as HTMLElement, uvHost: { clientWidth: 1, clientHeight: 1, contains: () => false } as unknown as HTMLElement,
     queryContext: () => { throw Error("No hit expected"); },
-    sceneFactory: (async () => {
+    sceneFactory: (async (_host: unknown, options: { body?: "female" | "male" }) => {
       loads++;
+      bodies.push(options.body ?? "female");
       // A failed load releases what it made itself (createScene does), so it leaves no canvas.
       if (plan.failLoad?.includes(loads)) throw Error("The head could not be read.");
-      const made = fakeScene(host, log);
+      const made = fakeScene(host, log, options.body);
       scenes.push(made);
       return made.scene;
     }) as unknown as typeof createSceneHost,
@@ -77,7 +80,7 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
     creator: { panel: () => new Promise(() => {}), page: () => new Promise(() => {}), view: () => new Promise(() => {}), preset: () => new Promise(() => {}),
       wait: async () => {} },
   };
-  return { log, host, scenes, viewport, ports, attached, preferenceListeners, schemeListeners,
+  return { log, host, scenes, viewport, ports, attached, preferenceListeners, schemeListeners, bodies,
     get connected() { return connected; }, surfaces, get persisted() { return persisted; }, get loads() { return loads; } };
 }
 
@@ -179,4 +182,48 @@ test("every composed layered surface gets its preview connected and presented, t
     .rejects.toThrow("Only one layered surface can carry the on-head editor.");
   expect(h.host.canvases).toBe(0);
   expect(h.viewport.scene()).toBeUndefined();
+});
+
+test("the head is the shown V's body's core: a masculine V's is prepared first, and a V that changes body loads the head again with its history", async () => {
+  const h = harness({});
+  const prepared: string[] = [], reloads: unknown[] = [], notices: string[] = [];
+  h.ports.workspace.preview.character = { origin: "default", bodyGender: "male", choices: [] };
+  Object.assign(h.ports, { prepareCore: async (body: string) => { prepared.push(body); }, reload: (history: unknown) => reloads.push(history),
+    notice: (text: string) => notices.push(text) });
+  const head = await attachBrowserHead(h.ports);
+  expect(prepared).toEqual(["male"]);
+  expect(h.bodies).toEqual(["male"]);
+  expect(head.characterContext.shownBody()).toBe("male");
+  // The feminine default V: the head asks to load again (after the change finished), carrying the panel's Undo history.
+  head.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "female" });
+  expect(reloads).toEqual([]);
+  await new Promise(done => setTimeout(done, 5));
+  expect(reloads).toEqual([expect.objectContaining({ kind: "xfs/character-history" })]);
+  // A head released before its reload ran asks nothing.
+  head.characterContext.dispatch({ kind: "character.undo" });
+  head.dispose();
+  await new Promise(done => setTimeout(done, 5));
+  expect(reloads.length).toBe(1);
+  expect(notices).toEqual([]);
+
+  // The masculine head can't be prepared: the feminine head shows with a plain notice, and no reload loop follows.
+  const failing = harness({});
+  const told: string[] = [], again: unknown[] = [];
+  failing.ports.workspace.preview.character = { origin: "default", bodyGender: "male", choices: [] };
+  Object.assign(failing.ports, { prepareCore: async () => { throw Error("A newer game patch."); }, reload: (history: unknown) => again.push(history),
+    notice: (text: string) => told.push(text) });
+  const fallback = await attachBrowserHead(failing.ports);
+  expect(failing.bodies).toEqual(["female"]);
+  expect(fallback.characterContext.shownBody()).toBe("male");
+  expect(told).toEqual(["The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. A newer game patch."]);
+  await new Promise(done => setTimeout(done, 5));
+  expect(again).toEqual([]);
+  // Showing the feminine V needs no new head; the masculine one again tries his head.
+  fallback.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "female" });
+  await new Promise(done => setTimeout(done, 5));
+  expect(again).toEqual([]);
+  fallback.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+  await new Promise(done => setTimeout(done, 5));
+  expect(again.length).toBe(1);
+  fallback.dispose();
 });

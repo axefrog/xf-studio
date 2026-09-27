@@ -105,7 +105,7 @@ describe("the creator rows' coverage (cc-render-coverage.ts)", () => {
       option("cover", "underpants", nudity("activate")), option("nipples_02", "nipples", nudity("deactivate")),
       option("wound", "scars", { flag: "Censor_Gore", action: "deactivate" }),
       option("nipples", "nipples", undefined, { type: "switcher", hasResource: false, targets: ["nipples_02"], uiSlots: ["nipples"] })];
-    const coverage = renderCoverage(options, "female");
+    const coverage = renderCoverage(options);
     expect(["skin", "skin_censored", "cover", "nipples_02", "wound", "nipples"].map(id => coverage.get(id)!.status))
       .toEqual(["rendered", "not-rendered", "rendered", "uncensored", "not-rendered", "uncensored"]);
     expect(coverage.get("nipples_02")!.note).toBe(UNDER_COVER);

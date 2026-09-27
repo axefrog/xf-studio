@@ -82,6 +82,17 @@ export const CHOICE_NAME_MAX = 127;
 /** A plain label the host words for the presentation: 1 to 127 characters, no control characters. */
 export const isChoiceLabel = (value: unknown): value is string => typeof value === "string" && /^[^\u0000-\u001f\u007f]{1,127}$/.test(value);
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
+/** The player body a core head belongs to: the creator's body gender (never the voice). */
+export type CoreBody = "female" | "male";
+export const CORE_BODIES: readonly CoreBody[] = ["female", "male"];
+/**
+ * Where a body's core files are served under `/assets/`: the feminine core at the top (unchanged since it was the only one),
+ * the masculine core under `pma/` (the game's own abbreviation for the male player head).
+ */
+export const CORE_ASSET_PREFIX: Readonly<Record<CoreBody, string>> = Object.freeze({ female: "", male: "pma/" });
+export const coreAssetName = (body: CoreBody, file: string) => `${CORE_ASSET_PREFIX[body]}${file}`;
+/** The URL of a body's core record (`CORE_DETAIL_URL` for the feminine core). */
+export const coreDetailUrl = (body: CoreBody) => `/assets/${coreAssetName(body, "preview-core.json")}`;
 /** Where character records and their files are served; file names are content-addressed. */
 export const CHARACTER_DETAIL_ASSETS = "/assets/character/";
 

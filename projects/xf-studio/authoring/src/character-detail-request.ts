@@ -161,9 +161,9 @@ export function parseCharacterRequest(value: unknown): CharacterRequest {
   return { schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: doc.bodyGender as BodyGender, appearances, morphs, ...choices };
 }
 
-/** The creator's default V, or a loaded save's V (its descriptors of every part), with no choices on top. */
+/** The creator's default (feminine) V, or a loaded save's V of either body (its descriptors of every part), with no choices on top. */
 export function characterRequestFor(v: SavedV | undefined): CharacterRequest {
-  return v && !v.isMale ? characterRequestFromSave(v) : DEFAULT_CHARACTER;
+  return v ? characterRequestFromSave(v) : DEFAULT_CHARACTER;
 }
 
 /** The same V, whatever choices, clothing, body switch and nudity setting are set on it (a change of any keeps the V's other details on screen). */
