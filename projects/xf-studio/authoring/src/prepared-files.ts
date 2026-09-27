@@ -22,21 +22,28 @@ export type PreparedRoots = { exports: string; resolver: string; store: string; 
 export const PREPARED_BUDGET_BYTES = 8 * 1024 ** 3;
 export type PreparedSize = { bytes: number; exports: number; resolver: number; store: number; manifests: number };
 
+/**
+ * How many file-system calls a size count keeps in flight: the count walks every prepared file (tens of thousands), and asking for all
+ * of them at once filled the runtime's I/O threads, so a person's request (reading a record, checking the mod setup) waited behind it.
+ */
+const SIZE_CONCURRENCY = 16;
 async function folderBytes(root: string, skip: (name: string) => boolean = () => false): Promise<number> {
   let total = 0;
-  const walk = async (folder: string): Promise<void> => {
-    let entries;
-    try { entries = await readdir(folder, { withFileTypes: true }); } catch { return; }
-    await Promise.all(entries.map(async entry => {
-      if (skip(entry.name)) return;
-      const path = join(folder, entry.name);
-      if (entry.isSymbolicLink()) return;
-      if (entry.isDirectory()) return walk(path);
-      // Read first, then add: `total += await …` would add to the total as it was before the await.
-      try { const bytes = (await lstat(path)).size; total += bytes; } catch { /* Gone meanwhile. */ }
-    }));
-  };
-  await walk(root);
+  const folders = [root];
+  while (folders.length) {
+    const batch = folders.splice(0, SIZE_CONCURRENCY);
+    const listed = await Promise.all(batch.map(folder => readdir(folder, { withFileTypes: true }).then(entries => ({ folder, entries }), () => null)));
+    const files: string[] = [];
+    for (const item of listed) for (const entry of item?.entries ?? []) {
+      if (skip(entry.name) || entry.isSymbolicLink()) continue;
+      const path = join(item!.folder, entry.name);
+      if (entry.isDirectory()) folders.push(path); else files.push(path);
+    }
+    for (let i = 0; i < files.length; i += SIZE_CONCURRENCY) {
+      const sizes = await Promise.all(files.slice(i, i + SIZE_CONCURRENCY).map(path => lstat(path).then(info => info.size, () => 0 /* Gone meanwhile. */)));
+      for (const bytes of sizes) total += bytes;
+    }
+  }
   return total;
 }
 const exportsSkip = (name: string) => name.startsWith(".work-") || name.endsWith(".tmp");

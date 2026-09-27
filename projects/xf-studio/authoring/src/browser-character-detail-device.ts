@@ -4,15 +4,17 @@ import { parseCharacterRequest } from "./character-detail-request";
 import { DetailVersionSkewError, type DetailLimit, type SlotLimits } from "./detail-limits";
 import { CHARACTER_DETAIL_SCHEMA, RenderDetailVersionError, type DetailSlot } from "./render-detail";
 import type { SceneHost } from "./platform/scene/scene-host";
+import { markCharacter } from "./character-timing";
 
 /** The scene host's character side: its detail loader and the swap into the scene (feature-module platform §5). */
-type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<SceneHost, "onBakeLimits">>;
+type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<SceneHost, "onBakeLimits" | "releaseKeptParts">>;
 
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)
  * and the renderer side (load a record, then swap it into the scene in one step). A load that is
- * cancelled or superseded is disposed and never reaches the scene. Each load reuses the parts of the shown
- * details whose content is unchanged (PREV-68), so a tried piercing style loads only the piercings.
+ * cancelled or superseded never reaches the scene; the parts it built are kept for later. Each load reuses the parts of the shown
+ * details whose content is unchanged (PREV-68), so a tried piercing style loads only the piercings, and takes parts shown before (or
+ * built by a superseded load) from the renderer's part pool, so undo, a style tried again or makeup shown again loads nothing.
  *
  * A host of another version (the app was updated while it ran, so the page and the host were built apart) is reported as
  * `DetailVersionSkewError`, never as a silent failure: a state that names another record schema (or none: an older host), a request
@@ -44,6 +46,11 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
   const page = pageName();
   /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
   let shown: LoadedCharacterDetails | null = null;
+  /**
+   * The load in progress. A newer one starts once it has settled: a superseded load stops at its next part, and the part it was building
+   * is finished and kept (the renderer's part pool), so the newer load takes it instead of loading it again.
+   */
+  let loading: Promise<unknown> = Promise.resolve();
   /** The slots the last `show` answered with (their limits follow the scene's, plus the host's own codes, `hostLimits`). */
   let shownSlots: readonly { slot: DetailSlot; state: string; hostLimits: readonly DetailLimit[] }[] = [];
   const limitListeners = new Set<(update: SlotLimits) => void>();
@@ -81,10 +88,18 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         if (error instanceof RenderDetailVersionError) throw new DetailVersionSkewError(`the record is ${error.direction} than this page reads.`);
         throw error;
       }
+      markCharacter("record", { components: record.components.length });
       // Through the host's detail loader: each chunk through the adapter for its template, with the host's anisotropy and skin placement.
-      const loaded = await scene.details.load(record, { fetcher, signal, reuse: shown });
+      await loading;
+      if (signal.aborted) throw new DOMException("Superseded.", "AbortError");
+      const load = scene.details.load(record, { fetcher, signal, reuse: shown });
+      loading = load.catch(() => {});
+      const loaded = await load;
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
+      markCharacter("loaded", { reused: loaded.reused, components: loaded.components?.length ?? 0 });
       const placed = scene.setCharacterDetails(loaded);
+      markCharacter("placed");
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(() => markCharacter("frame")));
       shown = loaded;
       shownSlots = record.slots.map(slot => ({ slot: slot.slot, state: loaded.problems.some(item => item.slot === slot.slot) ? "unavailable" : slot.state,
         hostLimits: slot.limits ?? [] }));
@@ -101,7 +116,8 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         return codes.length ? { ...rest, limits: codes } : rest;
       }) };
     },
-    clear() { scene.setCharacterDetails(null); shown = null; shownSlots = []; },
+    // Another V: the previous one leaves the scene and GPU memory whole, kept parts included.
+    clear() { scene.setCharacterDetails(null); scene.releaseKeptParts?.(); shown = null; shownSlots = []; },
     onLimits(listener) { limitListeners.add(listener); return () => { limitListeners.delete(listener); }; },
     wait: (ms, signal) => new Promise(resolve => {
       const timer = setTimeout(resolve, ms);

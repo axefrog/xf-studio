@@ -30,7 +30,9 @@ export type SceneHostProbe = {
   features: string[];
   frames: { settled: boolean; idleWindow: number; oneRequest: number; burst: number; layerChange: number; idlePlaying: number; idlePaused: number;
     idleOff: number; beforeDrawPerFrame: boolean; cheekFrames: number };
-  memory: { empty: Memory; a: Memory; b: Memory; aAgain: Memory; none: Memory; layers: Memory; layersCleared: Memory };
+  memory: { empty: Memory; a: Memory; b: Memory; aAgain: Memory; none: Memory; layers: Memory; layersCleared: Memory;
+    /** B shown with A's parts kept for later, then with them released. */
+    bKeepingA: Memory; bReleased: Memory };
   limits: { a: unknown; b: unknown };
   character: { a: unknown; b: unknown; none: unknown };
   skin: { mode: unknown; plateSkinLight: unknown; drawn: unknown; defaultAfter: unknown };
@@ -270,7 +272,9 @@ try {
   const recordA = await withSkin(await record("a", "#336699", "#aa2222"), "a", "#c09080"),
     recordB = await withSkin(await record("b", "#669933", "#2222aa"), "b", "#a07060");
   let shown: Awaited<ReturnType<typeof host.details.load>> | null = null;
-  const show = async (next: CharacterDetail | null) => {
+  // Another V releases what the previous one kept, as the page's device does (browser-character-detail-device.ts `clear`).
+  const show = async (next: CharacterDetail | null, release = true) => {
+    if (release) { host.setCharacterDetails(null); host.releaseKeptParts(); shown = null; }
     const loaded = next ? await host.details.load(next, { fetcher, reuse: shown }) : null;
     const placed = host.setCharacterDetails(loaded);
     shown = loaded;
@@ -293,6 +297,11 @@ try {
   probe.memory.b = memory();
   await show(recordA);
   probe.memory.aAgain = memory();
+  // A change on one V keeps what it removed for later (the part pool); releasing it returns to what the shown V costs.
+  await show(recordB, false);
+  probe.memory.bKeepingA = memory();
+  host.releaseKeptParts(); host.requestRender(); await settle();
+  probe.memory.bReleased = memory();
   await show(null);
   probe.character.none = { drawn: host.characterDetailsEvidence().components.map(item => item.slot) };
   probe.skin.defaultAfter = (host.characterDetailsEvidence() as unknown as { skin: { mode: string } }).skin.mode;

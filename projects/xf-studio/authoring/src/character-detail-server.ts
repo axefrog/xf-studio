@@ -31,6 +31,7 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
       return json({ code: "forbidden", error: "Use the local studio to prepare the preview." }, 403);
     if (request.method === "GET") {
       const key = url.searchParams.get("key") ?? "";
+      host.noteAsk();
       if (!/^[a-f0-9]{32}$/.test(key)) return json({ code: "invalid", error: "Unknown request." }, 400);
       return json(host.state(key));
     }
@@ -55,6 +56,8 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
 
 /** A content-addressed record or file for `/assets/character/<name>`, or a 404. */
 export async function serveCharacterAsset(host: CharacterDetailHost, pathname: string, method: string): Promise<Response> {
+  // The page is reading its V's files: work prepared ahead waits until it is done.
+  host.noteAsk();
   let name: string;
   try { name = decodeURIComponent(pathname.slice(CHARACTER_ASSET_PREFIX.length)); } catch { return new Response("Bad path", { status: 400 }); }
   const path = host.filePath(name);

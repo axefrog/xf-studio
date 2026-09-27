@@ -23,13 +23,18 @@
 - Priorities: the active selection, then what's under the pointer, then the current row, then the current feature set, then everything else.
 - A job that has passed a progress threshold is not cancelled when priorities change. It finishes at low priority and its result is cached for next time.
 - The person's own actions always come first.
+- Implementation on the host (27 September 2026): background loops take a turn between units of work (`src/event-loop.ts` `timeSlicer`: a macrotask once 8 ms are used, so waiting requests are answered); checking which choices are ready runs one manifest entry at a time; while a person's change is asked for, prepared or its files are read, background work waits until the page has been quiet for 400 ms (`QUIET_MS`), and a batch in progress is stopped at once, even when the change's answer was already ready (`ChoicePrefetcher.pause`). Selection and hover order the queue; a feature-set tier is not built (one row is prepared ahead at a time).
+
+## Measuring click → pixels
+
+`tools/measure-character-page.ts` drives a headless GPU Chrome against an isolated server (its own port, `XFAS_DATA_DIR` and `XFS_SETTINGS_DIR`; never 4317) and reads the page's `xfs:character:*` marks (`src/character-timing.ts`): ask, answer, record, loaded, placed, first frame. It runs hairstyle, colour, makeup on, hide makeup, Reset all and a burst of three hairstyles, optionally on a save copy's V and with a row prepared ahead (`XFS_MEASURE_PREFETCH`), and can profile one change (`XFS_MEASURE_PROFILE`). Pair it with a `/health` probe loop to see whether the host answers while it works.
 
 ## Budgets (initial targets)
 
 | Moment | Target |
 |---|---|
 | Click on a choice → selection shown | immediate (same frame) |
-| Click on a prepared choice → V updated | < 100 ms |
+| Click on a prepared choice → V updated | < 100 ms (met for parts shown before on the page: 73–111 ms on the reference save V, with or without a row prepared ahead; a part new to the page adds its first frame, above) |
 | Click on an unprepared choice → V updated | < 1 s typical, progress shown at once |
 | Page shown → interactive | < 1 s |
 | Restart, warm caches → own V complete | < 2 s |
@@ -44,7 +49,9 @@
 | Texture decodes on a cold V | 11–16 s for 66 textures | already native; parallel workers or GPU transcoding if it becomes the longest stage |
 | Warm restart | ~5–6 s (open 1.7 s, resolve 1–2 s) | persist the resolved graph and mount plan across restarts; start preparing the V before the page asks |
 | Choice clicks | host answers in 0.1–0.2 s, but the selection lagged seconds | optimistic selection and pre-emption (fix in progress); prefetch likely next choices |
-| Page rebuilds the whole V on every change | the host prepares a change in 0.2–0.3 s with every part reused, yet the page takes seconds (e.g. "Hide my V's makeup") | **incremental scene update**: keep loaded parts (meshes, textures, GPU resources) keyed by content identity; on a new record load only the changed parts and release only the removed ones; measure click → pixels |
+| Character changes took seconds (hide makeup "many seconds", Reset all 30 s+) while the host log said 0.2–0.3 s | Not the page: it already reused unchanged parts (PREV-68). The host's event loop was blocked for up to 26.6 s at a time by work prepared ahead for an open Character row, and the log timed only the preparation, not the wait. Reference save V, row open: most changes took several seconds, up to 27.8 s; after, 0.08–0.11 s once prepared and 0.1–1.1 s the first time (PREV-118; [mod loading §6](../../knowledge/mod-loading.md#6-implementation-and-reproduction)) | **Done** (27 September 2026): background work yields the event loop and steps aside for a person's request; parts kept for reuse on the page; faster answer polling |
+| A part never shown on this page costs its first frame | 150–220 ms on a new hairstyle: texture upload about 125 ms, program link about 60 ms | upload a new part's textures a few per frame before swapping it in, and compile its programs with the render target the scene draws into; smaller preview mips or GPU-compressed textures |
+| Each change asked for checks the mod setup | about 55–90 ms of a prepared change's 75–110 ms (9,334 watched paths on the reference route) | let a clean check vouch for the requests of the next moment, or answer from the known state while checking |
 | Hair and other parts dropped after a failed export | the part never shows | never let one refused input drop a whole archive (PIPE-108) |
 
 ## Related
