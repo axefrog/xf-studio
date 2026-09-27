@@ -3,22 +3,25 @@
  * planned and built on, read from the player's own game files the way the game resolves them.
  *
  * - **The table** photo mode reads on the launch route, skipping XF Studio's own expression tables (an earlier Build's overlay must never be
- *   carried into the next), and the game's own (the first provider outside the mod folder), each as rows with its provider and SHA-256.
+ *   carried into the next), and the game's own (the first provider in the base archives, `content` or `ep1`), each as rows with its provider and SHA-256.
  * - **Every provider** of the table path in load order and whether a visible `modlist.txt` orders them, so Check can say which list wins.
  * - **Each gender's face**: the vanilla photo-mode face set (whose neutral face gives the joint keys every static face shares) and the rig it
  *   names (its track names), with the facial setup's main-pose block.
  * - **V's photo-mode face rig** as the game ships it, whose document shape the patch follows.
  *
- * Everything is game-derived and stays in the host's private cache; nothing is committed or shipped but the built mod.
+ * Everything is game-derived and stays in the host's private cache; nothing is committed or shipped but the built mod. A prepared file belongs
+ * to one installation (`expressionsGameFingerprint`: the route, its mod folders' stamps, the registry's generation and the reader's version);
+ * Check plans on it only while that installation is current, and otherwise reads afresh in the background (the Check is provisional meanwhile).
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { refFromPath, type DepotRef } from "./depot-path";
 import { writeFileAtomic } from "./derived-cache";
 import { extractFacialJson, type FacialExtractor } from "./facial-host";
 import { EXPRESSION_TABLE, FACE_SETUP, PHOTO_MODE_FACE_RIG } from "./facial-catalogue";
 import { installations } from "./installation-registry";
+import { routeIdentity, routeStamps } from "./route-fingerprint";
 import type { MountedArchive } from "./archive-precedence";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { HostPrerequisite, PreparedPrerequisite } from "./platform/export/product-host";
@@ -35,7 +38,7 @@ type GameTable = { rows: string[][]; archive: string; provider: string; sha256: 
 export type GameRig = { rig: string; tracks: string[]; main: { start: number; count: number }; joints: number; constAnimKeys: number; jointBlockSha256: string };
 export type GameInputs = { schema: typeof EXPRESSIONS_GAME_1; table: GameTable; base: GameTable;
   providers: { name: string; group: string; provider: string }[]; modOrder: "modlist" | "alphabetical"; rigs: Record<Gender, GameRig> };
-type GameFile = { plan: GameInputs; sets: Record<Gender, unknown>; faceRig: unknown; table: unknown };
+type GameFile = { fingerprint?: string; plan: GameInputs; sets: Record<Gender, unknown>; faceRig: unknown; table: unknown };
 
 export type ExpressionsGameOptions = {
   readonly route: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">;
@@ -46,6 +49,8 @@ export type ExpressionsGameOptions = {
   /** Test seams. */
   readonly extract?: FacialExtractor;
   readonly acquire?: (options: InstallationOptions) => Promise<Installation>;
+  /** The installation fingerprint (default `expressionsGameFingerprint`). */
+  readonly fingerprint?: () => string;
 };
 
 const coded = (code: string, message: string) => Object.assign(Error(message), { code });
@@ -54,6 +59,8 @@ const backslashed = (path: string) => path.replaceAll("/", "\\");
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 /** An XF Studio expression table overlay (`0xfs_c…_table` / `0xfs_m…_table`): never carried. */
 export const XF_TABLE_OVERLAY = /^0xfs_[cm][0-9a-f]{32}_table\.archive$/i;
+/** The base archives: the game's own files (never a mod's, nor ArchiveXL's bundle). */
+const isGameOwn = (archive: MountedArchive) => archive.group === "content" || archive.group === "ep1";
 const MISSING = "XF Studio couldn't read photo mode's expressions from your game files. Check your game folder in Settings › Game, then build again.";
 
 function root(document: unknown): Record<string, unknown> {
@@ -101,61 +108,90 @@ export function genderRig(set: unknown, skeleton: unknown, setup: unknown, rigPa
   return { rig: rigPath, tracks, main, joints: neutral.joints, constAnimKeys: neutral.jointBlock.byteLength / 16, jointBlockSha256: sha256(neutral.jointBlock) };
 }
 
-/** Background reads started by a Check that found nothing prepared yet, by prepared file (one at a time per route). */
-const warming = new Map<string, Promise<unknown>>();
+/** Bumped whenever the same game files would be read into a different prepared file (PIPE-118): an older file is re-read. */
+export const EXPRESSIONS_GAME_READER = "1";
+/** Prepared files kept per route (the newest; an older installation's file may still be in a running Build's hands). */
+const KEPT_PER_ROUTE = 3;
+
+/**
+ * Reads in flight, by cache folder and route key (PIPE-117): at most one per route. A Check that finds nothing prepared for the current installation starts
+ * one in the background; a Build for the same installation joins it; a read for another installation (mods changed meanwhile) aborts it.
+ * Each read works in its own folder, so nothing it does touches another's files.
+ */
+const reading = new Map<string, { fingerprint: string; controller: AbortController; promise: Promise<PreparedPrerequisite> }>();
+
+/** The installation's fingerprint (PIPE-118): its route settings, the stamps of its mod folders and lists, the registry's generation, the reader. */
+export function expressionsGameFingerprint(route: ExpressionsGameOptions["route"], wolvenKitCli: string): string {
+  if (!route.gameRoot) return "";
+  const settings = { ...route, gameRoot: route.gameRoot };
+  return sha256(JSON.stringify({ reader: EXPRESSIONS_GAME_READER, route: routeIdentity(settings), stamps: routeStamps(settings),
+    generation: installations.generation({ ...settings, wolvenKitCli: wolvenKitCli || null }) }));
+}
 
 export function expressionsGamePrerequisite(options: ExpressionsGameOptions): HostPrerequisite {
   const key = sha256(JSON.stringify([options.route.gameRoot, options.route.launchRoute, options.route.mo2Root, options.route.mo2ProfileId,
     options.route.manualModRoot])).slice(0, 24);
-  const folder = join(options.cacheRoot, "expressions-game"), file = join(folder, `${key}.json`);
-  return {
-    cached() {
-      if (!existsSync(file)) {
-        // Nothing read for this route yet: this Check says so, and the files are read in the background so the next Check can tell which
-        // expressions the game's face rig can show and where they go in photo mode's list (Build reads them afresh anyway).
-        if (!warming.has(file) && options.route.gameRoot && options.wolvenKitCli)
-          warming.set(file, this.prepare(new AbortController().signal).catch(() => undefined).finally(() => warming.delete(file)));
-        return null;
-      }
-      try { const plan = (JSON.parse(readFileSync(file, "utf8")) as GameFile).plan; return plan?.schema === EXPRESSIONS_GAME_1 ? plan : null; } catch { return null; }
-    },
-    async prepare(signal): Promise<PreparedPrerequisite> {
-      if (!options.route.gameRoot || !options.wolvenKitCli) throw coded("package_input_missing", MISSING);
-      const installation = await (options.acquire ?? (value => installations.acquire(value)))({ ...options.route, gameRoot: options.route.gameRoot,
-        wolvenKitCli: options.wolvenKitCli, cacheDir: options.resolverCache });
-      const graph = installation.graph, extract = options.extract ?? extractFacialJson;
-      const work = join(folder, "tmp");
+  const folder = join(options.cacheRoot, "expressions-game");
+  const fingerprint = () => options.fingerprint ? options.fingerprint() : expressionsGameFingerprint(options.route, options.wolvenKitCli);
+  /** The prepared file of one installation: the route's key and the fingerprint's (a new installation never overwrites a file in use). */
+  const fileOf = (print: string) => join(folder, `${key}-${sha256(print).slice(0, 16)}.json`);
+  /** This route's slot in the reads in flight (per cache folder too: two hosts' caches never share a read). */
+  const slot = join(folder, key);
+  const stoppedError = () => coded("package_build_cancelled", "The game files' read was stopped.");
+
+  /** Keep the route's newest prepared files; older ones go (never the one just written). */
+  const prune = (kept: string) => {
+    let names: string[];
+    try { names = readdirSync(folder).filter(name => name.startsWith(`${key}-`) && name.endsWith(".json")); } catch { return; }
+    const dated = names.map(name => { const path = join(folder, name); try { return { path, at: statSync(path).mtimeMs }; } catch { return null; } })
+      .filter((item): item is { path: string; at: number } => !!item && item.path !== kept).sort((a, b) => b.at - a.at);
+    for (const item of dated.slice(KEPT_PER_ROUTE - 1)) rmSync(item.path, { force: true });
+  };
+
+  /** Read the game files for one installation into its prepared file, in a work folder of this read's own. */
+  const read = async (entry: { fingerprint: string }, signal: AbortSignal): Promise<PreparedPrerequisite> => {
+    if (!options.route.gameRoot || !options.wolvenKitCli) throw coded("package_input_missing", MISSING);
+    const installation = await (options.acquire ?? (value => installations.acquire(value)))({ ...options.route, gameRoot: options.route.gameRoot,
+      wolvenKitCli: options.wolvenKitCli, cacheDir: options.resolverCache });
+    if (signal.aborted) throw stoppedError();
+    // Opening the installation may find it changed and move the registry's generation on: the file is kept under the fingerprint after it.
+    const print = entry.fingerprint = fingerprint();
+    const graph = installation.graph, extract = options.extract ?? extractFacialJson;
+    mkdirSync(join(folder, "tmp"), { recursive: true });
+    const work = mkdtempSync(join(folder, "tmp", "read-"));
+    try {
       /** Read resources from one archive (untrimmed JSON: clips need their data chunks). */
-      const read = async (archive: MountedArchive, refs: readonly { ref: DepotRef; extension: string }[]) => {
+      const fetch = async (archive: MountedArchive, refs: readonly { ref: DepotRef; extension: string }[]) => {
         const out = new Map<string, unknown>();
         await extract(options.wolvenKitCli, archive, refs.map(item => ({ hash: item.ref.hash, extension: item.extension })), work,
           (hash, text) => { out.set(hash, JSON.parse(text.replace(/^﻿/, ""))); }, signal);
+        if (signal.aborted) throw stoppedError();
         return out;
       };
       const winner = async (path: string, extension: string) => {
         const ref = refFromPath(backslashed(path)), located = graph.locate(ref), archive = located.lookup.winner;
         if (!archive) throw coded("package_input_missing", MISSING);
-        const document = (await read(archive, [{ ref: located.entry, extension }])).get(located.entry.hash);
+        const document = (await fetch(archive, [{ ref: located.entry, extension }])).get(located.entry.hash);
         if (!document) throw coded("package_input_missing", MISSING);
         return { document, archive };
       };
-      // The table: the effective one (skipping XF overlays) and the game's own.
+      // The table: the effective one (skipping XF overlays) and the game's own (the base archives', never a mod's or ArchiveXL's bundle).
       const tableRef = refFromPath(EXPRESSION_TABLE), candidates = graph.locate(tableRef).lookup.candidates;
-      const effective = candidates.find(archive => !XF_TABLE_OVERLAY.test(archive.name)), base = candidates.find(archive => archive.group !== "mod");
+      const effective = candidates.find(archive => !XF_TABLE_OVERLAY.test(archive.name)), base = candidates.find(isGameOwn);
       if (!effective || !base) throw coded("package_input_missing", MISSING);
       const tables = new Map<MountedArchive, unknown>();
       for (const archive of new Set([effective, base])) {
-        const document = (await read(archive, [{ ref: tableRef, extension: "csv" }])).get(tableRef.hash);
+        const document = (await fetch(archive, [{ ref: tableRef, extension: "csv" }])).get(tableRef.hash);
         if (!document) throw coded("package_input_missing", MISSING);
         tables.set(archive, document);
       }
       const table = (archive: MountedArchive) => {
         const rows = tableRows(tables.get(archive));
-        return { rows, archive: archive.name, provider: archive.group === "mod" ? archive.providerName || archive.name : "Base game", sha256: sha256(JSON.stringify(rows)) };
+        return { rows, archive: archive.name, provider: isGameOwn(archive) ? "Base game" : archive.providerName || archive.name, sha256: sha256(JSON.stringify(rows)) };
       };
-      // The face rig as the game ships it (its first provider outside the mod folder), the facial setup, each gender's set and skeleton.
-      const rigRef = refFromPath(PHOTO_MODE_FACE_RIG), rigArchive = graph.locate(rigRef).lookup.candidates.find(archive => archive.group !== "mod");
-      const faceRig = rigArchive ? (await read(rigArchive, [{ ref: rigRef, extension: "app" }])).get(rigRef.hash) : undefined;
+      // The face rig as the game ships it (its first provider in the base archives), the facial setup, each gender's set and skeleton.
+      const rigRef = refFromPath(PHOTO_MODE_FACE_RIG), rigArchive = graph.locate(rigRef).lookup.candidates.find(isGameOwn);
+      const faceRig = rigArchive ? (await fetch(rigArchive, [{ ref: rigRef, extension: "app" }])).get(rigRef.hash) : undefined;
       if (!faceRig) throw coded("package_input_missing", MISSING);
       const setup = (await winner(FACE_SETUP, "facialsetup")).document;
       const sets = {} as Record<Gender, unknown>, rigs = {} as Record<Gender, GameRig>;
@@ -170,12 +206,61 @@ export function expressionsGamePrerequisite(options: ExpressionsGameOptions): Ho
       const plan: GameInputs = { schema: EXPRESSIONS_GAME_1, table: table(effective), base: table(base),
         providers: candidates.map(archive => ({ name: archive.name.replace(/\.archive$/i, ""), group: archive.group, provider: archive.providerName || archive.name })),
         modOrder: installation.plan.modOrder, rigs };
+      if (signal.aborted) throw stoppedError();
       mkdirSync(folder, { recursive: true });
-      const prepared: GameFile = { plan, sets, faceRig, table: tables.get(effective) };
+      const file = fileOf(print), prepared: GameFile = { fingerprint: print, plan, sets, faceRig, table: tables.get(effective) };
       writeFileAtomic(file, JSON.stringify(prepared));
-      rmSync(work, { recursive: true, force: true });
+      prune(file);
       return { builder: { file }, plan };
+    } finally { rmSync(work, { recursive: true, force: true }); }
+  };
+
+  /** The read for this installation: the one in flight when it is for the same installation, else a new one (stopping another's). */
+  const start = (print: string) => {
+    const current = reading.get(slot);
+    if (current?.fingerprint === print) return current;
+    current?.controller.abort();
+    const controller = new AbortController();
+    const entry = { fingerprint: print, controller, promise: undefined as unknown as Promise<PreparedPrerequisite> };
+    entry.promise = read(entry, controller.signal).finally(() => { if (reading.get(slot) === entry) reading.delete(slot); });
+    reading.set(slot, entry);
+    return entry;
+  };
+
+  return {
+    cached() {
+      if (!options.route.gameRoot || !options.wolvenKitCli) return null;
+      const print = fingerprint();
+      let plan: GameInputs | null = null;
+      try {
+        const value = JSON.parse(readFileSync(fileOf(print), "utf8")) as GameFile;
+        if (value.fingerprint === print && value.plan?.schema === EXPRESSIONS_GAME_1) plan = value.plan;
+      } catch { plan = null; }
+      // Nothing read for this installation yet (a new route, mods changed, an older reader): this Check is provisional and says so, and the
+      // files are read in the background so the next Check can tell which expressions the game's face rig can show and where they go.
+      if (!plan) start(print).promise.catch(() => undefined);
+      return plan;
     },
-    discard() { rmSync(file, { force: true }); },
+    async prepare(signal): Promise<PreparedPrerequisite> {
+      if (!options.route.gameRoot || !options.wolvenKitCli) throw coded("package_input_missing", MISSING);
+      const print = fingerprint();
+      // Build takes over a background read for this installation (joining it) and stops one for an older installation.
+      for (;;) {
+        if (signal.aborted) throw stoppedError();
+        const entry = start(print);
+        let abort: (() => void) | undefined;
+        const stopped = new Promise<never>((_, reject) => { abort = () => reject(stoppedError()); signal.addEventListener("abort", abort, { once: true }); });
+        try { return await Promise.race([entry.promise, stopped]); }
+        catch (error) {
+          // The joined read was stopped for another installation's, not by this Build, and this installation is still current: read again.
+          if (!signal.aborted && entry.controller.signal.aborted && fingerprint() === print) continue;
+          throw error;
+        } finally { signal.removeEventListener("abort", abort!); }
+      }
+    },
+    discard(prepared) {
+      const file = (prepared?.builder as { file?: unknown } | undefined)?.file;
+      rmSync(typeof file === "string" ? file : fileOf(fingerprint()), { force: true });
+    },
   };
 }

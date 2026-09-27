@@ -16,12 +16,12 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { COLLECTION_2, ExportRefusal, type ExportInfo, type ExportOmission, type FeatureCheck, type FeatureExporter, type FeatureOutcome,
+import { COLLECTION_2, ExportRefusal, PrerequisiteStale, type ExportInfo, type ExportOmission, type FeatureCheck, type FeatureExporter, type FeatureOutcome,
   type GeneratedFile } from "../../../platform/api";
 import { unknownControls } from "../../../engines/facial-rig/clip";
 import { controlLabel, controlSide } from "../../../engines/facial-rig/vocabulary";
 import { EXPRESSION_PART_1, parseExpressionPart } from "../part";
-import { EXPRESSIONS_GAME_PREREQUISITE, EXPRESSION_TABLE_PATH, FACE_RIG_APP_PATH, GENDERS, readGameInputs, type GameBuilderInputs, type GameFile,
+import { EXPRESSIONS_GAME_PREREQUISITE, EXPRESSION_TABLE_PATH, FACE_RIG_APP_PATH, GAME_INPUTS_DAMAGED, GENDERS, readGameInputs, type GameBuilderInputs, type GameFile,
   type Gender, type GameInputs } from "./game";
 import { animationSet, componentId, expressionRow, expressionTable, faceRigPatch, fillerRow, tweakRecords } from "./files";
 
@@ -199,8 +199,11 @@ export const EXPRESSIONS_EXPORTER: FeatureExporter<ExpressionPlan> = Object.free
   async buildInputs(context) {
     const value = context.prerequisites[EXPRESSIONS_GAME_PREREQUISITE] as Partial<GameBuilderInputs> | undefined;
     if (typeof value?.file !== "string") return refuse("package_input_missing", "XF Studio couldn't read photo mode's expressions from your game files.");
-    const file = JSON.parse(readFileSync(value.file, "utf8")) as GameFile;
-    return { prerequisites: { [EXPRESSIONS_GAME_PREREQUISITE]: readGameInputs(file.plan), [`${EXPRESSIONS_GAME_PREREQUISITE}#file`]: value.file } };
+    // A prepared file that can't be read is stale: the host discards it and prepares it again (PIPE-118).
+    let inputs: GameInputs;
+    try { inputs = readGameInputs((JSON.parse(readFileSync(value.file, "utf8")) as GameFile).plan); }
+    catch { throw new PrerequisiteStale(EXPRESSIONS_GAME_PREREQUISITE, GAME_INPUTS_DAMAGED); }
+    return { prerequisites: { [EXPRESSIONS_GAME_PREREQUISITE]: inputs, [`${EXPRESSIONS_GAME_PREREQUISITE}#file`]: value.file } };
   },
   async build(outcome, context) {
     const planned = outcome.plan;

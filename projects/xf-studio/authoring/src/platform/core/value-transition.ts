@@ -67,7 +67,8 @@ export function weightBlend(clamp: (value: number) => number = value => value): 
     mix(from, to, k) {
       const out: Record<string, number> = {};
       for (const name of [...new Set([...Object.keys(from), ...Object.keys(to)])].sort()) {
-        const a = from[name] ?? 0, b = to[name] ?? 0, value = clamp(k >= 1 ? b : k <= 0 ? a : a + (b - a) * k);
+        // Exact at the ends; beyond them (a curve's overshoot) it goes on along the line, and `clamp` decides what may show (CORE-117).
+        const a = from[name] ?? 0, b = to[name] ?? 0, value = clamp(k === 1 ? b : k === 0 ? a : a + (b - a) * k);
         if (value !== 0) out[name] = value;
       }
       return out;

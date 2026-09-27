@@ -17,7 +17,7 @@
  * (`source: "prepared"`) or for the face clips it baked, which the app can't make yet.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { PLAYER_ENTITIES } from "./clothing-resolver";
 import { animatedComponents } from "./deformation-rig-host";
@@ -75,6 +75,18 @@ function puppetSets(entity: JsonObject): { path: string | null; hash: string }[]
   return [...entitySets({ components: compiled }), ...entitySets(entity)].map(set => ({ path: set.path, hash: set.hash }));
 }
 
+/** Installation keys the idle cache keeps (PREV-163): a verification server borrowing the resolver cache and the main server both keep theirs. */
+export const IDLE_CACHE_KEYS = 4;
+/** Drop the idle cache's least recently used installation folders beyond `keep`, never `kept` (the one just written). */
+export function pruneIdleCache(root: string, kept: string, keep = IDLE_CACHE_KEYS): void {
+  let names: string[];
+  try { names = readdirSync(root); } catch { return; }
+  const aged = names.filter(name => name !== kept)
+    .map(name => { try { return { name, at: statSync(join(root, name)).mtimeMs }; } catch { return null; } })
+    .filter((item): item is { name: string; at: number } => !!item).sort((a, b) => b.at - a.at);
+  for (const item of aged.slice(Math.max(0, keep - 1))) rmSync(join(root, item.name), { recursive: true, force: true });
+}
+
 export class IdleHost {
   private entry: { key: string; promise: Promise<NativeIdles>; done: NativeIdles | null; error: string | null } | null = null;
   private readonly bodies = new Map<string, Promise<PoseSample | null>>();
@@ -105,17 +117,20 @@ export class IdleHost {
     entry.promise = (async () => {
       const file = join(this.cacheDir(key), "idles.json");
       const cached = readJson(file) as { version?: number; idles?: NativeIdles } | null;
-      if (cached?.version === IDLE_HOST_VERSION && cached.idles) return cached.idles;
+      if (cached?.version === IDLE_HOST_VERSION && cached.idles) {
+        // Used: its age starts again, so another installation's writes keep it (PREV-163).
+        try { const now = new Date(); utimesSync(this.cacheDir(key), now, now); } catch { /* Advisory. */ }
+        return cached.idles;
+      }
       const started = performance.now();
       const open = this.options.open ?? (await import("./installation-registry")).acquireInstallation;
       const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
       const idles = await readIdles(installation, this.options.log);
       this.options.log?.(`Idles read from the game in ${((performance.now() - started) / 1000).toFixed(1)} s: ${idles.entries.map(e => e.clip).join(", ")}.`);
       try {
-        // One cache folder per installation: older keys are dropped.
-        const root = join(this.options.resolverCache, "idles");
-        if (existsSync(root)) for (const name of readdirSync(root)) if (name !== key) rmSync(join(root, name), { recursive: true, force: true });
+        // One cache folder per installation; the few most recently used are kept (another host sharing the resolver cache keeps its own).
         mkdirSync(this.cacheDir(key), { recursive: true });
+        pruneIdleCache(join(this.options.resolverCache, "idles"), key);
         writeFileAtomic(file, JSON.stringify({ version: IDLE_HOST_VERSION, idles }));
       } catch { /* Advisory: read again next time. */ }
       return idles;

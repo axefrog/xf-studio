@@ -3,6 +3,7 @@
  * the host's prerequisite (`src/expressions-game-prerequisite.ts`) and handed to the plan. Pure types and a strict reader, so the plan is
  * deterministic and the host's result gate can repeat it.
  */
+import { ExportRefusal } from "../../../platform/api";
 
 export const EXPRESSIONS_GAME_PREREQUISITE = "expressions/game";
 export const EXPRESSIONS_GAME_1 = "xfs/expressions-game-1";
@@ -60,7 +61,9 @@ function rig(value: unknown): GameRig {
   return { rig: value.rig, tracks: [...value.tracks], main: { start: main.start as number, count: main.count as number }, joints: value.joints as number,
     constAnimKeys: value.constAnimKeys as number, jointBlockSha256: value.jointBlockSha256 };
 }
-/** The prepared inputs, checked field by field; throws a plain error when they are damaged. */
+/** What the person reads when the prepared inputs are damaged. */
+export const GAME_INPUTS_DAMAGED = "What XF Studio read from your game files for expressions is damaged. Build again to read it afresh.";
+/** The prepared inputs, checked field by field; throws an `ExportRefusal` (`package_input_missing`) when they are damaged (PIPE-118). */
 export function readGameInputs(value: unknown): GameInputs {
   try {
     if (!isRecord(value) || value.schema !== EXPRESSIONS_GAME_1 || !isRecord(value.rigs) || !Array.isArray(value.providers) ||
@@ -72,6 +75,6 @@ export function readGameInputs(value: unknown): GameInputs {
     return { schema: EXPRESSIONS_GAME_1, table: table(value.table), base: table(value.base), providers, modOrder: value.modOrder,
       rigs: { female: rig(value.rigs.female), male: rig(value.rigs.male) } };
   } catch {
-    throw Error("What XF Studio read from your game files for expressions is damaged. Build again to read it afresh.");
+    throw new ExportRefusal("package_input_missing", GAME_INPUTS_DAMAGED);
   }
 }

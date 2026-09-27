@@ -14,7 +14,7 @@ import { archiveXlText, ExportRefusal, type FeatureVerifyInput, type GeneratedFi
 import { EXPRESSIONS_EXPORTER, GAME_UNREAD_NOTE, NO_CONTROLS_REASON, plannedRows, SHARING_FIRST_INDEX, type ExpressionPlan } from "../src/features/expressions/export";
 import { animationSet, expressionTable, faceRigPatch, tweakRecords } from "../src/features/expressions/export/files";
 import { EXPRESSIONS_GAME_1, EXPRESSIONS_GAME_PREREQUISITE, type GameInputs } from "../src/features/expressions/export/game";
-import { EXPRESSIONS_VERIFIER } from "../src/features/expressions/verify";
+import { EXPRESSIONS_VERIFIER, yamlQuoted } from "../src/features/expressions/verify";
 
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const TRACKS = ["env_a", "env_b", "env_c", "eye_l_brows_raise_in", "eye_r_brows_raise_in", "jaw_mid_open", "lips_l_corner_up", "lips_r_corner_up", "wr_a", "wr_b"];
@@ -203,6 +203,19 @@ test("the independent verifier passes a faithful build and catches injected faul
       expect(() => EXPRESSIONS_VERIFIER.verify(built.input()), name).toThrow(message);
     } finally { built.cleanup(); }
   }
+});
+
+test("the verifier reads a label with a literal backslash and x41, and control characters, as written (PIPE-121)", () => {
+  // A literal backslash then "x41" (the exporter writes it as \\x41), a backslash, quotes, a tab and a control character.
+  const label = String.raw`Back\x41 slash \ ` + "\"q\" \t tab \u0001";
+  const value = collection([look(1, "Tricky", expression({ jaw_mid_open: 0.25 }, label))]);
+  const built = product(value);
+  try {
+    expect(() => EXPRESSIONS_VERIFIER.verify(built.input())).not.toThrow();
+  } finally { built.cleanup(); }
+  // The decoder: every escape the exporter writes, and refusals of what YAML wouldn't read.
+  expect(yamlQuoted(String.raw`"a\\x41\x41\u00e9\t\""`)).toBe(String.raw`a\x41` + "A\u00e9\t\"");
+  for (const bad of [String.raw`"a\q"`, String.raw`"a\x4"`, String.raw`"a"b"`, "a", String.raw`"a\"`]) expect(() => yamlQuoted(bad), bad).toThrow();
 });
 
 test("the verifier is independent: it imports nothing from the exporter or the clip writer", () => {

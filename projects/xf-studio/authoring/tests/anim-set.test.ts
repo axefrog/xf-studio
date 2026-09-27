@@ -1,7 +1,7 @@
 // The native animation decoder (src/native/anim-set.ts) over synthetic sets and rigs written from the format (no game data): the clip
 // index, the key block in a data chunk and inline, rotation rebuilding, sampling, the rig's bone table, and hostile input.
 import { describe, expect, test } from "bun:test";
-import { clipSampler, decodeAnimClip, readAnimRig, readAnimSetIndex, sampleClip } from "../src/native/anim-set";
+import { clipSampler, decodeAnimClip, MAX_SIMD_FRAMES, readAnimRig, readAnimSetIndex, sampleClip } from "../src/native/anim-set";
 import { NativeMalformedError, NativeUnsupportedError } from "../src/native/native-errors";
 import { animSet, rig, SIMD_FRAMES, simdBlock } from "./fixtures/anim-set";
 
@@ -64,6 +64,21 @@ describe("animation sets", () => {
 
   test("a SIMD block shorter than its header declares is refused as malformed", () => {
     expect(() => decodeAnimClip(animSet({ simdBlock: simdBlock(16).slice(0, 40) }), "simd", noDecompress)).toThrow(NativeMalformedError);
+  });
+
+  test("a SIMD clip's frames and the keys its decoding would produce are bounded before anything is read (NATIVE-67, NATIVE-69)", () => {
+    // Frames alone past the bound (a clip whose per-frame counts are all small or 0 would otherwise loop over every frame).
+    expect(() => decodeAnimClip(animSet({ simdFrames: MAX_SIMD_FRAMES + 1 }), "simd", noDecompress)).toThrow(/declares 65537 frames of 2 joints/);
+    // Within the declared-key bound (frames × joints ≤ 4,000,000) but three channels per joint and frame past the output bound.
+    expect(() => decodeAnimClip(animSet({ simdFrames: 1000, simdJoints: 1000 }), "simd", noDecompress)).toThrow(/declares 1000 frames of 1000 joints/);
+    // The fixture's own clip is well inside both.
+    expect(decodeAnimClip(animSet(), "simd", noDecompress)!.frames).toBe(SIMD_FRAMES);
+  });
+
+  test("a rig whose parents form a cycle is refused as malformed (NATIVE-68)", () => {
+    expect(() => readAnimRig(rig(["Root", "A", "B", "C"], { parents: [-1, 2, 3, 1] }))).toThrow(/cycle/);
+    expect(() => readAnimRig(rig(["A", "B"], { parents: [1, 0] }))).toThrow(/cycle/);
+    expect(readAnimRig(rig(["Root", "A", "B", "C"], { parents: [-1, 0, 1, 2] })).parents).toEqual([-1, 0, 1, 2]);
   });
 
   test("a prepared sampler gives what sampleClip gives at every time", () => {
