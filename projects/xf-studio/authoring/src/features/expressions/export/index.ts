@@ -51,7 +51,7 @@ export function movementName(name: string): string {
   const side = controlSide(name), label = controlLabel(name);
   return side && !/, (?:left|right)$/.test(label) ? `${label}, ${side}` : label;
 }
-export const GAME_UNREAD_NOTE = "XF Studio is reading your game files: check again in a moment to see which expressions can become mod files.";
+export const GAME_UNREAD_NOTE = "XF Studio is reading your game files; this check runs again by itself when it has them.";
 
 export type PlannedExpression = { readonly id: string; readonly name: string; readonly revision: number; readonly label: string; readonly clip: string;
   readonly index: number | null; readonly controls: readonly (readonly [string, number])[] };

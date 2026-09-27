@@ -120,7 +120,7 @@ for (const [index, { scheme, width }] of passes.entries()) {
       await click(page, ".expr-sets button", "Check");
       await page.waitFor(`document.querySelector('.expr-sets .result-card') && document.querySelector('.expr-sets .package-progress').classList.contains('idle')`, 60000);
       await page.wait(300);
-      if (!(await page.evaluate(`document.querySelector('.expr-sets .result-card').innerText.includes('check again in a moment')`))) break;
+      if (!(await page.evaluate(`document.querySelector('.expr-sets .result-card').innerText.includes('runs again by itself')`))) break;
       if (attempt === 0) { await scrollResult(page); await shot("08a-check-reading-game-files"); }
       await page.wait(4000);
     }
