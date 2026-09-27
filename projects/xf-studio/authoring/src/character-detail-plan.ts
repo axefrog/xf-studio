@@ -567,6 +567,8 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   const planned: { component: PlannedComponent; order: number; skin: boolean; label: string; role: BodyRole; option: string }[] = [];
   const seen = new Set<string>();
   const unshown: string[] = [];
+  /** Body choices whose game files mask every chunk out (drawn as nothing, as in the game). */
+  const masked: string[] = [];
   const label = (entry: BodyEntry) => {
     const option = cco.parts[entry.part].options.find(item => item.name === entry.option);
     const word = BODY_DETAIL_WORDS[option?.uiSlot ?? ""] ?? (entry.part === "arms" ? "arms" : "body detail");
@@ -587,6 +589,10 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
       // censored skin is a stand-in only, so its absence is not.
       const unread = entry.appearance.status === "missing" || entry.appearance.status === "unreadable";
       if (role !== "censored" && (unread || entry.components.some(component => component.geometry && !component.geometry.drawsNothing))) unshown.push(label(entry));
+      // Parts whose chunk masks hide every chunk (the definition's own, or its parts overrides': a mod's appearance can mask a part out)
+      // draw nothing, as in the game: said plainly rather than dropped silently.
+      else if (role !== "censored" && entry.components.some(component => (component.geometry?.renderChunks ?? 0) > 0 && component.geometry?.visibleChunks?.length === 0))
+        masked.push(label(entry));
       continue;
     }
     for (const item of items) {
@@ -620,7 +626,10 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
       : `XF Studio can't draw your V's ${noun} yet, so ${pronoun} ${not} shown.` } };
   const fallback = hadUncensored && !coveredOk ? `The underwear the game draws on your V couldn't be read, so the ${noun} is shown in the game's censored look.` : "";
   const partly = names.length ? `Some parts of your V's ${noun} (${missing}) couldn't be read from your game files, so they aren't shown.` : "";
-  const message = [fallback, partly].filter(Boolean).join(" ");
+  const hidden = [...new Set(masked)];
+  const maskedList = clampedList(hidden, 120);
+  const maskedLine = hidden.length ? `${maskedList.charAt(0).toUpperCase()}${maskedList.slice(1)} not shown: your installed game files hide ${hidden.length === 1 ? "this part" : "these parts"} for this choice, as the game would.` : "";
+  const message = [fallback, partly, maskedLine].filter(Boolean).join(" ");
   return { components, censored: coveredOk ? censored : [], state: { slot: "body", state: "shown", label: clampedList([...new Set(drawn.map(item => item.label))]),
     ...(message ? { message } : {}) } };
 }
