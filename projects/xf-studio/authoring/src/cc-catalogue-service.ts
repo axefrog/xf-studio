@@ -31,13 +31,14 @@ import { createHash } from "node:crypto";
 import { type BodyGender, buildCatalogue, CatalogueIndex, type CcCatalogue, userFacing } from "./cc-catalogue";
 import { type CatalogueLabels, type CatalogueLoad, currentGameLanguage, loadCreatorCatalogue } from "./cc-catalogue-host";
 import { choicePage, type CcChoicePage, type CcChoiceSearch, type CcIconSheet, type CcPanel, type CcSwatches, type CreatorState, type CreatorValue,
-  type CreatorView, panelProjection, searchChoices } from "./cc-panel";
+  type CreatorView, type ModMaker, panelProjection, searchChoices } from "./cc-panel";
 import { type CcPreset, type CcPresetEntry, writeCcPreset } from "./cc-preset";
 import { catalogueCoverage } from "./cc-render-coverage";
 import { type CharacterChoice, type CharacterSource, deriveCharacter, presetOfChoices, recoverSave, type SavedDescriptors } from "./character-context";
 import { type CharacterRequest, savedOfRequest } from "./character-detail-request";
 import { type CharacterInput, customLabel, type loadMergedCco } from "./character-resolver";
 import { personalDataIn } from "./private-data";
+import { modMakers } from "./mod-makers";
 import type { Installation, InstallationOptions } from "./resolver-host";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
@@ -57,6 +58,11 @@ export type CreatorHostOptions = {
    * none for an installation without a resource graph, such as a test's).
    */
   swatches?: (installation: Installation, route: CreatorRoute, catalogue: CcCatalogue, gender: BodyGender) => SwatchSource | null | Promise<SwatchSource | null>;
+  /**
+   * Who made each mod, by provider name, for the panel's groups (default: mod-makers.ts on the installation; none for an installation
+   * without a mount plan, such as a test's).
+   */
+  makers?: (installation: Installation, route: CreatorRoute) => ReadonlyMap<string, ModMaker> | Promise<ReadonlyMap<string, ModMaker>>;
   /** How long after a catalogue is ready its swatches start being worked out in the background (ms; default 1,500). */
   swatchDelayMs?: number;
   /** The game's on-screen language, part of the catalogue's key (default: the game's own settings, `currentGameLanguage`). */
@@ -199,7 +205,10 @@ export class CreatorCatalogueHost {
     // A rebuild that read labels the last one couldn't is another identity, so the panel takes it up (NATIVE-46).
     const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}\n` +
       `${load.labels?.next ?? ""}\n${++this.builds}`).digest("hex").slice(0, 24);
-    const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity);
+    let makers: ReadonlyMap<string, ModMaker> = new Map();
+    try { makers = await (this.options.makers ?? ((inst: Installation, r: CreatorRoute) => inst.plan ? modMakers(inst, r.gameRoot) : new Map()))(installation, route); }
+    catch (error) { this.options.log?.(`Mod authors won't be shown: ${(error as Error)?.message ?? error}`); }
+    const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity, makers);
     this.options.log?.(`Creator options (${gender}) read in ${((performance.now() - started) / 1000).toFixed(1)} s: ${panel.counts.options} options, ` +
       `${panel.counts.choices} choices, ${JSON.stringify(panel).length} bytes to the panel.`);
     let swatches: SwatchSource | null = null;

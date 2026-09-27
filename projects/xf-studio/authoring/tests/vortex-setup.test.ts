@@ -43,6 +43,8 @@ const pairs: [string, string][] = [
   ["persistent###mods###cyberpunk2077###XF Test Mod B-9001-1-0-1727000000###attributes###source", JSON.stringify("nexus")],
   ["persistent###mods###cyberpunk2077###XF Test Mod B-9001-1-0-1727000000###attributes###version", JSON.stringify("1.0")],
   ["persistent###mods###cyberpunk2077###XF Test Mod B-9001-1-0-1727000000###attributes###downloadGame", JSON.stringify("cyberpunk2077")],
+  ["persistent###mods###cyberpunk2077###XF Test Mod B-9001-1-0-1727000000###attributes###author", JSON.stringify("A. Modder")],
+  ["persistent###mods###cyberpunk2077###XF Test Mod A###attributes###uploader", JSON.stringify("An Uploader")],
   ["persistent###mods###cyberpunk2077###XF Test Mod B-9001-1-0-1727000000###rules", JSON.stringify([{ type: "after", reference: { id: "XF Test Mod A" } }])],
 ];
 
@@ -57,8 +59,10 @@ test("reads the active profile, enabled mods and Nexus identities from Vortex's 
   expect(game.deploymentMethod).toBe("hardlink_activator");
   const b = game.mods.get("XF Test Mod B-9001-1-0-1727000000")!;
   expect(b).toEqual({ id: "XF Test Mod B-9001-1-0-1727000000", name: "XF Test Mod B main file", version: "1.0",
-    nexus: { gameDomain: "cyberpunk2077", modId: 9001, fileId: 42 }, source: "nexus", enabled: true });
+    nexus: { gameDomain: "cyberpunk2077", modId: 9001, fileId: 42 }, source: "nexus", author: "A. Modder", enabled: true });
   expect(game.mods.get("XF Test Mod A")?.enabled).toBe(false);
+  // No author recorded: the uploader stands in.
+  expect(game.mods.get("XF Test Mod A")?.author).toBe("An Uploader");
   expect(game.mods.get("XF Test Mod A")?.nexus).toBeNull();
   // Another game's active profile: fall back to this game's last active one, and say it isn't the active one.
   const other = readVortexGameState(stateFromPairs([...pairs, ["settings###profiles###activeProfileId", JSON.stringify("p2")]]).state, "cyberpunk2077");

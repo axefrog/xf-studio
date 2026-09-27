@@ -532,6 +532,21 @@ span.category { border-color: transparent; background: transparent; padding-left
   background-position: var(--swatch-position, 0 0); background-repeat: no-repeat; }
 .cc-choice.swatch-choice .swatch[data-empty="waiting"] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line-soft) 3px 4px); opacity: .7; }
 .cc-choice.swatch-choice .cc-choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Grid, not a flex column: a flex column sizes a group of aspect-ratio swatches too tall. */
+.cc-choices.grouped { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.cc-maker-items { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.cc-choices.grid .cc-maker-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.cc-maker-items[hidden], .cc-maker-lead:empty { display: none; }
+.cc-maker { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.cc-maker-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 20px; padding: 0; border: 0; background: transparent; color: var(--text-muted);
+  font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; text-align: left; cursor: pointer; }
+.cc-maker-head:hover { color: var(--text); }
+.cc-maker-chevron { flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translate(-1px, -1px); }
+.cc-maker-head[aria-expanded="false"] .cc-maker-chevron { transform: rotate(-45deg); }
+.cc-maker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-maker-count { flex: none; color: var(--text-faint); font-family: var(--font-mono); letter-spacing: 0; }
+.cc-maker-head[data-chosen][aria-expanded="false"] .cc-maker-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--sp-2);
+  border-radius: 50%; background: var(--signal); vertical-align: middle; }
 .cc-choices-status { margin: 0 var(--sp-3) var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); }
 .cc-more { margin: 0 0 var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); align-self: flex-start; }
 .cc-row-swatch { width: 12px; height: 12px; }

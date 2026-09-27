@@ -2,7 +2,7 @@ import { keyBinding, panelModifiersHeld } from "../../input-bindings";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
-import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPanel, parkPanels, raiseWindow, recoverWindows,
+import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPanel, openShares, parkPanels, raiseWindow, recoverWindows,
   setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
@@ -175,12 +175,13 @@ export class DockView {
   private renderNode(node: DockNode, floating: boolean, shown: Set<PanelId>): HTMLElement {
     if (node.kind === "group") return this.renderGroup(node, floating, shown);
     const element = h("div", { class: "dock-split", "data-axis": node.axis, "data-split": node.id });
+    const folded = node.children.map(child => child.kind === "group" && !!child.collapsed), shares = openShares(node.sizes, folded);
     node.children.forEach((child, index) => {
       if (index > 0) element.append(this.splitter(node.id, node.axis, index));
       const cell = h("div", { class: "dock-cell" });
       // A collapsed group keeps only its tab bar: its cell takes no share, so its neighbours fill the space (never shifting inside).
-      const collapsed = child.kind === "group" && !!child.collapsed;
-      cell.style.flex = collapsed ? "0 0 auto" : `${node.sizes[index]} 1 0`;
+      const collapsed = folded[index]!;
+      cell.style.flex = collapsed ? "0 0 auto" : `${shares[index]} 1 0`;
       if (collapsed) cell.dataset.collapsed = node.axis;
       cell.append(this.renderNode(child, floating, shown));
       element.append(cell);

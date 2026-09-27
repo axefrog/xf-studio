@@ -19,8 +19,14 @@
  *   the colour the host derived from the winning resource (a hair, brow or lash profile as a small root-to-tip gradient), else the
  *   definition's own colour. Swatches arriving later update the items in place; a choice still without one keeps its place, marked as
  *   waiting. The label stays the item's accessible name and tooltip.
+ * - **Grouped by who made them** (cc-panel.ts `groups`, cc-controls backlog 4a): when a row's choices come from more than one maker, each
+ *   maker's choices sit under a small heading (the base game first, then XF Studio, then every author or mod by name), in the creator's
+ *   order within it; Off stays above the groups. A heading is a button that folds its group away and back (Enter, Space or a click;
+ *   Left folds and Right unfolds it from the keyboard), remembered per option while the panel is open. A folded group holding the V's
+ *   choice says so. Arrow keys move through headings and the choices of unfolded groups in the order they show; in a colour grid Up
+ *   and Down move by the group's own columns and step onto the heading next to it at its edges. A row with one maker has no headings.
  */
-import type { CcPanelChoice } from "../../cc-panel";
+import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups } from "../../cc-panel";
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 
@@ -40,7 +46,12 @@ export type ChoiceListInput = {
   swatches?: CharacterSwatchState | null;
   /** The V is being prepared with the current choices: the chosen item shows it is on its way, in place. */
   preparing?: boolean;
+  /** Who made each choice (the panel's `groups` and `modGroups`): shown grouped by maker; null or absent for a row with one maker. */
+  groups?: { readonly list: readonly CcChoiceGroup[]; readonly modGroups: readonly number[] } | null;
 };
+type Group = { index: number; key: string; head: HTMLButtonElement; count: HTMLElement; body: HTMLElement; element: HTMLElement; entries: Entry[]; open: boolean;
+  chosen: boolean };
+type Entry = { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string; swatch: HTMLElement | null; look: string; group: Group | null };
 
 /** How one grid choice's swatch is drawn: CSS custom properties on its swatch element, and whether it is still waiting. */
 export type SwatchLook = { readonly background: string; readonly image: string; readonly size: string; readonly position: string; readonly waiting: boolean;
@@ -76,9 +87,15 @@ export class ChoiceList {
   readonly element: HTMLElement;
   readonly list: HTMLElement;
   private readonly status: HTMLElement;
-  private items: { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string; swatch: HTMLElement | null; look: string }[] = [];
+  private items: Entry[] = [];
   private byPosition = new Map<number, HTMLButtonElement>();
-  private shown: { option: string; query: string } | null = null;
+  private shown: { option: string; query: string; grouped: boolean } | null = null;
+  /** The maker groups by group index (null: not grouped), their order, and the Off choices above them. */
+  private groups: Map<number, Group> | null = null;
+  private order: (a: number, b: number) => number = (a, b) => a - b;
+  private lead: HTMLElement | null = null;
+  /** Folded groups, by option and group label (kept while the panel is open). */
+  private readonly folded = new Set<string>();
   private selected: number | null = null;
   /** The item that takes Tab focus (roving tabindex). */
   private active: HTMLButtonElement | null = null;
@@ -91,7 +108,7 @@ export class ChoiceList {
   }
 
   update(input: ChoiceListInput) {
-    const same = this.shown?.option === input.option && this.shown.query === input.query;
+    const same = this.shown?.option === input.option && this.shown.query === input.query && this.shown.grouped === !!input.groups;
     if (!same) this.rebuild(input);
     this.list.classList.toggle("grid", input.grid);
     setAttr(this.list, "aria-label", `${input.label} choices`);
@@ -105,6 +122,7 @@ export class ChoiceList {
       this.showFetch(entry, input.preparing && entry.choice.position === input.selected ? "f" : input.fetch?.get(entry.choice.position));
       this.paintSwatch(entry, input.swatches);
     }
+    this.markChosen();
     const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
     setText(this.status, line);
     this.status.hidden = !line;
@@ -116,7 +134,12 @@ export class ChoiceList {
     const focusedAt = this.focused() ? [...this.byPosition].find(([, item]) => item === document.activeElement)?.[0] : undefined;
     this.list.replaceChildren();
     this.items = []; this.byPosition.clear(); this.active = null; this.selected = null;
-    this.shown = { option: input.option, query: input.query };
+    this.shown = { option: input.option, query: input.query, grouped: !!input.groups };
+    this.groups = input.groups ? new Map() : null;
+    this.order = input.groups ? compareGroups(input.groups.list) : (a, b) => a - b;
+    this.lead = input.groups ? h("div", { class: "cc-maker-items cc-maker-lead" }) : null;
+    this.list.classList.toggle("grouped", !!input.groups);
+    if (this.lead) this.list.appendChild(this.lead);
     for (const choice of input.choices) this.add(choice, input);
     this.selected = input.selected;
     const selected = input.selected === null ? undefined : this.byPosition.get(input.selected);
@@ -148,7 +171,56 @@ export class ChoiceList {
     this.selected = position;
     const item = position === null ? undefined : this.byPosition.get(position);
     if (item) setAttr(item, "aria-selected", "true");
+    this.markChosen();
     return item;
+  }
+
+  /** A folded group holding the V's choice says so on its heading. */
+  private markChosen() {
+    for (const group of this.groups?.values() ?? []) {
+      const chosen = group.entries.some(entry => entry.choice.position === this.selected);
+      if (chosen === group.chosen) continue;
+      group.chosen = chosen;
+      if (chosen) setAttr(group.head, "data-chosen", ""); else group.head.removeAttribute("data-chosen");
+      this.describeGroup(group);
+    }
+  }
+  private describeGroup(group: Group) {
+    const words = group.chosen && !group.open ? "Your choice is in this group" : "";
+    if (words) setAttr(group.head, "aria-description", words); else group.head.removeAttribute("aria-description");
+  }
+
+  /** The heading and body for a maker's choices, made when its first choice arrives and placed in the groups' order. */
+  private groupFor(index: number, input: ChoiceListInput): Group {
+    const known = this.groups!.get(index);
+    if (known) return known;
+    const maker = input.groups!.list[index] ?? { label: "Mods", kind: "mod" as const };
+    const id = `${this.list.id}-g${index}`, key = `${input.option}\n${maker.label.toLocaleLowerCase()}`, open = !this.folded.has(key);
+    const count = h("span", { class: "cc-maker-count" });
+    const head = h("button", { class: "cc-maker-head", type: "button", id: `${id}-head`, tabindex: "-1", "aria-expanded": String(open), "aria-controls": `${id}-items` },
+      h("span", { class: "cc-maker-chevron", "aria-hidden": "true" }), h("span", { class: "cc-maker-label", text: maker.label }), count);
+    const body = h("div", { class: "cc-maker-items", id: `${id}-items`, hidden: !open });
+    const element = h("div", { class: "cc-maker", role: "group", "aria-labelledby": `${id}-head`, "data-kind": maker.kind }, head, body);
+    const group: Group = { index, key, head, count, body, element, entries: [], open, chosen: false };
+    head.addEventListener("click", () => { this.rove(head); this.fold(group, group.open); });
+    head.addEventListener("focus", () => this.rove(head));
+    const after = [...this.groups!.values()].filter(other => this.order(other.index, index) > 0).sort((a, b) => this.order(a.index, b.index))[0];
+    this.list.insertBefore(element, after?.element ?? null);
+    this.groups!.set(index, group);
+    return group;
+  }
+  /** Fold a group away (or back); keyboard focus inside a folded group moves to its heading. */
+  private fold(group: Group, folded: boolean) {
+    group.open = !folded;
+    group.body.hidden = folded;
+    setAttr(group.head, "aria-expanded", String(!folded));
+    if (folded) this.folded.add(group.key); else this.folded.delete(group.key);
+    this.describeGroup(group);
+    if (folded && this.active && group.body.contains(this.active)) {
+      const refocus = document.activeElement === this.active;
+      this.rove(group.head);
+      if (refocus) group.head.focus();
+    }
   }
 
   /** Mark an item with its prepared-ahead state (only when it changes). */
@@ -185,34 +257,75 @@ export class ChoiceList {
     item.addEventListener("click", () => { this.rove(item); this.select(choice.position); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
     item.addEventListener("pointerenter", () => this.onHint(choice));
-    const firstPlain = choice.off ? this.items.find(entry => !entry.choice.off)?.element : undefined;
-    if (firstPlain) this.list.insertBefore(item, firstPlain); else this.list.appendChild(item);
-    const at = firstPlain ? this.items.findIndex(entry => entry.element === firstPlain) : this.items.length;
-    const entry = { choice, element: item, from, fetch: "", swatch, look: "" };
-    this.items.splice(at, 0, entry);
+    const group = this.groups && !choice.off ? this.groupFor(choiceGroup(choice, input.groups!), input) : null;
+    const entry: Entry = { choice, element: item, from, fetch: "", swatch, look: "", group };
+    if (group) {
+      group.body.appendChild(item);
+      group.entries.push(entry);
+      setText(group.count, String(group.entries.length));
+      this.items.push(entry);
+    } else if (this.lead) {
+      this.lead.appendChild(item);
+      this.items.push(entry);
+    } else {
+      const firstPlain = choice.off ? this.items.find(entry => !entry.choice.off)?.element : undefined;
+      if (firstPlain) this.list.insertBefore(item, firstPlain); else this.list.appendChild(item);
+      this.items.splice(firstPlain ? this.items.findIndex(entry => entry.element === firstPlain) : this.items.length, 0, entry);
+    }
     this.paintSwatch(entry, input.swatches);
     this.byPosition.set(choice.position, item);
   }
 
   private focused() { return !!document.activeElement && this.items.some(entry => entry.element === document.activeElement); }
+  /** What the arrow keys move through, in the order it shows: Off, then each group's heading and, when unfolded, its choices. */
+  private navigation(): HTMLButtonElement[] {
+    if (!this.groups) return this.items.map(entry => entry.element);
+    const groups = [...this.groups.values()].sort((a, b) => this.order(a.index, b.index));
+    return [...this.items.filter(entry => !entry.group).map(entry => entry.element),
+      ...groups.flatMap(group => [group.head, ...(group.open ? group.entries.map(entry => entry.element) : [])])];
+  }
   /** Make `item` the one Tab stop of the list (the first item when none). */
   private rove(item: HTMLButtonElement | null | undefined) {
-    const target = item ?? this.items[0]?.element ?? null;
+    let target = item ?? this.navigation()[0] ?? null;
+    // A choice in a folded group can't take focus: its heading does.
+    const folded = target && this.groups ? [...this.groups.values()].find(group => !group.open && group.body.contains(target)) : undefined;
+    if (folded) target = folded.head;
     if (target === this.active) return;
     if (this.active) this.active.tabIndex = -1;
     this.active = target;
     if (target) target.tabIndex = 0;
   }
 
-  /** Arrow keys, Home and End move focus (never the choice); Enter and Space choose, as the buttons do. */
+  /**
+   * Arrow keys, Home and End move focus (never the choice); Enter and Space choose, as the buttons do. On a group's heading, Left folds
+   * and Right unfolds it (then move on).
+   */
   private key(event: KeyboardEvent) {
-    const items = this.items.map(entry => entry.element);
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const items = this.navigation(), current = document.activeElement as HTMLButtonElement;
+    const at = items.indexOf(current);
     if (at < 0) return;
-    const first = items[0]!;
-    const columns = this.list.classList.contains("grid") ? Math.max(1, Math.round(this.list.clientWidth / Math.max(1, first.offsetWidth + 4))) : 1;
-    const next = event.key === "ArrowRight" ? at + 1 : event.key === "ArrowLeft" ? at - 1 : event.key === "ArrowDown" ? at + columns
-      : event.key === "ArrowUp" ? at - columns : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
+    const head = [...this.groups?.values() ?? []].find(group => group.head === current);
+    if (head && ((event.key === "ArrowLeft" && head.open) || (event.key === "ArrowRight" && !head.open))) {
+      event.preventDefault();
+      this.fold(head, head.open);
+      return;
+    }
+    // Up and Down move by columns within the block of choices the focus is in (the whole list, Off, or one group), and past its edge
+    // to what is next to it (a heading).
+    const entry = head ? undefined : this.items.find(item => item.element === current);
+    const block = !this.groups ? items : entry?.group ? entry.group.entries.map(item => item.element)
+      : this.items.filter(item => !item.group).map(item => item.element);
+    const inBlock = block.indexOf(current), container = entry?.group?.body ?? this.lead ?? this.list;
+    const columns = !head && this.list.classList.contains("grid")
+      ? Math.max(1, Math.round(container.clientWidth / Math.max(1, (block[0] ?? current).offsetWidth + 4))) : 1;
+    const vertical = (step: number) => {
+      if (head) return at + Math.sign(step);
+      const there = inBlock + step;
+      if (there >= 0 && there < block.length) return items.indexOf(block[there]!);
+      return step > 0 ? items.indexOf(block[block.length - 1]!) + 1 : items.indexOf(block[0]!) - 1;
+    };
+    const next = event.key === "ArrowRight" ? at + 1 : event.key === "ArrowLeft" ? at - 1 : event.key === "ArrowDown" ? vertical(columns)
+      : event.key === "ArrowUp" ? vertical(-columns) : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
     if (next === null) return;
     event.preventDefault();
     const target = items[Math.max(0, Math.min(items.length - 1, next))]!;

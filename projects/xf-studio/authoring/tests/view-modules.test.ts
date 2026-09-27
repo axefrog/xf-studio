@@ -10,7 +10,7 @@ import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { activate, allGroups, applyDrop, closePanel, locate, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
+import { activate, allGroups, applyDrop, closePanel, locate, openShares, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
@@ -141,6 +141,13 @@ test("a collapsed group keeps its flag through a save and restore, and expanding
   const read = parseTree(JSON.parse(JSON.stringify(collapsed)), STUDIO_CATALOGUE.ids, factory)!;
   expect(locate(read, "character")!.group.collapsed).toBe(true);
   expect("collapsed" in locate(setCollapsed(read, inspect, false), "character")!.group).toBe(false);
+});
+
+test("a collapsed group's neighbours share all of its split's space, whatever their stored shares", () => {
+  // Flex grow factors summing to less than 1 would leave the collapsed group's share empty.
+  expect(openShares([0.42, 0.58], [false, true])).toEqual([1, 0]);
+  expect(openShares([0.2, 0.3, 0.5], [false, true, false]).map(share => +share.toFixed(4))).toEqual([0.2857, 0, 0.7143]);
+  expect(openShares([0.5, 0.5], [false, false])).toEqual([0.5, 0.5]);
 });
 
 test("module visibility is a bounded presentation preference, stored only where the person chose", () => {

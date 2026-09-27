@@ -17,6 +17,12 @@
  *   to tip) and its creator icon as a cell of an icon sheet (cc-icons.ts), with the sheets' table. The view's current choices carry their
  *   swatch too (`CreatorValue.swatch`).
  *
+ * - **Who made each choice** (`groups`, `modGroups`; cc-controls backlog 4a): each mod's heading, so a row can group its choices by maker.
+ *   The base game's choices have a group of their own (always `groups[0]`), and so do the mods XF Studio built (their custom creator
+ *   resource is named with the `xfs_` prefix every generated resource carries: projects/xf-studio/data/naming.md); every other mod goes
+ *   under its author as its mod manager records it (`ModMaker`, mod-makers.ts), else under its own name. Mods by one author share a
+ *   group. Each option says how many groups its choices span (`groups`), so a row with one maker isn't grouped at all.
+ *
  * Nothing here names an option, a slot or a mod.
  */
 import type { CcoPart } from "./cco-model";
@@ -25,7 +31,7 @@ import type { RenderCoverage, RenderStatus } from "./cc-render-coverage";
 import type { CharacterChange, CharacterView } from "./character-context";
 import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 
-export const CC_PANEL_SCHEMA = "xfs/cc-panel-4" as const;
+export const CC_PANEL_SCHEMA = "xfs/cc-panel-5" as const;
 export const CC_PAGE_SIZE = 240;
 /**
  * The game's creator category (`gamedataCharacterRandomizationCategory`) whose rows are makeup: the section "hide my V's own makeup"
@@ -54,7 +60,21 @@ export interface CcPanelOption {
   readonly dependsOn: readonly string[];
   /** Preview coverage: status and an index into `notes`. */
   readonly coverage: readonly [RenderStatus, number];
+  /** How many of the panel's `groups` its offered choices come from (grouped by maker when more than one). */
+  readonly groups: number;
 }
+/** Who a group of choices comes from: the base game, XF Studio, an author as recorded, or a mod with no author recorded (by its name). */
+export type CcChoiceGroupKind = "game" | "xf" | "author" | "mod";
+export interface CcChoiceGroup { readonly label: string; readonly kind: CcChoiceGroupKind }
+export const BASE_GAME_GROUP: CcChoiceGroup = Object.freeze({ label: "Base game", kind: "game" });
+export const XF_GROUP: CcChoiceGroup = Object.freeze({ label: "Made with XF Studio", kind: "xf" });
+/**
+ * What the host knows about who made a mod (mod-makers.ts), by the mod's name in the catalogue: the author its mod manager recorded, and
+ * a better name to show for it when there is one (a Vortex mod's own name rather than its staging folder).
+ */
+export interface ModMaker { readonly author: string | null; readonly name?: string | null }
+/** A creator resource XF Studio generated (the `xfs_` prefix of every generated resource name). */
+export const isXfResource = (path: string | null | undefined) => !!path && /^xfs_/i.test(path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1));
 export interface CcPanelRow {
   readonly slot: string;
   readonly part: CcoPart;
@@ -73,6 +93,10 @@ export interface CcPanel {
   readonly identity: string;
   readonly language: string | null;
   readonly mods: readonly string[];
+  /** The groups choices are shown in by who made them; `groups[0]` is always the base game. */
+  readonly groups: readonly CcChoiceGroup[];
+  /** Each mod's group, by `mods` index. */
+  readonly modGroups: readonly number[];
   readonly notes: readonly string[];
   readonly options: readonly CcPanelOption[];
   readonly sections: readonly CcPanelSection[];
@@ -123,7 +147,8 @@ const hex = (rgba: readonly number[] | null | undefined) => rgba
   ? `#${rgba.slice(0, 3).map(channel => Math.max(0, Math.min(255, Math.round(channel))).toString(16).padStart(2, "0")).join("")}` : null;
 
 /** The panel's first-paint projection of a catalogue, with the preview's coverage of each option. */
-export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<string, RenderCoverage>, identity: string): { panel: CcPanel; mods: Map<string, number> } {
+export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<string, RenderCoverage>, identity: string,
+  makers: ReadonlyMap<string, ModMaker> = new Map()): { panel: CcPanel; mods: Map<string, number> } {
   const index = new CatalogueIndex(catalogue);
   const mods = new Map<string, number>(), notes = new Map<string, number>();
   const modIndex = (name: string | null) => {
@@ -137,11 +162,26 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
     if (at === undefined) { at = notes.size; notes.set(text, at); }
     return at;
   };
-  // Every mod any choice names, so a page's choices can refer to the same table.
-  for (const option of catalogue.options) {
-    if (option.provenance.kind === "mod") modIndex(option.provenance.mod);
-    for (const choice of option.choices) if (choice.provenance.kind === "mod") modIndex(choice.provenance.mod);
+  // Every mod any choice names, so a page's choices can refer to the same table; a mod whose creator resource XF Studio generated is XF's.
+  const xf = new Set<number>();
+  for (const option of catalogue.options) for (const { provenance } of [option, ...option.choices]) if (provenance.kind === "mod") {
+    const at = modIndex(provenance.mod);
+    if (at >= 0 && isXfResource(provenance.resource)) xf.add(at);
   }
+  const groups: CcChoiceGroup[] = [BASE_GAME_GROUP], groupAt = new Map<string, number>();
+  const groupIndex = (group: CcChoiceGroup) => {
+    // Mods by one author (or two mods of one name) share a group, whatever the case of the name.
+    const key = group.kind === "xf" ? "\u0000xf" : group.label.toLocaleLowerCase();
+    let at = groupAt.get(key);
+    if (at === undefined) { at = groups.length; groupAt.set(key, at); groups.push(group); }
+    return at;
+  };
+  const modGroups = [...mods.keys()].map((name, at) => {
+    if (xf.has(at)) return groupIndex(XF_GROUP);
+    const maker = makers.get(name);
+    return maker?.author ? groupIndex({ label: maker.author, kind: "author" }) : groupIndex({ label: maker?.name || name, kind: "mod" });
+  });
+  const groupOf = (provenance: CcOption["provenance"]) => provenance.kind === "mod" ? modGroups[mods.get(provenance.mod ?? "") ?? -1] ?? 0 : 0;
   const options: CcPanelOption[] = [], at = new Map<string, number>();
   const add = (option: CcOption) => {
     const known = at.get(option.id);
@@ -155,7 +195,7 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
       defaultChoice: option.defaultChoice, mod: option.provenance.kind === "mod" ? modIndex(option.provenance.mod) : -1,
       link: option.link ? { ...option.link } : null,
       dependsOn: option.controlledBy.map(name => index.option(option.part, name)?.label.text ?? name),
-      coverage: [shown.status, noteIndex(shown.note)] };
+      coverage: [shown.status, noteIndex(shown.note)], groups: new Set(option.choices.filter(offeredChoice).map(choice => groupOf(choice.provenance))).size };
     at.set(option.id, options.length);
     options.push(entry);
     return options.length - 1;
@@ -165,7 +205,7 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
       options: row.options.flatMap(id => { const option = index.byOptionId(id); return option ? [add(option)] : []; }) })) }));
   const choices = catalogue.options.reduce((n, option) => n + option.choices.length, 0);
   return { mods, panel: { schema: CC_PANEL_SCHEMA, bodyGender: catalogue.bodyGender, identity, language: catalogue.language,
-    mods: [...mods.keys()], notes: [...notes.keys()], options, sections,
+    mods: [...mods.keys()], groups, modGroups, notes: [...notes.keys()], options, sections,
     counts: { options: options.length, choices, modChoices: catalogue.counts.modChoices } } };
 }
 
@@ -174,6 +214,21 @@ export const searchQuery = (text: string) => text.trim().toLowerCase().slice(0, 
 const matches = (choice: { key: string; label: { text: string } }, query: string) =>
   !query || choice.label.text.toLowerCase().includes(query) || choice.key.toLowerCase().includes(query);
 const offered = (option: CcOption | undefined): option is CcOption => !!option && userFacing(option) && !followsLink(option);
+/** A choice the panel can offer: its key and activated options can be carried back to the host. */
+function offeredChoice(choice: CcOption["choices"][number]) {
+  return isCreatorName(choice.key, true) && choice.activates.length <= CREATOR_LIMITS.activates && choice.activates.every(name => isCreatorName(name));
+}
+/** A choice's group (the panel's `groups`): the base game's, or its mod's. */
+export const choiceGroup = (choice: Pick<CcPanelChoice, "mod">, panel: Pick<CcPanel, "modGroups">) => choice.mod >= 0 ? panel.modGroups[choice.mod] ?? 0 : 0;
+const KIND_ORDER: Record<CcChoiceGroupKind, number> = { game: 0, xf: 1, author: 2, mod: 2 };
+/** The order groups are shown in: the base game, then XF Studio, then every other maker by name. */
+export function compareGroups(groups: readonly CcChoiceGroup[]) {
+  return (a: number, b: number) => {
+    const x = groups[a], y = groups[b];
+    if (!x || !y) return a - b;
+    return KIND_ORDER[x.kind] - KIND_ORDER[y.kind] || x.label.localeCompare(y.label, undefined, { sensitivity: "base" }) || a - b;
+  };
+}
 
 /**
  * One page of an option's choices (with `query`, of its choices matching it), or null for an option the panel doesn't offer. A choice
@@ -184,8 +239,7 @@ export function choicePage(index: CatalogueIndex, mods: ReadonlyMap<string, numb
   const option = index.byOptionId(optionId);
   if (!offered(option)) return null;
   const query = searchQuery(options.query ?? "");
-  const all = option.choices.filter(choice => isCreatorName(choice.key, true) && choice.activates.length <= CREATOR_LIMITS.activates &&
-    choice.activates.every(name => isCreatorName(name)) && matches(choice, query));
+  const all = option.choices.filter(choice => offeredChoice(choice) && matches(choice, query));
   const start = Math.max(0, Math.min(all.length, Math.floor(offset)));
   return { identity: options.identity ?? "", option: option.id, query, offset: start, total: all.length,
     choices: all.slice(start, start + Math.max(1, Math.min(CC_PAGE_SIZE, options.limit ?? CC_PAGE_SIZE))).map(choice => ({ key: choice.key,
@@ -254,6 +308,7 @@ export function makeupOff(panel: Readonly<CcPanel>, view: Readonly<CreatorView> 
 const fail = (what: string): never => { throw Object.assign(Error(`The creator options from the preview host can't be read (${what}).`), { unreadable: true }); };
 const str = (value: unknown, what: string, max = 512) => typeof value === "string" && value.length <= max ? value : fail(what);
 const int = (value: unknown, what: string, max: number) => Number.isInteger(value) && (value as number) >= -1 && (value as number) <= max ? value as number : fail(what);
+const GROUP_KINDS = new Set<unknown>(["game", "xf", "author", "mod"]);
 const PARTS = new Set(["head", "body", "arms"]), TYPES = new Set(["appearance", "morph", "switcher"]), STATUS = new Set(["rendered", "conditional", "uncensored", "not-rendered"]);
 const name = (value: unknown, what: string, allowEmpty = false) => isCreatorName(value, allowEmpty) ? value : fail(what);
 
@@ -263,6 +318,10 @@ export function readCcPanel(value: unknown): CcPanel {
   if (panel.bodyGender !== "female" && panel.bodyGender !== "male") fail("body");
   const mods = Array.isArray(panel.mods) ? panel.mods.map(entry => str(entry, "mod")) : fail("mods");
   const notes = Array.isArray(panel.notes) ? panel.notes.map(entry => str(entry, "note", 1024)) : fail("notes");
+  if (!Array.isArray(panel.groups) || !panel.groups.length || panel.groups.length > mods.length + 1 || panel.groups[0]?.kind !== "game") fail("groups");
+  const groups = panel.groups.map(group => ({ label: str(group?.label, "group"), kind: GROUP_KINDS.has(group?.kind) ? group.kind : fail("group kind") }));
+  if (!Array.isArray(panel.modGroups) || panel.modGroups.length !== mods.length) fail("mod groups");
+  const modGroups = panel.modGroups.map(at => int(at, "mod group", groups.length - 1) < 0 ? fail("mod group") : at);
   if (!Array.isArray(panel.options) || panel.options.length > 20_000) fail("options");
   const options = panel.options.map(option => {
     if (!option || !PARTS.has(option.part) || !TYPES.has(option.type) || !Array.isArray(option.coverage) || !STATUS.has(option.coverage[0])) fail("an option");
@@ -271,14 +330,15 @@ export function readCcPanel(value: unknown): CcPanel {
       defaultChoice: option.defaultChoice === null ? null : str(option.defaultChoice, "default"), mod: int(option.mod, "mod", mods.length - 1),
       link: option.link ? { key: str(option.link.key, "link"), controller: option.link.controller === true } : null,
       dependsOn: Array.isArray(option.dependsOn) ? option.dependsOn.slice(0, 16).map(entry => str(entry, "depends")) : [],
-      coverage: [option.coverage[0], int(option.coverage[1], "coverage", notes.length - 1)] as const } satisfies CcPanelOption;
+      coverage: [option.coverage[0], int(option.coverage[1], "coverage", notes.length - 1)] as const,
+      groups: Math.max(0, int(option.groups, "groups", groups.length)) } satisfies CcPanelOption;
   });
   if (!Array.isArray(panel.sections)) fail("sections");
   const sections = panel.sections.map(section => ({ id: str(section?.id, "section"), label: str(section?.label, "section label"), makeup: section.makeup === true,
     rows: Array.isArray(section.rows) ? section.rows.map(row => ({ slot: str(row?.slot, "slot"), part: PARTS.has(row?.part) ? row.part : fail("row part"),
       options: Array.isArray(row.options) ? (row.options as unknown[]).map(i => int(i, "row option", options.length - 1)) : fail("row options") })) : fail("rows") }));
   return { schema: CC_PANEL_SCHEMA, bodyGender: panel.bodyGender, identity: str(panel.identity, "identity"), language: panel.language === null ? null : str(panel.language, "language"),
-    mods, notes, options, sections, counts: { options: options.length, choices: Number(panel.counts?.choices) || 0, modChoices: Number(panel.counts?.modChoices) || 0 } };
+    mods, groups, modGroups, notes, options, sections, counts: { options: options.length, choices: Number(panel.counts?.choices) || 0, modChoices: Number(panel.counts?.modChoices) || 0 } };
 }
 
 export function readChoicePage(value: unknown, mods: number): CcChoicePage {

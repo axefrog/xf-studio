@@ -39,8 +39,8 @@ test("parses a Cyberpunk deployment manifest and drops entries Vortex would igno
 
 const identities = new Map<string, VortexModIdentity>([
   ["XF Test Mod B-9001-1-0-1727000000", { id: "XF Test Mod B-9001-1-0-1727000000", name: "XF Test Mod B", version: "1.0",
-    nexus: { gameDomain: "cyberpunk2077", modId: 9001, fileId: 42 }, source: "nexus", enabled: true }],
-  ["XF Test Mod A", { id: "XF Test Mod A", name: "XF Test Mod A", version: null, nexus: null, source: null, enabled: false }],
+    nexus: { gameDomain: "cyberpunk2077", modId: 9001, fileId: 42 }, source: "nexus", author: "A. Modder", enabled: true }],
+  ["XF Test Mod A", { id: "XF Test Mod A", name: "XF Test Mod A", version: null, nexus: null, source: null, author: null, enabled: false }],
 ]);
 
 test("attributes a deployed file to the winning mod, with Vortex's identity when known", () => {

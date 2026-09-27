@@ -104,7 +104,7 @@ export function readVortexGameState(state: unknown, gameId: string): VortexGameS
     mods.set(folder, { id: folder, name: str(at(attributes, "customFileName")) ?? str(at(attributes, "logicalFileName")) ?? str(at(attributes, "modName")) ?? str(at(attributes, "name")),
       version: str(at(attributes, "version")),
       nexus: modId !== null || fileId !== null || source === "nexus" ? { gameDomain: str(at(attributes, "downloadGame")), modId, fileId } : null,
-      source, enabled });
+      source, author: str(at(attributes, "author")) ?? str(at(attributes, "uploader")), enabled });
   }
   return { gameId, instanceId: str(at(state, "app", "instanceId")), gamePath: str(at(state, "settings", "gameMode", "discovered", gameId, "path")),
     installPathSetting: str(at(state, "settings", "mods", "installPath", gameId)), deploymentMethod: str(at(state, "settings", "mods", "activator", gameId)),
