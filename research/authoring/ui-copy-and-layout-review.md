@@ -529,4 +529,6 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 | Coming soon placeholders (§6) | Done |
 | Dropdowns (§6a) | Done except the MO2 profile (kept) and Expression › Start from (the drawer follow-up). The library's `ChoiceList` (chips, rows, tiles) is the single-select control for more than four options or long labels, in the Character panel's choice look (the creator choices are built from the same `choiceItem`); `Segmented` is for two to four short options |
 
+**Follow-ups done in the same pass:** the library's TreeView gives a row's label priority over its secondary text (the secondary text takes only the room left, hides in a tree narrower than about 320 px, and the full text is the tooltip), and the Character panel's search is the library's SearchField (icon, clear button, Escape clears, the same pause as Poses). The reserved empty note line under a choice list or switch was kept at its height: collapsing it to the section gap would move the next control when a note appears.
+
 **Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and Expression › Start from (§6a).

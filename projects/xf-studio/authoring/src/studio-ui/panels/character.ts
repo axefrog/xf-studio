@@ -38,7 +38,7 @@ import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-p
 import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
-import { ChoiceList, propertyList } from "../components";
+import { ChoiceList, propertyList, SearchField } from "../components";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
@@ -152,8 +152,12 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
-  const search = h("input", { class: "field cc-search", type: "search", placeholder: "Find an option or choice", "aria-label": "Find a creator option or choice",
-    autocomplete: "off", spellcheck: "false" });
+  // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
+  // reads the query from its input.
+  const searchField = new SearchField({ label: "Find a creator option or choice", placeholder: "Find an option or choice", className: "cc-search-field",
+    onFilter: () => rt.changed() });
+  const search = searchField.input;
+  search.classList.add("cc-search");
   // One line explains the marks on choices not prepared yet (fixed height: it never moves the rows).
   const legendText = h("span", { class: "cc-legend-text" },
     h("span", { class: "cc-fetch-mark", "data-fetch": "pending", "aria-hidden": "true" }), ` ${LEGEND} · `,
@@ -213,7 +217,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale, h("span", { class: "cc-history" }, undo, redo)),
       h("div", { class: "row wrap gap-s" }, loadPreset, savePreset, h("span", { class: "cc-history" }, resetAll)), status, messages, detailNote, detailsBlock),
     h("section", { class: "section cc-quick" }, ownMakeup.element),
-    h("div", { class: "cc-find" }, search, legend, noMatch),
+    h("div", { class: "cc-find" }, searchField.element, legend, noMatch),
     groupsHost,
     section({ title: "Files", help: "A save is read on this computer and never changed or uploaded." }, h("div", { class: "row wrap gap-s" }, exportV),
       h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared)));
@@ -548,7 +552,6 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       }
     }
   }
-  search.addEventListener("input", () => rt.changed());
   const isOffChoice = (option: CcPanelOption, value: { choice: string } | undefined) => !!value && option.off !== null && value.choice === option.off;
 
   /** Every heading switch: its state from the preview and why it can't change when it can't (the reason tip); what it shows in the help tip. */

@@ -254,7 +254,7 @@ export const LIBRARY: readonly LibraryEntry[] = [
     sizes: "Every item 28 px (<code>TREE_ROW_HEIGHT</code>); rows indented by the chevron's width.",
     when: "Long grouped lists where one click applies the item. Short ordered lists use the Ordered list.",
     combine: `A Search field above with ${code("onArrowDown: () => tree.focus()")}; rows carry ${code("trailingState")} and the owner's ${code("onKey")} maps F to the favourite toggle.`,
-    adapt: "Only the items in view plus a margin (and the focused one) are in the page; updates reuse items by ID, so focus and scroll survive. Labels and secondary text clamp.",
+    adapt: "Only the items in view plus a margin (and the focused one) are in the page; updates reuse items by ID, so focus and scroll survive. The label keeps priority: the secondary text shrinks first and hides in a tree narrower than about 320 px; the full text is the item's tooltip and accessible name.",
     drives: "<code>update({ groups, expanded, current, loading })</code> from the owner's snapshot; <code>onActivate(rowId)</code>; <code>onToggle(groupId, expanded)</code> (the owner persists the expanded set, e.g. in <code>UIPreferences.folded</code>).",
     a11y: "The WAI tree pattern, flat and virtualised: <code>role=tree</code> of <code>treeitem</code>s with <code>aria-level</code>, <code>aria-setsize</code>, <code>aria-posinset</code> and, on groups, <code>aria-expanded</code>; one tab stop; Up/Down, Home/End, Right opens or enters, Left closes or goes to the group, Enter activates, Space toggles a group, type-ahead; names include secondary text and badges; trailing actions are outside the tab order.",
     do: "Give disabled rows a plain reason.", avoid: "Rendering every row; a separate select step before applying." },
