@@ -36,6 +36,28 @@ const same = (a: readonly GeneratedFile[], b: readonly GeneratedFile[]) => {
 };
 
 /**
+ * Verify one of a product's overlay archives (ProductExtras): copied into an empty folder, hashed, unbundled, and holding exactly the files
+ * its features recorded. Its root goes to the feature verifiers.
+ */
+export function verifyOverlayArchive(options: { readonly archive: string; readonly archiveSha256: string; readonly files: readonly GeneratedFile[];
+  readonly tools: VerifierTools; readonly work: string }): { root: string; files: GeneratedFile[] } {
+  const { work, tools } = options;
+  ensure(!existsSync(work) || readdirSync(work).length === 0, `work directory is not empty: ${work}`);
+  const copies = join(work, "archive"), unpacked = join(work, "unpacked");
+  for (const dir of [copies, unpacked]) mkdirSync(dir, { recursive: true });
+  const archive = join(copies, basename(options.archive));
+  copyFileSync(options.archive, archive);
+  ensure(sha256(readFileSync(archive)) === options.archiveSha256, `the overlay archive ${basename(archive)} differs from the build record`);
+  const run: ToolResult = tools.unbundle(archive, unpacked);
+  ensure(run.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(run.stdout + run.stderr), `WolvenKit unbundle failed: ${(run.stdout + run.stderr).slice(-2000)}`);
+  let files: GeneratedFile[];
+  try { files = listGeneratedFiles(unpacked); }
+  catch (error) { return ensure(false, (error as Error).message) as never; }
+  ensure(same(files, options.files), `the overlay ${basename(archive)} holds other files than its features recorded`);
+  return { root: unpacked, files };
+}
+
+/**
  * Verify one product's packed archive and declaration and unbundle it for the feature verifiers. `work` must be
  * empty or absent; `archiveSha256` is what the build recorded right after packing.
  */

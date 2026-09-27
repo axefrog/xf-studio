@@ -5,6 +5,7 @@ import { resolve, sep } from "node:path";
 import type { LocalSettings } from "../src/local-settings";
 import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
 import { eyePlatePrerequisite } from "../src/eye-plate-prerequisite";
+import { expressionsGamePrerequisite } from "../src/expressions-game-prerequisite";
 import { runProcessTree } from "../src/process-tree";
 import { hostFailure } from "../src/diagnostics/host-log";
 import type { FeatureExporterEntry } from "../src/platform/api";
@@ -184,6 +185,12 @@ export const desktopEyePlate = (settings: LocalSettings, dataRoot: string, tools
     mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot },
   cacheRoot: desktopPlateCache(dataRoot), wolvenKitCli: settings.wolvenKitCli ?? "",
   headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead), ...(tools ? { tools } : {}) });
+
+/** Expressions' game inputs (photo mode's table and V's face rigs) in the desktop's private data, beside its resolver cache. */
+export const desktopExpressionsGame = (settings: LocalSettings, dataRoot: string): HostPrerequisite =>
+  expressionsGamePrerequisite({ route: { gameRoot: settings.gameRoot ?? "", launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot }, wolvenKitCli: settings.wolvenKitCli ?? "",
+  cacheRoot: resolve(dataRoot, "expressions-game-cache"), resolverCache: resolve(dataRoot, "preview-cache", "resolver") });
 
 /**
  * The desktop's package host adapter: its readiness gate (packaged builder bundle, WolvenKit, game, private

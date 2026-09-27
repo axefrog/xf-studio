@@ -32,7 +32,7 @@ import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescript
 import type { AnyOwner, Registry } from "./platform/core/registry";
 import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from "./platform/core/history-transaction";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
-import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetService } from "./part-presets";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetService, PartPresetSetList, SetExportState } from "./part-presets";
 import type { FacialPreview } from "./facial-preview";
 import type { FacialPreviewSnapshot } from "./platform/api/facial";
 import { contextCandidates, contextScope, geometryHit,
@@ -969,6 +969,10 @@ export class StudioApplication {
   }
   /** A feature's saved presets (loaded on first ask). */
   presetList(feature: string): PartPresetList { return this.services.presets?.snapshot(feature) ?? { phase: "loading", items: [] }; }
+  /** A feature's sets of saved presets (loaded on first ask). */
+  presetSets(feature: string): PartPresetSetList { return this.services.presets?.sets(feature) ?? { phase: "loading", items: [] }; }
+  /** Each set's latest Check or Build, and what runs now. */
+  presetExports(): SetExportState { return this.services.presets?.exportState() ?? { busy: null, results: {} }; }
   /** The facial preview as a feature's drawer shows it (undefined until the root connects one). */
   facialPreview(): FacialPreviewSnapshot | undefined { return this.services.facial?.snapshot(); }
   facialRetry() { this.services.facial?.retry(); }

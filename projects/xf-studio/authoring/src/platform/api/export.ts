@@ -144,13 +144,15 @@ export class PackagePlanConflict extends Error {
 export type XlFragment = {
   readonly customizations?: { readonly female?: readonly string[]; readonly male?: readonly string[] };
   readonly scope?: Readonly<Record<string, readonly string[]>>;
+  /** Resource patches: a patch file in the product and the game resources it patches (ArchiveXL `resource: patch:`). */
+  readonly patch?: Readonly<Record<string, readonly string[]>>;
 };
 const XL_PATH = /^[a-z0-9_][a-z0-9_.\/-]*$/;
 const XL_SCOPE = /^[a-z0-9_][a-z0-9_.]*$/;
 
 /** One product's declaration: every feature's fragment in product order. Refuses an entry declared twice. */
 export function mergeXlFragments(fragments: readonly XlFragment[]): XlFragment {
-  const female: string[] = [], male: string[] = [], scope = new Map<string, string[]>();
+  const female: string[] = [], male: string[] = [], scope = new Map<string, string[]>(), patch = new Map<string, string[]>();
   const add = (list: string[], path: string) => {
     if (!XL_PATH.test(path)) throw Error(`ArchiveXL entry is not a canonical depot path: ${JSON.stringify(path)}`);
     if (list.includes(path)) throw Error(`Two features declare the same ArchiveXL entry: ${path}`);
@@ -165,9 +167,16 @@ export function mergeXlFragments(fragments: readonly XlFragment[]): XlFragment {
       for (const path of paths) add(list, path);
       scope.set(name, list);
     }
+    for (const [file, targets] of Object.entries(fragment.patch ?? {})) {
+      if (!XL_PATH.test(file)) throw Error(`ArchiveXL entry is not a canonical depot path: ${JSON.stringify(file)}`);
+      if (patch.has(file)) throw Error(`Two features declare the same ArchiveXL entry: ${file}`);
+      const list: string[] = [];
+      for (const target of targets) add(list, target);
+      patch.set(file, list);
+    }
   }
   return { ...(female.length || male.length ? { customizations: { ...(female.length ? { female } : {}), ...(male.length ? { male } : {}) } } : {}),
-    ...(scope.size ? { scope: Object.fromEntries(scope) } : {}) };
+    ...(scope.size ? { scope: Object.fromEntries(scope) } : {}), ...(patch.size ? { patch: Object.fromEntries(patch) } : {}) };
 }
 
 /**
@@ -188,8 +197,14 @@ export function archiveXlText(fragment: XlFragment): string {
     if (custom.male?.length) entry("  ", "male", custom.male, false);
   }
   const scopes = Object.entries(fragment.scope ?? {}).filter(([, paths]) => paths.length);
+  const patches = Object.entries(fragment.patch ?? {}).filter(([, paths]) => paths.length);
+  if (scopes.length || patches.length) lines.push("resource:");
+  if (patches.length) {
+    lines.push("  patch:");
+    for (const [file, targets] of patches) entry("    ", depot(file), targets, true);
+  }
   if (scopes.length) {
-    lines.push("resource:", "  scope:");
+    lines.push("  scope:");
     for (const [name, paths] of scopes) entry("    ", name, paths, true);
   }
   if (!lines.length) throw Error("An ArchiveXL declaration needs at least one entry.");
@@ -270,6 +285,19 @@ export type FeatureCheckInput = {
   readonly prerequisites: Readonly<Record<string, unknown>>;
   /** Honour diagnostic export knobs (a developer's prepared test candidate; never a host). */
   readonly diagnostics: boolean;
+  /** The product this feature ships in: its archive base name, which names the files a feature adds beside it (`ProductExtras`). */
+  readonly product?: { readonly archive: string; readonly modName: string };
+};
+/**
+ * Files a feature adds to its product beside the main archive and `.xl` (a platform capability for features that must own a whole game
+ * file or declare TweakDB records): TweakXL files below `r6/tweaks/<archive>/`, and overlay archives in `archive/pc/mod/`, each holding
+ * depot paths of its own (expression export's table, named to load before other mods'). Names are the feature's, checked by the builder.
+ */
+export type ProductExtras = {
+  /** TweakXL files by file name (`[a-z0-9_]+.yaml`), written by the build below `r6/tweaks/<product archive>/`. */
+  readonly tweaks?: readonly string[];
+  /** Overlay archives: base name (`[0-9a-z_]+`, never the product's own) and the depot paths it holds, sorted. */
+  readonly overlays?: readonly { readonly archive: string; readonly inventory: readonly string[] }[];
 };
 /** A feature's plan: its report, its plan (`plan.json`), its package-only snapshot, planned resources and `.xl` fragment. */
 export type FeatureOutcome<Plan = unknown> = {
@@ -280,6 +308,8 @@ export type FeatureOutcome<Plan = unknown> = {
   /** Every depot path the feature's build writes, sorted. */
   readonly inventory: readonly string[];
   readonly xl: XlFragment;
+  /** Files beside the main archive (TweakXL files, overlay archives); absent: none. */
+  readonly extras?: ProductExtras;
 };
 
 /**
@@ -288,7 +318,20 @@ export type FeatureOutcome<Plan = unknown> = {
  * and diagnostics only, never the page (PIPE-93).
  */
 export class ExportRefusal extends Error {
-  constructor(readonly code: string, message: string, readonly detail?: string) { super(message); this.name = "ExportRefusal"; }
+  /**
+   * `omissions`: when nothing can be packaged because every look was left out, each look and why, so a presentation can show them with
+   * their next step (an expression set's "Nothing in this set can become mod files yet").
+   */
+  constructor(readonly code: string, message: string, readonly detail?: string, readonly omissions?: readonly ExportOmission[]) {
+    super(message); this.name = "ExportRefusal";
+  }
+}
+/** A refusal's omissions as they may cross a process or network boundary: well-formed entries only, at most 500. */
+export function refusalOmissions(value: unknown): ExportOmission[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const kept = value.slice(0, 500).filter((item): item is ExportOmission => !!item && typeof item === "object" &&
+    typeof (item as { kind?: unknown }).kind === "string" && typeof (item as { reason?: unknown }).reason === "string");
+  return kept.length ? structuredClone(kept) : undefined;
 }
 /**
  * The builder found a host prerequisite stale (eye makeup: a cached plate whose recorded UV footprint
@@ -322,14 +365,19 @@ export type FeatureBuildContext = {
   readonly staging: string;
   /** This feature's private work directory (fresh; the build creates it). Its verifier reads it. */
   readonly work: string;
+  /**
+   * Where the feature writes its `ProductExtras`: TweakXL files at `r6/tweaks/<archive>/<name>` and each overlay's resources at
+   * `overlays/<overlay>/<depot path>` below it. Shared by the product's features.
+   */
+  readonly extras: string;
   readonly tools: ResourceTools;
   /** Builder-side prerequisite values by ID (eye makeup: the prepared plate's directory and manifest). */
   readonly prerequisites: Readonly<Record<string, unknown>>;
   readonly signal?: AbortSignal;
   readonly log: (line: string) => void;
 };
-/** What a feature's build wrote: exactly its outcome's inventory, hashed. */
-export type FeatureBuildRecord = { readonly files: readonly GeneratedFile[] };
+/** What a feature's build wrote: exactly its outcome's inventory, hashed, and its extras (paths below the extras folder). */
+export type FeatureBuildRecord = { readonly files: readonly GeneratedFile[]; readonly extras?: readonly GeneratedFile[] };
 
 /** What a Build needs before it plans (eye makeup: the plate's UV footprint, read from its manifest or the plate itself). */
 export type FeatureBuildInputs = {
@@ -368,7 +416,7 @@ export interface FeatureExporter<Plan = unknown> {
   /** Input paths among the builder-side prerequisites that the writable build roots may not overlap, each with a plain label. */
   protectedInputs?(prerequisites: Readonly<Record<string, unknown>>): readonly (readonly [string, string])[];
   /** Build: read the prerequisites the plan needs (may use WolvenKit), before planning. `work` is a fresh private folder. */
-  buildInputs?(context: Omit<FeatureBuildContext, "staging">): Promise<FeatureBuildInputs>;
+  buildInputs?(context: Omit<FeatureBuildContext, "staging" | "extras">): Promise<FeatureBuildInputs>;
   build(outcome: FeatureOutcome<Plan>, context: FeatureBuildContext): Promise<FeatureBuildRecord>;
   /** Cross-check its independent verifier's report against the plan (routes, lifts, inputs). Throws on a mismatch. */
   accept?(outcome: FeatureOutcome<Plan>, verification: FeatureVerification, context: FeatureBuildContext): void;
@@ -411,6 +459,12 @@ export type FeatureVerifyInput = {
   /** The package-only snapshot the host planned (every recipe in the build record must equal it). */
   readonly packaged: unknown;
   readonly prerequisites: Readonly<Record<string, unknown>>;
+  /**
+   * The product's extra files as the product verifier checked them: each overlay archive unbundled (`overlays[archive]` is its root),
+   * and the TweakXL files by their path below the product (`r6/tweaks/…`), with the folder that holds them.
+   */
+  readonly extras?: { readonly root: string; readonly tweaks: readonly GeneratedFile[]; readonly overlays: Readonly<Record<string, { readonly root: string;
+    readonly files: readonly GeneratedFile[] }>> };
 };
 /** A feature verifier's report: what it verified and what remains unproven. `report` is its full record. */
 export type FeatureVerification = { readonly presetCount: number; readonly verifiedFiles: number; readonly limits: readonly string[];

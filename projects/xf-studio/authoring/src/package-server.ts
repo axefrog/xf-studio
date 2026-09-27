@@ -11,6 +11,7 @@ import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
 import { eyePlateHeadOverride } from "./eye-plate-service";
 import { eyePlatePrerequisite, eyePlateRouteKeyFor } from "./eye-plate-prerequisite";
+import { expressionsGamePrerequisite } from "./expressions-game-prerequisite";
 import { runProcessTree } from "./process-tree";
 import { hostFailure } from "./diagnostics/host-log";
 import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction, type PackageHostAdapter } from "./platform/export/product-host";
@@ -63,6 +64,15 @@ export const localPlateRouteKey = (tools: PackageTools) => eyePlateRouteKeyFor({
 export const localEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
   eyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
     ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
+
+/**
+ * Expressions' game inputs for these localhost tools (photo mode's table and V's face rigs, read from the route's winning files): private,
+ * in the project's ignored `data/` (`XFS_EXPRESSIONS_GAME_CACHE` relocates it), beside the resolver cache the facial preview uses.
+ */
+export const localExpressionsGame = (tools: PackageTools, env: Record<string, string | undefined> = process.env): HostPrerequisite =>
+  expressionsGamePrerequisite({ route: localRoute(tools), wolvenKitCli: tools.wolvenkit,
+    cacheRoot: resolve(env.XFS_EXPRESSIONS_GAME_CACHE || resolve(app, "data", "expressions-game-cache")),
+    resolverCache: resolve(env.XFS_RESOLVER_CACHE || resolve(app, "data", "resolver-cache")) });
 
 /** What localhost's Build needs before anything starts, in plain words, or null. */
 export function localBuildIssue(tools: PackageTools): string | null {
@@ -162,6 +172,6 @@ export function createPackageHandler(adapter: (action: PackageAction) => Package
         : "XF Studio couldn't prepare mod files right now. Restart XF Studio and try again. Your collection is unchanged." }, 503);
     }
     const outcome = await service.run(host, action, input.collection, request.signal);
-    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);
+    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
   };
 }

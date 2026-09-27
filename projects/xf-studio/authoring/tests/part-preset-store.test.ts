@@ -55,7 +55,7 @@ test("saving, renaming and deleting presets leaves the released tables, their ve
   const after = new Database(temp.path, { readonly: true });
   try {
     expect((after.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(version);
-    expect(tables(after)).toEqual([...released, "part_presets"].sort());
+    expect(tables(after)).toEqual([...released, "part_preset_sets", "part_presets"].sort());
     // The release's own list reads the library exactly as before.
     const alpha = alphaList(after, parseRecipeFile);
     expect(alpha.map(({ id, name, revision, count }) => ({ id, name, revision, count })))
@@ -109,6 +109,8 @@ test("the presets family's service lists on first ask, keeps names sorted and re
     save: async input => { const row = { ...input, id: `id-${++n}`, revision: 1, updatedAt: "now" }; rows.push(row); return row; },
     rename: async (id, input) => ({ id, name: input.name, revision: input.revision + 1 }),
     delete: async id => ({ id }),
+    listSets: async () => [], createSet: async () => { throw Error("unused"); }, updateSet: async () => { throw Error("unused"); },
+    deleteSet: async id => ({ id }),
   });
   expect(service.snapshot("expressions")).toEqual({ phase: "loading", items: [] });
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -122,4 +124,133 @@ test("the presets family's service lists on first ask, keeps names sorted and re
   expect(service.capability({ kind: "partPreset.delete", feature: "expressions", id: "gone", revision: 1 })).toMatchObject({ available: false, code: "missing_target" });
   expect(await service.execute({ kind: "partPreset.delete", feature: "expressions", id: "id-2", revision: 1 })).toEqual({ ok: true });
   expect(service.snapshot("expressions").items.map(item => item.name)).toEqual(["Beta"]);
+});
+
+test("expression sets: created, renamed, filled, named for export and deleted, revision-guarded, beside the presets", async () => {
+  const temp = library();
+  let n = 0;
+  const presets = new PartPresetLibrary(temp.path, STUDIO_PARTS, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
+  try {
+    const smile = presets.save({ feature: "expressions", name: "Smile", part: expression({ lips_l_corner_up: 0.3 }) });
+    const frown = presets.save({ feature: "expressions", name: "Frown", part: expression({ eye_l_brows_lower: 0.2 }) });
+    const set = presets.createSet({ feature: "expressions", name: "  Moody  " });
+    expect(set).toMatchObject({ name: "Moody", revision: 1, members: [] });
+    expect(() => presets.createSet({ feature: "expressions", name: " " })).toThrow("Give the set a name.");
+    expect(() => presets.createSet({ feature: "nope", name: "x" })).toThrow();
+    const filled = presets.updateSet(set.id, { revision: 1, members: [frown.id, smile.id] });
+    expect(filled).toMatchObject({ revision: 2, members: [frown.id, smile.id] });
+    // A stale window can't overwrite; a damaged or duplicated list is refused.
+    expect(() => presets.updateSet(set.id, { revision: 1, name: "Late" })).toThrow("changed in another window");
+    expect(() => presets.updateSet(set.id, { revision: 2, members: [smile.id, smile.id] })).toThrow("damaged");
+    expect(() => presets.updateSet(set.id, { revision: 2, members: ["not-a-uuid"] })).toThrow("damaged");
+    // The mod name and table: a folder-unsafe name is refused in plain words; an empty name goes back to the default.
+    expect(() => presets.updateSet(set.id, { revision: 2, modName: "XF: Moody" })).toThrow("can't contain");
+    const named = presets.updateSet(set.id, { revision: 2, modName: "XF Moody Faces", table: "sharing", name: "Moody faces" });
+    expect(named).toMatchObject({ name: "Moody faces", modName: "XF Moody Faces", table: "sharing", revision: 3 });
+    const cleared = presets.updateSet(set.id, { revision: 3, modName: "", table: "installed" });
+    expect(cleared.modName).toBeUndefined(); expect(cleared.table).toBeUndefined();
+    // Deleting a saved expression takes it out of its sets in the same step; restoring puts both back, at its old place.
+    const removed = presets.delete(smile.id, 1);
+    expect(presets.listSets("expressions")[0]).toMatchObject({ members: [frown.id], revision: 5 });
+    expect(removed.restore.memberships).toEqual([{ set: set.id, index: 1 }]);
+    expect(presets.restore(removed.restore)).toMatchObject({ id: smile.id, name: "Smile", revision: 1 });
+    expect(presets.listSets("expressions")[0]).toMatchObject({ members: [frown.id, smile.id], revision: 6 });
+    expect(() => presets.restore(removed.restore)).toThrow("already back");
+    // Renaming with a part replaces the part too (an expression's photo-mode name lives there).
+    expect(presets.rename(smile.id, { name: "Smirk", revision: 1, part: expression({ lips_l_corner_up: 0.3 }) })).toMatchObject({ name: "Smirk", revision: 2 });
+    // The request route: list and change through <prefix>/sets.
+    const origin = "http://127.0.0.1:4999";
+    const listed = await (await partPresetRequest(new Request(`${origin}/api/part-presets/sets?feature=expressions`), presets, "/api/part-presets")).json();
+    expect(listed).toHaveLength(1);
+    const patched = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}`, { method: "PATCH", headers: { Origin: origin,
+      "Content-Type": "application/json" }, body: JSON.stringify({ revision: 6, members: [frown.id] }) }), presets, "/api/part-presets");
+    expect(patched.status).toBe(200);
+    const foreign = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}?revision=7`, { method: "DELETE", headers: { Origin: "http://evil" } }),
+      presets, "/api/part-presets");
+    expect(foreign.status).toBe(403);
+    expect(presets.deleteSet(set.id, 7)).toEqual({ id: set.id });
+    expect(presets.listSets("expressions")).toEqual([]);
+  } finally { presets.close(); temp.cleanup(); }
+});
+
+test("a set exports as a package-only collection named for the mod, members in order, deleted ones left out", async () => {
+  const { setCollection, defaultSetModName } = await import("../src/part-preset-sets");
+  expect(defaultSetModName("expressions", "Moody: faces?")).toBe("XF Expressions - Moody faces");
+  expect(defaultSetModName("expressions", "  ")).toBe("XF Expressions");
+  expect(defaultSetModName("expressions", "x".repeat(200)).length).toBeLessThanOrEqual(80);
+  const a = "00000000-0000-4000-8000-00000000000a", b = "00000000-0000-4000-8000-00000000000b", gone = "00000000-0000-4000-8000-00000000000c";
+  const set = { id: "00000000-0000-4000-8000-0000000000ff", feature: "expressions", name: "Moody", revision: 3, members: [b, gone, a], updatedAt: "now" };
+  const presets = [{ id: a, name: "A", revision: 1, part: expression({ jaw_mid_open: 0.5 }) }, { id: b, name: "B", revision: 2, part: expression({ eye_l_blink: 1 }) }];
+  const collection = setCollection(set, presets);
+  expect(collection.presets.map(look => look.id)).toEqual([b, a]);
+  expect(collection.packagePlan).toEqual({ schema: "xfs/package-plan-1", products: [{ id: set.id, name: "XF Expressions - Moody", features: ["expressions"] }] });
+  expect(collection.presetSet).toEqual({ table: "installed" });
+  expect(setCollection({ ...set, table: "sharing", modName: "Mine" }, presets)).toMatchObject({ presetSet: { table: "sharing" },
+    packagePlan: { products: [{ name: "Mine" }] } });
+});
+
+test("a set's Check and Build go through the package route with its package-only collection; reveal waits for a build", async () => {
+  const { PartPresetService } = await import("../src/part-presets");
+  const presetId = "00000000-0000-4000-8000-000000000001", setId = "00000000-0000-4000-8000-0000000000aa";
+  const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
+  const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [] as string[], updatedAt: "now" }];
+  const sent: unknown[] = [], revealed: string[] = [];
+  const service = new PartPresetService({
+    list: async () => [preset], save: async () => { throw Error("unused"); }, rename: async () => { throw Error("unused"); }, delete: async id => ({ id }),
+    listSets: async () => structuredClone(sets), createSet: async () => { throw Error("unused"); }, deleteSet: async id => ({ id }),
+    updateSet: async (id, input) => { Object.assign(sets[0]!, input, { revision: sets[0]!.revision + 1 }); return structuredClone(sets[0]!); },
+  }, {
+    package: async (action, collection) => { sent.push({ action, collection }); return { schema: action === "build" ? "xfs/package-build-2" : "xfs/package-check-2",
+      products: [{ package: "C:/dist/xfs_c00-1", features: [] }], omissions: [], originalPresetCount: 1 } as never; },
+    reveal: async id => { revealed.push(id); return { ok: true }; },
+  });
+  service.snapshot("expressions"); service.sets("expressions");
+  await Bun.sleep(0);
+  expect(service.capability({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toMatchObject({ available: false, code: "needs_input" });
+  expect(service.capability({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toMatchObject({ available: false, code: "missing_target" });
+  expect(await service.execute({ kind: "partPresetSet.setMembers", feature: "expressions", id: setId, members: [presetId], revision: 1 })).toMatchObject({ ok: true });
+  expect(service.capability({ kind: "partPresetSet.setExport", feature: "expressions", id: setId, revision: 2, modName: "XF: bad" }))
+    .toMatchObject({ available: false, code: "invalid_value" });
+  expect(await service.execute({ kind: "partPresetSet.build", feature: "expressions", id: setId })).toEqual({ ok: true });
+  expect(sent).toHaveLength(1);
+  expect((sent[0] as { collection: { presetSet: unknown; presets: { id: string }[] } }).collection).toMatchObject({ presetSet: { table: "installed" },
+    presets: [{ id: presetId }] });
+  expect(service.exportState().results[setId]).toMatchObject({ kind: "build", revision: 2, missing: 0 });
+  expect(await service.execute({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toEqual({ ok: true });
+  expect(revealed).toEqual(["xfs_c00-1"]);
+});
+
+test("a set's provisional Check runs again by itself, and Build says why while a current Check found nothing to package", async () => {
+  const { PartPresetService } = await import("../src/part-presets");
+  const presetId = "00000000-0000-4000-8000-000000000001", setId = "00000000-0000-4000-8000-0000000000aa";
+  const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
+  const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [presetId], updatedAt: "now" }];
+  let answers = 0, refuse = false;
+  const service = new PartPresetService({
+    list: async () => [preset], save: async () => { throw Error("unused"); }, rename: async () => { throw Error("unused"); }, delete: async id => ({ id }),
+    listSets: async () => structuredClone(sets), createSet: async () => { throw Error("unused"); }, deleteSet: async id => ({ id }),
+    updateSet: async () => { throw Error("unused"); },
+  }, {
+    package: async () => {
+      answers++;
+      if (refuse) throw Object.assign(Error("Nothing in this set can become mod files yet."), { code: "no_exportable_content",
+        omissions: [{ kind: "preset", presetId, presetName: "Smile", reason: "“Smile” is damaged, so XF Studio can't read it." }] });
+      // The first two answers are provisional (the game files still being read), then a final one.
+      return { schema: "xfs/package-check-2", ready: true, omissions: [], originalPresetCount: 1,
+        products: [{ features: [{ details: answers <= 2 ? { provisional: true } : {}, presets: [], omissions: [], notes: [] }] }] } as never;
+    },
+    reveal: async () => ({ ok: true }),
+  }, { recheckMs: 5 });
+  service.snapshot("expressions"); service.sets("expressions");
+  await Bun.sleep(0);
+  await service.execute({ kind: "partPresetSet.check", feature: "expressions", id: setId });
+  for (let i = 0; i < 40 && answers < 3; i++) await Bun.sleep(10);
+  await Bun.sleep(30);
+  expect(answers).toBe(3);
+  refuse = true;
+  expect(await service.execute({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toMatchObject({ ok: false, code: "no_exportable_content" });
+  expect(service.exportState().results[setId]).toMatchObject({ kind: "failed", omissions: [{ presetId }] });
+  expect(service.capability({ kind: "partPresetSet.build", feature: "expressions", id: setId }))
+    .toMatchObject({ available: false, code: "needs_input", reason: "Nothing in this set can become mod files yet. Fix what Check listed, then check again." });
+  expect(service.capability({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toEqual({ available: true });
 });

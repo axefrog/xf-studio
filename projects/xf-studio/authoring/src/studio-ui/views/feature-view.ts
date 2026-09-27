@@ -14,7 +14,7 @@ import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget 
 import type { EasingId } from "../../platform/api/easing";
 import type { StudioContextHit } from "../../studio-context-targets";
 import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
-import type { PartPresetList, PartPresetOutcome, PartPresetRequest } from "../../part-presets";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../part-presets";
 import type { ModuleService } from "../../platform/api";
 import type { Command } from "../commands";
 import type { Feedback, FeedbackAction } from "../feedback";
@@ -106,6 +106,10 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   /** This feature's part presets in the library: its list, and save, rename and delete (the `presets` family, feature filled in). */
   readonly presets: {
     list(): PartPresetList;
+    /** This feature's sets of saved presets (an expression set exports as one mod). */
+    sets(): PartPresetSetList;
+    /** Each set's latest Check or Build, and what runs now. */
+    exports(): SetExportState;
     capability(request: FeaturePresetRequest): StudioCapability;
     execute(request: FeaturePresetRequest): Promise<PartPresetOutcome>;
   };

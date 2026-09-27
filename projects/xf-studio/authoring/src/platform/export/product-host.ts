@@ -13,7 +13,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, re
   statSync, writeFileSync } from "node:fs";
 import { basename, relative, resolve, sep } from "node:path";
 import {
-  ExportRefusal, PACKAGE_BUILD_2, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
+  ExportRefusal, PACKAGE_BUILD_2, type ExportOmission, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
 } from "../api/export";
 import { checkProducts, type ProductsCheck } from "./product-check";
 import { runWorkerCheck, type CheckOutcome, type CheckRequest } from "./check-runner";
@@ -67,7 +67,7 @@ export interface PackageHostAdapter {
 
 export type PackageHostOutcome =
   | { ok: true; result: PackageCheckResult | PackageBuildResult }
-  | { ok: false; code: string; message: string; status: number };
+  | { ok: false; code: string; message: string; status: number; omissions?: readonly ExportOmission[] };
 
 const STATUS: Readonly<Record<string, number>> = {
   invalid_collection: 422, no_exportable_content: 422, namespace_duplicated: 422, package_conflict: 422,
@@ -76,9 +76,10 @@ const STATUS: Readonly<Record<string, number>> = {
   package_check_timeout: 504, package_build_timeout: 504, package_check_cancelled: 499, package_build_cancelled: 499,
   package_check_worker_unavailable: 503, package_check_worker_failed: 503, package_build_unavailable: 503,
 };
-const failure = (code: string, message: string): PackageHostOutcome => ({ ok: false, code, message, status: STATUS[code] ?? 422 });
+const failure = (code: string, message: string, omissions?: readonly ExportOmission[]): PackageHostOutcome =>
+  ({ ok: false, code, message, status: STATUS[code] ?? 422, ...(omissions?.length ? { omissions } : {}) });
 const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
-const refusalOf = (error: unknown) => error instanceof ExportRefusal ? failure(error.code, error.message) : undefined;
+const refusalOf = (error: unknown) => error instanceof ExportRefusal ? failure(error.code, error.message, error.omissions) : undefined;
 
 /**
  * The request's collection as the builder gets it: identity-checked, with a prepared test candidate's diagnostic
@@ -225,7 +226,7 @@ export class PackageHostService {
       // The log gets the technical detail (a namespace, a depot path); the page gets the plain message (PIPE-93).
       if (outcome.code !== "package_check_cancelled" && outcome.code !== "no_exportable_content")
         adapter.log("check", outcome.code, outcome.message, outcome.detail);
-      return failure(outcome.code, outcome.message);
+      return failure(outcome.code, outcome.message, outcome.omissions);
     }
     // The worker's answer must be the host's own plan of the same snapshot (the preflight's compile aside).
     try {

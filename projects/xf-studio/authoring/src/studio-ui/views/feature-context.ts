@@ -81,6 +81,8 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     facial: Object.freeze({ snapshot: () => port.facial.snapshot(), retry: () => port.facial.retry() }),
     presets: Object.freeze({
       list: () => port.presets.list(owner),
+      sets: () => port.presets.sets(owner),
+      exports: () => port.presets.exports(),
       capability: (request: FeaturePresetRequest) => port.presets.capability({ ...request, feature: owner } as PartPresetRequest),
       execute: (request: FeaturePresetRequest) => port.presets.execute({ ...request, feature: owner } as PartPresetRequest),
     }),

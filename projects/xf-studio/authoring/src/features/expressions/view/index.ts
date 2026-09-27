@@ -6,7 +6,8 @@
 import { featureView } from "../../../studio-ui/views/feature-view";
 import { EXPRESSIONS_VIEW } from "./contribution";
 import { expressionDrawer } from "./drawer";
+import { expressionSets } from "./sets";
 
 export { EXPRESSIONS_VIEW, EXPRESSIONS_PANEL_META } from "./contribution";
 
-export const EXPRESSIONS_VIEW_BINDING = featureView(EXPRESSIONS_VIEW, { panels: { "expressions.controls": expressionDrawer } });
+export const EXPRESSIONS_VIEW_BINDING = featureView(EXPRESSIONS_VIEW, { panels: { "expressions.controls": expressionDrawer, "expressions.sets": expressionSets } });

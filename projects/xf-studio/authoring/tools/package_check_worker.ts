@@ -17,7 +17,8 @@ self.onmessage = (event: MessageEvent<CheckRequest>) => {
   } catch (error) {
     outcome = { kind: "failure", message: error instanceof Error ? error.message : "Package Check failed.",
       code: error instanceof ExportRefusal ? error.code : "package_check_failed",
-      ...(error instanceof ExportRefusal && error.detail ? { detail: error.detail } : {}) };
+      ...(error instanceof ExportRefusal && error.detail ? { detail: error.detail } : {}),
+      ...(error instanceof ExportRefusal && error.omissions?.length ? { omissions: [...error.omissions] } : {}) };
   }
   self.postMessage(outcome);
 };
