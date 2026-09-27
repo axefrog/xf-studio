@@ -2,8 +2,9 @@
  * Browser device for choice previews (choice-preview-service.ts `ChoicePreviewPort`): the host's preview endpoint
  * (choice-preview-server.ts) and the preview worker (choice-preview-worker.ts), which draws off the main thread with its own WebGL 2
  * context. Images the worker draws are stored on the host under their key and shown from the host's URL (PREV-156), so the page holds
- * no copy; only an image the host couldn't keep is shown from an object URL, at most `OBJECT_URLS` of them, the oldest revoked first,
- * and all of them on `release` or `dispose`.
+ * no copy; only an image the host couldn't keep is shown from an object URL, at most `OBJECT_URLS` of them. Every one of those is a
+ * row's until the service releases it (`release`, or all on `dispose`), so past the bound a new picture fails (its tile keeps its glyph)
+ * rather than revoking one a tile still shows (PREV-164).
  *
  * **The worker.** A worker that stops (`onerror`) is dropped and every job waiting on it fails; the next job starts a new one, with
  * the subject head loaded again first. A second stop leaves previews off for the session (every job fails at once, tiles keep their
@@ -16,7 +17,7 @@ import { CHARACTER_DETAIL_ASSETS, coreAssetName, coreDetailUrl, parseCoreDetail 
 
 export const CHOICE_PREVIEW_ENDPOINT = "/api/preview-character/creator/previews";
 const SOURCES_SCHEMA = "xfs/choice-preview-sources-1";
-/** The most object URLs kept for images the host couldn't store (each a few kilobytes, a strip a few hundred). */
+/** The most object URLs held for images the host couldn't store (each a few kilobytes, a strip a few hundred); rows release them. */
 export const OBJECT_URLS = 48;
 /** Worker starts before previews stay off for the session. */
 const WORKER_STARTS = 2;
@@ -30,7 +31,7 @@ export function createBrowserChoicePreviewDevice(options: { fetch?: Fetch; worke
   /** The subject message last sent, sent again first to a new worker. */
   let subject: Message | null = null;
   const pending = new Map<number, { resolve(reply: PreviewWorkerReply): void }>();
-  /** Object URLs in use, oldest first. */
+  /** Object URLs rows hold (each until released). */
   const objects = new Set<string>();
   type Message = PreviewWorkerRequest extends infer R ? R extends PreviewWorkerRequest ? Omit<R, "id"> : never : never;
   const stopped = (id: number): PreviewWorkerReply => ({ id, ok: false, error: "The preview worker stopped." });
@@ -57,9 +58,9 @@ export function createBrowserChoicePreviewDevice(options: { fetch?: Fetch; worke
     return new Promise(resolve => { pending.set(id, { resolve }); to.postMessage({ ...message, id } as PreviewWorkerRequest); });
   };
   const objectUrl = (blob: Blob) => {
+    if (objects.size >= OBJECT_URLS) throw Error("As many pictures as XF Studio keeps in memory are shown already.");
     const url = urls.create(blob);
     objects.add(url);
-    for (const oldest of objects) { if (objects.size <= OBJECT_URLS) break; objects.delete(oldest); urls.revoke(oldest); }
     return url;
   };
   return {

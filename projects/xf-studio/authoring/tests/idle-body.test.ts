@@ -2,12 +2,12 @@
 // graph in the reader's JSON shape and synthetic rigs (no game data): which clips loop on which screen, the catalogue, the rests and
 // ancestry, the host's disk cache and prepared faces, and the endpoint's refusals. The real game is compared in native-idle-oracle.test.ts.
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as THREE from "three";
 import { EYES_SECTION_ID, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle } from "../src/idle-body";
-import { IDLE_HOST_VERSION, IdleHost, IdleSetupError } from "../src/idle-host";
+import { IDLE_CACHE_KEYS, IDLE_HOST_VERSION, IdleHost, IdleSetupError, pruneIdleCache } from "../src/idle-host";
 import { createIdleHandler } from "../src/idle-server";
 import type { IdleEntry } from "../src/idle-catalogue";
 import { restSkeleton } from "../src/platform/scene/idle-source";
@@ -128,6 +128,22 @@ describe("the idle host and its endpoint", () => {
       // The Python oracle's source answers with the preparation alone.
       const prepared = await new IdleHost({ route: () => route, fingerprint: () => "fp", resolverCache: join(root, "cache"), preparedAssets: () => assets, source: "prepared" }).state();
       expect(prepared.phase === "ready" && prepared.source).toBe("prepared");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("the idle cache keeps a few installations' folders, least recently used dropped first, never another host's current one (PREV-163)", () => {
+    const root = mkdtempSync(join(tmpdir(), "xfs-idle-cache-"));
+    try {
+      // Six installations' folders, oldest first; "main" is the other server's, used most recently.
+      const names = ["a", "b", "c", "d", "main", "new"];
+      names.forEach((name, i) => {
+        mkdirSync(join(root, name));
+        const at = new Date(Date.UTC(2026, 0, 1, 0, i));
+        utimesSync(join(root, name), at, at);
+      });
+      pruneIdleCache(root, "new");
+      expect(readdirSync(root).sort()).toEqual(["c", "d", "main", "new"]);
+      expect(readdirSync(root)).toHaveLength(IDLE_CACHE_KEYS);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 

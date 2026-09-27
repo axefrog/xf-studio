@@ -5,7 +5,7 @@
  * gone from the library, as the person chose).
  */
 import { modNameIssue, refusal, refusalOmissions, type Capability, type PackageBuildResult, type PackageCheckResult, type PartEnvelope } from "./platform/api";
-import { setCollection, setMembers, type PartPresetSet, type PartPresetSetList, type PartPresetSetTable, type SetExportResult,
+import { setCollection, setExportKey, setMembers, type PartPresetSet, type PartPresetSetList, type PartPresetSetTable, type SetExportResult,
   type SetExportState } from "./part-preset-sets";
 
 export type { PartPresetSet, PartPresetSetList, PartPresetSetTable, SetExportResult, SetExportState } from "./part-preset-sets";
@@ -124,7 +124,8 @@ export class PartPresetService {
       if (!this.exporter) return refusal("unavailable", "Making mod files isn't available here.");
       // A current Check found nothing to package: Build would refuse the same way, so it says why now.
       const checked = this.exports.results[set.id];
-      if (request.kind === "partPresetSet.build" && checked?.kind === "failed" && checked.code === "no_exportable_content" && checked.revision === set.revision)
+      if (request.kind === "partPresetSet.build" && checked?.kind === "failed" && checked.code === "no_exportable_content" &&
+          checked.key === setExportKey(set, this.lists.get(request.feature)?.items ?? []))
         return refusal("needs_input", "Nothing in this set can become mod files yet. Fix what Check listed, then check again.");
       if (this.exports.busy) return refusal("busy", this.exports.busy.action === "build" ? "A set's mod files are being built. Wait for it to finish."
         : "A set is being checked. Wait a moment.");
@@ -253,18 +254,18 @@ export class PartPresetService {
   /** Check or Build one set: its package-only collection through the host's package route (never installs anything). */
   private async runExport(feature: string, id: string, action: "check" | "build", attempt = 0): Promise<PartPresetOutcome> {
     const set = this.set(feature, id)!, presets = this.lists.get(feature)?.items ?? [];
-    const missing = setMembers(set, presets).filter(member => !member.preset).length;
+    const missing = setMembers(set, presets).filter(member => !member.preset).length, key = setExportKey(set, presets);
     this.exports = { ...this.exports, busy: { id, action } }; this.notify();
     let entry: SetExportResult;
     try {
       const result = await this.exporter!.package(action, setCollection(set, presets));
-      entry = action === "build" ? { kind: "build", result: result as PackageBuildResult, revision: set.revision, missing }
-        : { kind: "check", result: result as PackageCheckResult, revision: set.revision, missing };
+      entry = action === "build" ? { kind: "build", result: result as PackageBuildResult, revision: set.revision, key, missing }
+        : { kind: "check", result: result as PackageCheckResult, revision: set.revision, key, missing };
     } catch (error) {
       const code = (error as { code?: unknown })?.code;
       const omissions = refusalOmissions((error as { omissions?: unknown })?.omissions);
       entry = { kind: "failed", action, code: typeof code === "string" ? code : "package_failed",
-        message: error instanceof Error ? error.message : "The request failed.", revision: set.revision, ...(omissions ? { omissions } : {}) };
+        message: error instanceof Error ? error.message : "The request failed.", revision: set.revision, key, ...(omissions ? { omissions } : {}) };
     }
     this.exports = { busy: null, results: { ...this.exports.results, [id]: entry } };
     this.notify();
@@ -273,7 +274,7 @@ export class PartPresetService {
       (feature.details as { provisional?: unknown }).provisional === true));
     if (provisional && attempt < PROVISIONAL_RECHECKS) setTimeout(() => {
       const now = this.set(feature, id);
-      if (!now || now.revision !== set.revision || this.exports.busy || this.exports.results[id] !== entry) return;
+      if (!now || setExportKey(now, this.lists.get(feature)?.items ?? []) !== key || this.exports.busy || this.exports.results[id] !== entry) return;
       void this.runExport(feature, id, "check", attempt + 1);
     }, this.options.recheckMs ?? PROVISIONAL_RECHECK_MS);
     return entry.kind === "failed" ? { ok: false, code: entry.code, message: entry.message } : { ok: true };

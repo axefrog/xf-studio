@@ -147,6 +147,21 @@ describe("the character-detail host puts a person first", () => {
     expect(prepared).toBe(0);
   }, 10_000);
 
+  test("a derivation stopped for a person's change answers busy, not a failed try (PREV-162)", async () => {
+    for (const ending of ["rejects", "degraded"] as const) {
+      const host = new CharacterDetailHost({ cacheRoot: join(root, `stopped-${ending}`), settings: () => settings,
+        prepare: ({ signal }) => new Promise((resolve, reject) => signal!.addEventListener("abort", () => ending === "rejects" ? reject(Error("stopped"))
+          : resolve({ record: {} as never, recordFile: `${"d".repeat(64)}.json`, degraded: true }))) });
+      (host as unknown as { askedAt: number }).askedAt = 0;
+      const derived = (host as unknown as { derivePreview(...args: unknown[]): Promise<unknown> }).derivePreview(REQUEST_A, "hair", {}, "k".repeat(40), "1:1");
+      const inner = host as unknown as { previewing: { controller: AbortController } | null };
+      for (let i = 0; i < 100 && !inner.previewing; i++) await sleep(10);
+      // What a person's change does to a derivation that hasn't started writing.
+      inner.previewing!.controller.abort();
+      expect(await derived).toBe("busy");
+    }
+  }, 10_000);
+
   test("a request stops the batch prepared ahead, even when its answer is ready, and the next batch waits until the page is quiet", async () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => settings,
       prepare: async () => ({ record: {} as never, recordFile: `${"d".repeat(64)}.json`, degraded: false }) });

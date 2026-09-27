@@ -559,11 +559,14 @@ describe("the browser preview device (PREV-156, PREV-158)", () => {
     expect(kept.created).toEqual([]);
     const lost = device({ keep: false });
     const urls: string[] = [];
-    for (let i = 0; i < OBJECT_URLS + 2; i++) urls.push((await lost.render(hex(i))).url);
-    // The oldest are revoked past the bound; release and dispose revoke the rest.
-    expect(lost.revoked).toEqual([urls[0], urls[1]]);
+    for (let i = 0; i < OBJECT_URLS; i++) urls.push((await lost.render(hex(i))).url);
+    // Past the bound a new picture fails; none a row still shows is revoked (PREV-164).
+    await expect(lost.render(hex(OBJECT_URLS))).rejects.toThrow();
+    expect(lost.revoked).toEqual([]);
+    // A release revokes that one and makes room; dispose revokes the rest.
     lost.port.release!(urls[5]!);
-    expect(lost.revoked).toHaveLength(3);
+    expect(lost.revoked).toEqual([urls[5]]);
+    urls.push((await lost.render(hex(OBJECT_URLS + 1))).url);
     lost.port.dispose!();
     expect(new Set(lost.revoked)).toEqual(new Set(urls));
   });
