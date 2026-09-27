@@ -2,6 +2,7 @@ import { h, setAttr, setUnavailable, uid } from "../dom";
 import { NoteLine } from "../controls";
 import { helpTip, setHelp, type HelpText } from "../help-tip";
 import { contrastMark, setContrastMark, SwatchCard, type SwatchSample } from "./swatch-card";
+import { pageStep, TypeAhead } from "./listbox-keys";
 
 /**
  * Choice list (style guide "Choice list"): one choice among several, all shown at once (show the options, don't hide them), in the look
@@ -12,7 +13,8 @@ import { contrastMark, setContrastMark, SwatchCard, type SwatchSample } from "./
  *   long labels), `tiles` (an even grid of small tiles, for numbered sets such as eye shapes 1–22). An optional swatch leads a choice.
  * - **Groups.** A choice may name a `group`: groups show in the order they first appear, each under a small heading.
  * - **Keyboard: the listbox pattern.** One Tab stop (the chosen choice, else the first); arrow keys, Home and End move focus without
- *   choosing (in `tiles`, Up and Down move by a row); Enter, Space or a click chooses.
+ *   choosing (in `tiles`, Up and Down move by a row), PageUp and PageDown by a screenful, and typing a label's first letters moves to it
+ *   (listbox-keys.ts); Enter, Space or a click chooses.
  * - **States.** The chosen choice is marked (`aria-selected`) with the signal border, fill and underline. An unavailable choice stays
  *   focusable with its reason (the reason tip); the whole list can be unavailable with one reason, shown on its reserved note line, which
  *   also carries a passing state ("Loading that idle…") without ever moving the layout.
@@ -156,12 +158,18 @@ export class ChoiceList<T extends string> {
     const target = element ?? this.items[0]?.element;
     for (const item of this.items) item.element.tabIndex = item.element === target ? 0 : -1;
   }
+  private readonly typeAhead = new TypeAhead();
   private key(event: KeyboardEvent) {
     const elements = this.items.map(item => item.element), at = elements.indexOf(document.activeElement as HTMLButtonElement);
     if (at < 0) return;
     let next = at;
     const columns = this.options.layout === "tiles" ? this.columns() : 1;
-    if (event.key === "ArrowRight" || (event.key === "ArrowDown" && columns === 1)) next = at + 1;
+    if (this.typeAhead.accepts(event)) {
+      next = this.typeAhead.find(event.key, elements.map(element => element.textContent ?? ""), at);
+      event.preventDefault();
+      if (next < 0) return;
+    } else if (event.key === "PageDown" || event.key === "PageUp") next = at + (event.key === "PageDown" ? 1 : -1) * pageStep(elements[at]!, columns);
+    else if (event.key === "ArrowRight" || (event.key === "ArrowDown" && columns === 1)) next = at + 1;
     else if (event.key === "ArrowLeft" || (event.key === "ArrowUp" && columns === 1)) next = at - 1;
     else if (event.key === "ArrowDown") next = at + columns;
     else if (event.key === "ArrowUp") next = at - columns;

@@ -4,7 +4,8 @@
 
 type Listener = (event: LightEvent) => void;
 export type LightEvent = { type: string; key?: string; target?: LightElement; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean;
-  defaultPrevented?: boolean; preventDefault(): void; stopPropagation(): void };
+  defaultPrevented?: boolean; stopped?: boolean; preventDefault(): void; stopPropagation(): void;
+  pointerType?: string; pointerId?: number; button?: number; buttons?: number; clientX?: number; clientY?: number };
 
 export class LightNode {
   parentNode: LightElement | null = null;
@@ -89,7 +90,7 @@ export class LightElement extends LightNode {
   /** Dispatch with bubbling to the ancestors. */
   dispatchEvent(event: LightEvent) {
     event.target ??= this;
-    for (let at: LightElement | null = this; at; at = at.parentNode) for (const listener of at.listeners.get(event.type) ?? []) listener(event);
+    for (let at: LightElement | null = this; at && !event.stopped; at = at.parentNode) for (const listener of at.listeners.get(event.type) ?? []) listener(event);
     return !event.defaultPrevented;
   }
   click() { if (!this.disabled) this.dispatchEvent(lightEvent("click")); }
@@ -123,7 +124,7 @@ function matches(element: LightElement, selector: string): boolean {
 }
 
 export const lightEvent = (type: string, extra: Partial<LightEvent> = {}): LightEvent => ({ type, ...extra,
-  preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} });
+  preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } });
 
 export const lightDocument = {
   body: new LightElement("body"),

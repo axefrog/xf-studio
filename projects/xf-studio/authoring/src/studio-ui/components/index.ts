@@ -39,4 +39,6 @@ export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, Swatch
 export { LightList, type LightListItem, type LightListOptions } from "./light-list";
 export { azimuthWords, DIAL_DEFAULT_SIZE, DIAL_MIN_SIZE, DirectionDial, dialDirection, dialPoint, dragDirection, fitDialSize, HEIGHT_SNAP, heightTicks, heightY,
   snapStep, type DialMark, type Direction, type DirectionDialOptions } from "./direction-dial";
-export { installPreviewFilter, PREVIEW_FILTER_IDS, previewTile, previewTokens, type PreviewTile, type PreviewTileState } from "./choice-preview";
+export { installPreviewFilter, PREVIEW_FILTER_IDS, PreviewSpin, previewStage, previewTile, previewTokens, SPIN, spinMeasures, type PreviewStage, type PreviewTile,
+  type PreviewTileState } from "./choice-preview";
+export { pageStep, TypeAhead } from "./listbox-keys";
