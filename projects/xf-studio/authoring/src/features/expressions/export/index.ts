@@ -44,7 +44,8 @@ const before = (a: string, b: string) => { const x = a.toLowerCase(), y = b.toLo
 
 export const NO_CONTROLS_REASON = "It has no face controls set, and photo mode already has a neutral face.";
 export const DAMAGED_REASON = "It is damaged, so XF Studio can't read it.";
-export const GAME_UNREAD_NOTE = "XF Studio reads photo mode's expression list and your V's face rig from your game files when you build.";
+export const GAME_UNREAD_NOTE = "XF Studio is reading photo mode's expression list and your V's face rig from your game files. Check again in a moment to see "
+  + "which expressions can be packaged; Build reads them itself.";
 
 export type PlannedExpression = { readonly id: string; readonly name: string; readonly revision: number; readonly label: string; readonly clip: string;
   readonly index: number | null; readonly controls: readonly (readonly [string, number])[] };

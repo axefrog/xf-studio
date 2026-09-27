@@ -122,7 +122,13 @@ test("every exporting feature has an exporter and an independent verifier in the
   const exporting = STUDIO_OWNERS.filter(owner => owner.owner === "feature" && owner.exports)
     .map(owner => owner as { id: string; label: string; exports: import("../src/platform/api").ExportInfo });
   expect(exporting.map(feature => feature.id)).toEqual(["eye-makeup"]);
-  expect(STUDIO_EXPORTERS.map(entry => entry.exporter.feature)).toEqual(exporting.map(feature => feature.id));
+  // Expressions export only expression sets (a set's package collection), never a look collection, so its module names no exporter
+  // for the look collection's Mod package; its set-only exporter is registered beside eye makeup's.
+  expect(STUDIO_EXPORTERS.map(entry => entry.exporter.feature)).toEqual([...exporting.map(feature => feature.id), "expressions"]);
+  const expressions = STUDIO_EXPORTERS.find(entry => entry.exporter.feature === "expressions")!;
+  expect(expressions.verifier.exporterId).toBe(expressions.exporter.id);
+  expect(expressions.exporter.present({ schema: "xfs/collection-2", id: "x", name: "x", presets: [{ id: "a", name: "a", revision: 1,
+    parts: { expressions: { schema: "xfs/expression-part-1", body: {} } } }] })).toBe(false);
   for (const feature of exporting) {
     const entry = STUDIO_EXPORTERS.find(item => item.exporter.feature === feature.id)!;
     expect(entry.exporter.id).toBe(feature.exports.exporterId);

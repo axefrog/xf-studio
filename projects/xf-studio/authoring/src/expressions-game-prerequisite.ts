@@ -17,14 +17,25 @@ import { join } from "node:path";
 import { refFromPath, type DepotRef } from "./depot-path";
 import { writeFileAtomic } from "./derived-cache";
 import { extractFacialJson, type FacialExtractor } from "./facial-host";
-import { FACE_SETUP } from "./facial-catalogue";
+import { EXPRESSION_TABLE, FACE_SETUP, PHOTO_MODE_FACE_RIG } from "./facial-catalogue";
 import { installations } from "./installation-registry";
 import type { MountedArchive } from "./archive-precedence";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { HostPrerequisite, PreparedPrerequisite } from "./platform/export/product-host";
-import { EXPRESSIONS_GAME_1, EXPRESSION_TABLE_PATH, FACE_RIG_APP_PATH, GENDERS, readGameInputs, type GameFile, type GameInputs, type GameRig,
-  type Gender } from "./features/expressions/export/game";
-import { templateNeutral } from "./features/expressions/export/files";
+
+/**
+ * What this prerequisite prepares, in the shape the expressions exporter reads (`features/expressions/export/game.ts`, which checks it
+ * field by field; the composition binds the two by the prerequisite ID). A host module reaches no feature, so the shape is restated here.
+ */
+export const EXPRESSIONS_GAME_1 = "xfs/expressions-game-1";
+const GENDER_SETS = { female: "base/animations/ui/photomode/photomode_female_facial.anims",
+  male: "base/animations/ui/photomode/photomode_male_facial.anims" } as const;
+type Gender = keyof typeof GENDER_SETS;
+type GameTable = { rows: string[][]; archive: string; provider: string; sha256: string };
+export type GameRig = { rig: string; tracks: string[]; main: { start: number; count: number }; joints: number; constAnimKeys: number; jointBlockSha256: string };
+export type GameInputs = { schema: typeof EXPRESSIONS_GAME_1; table: GameTable; base: GameTable;
+  providers: { name: string; group: string; provider: string }[]; modOrder: "modlist" | "alphabetical"; rigs: Record<Gender, GameRig> };
+type GameFile = { plan: GameInputs; sets: Record<Gender, unknown>; faceRig: unknown; table: unknown };
 
 export type ExpressionsGameOptions = {
   readonly route: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">;
@@ -61,9 +72,28 @@ export function tableRows(document: unknown): string[][] {
   return (Array.isArray(r.compiledData) ? r.compiledData : []).map(row => (row as unknown[]).map(String));
 }
 
+/** The joint keys of a vanilla face set's `facial_neutral` (every static face of the set shares them) and its joint count. */
+export function neutralJoints(set: unknown): { jointBlock: Uint8Array; joints: number } {
+  const r = root(set), chunks = Array.isArray(r.animationDataChunks) ? r.animationDataChunks : [];
+  for (const item of Array.isArray(r.animations) ? r.animations : []) {
+    const entry = isRecord(item) && isRecord(item.Data) ? item.Data : undefined;
+    const animation = entry && isRecord(entry.animation) && isRecord(entry.animation.Data) ? entry.animation.Data : undefined;
+    if (!animation || cname(animation.name) !== "facial_neutral") continue;
+    const buffer = isRecord(animation.animBuffer) && isRecord(animation.animBuffer.Data) ? animation.animBuffer.Data : undefined;
+    const address = buffer && isRecord(buffer.dataAddress) ? buffer.dataAddress : undefined;
+    const chunk = address ? chunks[Number(address.unkIndex)] : undefined;
+    const text = isRecord(chunk) && isRecord(chunk.buffer) && typeof chunk.buffer.Bytes === "string" ? chunk.buffer.Bytes : undefined;
+    if (!buffer || !address || !text || buffer.numAnimKeys !== 0 || !Number.isInteger(buffer.numConstAnimKeys)) break;
+    const bytes = new Uint8Array(Buffer.from(text, "base64")), offset = Number(address.fsetInBytes), size = (buffer.numConstAnimKeys as number) * 16;
+    if (bytes.byteLength < offset + size) break;
+    return { jointBlock: bytes.slice(offset, offset + size), joints: Number(buffer.numJoints) };
+  }
+  throw coded("package_input_missing", "The game's photo-mode faces aren't what XF Studio expects, so it can't add expressions to them.");
+}
+
 /** A gender's rig inputs: its skeleton's track names, the setup's main-pose block and its template's joint keys. */
 export function genderRig(set: unknown, skeleton: unknown, setup: unknown, rigPath: string): GameRig {
-  const neutral = templateNeutral(set);
+  const neutral = neutralJoints(set);
   const tracks = (Array.isArray(root(skeleton).trackNames) ? root(skeleton).trackNames as unknown[] : []).map(cname);
   const info = root(setup).info, mapping = isRecord(info) && isRecord(info.tracksMapping) ? info.tracksMapping : undefined;
   if (!mapping) throw Error("The facial setup has no track mapping.");
@@ -71,14 +101,23 @@ export function genderRig(set: unknown, skeleton: unknown, setup: unknown, rigPa
   return { rig: rigPath, tracks, main, joints: neutral.joints, constAnimKeys: neutral.jointBlock.byteLength / 16, jointBlockSha256: sha256(neutral.jointBlock) };
 }
 
+/** Background reads started by a Check that found nothing prepared yet, by prepared file (one at a time per route). */
+const warming = new Map<string, Promise<unknown>>();
+
 export function expressionsGamePrerequisite(options: ExpressionsGameOptions): HostPrerequisite {
   const key = sha256(JSON.stringify([options.route.gameRoot, options.route.launchRoute, options.route.mo2Root, options.route.mo2ProfileId,
     options.route.manualModRoot])).slice(0, 24);
   const folder = join(options.cacheRoot, "expressions-game"), file = join(folder, `${key}.json`);
   return {
     cached() {
-      if (!existsSync(file)) return null;
-      try { return readGameInputs((JSON.parse(readFileSync(file, "utf8")) as GameFile).plan); } catch { return null; }
+      if (!existsSync(file)) {
+        // Nothing read for this route yet: this Check says so, and the files are read in the background so the next Check can tell which
+        // expressions the game's face rig can show and where they go in photo mode's list (Build reads them afresh anyway).
+        if (!warming.has(file) && options.route.gameRoot && options.wolvenKitCli)
+          warming.set(file, this.prepare(new AbortController().signal).catch(() => undefined).finally(() => warming.delete(file)));
+        return null;
+      }
+      try { const plan = (JSON.parse(readFileSync(file, "utf8")) as GameFile).plan; return plan?.schema === EXPRESSIONS_GAME_1 ? plan : null; } catch { return null; }
     },
     async prepare(signal): Promise<PreparedPrerequisite> {
       if (!options.route.gameRoot || !options.wolvenKitCli) throw coded("package_input_missing", MISSING);
@@ -101,7 +140,7 @@ export function expressionsGamePrerequisite(options: ExpressionsGameOptions): Ho
         return { document, archive };
       };
       // The table: the effective one (skipping XF overlays) and the game's own.
-      const tableRef = refFromPath(backslashed(EXPRESSION_TABLE_PATH)), candidates = graph.locate(tableRef).lookup.candidates;
+      const tableRef = refFromPath(EXPRESSION_TABLE), candidates = graph.locate(tableRef).lookup.candidates;
       const effective = candidates.find(archive => !XF_TABLE_OVERLAY.test(archive.name)), base = candidates.find(archive => archive.group !== "mod");
       if (!effective || !base) throw coded("package_input_missing", MISSING);
       const tables = new Map<MountedArchive, unknown>();
@@ -115,13 +154,13 @@ export function expressionsGamePrerequisite(options: ExpressionsGameOptions): Ho
         return { rows, archive: archive.name, provider: archive.group === "mod" ? archive.providerName || archive.name : "Base game", sha256: sha256(JSON.stringify(rows)) };
       };
       // The face rig as the game ships it (its first provider outside the mod folder), the facial setup, each gender's set and skeleton.
-      const rigRef = refFromPath(backslashed(FACE_RIG_APP_PATH)), rigArchive = graph.locate(rigRef).lookup.candidates.find(archive => archive.group !== "mod");
+      const rigRef = refFromPath(PHOTO_MODE_FACE_RIG), rigArchive = graph.locate(rigRef).lookup.candidates.find(archive => archive.group !== "mod");
       const faceRig = rigArchive ? (await read(rigArchive, [{ ref: rigRef, extension: "app" }])).get(rigRef.hash) : undefined;
       if (!faceRig) throw coded("package_input_missing", MISSING);
       const setup = (await winner(FACE_SETUP, "facialsetup")).document;
       const sets = {} as Record<Gender, unknown>, rigs = {} as Record<Gender, GameRig>;
-      for (const gender of Object.keys(GENDERS) as Gender[]) {
-        const set = (await winner(GENDERS[gender].set, "anims")).document;
+      for (const gender of Object.keys(GENDER_SETS) as Gender[]) {
+        const set = (await winner(GENDER_SETS[gender], "anims")).document;
         const rigPath = cname(isRecord(root(set).rig) && isRecord((root(set).rig as Record<string, unknown>).DepotPath) ? ((root(set).rig as Record<string, unknown>).DepotPath) : "");
         if (!rigPath.endsWith(".rig")) throw coded("package_input_missing", MISSING);
         const skeleton = (await winner(rigPath, "rig")).document;

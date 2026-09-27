@@ -150,8 +150,8 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   locate(expected.wide, "uv")!.group.panels.push("save-explorer.explorer");
   locate(expected.compact, "uv")!.group.panels.push("save-explorer.explorer");
   // The Expressions panel (a module hidden by default, which the shell parks) joins its default group too.
-  locate(expected.wide, "finish")!.group.panels.push("expressions.controls");
-  locate(expected.compact, "finish")!.group.panels.push("expressions.controls");
+  locate(expected.wide, "finish")!.group.panels.push("expressions.controls", "expressions.sets");
+  locate(expected.compact, "finish")!.group.panels.push("expressions.controls", "expressions.sets");
   // So does Poses (also hidden by default).
   locate(expected.wide, "finish")!.group.panels.push("poses.library");
   locate(expected.compact, "finish")!.group.panels.push("poses.library");
