@@ -1,7 +1,7 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, openValuePopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
+  Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
@@ -39,16 +39,20 @@ const MOUNTS: Record<string, Mount> = {
   "lib-switch": () => { const t = new Toggle({ label: "Show my V's own makeup", help: "Draws the makeup saved with your V under your layers.", onChange: checked => t.update(checked) }); t.update(true); return t.element; },
   "lib-slider": () => { const s = new Slider({ label: "Opacity", min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)}%`, transaction: { edit: v => s.update(v) } }); s.update(.85); return s.element; },
   "lib-slider-value": () => { let value = .4; const s: SliderWithValue = new SliderWithValue({ label: "Brow raise", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`,
-      defaultValue: 0, reset: true, reserveNote: true, transaction: { edit: v => { value = v; s.update(value); } } });
+      defaultValue: 0, reset: true, transaction: { edit: v => { value = v; s.update(value); } } });
     s.update(value);
+    const rest = new SliderWithValue({ label: "Brow lower", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, transaction: { edit: v => rest.update(v) } });
+    rest.update(0);
     const off = new SliderWithValue({ label: "Lid squint", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, reserveNote: true, transaction: { edit: () => {} } });
     off.update(0, { disabled: true, reason: "Choose a face shape first." });
-    return stack({ gap: "normal" }, s.element, off.element); },
-  "lib-pair": () => { const values = { left: .2, right: .5 }; let linked = true;
-    const pair: PairControl = new PairControl({ label: "Brow height", min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true,
-      onLinkChange: next => { linked = next; pair.update(values, { linked }); },
-      transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
-    pair.update(values, { linked }); return pair.element; },
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, s.element, rest.element, off.element)); },
+  "lib-pair": () => {
+    const make = (label: string, values: { left: number; right: number }, linked: boolean) => {
+      const pair: PairControl = new PairControl({ label, min: 0, max: 100, step: 1, format: v => `${Math.round(v)} %`, defaultValue: 0, reset: true,
+        transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
+      pair.update(values, { linked }); return pair.element; };
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, make("Inner brow raise", { left: 35, right: 35 }, true), make("Brow lower", { left: 14, right: 10 }, true),
+      make("Squint, inner", { left: 30, right: 26 }, false))); },
   "lib-light-list": () => {
     let lights: LightListItem[] = [{ id: "key", name: "Key", meta: "2.5 · shadows", colour: "#fff2e9", kind: "directional" },
       { id: "fill", name: "Fill", meta: "1", colour: "#c6dafa", kind: "directional" },
@@ -93,19 +97,22 @@ const MOUNTS: Record<string, Mount> = {
     return stack({ gap: "normal" }, search.element, list, empty); },
   "lib-expander": () => { const b = expander("section", { expanded: true }, expanderLabel("Face")); b.addEventListener("click", () => b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true")));
     return stack({ gap: "tight" }, h("h4", { style: "margin:0" }, b), expander("row", { expanded: false }, expanderLabel("Eyebrows"))); },
-  "lib-group-section": () => { const g: GroupSection = new GroupSection({ title: "Brows", key: "guide.brows", expanded: true, help: "The brow region's controls.", onReset: () => g.update({ set: 0 }) });
+  "lib-group-section": () => { const g: GroupSection = new GroupSection({ title: "Brows", key: "guide.brows", expanded: true, help: "The brow region's controls.", level: "subsection",
+      actions: [iconButton({ label: "Mirror sides: Brows", icon: "mirror", small: true, mode: true, pressed: true })], onReset: () => g.update({ set: 0 }) });
     const s = new SliderWithValue({ label: "Brow raise", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`, defaultValue: 0, reset: true, transaction: { edit: () => {} } }); s.update(.4);
     g.body.append(s.element); g.update({ set: 1 });
-    const folded = new GroupSection({ title: "Mouth", key: "guide.mouth", onReset: () => {} }); folded.update({ set: 0 });
-    return stack({ gap: "normal" }, g.element, folded.element); },
+    const folded = new GroupSection({ title: "Mouth", key: "guide.mouth", level: "subsection", onReset: () => {} }); folded.update({ set: 0 });
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, g.element, folded.element)); },
   "lib-help-tip": () => h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Finish" }), helpTip("Finish", "How the makeup catches the light.")),
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
-  "lib-menu": () => button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
+  "lib-menu": () => h("div", { class: "row wrap gap-s" }, button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
     { kind: "action", label: "Duplicate", icon: "duplicate", shortcut: "Ctrl+D", run: () => {} }, { kind: "action", label: "Merge down", icon: "layers", capability: { available: false, reason: "The bottom layer has nothing below it." }, run: () => {} },
     { kind: "action", label: "Save as new layout…", icon: "plus", run: () => openValuePopover({ kind: "text", label: "Name", value: "Layout 2", maxLength: 48 },
       { x: 120, y: 120 }, { title: "Save layout", apply: "Save", options: [{ label: "Remember shown modules", checked: true }, { label: "Switch to it in wide windows", checked: false }],
         commit: () => {} }) },
     { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
+    button({ label: "Delete a saved expression", icon: "trash", onClick: event => openConfirmPopover(event.currentTarget as Element,
+      { title: "Delete saved expression", message: "Delete “Smirk” from your library? This can't be undone.", confirm: "Delete", danger: true, onConfirm: () => {} }) })),
   "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy" }]; let selected = "a";
     const list: ItemList<{ id: string; name: string; meta: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,
       onSelect: id => { selected = id; list.update(items, selected); }, onMove: (id, index) => { const item = items.find(i => i.id === id)!; items = items.filter(i => i.id !== id); items.splice(index, 0, item); list.update(items, selected); },
@@ -134,7 +141,8 @@ const MOUNTS: Record<string, Mount> = {
     const tree: TreeView = new TreeView({ label: "Sample poses", maxRows: 8, minRows: 3, onActivate: id => { current = id; paint(); },
       onToggle: (id, open) => { if (open) expanded.add(id); else expanded.delete(id); paint(); },
       onKey: (event, item) => { if (item.kind === "row" && event.key.toLowerCase() === "f" && !event.ctrlKey) { toggle(item.id); return true; } },
-      trailing: row => favouriteToggle({ on: favourites.has(row.id), what: row.label, onToggle: () => toggle(row.id) }) });
+      trailing: row => favouriteToggle({ on: favourites.has(row.id), what: row.label, onToggle: () => toggle(row.id) }),
+      onMenu: (item, anchor) => { if (item.kind === "row") openMenu([{ kind: "action", label: favourites.has(item.id) ? "Remove from favourites" : "Add to favourites", icon: "star", run: () => toggle(item.id) }], anchor, { label: "Pose actions" }); } });
     const paint = () => tree.update({ groups: groups(), expanded, current });
     paint();
     const search = new SearchField({ label: "Search sample poses", placeholder: "Search poses (Down moves into the list)", onFilter: () => {}, onArrowDown: () => tree.focus() });

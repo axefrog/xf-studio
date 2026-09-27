@@ -42,6 +42,12 @@ export function originIssue(value: unknown): string | undefined {
   return undefined;
 }
 
+/** Why a links map can't be stored (pair keys to booleans), or undefined. */
+export function linksIssue(value: unknown): string | undefined {
+  return isRecord(value) && Object.entries(value).every(([key, linked]) => PAIR.test(key) && typeof linked === "boolean")
+    ? undefined : "The expression's left/right links are damaged.";
+}
+
 /** Validate a part body; throws a plain error. */
 export function parseExpressionPart(body: unknown): ExpressionPart {
   if (!isRecord(body)) throw Error("The expression is damaged.");
@@ -50,13 +56,13 @@ export function parseExpressionPart(body: unknown): ExpressionPart {
   if (body.label !== undefined && (typeof body.label !== "string" || body.label.length > MAX_LABEL)) throw Error("The expression's label is damaged.");
   const issue = vectorIssue(body.controls);
   if (issue) throw Error(issue);
-  if (!isRecord(body.links) || Object.entries(body.links).some(([key, linked]) => !PAIR.test(key) || typeof linked !== "boolean"))
-    throw Error("The expression's left/right links are damaged.");
+  const badLinks = linksIssue(body.links);
+  if (badLinks) throw Error(badLinks);
   if (body.origin !== undefined) { const bad = originIssue(body.origin); if (bad) throw Error(bad); }
   return {
     ...(body.label ? { label: body.label as string } : {}),
     controls: normaliseVector(body.controls),
-    links: Object.fromEntries(Object.keys(body.links).sort().map(key => [key, (body.links as Record<string, boolean>)[key]!])),
+    links: Object.fromEntries(Object.keys(body.links as Record<string, boolean>).sort().map(key => [key, (body.links as Record<string, boolean>)[key]!])),
     ...(body.origin ? { origin: structuredClone(body.origin) as ExpressionOrigin } : {}),
   };
 }

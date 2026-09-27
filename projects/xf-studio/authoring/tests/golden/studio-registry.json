@@ -123,7 +123,9 @@
   "view.redo",
   "view.endEdit",
   "expression.setControl",
+  "expression.setAxis",
   "expression.linkPair",
+  "expression.setLinks",
   "expression.mirror",
   "expression.reset",
   "expression.startFrom",
@@ -3258,6 +3260,36 @@
     }
    }
   },
+  "expression.setAxis": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "negative": {
+     "type": "string",
+     "required": true,
+     "minLength": 1,
+     "maxLength": 96,
+     "from": "input"
+    },
+    "positive": {
+     "type": "string",
+     "required": true,
+     "minLength": 1,
+     "maxLength": 96,
+     "from": "input"
+    },
+    "value": {
+     "type": "number",
+     "required": true,
+     "min": -1,
+     "max": 1,
+     "from": "input"
+    }
+   }
+  },
   "expression.linkPair": {
    "scope": [
     "workspace"
@@ -3279,6 +3311,20 @@
     }
    }
   },
+  "expression.setLinks": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "links": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
   "expression.mirror": {
    "scope": [
     "workspace"
@@ -3291,7 +3337,8 @@
      "required": true,
      "values": [
       "left",
-      "right"
+      "right",
+      "flip"
      ],
      "from": "input"
     }
@@ -3337,6 +3384,11 @@
     "controls": {
      "type": "object",
      "required": true,
+     "from": "input"
+    },
+    "links": {
+     "type": "object",
+     "required": false,
      "from": "input"
     }
    }
@@ -4471,7 +4523,25 @@
    "async": false
   },
   {
+   "id": "expression.setAxis",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
    "id": "expression.linkPair",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.setLinks",
    "family": "action",
    "scope": [
     "workspace"

@@ -10,7 +10,7 @@ import { FACIAL_STATE_SCHEMA, type FacialHostState, type FacialSolveRequest } fr
 const JOINTS = [{ name: "root", parent: -1, t: [0, 0, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }, { name: "jaw", parent: 0, t: [0, 1, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }];
 const readyState = (patch: Partial<FacialHostState> = {}): FacialHostState => ({ schema: FACIAL_STATE_SCHEMA,
   rig: { phase: "ready", controls: [], joints: JOINTS }, solver: { phase: "ready" }, blink: { available: true, closedTime: 0.1, duration: 0.5, rate: 60 },
-  expressions: { phase: "ready", count: 0 }, ...patch });
+  expressions: { phase: "ready", count: 0 }, samples: [], ...patch });
 /** A solved pose moving the jaw joint by `amount` (REDengine +X). */
 const solved = (amount: number, frames = 1): FacialSolved => ({ ok: true, frames, ...(frames > 1 ? { rate: 60 } : {}), ms: 0.7, skipped: [],
   pose: { q: Float32Array.from({ length: frames * 8 }, (_, i) => i % 4 === 3 ? 1 : 0), t: Float32Array.from({ length: frames * 6 }, (_, i) => i % 6 === 3 ? amount : 0) } });
@@ -123,4 +123,43 @@ test("several posers combine by summing and clamping", () => {
   const one = { a: 0.2 };
   expect(combineFacePoses([one, undefined])).toBe(one);
   expect(combineFacePoses([{ a: 0.7, b: 0.1 }, { a: 0.5 }])).toEqual({ a: 1, b: 0.1 });
+});
+
+test("controls the host found move nothing are marked inert in the snapshot, and the built-in samples pass through", async () => {
+  const control = (name: string) => ({ name, track: 1, group: "mouth" as const, label: name, text: name, side: null, partner: null, pair: null, direction: false });
+  const sample = { id: "xf-sample:test", name: "Test", summary: "AU12 lip corner puller", controls: { jaw_mid_open: 0.1 }, links: {} };
+  const preview = new FacialPreview({ state: async () => readyState({ rig: { phase: "ready", controls: [control("jaw_mid_open"), control("lips_corner_sticky")],
+    joints: JOINTS, inert: ["lips_corner_sticky"] }, samples: [sample] }), expressions: async () => ({ phase: "ready", items: [] }),
+    solve: async () => solved(0) });
+  preview.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const snapshot = preview.snapshot();
+  expect(snapshot.controls!.map(item => [item.name, !!item.inert])).toEqual([["jaw_mid_open", false], ["lips_corner_sticky", true]]);
+  expect(snapshot.samples).toEqual([sample]);
+  // The marked list is reused while the host's lists are unchanged.
+  expect(preview.snapshot().controls).toBe(snapshot.controls);
+  preview.dispose();
+});
+
+test("two-way controls: the names' proposals (marked proposed) until the solver confirms its own pairs, which replace them", async () => {
+  const control = (name: string) => ({ name, track: 1, group: "gaze" as const, label: name, text: name, side: null, partner: null, pair: null, direction: false });
+  const controls = ["eye_l_dir_in", "eye_l_dir_out", "eye_r_dir_in", "eye_r_dir_out", "eye_l_dir_up", "eye_l_dir_dn", "nose_l_breathe_in", "nose_l_breathe_out"].map(control);
+  let state = readyState({ rig: { phase: "ready", controls, joints: JOINTS }, solver: { phase: "missing", reason: "No solver here." } });
+  const preview = new FacialPreview({ state: async () => state, expressions: async () => ({ phase: "ready", items: [] }), solve: async () => solved(0) });
+  preview.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const before = preview.snapshot().axes!;
+  expect(before.map(axis => [axis.key, !!axis.proposed])).toEqual([["eye_l_dir_out~eye_l_dir_in", true], ["eye_r_dir_in~eye_r_dir_out", true], ["eye_l_dir_dn~eye_l_dir_up", true]]);
+  // Gaze pairs link to each other as before (one value moves both eyes the same way).
+  expect(before[0]!.link?.counterpart).toBe("eye_r_dir_in~eye_r_dir_out");
+  // The solver ran: its list wins (here it confirmed the nostril too and rejected vertical gaze).
+  state = readyState({ rig: { phase: "ready", controls, joints: JOINTS, axes: [
+    { negative: "eye_l_dir_out", positive: "eye_l_dir_in", direction: "lateral", frame: "world" },
+    { negative: "eye_r_dir_in", positive: "eye_r_dir_out", direction: "lateral", frame: "world" },
+    { negative: "nose_l_breathe_out", positive: "nose_l_breathe_in", direction: "lateral", frame: "outward" }] } });
+  preview.retry();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const after = preview.snapshot().axes!;
+  expect(after.map(axis => [axis.key, !!axis.proposed])).toEqual([["eye_l_dir_out~eye_l_dir_in", false], ["eye_r_dir_in~eye_r_dir_out", false], ["nose_l_breathe_out~nose_l_breathe_in", false]]);
+  preview.dispose();
 });

@@ -12,7 +12,7 @@ export { applyCapability, badge, bindRangeTransaction, button, ColorField, Empty
 export { ExpandAll, expander, expanderLabel, isExpanded, setExpanded, type ExpanderLevel } from "../expander";
 export { helpTip, installHelpTips, setHelp, type HelpText } from "../help-tip";
 export { installReasonTips } from "../reason-tip";
-export { closeMenus, menuFromSections, openMenu, openValuePopover, type Capability, type MenuItem, type MenuSection, type ValueField, type ValueOption } from "../menu";
+export { closeMenus, menuFromSections, openConfirmPopover, openMenu, openValuePopover, type Capability, type MenuItem, type MenuSection, type ValueField, type ValueOption } from "../menu";
 export { ItemList, type ItemListOptions, type ListItem, type ListRow } from "../item-list";
 export { iconButton, type IconButtonOptions } from "./icon-button";
 export { planTabs, TabStrip, TAB_STAGES, type TabItem, type TabStripOptions, type TabStripStage } from "./tab-strip";

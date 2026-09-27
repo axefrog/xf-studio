@@ -14,7 +14,13 @@ export type FacialControlGroup = "brows" | "lids" | "gaze" | "nose" | "cheeks" |
 /** One main-pose control of the rig, as the drawer lists it (engines/facial-rig/vocabulary.ts `ControlInfo`). */
 export type FacialControl = { readonly name: string; readonly track: number; readonly group: FacialControlGroup; readonly label: string;
   readonly text: string; readonly side: "left" | "right" | null; readonly partner: string | null; readonly pair: string | null;
-  readonly direction: boolean; readonly note?: string };
+  readonly direction: boolean; readonly note?: string;
+  /** It moves nothing on this face (the host's solver found no joint motion and no wrinkle output): the drawer doesn't offer it. */
+  readonly inert?: boolean;
+  /** Its symmetry (engines/facial-rig/symmetry.ts): the link key it is stored under, the counterpart a linked edit also sets, and
+   * whether it starts linked; absent for a centre control or a lateral direction pair. */
+  readonly link?: FacialLink };
+export type FacialLink = { readonly key: string; readonly counterpart: string; readonly byDefault: boolean };
 export type FacialRigJoint = { readonly name: string; readonly parent: number; readonly t: readonly number[]; readonly r: readonly number[];
   readonly s: readonly number[] };
 
@@ -26,13 +32,43 @@ export type FacialHostState = {
   readonly rig: { readonly phase: FacialPhase; readonly reason?: string; readonly skeleton?: string; readonly setup?: string;
     readonly tracks?: readonly string[]; readonly reference?: readonly number[]; readonly main?: { readonly start: number; readonly count: number };
     readonly controls?: readonly FacialControl[]; readonly groups?: readonly { readonly id: FacialControlGroup; readonly label: string }[];
-    readonly joints?: readonly FacialRigJoint[] };
+    readonly joints?: readonly FacialRigJoint[];
+    /** Controls that move nothing on this face, once the solver has checked (absent: not known, so every control is offered). */
+    readonly inert?: readonly string[];
+    /** Opposing pairs the solver confirmed (engines/facial-rig/relations.ts), each one two-way control; absent: not checked yet. */
+    readonly axes?: readonly FacialAxisPair[];
+    /** Whether each horizontal gaze control's counterpart turns the other eye the same world way (null: nothing to check). */
+    readonly gazeSameWay?: boolean | null };
   /** The external solver kept warm (the pinned, unmodified IO Suite modules run as their own program). */
   readonly solver: { readonly phase: "missing" | "starting" | "ready" | "failed"; readonly reason?: string; readonly compileMs?: number };
   /** The game's normal blink, which composes with a held expression before the solve (the game adds blink tracks first). */
   readonly blink: { readonly available: boolean; readonly closedTime?: number; readonly duration?: number; readonly rate?: number };
   /** The installed photo-mode expressions (start points). */
   readonly expressions: { readonly phase: FacialPhase; readonly reason?: string; readonly count?: number };
+  /** The built-in starting points (the natural samples), available whether or not the game files are read. */
+  readonly samples: readonly FacialSample[];
+};
+
+/** A confirmed opposing pair (engines/facial-rig/symmetry.ts `AxisPair`): negative toward V's left, down or back (or inward). */
+export type FacialAxisPair = { readonly negative: string; readonly positive: string; readonly direction: "lateral" | "vertical" | "depth";
+  readonly frame: "world" | "outward" };
+/** A two-way control for the drawer (symmetry.ts `FacialAxis`). */
+export type FacialAxisControl = FacialAxisPair & { readonly key: string; readonly label: string; readonly ends: readonly [string, string];
+  readonly side: "left" | "right" | null; readonly gaze: boolean;
+  /** Proposed by the control names alone (the solver hasn't confirmed its pairs yet); the solver's own list replaces it once it runs. */
+  readonly proposed?: true;
+  /** Its symmetry: the link keys of its two ends, its counterpart axis (by key) and whether it starts linked; absent for a centre axis. */
+  readonly link?: { readonly keys: readonly string[]; readonly counterpart: string; readonly byDefault: boolean } };
+
+/** A built-in starting point: an expression XF Studio ships (src/expression-samples.ts), started from with its own links. */
+export type FacialSample = {
+  /** `xf-sample:<file>`: the preset id its origin records. */
+  readonly id: string;
+  readonly name: string;
+  /** Its action units in a few words ("AU6 cheek raiser, AU12 lip corner puller"). */
+  readonly summary: string;
+  readonly controls: Readonly<Record<string, number>>;
+  readonly links: Readonly<Record<string, boolean>>;
 };
 
 /** An installed photo-mode expression, found the way the game finds it (the winning expression table, clips by name). */
@@ -81,6 +117,11 @@ export type FacialPreviewSnapshot = {
   /** The drawer's groups, in order, with their labels. */
   readonly groups?: readonly { readonly id: FacialControlGroup; readonly label: string }[];
   readonly startPoints: FacialStartPoints;
+  /** The built-in starting points (empty until the host answers). */
+  readonly samples: readonly FacialSample[];
+  /** Two-way controls over the confirmed opposing pairs, and whether linked gaze keeps both eyes looking the same way. */
+  readonly axes?: readonly FacialAxisControl[];
+  readonly gazeSameWay?: boolean | null;
   /** Round-trip time of recent solves (median and slowest of the last 20), for the drawer's footnote and evidence. */
   readonly latency?: { readonly median: number; readonly max: number; readonly solver: number; readonly count: number };
 };

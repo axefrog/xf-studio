@@ -135,8 +135,17 @@ export class Toggle {
         h("span", { class: "toggle-label", text: options.label })), this.tip), this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
-  update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string; reasonOnLine?: boolean } = {}) {
-    if (this.input.checked !== checked) this.input.checked = checked;
+  /**
+   * `mixed`: a switch over several things of which some are on (Symmetric while some face regions are mirrored). It shows a half
+   * state and reads "mixed"; ARIA's switch has no mixed value, so while mixed it is announced as a checkbox. A press turns it fully on.
+   */
+  update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string; reasonOnLine?: boolean; mixed?: boolean } = {}) {
+    const mixed = !!state.mixed;
+    if (this.input.indeterminate !== mixed) this.input.indeterminate = mixed;
+    setAttr(this.input, "role", mixed ? "checkbox" : "switch");
+    setAttr(this.input, "aria-checked", mixed ? "mixed" : undefined);
+    const on = mixed ? false : checked;
+    if (this.input.checked !== on) this.input.checked = on;
     setDisabled(this.input, !!state.disabled, state.reason);
     this.note.update(this.input, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }

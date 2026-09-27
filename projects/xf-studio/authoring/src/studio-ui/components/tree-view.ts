@@ -1,3 +1,4 @@
+import { keyBinding } from "../../input-bindings";
 import { h, setAttr, setText } from "../dom";
 import { icon } from "../icons";
 
@@ -13,6 +14,8 @@ import { icon } from "../icons";
  *   Right opens a group or moves to its first row; Left closes a group or moves to a row's group; typing a letter jumps to the next item
  *   starting with it; the focused item scrolls into view. `onKey` sees each key first (a feature's own binding, such as F for a
  *   favourite) and returns true when it handled it.
+ * - **Context menu** (`onMenu`): a right-click on an item, Shift+F10 or the Menu key hears the item and where to open the owner's menu
+ *   (the pointer, or the focused item). The owner shows only what can be done on that item and opens nothing when there is nothing.
  * - **Scale:** only the items in view (plus a margin, plus the focused one) are in the page, and they follow the tree's own size (a
  *   ResizeObserver) as well as scrolling and updates; items are reused by ID and updated in place, so focus and the scroll position
  *   survive updates. Every item is one row high (28 px).
@@ -53,6 +56,8 @@ export type TreeViewOptions = {
   trailing?(row: TreeRowData, group: TreeGroupData): HTMLElement | null | undefined;
   /** Shown when there are no groups. */
   emptyText?: string;
+  /** An item's context menu: right-click, Shift+F10 or the Menu key (`anchor` is the pointer or the item). */
+  onMenu?(item: TreeItemRef, anchor: Element | { x: number; y: number }): void;
   /** Fit the frame to the visible items, at most this many rows tall (then it scrolls). */
   maxRows?: number;
   /** With `maxRows`: never shorter than this many rows (default 1). */
@@ -92,6 +97,18 @@ export class TreeView {
     this.element.addEventListener("click", event => this.click(event));
     // A taller tree shows more rows at once (UI-118): paint whenever its size changes, not only on updates and scrolling.
     this.resize?.observe(this.tree);
+    // Focus that arrives by any route (a pointer, a script, assistive technology) moves the roving tab stop with it.
+    this.element.addEventListener("focusin", event => {
+      const item = this.itemOf(event.target);
+      if (item && item.ident !== this.focusId) { this.focusId = item.ident; for (const [ident, entry] of this.rendered) entry.element.tabIndex = ident === this.focusId ? 0 : -1; }
+    });
+    this.element.addEventListener("contextmenu", event => {
+      const item = options.onMenu ? this.itemOf(event.target) : undefined;
+      if (!item) return;
+      event.preventDefault();
+      this.focusIdent(item.ident);
+      options.onMenu!(item.ref, { x: event.clientX, y: event.clientY });
+    });
   }
   /** Show `groups` with `expanded` open; `current` marks the current row; `loading` shows the status line without moving anything. */
   update(state: { groups: readonly TreeGroupData[]; expanded: ReadonlySet<string>; current?: string; loading?: boolean | string }) {
@@ -233,6 +250,11 @@ export class TreeView {
     const index = this.flat.findIndex(item => item.ident === this.focusId), item = this.flat[index];
     if (!item) return;
     if (this.options.onKey?.(event, item.ref)) { event.preventDefault(); return; }
+    if (this.options.onMenu && keyBinding("rows", event)?.id === "rows.menu") {
+      event.preventDefault();
+      this.options.onMenu(item.ref, this.rendered.get(item.ident)?.element ?? this.element);
+      return;
+    }
     const move = (to: number) => { event.preventDefault(); const next = this.flat[Math.max(0, Math.min(this.flat.length - 1, to))]; if (next) this.focusIdent(next.ident); };
     const open = item.level === 1 && this.expanded.has(item.group.id);
     switch (event.key) {

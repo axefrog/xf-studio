@@ -34,7 +34,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 
 | Category | Components |
 |---|---|
-| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
+| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView`, `Splitter` |
 | Feature-specific | `LightList`, `DirectionDial` (lighting setups) |
 
@@ -43,6 +43,7 @@ Components added on request:
 - For the Poses panel (`claude/pose-panel`): TreeView, favouriteToggle, and SearchField's Down into the list.
 - For settings discoverability and Game & tools: FolderSetting. For the copy and layout review (`claude/ui-copy-polish`): FolderSetting's found folders shown as choices (`found`, `onSelect`) and an optional folder's **Don't use a folder** (`onClear`), used by Settings › Game. `ChoiceList` and `choiceItem` (chips, rows, tiles; the Character panel's creator choices are built from `choiceItem`), replacing `Segmented`'s short-lived `wrap` mode.
 - For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
+- For the expression drawer's rebuild (`claude/expressions-drawer`, UI-108): `openConfirmPopover` (ask before an action that can't be undone, in place of the browser's `confirm`) and TreeView's `onMenu` (an item's context menu by right-click, Shift+F10 or the Menu key).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
 - For the lighting setups (`claude/lighting-setups`): Light list (the Ordered list with a light's colour chip and kind glyph) and Direction dial (a top view of V: one handle for a light's angle and height, readouts typed in place).
 - For the dock (UI-121): Splitter, the focusable bar between two resizable sides, which the dock's splitters and the Split view's gutter compose.
@@ -60,14 +61,13 @@ Comments and prose don't count (markup counts only inside a string). UI-121 clos
 - An allowance must equal its file's count. When a control moves into the library, its file's allowance must be lowered in the same change, so the debt only shrinks.
 - The scan itself is tested on prose and code.
 
-Debt at introduction (27 September 2026, after the first consolidation round and the merge of `main` that brought the expressions drawer and the Settings links in Help): 88 ad hoc controls in 18 files.
+Debt at introduction (27 September 2026, after the first consolidation round and the merge of `main` that brought the expressions drawer and the Settings links in Help): 88 ad hoc controls in 18 files. The table lists what is left; the expressions drawer was cleared by UI-108 (81 in 17 files).
 
 | File | Count | What is left |
 |---|---|---|
 | `features/save-explorer/view/panel.ts` | 20 | tree rows (role tree), link buttons, filter inputs, `details` disclosures |
 | `studio-ui/diagnostics/report-dialog.ts` | 9 | the sheet shell, raw checkboxes, `details` ×5, textarea |
 | `studio-ui/guidance/help-panel.ts` | 12 | search input, link buttons, topic `details`, buttons |
-| `features/expressions/view/drawer.ts` | 7 | search and number inputs, a select, a `details` group, a hand-built button (moving to SearchField, Combobox, SliderWithValue and GroupSection) |
 | `studio-ui/panels/game-setup.ts` | 7 | hand-copied select markup ×3, text fields ×3, `details` section |
 | `studio-ui/commands.ts` | 6 | the palette (dialog, combobox, listbox, options), the reference sheet |
 | `studio-ui/panels/character.ts` | 5 | heading switch, search field, off chip, row buttons |
