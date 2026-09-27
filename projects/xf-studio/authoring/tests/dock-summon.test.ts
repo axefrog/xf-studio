@@ -51,7 +51,7 @@ test("not in the layout, closed from a floating window: it floats where it was",
 test("not in the layout with no remembered place: it joins its factory group when one of that group's panels is open", () => {
   // A layout saved before places were remembered: History closed, nothing known about where it was.
   const tree: DockTree = { ...factory(), closed: ["activity", "help", "history"] };
-  const layers = tree.root!.kind === "split" && tree.root.children[0]!.kind === "split" ? tree.root.children[0].children[1] as GroupNode : undefined;
+  const root = tree.root!, layers = root.kind === "split" && root.children[0]!.kind === "split" ? root.children[0].children[1] as GroupNode : undefined;
   layers!.panels = ["layers"];
   const next = summonPanel(tree, "history", factory(), float);
   expect(locate(next, "history")!.group).toEqual(g("g-layers", ["layers", "history"], false, "history"));

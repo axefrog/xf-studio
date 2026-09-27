@@ -3,9 +3,13 @@
  * decode status, a node's contents, an object inspector with names resolved where a source knows them, and a generic mod-data view.
  * Read-only and keyboard-accessible: the tree follows the tree pattern (arrows move, Right and Left open and close, Enter shows a node),
  * everything else is buttons and native disclosure. It acts only through its context's facade; it holds no save bytes.
+ *
+ * The reference composition of the layout primitives (style guide "Layout primitives"): a page header (back, title and view switch, meta
+ * line), a split view between the tree and the inspector, block sections for a node and an object, property lists and code blocks.
  */
 import { chordsLabel, keyBinding, keyBindingById } from "../../../input-bindings";
-import { applyCapability, badge, button, emptyState, note, Segmented } from "../../../studio-ui/controls";
+import { applyCapability, badge, blockSection, button, codeBlock, emptyState, note, PageHeader, propertyList, Segmented, SplitView, stack }
+  from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -45,19 +49,21 @@ export function explorerPanel(ctx: Ctx): PanelController {
     note("Read-only: XF Studio never changes a save here. Script mods' data is shown as the save names it."));
 
   // ---- One open save ----
-  const back = button({ label: "All saves", icon: "chevronLeft", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "saves.close" }); } });
-  const title = h("h3", { class: "save-title" }), facts = h("p", { class: "note muted save-facts" }), namesNote = note("", "info");
+  const namesNote = note("", "info");
   const tabs = new Segmented<"nodes" | "mods">({ label: "Show", options: [{ value: "nodes", label: "Nodes" }, { value: "mods", label: "Mod data" }],
     onSelect: view => { void ctx.dispatch({ kind: "saves.setView", view }, { quiet: true }); }, compact: true, showLabel: false });
+  const header = new PageHeader({ back: { label: "All saves", onClick: () => { void ctx.dispatch({ kind: "saves.close" }); } }, titleClass: "save-title",
+    actions: [tabs.element], className: "save-header" });
   const tree = h("ul", { class: "save-tree", role: "tree", "aria-label": "Nodes of this save" });
   const nodePane = h("div", { class: "save-node", "aria-live": "off" });
   const objectPane = h("div", { class: "save-object" });
   const modsPane = h("div", { class: "save-mods" });
   const treeHelp = note(`${chordsLabel(keyBindingById("rows.focus"))} move, ${chordsLabel(keyBindingById("rows.expand"))} open and close, Enter shows the node.`);
-  const nodesView = h("div", { class: "save-explorer-body" }, h("div", { class: "save-tree-pane" }, tree, treeHelp), h("div", { class: "save-inspect-pane" }, nodePane, objectPane));
+  const nodesView = new SplitView({ label: "the node tree and the inspector", key: "save-explorer.nodes", initial: .42, min: 220, className: "save-explorer-body",
+    start: stack({ className: "save-tree-pane" }, tree, treeHelp), end: stack({ gap: "loose", className: "save-inspect-pane" }, nodePane, objectPane) }).element;
   const loading = h("p", { class: "note info", role: "status" });
-  const failed = h("div", {});
-  const openView = h("div", { class: "save-explorer-open" }, h("div", { class: "list-head" }, back, tabs.element), title, facts, namesNote, loading, failed, nodesView, modsPane);
+  const failed = h("div", { hidden: true });
+  const openView = stack({ gap: "loose", className: "save-explorer-open" }, header.element, namesNote, loading, failed, nodesView, modsPane);
   const element = h("div", { class: "panel-content save-explorer" }, listView, openView);
 
   // Presentation-only state: which containers are open, the focused tree row, pages and filters.
@@ -117,13 +123,13 @@ export function explorerPanel(ctx: Ctx): PanelController {
   });
 
   // ---- A node ----
-  const factTable = (rows: [string, string][]) => h("dl", { class: "save-facts-table" }, rows.flatMap(([term, value]) => [h("dt", { text: term }), h("dd", { text: value })]));
-  const hex = (text: string) => h("pre", { class: "save-hex", tabindex: 0, "aria-label": "Bytes, in hexadecimal" }, text);
+  const hex = (text: string) => codeBlock(text, { label: "Bytes, in hexadecimal", className: "save-hex" });
   const renderNode = (rows: readonly TreeRow[], inspection: NodeInspection | undefined, row: TreeRow | undefined, selectedObject: ObjectRef | null) => {
     if (!inspection || !row) { nodePane.replaceChildren(emptyState("No node selected", "Choose a node in the tree to see what it holds.")); return; }
     const n = inspection.node;
-    const head = [h("h4", { class: "save-node-title", text: n.name }), factTable([["Kind", ENCODING_TEXT[row.encoding]], ["Size", `${bytes(n.size)}${n.children ? ` (${bytes(n.ownBytes)} of its own)` : ""}`],
-      ["Where", `offset ${number(n.offset)}, chunk${n.chunks[0] === n.chunks[1] ? ` ${n.chunks[0] + 1}` : `s ${n.chunks[0] + 1}–${n.chunks[1] + 1}`}`], ["Status", row.detail]])];
+    const facts = propertyList([["Kind", ENCODING_TEXT[row.encoding]], ["Size", `${bytes(n.size)}${n.children ? ` (${bytes(n.ownBytes)} of its own)` : ""}`],
+      ["Where", `offset ${number(n.offset)}, chunk${n.chunks[0] === n.chunks[1] ? ` ${n.chunks[0] + 1}` : `s ${n.chunks[0] + 1}–${n.chunks[1] + 1}`}`], ["Status", row.detail]],
+      { label: `About ${n.name}` });
     const body: (HTMLElement | null)[] = [];
     if (!n.idMatches) body.push(note("This node doesn't start with its own ID, as nodes of a well-formed save do.", "warning"));
     if (inspection.kind === "container") {
@@ -178,7 +184,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
         rows.length > 300 ? note(`${number(rows.length - 300)} more; filter to find one.`) : null);
     }
     if (inspection.kind === "bespoke" || inspection.kind === "failed") body.push(note(inspection.note, inspection.kind === "failed" ? "warning" : "muted"), hex(inspection.hex));
-    nodePane.replaceChildren(...head, ...body.filter((item): item is HTMLElement => !!item));
+    nodePane.replaceChildren(blockSection({ title: n.name, titleClass: "save-node-title" }, facts, ...body));
   };
 
   // ---- An object ----
@@ -198,13 +204,13 @@ export function explorerPanel(ctx: Ctx): PanelController {
   };
   const renderObject = (inspection: ObjectInspection | undefined) => {
     if (!inspection) { objectPane.replaceChildren(); return; }
-    objectPane.replaceChildren(h("div", { class: "list-head" }, h("h4", { class: "save-node-title", text: inspection.title }),
-      button({ label: "Close", icon: "close", iconOnly: true, small: true, variant: "quiet", onClick: () => inspect(null) })),
+    objectPane.replaceChildren(blockSection({ title: inspection.title, titleClass: "save-node-title",
+      actions: [button({ label: "Close", icon: "close", iconOnly: true, small: true, variant: "quiet", onClick: () => inspect(null) })] },
       h("p", { class: "note muted", text: inspection.subtitle }),
       ...inspection.notes.map(text => note(text, "info")),
       inspection.fields.length ? h("div", { class: "save-fields", role: "group", "aria-label": `Fields of ${inspection.title}` }, inspection.fields.map(fieldView))
         : note("No fields are written: every value is at its default."),
-      ...(inspection.hex ? [hex(inspection.hex)] : []));
+      inspection.hex ? hex(inspection.hex) : null));
   };
 
   // ---- Mod data ----
@@ -267,14 +273,15 @@ export function explorerPanel(ctx: Ctx): PanelController {
       const source = open.source?.kind === "listed" ? open.source.folder : open.source?.name ?? "";
       if (source !== lastSource) { lastSource = source; expanded.clear(); focusId = null; entryOffset = 0; entryFilter = ""; typeFilter = ""; objectsShown = OBJECTS_PAGE; }
       const listed = open.source?.kind === "listed" ? state.listing.saves.find(save => save.folder === source) : undefined;
-      setText(title, listed?.location ?? source);
+      header.setTitle(listed?.location ?? source);
       const summary = open.summary;
-      setText(facts, summary ? [listed ? KIND_LABELS[listed.kind] : "Save file", `game ${Math.floor(summary.gameVersion / 1000)}.${summary.gameVersion % 1000 / 10}`,
+      header.setMeta(summary ? [listed ? KIND_LABELS[listed.kind] : "Save file", `game ${Math.floor(summary.gameVersion / 1000)}.${summary.gameVersion % 1000 / 10}`,
         `save version ${summary.saveVersion}`, `${number(summary.nodes)} nodes`, `${bytes(summary.fileBytes)} (${bytes(summary.expandedBytes)} expanded)`].join(" · ") : "");
       const namesText = summary && (!summary.types.scriptNames ? state.names.message ?? "Names from your installed scripts aren't available, so some names show as hashes." :
         !summary.types.engineNames ? "The game's type list isn't available, so a few native values aren't read." : "");
       setText(namesNote, namesText || ""); namesNote.hidden = !namesText;
       setText(loading, open.phase === "loading" ? "Opening the save…" : open.checking ? "Checking each node…" : ""); loading.hidden = !(open.phase === "loading" || open.checking);
+      failed.hidden = open.phase !== "failed";
       failed.replaceChildren(...(open.phase === "failed" ? [emptyState("This save couldn't be opened", open.message ?? "", button({ label: "All saves", onClick: () => { void ctx.dispatch({ kind: "saves.close" }); } }))] : []));
       const ready = open.phase === "ready";
       tabs.element.hidden = !ready;

@@ -47,7 +47,7 @@ async function strip(onSelect: (id: string) => void = () => {}) {
 test("a tab's accessible name is its label and its tooltip says more; only the active tab is in the tab order", async () => {
   const view = await strip();
   expect(view.tabs.map(tab => [tab.id, tab.getAttribute("role"), tab.getAttribute("aria-label"), tab.title, tab.getAttribute("aria-selected"), tab.tabIndex]))
-    .toEqual(items.map((item, index) => [`tab-${item.id}`, "tab", item.label, item.tooltip, String(index === 0), index === 0 ? 0 : -1]));
+    .toEqual(items.map((item, index) => [`tab-${item.id}`, "tab", item.label, item.tooltip ?? "", String(index === 0), index === 0 ? 0 : -1]));
   expect(view.tablist.getAttribute("role")).toBe("tablist");
 });
 
