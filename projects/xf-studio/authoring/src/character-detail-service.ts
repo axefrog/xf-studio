@@ -40,7 +40,7 @@ import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, res
 import { type ClothingFailure, resolveClothing, type ResolvedClothing } from "./clothing-resolver";
 import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
-import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
+import { archiveExportSource, type ExportBase, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
 import { decodePngHalved, encodePngAsync, type RgbaImage } from "./png";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
@@ -588,14 +588,15 @@ const cancelledError = () => new CharacterDetailError("character_cancelled", "Pr
  * per archive and kind for an exporter without it. What is kept never points into an exporter's work folder: a partial geometry export
  * the exporter did not cache is kept in the content-addressed store.
  */
-async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
+async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located; base?: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
   const { cache, exporter, signal, log } = ctx;
   const into = (kind: ExportKind) => (kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks) as Map<string, unknown>;
-  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string> }>();
-  for (const { kind, at } of items) {
+  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string>; bases: Record<string, ExportBase> }>();
+  for (const { kind, at, base } of items) {
     if (into(kind).has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) continue;
-    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>() };
+    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>(), bases: {} };
     group[kind].add(at.depotPath);
+    if (kind === "geometry" && base) group.bases[at.depotPath.toLowerCase()] = { depotPath: base.depotPath, archivePath: base.archive.id };
     groups.set(at.archive.id, group);
   }
   if (!groups.size) return undefined;
@@ -620,7 +621,8 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
   if (exporter.exportAll) {
     try {
       const answers = await exporter.exportAll(list.map(group => ({ source: archiveExportSource(group.archive.id, ctx.gameRoot),
-        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks] })), signal, { lowPriority: ctx.lowPriority });
+        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks], ...(Object.keys(group.bases).length ? { bases: group.bases } : {}) })),
+        signal, { lowPriority: ctx.lowPriority });
       answers.forEach((answer, index) => {
         const archive = list[index]!.archive;
         // What the archive's launches did answer is kept even when one of them failed: a texture both readers refuse (its WolvenKit
@@ -654,10 +656,13 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
 async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[]): Promise<Gathered> {
   const { graph, cache, signal } = ctx;
   const toolFailures = new Set<string>();
-  const geometryAt = new Map<PlannedComponent, Located>();
+  const geometryAt = new Map<PlannedComponent, Located>(), baseAt = new Map<PlannedComponent, Located>();
   for (const component of fresh) {
     const located = locate(graph, component.drawnFrom.ref);
     if (located) geometryAt.set(component, located);
+    // A morph target's base mesh, where the game finds it (its winning archive), for the skin the mesh reader builds.
+    const base = component.baseMesh ? locate(graph, component.baseMesh.ref) : null;
+    if (base) baseAt.set(component, base);
   }
   const textureAt = new Map<string, Located>(), maskAt = new Map<string, Located>();
   for (const component of fresh) for (const material of component.materials) {
@@ -675,7 +680,7 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const began = performance.now(), seconds = (from: number) => `${((performance.now() - from) / 1000).toFixed(2)} s`;
   const tally: ExportTally = { asked: 0, cached: 0 }, stages: string[] = [];
   const texturesBefore = nativeTextureCounts(ctx.exporter), geometryBefore = nativeGeometryCounts(ctx.exporter);
-  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
+  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt].map(([component, at]) => ({ kind: "geometry" as const, at, base: baseAt.get(component) })),
     ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures, tally)
     .finally(() => { stages.push(`exports ${seconds(began)}`); }));
 

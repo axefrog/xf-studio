@@ -11,6 +11,9 @@ import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAs
 import { accessorFloats, parseGlb, readAccessor, type Glb } from "../src/glb";
 import { createNativeGeometryExporter, NATIVE_MESH_IDENTITY, type GeometryDecoder } from "../src/native-geometry-export";
 import { NativeDecoders } from "../src/native-texture-export";
+import { planClothing } from "../src/character-detail-plan";
+import { NO_OVERRIDES, type ResolvedComponent } from "../src/character-resolver";
+import type { ResolvedGarment } from "../src/clothing-resolver";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { DecodeSession } from "../src/native/limits";
@@ -448,4 +451,65 @@ test("mutated meshes and morph targets never fail inside the reader", () => {
   }
   expect(internal.slice(0, 3)).toEqual([]);
   expect(slowest).toBeLessThan(2000);
+});
+
+test("a morph target's skin comes from the base mesh the resolver says wins, wherever that archive is", async () => {
+  const chunks: ChunkSpec[] = [{ vertices: quad(), indices: [0, 1, 2] }];
+  // The morph target's winning archive (a morph mod) lacks its base mesh; the game archive holds it.
+  const morphArchive = geometryArchive({ "base\\m\\nails.morphtarget": morphResource({ chunks, baseMesh: "base\\m\\nails.mesh", targets: morphTargets().map(t => ({ ...t, perChunk: t.perChunk.slice(0, 1) })) }) });
+  const gameArchive = geometryArchive({ "base\\m\\nails.mesh": meshResource({ chunks, bones: ["Hand", "Finger", "Tip"] }) });
+  const pool = new NativeArchivePool(fakeDecompress);
+  const hash = depotHash("base\\m\\nails.morphtarget");
+  const alone = decodeGeometryFromPool(pool, fakeDecompress, { archivePath: morphArchive, hash });
+  expect(alone.ok && [alone.geometry.baseMesh, alone.geometry.joints]).toEqual(["absent", 0]);
+  const located = decodeGeometryFromPool(pool, fakeDecompress, { archivePath: morphArchive, hash, base: { archivePath: gameArchive, hash: depotHash("base\\m\\nails.mesh") } });
+  expect(located.ok && [located.geometry.baseMesh, located.geometry.joints]).toEqual(["read", 3]);
+  if (located.ok) expect(parseGlb(located.geometry.glb).json.skins[0].joints.length).toBe(3);
+
+  // Through the exporter: the request's `bases` reach the reader, the cache entry records the base, and an entry made from another
+  // base (here: none) is decoded again rather than served.
+  const inner: GameAssetExporter = { tool: { key: "wk", label: "WolvenKit" }, open() { throw new Error("not used"); },
+    async exportAll(requests) { return requests.map((): ExportAnswer => ({ geometry: new Map(), textures: new Map(), masks: new Map() })); } };
+  let decodes = 0;
+  const decoder: GeometryDecoder = { decodeGeometry: async request => { decodes++; return decodeGeometryFromPool(pool, fakeDecompress, request); } };
+  const exporter = createNativeGeometryExporter(inner, { cacheRoot: join(tempRoot(), "exports"), decoder: async () => decoder, onFallback: () => {} });
+  const source = archiveExportSource(morphArchive, tempRoot());
+  const bases = { "base\\m\\nails.morphtarget": { depotPath: "base\\m\\nails.mesh", archivePath: gameArchive } };
+  const skinOf = (answer: ExportAnswer) => parseGlb(new Uint8Array(readFileSync(answer.geometry.get("base\\m\\nails.morphtarget")!.glb!))).json.skins?.[0]?.joints.length ?? 0;
+  const [first] = await exporter.exportAll!([{ source, geometry: ["base\\m\\nails.morphtarget"], textures: [], masks: [], bases }]);
+  expect(skinOf(first!)).toBe(3);
+  const [again] = await exporter.exportAll!([{ source, geometry: ["base\\m\\nails.morphtarget"], textures: [], masks: [], bases }]);
+  expect([again!.geometry.get("base\\m\\nails.morphtarget")!.cached, decodes]).toEqual([true, 1]);
+  const [own] = await exporter.exportAll!([{ source, geometry: ["base\\m\\nails.morphtarget"], textures: [], masks: [] }]);
+  expect([own!.geometry.get("base\\m\\nails.morphtarget")!.cached, skinOf(own!), decodes]).toEqual([false, 0, 2]);
+});
+
+test("the plan names a morph component's effective base mesh, and only a morph component's", () => {
+  const provenance = (path: string, status = "archive") => ({ ref: { hash: depotHash(path), path }, status, archive: "a.archive", group: "content", provider: "game",
+    provider2: null, alternatives: [], rule: { rule: "x", grade: "source", basis: "" }, via: [], extractedSha256: null, ambiguities: [] }) as never;
+  const component = (type: string, morph: boolean): ResolvedComponent => ({ name: `c_${type}`, type, origin: { kind: "part", source: "x.ent" }, meshAppearance: "default",
+    chunkMask: "1", overriddenBy: [], morphRegions: {}, appliedMorphs: [], meshAppearanceResolved: null, notes: [],
+    geometry: { morphTarget: morph ? provenance("base\\m\\nails.morphtarget") : null, mesh: provenance("base\\m\\nails.mesh"), renderChunks: 1, chunkLods: [1],
+      chunkInScene: [true], visibleChunks: [0], drawsNothing: false, patchedFrom: [], drawnFrom: provenance(morph ? "base\\m\\nails.morphtarget" : "base\\m\\nails.mesh"),
+      morphTexture: null },
+    materials: [{ chunk: 0, name: "ml", route: "entry", entry: null, dynamic: null, chain: [], gaps: [], params: [],
+      template: { ref: { hash: "2", path: "engine\\materials\\multilayered.mt" } } as never }] });
+  const garment = (components: ResolvedComponent[]): ResolvedGarment => ({ area: "Legs", item: "5", status: "drawn", hiddenBy: null, gap: null, label: "x", record: null,
+    rootEntity: null, rootAppearance: null, app: null, definition: "d", tags: [], components, layers: {} });
+  const plan = planClothing({ overrides: NO_OVERRIDES, feet: "lifted", feetState: "Lifted", bodyType: "base_body", gaps: [], ambiguities: [],
+    garments: [garment([component("entMorphTargetSkinnedMeshComponent", true), component("entSkinnedMeshComponent", false)])] }, new Map(), new Map());
+  expect(plan.components.map(item => item.baseMesh?.ref.path ?? null)).toEqual(["base\\m\\nails.mesh", null]);
+});
+
+test("a boneless stub base mesh (ArchiveXL's eyebrow stub) is passed over for the base mesh the morph target names", () => {
+  const chunks: ChunkSpec[] = [{ vertices: quad(), indices: [0, 1, 2] }];
+  const stub = new Cr2wBuilder();
+  stub.export("CMesh", [prop("objectType", "ERenderObjectType", v.enum("ROT_Static"))]);
+  const morphArchive = geometryArchive({ "base\\m\\brows.morphtarget": morphResource({ chunks, baseMesh: "base\\m\\brows.mesh", targets: morphTargets().map(t => ({ ...t, perChunk: t.perChunk.slice(0, 1) })) }),
+    "base\\m\\brows.mesh": meshResource({ chunks, bones: ["A", "B", "C", "D"] }) });
+  const bundle = geometryArchive({ "archive_xl\\m\\brows_stub.mesh": stub.build() });
+  const pool = new NativeArchivePool(fakeDecompress);
+  const outcome = decodeGeometryFromPool(pool, fakeDecompress, { archivePath: morphArchive, hash: depotHash("base\\m\\brows.morphtarget"),
+    base: { archivePath: bundle, hash: depotHash("archive_xl\\m\\brows_stub.mesh") } });
+  expect(outcome.ok && [outcome.geometry.baseMesh, outcome.geometry.joints]).toEqual(["read", 4]);
 });

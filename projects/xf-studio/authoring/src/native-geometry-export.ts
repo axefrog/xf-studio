@@ -8,11 +8,15 @@
  * - **The same GLB.** The vertex data is WolvenKit's, bit for bit, and the structure (chunk meshes and names, joints, skin, targets,
  *   extras) is the same; morph deltas are stored sparse. knowledge/archive-format.md §11 has the conventions and the oracle.
  * - **Cache.** Native GLBs live in the exporter's own cache folder (so the prepared-files budget and Clear cover them), keyed by the depot
- *   hash, the archive's fingerprint and the mesh reader's identity (`NATIVE_MESH_IDENTITY`), never WolvenKit's. A morph target's joints
- *   come from its base mesh in the same archive, so the archive's fingerprint covers both.
+ *   hash, the archive's fingerprint and the mesh reader's identity (`NATIVE_MESH_IDENTITY`), never WolvenKit's.
+ * - **A morph target's skin** comes from its base mesh where the game finds it: the request's `bases` (the resolver's winning archive
+ *   for the effective base mesh), else the path the file names in its own archive. The entry records which (`baseKey`: the base
+ *   archive's fingerprint and the path's hash), and an entry made from another base is decoded again.
  * - **Fallback per resource.** A resource the reader refuses (a layout or parameter it doesn't decode, a damaged file, over a budget, the
  *   worker down) is exported by the wrapped exporter, in one extra launch for all of a batch's refusals. Refusals are counted by kind;
  *   unexpected ones go to the diagnostics log.
+ * - **Changes against WolvenKit's GLB:** a morph target whose winning archive lacks its base mesh gets its skin (WolvenKit's per-archive
+ *   export finds none); on the reference route the nails morph mod, the facial-rig fix's head and earring morphs and two piercing morphs.
  * - **Not read natively:** a folder of archives (the core preview's game content source) and geometry asked for with WolvenKit's
  *   materials file (the core preview's head and eyes); both go to the wrapped exporter.
  */
@@ -21,7 +25,7 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { depotHash } from "./depot-path";
 import { hostFailure } from "./diagnostics/host-log";
-import { type ExportAnswer, type ExportedGeometry, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
+import { archiveExportSource, type ExportAnswer, type ExportBase, type ExportedGeometry, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
   type ExportSource, type GameAssetExporter, type GameAssetExportSession } from "./game-asset-export";
 import { NATIVE_MESH_VERSION, type NativeGeometryOutcome, type NativeGeometryRequest } from "./native/mesh-decode";
 import type { NativeDecoder } from "./native/native-decode";
@@ -73,7 +77,12 @@ const nativeEligible = (request: Pick<ExportRequest, "source" | "materials">) =>
 
 /** What the reader records beside a GLB: its identity, the hashes (so a hit needs no second hashing) and its plain notes. */
 type GeometryMeta = { reader: string; depotPath: string; rawSha256: string; glbSha256: string; root: string; meshes: number; vertices: number; targets: number;
-  joints: number; baseMesh?: string; notes: string[] };
+  joints: number; baseMesh?: string; notes: string[];
+  /** Which base mesh gave a morph target's skin: `own` (the path it names, in its own archive) or the base archive's fingerprint and path hash. */
+  baseKey?: string };
+/** The cache's name for where a morph target's base mesh is read. */
+const baseKeyOf = (base: ExportBase | undefined, gameRoot: string) =>
+  base ? `${archiveExportSource(base.archivePath, gameRoot).fingerprint}|${depotHash(base.depotPath)}` : "own";
 
 /** A geometry answer is a WolvenKit-shaped one with the reader's notes (`readerNote`) instead of a repair line. */
 export type NativeExportedGeometry = ExportedGeometry & { readerNote?: string | null };
@@ -85,12 +94,13 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
   const answerOf = (depotPath: string, files: Record<string, string>, cachedHit: boolean, meta: GeometryMeta): NativeExportedGeometry => ({
     depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: meta.rawSha256, glb: files["export.glb"]!, glbSha256: meta.glbSha256,
     materials: null, materialsSha256: null, complete: true, cached: cachedHit, repair: null, readerNote: meta.notes.length ? meta.notes.join("; ") : null });
-  const cached = (depotPath: string, source: ExportSource): NativeExportedGeometry | null => {
+  const cached = (depotPath: string, source: ExportSource, base?: ExportBase): NativeExportedGeometry | null => {
     const files = cache.read(depotPath, source);
     if (!files || !GEOMETRY_FILES.every(name => files[name])) return null;
     try {
       const meta = JSON.parse(readFileSync(files["geometry.json"]!, "utf8")) as GeometryMeta;
-      return meta.reader === NATIVE_MESH_IDENTITY ? answerOf(depotPath, files, true, meta) : null;
+      const baseKey = /\.morphtarget$/i.test(depotPath) ? baseKeyOf(base, source.gameRoot) : "own";
+      return meta.reader === NATIVE_MESH_IDENTITY && (meta.baseKey ?? "own") === baseKey ? answerOf(depotPath, files, true, meta) : null;
     } catch { return null; }
   };
 
@@ -98,7 +108,8 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
    * Decode `paths` of one source natively, one at a time (the worker is serial), into `into`; returns the paths to hand to the wrapped
    * exporter. Stops with `cancelled` between meshes once `signal` aborts.
    */
-  const decodeAll = async (source: ExportSource, paths: readonly string[], into: Map<string, ExportedGeometry>, signal?: AbortSignal): Promise<string[]> => {
+  const decodeAll = async (source: ExportSource, paths: readonly string[], into: Map<string, ExportedGeometry>, signal?: AbortSignal,
+    bases: Readonly<Record<string, ExportBase>> = {}): Promise<string[]> => {
     const rest: string[] = [];
     if (!paths.length) return rest;
     const decoder = await options.decoder(source.gameRoot).catch(() => null);
@@ -107,7 +118,9 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
     try {
       for (const depotPath of paths) {
         if (signal?.aborted) throw new GameAssetExportError("cancelled", "The export was cancelled.");
-        const request: NativeGeometryRequest = { archivePath: source.archivePath, hash: depotHash(depotPath), timeoutMs: options.timeoutMs ?? NATIVE_GEOMETRY_TIMEOUT_MS };
+        const base = /\.morphtarget$/i.test(depotPath) ? bases[depotPath.toLowerCase()] : undefined;
+        const request: NativeGeometryRequest = { archivePath: source.archivePath, hash: depotHash(depotPath), timeoutMs: options.timeoutMs ?? NATIVE_GEOMETRY_TIMEOUT_MS,
+          ...(base ? { base: { archivePath: base.archivePath, hash: depotHash(base.depotPath) } } : {}) };
         const began = performance.now();
         let outcome: NativeGeometryOutcome;
         try { outcome = await decoder.decodeGeometry(request); }
@@ -127,7 +140,8 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
         writeFileSync(glb, geometry.glb);
         const meta: GeometryMeta = { reader: NATIVE_MESH_IDENTITY, depotPath, rawSha256: geometry.extractedSha256,
           glbSha256: createHash("sha256").update(geometry.glb).digest("hex"), root: geometry.root, meshes: geometry.meshes, vertices: geometry.vertices,
-          targets: geometry.targets, joints: geometry.joints, ...(geometry.baseMesh ? { baseMesh: geometry.baseMesh } : {}), notes: [...geometry.notes] };
+          targets: geometry.targets, joints: geometry.joints, ...(geometry.baseMesh ? { baseMesh: geometry.baseMesh } : {}), notes: [...geometry.notes],
+          baseKey: /\.morphtarget$/i.test(depotPath) ? baseKeyOf(base, source.gameRoot) : "own" };
         writeFileSync(metaFile, JSON.stringify(meta));
         into.set(depotPath, answerOf(depotPath, cache.write(depotPath, source, { raw, "export.glb": glb, "geometry.json": metaFile }), false, meta));
         stats.decoded++;
@@ -176,16 +190,17 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
         const paths: string[] = [], other: string[] = [];
         for (const depotPath of new Set(request.geometry)) {
           if (!isGeometry(depotPath)) { other.push(depotPath); continue; }
-          const hit = cached(depotPath, request.source);
+          const hit = cached(depotPath, request.source, request.bases?.[depotPath.toLowerCase()]);
           if (hit) { native[index]!.set(depotPath, hit); stats.cached++; } else paths.push(depotPath);
         }
         if (paths.length) jobs.push({ index, paths });
-        return { ...request, geometry: other };
+        const { bases: _bases, ...rest } = request;
+        return { ...rest, geometry: other };
       });
       const decoding = (async () => {
         const refused: { index: number; paths: string[] }[] = [];
         for (const job of jobs) {
-          const rest = await decodeAll(requests[job.index]!.source, job.paths, native[job.index]!, signal);
+          const rest = await decodeAll(requests[job.index]!.source, job.paths, native[job.index]!, signal, requests[job.index]!.bases);
           if (rest.length) refused.push({ index: job.index, paths: rest });
         }
         return refused;
