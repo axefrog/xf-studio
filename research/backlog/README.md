@@ -103,6 +103,14 @@ In order:
 
    How vanilla and modded tattoos work, a proposed XF Tattoos design (decal canvases cut from the V's own skin, placed stencils, per-look atlases), a phased plan and questions for the maintainer: [tattoos brief](../character-customization/tattoos-brief.md).
 7. Full body customisation
+7a. Fashion Designer (roadmap, not an immediate priority; requested 27 September 2026)
+
+   A wearables studio covering every equipment category players can wear (as EquipmentEx's slot categories describe them), built from sub-designers per category:
+   - **Clothing, designed the way real garments are made:** vector-drawn panels cut from fabrics and other materials, stitched together, with materials, seams and stitching, overlays and add-ons. It should span everything from a flowing dress or skirt to a tough Maelstrom jacket with spikes.
+   - **Shoes.**
+   - **Other articles:** belts, shoulder bags, harnesses, holsters, backpacks and so on.
+
+   The jewellery construction set folds into it; the piercings editor then draws on items from the jewellery designer. Big open areas to design: garment simulation or draping versus authored shapes, rigging and garment support on V's body (see [clothing](../../knowledge/clothing.md)), game material templates for fabrics, export as worn items through TweakXL and ArchiveXL (the clothing resolver already reads the same data), and interplay with body shape. When it's time, start with a design study; nothing is built before discussion.
 8. World integration: quest design, area design
 
 Existing brow, lash, hair and piercing *preview context* is not permission to build those editors.
